@@ -1,0 +1,248 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                String           @id @default(cuid())
+  name              String?
+  email             String           @unique
+  emailVerified     DateTime?
+  image             String?
+  password          String?
+  subscriptionTier  SubscriptionTier @default(FREE)
+  premiumExpiresAt  DateTime?
+  accounts          Account[]
+  sessions          Session[]
+  portfolios        Portfolio[]
+  rankingHistory    RankingHistory[]
+  
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Company {
+  id              Int             @id @default(autoincrement())
+  ticker          String          @unique
+  name            String
+  sector          String?
+  industry        String?         // Oil & Gas Integrated
+  cnpj            String?
+  description     String?
+  website         String?         // https://petrobras.com.br
+  
+  // Dados de localização
+  address         String?         // Endereço completo
+  city            String?         // Rio de Janeiro
+  state           String?         // RJ
+  country         String?         // Brazil
+  
+  // Dados corporativos
+  fullTimeEmployees Int?         // 45149
+  
+  // Logos e metadados
+  logoUrl         String?         // https://icons.brapi.dev/icons/PETR4.svg
+  updatedAt       DateTime?       @updatedAt
+  
+  financialData   FinancialData[]
+  dailyQuotes     DailyQuote[]
+  
+  @@map("companies")
+}
+
+model FinancialData {
+  id                    Int      @id @default(autoincrement())
+  companyId             Int      @map("company_id")
+  reportDate            DateTime @map("report_date") @db.Date
+  
+  // === INDICADORES DE VALUATION ===
+  pl                    Decimal? @db.Decimal(15, 6)  // P/L atual
+  forwardPE             Decimal? @map("forward_pe") @db.Decimal(15, 6)     // P/L projetado
+  pvp                   Decimal? @db.Decimal(15, 6)  // P/VP
+  dy                    Decimal? @db.Decimal(15, 6)  // Dividend Yield
+  evEbitda              Decimal? @map("ev_ebitda") @db.Decimal(15, 6)      // EV/EBITDA
+  evEbit                Decimal? @map("ev_ebit") @db.Decimal(15, 6)        // EV/EBIT (proxy EV/Revenue)
+  evRevenue             Decimal? @map("ev_revenue") @db.Decimal(15, 6)     // EV/Revenue específico
+  psr                   Decimal? @db.Decimal(15, 6)  // Price-to-Sales
+  pAtivos               Decimal? @map("p_ativos") @db.Decimal(15, 6)       // P/Ativos
+  pCapGiro              Decimal? @map("p_cap_giro") @db.Decimal(15, 6)     // P/Capital Giro
+  pEbit                 Decimal? @map("p_ebit") @db.Decimal(15, 6)         // P/EBIT
+  lpa                   Decimal? @db.Decimal(15, 6)  // Lucro por Ação
+  trailingEps           Decimal? @map("trailing_eps") @db.Decimal(15, 6)   // EPS trailing 12m
+  vpa                   Decimal? @db.Decimal(15, 6)  // Valor Patrimonial por Ação
+  
+  // === DADOS DE MERCADO E AÇÕES ===
+  marketCap             Decimal? @map("market_cap") @db.Decimal(20, 2)     // Valor de Mercado
+  enterpriseValue       Decimal? @map("enterprise_value") @db.Decimal(20, 2) // Enterprise Value
+  sharesOutstanding     Decimal? @map("shares_outstanding") @db.Decimal(20, 0) // Ações em Circulação
+  totalAssets           Decimal? @map("total_assets") @db.Decimal(20, 2)    // Ativos Totais
+  
+  // === INDICADORES DE ENDIVIDAMENTO E LIQUIDEZ ===
+  dividaLiquidaPl       Decimal? @map("divida_liquida_pl") @db.Decimal(15, 6)
+  dividaLiquidaEbitda   Decimal? @map("divida_liquida_ebitda") @db.Decimal(15, 6)
+  liquidezCorrente      Decimal? @map("liquidez_corrente") @db.Decimal(15, 6)  // Current Ratio
+  liquidezRapida        Decimal? @map("liquidez_rapida") @db.Decimal(15, 6)    // Quick Ratio
+  passivoAtivos         Decimal? @map("passivo_ativos") @db.Decimal(15, 6)
+  debtToEquity          Decimal? @map("debt_to_equity") @db.Decimal(15, 6)     // Dívida/Patrimônio
+  
+  // === INDICADORES DE RENTABILIDADE ===
+  roe                   Decimal? @db.Decimal(15, 6)  // Return on Equity
+  roic                  Decimal? @db.Decimal(15, 6)  // Return on Invested Capital
+  roa                   Decimal? @db.Decimal(15, 6)  // Return on Assets
+  margemBruta           Decimal? @map("margem_bruta") @db.Decimal(15, 6)
+  margemEbitda          Decimal? @map("margem_ebitda") @db.Decimal(15, 6)
+  margemLiquida         Decimal? @map("margem_liquida") @db.Decimal(15, 6)    // Profit Margins
+  giroAtivos            Decimal? @map("giro_ativos") @db.Decimal(15, 6)
+  
+  // === INDICADORES DE CRESCIMENTO ===
+  // REMOVIDO: cagrReceitas5a - não disponível na API (precisa dados históricos 5 anos)
+  // REMOVIDO: crescimentoTrimestral - API retorna null para earningsQuarterlyGrowth
+  cagrLucros5a          Decimal? @map("cagr_lucros_5a") @db.Decimal(15, 6)   // Earnings Annual Growth
+  crescimentoLucros     Decimal? @map("crescimento_lucros") @db.Decimal(15, 6)     // Earnings Growth
+  crescimentoReceitas   Decimal? @map("crescimento_receitas") @db.Decimal(15, 6)   // Revenue Growth
+  
+  // === DADOS DE DIVIDENDOS ===
+  dividendYield12m      Decimal? @map("dividend_yield_12m") @db.Decimal(15, 6)    // DY 12 meses
+  ultimoDividendo       Decimal? @map("ultimo_dividendo") @db.Decimal(15, 6)      // Last Dividend Value
+  dataUltimoDividendo   DateTime? @map("data_ultimo_dividendo") @db.Date          // Last Dividend Date
+  
+  // === PERFORMANCE E VARIAÇÕES ===
+  variacao52Semanas     Decimal? @map("variacao_52_semanas") @db.Decimal(15, 6)  // 52 Week Change
+  retornoAnoAtual       Decimal? @map("retorno_ano_atual") @db.Decimal(15, 6)    // YTD Return
+  
+  // === DADOS FINANCEIROS OPERACIONAIS ===
+  ebitda                Decimal? @db.Decimal(20, 2)                              // EBITDA valor absoluto
+  receitaTotal          Decimal? @map("receita_total") @db.Decimal(20, 2)        // Total Revenue
+  lucroLiquido          Decimal? @map("lucro_liquido") @db.Decimal(20, 2)        // Net Income / Gross Profits
+  fluxoCaixaOperacional Decimal? @map("fluxo_caixa_operacional") @db.Decimal(20, 2) // Operating Cashflow
+  fluxoCaixaLivre       Decimal? @map("fluxo_caixa_livre") @db.Decimal(20, 2)    // Free Cashflow
+  totalCaixa            Decimal? @map("total_caixa") @db.Decimal(20, 2)          // Total Cash
+  totalDivida           Decimal? @map("total_divida") @db.Decimal(20, 2)         // Total Debt
+  receitaPorAcao        Decimal? @map("receita_por_acao") @db.Decimal(15, 6)     // Revenue Per Share
+  caixaPorAcao          Decimal? @map("caixa_por_acao") @db.Decimal(15, 6)       // Total Cash Per Share
+  
+  // === DADOS DO BALANÇO PATRIMONIAL ===
+  ativoCirculante       Decimal? @map("ativo_circulante") @db.Decimal(20, 2)     // Total Current Assets
+  ativoTotal            Decimal? @map("ativo_total") @db.Decimal(20, 2)          // Total Assets
+  passivoCirculante     Decimal? @map("passivo_circulante") @db.Decimal(20, 2)   // Total Current Liabilities
+  passivoTotal          Decimal? @map("passivo_total") @db.Decimal(20, 2)        // Total Liabilities
+  patrimonioLiquido     Decimal? @map("patrimonio_liquido") @db.Decimal(20, 2)   // Total Stockholder Equity
+  caixa                 Decimal? @db.Decimal(20, 2)                              // Cash
+  estoques              Decimal? @db.Decimal(20, 2)                              // Inventory
+  contasReceber         Decimal? @map("contas_receber") @db.Decimal(20, 2)       // Net Receivables
+  imobilizado           Decimal? @db.Decimal(20, 2)                              // Property Plant Equipment
+  intangivel            Decimal? @db.Decimal(20, 2)                              // Intangible Assets
+  dividaCirculante      Decimal? @map("divida_circulante") @db.Decimal(20, 2)    // Short Term Debt
+  dividaLongoPrazo      Decimal? @map("divida_longo_prazo") @db.Decimal(20, 2)   // Long Term Debt
+  
+  // === DADOS DE DIVIDENDOS DETALHADOS ===
+  dividendoMaisRecente           Decimal? @map("dividendo_mais_recente") @db.Decimal(15, 6)      // Último dividendo pago
+  dataDividendoMaisRecente       DateTime? @map("data_dividendo_mais_recente") @db.Date          // Data do último dividendo
+  historicoUltimosDividendos     String?   @map("historico_ultimos_dividendos") @db.Text        // JSON com histórico
+  
+  // === METADADOS ===
+  updatedAt             DateTime? @updatedAt
+  dataSource            String?   @map("data_source") @default("brapi")         // Fonte dos dados
+  
+  company               Company  @relation(fields: [companyId], references: [id])
+  
+  @@unique([companyId, reportDate])
+  @@map("financial_data")
+}
+
+model DailyQuote {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  date      DateTime @db.Date
+  price     Decimal  @db.Decimal(10, 4)
+  
+  company   Company  @relation(fields: [companyId], references: [id])
+  
+  @@unique([companyId, date])
+  @@map("daily_quotes")
+}
+
+model Portfolio {
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
+  name        String
+  createdAt   DateTime        @default(now()) @map("created_at")
+  assets      PortfolioAsset[]
+  
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("portfolios")
+}
+
+model PortfolioAsset {
+  id              String    @id @default(cuid())
+  portfolioId     String    @map("portfolio_id")
+  ticker          String
+  initialQuantity Decimal   @map("initial_quantity") @db.Decimal(10, 4)
+  initialPrice    Decimal   @map("initial_price") @db.Decimal(10, 4)
+  
+  portfolio       Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  
+  @@map("portfolio_assets")
+}
+
+model RankingHistory {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  model       String   // 'graham', 'dividendYield', 'lowPE', 'magicFormula'
+  params      Json     // Parâmetros utilizados no ranking
+  results     Json?    // Resultados opcionais (cache)
+  resultCount Int      @map("result_count") @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("ranking_history")
+}

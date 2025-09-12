@@ -1,36 +1,289 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Analisador de Ações - SaaS de Análise Fundamentalista
 
-## Getting Started
+Uma plataforma SaaS que simplifica a análise fundamentalista de ações para investidores pessoa física, utilizando modelos de valuation consagrados e o poder da IA.
 
-First, run the development server:
+## 🚀 Tecnologias
 
+- **Frontend:** Next.js 14 + TypeScript + Tailwind CSS
+- **UI Components:** shadcn/ui
+- **Backend:** Next.js API Routes
+- **Banco de Dados:** PostgreSQL (Supabase)
+- **ORM:** Prisma
+- **Autenticação:** NextAuth.js
+- **IA:** Google Gemini API
+
+## 📋 Pré-requisitos
+
+- Node.js 18+ e npm
+- Conta no Supabase (PostgreSQL)
+- Conta no Google Cloud (para OAuth e Gemini)
+
+## ⚙️ Configuração
+
+1. **Clone e instale dependências:**
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd analisador-acoes
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. **Configure as variáveis de ambiente:**
+Crie um arquivo `.env` na raiz do projeto baseado no `env.example`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+# Database (Supabase)
+DATABASE_URL="postgresql://username:password@db.host.com:5432/database_name?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://username:password@db.host.com:5432/database_name"
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# NextAuth.js
+NEXTAUTH_SECRET="your-secret-key-here"
+NEXTAUTH_URL="http://localhost:3000"
 
-## Learn More
+# Google OAuth
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+```
 
-To learn more about Next.js, take a look at the following resources:
+3. **Configure o banco de dados:**
+```bash
+# Gerar o cliente Prisma
+npx prisma generate
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Executar as migrações
+npx prisma db push
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# (Opcional) Visualizar o banco
+npx prisma studio
+```
 
-## Deploy on Vercel
+4. **Execute o projeto:**
+```bash
+npm run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🗃️ Estrutura do Banco de Dados
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+O projeto utiliza os seguintes modelos principais:
+
+- **User:** Usuários da plataforma com sistema de assinatura
+- **Company:** Empresas listadas na B3
+- **FinancialData:** Indicadores fundamentalistas das empresas
+- **DailyQuote:** Cotações históricas
+- **Portfolio:** Carteiras de investimento dos usuários
+
+## 🔐 Autenticação
+
+A aplicação suporta dois métodos de autenticação:
+- **Credentials:** Email/senha com bcrypt
+- **Google OAuth:** Login social
+
+## 📊 Funcionalidades
+
+### Nível Gratuito
+- Ranking básico usando Fórmula de Graham
+- Visualização de até 10 empresas
+- Dados fundamentalistas básicos
+
+### Nível Premium
+- Múltiplos modelos de valuation
+- Análise completa com IA (Gemini)
+- Criação e gestão de carteiras
+- Backtesting avançado
+- Rankings ilimitados
+
+## 🛠️ Desenvolvimento
+
+```bash
+# Executar em modo desenvolvimento
+npm run dev
+
+# Build para produção
+npm run build
+
+# Executar worker de ingestão de dados
+npm run fetch:data
+
+# Testar API de ranking
+npm run test:rank-builder
+
+# Executar linting
+npm run lint
+```
+
+## 🔄 Worker de Ingestão de Dados
+
+O projeto inclui um script TypeScript para buscar dados de ações brasileiras:
+
+```bash
+# Plano gratuito (1 ação por vez)
+npm run fetch:data:free
+
+# Plano pago (10 ações por lote) 
+npm run fetch:data:paid
+
+# Script padrão (gratuito)
+npm run fetch:data
+```
+
+**Funcionalidades:**
+- ✅ 45+ tickers principais do BOVESPA
+- ✅ **65 indicadores fundamentalistas** extraídos por ação (**62/65 disponíveis tipicamente ~95%**)
+- ✅ 100% compatível com plano gratuito da Brapi  
+- ✅ **TODOS os dados críticos funcionam!** (**ROE, ROA, Margem Bruta, EBITDA**, etc.)
+- ✅ **Balanço Patrimonial completo** - 12+ campos de ativos, passivos, patrimônio líquido
+- ✅ **63+ dividendos históricos** - último dividendo, datas, tipos, histórico completo
+- ✅ **8 indicadores calculados** - P/Ativos, ROIC, Giro Ativos, Dívida Líquida/PL, etc.
+- ✅ Suporte para upgrade automático ao plano pago
+- ✅ Integração com Brapi API oficial (4 módulos + dividends=true)
+- ✅ Rate limiting adaptativo por plano
+- ✅ Cálculos proprietários para indicadores não disponíveis na API
+
+**Configuração:**
+```env
+# Opcional - para rate limiting maior
+BRAPI_TOKEN="seu-token-brapi"
+```
+
+Veja documentação completa em [`scripts/README.md`](scripts/README.md).
+
+## 🎯 API de Ranking (/api/rank-builder)
+
+A API de ranking implementa 4 modelos de valuation **aprimorados** com filtros de qualidade para evitar armadilhas comuns:
+
+### 📊 Modelos Disponíveis
+
+**1. Graham Quality Model (`graham`)**
+```json
+{
+  "model": "graham",
+  "params": { "marginOfSafety": 0.3 }
+}
+```
+- ✅ **Fórmula Original**: Preço Justo = √(22.5 × LPA × VPA)
+- 🛡️ **Filtros de Qualidade**: ROE ≥ 10%, Liquidez ≥ 1.0, Margem Líquida > 0%, Dívida/PL ≤ 150%
+- 📊 **Score de Qualidade**: Prioriza empresas sólidas dentro da margem de segurança
+- 🎯 **Retorna**: preço justo, potencial de alta, margem de segurança + qualityScore
+
+**2. Anti-Dividend Trap Model (`dividendYield`)**
+```json
+{
+  "model": "dividendYield", 
+  "params": { "minYield": 0.06 }
+}
+```
+- 🚨 **Problema Resolvido**: Evita "dividend traps" (empresas que pagam DY alto mas estão em declínio)
+- 🛡️ **Filtros Anti-Trap**: ROE ≥ 10%, LC ≥ 1.2, P/L entre 5-25, Margem Líquida ≥ 5%, Market Cap ≥ R$ 1B
+- 📊 **Sustainability Score**: Combina DY + sustentabilidade financeira
+- 💡 **Ideal**: Renda passiva sustentável, não armadilhas
+
+**3. Value Investing Model (`lowPE`)**
+```json
+{
+  "model": "lowPE",
+  "params": { "maxPE": 15, "minROE": 0.15 }
+}
+```
+- 💎 **Filosofia**: P/L baixo + empresas de qualidade (não "value traps")
+- 🔍 **Filtros Rigorosos**: ROA ≥ 5%, Margem Líquida ≥ 3%, Crescimento Receitas > -10%, LC ≥ 1.0
+- 📊 **Value Score**: Combina preço atrativo + indicadores de qualidade
+- 🎯 **Busca**: Empresas baratas MAS rentáveis e saudáveis
+
+**4. Enhanced Magic Formula (`magicFormula`)**
+```json
+{
+  "model": "magicFormula",
+  "params": { "limit": 10 }
+}
+```
+- 🧙‍♂️ **Base Greenblatt**: ROIC + Earnings Yield ranking
+- ✨ **Melhorias**: ROIC ajustado por margem e crescimento, filtros de qualidade adicionais
+- 🛡️ **Filtros Extras**: ROE ≥ 8%, Margem EBITDA ≥ 10%, Crescimento > -15%, LC ≥ 1.0
+- 🏆 **Resultado**: Empresas com qualidade E preço atrativo (não apenas baratas)
+
+### 📋 Campo Rational - Transparência Total
+
+Cada resposta da API inclui dois níveis de racional:
+
+**1. Racional Geral da Estratégia** (`rational` na resposta principal):
+```json
+{
+  "model": "graham",
+  "rational": "🧮 **MODELO GRAHAM APRIMORADO**\n\n📚 **Filosofia**: Baseado na fórmula clássica de Benjamin Graham...",
+  "results": [...]
+}
+```
+
+**2. Racional Individual de Cada Empresa** (`rational` em cada resultado):
+```json
+{
+  "ticker": "VALE3",
+  "name": "Vale S.A.",
+  "rational": "✅ Aprovada no Graham Quality Model com 35.2% de margem de segurança. Empresa sólida: ROE 15.3%, LC 1.45, Margem Líquida 12.8%. Score de qualidade: 78.5/100."
+}
+```
+
+### 🧪 Testando a API
+
+```bash
+# Testar todos os modelos com racionais detalhados
+npm run test:rank-builder
+
+# Ou testar manualmente:
+curl -X POST http://localhost:3000/api/rank-builder \
+  -H "Content-Type: application/json" \
+  -d '{"model": "graham", "params": {"marginOfSafety": 0.2}}'
+```
+
+**Resposta Exemplo com Rational:**
+```json
+{
+  "model": "graham",
+  "rational": "🧮 MODELO GRAHAM APRIMORADO - Filosofia, filtros e critérios...",
+  "results": [
+    {
+      "ticker": "VALE3",
+      "rational": "✅ Aprovada no Graham Quality Model com 35.2% de margem...",
+      "fairValue": 125.50,
+      "marginOfSafety": 35.2,
+      "key_metrics": {...}
+    }
+  ]
+}
+```
+
+## 📁 Estrutura do Projeto
+
+```
+src/
+├── app/                 # App Router do Next.js
+│   ├── api/            # API Routes
+│   ├── login/          # Página de login
+│   ├── register/       # Página de registro
+│   └── globals.css     # Estilos globais
+├── components/         # Componentes React
+│   └── ui/            # Componentes shadcn/ui
+├── lib/               # Utilitários
+│   ├── auth.ts        # Configuração NextAuth
+│   └── prisma.ts      # Cliente Prisma
+├── providers/         # Providers do React
+└── types/            # Tipos TypeScript
+
+scripts/
+├── fetch-data.ts       # Worker de ingestão de dados
+└── README.md          # Documentação dos scripts
+```
+
+## 🚧 Próximos Passos
+
+1. ✅ ~~Implementar worker de ingestão de dados (Brapi API)~~ - **CONCLUÍDO**
+2. ✅ ~~Desenvolver API de ranking com 4 modelos de valuation aprimorados~~ - **CONCLUÍDO**
+3. ✅ ~~Adicionar campo 'rational' para transparência total da estratégia~~ - **CONCLUÍDO**
+4. Criar interface frontend para ferramenta de ranking rápido
+5. Criar páginas individuais de ativos
+6. Integrar Google Gemini para análise IA
+7. Implementar sistema de pagamento PIX
+8. Desenvolver sistema de backtesting
+
+## 📄 Licença
+
+MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.

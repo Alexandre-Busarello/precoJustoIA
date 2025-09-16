@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Analisador de Ações",
+  title: "Preço Justo AI",
   description: "Plataforma SaaS para análise fundamentalista de ativos",
 };
 

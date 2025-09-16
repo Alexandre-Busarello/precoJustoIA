@@ -9,7 +9,9 @@ import {
   BarChart3, 
   RefreshCw, 
   Eye,
-  Calendar 
+  Calendar,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 
 interface HistoryItem {
@@ -32,10 +34,17 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
   const [loading, setLoading] = useState(true)
   const [reprocessing, setReprocessing] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 4
 
   useEffect(() => {
     fetchHistory()
   }, [])
+
+  // Reset para primeira página quando histórico muda
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [history])
 
   const fetchHistory = async () => {
     try {
@@ -108,6 +117,10 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
 
   const getModelBadgeColor = (model: string) => {
     switch (model) {
+      case 'ai':
+        return 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg border-0'
+      case 'gordon':
+        return 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg border-0'
       case 'graham':
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
       case 'dividendYield':
@@ -116,6 +129,8 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
         return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
       case 'magicFormula':
         return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+      case 'fcd':
+        return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
       default:
         return 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
     }
@@ -198,6 +213,12 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
     )
   }
 
+  // Calcular paginação
+  const totalPages = Math.ceil(history.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentItems = history.slice(startIndex, endIndex)
+
   return (
     <Card className={className}>
       <CardHeader>
@@ -205,6 +226,11 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
           <CardTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5" />
             Últimos Rankings
+            {history.length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {history.length}
+              </Badge>
+            )}
           </CardTitle>
           <Button variant="ghost" size="sm" onClick={fetchHistory}>
             <RefreshCw className="w-4 h-4" />
@@ -213,7 +239,7 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {history.map((item) => (
+          {currentItems.map((item) => (
             <div
               key={item.id}
               className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border hover:shadow-sm transition-shadow"
@@ -262,6 +288,37 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
             </div>
           ))}
         </div>
+
+        {/* Paginação */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+            <div className="text-sm text-muted-foreground">
+              Página {currentPage} de {totalPages} ({history.length} rankings)
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3 h-3" />
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="flex items-center gap-1"
+              >
+                Próxima
+                <ChevronRight className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

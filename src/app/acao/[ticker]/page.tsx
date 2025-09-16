@@ -1,0 +1,492 @@
+import { notFound } from 'next/navigation'
+import { Metadata } from 'next'
+import { prisma } from '@/lib/prisma'
+import { CompanyLogo } from '@/components/company-logo'
+import StrategicAnalysisClient from '@/components/strategic-analysis-client'
+import HeaderScoreWrapper from '@/components/header-score-wrapper'
+import AIAnalysis from '@/components/ai-analysis'
+import FinancialIndicators from '@/components/financial-indicators'
+import Link from 'next/link'
+
+// Shadcn UI Components
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+
+// Lucide Icons
+import {
+  TrendingUp,
+  TrendingDown,
+  Building2,
+  Percent,
+  DollarSign,
+  Target,
+  BarChart3,
+  Activity,
+  PieChart,
+  Eye,
+  User,
+  LineChart
+} from 'lucide-react'
+
+interface PageProps {
+  params: {
+    ticker: string
+  }
+}
+
+
+// Funções de formatação definidas mais abaixo
+
+// Função helper para determinar tipo de indicador
+function getIndicatorType(value: number | null, positiveThreshold?: number, negativeThreshold?: number): 'positive' | 'negative' | 'neutral' | 'default' {
+  if (value === null) return 'default'
+  
+  if (positiveThreshold !== undefined && value >= positiveThreshold) return 'positive'
+  if (negativeThreshold !== undefined && value <= negativeThreshold) return 'positive'
+  if (positiveThreshold !== undefined && value < positiveThreshold) return 'negative'
+  if (negativeThreshold !== undefined && value > negativeThreshold) return 'negative'
+  
+  return 'neutral'
+}
+
+// Componente IndicatorCard definido abaixo (após os componentes inline)
+
+// Tipo para valores do Prisma que podem ser Decimal
+type PrismaDecimal = { toNumber: () => number } | number | string | null | undefined
+
+// Função para converter Decimal para number
+function toNumber(value: PrismaDecimal | Date | string | null): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') return value
+  if (typeof value === 'string') return parseFloat(value)
+  if (value instanceof Date) return value.getTime()
+  if (value && typeof value === 'object' && 'toNumber' in value) {
+    return value.toNumber()
+  }
+  return parseFloat(String(value))
+}
+
+// Funções de formatação
+function formatCurrency(value: number | null): string {
+  if (value === null || value === undefined) return 'N/A'
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(value)
+}
+
+function formatPercent(value: PrismaDecimal | Date | string | null): string {
+  const numValue = toNumber(value)
+  if (numValue === null || numValue === undefined) return 'N/A'
+  return `${(numValue * 100).toFixed(2)}%`
+}
+
+function formatLargeNumber(value: number | null): string {
+  if (value === null || value === undefined) return 'N/A'
+  
+  if (value >= 1_000_000_000) {
+    return `R$ ${(value / 1_000_000_000).toFixed(2)}B`
+  } else if (value >= 1_000_000) {
+    return `R$ ${(value / 1_000_000).toFixed(2)}M`
+  } else if (value >= 1_000) {
+    return `R$ ${(value / 1_000).toFixed(2)}K`
+  }
+  return formatCurrency(value)
+}
+
+
+
+// Componente para indicador com ícone - copiado exatamente do ticker-page-client
+function IndicatorCard({ 
+  title, 
+  value, 
+  icon: Icon, 
+  description,
+  type = 'default',
+  onChartClick,
+  ticker
+}: {
+  title: string
+  value: string | number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  icon: any
+  description?: string
+  type?: 'positive' | 'negative' | 'neutral' | 'default'
+  onChartClick?: (indicator: string) => void
+  ticker?: string
+}) {
+  const getColorClass = () => {
+    switch (type) {
+      case 'positive': return 'text-green-600 dark:text-green-400'
+      case 'negative': return 'text-red-600 dark:text-red-400'
+      case 'neutral': return 'text-blue-600 dark:text-blue-400'
+      default: return 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3 flex-1">
+            <div className={`p-2 rounded-lg bg-gray-100 dark:bg-gray-800 ${getColorClass()}`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-muted-foreground truncate">
+                {title}
+              </p>
+              <p className="text-xl font-bold">
+                {value}
+              </p>
+              {description && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {description}
+                </p>
+              )}
+            </div>
+          </div>
+          {onChartClick && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onChartClick(title)}
+              className="ml-2 p-2 h-8 w-8"
+              title={`Ver gráfico de evolução do ${title}`}
+            >
+              <LineChart className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+
+// Gerar metadata dinâmico para SEO
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const resolvedParams = await params
+  const ticker = resolvedParams.ticker.toUpperCase()
+  
+  try {
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      include: {
+        financialData: {
+          orderBy: { year: 'desc' },
+          take: 1
+        },
+        dailyQuotes: {
+          orderBy: { date: 'desc' },
+          take: 1
+        }
+      }
+    })
+
+    if (!company) {
+      return {
+        title: `${ticker} - Ticker Não Encontrado | Análise Fácil`,
+        description: `O ticker ${ticker} não foi encontrado em nossa base de dados de análise de ações.`
+      }
+    }
+
+    const latestFinancials = company.financialData[0]
+    const currentPrice = toNumber(company.dailyQuotes[0]?.price) || 0
+    
+    const title = `${ticker} - ${company.name} | Análise de Ação Completa - Preço Justo AI`
+    const description = `Análise fundamentalista completa da ação ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}. Análise com IA, indicadores financeiros e estratégias de investimento.`
+
+    return {
+      title,
+      description,
+      keywords: `${ticker}, ${company.name}, análise fundamentalista, ação ${ticker}, ações, B3, bovespa, investimentos, ${company.sector}, análise de ações, valuation, indicadores financeiros`,
+      openGraph: {
+        title,
+        description,
+        type: 'article',
+        url: `/acao/${ticker}`,
+        siteName: 'Preço Justo AI',
+        images: company.logoUrl ? [{ 
+          url: company.logoUrl, 
+          alt: `Logo ${company.name}`,
+          width: 400,
+          height: 400
+        }] : undefined,
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: company.logoUrl ? [company.logoUrl] : undefined,
+        creator: '@PrecoJustoAI',
+        site: '@PrecoJustoAI'
+      },
+      alternates: {
+        canonical: `/acao/${ticker}`,
+      },
+      robots: {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          'max-video-preview': -1,
+          'max-image-preview': 'large',
+          'max-snippet': -1,
+        },
+      },
+      other: {
+        'article:section': 'Análise de Ações',
+        'article:tag': `${ticker}, ${company.name}, ${company.sector}, análise fundamentalista`,
+        'article:author': 'Preço Justo AI',
+        'article:publisher': 'Preço Justo AI',
+      }
+    }
+  } catch {
+    return {
+      title: `${ticker} - Análise de Ação | Preço Justo AI`,
+      description: `Análise fundamentalista completa da ação ${ticker} com indicadores financeiros, valuation e estratégias de investimento. Descubra se ${ticker} está subvalorizada ou sobrevalorizada.`,
+      alternates: {
+        canonical: `/acao/${ticker}`,
+      }
+    }
+  }
+}
+
+export default async function TickerPage({ params }: PageProps) {
+  const resolvedParams = await params
+  const ticker = resolvedParams.ticker.toUpperCase()
+
+  // Sessão do usuário é agora verificada no componente cliente via useSession()
+
+  // Buscar dados da empresa
+  const companyData = await prisma.company.findUnique({
+    where: { ticker },
+    include: {
+      financialData: {
+        orderBy: { year: 'desc' },
+        take: 1
+      },
+      dailyQuotes: {
+        orderBy: { date: 'desc' },
+        take: 1
+      }
+    }
+  })
+
+  if (!companyData) {
+    notFound()
+  }
+
+  const latestFinancials = companyData.financialData[0]
+  const latestQuote = companyData.dailyQuotes[0]
+  const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+
+  // As análises estratégicas agora são feitas no componente cliente
+
+  // Converter dados financeiros para números (evitar erro Decimal do Prisma)
+  const serializedFinancials = latestFinancials ? Object.fromEntries(
+    Object.entries(latestFinancials).map(([key, value]) => [
+      key,
+      // Converter Decimals para números, manter Dates e outros tipos
+      value && typeof value === 'object' && 'toNumber' in value 
+        ? value.toNumber() 
+        : value
+    ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any : null
+
+  return (
+    <>
+      <div className="container mx-auto py-8 px-4">
+        {/* Layout Responsivo: 2 Cards Separados */}
+        <div className="mb-8">
+          {/* Desktop: Cards lado a lado */}
+          <div className="lg:flex lg:space-x-6 space-y-6 lg:space-y-0">
+            
+            {/* Card do Header da Empresa */}
+            <Card className="flex-1">
+              <CardContent className="p-6">
+                <div className="flex items-start space-x-6">
+                  {/* Logo da empresa com fallback */}
+                  <div className="flex-shrink-0">
+                    <CompanyLogo
+                      logoUrl={companyData.logoUrl}
+                      companyName={companyData.name}
+                      ticker={ticker}
+                      size={80}
+                    />
+                  </div>
+
+                  {/* Informações básicas */}
+                  <div className="flex-1">
+                    {/* Header: Ticker + Preço (Responsivo) */}
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-3">
+                      {/* Ticker e Setor */}
+                      <div className="flex items-center space-x-3 mb-3 md:mb-0">
+                        <h1 className="text-3xl font-bold">{ticker}</h1>
+                        <Badge variant="secondary" className="text-sm">
+                          {companyData.sector || 'N/A'}
+                        </Badge>
+                      </div>
+                      
+                      {/* Preço - Mobile: abaixo do ticker, Desktop: ao lado direito */}
+                      <div className="md:text-right md:flex-shrink-0">
+                        <p className="text-sm text-muted-foreground">Preço Atual</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {formatCurrency(currentPrice)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Último dado disponível
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <h2 className="text-xl text-muted-foreground mb-3">
+                      Análise da Ação {companyData.name}
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
+                      {companyData.industry && (
+                        <div className="flex items-center space-x-2">
+                          <PieChart className="w-4 h-4 text-muted-foreground" />
+                          <span>{companyData.industry}</span>
+                        </div>
+                      )}
+                      
+                      {companyData.website && (
+                        <div className="flex items-center space-x-2">
+                          <Eye className="w-4 h-4 text-muted-foreground" />
+                          <Link 
+                            href={companyData.website} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            Site oficial
+                          </Link>
+                        </div>
+                      )}
+                      
+                      {(companyData.city || companyData.state) && (
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          <span>
+                            {[companyData.city, companyData.state].filter(Boolean).join(', ')}
+                          </span>
+                        </div>
+                      )}
+
+                      {companyData.fullTimeEmployees && (
+                        <div className="flex items-center space-x-2">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                          <span>{companyData.fullTimeEmployees.toLocaleString()} funcionários</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card do Score - Separado */}
+            <div className="lg:flex-shrink-0">
+              <HeaderScoreWrapper ticker={ticker} />
+            </div>
+          </div>
+        </div>
+
+
+        {latestFinancials && (
+          <>
+            {/* Análises Estratégicas - Usando componente cliente */}
+            {latestFinancials && (
+              <StrategicAnalysisClient 
+                ticker={ticker}
+                currentPrice={currentPrice}
+                latestFinancials={serializedFinancials}
+              />
+            )}
+
+
+
+            {/* Indicadores Financeiros com Gráficos */}
+            <FinancialIndicators 
+              ticker={ticker}
+              latestFinancials={serializedFinancials}
+            />
+
+            {/* Análise com IA */}
+            <AIAnalysis
+              ticker={ticker}
+              name={companyData.name}
+              sector={companyData.sector}
+              currentPrice={currentPrice}
+              financials={serializedFinancials}
+            />
+
+            {/* Footer com data da atualização */}
+            <div className="mt-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Dados financeiros atualizados em: {' '}
+                {latestFinancials.updatedAt 
+                  ? new Date(latestFinancials.updatedAt).toLocaleDateString('pt-BR')
+                  : 'N/A'
+                }
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Schema Structured Data para SEO */}
+      {latestFinancials && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Corporation",
+              "name": companyData.name,
+              "alternateName": ticker,
+              "description": `Análise fundamentalista completa de ${companyData.name} (${ticker}) com indicadores financeiros, valuation e estratégias de investimento. Descubra se a ação está subvalorizada.`,
+              "url": `https://preço-justo.ai/acao/${ticker}`,
+              "logo": companyData.logoUrl || undefined,
+              "sameAs": companyData.website ? [companyData.website] : undefined,
+              "address": companyData.address ? {
+                "@type": "PostalAddress",
+                "addressLocality": companyData.city,
+                "addressRegion": companyData.state,
+                "addressCountry": "BR"
+              } : undefined,
+              "numberOfEmployees": companyData.fullTimeEmployees,
+              "industry": companyData.industry,
+              "sector": companyData.sector,
+              "marketCapitalization": {
+                "@type": "MonetaryAmount",
+                "currency": "BRL",
+                "value": toNumber(latestFinancials.marketCap)
+              },
+              "revenue": {
+                "@type": "MonetaryAmount", 
+                "currency": "BRL",
+                "value": toNumber(latestFinancials.receitaTotal)
+              },
+              "stockExchange": "B3 - Brasil Bolsa Balcão",
+              "tickerSymbol": ticker,
+              "priceRange": formatCurrency(currentPrice),
+              "dividendYield": toNumber(latestFinancials.dy),
+              "peRatio": toNumber(latestFinancials.pl),
+              "pbRatio": toNumber(latestFinancials.pvp),
+              "roe": toNumber(latestFinancials.roe),
+              "roa": toNumber(latestFinancials.roa),
+              "lastUpdated": latestFinancials.updatedAt?.toISOString()
+            })
+          }}
+        />
+      )}
+    </>
+  )
+}

@@ -100,11 +100,12 @@ model Company {
 model FinancialData {
   id                    Int      @id @default(autoincrement())
   companyId             Int      @map("company_id")
-  reportDate            DateTime @map("report_date") @db.Date
+  year                  Int      @db.Integer
   
   // === INDICADORES DE VALUATION ===
   pl                    Decimal? @db.Decimal(15, 6)  // P/L atual
   forwardPE             Decimal? @map("forward_pe") @db.Decimal(15, 6)     // P/L projetado
+  earningsYield         Decimal? @map("earnings_yield") @db.Decimal(15, 6) // Earnings Yield (1/P/L)
   pvp                   Decimal? @db.Decimal(15, 6)  // P/VP
   dy                    Decimal? @db.Decimal(15, 6)  // Dividend Yield
   evEbitda              Decimal? @map("ev_ebitda") @db.Decimal(15, 6)      // EV/EBITDA
@@ -152,6 +153,7 @@ model FinancialData {
   dividendYield12m      Decimal? @map("dividend_yield_12m") @db.Decimal(15, 6)    // DY 12 meses
   ultimoDividendo       Decimal? @map("ultimo_dividendo") @db.Decimal(15, 6)      // Last Dividend Value
   dataUltimoDividendo   DateTime? @map("data_ultimo_dividendo") @db.Date          // Last Dividend Date
+  payout                Decimal? @db.Decimal(15, 6)                               // Payout ratio (% do lucro pago como dividendo)
   
   // === PERFORMANCE E VARIAÇÕES ===
   variacao52Semanas     Decimal? @map("variacao_52_semanas") @db.Decimal(15, 6)  // 52 Week Change
@@ -162,6 +164,8 @@ model FinancialData {
   receitaTotal          Decimal? @map("receita_total") @db.Decimal(20, 2)        // Total Revenue
   lucroLiquido          Decimal? @map("lucro_liquido") @db.Decimal(20, 2)        // Net Income / Gross Profits
   fluxoCaixaOperacional Decimal? @map("fluxo_caixa_operacional") @db.Decimal(20, 2) // Operating Cashflow
+  fluxoCaixaInvestimento Decimal? @map("fluxo_caixa_investimento") @db.Decimal(20, 2) // Investment Cashflow
+  fluxoCaixaFinanciamento Decimal? @map("fluxo_caixa_financiamento") @db.Decimal(20, 2) // Financing Cashflow
   fluxoCaixaLivre       Decimal? @map("fluxo_caixa_livre") @db.Decimal(20, 2)    // Free Cashflow
   totalCaixa            Decimal? @map("total_caixa") @db.Decimal(20, 2)          // Total Cash
   totalDivida           Decimal? @map("total_divida") @db.Decimal(20, 2)         // Total Debt
@@ -193,7 +197,7 @@ model FinancialData {
   
   company               Company  @relation(fields: [companyId], references: [id])
   
-  @@unique([companyId, reportDate])
+  @@unique([companyId, year])
   @@map("financial_data")
 }
 

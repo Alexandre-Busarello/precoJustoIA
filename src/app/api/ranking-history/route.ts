@@ -94,6 +94,10 @@ export async function GET() {
 
 function getModelDisplayName(model: string): string {
   switch (model) {
+    case 'ai':
+      return '🤖 IA Premium';
+    case 'gordon':
+      return 'Fórmula de Gordon';
     case 'graham':
       return 'Fórmula de Graham';
     case 'dividendYield':
@@ -102,6 +106,8 @@ function getModelDisplayName(model: string): string {
       return 'Value Investing';
     case 'magicFormula':
       return 'Fórmula Mágica';
+    case 'fcd':
+      return 'Fluxo de Caixa Descontado';
     default:
       return model;
   }
@@ -109,6 +115,15 @@ function getModelDisplayName(model: string): string {
 
 function generateHistoryDescription(model: string, params: Record<string, unknown>): string {
   switch (model) {
+    case 'ai':
+      const riskTolerance = params.riskTolerance as string || 'Moderado';
+      const timeHorizon = params.timeHorizon as string || 'Longo Prazo';
+      const focus = params.focus as string || 'Crescimento e Valor';
+      return `Risco: ${riskTolerance}, Horizonte: ${timeHorizon}, Foco: ${focus}`;
+    case 'gordon':
+      const discountRate = ((params.discountRate as number || 0.10) * 100).toFixed(1);
+      const dividendGrowthRate = ((params.dividendGrowthRate as number || 0.03) * 100).toFixed(1);
+      return `Taxa desconto: ${discountRate}%, Crescimento div: ${dividendGrowthRate}%`;
     case 'graham':
       return `Margem de segurança: ${((params.marginOfSafety as number) * 100).toFixed(0)}%`;
     case 'dividendYield':
@@ -117,6 +132,10 @@ function generateHistoryDescription(model: string, params: Record<string, unknow
       return `P/L máx: ${params.maxPE}, ROE min: ${((params.minROE as number) * 100).toFixed(0)}%`;
     case 'magicFormula':
       return `Top ${params.limit || 10} empresas`;
+    case 'fcd':
+      const growthRate = ((params.growthRate as number || 0.025) * 100).toFixed(1);
+      const discountRateFcd = ((params.discountRate as number || 0.10) * 100).toFixed(1);
+      return `Crescimento: ${growthRate}%, Taxa: ${discountRateFcd}%`;
     default:
       return 'Parâmetros personalizados';
   }

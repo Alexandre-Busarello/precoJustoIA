@@ -1,4 +1,4 @@
-# Analisador de Ações - SaaS de Análise Fundamentalista
+# Preço Justo AI - SaaS de Análise Fundamentalista
 
 Uma plataforma SaaS que simplifica a análise fundamentalista de ações para investidores pessoa física, utilizando modelos de valuation consagrados e o poder da IA.
 
@@ -172,7 +172,7 @@ A API de ranking implementa 4 modelos de valuation **aprimorados** com filtros d
 }
 ```
 - 🚨 **Problema Resolvido**: Evita "dividend traps" (empresas que pagam DY alto mas estão em declínio)
-- 🛡️ **Filtros Anti-Trap**: ROE ≥ 10%, LC ≥ 1.2, P/L entre 5-25, Margem Líquida ≥ 5%, Market Cap ≥ R$ 1B
+- 🛡️ **Filtros Anti-Trap**: ROE ≥ 10%, LC ≥ 1.2, P/L entre 4-25, Margem Líquida ≥ 5%, Market Cap ≥ R$ 1B
 - 📊 **Sustainability Score**: Combina DY + sustentabilidade financeira
 - 💡 **Ideal**: Renda passiva sustentável, não armadilhas
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { prisma, safeQuery } from '@/lib/prisma-wrapper';
 
 // Função helper simplificada para retry
 async function withRetry<T>(
@@ -44,7 +44,7 @@ export async function GET() {
 
     // Executar queries sequencialmente para evitar sobrecarga do pgbouncer
     console.log('📊 Buscando rankings de hoje...')
-    const rankingsToday = await withRetry(() => 
+    const rankingsToday = await safeQuery('rankings-today', () => 
       prisma.rankingHistory.count({
         where: {
           userId: session.user.id,
@@ -57,7 +57,7 @@ export async function GET() {
     );
 
     console.log('📊 Buscando total de rankings...')
-    const totalRankings = await withRetry(() =>
+    const totalRankings = await safeQuery('total-rankings', () =>
       prisma.rankingHistory.count({
         where: {
           userId: session.user.id
@@ -66,11 +66,13 @@ export async function GET() {
     );
 
     console.log('📊 Buscando total de empresas...')
-    const totalCompanies = await withRetry(() => prisma.company.count());
+    const totalCompanies = await safeQuery('total-companies', () => 
+      prisma.company.count()
+    );
 
     // Contar modelos disponíveis baseado na subscription
     const isPremium = session.user.subscriptionTier === 'PREMIUM';
-    const availableModels = isPremium ? 4 : 1; // Premium: 4 modelos, Free: 1 modelo
+    const availableModels = isPremium ? 5 : 1; // Premium: 4 modelos, Free: 1 modelo
 
     return NextResponse.json({
       rankingsToday,

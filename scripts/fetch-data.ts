@@ -154,6 +154,7 @@ interface BrapiQuoteResponse {
       longTermDebt?: number;
       otherLiab?: number;
       totalCurrentLiabilities?: number;
+      nonCurrentLiabilities?: number;
       totalLiab?: number;
       commonStock?: number;
       retainedEarnings?: number;
@@ -163,6 +164,18 @@ interface BrapiQuoteResponse {
       netTangibleAssets?: number;
       goodWill?: number;
       intangibleAssets?: number;
+      updatedAt?: string;
+    }>;
+    cashflowHistory?: Array<{
+      symbol?: string;
+      type?: string;
+      endDate?: string;
+      operatingCashFlow?: number;
+      investmentCashFlow?: number;
+      financingCashFlow?: number;
+      increaseOrDecreaseInCash?: number;
+      initialCashBalance?: number;
+      finalCashBalance?: number;
       updatedAt?: string;
     }>;
     dividendsData?: {
@@ -250,6 +263,7 @@ export class DataFetcher {
     const profile = quoteData.summaryProfile;
     const financial = quoteData.financialData;
     const balance = quoteData.balanceSheetHistory?.[0]; // Dados mais recentes do balanço
+    const cashflow = quoteData.cashflowHistory?.[0]; // Dados mais recentes de fluxo de caixa
     const dividends = quoteData.dividendsData;
 
     // Calcular PSR: Priorizar financialData, fallback para cálculo
@@ -279,13 +293,24 @@ export class DataFetcher {
         pAtivos = quoteData.marketCap / balance.totalAssets;
       }
 
-      // Passivo/Ativos = Total Passivo / Total Assets
-      if (balance.totalLiab && balance.totalAssets) {
-        passivoAtivos = balance.totalLiab / balance.totalAssets;
+      // Passivo/Ativos = (Passivo Circulante + Passivo Não Circulante) / Ativo Total
+      // A API retorna `totalLiab` como o mesmo valor de `totalAssets`, representando "Passivos + Patrimônio Líquido".
+      // O cálculo correto para o total de passivos é a soma dos passivos circulantes e não circulantes.
+      if (balance?.totalCurrentLiabilities && balance?.nonCurrentLiabilities && balance?.totalAssets) {
+        const totalRealLiab = balance.totalCurrentLiabilities + balance.nonCurrentLiabilities;
+        if (totalRealLiab > 0 && balance.totalAssets > 0) {
+          passivoAtivos = totalRealLiab / balance.totalAssets;
+        }
+      } else if (balance?.totalLiab && balance?.totalStockholderEquity && balance?.totalAssets) {
+        // Fallback: Total Ativos - Patrimônio Líquido
+        const totalRealLiab = balance.totalLiab - balance.totalStockholderEquity;
+          if (totalRealLiab > 0 && balance.totalAssets > 0) {
+          passivoAtivos = totalRealLiab / balance.totalAssets;
+        }
       }
 
       // Giro Ativos = Receita Total / Total Assets
-      if (financial?.totalRevenue && balance.totalAssets) {
+      if (financial?.totalRevenue && balance?.totalAssets) {
         giroAtivos = financial.totalRevenue / balance.totalAssets;
       }
 
@@ -348,9 +373,20 @@ export class DataFetcher {
       dataDividendoMaisRecente = dividends.cashDividends[0]?.paymentDate;
     }
 
+    // === CALCULAR EARNINGS YIELD ===
+    // Earnings Yield = 1 / P/L (quando P/L > 0)
+    // Alternativamente: LPA / Preço da Ação
+    let earningsYield = null;
+    if (quoteData.priceEarnings && quoteData.priceEarnings > 0) {
+      earningsYield = 1 / quoteData.priceEarnings;
+    } else if (quoteData.earningsPerShare && quoteData.regularMarketPrice && quoteData.regularMarketPrice > 0) {
+      earningsYield = quoteData.earningsPerShare / quoteData.regularMarketPrice;
+    }
+
     return {
       // === INDICADORES DE VALUATION ===
       pl: quoteData.priceEarnings || null,
+      earningsYield: earningsYield,
       pvp: stats?.priceToBook || null,
       dy: stats?.dividendYield ? stats.dividendYield / 100 : null, // Converter % para decimal
       evEbitda: stats?.enterpriseToEbitda || null,
@@ -359,7 +395,7 @@ export class DataFetcher {
       pAtivos: pAtivos,            // ✅ CALCULADO
       pCapGiro: pCapGiro,          // ✅ CALCULADO
       pEbit: pEbit,                // ✅ CALCULADO
-      lpa: stats?.trailingEps || quoteData.earningsPerShare || null,
+      lpa: quoteData.earningsPerShare || stats?.trailingEps  || null,
       vpa: stats?.bookValue || null,
 
       // === INDICADORES DE ENDIVIDAMENTO ===
@@ -414,7 +450,9 @@ export class DataFetcher {
       ebitda: financial?.ebitda || null,
       receitaTotal: financial?.totalRevenue || null,
       lucroLiquido: financial?.grossProfits || null,
-      fluxoCaixaOperacional: financial?.operatingCashflow || null,
+      fluxoCaixaOperacional: cashflow?.operatingCashFlow || financial?.operatingCashflow || null,
+      fluxoCaixaInvestimento: cashflow?.investmentCashFlow || null,
+      fluxoCaixaFinanciamento: cashflow?.financingCashFlow || null,
       fluxoCaixaLivre: financial?.freeCashflow || null,
       totalCaixa: financial?.totalCash || null,
       totalDivida: financial?.totalDebt || null,
@@ -499,6 +537,9 @@ export class DataFetcher {
     // 2. Inserir cotação do dia
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    
+    // Ano atual para dados financeiros (dados anualizados)
+    const currentYear = new Date().getFullYear();
 
     await prisma.dailyQuote.upsert({
       where: {
@@ -530,15 +571,16 @@ export class DataFetcher {
     if (hasFundamentalData) {
       await prisma.financialData.upsert({
         where: {
-          companyId_reportDate: {
+          companyId_year: {
             companyId: company.id,
-            reportDate: today
+            year: currentYear
           }
         },
         update: {
           // === VALUATION EXPANDIDO ===
           pl: financialData.pl,
           forwardPE: financialData.forwardPE,
+          earningsYield: financialData.earningsYield,
           pvp: financialData.pvp,
           dy: financialData.dy,
           evEbitda: financialData.evEbitda,
@@ -596,6 +638,8 @@ export class DataFetcher {
           receitaTotal: financialData.receitaTotal,
           lucroLiquido: financialData.lucroLiquido,
           fluxoCaixaOperacional: financialData.fluxoCaixaOperacional,
+          fluxoCaixaInvestimento: financialData.fluxoCaixaInvestimento,
+          fluxoCaixaFinanciamento: financialData.fluxoCaixaFinanciamento,
           fluxoCaixaLivre: financialData.fluxoCaixaLivre,
           totalCaixa: financialData.totalCaixa,
           totalDivida: financialData.totalDivida,
@@ -623,11 +667,12 @@ export class DataFetcher {
         },
         create: {
           companyId: company.id,
-          reportDate: today,
+          year: currentYear,
           
           // === VALUATION EXPANDIDO ===
           pl: financialData.pl,
           forwardPE: financialData.forwardPE,
+          earningsYield: financialData.earningsYield,
           pvp: financialData.pvp,
           dy: financialData.dy,
           evEbitda: financialData.evEbitda,
@@ -682,6 +727,8 @@ export class DataFetcher {
           receitaTotal: financialData.receitaTotal,
           lucroLiquido: financialData.lucroLiquido,
           fluxoCaixaOperacional: financialData.fluxoCaixaOperacional,
+          fluxoCaixaInvestimento: financialData.fluxoCaixaInvestimento,
+          fluxoCaixaFinanciamento: financialData.fluxoCaixaFinanciamento,
           fluxoCaixaLivre: financialData.fluxoCaixaLivre,
           totalCaixa: financialData.totalCaixa,
           totalDivida: financialData.totalDivida,
@@ -712,6 +759,7 @@ export class DataFetcher {
       // Log detalhado dos indicadores encontrados
       const indicators = [];
       if (financialData.pl) indicators.push(`P/L: ${Number(financialData.pl).toFixed(2)}`);
+      if (financialData.earningsYield) indicators.push(`EY: ${(Number(financialData.earningsYield) * 100).toFixed(1)}%`);
       if (financialData.pvp) indicators.push(`P/VP: ${Number(financialData.pvp).toFixed(2)}`);
       if (financialData.dy) indicators.push(`DY: ${(Number(financialData.dy) * 100).toFixed(2)}%`);
       if (financialData.psr) indicators.push(`PSR: ${Number(financialData.psr).toFixed(2)}`);
@@ -725,7 +773,7 @@ export class DataFetcher {
         !['setor', 'industria', 'website', 'funcionarios', 'endereco', 'cidade', 'estado', 'pais', 'logoUrl'].includes(key)
       );
       const availableCount = financialFields.filter(key => financialData[key as keyof typeof financialData] !== null && financialData[key as keyof typeof financialData] !== undefined).length;
-      const totalFields = 65; // Total de campos no schema (66 - 1 crescimentoTrimestral removido)
+      const totalFields = 66; // Total de campos no schema (65 + 1 earningsYield adicionado)
       
       // Logs detalhados por categoria
       console.log(`📈 Fundamentos atualizados: ${ticker} (${indicators.slice(0, 4).join(', ')})`);

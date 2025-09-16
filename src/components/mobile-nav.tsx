@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -90,10 +91,17 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
           <div className="flex items-center justify-between p-4 border-b border-border">
             <Link
               href="/"
-              className="text-xl font-bold text-primary"
+              className="flex items-center"
               onClick={() => setIsOpen(false)}
             >
-              Analisador de Ações
+              <Image 
+                src="/logo-preco-justo.png" 
+                alt="Preço Justo AI" 
+                width={147}
+                height={36}
+                style={{ height: '36px', width: 'auto' }}
+                className="w-auto"
+              />
             </Link>
             <Button 
               variant="ghost" 

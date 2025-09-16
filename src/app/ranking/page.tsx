@@ -124,7 +124,7 @@ export default function RankingPage() {
                     <div>
                       <h3 className="font-semibold mb-1">Desbloqueie todo o potencial</h3>
                       <p className="text-sm text-muted-foreground">
-                        Acesse Dividend Yield, Value Investing, Fórmula Mágica e análises com IA
+                        Acesse Dividend Yield, Value Investing, Fórmula Mágica, Fórmula de Gordon e análises com IA
                       </p>
                     </div>
                   </div>
@@ -144,7 +144,7 @@ export default function RankingPage() {
         <QuickRanker />
 
         {/* Tips Section */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/20 dark:to-blue-900/20">
             <CardContent className="p-6">
               <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-4">
@@ -167,6 +167,19 @@ export default function RankingPage() {
               <p className="text-sm text-muted-foreground">
                 Encontra empresas com dividendos sustentáveis, evitando armadilhas 
                 de yield inflado. Requer conta premium.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/20 dark:to-orange-900/20">
+            <CardContent className="p-6">
+              <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center mb-4">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="font-semibold mb-2">Fórmula de Gordon</h3>
+              <p className="text-sm text-muted-foreground">
+                Método baseado em dividendos para avaliar empresas com distribuições 
+                consistentes. Ideal para renda passiva. Requer conta premium.
               </p>
             </CardContent>
           </Card>

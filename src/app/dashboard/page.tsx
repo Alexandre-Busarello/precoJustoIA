@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { RankingHistory } from "@/components/ranking-history"
+import CompanySearch from "@/components/company-search"
 import { 
   BarChart3, 
   TrendingUp, 
@@ -14,7 +15,6 @@ import {
   PieChart, 
   Activity,
   Shield,
-  Zap,
   ArrowRight
 } from "lucide-react"
 import Link from "next/link"
@@ -78,97 +78,32 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background">
       <div className="container mx-auto px-6 py-8">
-        {/* Header */}
+        {/* Header com Busca */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">
-            Dashboard
-          </h1>
-          <p className="text-muted-foreground">
-            Bem-vindo de volta, {session.user?.name || session.user?.email?.split('@')[0]}
-          </p>
-        </div>
-
-        {/* Status Card */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="col-span-1">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                {isPremium ? (
-                  <>
-                    <div className="w-12 h-12 bg-gradient-to-r from-violet-500 to-pink-500 rounded-xl flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">Premium Ativo</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Acesso completo
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">Plano Gratuito</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Recursos limitados
-                      </p>
-                    </div>
-                  </>
-                )}
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+            {/* Título e Saudação */}
+            <div className="flex-shrink-0">
+              <h1 className="text-3xl font-bold mb-2">
+                Dashboard
+              </h1>
+              <p className="text-muted-foreground mb-4 lg:mb-0">
+                Bem-vindo de volta, {session.user?.name || session.user?.email?.split('@')[0]}
+              </p>
+            </div>
+            
+            {/* Buscador - Desktop: direita, Mobile: abaixo */}
+            <div className="lg:flex-shrink-0 lg:max-w-md w-full">
+              <div className="lg:text-right">
+                <p className="text-sm text-muted-foreground mb-2 lg:text-right">
+                  Buscar empresas
+                </p>
+                <CompanySearch 
+                  placeholder="Digite ticker ou nome..."
+                  className="w-full"
+                />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="col-span-1">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-xl flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Rankings</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {statsLoading ? 'Carregando...' : `${stats?.rankingsToday || 0} gerados hoje`}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="col-span-1">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
-                  <PieChart className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Carteiras</h3>
-                  <p className="text-sm text-muted-foreground">
-                    0 criadas
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="col-span-1">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <Activity className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Backtests</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Em breve
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Main Content Grid */}

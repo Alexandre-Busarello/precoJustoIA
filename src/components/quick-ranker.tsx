@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { CompanyLogo } from "@/components/company-logo"
 import { 
   Loader2, 
   TrendingUp, 
@@ -21,7 +23,13 @@ import {
   PieChart,
   Crown,
   Clock,
-  RefreshCw
+  RefreshCw,
+  Calculator,
+  Brain,
+  Sparkles,
+  Search,
+  CheckCircle,
+  AlertCircle
 } from "lucide-react"
 import Link from "next/link"
 
@@ -32,6 +40,17 @@ interface RankingParams {
   maxPE?: number;
   minROE?: number;
   limit?: number;
+  // Parâmetros FCD
+  growthRate?: number;
+  discountRate?: number;
+  yearsProjection?: number;
+  minMarginOfSafety?: number;
+  // Parâmetros Gordon
+  dividendGrowthRate?: number;
+  // Parâmetros AI
+  riskTolerance?: string;
+  timeHorizon?: string;
+  focus?: string;
 }
 
 interface RankingResult {
@@ -39,6 +58,7 @@ interface RankingResult {
   name: string;
   sector: string | null;
   currentPrice: number;
+  logoUrl?: string | null;
   fairValue: number | null;
   upside: number | null;
   marginOfSafety: number | null;
@@ -55,6 +75,16 @@ interface RankingResponse {
 }
 
 const models = [
+  { 
+    id: "ai", 
+    name: "🤖 Análise Preditiva com IA", 
+    description: "Inteligência Artificial analisa TODAS as estratégias e cria ranking preditivo",
+    icon: <Brain className="w-4 h-4" />,
+    free: false,
+    badge: "IA Premium",
+    special: true,
+    disclaimer: "⚠️ Utiliza IA e pode gerar resultados ligeiramente diferentes em novas execuções"
+  },
   { 
     id: "graham", 
     name: "Fórmula de Graham", 
@@ -87,6 +117,22 @@ const models = [
     free: false,
     badge: "Premium"
   },
+  { 
+    id: "fcd", 
+    name: "Fluxo de Caixa Descontado", 
+    description: "Avaliação intrínseca por DCF com projeções sofisticadas de fluxo de caixa",
+    icon: <Calculator className="w-4 h-4" />,
+    free: false,
+    badge: "Premium"
+  },
+  { 
+    id: "gordon", 
+    name: "Fórmula de Gordon", 
+    description: "Método dos dividendos para empresas com distribuições consistentes",
+    icon: <DollarSign className="w-4 h-4" />,
+    free: false,
+    badge: "Premium"
+  },
 ]
 
 export function QuickRanker() {
@@ -98,6 +144,9 @@ export function QuickRanker() {
   const [error, setError] = useState<string | null>(null)
   const [isViewingCached, setIsViewingCached] = useState(false) // Estado para resultados em cache
   const [cachedInfo, setCachedInfo] = useState<{resultCount: number, createdAt: string} | null>(null)
+  const [showAIModal, setShowAIModal] = useState(false) // Modal de processamento IA
+  const [aiProcessingStep, setAiProcessingStep] = useState(0) // Etapa atual do processamento
+  const resultsRef = useRef<HTMLDivElement>(null)
 
   // Verificar se há parâmetros E resultados para mostrar do histórico
   useEffect(() => {
@@ -132,6 +181,19 @@ export function QuickRanker() {
       }
     }
   }, [])
+
+  // Scroll automático para os resultados quando forem carregados
+  useEffect(() => {
+    if (results && results.results.length > 0 && !isViewingCached && resultsRef.current) {
+      // Pequeno delay para garantir que o DOM foi atualizado
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        })
+      }, 100)
+    }
+  }, [results, isViewingCached])
   
   const isLoggedIn = !!session
   const isPremium = session?.user?.subscriptionTier === 'PREMIUM'
@@ -167,10 +229,96 @@ export function QuickRanker() {
       case "magicFormula":
         setParams({ limit: 10 })
         break
+      case "fcd":
+        setParams({ 
+          growthRate: 0.025,        // 2.5% crescimento perpétuo
+          discountRate: 0.10,       // 10% WACC
+          yearsProjection: 5,       // 5 anos de projeção
+          minMarginOfSafety: 0.20,  // 20% margem de segurança
+          limit: 10                 // 10 resultados
+        })
+        break
+      case "gordon":
+        setParams({ 
+          discountRate: 0.12,       // 12% taxa de desconto
+          dividendGrowthRate: 0.05, // 5% crescimento dos dividendos
+          limit: 10                 // 10 resultados
+        })
+        break
+      case "ai":
+        setParams({ 
+          riskTolerance: "Moderado",           // Tolerância ao risco
+          timeHorizon: "Longo Prazo",          // Horizonte de investimento
+          focus: "Crescimento e Valor",        // Foco da análise
+          limit: 10                            // 10 resultados
+        })
+        break
       default:
         setParams({})
     }
   }
+
+  // Etapas do processamento da IA
+  const aiProcessingSteps = useMemo(() => [
+    { 
+      id: 0, 
+      title: "Iniciando análise", 
+      description: "Preparando sistema de IA...", 
+      icon: <Brain className="w-5 h-5" />,
+      duration: 5000 
+    },
+    { 
+      id: 1, 
+      title: "Seleção inteligente com IA", 
+      description: `IA analisando centenas de empresas e selecionando as ${(params.limit || 10) + 10} melhores baseado no seu perfil...`, 
+      icon: <Brain className="w-5 h-5" />,
+      duration: 10000 
+    },
+    { 
+      id: 2, 
+      title: "Executando estratégias tradicionais", 
+      description: "Analisando Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Gordon nas empresas selecionadas...", 
+      icon: <Calculator className="w-5 h-5" />,
+      duration: 5000 
+    },
+    { 
+      id: 3, 
+      title: "Análise batch com IA", 
+      description: "IA processando todas as empresas simultaneamente com dados da internet...", 
+      icon: <Sparkles className="w-5 h-5" />,
+      duration: 20000 
+    },
+    { 
+      id: 4, 
+      title: "Pesquisando dados na internet", 
+      description: "Buscando notícias recentes e informações atualizadas para cada empresa...", 
+      icon: <Search className="w-5 h-5" />,
+      duration: 20000 
+    },
+    { 
+      id: 5, 
+      title: "Finalizando ranking", 
+      description: "Consolidando resultados e preparando relatório...", 
+      icon: <CheckCircle className="w-5 h-5" />,
+      duration: 5000 
+    }
+  ], [params.limit])
+
+  // Simular progresso das etapas da IA
+  useEffect(() => {
+    if (!showAIModal) return
+
+    const currentStep = aiProcessingSteps[aiProcessingStep]
+    if (!currentStep) return
+
+    const timer = setTimeout(() => {
+      if (aiProcessingStep < aiProcessingSteps.length - 1) {
+        setAiProcessingStep(prev => prev + 1)
+      }
+    }, currentStep.duration)
+
+    return () => clearTimeout(timer)
+  }, [aiProcessingStep, showAIModal, aiProcessingSteps])
 
   const handleGenerateRanking = async () => {
     if (!selectedModel) return
@@ -179,6 +327,12 @@ export function QuickRanker() {
     setError(null)
     setIsViewingCached(false) // Resetar estado de cache ao gerar novo ranking
     setCachedInfo(null)
+
+    // Se for modelo AI, mostrar modal de processamento
+    if (selectedModel === 'ai') {
+      setShowAIModal(true)
+      setAiProcessingStep(0)
+    }
 
     try {
       const response = await fetch("/api/rank-builder", {
@@ -203,6 +357,8 @@ export function QuickRanker() {
       setError("Erro ao gerar ranking. Tente novamente.")
     } finally {
       setLoading(false)
+      setShowAIModal(false)
+      setAiProcessingStep(0)
     }
   }
 
@@ -224,6 +380,86 @@ export function QuickRanker() {
   const formatPercentage = (value: number | null) => {
     if (value === null) return "N/A"
     return `${(value).toFixed(1)}%`
+  }
+
+  // Função para formatar valores das métricas
+  const formatMetricValue = (key: string, value: number | null) => {
+    if (value === null || value === undefined) return 'N/A';
+    
+    // Identificar métricas que são percentuais (geralmente em decimal)
+    const percentualMetrics = [
+      'roe', 'roa', 'roic', 'margemLiquida', 'margemEbitda', 
+      'crescimentoReceitas', 'crescimentoLucros', 'dy', 'impliedWACC', 
+      'impliedGrowth', 'sustainabilityScore', 'qualityScore', 'valueScore',
+      'fcdQualityScore', 'terminalValueContribution'
+    ];
+    
+    // Identificar métricas monetárias
+    const monetaryMetrics = [
+      'lpa', 'vpa', 'fairValue', 'currentPrice', 'precoJusto',
+      'fcffBase', 'enterpriseValue', 'presentValueCashflows', 
+      'presentValueTerminal', 'marketCapBi'
+    ];
+    
+    // Formatação específica baseada no tipo de métrica
+    if (percentualMetrics.includes(key)) {
+      // Se o valor está entre 0 e 1, assumir que é decimal e converter para %
+      if (value >= 0 && value <= 1) {
+        return `${(value * 100).toFixed(1)}%`;
+      }
+      // Caso contrário, assumir que já está em %
+      return `${value.toFixed(1)}%`;
+    }
+    
+    if (monetaryMetrics.includes(key)) {
+      return formatCurrency(value);
+    }
+    
+    // Para outros valores, formatar como número
+    return value.toLocaleString('pt-BR', {
+      minimumFractionDigits: value % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  // Função para traduzir nomes de métricas
+  const translateMetricName = (key: string) => {
+    const translations: Record<string, string> = {
+      'fairValue': 'Preço Justo',
+      'roe': 'ROE',
+      'roa': 'ROA', 
+      'roic': 'ROIC',
+      'pl': 'P/L',
+      'pvp': 'P/VP',
+      'dy': 'Dividend Yield',
+      'lpa': 'LPA',
+      'vpa': 'VPA',
+      'margemLiquida': 'Margem Líquida',
+      'margemEbitda': 'Margem EBITDA',
+      'crescimentoReceitas': 'Crescimento Receitas',
+      'crescimentoLucros': 'Crescimento Lucros',
+      'liquidezCorrente': 'Liquidez Corrente',
+      'dividaLiquidaPl': 'Dívida Líquida/PL',
+      'qualityScore': 'Score Qualidade',
+      'sustainabilityScore': 'Score Sustentabilidade',
+      'valueScore': 'Score Value',
+      'fcdQualityScore': 'Score FCD',
+      'fcffBase': 'FCFF Base (R$ Mi)',
+      'enterpriseValue': 'Enterprise Value (R$ Bi)',
+      'presentValueCashflows': 'VP Fluxos (R$ Bi)',
+      'presentValueTerminal': 'VP Terminal (R$ Bi)',
+      'terminalValueContribution': 'Contribuição Valor Terminal',
+      'impliedWACC': 'WACC Aplicado',
+      'impliedGrowth': 'Crescimento Aplicado',
+      'projectionYears': 'Anos Projeção',
+      'marketCapBi': 'Market Cap (R$ Bi)',
+      'combinedRank': 'Ranking Combinado',
+      'roicRank': 'Ranking ROIC',
+      'eyRank': 'Ranking Earnings Yield',
+      'earningsYield': 'Earnings Yield'
+    };
+    
+    return translations[key] || key.replace(/([A-Z])/g, ' $1').trim();
   }
 
   // Função para gerar rational baseado no modelo e parâmetros (similar ao backend)
@@ -259,7 +495,7 @@ export function QuickRanker() {
 **Filtros Anti-Trap**:
 • ROE ≥ 10% (rentabilidade forte e consistente)
 • Liquidez Corrente ≥ 1.2 (capacidade real de pagar dividendos)
-• P/L entre 5-25 (evita preços artificiais ou empresas caras demais)
+• P/L entre 4-25 (evita preços artificiais ou empresas caras demais)
 • Margem Líquida ≥ 5% (lucratividade real e saudável)
 • Dívida Líquida/PL ≤ 100% (não comprometida por dívidas)
 • Market Cap ≥ R$ 1B (tamanho e liquidez adequados)
@@ -309,6 +545,115 @@ export function QuickRanker() {
 
 **Objetivo**: Encontrar empresas que geram muito valor e estão baratas no mercado.`;
 
+      case 'fcd':
+        const growthRate = ((params.growthRate || 0.025) * 100).toFixed(1);
+        const discountRate = ((params.discountRate || 0.10) * 100).toFixed(1);
+        const years = params.yearsProjection || 5;
+        const marginSafety = ((params.minMarginOfSafety || 0.20) * 100).toFixed(0);
+        
+        return `**MODELO FLUXO DE CAIXA DESCONTADO (FCD) - PREMIUM**
+
+**Filosofia**: Avaliação intrínseca baseada na capacidade de geração de caixa da empresa, projetando fluxos futuros e descontando-os a valor presente.
+
+**Metodologia Aplicada**:
+• **Fluxo de Caixa Livre da Firma (FCFF)**: EBITDA - Capex Estimado - Variação Capital de Giro
+• **Projeção**: ${years} anos com crescimento de ${growthRate}% ao ano
+• **Taxa de Desconto**: ${discountRate}% (WACC simplificado considerando risco Brasil)
+• **Valor Terminal**: Crescimento perpétuo de ${growthRate}% pós-período explícito
+• **Margem de Segurança**: Mínima de ${marginSafety}%
+
+**Filtros de Qualidade Premium**:
+• EBITDA > 0 e consistente (geração de caixa operacional)
+• Fluxo de Caixa Operacional > 0 (capacidade real de geração)
+• ROE ≥ 12% (rentabilidade superior sobre patrimônio)
+• Margem EBITDA ≥ 15% (eficiência operacional elevada)
+• Crescimento Receitas ≥ -10% (não em declínio operacional severo)
+• Liquidez Corrente ≥ 1.2 (situação financeira sólida)
+• Market Cap ≥ R$ 2B (empresas consolidadas e líquidas)
+
+**Diferencial Premium**:
+• Cálculo sofisticado de valor intrínseco baseado em DCF
+• Considera valor temporal do dinheiro e risco específico
+• Projeta cenários futuros realistas de geração de caixa
+• Identifica empresas subvalorizadas com base em fundamentos sólidos
+
+**Resultado**: Preço justo calculado por metodologia robusta utilizada por analistas profissionais.`;
+
+      case 'gordon':
+        const discountRateGordon = ((params.discountRate || 0.12) * 100).toFixed(1);
+        const dividendGrowthRateGordon = ((params.dividendGrowthRate || 0.05) * 100).toFixed(1);
+        
+        return `**FÓRMULA DE GORDON (MÉTODO DOS DIVIDENDOS) - PREMIUM**
+
+**Filosofia**: Avaliação baseada na capacidade de distribuição de dividendos da empresa, utilizando a fórmula clássica de Gordon para calcular o preço justo.
+
+**Metodologia Aplicada**:
+• **Fórmula**: Preço Justo = Dividendo Próximos 12m / (Taxa Desconto - Taxa Crescimento)
+• **Taxa de Desconto**: ${discountRateGordon}% (retorno esperado pelo investidor)
+• **Taxa de Crescimento**: ${dividendGrowthRateGordon}% (crescimento esperado dos dividendos)
+• **Margem de Segurança**: Mínima de 15% (upside mínimo exigido)
+
+**Filtros de Qualidade Premium**:
+• Dividend Yield ≥ 4% (rentabilidade atrativa em dividendos)
+• DY 12m ≥ 3% (consistência na distribuição)
+• Payout ≤ 80% (sustentabilidade dos pagamentos)
+• ROE ≥ 12% (alta rentabilidade sobre patrimônio)
+• Crescimento Lucros ≥ -20% (não em declínio severo)
+• Liquidez Corrente ≥ 1.2 (capacidade de honrar compromissos)
+• Dívida Líquida/PL ≤ 100% (endividamento controlado)
+
+**Diferencial Premium**:
+• Foco específico em empresas pagadoras de dividendos
+• Avalia sustentabilidade e crescimento das distribuições
+• Identifica oportunidades para renda passiva consistente
+• Combina yield atrativo com qualidade financeira
+
+**Ideal Para**: Investidores focados em renda passiva com crescimento sustentável dos dividendos.
+
+**Resultado**: Empresas com dividendos atrativos e sustentáveis, ordenadas por potencial de valorização + qualidade dos pagamentos.`;
+
+      case 'ai':
+        const riskTolerance = params.riskTolerance || 'Moderado';
+        const timeHorizon = params.timeHorizon || 'Longo Prazo';
+        const focus = params.focus || 'Crescimento e Valor';
+        
+        return `# ANÁLISE PREDITIVA COM INTELIGÊNCIA ARTIFICIAL - PREMIUM
+
+**Filosofia**: Utiliza Inteligência Artificial (Gemini) para analisar e sintetizar os resultados de todas as estratégias tradicionais, criando uma avaliação preditiva abrangente.
+
+## Metodologia Aplicada
+
+- **Seleção Inteligente com IA**: Primeira chamada LLM seleciona empresas baseada no perfil do investidor
+- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Gordon
+- **Pesquisa em Tempo Real**: IA busca notícias e dados atualizados na internet
+- **Processamento Batch**: Segunda chamada LLM analisa todas as empresas simultaneamente
+- **Síntese Inteligente**: IA analisa consistência e convergência entre estratégias
+- **Avaliação Preditiva**: Considera contexto macroeconômico e tendências setoriais
+
+## Parâmetros de Análise
+
+- **Tolerância ao Risco**: ${riskTolerance}
+- **Horizonte**: ${timeHorizon}
+- **Foco**: ${focus}
+
+## Diferencial Premium
+
+- Seleção inteligente baseada no perfil específico do investidor
+- Análise de 6 estratégias simultaneamente para cada empresa selecionada
+- Inteligência Artificial com acesso a dados da internet em tempo real
+- Processamento batch otimizado (mais rápido e eficiente)
+- Pesquisa automática de notícias e fatos relevantes recentes
+- Síntese preditiva considerando contexto atual do mercado
+- Avaliação de riscos e oportunidades específicas por empresa
+- Nível de confiança da análise baseado em múltiplas fontes
+- Consideração de fatores macroeconômicos e setoriais atualizados
+
+> **IMPORTANTE**: Esta análise utiliza Inteligência Artificial e pode gerar resultados ligeiramente diferentes em novas execuções devido à natureza adaptativa do modelo.
+
+**Ideal Para**: Investidores que buscam uma análise abrangente e preditiva baseada em múltiplas metodologias.
+
+**Resultado**: Ranking preditivo personalizado com base no seu perfil de risco e objetivos de investimento.`;
+
       default:
         return `📊 **ESTRATÉGIA PERSONALIZADA**
 
@@ -338,7 +683,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
       {/* Results - prioridade quando cached */}
       {results && (
-        <div className="space-y-6">
+        <div ref={resultsRef} className="space-y-6">
           {/* Results Header */}
           <Card className="border-0 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20">
             <CardContent className="p-6">
@@ -378,15 +723,24 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
               {results.results.map((result, index) => (
                 <Link 
                   key={result.ticker} 
-                  href={`/${result.ticker}`}
+                  href={`/acao/${result.ticker}`}
                   className="block group"
                 >
                   <Card className="border-0 shadow-md hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02] bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-start gap-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-violet-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-                            {index + 1}
+                          <div className="relative">
+                            <CompanyLogo 
+                              logoUrl={result.logoUrl}
+                              companyName={result.name}
+                              ticker={result.ticker}
+                              size={48}
+                            />
+                            {/* Badge com número do ranking */}
+                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-blue-500 to-violet-500 rounded-full flex items-center justify-center text-white font-bold text-xs border-2 border-white dark:border-background">
+                              {index + 1}
+                            </div>
                           </div>
                           <div>
                             <h3 className="text-xl font-bold mb-1">
@@ -428,15 +782,11 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                             .slice(0, 4)
                             .map(([key, value]) => (
                               <div key={key} className="text-center">
-                                <p className="text-xs text-muted-foreground capitalize mb-1">
-                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                <p className="text-xs text-muted-foreground mb-1">
+                                  {translateMetricName(key)}
                                 </p>
                                 <p className="font-semibold text-sm">
-                                  {typeof value === 'number' && key.toLowerCase().includes('percentual') 
-                                    ? formatPercentage(value)
-                                    : typeof value === 'number' && (key.toLowerCase().includes('price') || key.toLowerCase().includes('valor'))
-                                    ? formatCurrency(value)
-                                    : value?.toString() || 'N/A'}
+                                  {formatMetricValue(key, value as number)}
                                 </p>
                               </div>
                             ))}
@@ -535,20 +885,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
               <Label className="text-base font-semibold">Escolha sua estratégia</Label>
               
               {/* Available Models Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {availableModels.map((model) => (
                   <button
                     key={model.id}
                     onClick={() => handleModelChange(model.id)}
                     className={`relative p-4 rounded-xl border-2 transition-all duration-200 text-left group ${
-                      selectedModel === model.id
+                      model.id === 'ai' 
+                        ? selectedModel === model.id
+                          ? "border-purple-500 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 shadow-lg"
+                          : "border-purple-300 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 hover:border-purple-400 hover:shadow-md"
+                        : selectedModel === model.id
                         ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                         : "border-border hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-background/50"
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`p-2 rounded-lg ${
-                        selectedModel === model.id 
+                        model.id === 'ai'
+                          ? selectedModel === model.id 
+                            ? "bg-gradient-to-br from-purple-500 to-blue-500 text-white" 
+                            : "bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900 dark:to-blue-900 text-purple-600 dark:text-purple-400 group-hover:from-purple-200 group-hover:to-blue-200"
+                          : selectedModel === model.id 
                           ? "bg-blue-500 text-white" 
                           : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600"
                       }`}>
@@ -559,7 +917,13 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <span className="font-medium text-sm">{model.name}</span>
                           <Badge 
                             variant={model.free ? "secondary" : "default"}
-                            className={`text-xs ${model.free ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"}`}
+                            className={`text-xs ${
+                              model.id === 'ai' 
+                                ? "bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 dark:from-purple-900/50 dark:to-blue-900/50 dark:text-purple-300 border border-purple-200 dark:border-purple-700"
+                                : model.free 
+                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+                                : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+                            }`}
                           >
                             {model.badge}
                           </Badge>
@@ -567,6 +931,11 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         <p className="text-xs text-muted-foreground leading-tight">
                           {model.description}
                         </p>
+                        {model.id === 'ai' && model.disclaimer && (
+                          <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 font-medium">
+                            {model.disclaimer}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -617,7 +986,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         <div>
                           <h4 className="font-semibold text-sm">Desbloqueie todos os modelos</h4>
                           <p className="text-xs text-muted-foreground">
-                            Acesse Dividend Yield, Value Investing e Fórmula Mágica
+                            Acesse Dividend Yield, Value Investing, Fórmula Mágica, Fórmula de Gordon, Fluxo de Caixa Descontado e Análise Preditiva com IA
                           </p>
                         </div>
                       </div>
@@ -774,6 +1143,319 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     </div>
                   </div>
                 )}
+
+                {selectedModel === "fcd" && (
+                  <div className="space-y-6">
+                    {/* Primeira linha - Taxa de Crescimento e Taxa de Desconto */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Taxa de Crescimento Perpétuo</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.growthRate || 0.025) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.growthRate ? params.growthRate * 100 : 2.5]}
+                          onValueChange={(value) => setParams({ ...params, growthRate: value[0] / 100 })}
+                          max={5}
+                          min={1}
+                          step={0.1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>1.0%</span>
+                          <span>5.0%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Taxa de crescimento esperada para sempre após período de projeção
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Taxa de Desconto (WACC)</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.discountRate || 0.10) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.discountRate ? params.discountRate * 100 : 10]}
+                          onValueChange={(value) => setParams({ ...params, discountRate: value[0] / 100 })}
+                          max={18}
+                          min={6}
+                          step={0.5}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>6.0%</span>
+                          <span>18.0%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Custo médio ponderado de capital para descontar fluxos futuros
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Segunda linha - Anos de Projeção e Margem de Segurança */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Anos de Projeção</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {params.yearsProjection || 5} anos
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.yearsProjection || 5]}
+                          onValueChange={(value) => setParams({ ...params, yearsProjection: value[0] })}
+                          max={10}
+                          min={3}
+                          step={1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>3 anos</span>
+                          <span>10 anos</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Período de projeção explícita dos fluxos de caixa
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Margem de Segurança Mínima</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.minMarginOfSafety || 0.20) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.minMarginOfSafety ? params.minMarginOfSafety * 100 : 20]}
+                          onValueChange={(value) => setParams({ ...params, minMarginOfSafety: value[0] / 100 })}
+                          max={50}
+                          min={5}
+                          step={5}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>5%</span>
+                          <span>50%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Desconto mínimo exigido entre preço justo calculado e preço atual
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Terceira linha - Número de Resultados */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Número de Resultados</Label>
+                        <Badge variant="outline" className="font-mono">
+                          {params.limit || 10} empresas
+                        </Badge>
+                      </div>
+                      <Slider
+                        value={[params.limit || 10]}
+                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
+                        max={20}
+                        min={5}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Top 5</span>
+                        <span>Top 20</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Método sofisticado de DCF: projeta fluxos de caixa e calcula valor intrínseco
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {selectedModel === "gordon" && (
+                  <div className="space-y-6">
+                    {/* Primeira linha - Taxa de Desconto e Taxa de Crescimento */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Taxa de Desconto</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.discountRate || 0.12) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.discountRate ? params.discountRate * 100 : 12]}
+                          onValueChange={(value) => setParams({ ...params, discountRate: value[0] / 100 })}
+                          max={20}
+                          min={8}
+                          step={0.5}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>8.0%</span>
+                          <span>20.0%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Retorno esperado pelo investidor (taxa de desconto)
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Taxa de Crescimento dos Dividendos</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.dividendGrowthRate || 0.05) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.dividendGrowthRate ? params.dividendGrowthRate * 100 : 5]}
+                          onValueChange={(value) => setParams({ ...params, dividendGrowthRate: value[0] / 100 })}
+                          max={10}
+                          min={0}
+                          step={0.5}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>0.0%</span>
+                          <span>10.0%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Crescimento esperado dos dividendos ao longo do tempo
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Segunda linha - Número de Resultados */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Número de Resultados</Label>
+                        <Badge variant="outline" className="font-mono">
+                          {params.limit || 10} empresas
+                        </Badge>
+                      </div>
+                      <Slider
+                        value={[params.limit || 10]}
+                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
+                        max={20}
+                        min={5}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Top 5</span>
+                        <span>Top 20</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Fórmula de Gordon: avalia empresas com base na sustentabilidade dos dividendos
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Configuração AI */}
+                {selectedModel === "ai" && (
+                  <div className="space-y-6">
+                    {/* Primeira linha - Tolerância ao Risco e Horizonte */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Tolerância ao Risco</Label>
+                        <select 
+                          value={params.riskTolerance || "Moderado"}
+                          onChange={(e) => setParams({ ...params, riskTolerance: e.target.value })}
+                          className="w-full p-2 border rounded-md bg-background"
+                        >
+                          <option value="Conservador">Conservador</option>
+                          <option value="Moderado">Moderado</option>
+                          <option value="Agressivo">Agressivo</option>
+                        </select>
+                        <p className="text-xs text-muted-foreground">
+                          Define o nível de risco aceitável para os investimentos
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Horizonte de Investimento</Label>
+                        <select 
+                          value={params.timeHorizon || "Longo Prazo"}
+                          onChange={(e) => setParams({ ...params, timeHorizon: e.target.value })}
+                          className="w-full p-2 border rounded-md bg-background"
+                        >
+                          <option value="Curto Prazo">Curto Prazo (1-2 anos)</option>
+                          <option value="Médio Prazo">Médio Prazo (3-5 anos)</option>
+                          <option value="Longo Prazo">Longo Prazo (5+ anos)</option>
+                        </select>
+                        <p className="text-xs text-muted-foreground">
+                          Período esperado para manter o investimento
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Segunda linha - Foco da Análise */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Foco da Análise</Label>
+                      <select 
+                        value={params.focus || "Crescimento e Valor"}
+                        onChange={(e) => setParams({ ...params, focus: e.target.value })}
+                        className="w-full p-2 border rounded-md bg-background"
+                      >
+                        <option value="Valor">Valor (Value Investing)</option>
+                        <option value="Crescimento">Crescimento (Growth)</option>
+                        <option value="Dividendos">Dividendos (Income)</option>
+                        <option value="Crescimento e Valor">Crescimento e Valor (GARP)</option>
+                      </select>
+                      <p className="text-xs text-muted-foreground">
+                        Estratégia de investimento preferida para a análise
+                      </p>
+                    </div>
+
+                    {/* Terceira linha - Número de Resultados */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Número de Resultados</Label>
+                        <Badge variant="outline" className="font-mono">
+                          {params.limit || 10} empresas
+                        </Badge>
+                      </div>
+                      <Slider
+                        value={[params.limit || 10]}
+                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
+                        max={20}
+                        min={5}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Top 5</span>
+                        <span>Top 20</span>
+                      </div>
+                    </div>
+
+                    {/* Disclaimer da IA */}
+                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-start space-x-3">
+                        <Sparkles className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-blue-900 dark:text-blue-100">
+                            🤖 Análise com Inteligência Artificial
+                          </h4>
+                          <p className="text-sm text-blue-800 dark:text-blue-200">
+                            Esta estratégia utiliza IA (Gemini) para analisar <strong>TODAS as 6 estratégias disponíveis</strong> 
+                             e criar uma síntese preditiva inteligente. Os resultados podem variar ligeiramente entre execuções 
+                            devido à natureza adaptativa do modelo de IA.
+                          </p>
+                          <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                            <p>• Analisa: Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Gordon</p>
+                            <p>• Considera: Consistência entre estratégias, contexto macroeconômico</p>
+                            <p>• Gera: Score preditivo, análise de riscos e oportunidades</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -804,6 +1486,133 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
         </CardContent>
       </Card>
       )}
+
+      {/* Modal de Processamento IA */}
+      <Dialog open={showAIModal} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
+                <Brain className="w-4 h-4 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                Análise Preditiva com IA
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Aviso de Tempo */}
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+                    ⏱️ Processamento Avançado
+                  </h4>
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    A análise preditiva com IA pode demorar <strong>alguns minutos</strong> para ser concluída. 
+                    Estamos executando múltiplas estratégias e buscando dados atualizados na internet.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Progresso das Etapas */}
+            <div className="space-y-4">
+              {aiProcessingSteps.map((step, index) => {
+                const isActive = index === aiProcessingStep
+                const isCompleted = index < aiProcessingStep
+
+                return (
+                  <div
+                    key={step.id}
+                    className={`flex items-start gap-4 p-3 rounded-lg transition-all duration-500 ${
+                      isActive 
+                        ? "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 border border-blue-200 dark:border-blue-700"
+                        : isCompleted
+                        ? "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
+                        : "bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg flex-shrink-0 transition-all duration-300 ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white animate-pulse"
+                        : isCompleted
+                        ? "bg-green-500 text-white"
+                        : "bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-400"
+                    }`}>
+                      {isCompleted ? <CheckCircle className="w-5 h-5" /> : step.icon}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <h4 className={`font-medium text-sm mb-1 ${
+                        isActive 
+                          ? "text-blue-900 dark:text-blue-100"
+                          : isCompleted
+                          ? "text-green-900 dark:text-green-100"
+                          : "text-gray-600 dark:text-gray-400"
+                      }`}>
+                        {step.title}
+                        {isActive && (
+                          <Loader2 className="w-4 h-4 inline ml-2 animate-spin" />
+                        )}
+                      </h4>
+                      <p className={`text-xs leading-tight ${
+                        isActive 
+                          ? "text-blue-700 dark:text-blue-200"
+                          : isCompleted
+                          ? "text-green-700 dark:text-green-200"
+                          : "text-gray-500 dark:text-gray-500"
+                      }`}>
+                        {step.description}
+                      </p>
+                    </div>
+
+                    {/* Status Icon */}
+                    <div className="flex-shrink-0">
+                      {isCompleted && (
+                        <CheckCircle className="w-5 h-5 text-green-500" />
+                      )}
+                      {isActive && (
+                        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Progresso Geral */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Progresso Geral</span>
+                <span className="font-medium">
+                  {Math.round((aiProcessingStep / (aiProcessingSteps.length - 1)) * 100)}%
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
+                  style={{ 
+                    width: `${(aiProcessingStep / (aiProcessingSteps.length - 1)) * 100}%` 
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Informações Adicionais */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                <p>🧠 <strong>IA Gemini</strong> com 2 chamadas otimizadas (seleção + análise batch)</p>
+                <p>📊 <strong>6 estratégias</strong> executadas nas {(params.limit || 10) + 10} empresas selecionadas</p>
+                <p>🌐 <strong>Dados em tempo real</strong> da internet integrados na análise</p>
+                <p>⚡ <strong>Processamento batch</strong> para máxima eficiência e precisão</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
@@ -25,8 +26,15 @@ export default function Header() {
               isOpen={mobileMenuOpen} 
               setIsOpen={setMobileMenuOpen}
             />
-            <Link href="/" className="text-xl lg:text-2xl font-bold text-primary hover:text-primary/80 transition-colors">
-              Analisador de Ações
+            <Link href="/" className="hover:opacity-80 transition-opacity">
+              <Image 
+                src="/logo-preco-justo.png" 
+                alt="Preço Justo AI" 
+                width={287}
+                height={70}
+                style={{ height: '70px', width: 'auto' }}
+                className="w-auto"
+              />
             </Link>
           </div>
 

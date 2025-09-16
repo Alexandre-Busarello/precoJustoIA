@@ -1,235 +1,184 @@
-# Scripts de Ingestão de Dados
+# Scripts de Extração de Dados
 
-## fetch-data.ts
+Este diretório contém scripts para extrair e processar dados financeiros de diferentes fontes.
 
-Script TypeScript para buscar dados de ações brasileiras da API Brapi e armazenar no banco de dados PostgreSQL via Prisma.
+## Scripts Disponíveis
 
-### 🎯 **Funcionalidades**
+### 1. `fetch-data.ts` - Dados da Brapi API
+Script original que busca dados da Brapi API (dados atuais/recentes).
 
-- **45+ Tickers do BOVESPA** - Lista abrangente das principais ações brasileiras
-- **Ações de Teste Gratuitas** - PETR4, MGLU3, VALE3, ITUB4 funcionam sem token
-- **Integração Oficial Brapi API** - Módulos funcionam em ambos os planos! 
-- **Módulos Completos** - `summaryProfile` e `defaultKeyStatistics` (gratuito e pago)
-- **Rate Limiting Adaptativo** - Otimizado para cada tipo de plano
-- **Upsert Inteligente** - Atualiza dados existentes ou cria novos registros
-- **Error Handling** - Tratamento robusto de erros com continuidade do processo
-- **Logging Detalhado** - Acompanhamento completo do progresso
-
-### 📊 **Dados Coletados**
-
-**Empresas:**
-- Ticker, Nome, Setor (Energy, Consumer Cyclical, etc.), Indústria, Descrição
-
-**Cotações Diárias:**
-- Preço de fechamento por dia
-
-**Indicadores Fundamentalistas (65 indicadores disponíveis, 62 típicos!):**
-
-**💰 VALUATION (14 indicadores):**
-- P/L, Forward P/E, P/VP, DY, EV/EBITDA, EV/EBIT, EV/Revenue, PSR, LPA, Trailing EPS, VPA
-
-**🏦 ENDIVIDAMENTO E LIQUIDEZ (6 indicadores):**
-- Liquidez Corrente, Liquidez Rápida, Debt/Equity, Dívida Líquida/PL, Passivo/Ativos
-
-**📈 RENTABILIDADE (7 indicadores):**
-- **ROE, ROA**, Margem Bruta, **Margem EBITDA**, Margem Operacional, Margem Líquida, ROIC
-
-**📊 CRESCIMENTO (4 indicadores):**
-- ~~CAGR Receitas 5a~~ (requer dados históricos), CAGR Lucros 5a, ~~Crescimento Trimestral~~ (dados não disponíveis), Crescimento Lucros, Crescimento Receitas
-
-**💹 DADOS FINANCEIROS OPERACIONAIS (9 indicadores):**
-- **EBITDA**, Receita Total, Lucro Líquido, Fluxo Caixa Operacional, **Fluxo Caixa Livre**, Total Caixa, Total Dívida, Receita por Ação, Caixa por Ação
-
-**🏢 DADOS DA EMPRESA (6 indicadores):**
-- Setor, Indústria, Website, Funcionários, Endereço completo, Logo URL
-
-**💰 DADOS DO BALANÇO PATRIMONIAL (12 indicadores):**
-- Ativo Total, Ativo Circulante, Passivo Total, Patrimônio Líquido, Caixa, Estoques, Contas a Receber, Imobilizado, Intangível, Dívida Circulante, Dívida Longo Prazo
-
-**📈 DADOS DE DIVIDENDOS DETALHADOS (3 indicadores):**
-- **Último Dividendo Pago**, **Data do Último Dividendo**, **Histórico Completo** (até 63+ dividendos históricos!)
-
-**🔢 INDICADORES CALCULADOS (8 indicadores):**
-- **P/Ativos**, **Passivo/Ativos**, **Giro de Ativos**, **ROIC**, **Dívida Líquida/PL**, **Dívida Líquida/EBITDA**, **P/Capital de Giro**, **P/EBIT**
-
-### ✨ **Descoberta Revolucionária**
-
-**TODOS os módulos E parâmetros funcionam no plano gratuito!** Descobrimos os segredos da API:
-
-- ✅ `summaryProfile` - Dados da empresa (setor, indústria, descrição)
-- ✅ `defaultKeyStatistics` - Alguns indicadores financeiros 
-- ✅ **`financialData`** - **OS DADOS CRÍTICOS!** (ROE, ROA, Margem Bruta, EBITDA, etc.)
-- ✅ **`balanceSheetHistory`** - **BALANÇO PATRIMONIAL COMPLETO!** (Ativo Total, PL, etc.)
-- ✅ **`dividends=true`** - **63+ DIVIDENDOS HISTÓRICOS!** (último dividendo, datas, tipos)
-- ✅ Cálculos proprietários para indicadores não disponíveis diretamente
-
-### 🚀 **Execução**
-
-O script agora suporta tanto plano gratuito quanto pago da Brapi:
-
+**Uso:**
 ```bash
-# PLANO GRATUITO (1 ação por requisição)
-npm run fetch:data:free
+# Buscar dados de todas as empresas
+npx tsx scripts/fetch-data.ts
 
-# PLANO PAGO (10 ações por requisição)
-npm run fetch:data:paid
-
-# Script genérico (padrão: gratuito)
-npm run fetch:data
-
-# Com token da Brapi (para plano pago)
-BRAPI_TOKEN="seu-token" npm run fetch:data:paid
+# Buscar dados de empresas específicas
+npx tsx scripts/fetch-data.ts PETR4 VALE3 ITUB4
 ```
 
-### ⚙️ **Configuração**
+**Características:**
+- Busca dados atuais (ano corrente)
+- Uma linha por empresa por ano
+- Calcula `earningsYield` automaticamente
+- Fonte: Brapi API (gratuita para algumas ações)
 
-**Variáveis de Ambiente:**
-```env
-# Obrigatórias
-DATABASE_URL="postgresql://..."
-DIRECT_URL="postgresql://..."
+### 2. `fetch-data-ward.ts` - Dados Históricos da Ward API
+Novo script que busca dados históricos completos da Ward API.
 
-# Opcional - para rate limiting maior
-BRAPI_TOKEN="seu-token-brapi"
+**Uso:**
+```bash
+# Buscar dados históricos com complemento da Brapi (padrão)
+npx tsx scripts/fetch-data-ward.ts ITUB4 PETR4
+
+# Buscar dados apenas da Ward (sem complemento)
+npx tsx scripts/fetch-data-ward.ts ITUB4 PETR4 --no-brapi
+
+# Auto-discovery com complemento da Brapi (356 empresas)
+npx tsx scripts/fetch-data-ward.ts
+
+# Auto-discovery apenas Ward
+npx tsx scripts/fetch-data-ward.ts --no-brapi
+
+# Configurar token JWT (opcional, já tem um padrão)
+export WARD_JWT_TOKEN="seu_token_aqui"
+npx tsx scripts/fetch-data-ward.ts ITUB4
 ```
 
-**Pré-requisitos:**
-1. Banco PostgreSQL configurado (Supabase)
-2. Schema Prisma aplicado (`npx prisma db push`)
-3. Cliente Prisma gerado (`npx prisma generate`)
+**⚡ Funcionalidades Avançadas:**
+- **Auto-descoberta:** Busca automaticamente **todos os 356 tickers** disponíveis na Ward API
+- **Criação automática:** Empresas faltantes são criadas usando dados básicos da Brapi (gratuito)
+- **Integração híbrida:** Ward (histórico) + Brapi (indicadores complementares)
+- **Complemento inteligente:** Dados da Ward têm prioridade, Brapi complementa campos faltantes
+- **Progresso em tempo real:** Logs a cada 10 empresas processadas
 
-### 🔄 **Fluxo de Execução**
+**Características:**
+- **Ward API:** Dados históricos, P/L, ROE, ROIC, Payout, CAGR, etc.
+- **Brapi API:** Market Cap, dados do balanço, fluxo de caixa, PSR, Forward P/E
+- **Mesclagem:** Ano atual recebe dados de ambas as APIs (dataSource: 'ward+brapi')
+- **Anos anteriores:** Apenas Ward API (dataSource: 'ward')
+- **Opção --no-brapi:** Desabilita complemento da Brapi se necessário
+- Converte automaticamente percentuais para decimais
+- Trata valores -9999 como null
 
-**Plano Gratuito:**
-1. **Processamento Individual** - 1 ação por vez
-2. **Busca Completa** - API Brapi `/quote/` com `fundamental=true` + módulos
-3. **Módulos Funcionais** - `summaryProfile` e `defaultKeyStatistics` ✅
-4. **Rate Limiting** - 2s entre requisições
+### 3. `update-quotes.ts` - Atualização Rápida de Cotações
+Script otimizado para atualizar apenas as cotações diárias.
 
-**Plano Pago:**
-1. **Processamento em Lotes** - 10 ações por requisição  
-2. **Mesma API** - `/quote/` com `fundamental=true` + módulos
-3. **Mesmos Módulos** - `summaryProfile` e `defaultKeyStatistics`
-4. **Rate Limiting** - 1s entre lotes
+**Uso:**
+```bash
+# Atualizar cotações de todas as empresas (plano gratuito)
+npx tsx scripts/update-quotes.ts 1
 
-**Ambos:**
-5. **Upsert Empresas** - Cria/atualiza dados da empresa
-6. **Upsert Cotações** - Armazena preço do dia
-7. **Upsert Indicadores** - Dados fundamentalistas disponíveis
-
-### 📈 **Rate Limiting**
-
-**Adaptado para ambos os planos:**
-
-**Plano Gratuito (sem token):**
-- 1 ação por requisição
-- 2 segundos entre requisições
-- ~45 requisições para todas as ações
-- Tempo estimado: ~2 minutos
-
-**Plano Pago (com token):**
-- 10 ações por requisição
-- 1 segundo entre lotes
-- ~5 lotes para todas as ações  
-- Tempo estimado: ~10 segundos
-
-### 🎛️ **Personalização**
-
-**Adicionar Tickers:**
-```typescript
-const TICKERS = [
-  // ... tickers existentes
-  'NOVO4', 'TESTE3'
-];
+# Atualizar cotações em lotes maiores (plano pago)
+npx tsx scripts/update-quotes.ts 10
 ```
 
-**Ajustar Rate Limiting:**
-```typescript
-await this.delay(500); // Entre empresas
-await this.delay(2000); // Entre lotes
+**Características:**
+- **Rápido:** Apenas cotações, sem dados fundamentalistas
+- **Inteligente:** Calcula variação percentual automaticamente
+- **Eficiente:** Processa apenas empresas já cadastradas no banco
+- **Visual:** Mostra 📈 (alta), 📉 (baixa), ➡️ (estável)
+- **Seguro:** Rate limiting automático para evitar bloqueios
+
+### 4. Scripts de Migração
+
+#### `migrate-to-year.ts` (removido)
+Migra dados existentes de `reportDate` para `year`.
+
+#### `cleanup-duplicates.ts` (removido)
+Remove duplicatas mantendo apenas o registro mais recente por empresa/ano.
+
+## Estrutura de Dados
+
+### Mudanças no Schema
+- **Antes:** `reportDate` (DateTime) - uma data específica
+- **Depois:** `year` (Int) - ano dos dados (dados anualizados)
+- **Novo campo:** `payout` (Decimal) - percentual de distribuição de dividendos
+
+### Índice Único
+Agora garantimos apenas **uma linha por empresa por ano**:
+```prisma
+@@unique([companyId, year])
 ```
 
-### 📋 **Logs de Exemplo**
+## Fluxo Recomendado
 
-**Plano Gratuito:**
+1. **Setup inicial:** Use `fetch-data-ward.ts` para criar empresas e histórico completo
+2. **Dados atuais:** Use `fetch-data.ts` para dados fundamentalistas do ano corrente
+3. **Cotações diárias:** Use `update-quotes.ts` para atualização rápida de preços
+4. **Manutenção:** Execute `update-quotes.ts` diariamente e os outros periodicamente
+
+## Exemplo de Dados Extraídos
+
+### Ward API - Fluxo Completo:
+```
+🔍 Buscando lista de tickers da Ward API...
+✅ Lista de tickers obtida: 356 empresas encontradas
+📊 Processando 356 tickers da Ward API
+
+🏢 Processando ABEV3...
+🔍 Buscando dados básicos da Brapi para ABEV3...
+✅ Dados básicos obtidos da Brapi para ABEV3
+✅ Empresa criada: ABEV3 - Ambev S.A.
+🏭 Setor: Consumer Defensive
+💰 Cotação criada: ABEV3 - R$ 12.63
+```
+
+### Ward API Response (ITUB4):
+```
+📊 2023: P/L=9.70, ROE=17.02%, EY=10.31%
+📊 2022: P/L=7.81, ROE=17.33%, EY=12.80%
+📊 2021: P/L=7.41, ROE=17.26%, EY=13.50%
+...
+📈 Progresso: 10/356 empresas processadas
+```
+
+### Update Quotes - Cotações Rápidas:
 ```
 🔧 Configuração: Plano Gratuito (1 ação por requisição)
-🚀 Iniciando processo de atualização de dados...
-📋 Total de tickers: 45
+🚀 Iniciando atualização de cotações...
+📋 Total de empresas: 7
 
-📦 Processando lote 1 de 45 (1 ação)
-🔍 Buscando cotações e fundamentos para: PETR4
-✅ Empresa processada: PETR4 - Petróleo Brasileiro S.A. - Petrobras
-🏭 Setor: Energy
-💰 Cotação atualizada: PETR4 - R$ 31.55
-📈 Fundamentos atualizados: PETR4 (P/L: 5.24, P/VP: 0.99, DY: 17.02%, PSR: 0.85)
-   📊 Disponíveis: 62/66 indicadores
-   📋 Dados extras: MC: R$ 414.1B, Receita: R$ 487.7B, EBITDA: R$ 208.1B
-   🎯 Dados críticos: ROE: 16.5%, ROA: 5.6%, LC: 0.76, ME: 42.7%
-   🎉 Antes NULL, agora OK: P/Ativos: 0.37, Pass/At: 100.0%, GA: 0.43, ROIC: 14.4%, DL/PL: 0.96
-   📊 Balanço: At.Total: R$ 1124.8B, PL: R$ 367.5B, Últ.Div: R$ 0.31
+💰 AALR3: R$ 6.00 ➡️ +0.00%
+💰 ABEV3: R$ 12.63 📈 +0.40%
+💰 ITUB4: R$ 38.00 📈 +1.66%
+💰 MGLU3: R$ 10.58 📈 +7.41%
 
-📦 Processando lote 2 de 45 (1 ação)
-🔍 Buscando cotações e fundamentos para: MGLU3
-✅ Empresa processada: MGLU3 - Magazine Luiza S.A.
-🏭 Setor: Consumer Cyclical
-💰 Cotação atualizada: MGLU3 - R$ 9.86
-📈 Fundamentos atualizados: MGLU3 (P/L: 17.86, P/VP: 0.52, DY: 3.89%, PSR: 0.16)
-   📊 Disponíveis: 40/47 indicadores
-   📋 Dados extras: MC: R$ 6.0B, Receita: R$ 38.2B, EBITDA: R$ 2.9B
-   🎯 Dados críticos: ROE: 3.6%, ROA: 1.1%, LC: 1.29, ME: 7.7%
+✅ Taxa de sucesso: 100.0%
 ```
 
-**Plano Pago:**
-```
-🔧 Configuração: Plano Pago (10 ações por requisição)
-🚀 Iniciando processo de atualização de dados...
-📋 Total de tickers: 45
+### Campos Principais:
+- **Valuation:** P/L, P/VP, EV/EBITDA, Earnings Yield
+- **Rentabilidade:** ROE, ROIC, ROA, Margens
+- **Crescimento:** CAGR Lucros 5a, Crescimento Receitas
+- **Dividendos:** DY, Payout
+- **Financeiros:** EBITDA, Receita, Lucro Líquido
 
-📦 Processando lote 1 de 5 (4 ações)
-🔍 Buscando cotações e fundamentos para: PETR4,MGLU3,VALE3,ITUB4
-✅ Empresa processada: PETR4 - Petróleo Brasileiro S.A. - Petrobras
-💰 Cotação atualizada: PETR4 - R$ 31.56
-📈 Fundamentos atualizados: PETR4
-✅ Empresa processada: MGLU3 - Magazine Luiza S.A.
-💰 Cotação atualizada: MGLU3 - R$ 9.84
-📈 Fundamentos atualizados: MGLU3
-```
+## Configuração
 
-### ⚠️ **Notas Importantes**
-
-- **Dados Históricos:** Script busca apenas dados atuais
-- **Horário Mercado:** Melhor executar após 18h (fechamento B3)
-- **Fins de Semana:** API pode retornar dados do último dia útil
-- **Tokens Inválidos:** Script continua sem token, apenas com rate limiting menor
-
-### 🔧 **Troubleshooting**
-
-**Erro "O seu plano não permite acessar dados do módulo":**
-- Use `npm run fetch:data:free` para plano gratuito
-- Script adaptado automaticamente remove módulos restritos
-
-**Erro "O seu plano permite até 1 ações por requisição":**
-- Use `npm run fetch:data:free` (1 ação por vez)
-- Não use `npm run fetch:data:paid` sem token válido
-
-**Erro 401 Unauthorized:**
-- Token inválido ou expirado
-- Script funciona sem token nas ações gratuitas
-
-**Erro Prisma P5010:**
-- Banco não conectado ou inacessível
-- Verificar `DATABASE_URL`
-
-**Rate Limit Exceeded:**
-- Aumentar delays no código
-- Considerar upgrade para plano pago
-
-### 📅 **Automação**
-
-Para execução automática, configure um cron job:
-
+### Variáveis de Ambiente
 ```bash
-# Executar diariamente às 19h
-0 19 * * 1-5 cd /caminho/projeto && npm run fetch:data
+# Token da Ward API (opcional, já tem padrão)
+WARD_JWT_TOKEN=seu_token_jwt_aqui
+
+# Configurações do banco (já configuradas no .env)
+DATABASE_URL=sua_connection_string
 ```
+
+### Dependências
+```bash
+npm install axios prisma @prisma/client dotenv
+```
+
+## Troubleshooting
+
+### Erro: "Token JWT expirado"
+- Atualize o `WARD_JWT_TOKEN` no arquivo ou variável de ambiente
+- O token padrão pode expirar periodicamente
+
+### Erro: "Unique constraint failed"
+- Execute `cleanup-duplicates.ts` para remover duplicatas
+- Verifique se não há dados conflitantes
+
+### Erro: "Campo não existe"
+- Execute `npx prisma generate` após mudanças no schema
+- Verifique se a migração foi aplicada com `npx prisma db push`

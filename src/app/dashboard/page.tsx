@@ -79,32 +79,34 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-background">
       <div className="container mx-auto px-6 py-8">
         {/* Header com Busca */}
-        <div className="mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-            {/* Título e Saudação */}
-            <div className="flex-shrink-0">
-              <h1 className="text-3xl font-bold mb-2">
-                Dashboard
-              </h1>
-              <p className="text-muted-foreground mb-4 lg:mb-0">
-                Bem-vindo de volta, {session.user?.name || session.user?.email?.split('@')[0]}
-              </p>
-            </div>
-            
-            {/* Buscador - Desktop: direita, Mobile: abaixo */}
-            <div className="lg:flex-shrink-0 lg:max-w-md w-full">
-              <div className="lg:text-right">
-                <p className="text-sm text-muted-foreground mb-2 lg:text-right">
-                  Buscar empresas
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+              {/* Título e Saudação */}
+              <div className="flex-shrink-0">
+                <h1 className="text-3xl font-bold mb-2">
+                  Dashboard
+                </h1>
+                <p className="text-muted-foreground mb-4 lg:mb-0">
+                  Bem-vindo de volta, {session.user?.name || session.user?.email?.split('@')[0]}
                 </p>
-                <CompanySearch 
-                  placeholder="Digite ticker ou nome..."
-                  className="w-full"
-                />
+              </div>
+              
+              {/* Buscador - Desktop: direita, Mobile: abaixo */}
+              <div className="lg:flex-shrink-0 lg:max-w-md w-full">
+                <div className="lg:text-right">
+                  <p className="text-sm text-muted-foreground mb-2 lg:text-right">
+                    Buscar empresas
+                  </p>
+                  <CompanySearch 
+                    placeholder="Digite ticker ou nome..."
+                    className="w-full"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -245,6 +247,29 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Comparador de Ações */}
+            <Card className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/10 dark:to-purple-900/10 border border-blue-200 dark:border-blue-800 hover:shadow-lg transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                    <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base">Comparador</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Compare ações lado a lado
+                    </p>
+                  </div>
+                </div>
+                <Button asChild size="sm" className="w-full bg-blue-600 hover:bg-blue-700">
+                  <Link href="/comparador" className="flex items-center justify-center gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    Comparar Agora
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
 

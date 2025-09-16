@@ -8,7 +8,7 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
-import { LayoutDashboard, BarChart3, Shield, Zap } from "lucide-react"
+import { LayoutDashboard, BarChart3, Shield, Zap, GitCompare } from "lucide-react"
 
 export default function Header() {
   const { data: session, status } = useSession()
@@ -69,6 +69,17 @@ export default function Header() {
                   <Link href="/ranking" className="flex items-center gap-2">
                     <BarChart3 className="w-4 h-4" />
                     Rankings
+                  </Link>
+                </Button>
+
+                <Button 
+                  variant={pathname === "/comparador" ? "default" : "ghost"} 
+                  size="sm" 
+                  asChild
+                >
+                  <Link href="/comparador" className="flex items-center gap-2">
+                    <GitCompare className="w-4 h-4" />
+                    Comparador
                   </Link>
                 </Button>
               </div>

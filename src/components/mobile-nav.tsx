@@ -18,7 +18,8 @@ import {
   LogOut,
   User,
   Settings,
-  CreditCard
+  CreditCard,
+  GitCompare
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -66,6 +67,12 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       title: "Rankings",
       href: "/ranking", 
       icon: <BarChart3 className="w-5 h-5" />,
+      show: true
+    },
+    {
+      title: "Comparador",
+      href: "/comparador", 
+      icon: <GitCompare className="w-5 h-5" />,
       show: true
     }
   ]

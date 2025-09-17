@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
+import { StrategyFactory } from '@/lib/strategies/strategy-factory'
+import { calculateOverallScore } from '@/lib/strategies/overall-score'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -29,7 +31,10 @@ import {
   LineChart,
   ArrowRight,
   Lock,
-  Crown
+  Crown,
+  Trophy,
+  Medal,
+  Award
 } from 'lucide-react'
 
 interface PageProps {
@@ -91,6 +96,227 @@ function getIndicatorType(value: number | null, positiveThreshold?: number, nega
   if (negativeThreshold !== undefined && value > negativeThreshold) return 'negative'
   
   return 'neutral'
+}
+
+// Sistema de pontuação ponderada para determinar a melhor empresa
+function calculateWeightedScore(companies: Record<string, unknown>[]): { scores: number[], bestIndex: number, tiedIndices: number[] } {
+  // Definir pesos para cada indicador (total = 100%)
+  const weights = {
+    // Indicadores Básicos (40%)
+    pl: 0.12,           // 12% - Valuation fundamental
+    pvp: 0.08,          // 8% - Valor patrimonial
+    roe: 0.15,          // 15% - Rentabilidade principal
+    dy: 0.05,           // 5% - Dividendos
+    
+    // Indicadores Avançados (25%)
+    margemLiquida: 0.10, // 10% - Eficiência operacional
+    roic: 0.10,         // 10% - Retorno sobre capital
+    dividaLiquidaEbitda: 0.05, // 5% - Endividamento
+    
+    // Score Geral (15%)
+    overallScore: 0.15,  // 15% - Análise consolidada
+    
+    // Estratégias de Investimento (20%)
+    graham: 0.04,        // 4% - Análise Graham
+    dividendYield: 0.03, // 3% - Estratégia dividendos
+    lowPE: 0.04,         // 4% - Value investing
+    magicFormula: 0.04,  // 4% - Greenblatt
+    fcd: 0.03,           // 3% - Fluxo de caixa
+    gordon: 0.02         // 2% - Modelo Gordon
+  }
+  
+  const scores = companies.map((company, companyIndex) => {
+    let totalScore = 0
+    let totalWeight = 0
+    
+    // Executar estratégias para obter dados completos
+    const dailyQuotes = company.dailyQuotes as any[]
+    const financialData = company.financialData as any[]
+    const currentPrice = toNumber(dailyQuotes?.[0]?.price) || toNumber(financialData?.[0]?.lpa) || 0
+    const { strategies, overallScore } = executeStrategiesForCompany(company, currentPrice)
+    
+    // Função para normalizar e pontuar um indicador com valores de referência absolutos
+    const scoreIndicator = (values: (number | null)[], companyValue: number | null, weight: number, higherIsBetter: boolean, indicatorKey: string) => {
+      if (companyValue === null) return 0
+      
+      const validValues = values.filter(v => v !== null) as number[]
+      if (validValues.length === 0) return 0
+      
+      // Valores de referência absolutos baseados no mercado brasileiro
+      const referenceRanges: Record<string, { min: number, max: number }> = {
+        // Indicadores básicos
+        pl: { min: 3, max: 25 },           // P/L típico: 3-25
+        pvp: { min: 0.5, max: 3 },         // P/VP típico: 0.5-3
+        roe: { min: 0.05, max: 0.35 },     // ROE típico: 5%-35%
+        dy: { min: 0, max: 0.15 },         // DY típico: 0%-15%
+        
+        // Indicadores avançados
+        margemLiquida: { min: 0, max: 0.5 }, // Margem típica: 0%-50%
+        roic: { min: 0.05, max: 0.4 },     // ROIC típico: 5%-40%
+        dividaLiquidaEbitda: { min: -2, max: 8 }, // Dívida típica: -2x a 8x
+        
+        // Scores (0-100)
+        overallScore: { min: 0, max: 100 },
+        graham: { min: 0, max: 100 },
+        dividendYield: { min: 0, max: 100 },
+        lowPE: { min: 0, max: 100 },
+        magicFormula: { min: 0, max: 100 },
+        fcd: { min: 0, max: 100 },
+        gordon: { min: 0, max: 100 }
+      }
+      
+      const range = referenceRanges[indicatorKey]
+      if (!range) {
+        // Fallback para normalização relativa se não houver referência
+        const min = Math.min(...validValues)
+        const max = Math.max(...validValues)
+        if (min === max) return weight
+        
+        let normalizedScore: number
+        if (higherIsBetter) {
+          normalizedScore = (companyValue - min) / (max - min)
+        } else {
+          normalizedScore = (max - companyValue) / (max - min)
+        }
+        return Math.max(0, Math.min(1, normalizedScore)) * weight
+      }
+      
+      // Normalização absoluta usando valores de referência
+      let normalizedScore: number
+      if (higherIsBetter) {
+        normalizedScore = (companyValue - range.min) / (range.max - range.min)
+      } else {
+        normalizedScore = (range.max - companyValue) / (range.max - range.min)
+      }
+      
+      // Garantir que o score fique entre 0 e 1
+      normalizedScore = Math.max(0, Math.min(1, normalizedScore))
+      
+      return normalizedScore * weight
+    }
+    
+    // Coletar todos os valores para normalização
+    const allPL = companies.map(c => toNumber((c.financialData as any[])?.[0]?.pl))
+    const allPVP = companies.map(c => toNumber((c.financialData as any[])?.[0]?.pvp))
+    const allROE = companies.map(c => toNumber((c.financialData as any[])?.[0]?.roe))
+    const allDY = companies.map(c => toNumber((c.financialData as any[])?.[0]?.dy))
+    const allMargemLiquida = companies.map(c => toNumber((c.financialData as any[])?.[0]?.margemLiquida))
+    const allROIC = companies.map(c => toNumber((c.financialData as any[])?.[0]?.roic))
+    const allDividaEbitda = companies.map(c => toNumber((c.financialData as any[])?.[0]?.dividaLiquidaEbitda))
+    
+    // Calcular scores dos indicadores básicos
+    const companyFinancialData = financialData?.[0] as any
+    if (companyFinancialData) {
+      totalScore += scoreIndicator(allPL, toNumber(companyFinancialData.pl), weights.pl, false, 'pl') // Menor P/L é melhor
+      totalScore += scoreIndicator(allPVP, toNumber(companyFinancialData.pvp), weights.pvp, false, 'pvp') // Menor P/VP é melhor
+      totalScore += scoreIndicator(allROE, toNumber(companyFinancialData.roe), weights.roe, true, 'roe') // Maior ROE é melhor
+      totalScore += scoreIndicator(allDY, toNumber(companyFinancialData.dy), weights.dy, true, 'dy') // Maior DY é melhor
+      totalScore += scoreIndicator(allMargemLiquida, toNumber(companyFinancialData.margemLiquida), weights.margemLiquida, true, 'margemLiquida')
+      totalScore += scoreIndicator(allROIC, toNumber(companyFinancialData.roic), weights.roic, true, 'roic')
+      totalScore += scoreIndicator(allDividaEbitda, toNumber(companyFinancialData.dividaLiquidaEbitda), weights.dividaLiquidaEbitda, false, 'dividaLiquidaEbitda')
+      
+      totalWeight += weights.pl + weights.pvp + weights.roe + weights.dy + weights.margemLiquida + weights.roic + weights.dividaLiquidaEbitda
+    }
+    
+    // Score geral
+    if (overallScore?.score) {
+      const allOverallScores = companies.map(c => {
+        const cDailyQuotes = c.dailyQuotes as any[]
+        const cFinancialData = c.financialData as any[]
+        const price = toNumber(cDailyQuotes?.[0]?.price) || toNumber(cFinancialData?.[0]?.lpa) || 0
+        const { overallScore: os } = executeStrategiesForCompany(c, price)
+        return os?.score || null
+      })
+      totalScore += scoreIndicator(allOverallScores, overallScore.score, weights.overallScore, true, 'overallScore')
+      totalWeight += weights.overallScore
+    }
+    
+    // Estratégias
+    if (strategies) {
+      const strategyKeys = ['graham', 'dividendYield', 'lowPE', 'magicFormula', 'fcd', 'gordon'] as const
+      
+      strategyKeys.forEach(key => {
+        const strategyScore = strategies[key]?.score
+        if (strategyScore !== undefined) {
+          const allStrategyScores = companies.map(c => {
+            const cDailyQuotes = c.dailyQuotes as any[]
+            const cFinancialData = c.financialData as any[]
+            const price = toNumber(cDailyQuotes?.[0]?.price) || toNumber(cFinancialData?.[0]?.lpa) || 0
+            const { strategies: s } = executeStrategiesForCompany(c, price)
+            return s?.[key]?.score || null
+          })
+          totalScore += scoreIndicator(allStrategyScores, strategyScore, weights[key], true, key)
+          totalWeight += weights[key]
+        }
+      })
+    }
+    
+    // Normalizar pela soma dos pesos utilizados
+    return totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0
+  })
+  
+  // Encontrar o melhor score
+  const maxScore = Math.max(...scores)
+  const tolerance = 0.1 // Tolerância de 0.1 pontos para empates
+  const tiedIndices = scores
+    .map((score, index) => ({ score, index }))
+    .filter(item => Math.abs(item.score - maxScore) <= tolerance)
+    .map(item => item.index)
+  
+  const bestIndex = tiedIndices.length === 1 ? tiedIndices[0] : -1
+  
+  // Debug temporário para investigar mudanças de ranking
+  if (companies.length <= 6) { // Só para comparações pequenas
+    console.log('=== WEIGHTED SCORING DEBUG ===')
+    console.log('Companies:', companies.map(c => c.ticker))
+    console.log('Scores:', companies.map((c, i) => ({ ticker: c.ticker, score: scores[i].toFixed(2) })))
+    console.log('Best score:', maxScore.toFixed(2))
+    console.log('Winner:', bestIndex !== -1 ? companies[bestIndex].ticker : 'Tie')
+    console.log('Tied companies:', tiedIndices.length > 1 ? tiedIndices.map(i => companies[i].ticker) : 'None')
+  }
+  
+  return { scores, bestIndex, tiedIndices }
+}
+
+// Função para executar estratégias e calcular score geral
+function executeStrategiesForCompany(company: Record<string, unknown>, currentPrice: number) {
+  try {
+    // Preparar dados da empresa no formato esperado pelas estratégias
+    const companyData = {
+      ticker: company.ticker,
+      name: company.name,
+      sector: company.sector,
+      currentPrice,
+      financials: company.financialData[0],
+      financialData: company.financialData[0]
+    }
+
+    // Executar todas as estratégias
+    const strategies = {
+      graham: StrategyFactory.runGrahamAnalysis(companyData, { marginOfSafety: 0.20 }),
+      dividendYield: StrategyFactory.runDividendYieldAnalysis(companyData, { minYield: 0.04 }),
+      lowPE: StrategyFactory.runLowPEAnalysis(companyData, { maxPE: 15, minROE: 0.12 }),
+      magicFormula: StrategyFactory.runMagicFormulaAnalysis(companyData, { limit: 10 }),
+      fcd: StrategyFactory.runFCDAnalysis(companyData, {
+        growthRate: 0.025,
+        discountRate: 0.10,
+        yearsProjection: 5,
+        minMarginOfSafety: 0.20
+      }),
+      gordon: StrategyFactory.runGordonAnalysis(companyData, {
+        discountRate: 0.12,
+        dividendGrowthRate: 0.05
+      })
+    }
+
+    // Calcular score geral
+    const overallScore = calculateOverallScore(strategies, companyData.financialData, currentPrice)
+
+    return { strategies, overallScore }
+  } catch (error) {
+    console.error(`Erro ao executar estratégias para ${company.ticker}:`, error)
+    return { strategies: null, overallScore: null }
+  }
 }
 
 // Componente para indicador com blur premium
@@ -313,13 +539,30 @@ export default async function CompareStocksPage({ params }: PageProps) {
 
       {/* Cards das Empresas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {orderedCompanies.map((company) => {
-          const latestFinancials = company.financialData[0]
-          const latestQuote = company.dailyQuotes[0]
-          const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+        {(() => {
+          // Calcular pontuação ponderada uma única vez
+          const { bestIndex, tiedIndices } = calculateWeightedScore(orderedCompanies)
+          
+          return orderedCompanies.map((company, companyIndex) => {
+            const latestFinancials = company.financialData[0]
+            const latestQuote = company.dailyQuotes[0]
+            const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+
+            // Determinar se é a empresa campeã baseado na pontuação ponderada
+            const isBestCompany = userIsPremium && (
+              bestIndex === companyIndex || // Campeã única
+              (bestIndex === -1 && tiedIndices.includes(companyIndex)) // Empate
+            )
 
           return (
-            <Card key={company.ticker}>
+            <Card key={company.ticker} className={`relative ${isBestCompany ? 'ring-2 ring-yellow-400 shadow-lg' : ''}`}>
+              {isBestCompany && (
+                <div className="absolute -top-2 -right-2 z-10">
+                  <div className="bg-yellow-500 rounded-full p-2 shadow-lg">
+                    <Trophy className="w-4 h-4 text-white" />
+                  </div>
+                </div>
+              )}
               <CardContent className="p-6">
                 <div className="flex items-start space-x-4 mb-4">
                   <CompanyLogo
@@ -334,6 +577,12 @@ export default async function CompareStocksPage({ params }: PageProps) {
                       <Badge variant="secondary" className="text-xs">
                         {company.sector || 'N/A'}
                       </Badge>
+                      {isBestCompany && (
+                        <Badge className="bg-yellow-500 text-white text-xs">
+                          <Medal className="w-3 h-3 mr-1" />
+                          Destaque
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground mb-2">
                       {company.name}
@@ -380,7 +629,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               </CardContent>
             </Card>
           )
-        })}
+        })
+        })()}
       </div>
 
       {/* Indicadores Comparativos */}
@@ -535,7 +785,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
             <ComparisonIndicatorCard
               title="Dívida Líquida/Patrimônio"
               values={orderedCompanies.map(c => {
-                const divPat = toNumber(c.financialData[0]?.dividaLiquidaPatrimonio)
+                const divPat = toNumber(c.financialData[0]?.dividaLiquidaPl)
                 return divPat ? divPat.toFixed(2) : 'N/A'
               })}
               tickers={tickers}
@@ -564,26 +814,33 @@ export default async function CompareStocksPage({ params }: PageProps) {
       {/* Tabela de Comparação Detalhada */}
       <div className="mb-8">
         <ComparisonTable 
-          companies={orderedCompanies.map(company => ({
-            ticker: company.ticker,
-            name: company.name,
-            sector: company.sector,
-            currentPrice: toNumber(company.dailyQuotes[0]?.price) || toNumber(company.financialData[0]?.lpa) || 0,
-            financialData: company.financialData[0] ? {
-              pl: toNumber(company.financialData[0].pl),
-              pvp: toNumber(company.financialData[0].pvp),
-              roe: toNumber(company.financialData[0].roe),
-              dy: toNumber(company.financialData[0].dy),
-              margemLiquida: toNumber(company.financialData[0].margemLiquida),
-              roic: toNumber(company.financialData[0].roic),
-              marketCap: toNumber(company.financialData[0].marketCap),
-              receitaTotal: toNumber(company.financialData[0].receitaTotal),
-              lucroLiquido: toNumber(company.financialData[0].lucroLiquido),
-              dividaLiquidaEbitda: toNumber(company.financialData[0].dividaLiquidaEbitda),
-              dividaLiquidaPatrimonio: toNumber(company.financialData[0].dividaLiquidaPatrimonio),
-              liquidezCorrente: toNumber(company.financialData[0].liquidezCorrente),
-            } : null
-          }))}
+          companies={orderedCompanies.map(company => {
+            const currentPrice = toNumber(company.dailyQuotes[0]?.price) || toNumber(company.financialData[0]?.lpa) || 0
+            const { strategies, overallScore } = executeStrategiesForCompany(company, currentPrice)
+            
+            return {
+              ticker: company.ticker,
+              name: company.name,
+              sector: company.sector,
+              currentPrice,
+              financialData: company.financialData[0] ? {
+                pl: toNumber(company.financialData[0].pl),
+                pvp: toNumber(company.financialData[0].pvp),
+                roe: toNumber(company.financialData[0].roe),
+                dy: toNumber(company.financialData[0].dy),
+                margemLiquida: toNumber(company.financialData[0].margemLiquida),
+                roic: toNumber(company.financialData[0].roic),
+                marketCap: toNumber(company.financialData[0].marketCap),
+                receitaTotal: toNumber(company.financialData[0].receitaTotal),
+                lucroLiquido: toNumber(company.financialData[0].lucroLiquido),
+                dividaLiquidaEbitda: toNumber(company.financialData[0].dividaLiquidaEbitda),
+                dividaLiquidaPatrimonio: toNumber(company.financialData[0].dividaLiquidaPl),
+                liquidezCorrente: toNumber(company.financialData[0].liquidezCorrente),
+              } : null,
+              strategies,
+              overallScore
+            }
+          })}
           userIsPremium={userIsPremium}
         />
       </div>

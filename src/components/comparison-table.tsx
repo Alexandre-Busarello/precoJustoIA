@@ -20,7 +20,10 @@ import {
   TrendingDown, 
   Minus,
   Eye,
-  ArrowUpDown
+  ArrowUpDown,
+  Trophy,
+  Medal,
+  Award
 } from 'lucide-react'
 
 // Tipo para dados da empresa
@@ -43,6 +46,20 @@ interface CompanyData {
     dividaLiquidaPatrimonio?: number | null
     liquidezCorrente?: number | null
   } | null
+  strategies?: {
+    graham?: { score: number; isEligible: boolean; fairValue?: number | null } | null
+    dividendYield?: { score: number; isEligible: boolean } | null
+    lowPE?: { score: number; isEligible: boolean } | null
+    magicFormula?: { score: number; isEligible: boolean } | null
+    fcd?: { score: number; isEligible: boolean; fairValue?: number | null } | null
+    gordon?: { score: number; isEligible: boolean; fairValue?: number | null } | null
+  } | null
+  overallScore?: {
+    score: number
+    grade: string
+    classification: string
+    recommendation: string
+  } | null
 }
 
 interface ComparisonTableProps {
@@ -62,12 +79,13 @@ const premiumIndicators = [
 
 // Configuração dos indicadores
 const indicators = [
+  // Indicadores Básicos (Gratuitos)
   {
     key: 'pl',
     label: 'P/L',
     description: 'Preço/Lucro',
     format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
-    getBestType: (values: (number | null)[]) => 'lowest', // menor é melhor
+    getBestType: () => 'lowest' as const,
     isPremium: false
   },
   {
@@ -75,7 +93,7 @@ const indicators = [
     label: 'P/VP',
     description: 'Preço/Valor Patrimonial',
     format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
-    getBestType: (values: (number | null)[]) => 'lowest',
+    getBestType: () => 'lowest' as const,
     isPremium: false
   },
   {
@@ -83,7 +101,7 @@ const indicators = [
     label: 'ROE',
     description: 'Retorno sobre Patrimônio',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: (values: (number | null)[]) => 'highest', // maior é melhor
+    getBestType: () => 'highest' as const,
     isPremium: false
   },
   {
@@ -91,24 +109,8 @@ const indicators = [
     label: 'Dividend Yield',
     description: 'Rendimento de Dividendos',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: (values: (number | null)[]) => 'highest',
+    getBestType: () => 'highest' as const,
     isPremium: false
-  },
-  {
-    key: 'margemLiquida',
-    label: 'Margem Líquida',
-    description: 'Margem de Lucro Líquido',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: (values: (number | null)[]) => 'highest',
-    isPremium: true
-  },
-  {
-    key: 'roic',
-    label: 'ROIC',
-    description: 'Retorno sobre Capital Investido',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: (values: (number | null)[]) => 'highest',
-    isPremium: true
   },
   {
     key: 'marketCap',
@@ -120,16 +122,101 @@ const indicators = [
       if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(2)}M`
       return `R$ ${(value / 1_000).toFixed(2)}K`
     },
-    getBestType: (values: (number | null)[]) => 'neutral',
+    getBestType: () => 'neutral' as const,
     isPremium: false
+  },
+  
+  // Indicadores Avançados (Premium)
+  {
+    key: 'margemLiquida',
+    label: 'Margem Líquida',
+    description: 'Margem de Lucro Líquido',
+    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true
+  },
+  {
+    key: 'roic',
+    label: 'ROIC',
+    description: 'Retorno sobre Capital Investido',
+    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true
   },
   {
     key: 'dividaLiquidaEbitda',
     label: 'Dív. Líq./EBITDA',
     description: 'Dívida Líquida sobre EBITDA',
     format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
-    getBestType: (values: (number | null)[]) => 'lowest',
+    getBestType: () => 'lowest' as const,
     isPremium: true
+  },
+  
+  // Score Geral (Premium) - Separador visual
+  {
+    key: 'overallScore',
+    label: 'Score Geral',
+    description: 'Pontuação Geral da Empresa',
+    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true,
+    isStrategy: true
+  },
+  
+  // Estratégias de Investimento (Premium) - No final da tabela
+  {
+    key: 'graham',
+    label: 'Graham',
+    description: 'Análise Benjamin Graham',
+    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true,
+    isStrategy: true
+  },
+  {
+    key: 'dividendYieldStrategy',
+    label: 'Dividend Yield',
+    description: 'Estratégia de Dividendos',
+    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true,
+    isStrategy: true
+  },
+  {
+    key: 'lowPE',
+    label: 'Low P/E',
+    description: 'Estratégia P/L Baixo',
+    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true,
+    isStrategy: true
+  },
+  {
+    key: 'magicFormula',
+    label: 'Magic Formula',
+    description: 'Fórmula Mágica de Greenblatt',
+    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true,
+    isStrategy: true
+  },
+  {
+    key: 'fcd',
+    label: 'FCD',
+    description: 'Fluxo de Caixa Descontado',
+    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true,
+    isStrategy: true
+  },
+  {
+    key: 'gordon',
+    label: 'Gordon',
+    description: 'Modelo de Gordon',
+    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true,
+    isStrategy: true
   }
 ]
 
@@ -137,22 +224,35 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
   const [sortBy, setSortBy] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  // Função para determinar o melhor valor
-  const getBestValueIndex = (values: (number | null)[], type: 'highest' | 'lowest' | 'neutral') => {
-    if (type === 'neutral') return -1
+  // Função para determinar o melhor valor e empates
+  const getBestValueInfo = (values: (number | null)[], type: 'highest' | 'lowest' | 'neutral') => {
+    if (type === 'neutral') return { bestIndex: -1, tiedIndices: [] }
     
     const validValues = values.map((v, i) => ({ value: v, index: i })).filter(v => v.value !== null)
-    if (validValues.length === 0) return -1
+    if (validValues.length === 0) return { bestIndex: -1, tiedIndices: [] }
     
+    // Encontrar o melhor valor
+    let bestValue: number
     if (type === 'highest') {
-      return validValues.reduce((best, current) => 
-        current.value! > best.value! ? current : best
-      ).index
+      bestValue = Math.max(...validValues.map(v => v.value!))
     } else {
-      return validValues.reduce((best, current) => 
-        current.value! < best.value! ? current : best
-      ).index
+      bestValue = Math.min(...validValues.map(v => v.value!))
     }
+    
+    // Encontrar todos os índices com o melhor valor (empates)
+    const tiedIndices = validValues
+      .filter(v => Math.abs(v.value! - bestValue) < 0.01) // Tolerância para números decimais
+      .map(v => v.index)
+    
+    // Se há empate (mais de um valor igual ao melhor), não destacar um único campeão
+    const bestIndex = tiedIndices.length > 1 ? -1 : tiedIndices[0]
+    
+    return { bestIndex, tiedIndices }
+  }
+
+  // Função para determinar o melhor valor (compatibilidade)
+  const getBestValueIndex = (values: (number | null)[], type: 'highest' | 'lowest' | 'neutral') => {
+    return getBestValueInfo(values, type).bestIndex
   }
 
   // Função para renderizar célula com indicador de melhor valor
@@ -205,10 +305,28 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
             </TableHeader>
             <TableBody>
               {indicators.map((indicator) => {
-                const values = companies.map(c => 
-                  c.financialData ? (c.financialData as Record<string, number | null>)[indicator.key] : null
-                )
-                const bestIndex = getBestValueIndex(values, indicator.getBestType(values))
+                const values = companies.map(c => {
+                  // Score Geral
+                  if (indicator.key === 'overallScore') {
+                    return c.overallScore?.score || null
+                  }
+                  
+                  // Estratégias de Investimento
+                  if (indicator.isStrategy && c.strategies) {
+                    // Mapear chave da estratégia corretamente
+                    let strategyKey = indicator.key
+                    if (indicator.key === 'dividendYieldStrategy') {
+                      strategyKey = 'dividendYield'
+                    }
+                    
+                    const strategy = (c.strategies as Record<string, { score: number; isEligible: boolean }>)[strategyKey]
+                    return strategy?.score || null
+                  }
+                  
+                  // Indicadores Financeiros
+                  return c.financialData ? (c.financialData as Record<string, number | null>)[indicator.key] : null
+                })
+                const { bestIndex, tiedIndices } = getBestValueInfo(values, indicator.getBestType())
                 const shouldBlur = indicator.isPremium && !userIsPremium
 
                 return (
@@ -226,18 +344,44 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                     </TableCell>
                     {values.map((value, companyIndex) => {
                       const isBest = bestIndex === companyIndex && bestIndex !== -1
+                      const isTied = tiedIndices.includes(companyIndex) && tiedIndices.length > 1
                       
                       return (
                         <TableCell key={companyIndex} className={`text-center relative ${shouldBlur ? 'blur-sm' : ''}`}>
                           <div className="flex items-center justify-center space-x-1">
-                            <span className={isBest ? 'font-bold text-green-600' : ''}>
+                            <span className={isBest ? 'font-bold text-green-600' : isTied ? 'font-semibold text-blue-600' : ''}>
                               {indicator.format(value)}
                             </span>
-                            {isBest && indicator.getBestType(values) === 'highest' && (
-                              <TrendingUp className="w-4 h-4 text-green-600" />
+                            {isBest && userIsPremium && (
+                              <div className="flex items-center">
+                                {indicator.getBestType() === 'highest' && (
+                                  <>
+                                    <TrendingUp className="w-4 h-4 text-green-600 mr-1" />
+                                    <Trophy className="w-4 h-4 text-yellow-500" />
+                                  </>
+                                )}
+                                {indicator.getBestType() === 'lowest' && (
+                                  <>
+                                    <TrendingDown className="w-4 h-4 text-green-600 mr-1" />
+                                    <Trophy className="w-4 h-4 text-yellow-500" />
+                                  </>
+                                )}
+                              </div>
                             )}
-                            {isBest && indicator.getBestType(values) === 'lowest' && (
-                              <TrendingDown className="w-4 h-4 text-green-600" />
+                            {isBest && !userIsPremium && (
+                              <div className="flex items-center">
+                                {indicator.getBestType() === 'highest' && (
+                                  <TrendingUp className="w-4 h-4 text-green-600" />
+                                )}
+                                {indicator.getBestType() === 'lowest' && (
+                                  <TrendingDown className="w-4 h-4 text-green-600" />
+                                )}
+                              </div>
+                            )}
+                            {isTied && !isBest && (
+                              <div className="flex items-center" title="Empate">
+                                <Minus className="w-4 h-4 text-blue-600" />
+                              </div>
                             )}
                           </div>
                           {shouldBlur && (
@@ -255,8 +399,39 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
           </Table>
         </div>
 
+        {/* Legenda dos símbolos */}
+        <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900/20 rounded-lg border">
+          <h4 className="font-semibold mb-3 text-sm">Legenda dos Símbolos</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="flex items-center space-x-2">
+              <Trophy className="w-4 h-4 text-yellow-500" />
+              <span>Melhor valor único (Premium)</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="w-4 h-4 text-green-600" />
+              <span>Melhor valor (maior é melhor)</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <TrendingDown className="w-4 h-4 text-green-600" />
+              <span>Melhor valor (menor é melhor)</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Minus className="w-4 h-4 text-blue-600" />
+              <span>Empate no melhor valor</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Crown className="w-4 h-4 text-yellow-500" />
+              <span>Recurso Premium</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Lock className="w-4 h-4 text-muted-foreground" />
+              <span>Bloqueado (Premium)</span>
+            </div>
+          </div>
+        </div>
+
         {!userIsPremium && (
-          <div className="mt-6 p-4 bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+          <div className="mt-4 p-4 bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
             <div className="flex items-center space-x-3">
               <Crown className="w-6 h-6 text-yellow-600" />
               <div className="flex-1">

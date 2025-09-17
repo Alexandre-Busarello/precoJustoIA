@@ -75,7 +75,7 @@ function runStrategicAnalyses(companyData: CompanyData) {
   try {
     // Graham Analysis
     const grahamStrategy = new GrahamStrategy();
-    const grahamAnalysis = grahamStrategy.runAnalysis(companyData, { marginOfSafety: 0.3 });
+    const grahamAnalysis = grahamStrategy.runAnalysis(companyData);
     analyses.graham = {
       fairValue: grahamAnalysis.fairValue,
       upside: grahamAnalysis.upside,
@@ -102,7 +102,7 @@ function runStrategicAnalyses(companyData: CompanyData) {
   try {
     // Low P/E Analysis  
     const lowPEStrategy = new LowPEStrategy();
-    const lowPEAnalysis = lowPEStrategy.runAnalysis(companyData, { maxPE: 15 });
+    const lowPEAnalysis = lowPEStrategy.runAnalysis(companyData, { maxPE: 15, minROE: 0.12 });
     analyses.lowPE = {
       eligible: lowPEAnalysis.isEligible,
       score: lowPEAnalysis.score,
@@ -115,7 +115,7 @@ function runStrategicAnalyses(companyData: CompanyData) {
   try {
     // Magic Formula Analysis
     const magicStrategy = new MagicFormulaStrategy();
-    const magicAnalysis = magicStrategy.runAnalysis(companyData, {});
+    const magicAnalysis = magicStrategy.runAnalysis(companyData, { minROIC: 0.15, minEY: 0.08 });
     analyses.magicFormula = {
       eligible: magicAnalysis.isEligible,
       score: magicAnalysis.score

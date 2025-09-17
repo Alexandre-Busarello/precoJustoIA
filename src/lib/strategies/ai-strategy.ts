@@ -188,7 +188,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
           graham: StrategyFactory.runGrahamAnalysis(company, { marginOfSafety: 0.20 }),
           dividendYield: StrategyFactory.runDividendYieldAnalysis(company, { minYield: 0.04 }),
           lowPE: StrategyFactory.runLowPEAnalysis(company, { maxPE: 15, minROE: 0.12 }),
-          magicFormula: StrategyFactory.runMagicFormulaAnalysis(company, { limit: 10 }),
+          magicFormula: StrategyFactory.runMagicFormulaAnalysis(company, { limit: 10, minROIC: 0.15, minEY: 0.08 }),
           fcd: StrategyFactory.runFCDAnalysis(company, {
             growthRate: 0.025,
             discountRate: 0.10,

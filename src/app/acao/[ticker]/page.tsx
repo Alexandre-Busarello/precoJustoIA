@@ -16,20 +16,12 @@ import { Button } from '@/components/ui/button'
 
 // Lucide Icons
 import {
-  TrendingUp,
-  TrendingDown,
   Building2,
-  Percent,
-  DollarSign,
-  Target,
-  BarChart3,
-  Activity,
   PieChart,
   Eye,
   User,
   LineChart,
-  GitCompare,
-  Search
+  GitCompare
 } from 'lucide-react'
 
 interface PageProps {

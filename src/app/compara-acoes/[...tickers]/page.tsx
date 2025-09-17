@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
+import React from 'react'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
 import { StrategyFactory } from '@/lib/strategies/strategy-factory'
-import { calculateOverallScore } from '@/lib/strategies/overall-score'
+import { calculateOverallScore, FinancialData } from '@/lib/strategies/overall-score'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -17,14 +18,7 @@ import { ComparisonTable } from '@/components/comparison-table'
 
 // Lucide Icons
 import {
-  TrendingUp,
-  TrendingDown,
   Building2,
-  Percent,
-  DollarSign,
-  Target,
-  BarChart3,
-  Activity,
   PieChart,
   Eye,
   User,
@@ -34,7 +28,13 @@ import {
   Crown,
   Trophy,
   Medal,
-  Award
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  Percent,
+  DollarSign,
+  Target,
+  Activity
 } from 'lucide-react'
 
 interface PageProps {
@@ -113,21 +113,21 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
     gordon: 0.025         // 2.5% - Modelo Gordon
   }
   
-  const scores = companies.map((company, companyIndex) => {
+  const scores = companies.map((company) => {
     let totalScore = 0
     let totalWeight = 0
     let penaltyFactor = 1.0 // Fator de penalização (1.0 = sem penalidade)
     
     // Executar estratégias para obter dados completos
-    const dailyQuotes = company.dailyQuotes as any[]
-    const financialData = company.financialData as any[]
-    const currentPrice = toNumber(dailyQuotes?.[0]?.price) || toNumber(financialData?.[0]?.lpa) || 0
+    const dailyQuotes = company.dailyQuotes as Record<string, unknown>[]
+    const financialData = company.financialData as Record<string, unknown>[]
+    const currentPrice = toNumber(dailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(financialData?.[0]?.lpa as PrismaDecimal) || 0
     const { strategies, overallScore } = executeStrategiesForCompany(company, currentPrice)
     
     // PENALIZAÇÃO 1: Empresas com valor de mercado menor que 2B
-    const companyFinancialData = financialData?.[0] as any
+    const companyFinancialData = financialData?.[0] as Record<string, unknown>
     if (companyFinancialData) {
-      const marketCap = toNumber(companyFinancialData.valorMercado) || 0
+      const marketCap = toNumber(companyFinancialData.valorMercado as PrismaDecimal) || 0
       if (marketCap > 0 && marketCap < 2000000000) { // 2 bilhões
         penaltyFactor *= 0.8 // Penalidade de 20%
         console.log(`Penalidade valor de mercado aplicada para ${company.ticker}: R$ ${(marketCap / 1000000).toFixed(0)}M`)
@@ -147,12 +147,12 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
     if (companyFinancialData) {
       // Verificar indicadores críticos
       const criticalIndicators = [
-        { key: 'pl', value: toNumber(companyFinancialData.pl), maxInflated: 100 },
-        { key: 'pvp', value: toNumber(companyFinancialData.pvp), maxInflated: 10 },
-        { key: 'roe', value: toNumber(companyFinancialData.roe), maxInflated: 1 }, // 100%
-        { key: 'dy', value: toNumber(companyFinancialData.dy), maxInflated: 0.3 }, // 30%
-        { key: 'margemLiquida', value: toNumber(companyFinancialData.margemLiquida), maxInflated: 1 }, // 100%
-        { key: 'roic', value: toNumber(companyFinancialData.roic), maxInflated: 1 }, // 100%
+        { key: 'pl', value: toNumber(companyFinancialData.pl as PrismaDecimal), maxInflated: 100 },
+        { key: 'pvp', value: toNumber(companyFinancialData.pvp as PrismaDecimal), maxInflated: 10 },
+        { key: 'roe', value: toNumber(companyFinancialData.roe as PrismaDecimal), maxInflated: 1 }, // 100%
+        { key: 'dy', value: toNumber(companyFinancialData.dy as PrismaDecimal), maxInflated: 0.3 }, // 30%
+        { key: 'margemLiquida', value: toNumber(companyFinancialData.margemLiquida as PrismaDecimal), maxInflated: 1 }, // 100%
+        { key: 'roic', value: toNumber(companyFinancialData.roic as PrismaDecimal), maxInflated: 1 }, // 100%
       ]
       
       criticalIndicators.forEach(indicator => {
@@ -239,23 +239,23 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
     }
     
     // Coletar todos os valores para normalização
-    const allPL = companies.map(c => toNumber((c.financialData as any[])?.[0]?.pl))
-    const allPVP = companies.map(c => toNumber((c.financialData as any[])?.[0]?.pvp))
-    const allROE = companies.map(c => toNumber((c.financialData as any[])?.[0]?.roe))
-    const allDY = companies.map(c => toNumber((c.financialData as any[])?.[0]?.dy))
-    const allMargemLiquida = companies.map(c => toNumber((c.financialData as any[])?.[0]?.margemLiquida))
-    const allROIC = companies.map(c => toNumber((c.financialData as any[])?.[0]?.roic))
-    const allDividaEbitda = companies.map(c => toNumber((c.financialData as any[])?.[0]?.dividaLiquidaEbitda))
+    const allPL = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.pl as PrismaDecimal))
+    const allPVP = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.pvp as PrismaDecimal))
+    const allROE = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.roe as PrismaDecimal))
+    const allDY = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.dy as PrismaDecimal))
+    const allMargemLiquida = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.margemLiquida as PrismaDecimal))
+    const allROIC = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.roic as PrismaDecimal))
+    const allDividaEbitda = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.dividaLiquidaEbitda as PrismaDecimal))
     
     // Calcular scores dos indicadores básicos
     if (companyFinancialData) {
-      totalScore += scoreIndicator(allPL, toNumber(companyFinancialData.pl), weights.pl, false, 'pl') // Menor P/L é melhor
-      totalScore += scoreIndicator(allPVP, toNumber(companyFinancialData.pvp), weights.pvp, false, 'pvp') // Menor P/VP é melhor
-      totalScore += scoreIndicator(allROE, toNumber(companyFinancialData.roe), weights.roe, true, 'roe') // Maior ROE é melhor
-      totalScore += scoreIndicator(allDY, toNumber(companyFinancialData.dy), weights.dy, true, 'dy') // Maior DY é melhor
-      totalScore += scoreIndicator(allMargemLiquida, toNumber(companyFinancialData.margemLiquida), weights.margemLiquida, true, 'margemLiquida')
-      totalScore += scoreIndicator(allROIC, toNumber(companyFinancialData.roic), weights.roic, true, 'roic')
-      totalScore += scoreIndicator(allDividaEbitda, toNumber(companyFinancialData.dividaLiquidaEbitda), weights.dividaLiquidaEbitda, false, 'dividaLiquidaEbitda')
+      totalScore += scoreIndicator(allPL, toNumber(companyFinancialData.pl as PrismaDecimal), weights.pl, false, 'pl') // Menor P/L é melhor
+      totalScore += scoreIndicator(allPVP, toNumber(companyFinancialData.pvp as PrismaDecimal), weights.pvp, false, 'pvp') // Menor P/VP é melhor
+      totalScore += scoreIndicator(allROE, toNumber(companyFinancialData.roe as PrismaDecimal), weights.roe, true, 'roe') // Maior ROE é melhor
+      totalScore += scoreIndicator(allDY, toNumber(companyFinancialData.dy as PrismaDecimal), weights.dy, true, 'dy') // Maior DY é melhor
+      totalScore += scoreIndicator(allMargemLiquida, toNumber(companyFinancialData.margemLiquida as PrismaDecimal), weights.margemLiquida, true, 'margemLiquida')
+      totalScore += scoreIndicator(allROIC, toNumber(companyFinancialData.roic as PrismaDecimal), weights.roic, true, 'roic')
+      totalScore += scoreIndicator(allDividaEbitda, toNumber(companyFinancialData.dividaLiquidaEbitda as PrismaDecimal), weights.dividaLiquidaEbitda, false, 'dividaLiquidaEbitda')
       
       totalWeight += weights.pl + weights.pvp + weights.roe + weights.dy + weights.margemLiquida + weights.roic + weights.dividaLiquidaEbitda
     }
@@ -263,9 +263,9 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
     // Score geral
     if (overallScore?.score) {
       const allOverallScores = companies.map(c => {
-        const cDailyQuotes = c.dailyQuotes as any[]
-        const cFinancialData = c.financialData as any[]
-        const price = toNumber(cDailyQuotes?.[0]?.price) || toNumber(cFinancialData?.[0]?.lpa) || 0
+        const cDailyQuotes = c.dailyQuotes as Record<string, unknown>[]
+        const cFinancialData = c.financialData as Record<string, unknown>[]
+        const price = toNumber(cDailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(cFinancialData?.[0]?.lpa as PrismaDecimal) || 0
         const { overallScore: os } = executeStrategiesForCompany(c, price)
         return os?.score || null
       })
@@ -281,9 +281,9 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
         const strategyScore = strategies[key]?.score
         if (strategyScore !== undefined) {
           const allStrategyScores = companies.map(c => {
-            const cDailyQuotes = c.dailyQuotes as any[]
-            const cFinancialData = c.financialData as any[]
-            const price = toNumber(cDailyQuotes?.[0]?.price) || toNumber(cFinancialData?.[0]?.lpa) || 0
+            const cDailyQuotes = c.dailyQuotes as Record<string, unknown>[]
+            const cFinancialData = c.financialData as Record<string, unknown>[]
+            const price = toNumber(cDailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(cFinancialData?.[0]?.lpa as PrismaDecimal) || 0
             const { strategies: s } = executeStrategiesForCompany(c, price)
             return s?.[key]?.score || null
           })
@@ -319,11 +319,15 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
   if (companies.length <= 6) { // Só para comparações pequenas
     console.log('=== WEIGHTED SCORING DEBUG ===')
     console.log('Companies:', companies.map(c => c.ticker))
-    console.log('Scores:', companies.map((c, i) => ({ 
-      ticker: c.ticker, 
-      score: scores[i].toFixed(2),
-      marketCap: `R$ ${((toNumber((c.financialData as any[])?.[0]?.valorMercado) || 0) / 1000000).toFixed(0)}M`
-    })))
+    console.log('Scores:', companies.map((c, i) => {
+      const financialData = (c.financialData as Record<string, unknown>[])?.[0];
+      const marketCapValue = toNumber(financialData?.valorMercado as PrismaDecimal) || 0;
+      return {
+        ticker: c.ticker, 
+        score: scores[i].toFixed(2),
+        marketCap: `R$ ${(marketCapValue / 1000000).toFixed(0)}M`
+      };
+    }))
     console.log('Best score:', maxScore.toFixed(2))
     console.log('Winner:', bestIndex !== -1 ? companies[bestIndex].ticker : 'Tie')
     console.log('Tied companies:', tiedIndices.length > 1 ? tiedIndices.map(i => companies[i].ticker) : 'None')
@@ -338,12 +342,12 @@ function executeStrategiesForCompany(company: Record<string, unknown>, currentPr
   try {
     // Preparar dados da empresa no formato esperado pelas estratégias
     const companyData = {
-      ticker: company.ticker,
-      name: company.name,
-      sector: company.sector,
+      ticker: company.ticker as string,
+      name: company.name as string,
+      sector: company.sector as string,
       currentPrice,
-      financials: company.financialData[0],
-      financialData: company.financialData[0]
+      financials: (company.financialData as Record<string, unknown>[])[0],
+      financialData: (company.financialData as Record<string, unknown>[])[0]
     }
 
     // Executar todas as estratégias
@@ -351,7 +355,7 @@ function executeStrategiesForCompany(company: Record<string, unknown>, currentPr
       graham: StrategyFactory.runGrahamAnalysis(companyData, { marginOfSafety: 0.20 }),
       dividendYield: StrategyFactory.runDividendYieldAnalysis(companyData, { minYield: 0.04 }),
       lowPE: StrategyFactory.runLowPEAnalysis(companyData, { maxPE: 15, minROE: 0.12 }),
-      magicFormula: StrategyFactory.runMagicFormulaAnalysis(companyData, { limit: 10 }),
+      magicFormula: StrategyFactory.runMagicFormulaAnalysis(companyData, { limit: 10, minROIC: 0.15, minEY: 0.08 }),
       fcd: StrategyFactory.runFCDAnalysis(companyData, {
         growthRate: 0.025,
         discountRate: 0.10,
@@ -365,7 +369,7 @@ function executeStrategiesForCompany(company: Record<string, unknown>, currentPr
     }
 
     // Calcular score geral
-    const overallScore = calculateOverallScore(strategies, companyData.financialData, currentPrice)
+    const overallScore = calculateOverallScore(strategies, companyData.financialData as FinancialData, currentPrice)
 
     return { strategies, overallScore }
   } catch (error) {
@@ -387,8 +391,7 @@ function ComparisonIndicatorCard({
   title: string
   values: (string | number)[]
   tickers: string[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  icon: any
+  icon: React.ComponentType<{ className?: string }>
   description?: string
   isPremium?: boolean
   userIsPremium?: boolean

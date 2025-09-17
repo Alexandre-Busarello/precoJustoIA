@@ -21,9 +21,7 @@ import {
   Minus,
   Eye,
   ArrowUpDown,
-  Trophy,
-  Medal,
-  Award
+  Trophy
 } from 'lucide-react'
 
 // Tipo para dados da empresa

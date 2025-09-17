@@ -10,7 +10,6 @@ import {
   BarChart3, 
   Plus, 
   X, 
-  Search,
   TrendingUp
 } from 'lucide-react'
 

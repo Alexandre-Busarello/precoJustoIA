@@ -3,28 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma, safeQuery } from '@/lib/prisma-wrapper';
 
-// Função helper simplificada para retry
-async function withRetry<T>(
-  operation: () => Promise<T>,
-  maxRetries: number = 2
-): Promise<T> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      console.warn(`Tentativa ${attempt}/${maxRetries} falhou:`, error);
-      
-      if (attempt === maxRetries) {
-        throw error;
-      }
-      
-      // Pequena pausa entre tentativas
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  }
-  
-  throw new Error('Todas as tentativas falharam');
-}
+// Função helper removida pois não é usada
 
 export async function GET() {
   try {

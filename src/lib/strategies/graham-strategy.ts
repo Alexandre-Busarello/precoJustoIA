@@ -4,7 +4,7 @@ import { GrahamParams, CompanyData, StrategyAnalysis, RankBuilderResult } from '
 export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
   readonly name = 'graham';
 
-  validateCompanyData(companyData: CompanyData, params: GrahamParams): boolean {
+  validateCompanyData(companyData: CompanyData): boolean {
     const { financials } = companyData;
     return !!(
       financials.lpa && toNumber(financials.lpa)! > 0 &&
@@ -17,7 +17,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     );
   }
 
-  runAnalysis(companyData: CompanyData, params: GrahamParams): StrategyAnalysis {
+  runAnalysis(companyData: CompanyData): StrategyAnalysis {
     const { financials, currentPrice } = companyData;
     
     const lpa = toNumber(financials.lpa);
@@ -27,6 +27,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const margemLiquida = toNumber(financials.margemLiquida);
     const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
     const crescimentoLucros = toNumber(financials.crescimentoLucros);
+    const marketCap = toNumber(financials.marketCap);
     
     const fairValue = this.calculateGrahamFairValue(lpa, vpa);
     const upside = fairValue && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : null;
@@ -39,7 +40,8 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       { label: 'Liquidez Corrente ≥ 1.0', value: !!(liquidezCorrente && liquidezCorrente >= 1.0), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
       { label: 'Margem Líquida positiva', value: !!(margemLiquida && margemLiquida > 0), description: `Margem: ${formatPercent(margemLiquida)}` },
       { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
-      { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15, description: `Crescimento: ${formatPercent(crescimentoLucros)}` }
+      { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15, description: `Crescimento: ${formatPercent(crescimentoLucros)}` },
+      { label: 'Market Cap ≥ R$ 2B', value: !!(marketCap && marketCap >= 2000000000), description: `Market Cap: ${formatCurrency(marketCap)}` }
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
@@ -52,12 +54,14 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const score = (passedCriteria / criteria.length) * 100;
     
     // Calcular quality score como no backend
-    const qualityScore = (
+    let qualityScore = (
       Math.min(roe || 0, 0.25) * 40 +
       Math.min(liquidezCorrente || 0, 2.5) * 20 +
       Math.min(margemLiquida || 0, 0.15) * 100 +
       Math.max(0, (crescimentoLucros || 0) + 0.15) * 50
     );
+
+    if (qualityScore > 100) qualityScore = 100;
 
     // Determinar o motivo da reprovação
     let reasoning: string;
@@ -106,7 +110,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const results: RankBuilderResult[] = [];
 
     for (const company of companies) {
-      if (!this.validateCompanyData(company, params)) continue;
+      if (!this.validateCompanyData(company)) continue;
 
       const { financials, currentPrice } = company;
       const lpa = toNumber(financials.lpa)!;
@@ -115,22 +119,25 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       const liquidezCorrente = toNumber(financials.liquidezCorrente) || 0;
       const margemLiquida = toNumber(financials.margemLiquida) || 0;
       const crescimentoLucros = toNumber(financials.crescimentoLucros) || 0;
+      const marketCap = toNumber(financials.marketCap);
 
       // Fórmula de Graham: Preço Justo = √(22.5 × LPA × VPA)
       const fairValue = Math.sqrt(22.5 * lpa * vpa);
       const marginOfSafetyActual = (fairValue / currentPrice) - 1;
 
       // Filtrar apenas empresas com margem de segurança >= parâmetro
-      if (marginOfSafetyActual >= marginOfSafety) {
+      if (marginOfSafetyActual >= marginOfSafety && (marketCap && marketCap >= 2000000000)) {
         const upside = ((fairValue / currentPrice) - 1) * 100;
 
         // Score de qualidade para Graham (peso na solidez da empresa)
-        const qualityScore = (
+        let qualityScore = (
           Math.min(roe, 0.25) * 40 +        // ROE (peso alto)
           Math.min(liquidezCorrente, 2.5) * 20 +         // Liquidez
           Math.min(margemLiquida, 0.15) * 100 +          // Margem líquida
           Math.max(0, crescimentoLucros + 0.15) * 50   // Crescimento (penaliza declínio)
         );
+
+        if (qualityScore > 100) qualityScore = 100;
 
         results.push({
           ticker: company.ticker,

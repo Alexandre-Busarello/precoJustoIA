@@ -20,8 +20,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: LowPEParams): StrategyAnalysis {
-    const { financials, currentPrice } = companyData;
-    const { maxPE, minROE = 0 } = params;
+    const { financials } = companyData;
+    const { maxPE, minROE = 0.15 } = params;
     
     const pl = toNumber(financials.pl);
     const roe = toNumber(financials.roe);
@@ -49,7 +49,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular value score como no backend
-    const valueScore = (
+    let valueScore = (
       Math.max(0, 50 - (pl || 0) * 2) +
       Math.min(roe || 0, 0.30) * 50 +
       Math.min(roa || 0, 0.20) * 100 +
@@ -57,6 +57,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
       Math.max(0, (crescimentoReceitas || 0) + 0.10) * 30 +
       Math.min(roic || 0, 0.25) * 40
     );
+
+    if (valueScore > 100) valueScore = 100;
     
     return {
       isEligible,
@@ -78,7 +80,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
   }
 
   runRanking(companies: CompanyData[], params: LowPEParams): RankBuilderResult[] {
-    const { maxPE, minROE = 0 } = params;
+    // const { maxPE, minROE = 0 } = params; // Não usado atualmente
     const results: RankBuilderResult[] = [];
 
     for (const company of companies) {
@@ -94,7 +96,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
       const roic = toNumber(financials.roic) || 0;
 
       // Score de value investing (qualidade + preço baixo)
-      const valueScore = (
+      let valueScore = (
         Math.max(0, 50 - pl * 2) +         // Premia P/L baixo
         Math.min(roe, 0.30) * 50 +          // ROE forte
         Math.min(roa, 0.20) * 100 +          // ROA eficiente
@@ -102,6 +104,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
         Math.max(0, crescimentoReceitas + 0.10) * 30 +   // Crescimento não negativo
         Math.min(roic, 0.25) * 40           // ROIC para qualidade
       );
+
+      if (valueScore > 100) valueScore = 100;
 
       results.push({
         ticker: company.ticker,
@@ -112,7 +116,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
         fairValue: null,
         upside: null,
         marginOfSafety: null,
-        rational: `Aprovada no Value Investing Model com P/L ${pl.toFixed(1)}. Empresa de qualidade: ROE ${roe.toFixed(1)}%, ROA ${roa.toFixed(1)}%, Margem ${margemLiquida.toFixed(1)}%. Crescimento Receitas: ${crescimentoReceitas.toFixed(1)}%. Value Score: ${Number(valueScore.toFixed(1))}/100. Não é value trap.`,
+        rational: `Aprovada no Value Investing Model com P/L ${pl.toFixed(1)}. Empresa de qualidade: ROE ${(roe * 100).toFixed(2)}%, ROA ${roa.toFixed(1)}%, Margem ${(margemLiquida * 100).toFixed(2)}%. Crescimento Receitas: ${(crescimentoReceitas * 100).toFixed(2)}%. Value Score: ${Number(valueScore.toFixed(1))}/100. Não é value trap.`,
         key_metrics: {
           pl: pl,
           valueScore: Number(valueScore.toFixed(1)),

@@ -44,7 +44,7 @@ export async function smartDeallocate() {
       await prisma.$executeRaw`DEALLOCATE ALL`;
       statementsCleared = true;
       lastClearTime = now;
-    } catch (error) {
+    } catch {
       // DEALLOCATE ALL pode falhar se não houver statements - é normal
       statementsCleared = true;
       lastClearTime = now;

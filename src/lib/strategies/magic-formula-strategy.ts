@@ -20,8 +20,8 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: MagicFormulaParams): StrategyAnalysis {
-    const { financials, currentPrice } = companyData;
-    const { minROIC = 0, minEY = 0 } = params;
+    const { financials } = companyData;
+    const { minROIC = 0.15, minEY = 0.8 } = params;
     
     const roic = toNumber(financials.roic);
     const earningsYield = toNumber(financials.earningsYield);
@@ -48,13 +48,15 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular magic formula score como no backend
-    const magicScore = (
+    let magicScore = (
       Math.min(roic || 0, 0.50) * 100 +   // ROIC até 50%
       Math.min(earningsYield || 0, 0.25) * 200 +  // EY até 25%
       Math.min(roe || 0, 0.30) * 50 +     // ROE até 30%
       Math.min(margemLiquida || 0, 0.30) * 50 +   // Margem até 30%
       Math.max(0, (crescimentoReceitas || 0) + 0.05) * 80     // Crescimento não negativo
     );
+
+    if (magicScore > 100) magicScore = 100;
     
     return {
       isEligible,
@@ -76,7 +78,7 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
   }
 
   runRanking(companies: CompanyData[], params: MagicFormulaParams): RankBuilderResult[] {
-    const { minROIC = 0, minEY = 0 } = params;
+    // const { minROIC = 0, minEY = 0 } = params; // Não usado atualmente
     const results: RankBuilderResult[] = [];
 
     for (const company of companies) {
@@ -91,13 +93,15 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
       const liquidezCorrente = toNumber(financials.liquidezCorrente) || 0;
 
       // Magic Formula Score (combina ROIC alto + EY alto + qualidade)
-      const magicScore = (
+      let magicScore = (
         Math.min(roic, 0.50) * 100 +        // ROIC até 50% = 50 pontos
         Math.min(earningsYield, 0.25) * 200 +   // EY até 25% = 50 pontos
         Math.min(roe, 0.30) * 50 +          // ROE até 30% = 15 pontos
         Math.min(margemLiquida, 0.30) * 50 +        // Margem até 30% = 15 pontos
         Math.max(0, crescimentoReceitas + 0.05) * 80 // Crescimento não negativo = 8 pontos
       );
+
+      if (magicScore > 100) magicScore = 100;
 
       results.push({
         ticker: company.ticker,

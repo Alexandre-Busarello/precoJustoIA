@@ -19,7 +19,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
   }
 
   runAnalysis(companyData: CompanyData, params: DividendYieldParams): StrategyAnalysis {
-    const { financials, currentPrice } = companyData;
+    const { financials } = companyData;
     const { minYield } = params;
     
     const dy = toNumber(financials.dy);
@@ -46,7 +46,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular sustainability score como no backend
-    const sustainabilityScore = (
+    let sustainabilityScore = (
       Math.min(roe || 0, 0.30) * 25 +
       Math.min(liquidezCorrente || 0, 3) * 15 +
       Math.max(0, 50 - (dividaLiquidaPl || 0) * 50) +
@@ -54,6 +54,8 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
       Math.min(roic || 0, 0.25) * 20 +
       (dy || 0) * 50
     );
+
+    if (sustainabilityScore > 100) sustainabilityScore = 100;
     
     return {
       isEligible,
@@ -102,7 +104,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
       const roic = toNumber(financials.roic) || 0;
 
       // Calcular "Score de Qualidade" para evitar dividend traps
-      const sustainabilityScore = (
+      let sustainabilityScore = (
         Math.min(roe, 0.30) * 25 +       // ROE forte (peso 25%)
         Math.min(liquidezCorrente, 3) * 15 +           // Liquidez adequada (peso alto)
         Math.max(0, 50 - dividaLiquidaPl * 50) +        // Penaliza alta dívida
@@ -110,6 +112,8 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
         Math.min(roic, 0.25) * 20 +       // ROIC para eficiência
         dy * 50                   // DY ainda importa, mas não domina
       );
+
+      if (sustainabilityScore > 100) sustainabilityScore = 100;
 
       results.push({
         ticker: company.ticker,

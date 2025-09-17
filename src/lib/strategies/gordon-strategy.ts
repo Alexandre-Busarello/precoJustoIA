@@ -72,10 +72,10 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     const hasValidFairValue = !!fairValue;
     const hasValidUpside = !!upside;
     const hasMinimumUpside = !!(upside && upside >= 15);
-    
+
     const isEligible = hasMinimumCriteria && hasValidFairValue && hasValidUpside && hasMinimumUpside;
     const score = (passedCriteria / criteria.length) * 100;
-    
+
     // Reasoning detalhado
     let reasoning = '';
     if (!hasMinimumCriteria) {

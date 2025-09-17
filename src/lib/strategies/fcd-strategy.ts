@@ -4,7 +4,7 @@ import { FCDParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './t
 export class FCDStrategy extends AbstractStrategy<FCDParams> {
   readonly name = 'fcd';
 
-  validateCompanyData(companyData: CompanyData, params: FCDParams): boolean {
+  validateCompanyData(companyData: CompanyData): boolean {
     const { financials } = companyData;
     return !!(
       financials.ebitda && toNumber(financials.ebitda)! > 0 &&
@@ -60,13 +60,15 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const score = (passedCriteria / criteria.length) * 100;
     
     // Calcular quality score como no backend
-    const fcdQualityScore = Math.min(100, (
+    let fcdQualityScore = Math.min(100, (
       Math.min(roe || 0, 0.4) * 100 +          // ROE strong (até 40% = 40 pontos)
       Math.min(margemEbitda || 0, 0.5) * 80 +  // Margem EBITDA (até 50% = 40 pontos)
       Math.max(0, (crescimentoReceitas || 0) + 0.2) * 50 + // Crescimento não negativo
       Math.min(liquidezCorrente || 0, 3) * 5 +  // Liquidez adequada
       Math.min((upside || 0) / 100, 1) * 5      // Upside potencial
     ));
+
+    if (fcdQualityScore > 100) fcdQualityScore = 100;
     
     const reasoning = `Análise FCD: Preço justo calculado em ${formatCurrency(fairValue)} vs atual ${formatCurrency(currentPrice)}. ${passedCriteria} de ${criteria.length} critérios Premium atendidos (Score FCD: ${fcdQualityScore.toFixed(1)}). ${
       isEligible ? `Upside potencial de ${upside?.toFixed(1)}%. Empresa atende aos critérios Premium de geração de caixa com margem de segurança robusta.` :
@@ -105,7 +107,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const results: RankBuilderResult[] = [];
 
     for (const company of companies) {
-      if (!this.validateCompanyData(company, params)) continue;
+      if (!this.validateCompanyData(company)) continue;
 
       const { financials, currentPrice } = company;
       const ebitda = toNumber(financials.ebitda)!;
@@ -168,13 +170,15 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
         const upside = marginOfSafetyActual * 100;
 
         // Score FCD: combina upside potencial + qualidade dos dados
-        const fcdQualityScore = Math.min(100, (
+        let fcdQualityScore = Math.min(100, (
           Math.min(roe, 0.4) * 100 +          // ROE strong (até 40% = 40 pontos)
           Math.min(margemEbitda, 0.5) * 80 +  // Margem EBITDA (até 50% = 40 pontos)
           Math.max(0, crescimentoReceitas + 0.2) * 50 +    // Crescimento não negativo (até 20% = 10 pontos)
           Math.min(liquidezCorrente, 3) * 5 +               // Liquidez adequada (até 3.0 = 15 pontos)
           Math.min(marginOfSafetyActual, 1) * 5    // Upside potencial (até 100% = 5 pontos)
         ));
+
+        if (fcdQualityScore > 100) fcdQualityScore = 100;
 
         results.push({
           ticker: company.ticker,

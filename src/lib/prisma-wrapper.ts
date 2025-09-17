@@ -34,11 +34,11 @@ export async function withPrismaRetry<T>(
         return await operation();
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       const is42P05Error = 
-        error?.code === '42P05' || 
-        error?.message?.includes('duplicate_prepared_statement') ||
-        error?.message?.includes('42P05');
+        (error as { code?: string })?.code === '42P05' || 
+        (error as { message?: string })?.message?.includes('duplicate_prepared_statement') ||
+        (error as { message?: string })?.message?.includes('42P05');
 
       if (is42P05Error && attempt < maxRetries) {
         if (process.env.NODE_ENV === 'development') {
@@ -48,7 +48,7 @@ export async function withPrismaRetry<T>(
         // Limpar prepared statements de forma inteligente
         try {
           await smartDeallocate();
-        } catch (cleanupError) {
+        } catch {
           // Se não conseguir limpar, resetar conexão como fallback
           await resetPrismaConnection();
         }
@@ -60,7 +60,7 @@ export async function withPrismaRetry<T>(
 
       // Se não é erro 42P05 ou esgotaram as tentativas, relançar erro
       if (process.env.NODE_ENV === 'development' && is42P05Error) {
-        console.error(`❌ Erro 42P05 persistente após ${maxRetries} tentativas:`, error?.message);
+        console.error(`❌ Erro 42P05 persistente após ${maxRetries} tentativas:`, (error as { message?: string })?.message);
       }
       
       throw error;
@@ -155,17 +155,17 @@ export async function clearPreparedStatements(): Promise<void> {
 /**
  * Middleware para APIs que sofrem com erro 42P05
  */
-export function withPrismaErrorHandler<T extends (...args: any[]) => Promise<any>>(
+export function withPrismaErrorHandler<T extends (...args: unknown[]) => Promise<unknown>>(
   handler: T,
   apiName: string = 'API'
 ): T {
-  return (async (...args: any[]) => {
+  return (async (...args: unknown[]) => {
     try {
       return await handler(...args);
-    } catch (error: any) {
+    } catch (error: unknown) {
       const is42P05Error = 
-        error?.code === '42P05' || 
-        error?.message?.includes('duplicate_prepared_statement');
+        (error as { code?: string })?.code === '42P05' || 
+        (error as { message?: string })?.message?.includes('duplicate_prepared_statement');
 
       if (is42P05Error) {
         console.error(`🚨 Erro 42P05 detectado em ${apiName}. Tentando recuperação automática...`);

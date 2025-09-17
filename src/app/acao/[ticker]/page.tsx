@@ -6,6 +6,7 @@ import StrategicAnalysisClient from '@/components/strategic-analysis-client'
 import HeaderScoreWrapper from '@/components/header-score-wrapper'
 import AIAnalysis from '@/components/ai-analysis'
 import FinancialIndicators from '@/components/financial-indicators'
+import CompanySearch from '@/components/company-search'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -26,7 +27,9 @@ import {
   PieChart,
   Eye,
   User,
-  LineChart
+  LineChart,
+  GitCompare,
+  Search
 } from 'lucide-react'
 
 interface PageProps {
@@ -48,6 +51,115 @@ function getIndicatorType(value: number | null, positiveThreshold?: number, nega
   if (negativeThreshold !== undefined && value > negativeThreshold) return 'negative'
   
   return 'neutral'
+}
+
+// Função para extrair prefixo do ticker (remove números finais)
+function getTickerPrefix(ticker: string): string {
+  return ticker.replace(/\d+$/, '') // Remove números no final
+}
+
+// Função para buscar concorrentes do mesmo setor com priorização de subsetor
+async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, limit: number = 5) {
+  if (!sector) return []
+  
+  try {
+    const currentPrefix = getTickerPrefix(currentTicker)
+    let competitors: { ticker: string; name: string; sector: string | null }[] = []
+    
+    // Primeiro: buscar empresas do mesmo industry (subsetor específico)
+    if (industry) {
+      const industryCompetitors = await prisma.company.findMany({
+        where: {
+          industry: industry,
+          ticker: {
+            not: currentTicker // Excluir a empresa atual
+          },
+          // Apenas empresas com dados financeiros recentes
+          financialData: {
+            some: {
+              year: {
+                gte: new Date().getFullYear() - 1 // Último ano
+              }
+            }
+          }
+        },
+        select: {
+          ticker: true,
+          name: true,
+          sector: true
+        },
+        orderBy: {
+          ticker: 'asc'
+        }
+      })
+      
+      // Filtrar empresas com mesmo prefixo (tanto da empresa atual quanto entre concorrentes)
+      const seenPrefixes = new Set([currentPrefix]) // Começar com o prefixo da empresa atual
+      const filteredIndustryCompetitors = industryCompetitors.filter(company => {
+        const companyPrefix = getTickerPrefix(company.ticker)
+        if (seenPrefixes.has(companyPrefix)) {
+          return false // Já temos uma empresa com este prefixo
+        }
+        seenPrefixes.add(companyPrefix)
+        return true
+      })
+      
+      competitors = filteredIndustryCompetitors.slice(0, limit)
+      console.log(`Encontradas ${industryCompetitors.length} empresas no subsetor "${industry}", ${filteredIndustryCompetitors.length} após filtrar prefixos, ${competitors.length} selecionadas`)
+    }
+    
+    // Se não conseguiu completar o limite, buscar no setor geral
+    if (competitors.length < limit) {
+      const remainingLimit = limit - competitors.length
+      const existingTickers = competitors.map(c => c.ticker)
+      
+      const sectorCompetitors = await prisma.company.findMany({
+        where: {
+          sector: sector,
+          ticker: {
+            not: currentTicker,
+            notIn: existingTickers // Excluir empresas já encontradas
+          },
+          // Apenas empresas com dados financeiros recentes
+          financialData: {
+            some: {
+              year: {
+                gte: new Date().getFullYear() - 1 // Último ano
+              }
+            }
+          }
+        },
+        select: {
+          ticker: true,
+          name: true,
+          sector: true
+        },
+        orderBy: {
+          ticker: 'asc'
+        }
+      })
+      
+      // Filtrar empresas com mesmo prefixo (continuando com os prefixos já vistos)
+      const existingPrefixes = new Set([currentPrefix, ...competitors.map(c => getTickerPrefix(c.ticker))])
+      const filteredSectorCompetitors = sectorCompetitors.filter(company => {
+        const companyPrefix = getTickerPrefix(company.ticker)
+        if (existingPrefixes.has(companyPrefix)) {
+          return false // Já temos uma empresa com este prefixo
+        }
+        existingPrefixes.add(companyPrefix)
+        return true
+      })
+      
+      const additionalCompetitors = filteredSectorCompetitors.slice(0, remainingLimit)
+      competitors = [...competitors, ...additionalCompetitors]
+      console.log(`Adicionadas ${additionalCompetitors.length} empresas do setor geral "${sector}" (${sectorCompetitors.length} encontradas, ${filteredSectorCompetitors.length} após filtrar). Total: ${competitors.length}`)
+    }
+    
+    return competitors
+  } catch (error) {
+    console.error('Erro ao buscar concorrentes:', error)
+    return []
+  }
 }
 
 // Componente IndicatorCard definido abaixo (após os componentes inline)
@@ -284,6 +396,14 @@ export default async function TickerPage({ params }: PageProps) {
   const latestQuote = companyData.dailyQuotes[0]
   const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
 
+  // Buscar concorrentes do mesmo setor/subsetor (5 concorrentes + empresa atual = 6 total)
+  const competitors = await getSectorCompetitors(ticker, companyData.sector, companyData.industry, 5)
+  
+  // Criar URL do comparador inteligente
+  const smartComparatorUrl = competitors.length > 0 
+    ? `/compara-acoes/${ticker}/${competitors.map(c => c.ticker).join('/')}`
+    : null
+
   // As análises estratégicas agora são feitas no componente cliente
 
   // Converter dados financeiros para números (evitar erro Decimal do Prisma)
@@ -300,6 +420,26 @@ export default async function TickerPage({ params }: PageProps) {
 
   return (
     <>
+      {/* Barra de Busca no Topo */}
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto py-4 px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-lg font-semibold">Análise de Ações</h1>
+              <div className="hidden sm:block text-sm text-muted-foreground">
+                {companyData.name} ({ticker})
+              </div>
+            </div>
+            <div className="w-full max-w-md">
+              <CompanySearch 
+                placeholder="Buscar outras empresas..."
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="container mx-auto py-8 px-4">
         {/* Layout Responsivo: 2 Cards Separados */}
         <div className="mb-8">
@@ -344,9 +484,21 @@ export default async function TickerPage({ params }: PageProps) {
                       </div>
                     </div>
                     
-                    <h2 className="text-xl text-muted-foreground mb-3">
+                    <h2 className="text-xl text-muted-foreground mb-4">
                       Análise da Ação {companyData.name}
                     </h2>
+
+                    {/* Botão de Ação */}
+                    {smartComparatorUrl && (
+                      <div className="mb-4">
+                        <Button asChild>
+                          <Link href={smartComparatorUrl}>
+                            <GitCompare className="w-4 h-4 mr-2" />
+                            Comparador Inteligente
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
                       {companyData.industry && (

@@ -86,54 +86,97 @@ function formatLargeNumber(value: number | null): string {
   return formatCurrency(value)
 }
 
-// Função helper para determinar tipo de indicador
-function getIndicatorType(value: number | null, positiveThreshold?: number, negativeThreshold?: number): 'positive' | 'negative' | 'neutral' | 'default' {
-  if (value === null) return 'default'
-  
-  if (positiveThreshold !== undefined && value >= positiveThreshold) return 'positive'
-  if (negativeThreshold !== undefined && value <= negativeThreshold) return 'positive'
-  if (positiveThreshold !== undefined && value < positiveThreshold) return 'negative'
-  if (negativeThreshold !== undefined && value > negativeThreshold) return 'negative'
-  
-  return 'neutral'
-}
-
 // Sistema de pontuação ponderada para determinar a melhor empresa
 function calculateWeightedScore(companies: Record<string, unknown>[]): { scores: number[], bestIndex: number, tiedIndices: number[] } {
   // Definir pesos para cada indicador (total = 100%)
   const weights = {
     // Indicadores Básicos (40%)
-    pl: 0.12,           // 12% - Valuation fundamental
-    pvp: 0.08,          // 8% - Valor patrimonial
-    roe: 0.15,          // 15% - Rentabilidade principal
-    dy: 0.05,           // 5% - Dividendos
+    pl: 0.10,           // 10% - Valuation fundamental
+    pvp: 0.10,          // 10% - Valor patrimonial
+    roe: 0.10,          // 10% - Rentabilidade principal
+    dy: 0.10,           // 10% - Dividendos
     
     // Indicadores Avançados (25%)
     margemLiquida: 0.10, // 10% - Eficiência operacional
     roic: 0.10,         // 10% - Retorno sobre capital
     dividaLiquidaEbitda: 0.05, // 5% - Endividamento
     
-    // Score Geral (15%)
-    overallScore: 0.15,  // 15% - Análise consolidada
+    // Score Geral (20%)
+    overallScore: 0.20,  // 20% - Análise consolidada
     
-    // Estratégias de Investimento (20%)
-    graham: 0.04,        // 4% - Análise Graham
-    dividendYield: 0.03, // 3% - Estratégia dividendos
-    lowPE: 0.04,         // 4% - Value investing
-    magicFormula: 0.04,  // 4% - Greenblatt
-    fcd: 0.03,           // 3% - Fluxo de caixa
-    gordon: 0.02         // 2% - Modelo Gordon
+    // Estratégias de Investimento (15%)
+    graham: 0.025,        // 2.5% - Análise Graham
+    dividendYield: 0.025, // 2.5% - Estratégia dividendos
+    lowPE: 0.025,         // 2.5% - Value investing
+    magicFormula: 0.025,  // 2.5% - Greenblatt
+    fcd: 0.025,           // 2.5% - Fluxo de caixa
+    gordon: 0.025         // 2.5% - Modelo Gordon
   }
   
   const scores = companies.map((company, companyIndex) => {
     let totalScore = 0
     let totalWeight = 0
+    let penaltyFactor = 1.0 // Fator de penalização (1.0 = sem penalidade)
     
     // Executar estratégias para obter dados completos
     const dailyQuotes = company.dailyQuotes as any[]
     const financialData = company.financialData as any[]
     const currentPrice = toNumber(dailyQuotes?.[0]?.price) || toNumber(financialData?.[0]?.lpa) || 0
     const { strategies, overallScore } = executeStrategiesForCompany(company, currentPrice)
+    
+    // PENALIZAÇÃO 1: Empresas com valor de mercado menor que 2B
+    const companyFinancialData = financialData?.[0] as any
+    if (companyFinancialData) {
+      const marketCap = toNumber(companyFinancialData.valorMercado) || 0
+      if (marketCap > 0 && marketCap < 2000000000) { // 2 bilhões
+        penaltyFactor *= 0.8 // Penalidade de 20%
+        console.log(`Penalidade valor de mercado aplicada para ${company.ticker}: R$ ${(marketCap / 1000000).toFixed(0)}M`)
+      }
+    }
+    
+    // PENALIZAÇÃO 2: Score Geral menor que 50
+    if (overallScore?.score && overallScore.score < 50) {
+      penaltyFactor *= 0.7 // Penalidade de 30%
+      console.log(`Penalidade score geral aplicada para ${company.ticker}: ${overallScore.score.toFixed(1)}`)
+    }
+    
+    // PENALIZAÇÃO 3: Indicadores ausentes (N/A) ou super inflados
+    let missingIndicators = 0
+    let inflatedIndicators = 0
+    
+    if (companyFinancialData) {
+      // Verificar indicadores críticos
+      const criticalIndicators = [
+        { key: 'pl', value: toNumber(companyFinancialData.pl), maxInflated: 100 },
+        { key: 'pvp', value: toNumber(companyFinancialData.pvp), maxInflated: 10 },
+        { key: 'roe', value: toNumber(companyFinancialData.roe), maxInflated: 1 }, // 100%
+        { key: 'dy', value: toNumber(companyFinancialData.dy), maxInflated: 0.3 }, // 30%
+        { key: 'margemLiquida', value: toNumber(companyFinancialData.margemLiquida), maxInflated: 1 }, // 100%
+        { key: 'roic', value: toNumber(companyFinancialData.roic), maxInflated: 1 }, // 100%
+      ]
+      
+      criticalIndicators.forEach(indicator => {
+        if (indicator.value === null || indicator.value === undefined) {
+          missingIndicators++
+        } else if (indicator.value > indicator.maxInflated) {
+          inflatedIndicators++
+          console.log(`Indicador inflado detectado para ${company.ticker}: ${indicator.key} = ${indicator.value}`)
+        }
+      })
+      
+      // Aplicar penalidades por indicadores problemáticos
+      if (missingIndicators > 0) {
+        const missingPenalty = Math.min(0.5, missingIndicators * 0.1) // Máximo 50% de penalidade
+        penaltyFactor *= (1 - missingPenalty)
+        console.log(`Penalidade indicadores ausentes aplicada para ${company.ticker}: ${missingIndicators} indicadores, penalidade ${(missingPenalty * 100).toFixed(0)}%`)
+      }
+      
+      if (inflatedIndicators > 0) {
+        const inflatedPenalty = Math.min(0.4, inflatedIndicators * 0.15) // Máximo 40% de penalidade
+        penaltyFactor *= (1 - inflatedPenalty)
+        console.log(`Penalidade indicadores inflados aplicada para ${company.ticker}: ${inflatedIndicators} indicadores, penalidade ${(inflatedPenalty * 100).toFixed(0)}%`)
+      }
+    }
     
     // Função para normalizar e pontuar um indicador com valores de referência absolutos
     const scoreIndicator = (values: (number | null)[], companyValue: number | null, weight: number, higherIsBetter: boolean, indicatorKey: string) => {
@@ -205,7 +248,6 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
     const allDividaEbitda = companies.map(c => toNumber((c.financialData as any[])?.[0]?.dividaLiquidaEbitda))
     
     // Calcular scores dos indicadores básicos
-    const companyFinancialData = financialData?.[0] as any
     if (companyFinancialData) {
       totalScore += scoreIndicator(allPL, toNumber(companyFinancialData.pl), weights.pl, false, 'pl') // Menor P/L é melhor
       totalScore += scoreIndicator(allPVP, toNumber(companyFinancialData.pvp), weights.pvp, false, 'pvp') // Menor P/VP é melhor
@@ -251,8 +293,16 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
       })
     }
     
-    // Normalizar pela soma dos pesos utilizados
-    return totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0
+    // Normalizar pela soma dos pesos utilizados e aplicar penalidades
+    const baseScore = totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0
+    const finalScore = baseScore * penaltyFactor
+    
+    // Log do score final com penalidades
+    if (penaltyFactor < 1.0) {
+      console.log(`Score final para ${company.ticker}: ${baseScore.toFixed(2)} -> ${finalScore.toFixed(2)} (penalidade: ${((1 - penaltyFactor) * 100).toFixed(0)}%)`)
+    }
+    
+    return finalScore
   })
   
   // Encontrar o melhor score
@@ -269,10 +319,15 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
   if (companies.length <= 6) { // Só para comparações pequenas
     console.log('=== WEIGHTED SCORING DEBUG ===')
     console.log('Companies:', companies.map(c => c.ticker))
-    console.log('Scores:', companies.map((c, i) => ({ ticker: c.ticker, score: scores[i].toFixed(2) })))
+    console.log('Scores:', companies.map((c, i) => ({ 
+      ticker: c.ticker, 
+      score: scores[i].toFixed(2),
+      marketCap: `R$ ${((toNumber((c.financialData as any[])?.[0]?.valorMercado) || 0) / 1000000).toFixed(0)}M`
+    })))
     console.log('Best score:', maxScore.toFixed(2))
     console.log('Winner:', bestIndex !== -1 ? companies[bestIndex].ticker : 'Tie')
     console.log('Tied companies:', tiedIndices.length > 1 ? tiedIndices.map(i => companies[i].ticker) : 'None')
+    console.log('=== END DEBUG ===')
   }
   
   return { scores, bestIndex, tiedIndices }

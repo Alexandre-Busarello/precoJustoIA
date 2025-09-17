@@ -234,7 +234,7 @@ export function QuickRanker() {
           growthRate: 0.025,        // 2.5% crescimento perpétuo
           discountRate: 0.10,       // 10% WACC
           yearsProjection: 5,       // 5 anos de projeção
-          minMarginOfSafety: 0.20,  // 20% margem de segurança
+          minMarginOfSafety: 0.15,  // 20% margem de segurança
           limit: 10                 // 10 resultados
         })
         break

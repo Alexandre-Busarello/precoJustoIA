@@ -111,7 +111,7 @@ export async function GET(
       dividendYield: isPremium ? StrategyFactory.runDividendYieldAnalysis(companyAnalysisData, { minYield: 0.04 }) : null,
       lowPE: isPremium ? StrategyFactory.runLowPEAnalysis(companyAnalysisData, { maxPE: 12, minROE: 0 }) : null,
       magicFormula: isPremium ? StrategyFactory.runMagicFormulaAnalysis(companyAnalysisData, { limit: 10, minROIC: 0.15, minEY: 0.08 }) : null,
-      fcd: isPremium ? StrategyFactory.runFCDAnalysis(companyAnalysisData, { growthRate: 0.025, discountRate: 0.10, yearsProjection: 5, minMarginOfSafety: 0.2 }) : null,
+      fcd: isPremium ? StrategyFactory.runFCDAnalysis(companyAnalysisData, { growthRate: 0.025, discountRate: 0.10, yearsProjection: 5, minMarginOfSafety: 0.15 }) : null,
       gordon: isPremium ? StrategyFactory.runGordonAnalysis(companyAnalysisData, { discountRate: 0.12, dividendGrowthRate: 0.05 }) : null
     };
 

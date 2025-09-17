@@ -30,11 +30,11 @@ export function calculateOverallScore(strategies: {
   gordon: StrategyAnalysis | null;
 }, financialData: FinancialData, currentPrice: number): OverallScore {
   const weights = {
-    graham: 0.20,        // 20% - Base fundamentalista
-    dividendYield: 0.12, // 12% - Sustentabilidade de dividendos
-    lowPE: 0.18,         // 18% - Value investing
-    magicFormula: 0.20,  // 20% - Qualidade operacional
-    fcd: 0.15,           // 15% - Valor intrínseco
+    graham: 0.15,        // 15% - Base fundamentalista
+    dividendYield: 0.15, // 15% - Sustentabilidade de dividendos
+    lowPE: 0.20,         // 20% - Value investing
+    magicFormula: 0.15,  // 15% - Qualidade operacional
+    fcd: 0.20,           // 20% - Valor intrínseco
     gordon: 0.15         // 15% - Método dos dividendos
   };
 

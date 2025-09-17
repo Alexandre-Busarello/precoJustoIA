@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build:vercel",
+  "installCommand": "npm install",
+  "env": {
+    "PRISMA_GENERATE_DATAPROXY": "true"
+  },
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "regions": ["gru1"]
+}

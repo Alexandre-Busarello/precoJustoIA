@@ -183,9 +183,6 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
             </div>
             {error ? (
               <>
-                <h3 className="font-medium mb-2 text-red-600 dark:text-red-400">
-                  {error.includes('Sessão') ? 'Erro de Sessão' : 'Erro'}
-                </h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   {error}
                 </p>

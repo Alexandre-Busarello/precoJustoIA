@@ -360,7 +360,7 @@ function executeStrategiesForCompany(company: Record<string, unknown>, currentPr
         growthRate: 0.025,
         discountRate: 0.10,
         yearsProjection: 5,
-        minMarginOfSafety: 0.20
+        minMarginOfSafety: 0.15
       }),
       gordon: StrategyFactory.runGordonAnalysis(companyData, {
         discountRate: 0.12,

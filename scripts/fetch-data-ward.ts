@@ -1,8 +1,90 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
+import { GoogleGenAI } from '@google/genai';
 // Importar apenas o que precisamos do fetch-data.ts
 // import { DataFetcher } from './fetch-data';
+
+// Função para traduzir texto usando Gemini AI
+async function translateToPortuguese(text: string, fieldType: 'description' | 'sector' | 'industry' = 'description'): Promise<string> {
+  if (!text || text.trim().length === 0) {
+    return text;
+  }
+
+  // Verificar se a API key do Gemini está configurada
+  if (!process.env.GEMINI_API_KEY) {
+    console.log(`⚠️  GEMINI_API_KEY não configurada, mantendo texto original`);
+    return text;
+  }
+
+  try {
+    const fieldNames = {
+      description: 'descrição da empresa',
+      sector: 'setor',
+      industry: 'indústria'
+    };
+    
+    console.log(`🌐 Traduzindo ${fieldNames[fieldType]} com Gemini AI...`);
+    
+    // Configurar Gemini AI
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY!,
+    });
+
+    let prompt: string;
+    
+    if (fieldType === 'description') {
+      prompt = `Traduza o seguinte texto do inglês para português brasileiro de forma natural e fluida, mantendo o contexto empresarial e técnico. Retorne APENAS a tradução, sem explicações adicionais:
+
+"${text}"`;
+    } else {
+      prompt = `Traduza o seguinte ${fieldType === 'sector' ? 'setor empresarial' : 'ramo de indústria'} do inglês para português brasileiro. Use a terminologia padrão do mercado brasileiro. Retorne APENAS a tradução, sem explicações adicionais:
+
+"${text}"`;
+    }
+
+    const model = 'gemini-2.5-flash-lite';
+    const contents = [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+    ];
+
+    // Fazer chamada para Gemini API (sem ferramentas de busca para tradução simples)
+    const response = await ai.models.generateContentStream({
+      model,
+      contents,
+    });
+
+    // Coletar resposta completa
+    let translatedText = '';
+    for await (const chunk of response) {
+      if (chunk.text) {
+        translatedText += chunk.text;
+      }
+    }
+
+    // Limpar a resposta (remover aspas extras, quebras de linha desnecessárias)
+    translatedText = translatedText.trim().replace(/^["']|["']$/g, '');
+
+    if (translatedText && translatedText.length > 0 && translatedText !== text) {
+      console.log(`✅ ${fieldNames[fieldType].charAt(0).toUpperCase() + fieldNames[fieldType].slice(1)} traduzida com sucesso pelo Gemini`);
+      return translatedText;
+    }
+
+    console.log(`⚠️  Tradução não disponível, mantendo texto original`);
+    return text;
+
+  } catch (error: any) {
+    console.log(`⚠️  Erro na tradução com Gemini, mantendo texto original:`, error.message);
+    return text;
+  }
+}
 
 // Interface para resposta básica da Brapi (sem módulos pagos)
 interface BrapiBasicResponse {
@@ -20,10 +102,19 @@ interface BrapiBasicResponse {
       longBusinessSummary?: string;
       website?: string;
       address1?: string;
+      address2?: string;
+      address3?: string;
       city?: string;
       state?: string;
       country?: string;
+      zip?: string;
+      phone?: string;
+      fax?: string;
       fullTimeEmployees?: number;
+      industryKey?: string;
+      industryDisp?: string;
+      sectorKey?: string;
+      sectorDisp?: string;
     };
   }>;
 }
@@ -100,9 +191,265 @@ interface WardApiResponse {
   gdPrecoTetoProjetivo: any;
 }
 
+// Interfaces para dados da Brapi PRO
+interface BrapiBalanceSheet {
+  symbol?: string;
+  type?: string;
+  endDate?: string;
+  cash?: number;
+  shortTermInvestments?: number;
+  totalCurrentAssets?: number;
+  longTermInvestments?: number;
+  otherAssets?: number;
+  totalAssets?: number;
+  totalCurrentLiabilities?: number;
+  totalLiab?: number;
+  commonStock?: number;
+  treasuryStock?: number;
+  totalStockholderEquity?: number;
+  netTangibleAssets?: number;
+  goodWill?: number;
+  financialAssets?: number;
+  centralBankCompulsoryDeposit?: number;
+  financialAssetsMeasuredAtFairValueThroughProfitOrLoss?: number;
+  longTermAssets?: number;
+  creditsFromOperations?: number;
+  complementaryPension?: number;
+  deferredSellingExpenses?: number;
+  nonCurrentAssets?: number;
+  deferredTaxes?: number;
+  financialLiabilitiesMeasuredAtFairValueThroughIncome?: number;
+  financialLiabilitiesAtAmortizedCost?: number;
+  provisions?: number;
+  shareholdersEquity?: number;
+  realizedShareCapital?: number;
+  profitReserves?: number;
+  accumulatedProfitsOrLosses?: number;
+  equityValuationAdjustments?: number;
+  currentLiabilities?: number;
+  nonCurrentLiabilities?: number;
+  thirdPartyDeposits?: number;
+  otherDebits?: number;
+  updatedAt?: string;
+}
+
+interface BrapiIncomeStatement {
+  type?: string;
+  endDate?: string;
+  totalRevenue?: number;
+  costOfRevenue?: number;
+  grossProfit?: number;
+  researchDevelopment?: number;
+  sellingGeneralAdministrative?: number;
+  nonRecurring?: number;
+  otherOperatingExpenses?: number;
+  totalOperatingExpenses?: number;
+  operatingIncome?: number;
+  totalOtherIncomeExpenseNet?: number;
+  ebit?: number;
+  interestExpense?: number;
+  incomeBeforeTax?: number;
+  incomeTaxExpense?: number;
+  minorityInterest?: number;
+  netIncomeFromContinuingOps?: number;
+  discontinuedOperations?: number;
+  extraordinaryItems?: number;
+  effectOfAccountingCharges?: number;
+  otherItems?: number;
+  netIncome?: number;
+  netIncomeApplicableToCommonShares?: number;
+  salesExpenses?: number;
+  lossesDueToNonRecoverabilityOfAssets?: number;
+  otherOperatingIncome?: number;
+  equityIncomeResult?: number;
+  financialResult?: number;
+  financialIncome?: number;
+  financialExpenses?: number;
+  currentTaxes?: number;
+  deferredTaxes?: number;
+  incomeBeforeStatutoryParticipationsAndContributions?: number;
+  basicEarningsPerCommonShare?: number;
+  dilutedEarningsPerCommonShare?: number;
+  basicEarningsPerPreferredShare?: number;
+  dilutedEarningsPerPreferredShare?: number;
+  profitSharingAndStatutoryContributions?: number;
+  claimsAndOperationsCosts?: number;
+  administrativeCosts?: number;
+  otherOperatingIncomeAndExpenses?: number;
+  earningsPerShare?: number;
+  basicEarningsPerShare?: number;
+  dilutedEarningsPerShare?: number;
+  insuranceOperations?: number;
+  reinsuranceOperations?: number;
+  complementaryPensionOperations?: number;
+  capitalizationOperations?: number;
+  updatedAt?: string;
+}
+
+interface BrapiCashflowStatement {
+  symbol?: string;
+  type?: string;
+  endDate?: string;
+  operatingCashFlow?: number;
+  incomeFromOperations?: number;
+  netIncomeBeforeTaxes?: number;
+  adjustmentsToProfitOrLoss?: number;
+  changesInAssetsAndLiabilities?: number;
+  otherOperatingActivities?: number;
+  investmentCashFlow?: number;
+  financingCashFlow?: number;
+  increaseOrDecreaseInCash?: number;
+  initialCashBalance?: number;
+  finalCashBalance?: number;
+  cashGeneratedInOperations?: number;
+  updatedAt?: string;
+}
+
+interface BrapiKeyStatistics {
+  type?: string;
+  symbol?: string;
+  enterpriseValue?: number;
+  forwardPE?: number;
+  profitMargins?: number;
+  sharesOutstanding?: number;
+  bookValue?: number;
+  priceToBook?: number;
+  mostRecentQuarter?: string;
+  earningsQuarterlyGrowth?: number;
+  earningsAnnualGrowth?: number;
+  trailingEps?: number;
+  enterpriseToRevenue?: number;
+  enterpriseToEbitda?: number;
+  "52WeekChange"?: number;
+  ytdReturn?: number;
+  lastDividendValue?: number;
+  lastDividendDate?: string;
+  dividendYield?: number;
+  totalAssets?: number;
+  updatedAt?: string;
+}
+
+interface BrapiFinancialData {
+  symbol?: string;
+  currentPrice?: number;
+  ebitda?: number;
+  quickRatio?: number;
+  currentRatio?: number;
+  debtToEquity?: number;
+  revenuePerShare?: number;
+  returnOnAssets?: number;
+  returnOnEquity?: number;
+  earningsGrowth?: number;
+  revenueGrowth?: number;
+  grossMargins?: number;
+  ebitdaMargins?: number;
+  operatingMargins?: number;
+  profitMargins?: number;
+  totalCash?: number;
+  totalCashPerShare?: number;
+  totalDebt?: number;
+  totalRevenue?: number;
+  grossProfits?: number;
+  operatingCashflow?: number;
+  freeCashflow?: number;
+  financialCurrency?: string;
+  updatedAt?: string;
+  type?: string;
+}
+
+interface BrapiValueAddedStatement {
+  symbol?: string;
+  type?: string;
+  endDate?: string;
+  revenue?: number;
+  financialIntermediationRevenue?: number;
+  updatedAt?: string;
+}
+
+interface BrapiProResponse {
+  results: Array<{
+    symbol: string;
+    shortName: string;
+    longName: string;
+    currency: string;
+    regularMarketPrice: number;
+    logourl?: string;
+    sector?: string;
+    summaryProfile?: any;
+    balanceSheetHistory?: BrapiBalanceSheet[];
+    balanceSheetHistoryQuarterly?: BrapiBalanceSheet[];
+    incomeStatementHistory?: BrapiIncomeStatement[];
+    incomeStatementHistoryQuarterly?: BrapiIncomeStatement[];
+    cashflowHistory?: BrapiCashflowStatement[];
+    cashflowHistoryQuarterly?: BrapiCashflowStatement[];
+    defaultKeyStatistics?: BrapiKeyStatistics;
+    defaultKeyStatisticsHistory?: BrapiKeyStatistics[];
+    defaultKeyStatisticsHistoryQuarterly?: BrapiKeyStatistics[];
+    financialData?: BrapiFinancialData;
+    financialDataHistory?: BrapiFinancialData[];
+    financialDataHistoryQuarterly?: BrapiFinancialData[];
+    valueAddedHistory?: BrapiValueAddedStatement[];
+    valueAddedHistoryQuarterly?: BrapiValueAddedStatement[];
+  }>;
+}
+
 // Tokens das APIs
 const WARD_JWT_TOKEN = process.env.WARD_JWT_TOKEN || 'eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjE1MDc5IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvZW1haWxhZGRyZXNzIjoiYnVzYW1hckBnbWFpbC5jb20iLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJVc2VyIiwiaWF0IjoxNzU3NzAwNjE5LCJhdWQiOlsiaHR0cHM6Ly9kZXYud2FyZC5hcHAuYnIiLCJodHRwczovL3dhcmQuYXBwLmJyIiwiaHR0cHM6Ly90YXNrcy53YXJkLmFwcC5iciJdLCJleHAiOjE3NTg5OTY2MTksImlzcyI6Imh0dHBzOi8vd2FyZC5hcHAuYnIifQ.BBtBaqK5a2DL4G0QVd7H3rjFp-jxrjE1IVr8kfpIApW1uepBB_RVBkXPMVqFV6Aia2GGQyD_BDM0oJavhM-NgA';
 const BRAPI_TOKEN = process.env.BRAPI_TOKEN; // Opcional para plano gratuito
+
+// Função para buscar dados completos da Brapi PRO
+async function fetchBrapiProData(ticker: string): Promise<BrapiProResponse['results'][0] | null> {
+  try {
+    console.log(`🔍 Buscando dados completos da Brapi PRO para ${ticker}...`);
+    
+    if (!BRAPI_TOKEN) {
+      console.log(`⚠️  BRAPI_TOKEN não configurado, pulando dados da Brapi PRO`);
+      return null;
+    }
+    
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${BRAPI_TOKEN}`,
+      'User-Agent': 'analisador-acoes/1.0.0'
+    };
+    
+    const response = await axios.get<BrapiProResponse>(
+      `https://brapi.dev/api/quote/${ticker}`,
+      {
+        headers,
+        params: {
+          modules: 'balanceSheetHistory,balanceSheetHistoryQuarterly,defaultKeyStatistics,defaultKeyStatisticsHistory,defaultKeyStatisticsHistoryQuarterly,incomeStatementHistory,incomeStatementHistoryQuarterly,financialData,financialDataHistory,financialDataHistoryQuarterly,valueAddedHistory,valueAddedHistoryQuarterly,cashflowHistory,cashflowHistoryQuarterly,summaryProfile'
+        },
+        timeout: 30000
+      }
+    );
+
+    if (response.status === 200 && response.data.results && response.data.results.length > 0) {
+      const data = response.data.results[0];
+      console.log(`✅ Dados completos da Brapi PRO obtidos para ${ticker}:`);
+      console.log(`  📊 Balanços: ${data.balanceSheetHistory?.length || 0} anuais, ${data.balanceSheetHistoryQuarterly?.length || 0} trimestrais`);
+      console.log(`  📈 DREs: ${data.incomeStatementHistory?.length || 0} anuais, ${data.incomeStatementHistoryQuarterly?.length || 0} trimestrais`);
+      console.log(`  💰 DFCs: ${data.cashflowHistory?.length || 0} anuais, ${data.cashflowHistoryQuarterly?.length || 0} trimestrais`);
+      console.log(`  📋 Estatísticas: ${data.defaultKeyStatisticsHistory?.length || 0} anuais, ${data.defaultKeyStatisticsHistoryQuarterly?.length || 0} trimestrais`);
+      console.log(`  💡 DVAs: ${data.valueAddedHistory?.length || 0} anuais, ${data.valueAddedHistoryQuarterly?.length || 0} trimestrais`);
+      return data;
+    } else {
+      console.log(`⚠️  Nenhum dado encontrado na Brapi PRO para ${ticker}`);
+      return null;
+    }
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      console.log(`❌ Empresa ${ticker} não encontrada na Brapi PRO`);
+    } else if (error.response?.status === 429) {
+      console.log(`⏳ Rate limit atingido na Brapi PRO para ${ticker}, aguardando...`);
+      await new Promise(resolve => setTimeout(resolve, 10000));
+    } else if (error.response?.status === 401) {
+      console.log(`🔐 Token inválido ou expirado na Brapi PRO para ${ticker}`);
+    } else {
+      console.error(`❌ Erro ao buscar dados da Brapi PRO para ${ticker}:`, error.message);
+    }
+    return null;
+  }
+}
 
 // Função para buscar dados básicos da empresa na Brapi API (gratuito)
 async function fetchBrapiBasicData(ticker: string): Promise<BrapiBasicResponse['results'][0] | null> {
@@ -529,19 +876,53 @@ async function createOrUpdateCompany(ticker: string): Promise<{ id: number; tick
     // Criar empresa com dados básicos da Brapi
     const profile = brapiData.summaryProfile;
     
+    // Traduzir campos de texto se disponíveis
+    let translatedDescription = null;
+    let translatedSector = null;
+    let translatedIndustry = null;
+    
+    if (profile?.longBusinessSummary) {
+      translatedDescription = await translateToPortuguese(profile.longBusinessSummary, 'description');
+    }
+    
+    if (profile?.sector || brapiData.sector) {
+      const sectorToTranslate = profile?.sector || brapiData.sector;
+      translatedSector = await translateToPortuguese(sectorToTranslate!, 'sector');
+    }
+    
+    if (profile?.industry) {
+      translatedIndustry = await translateToPortuguese(profile.industry, 'industry');
+    }
+    
     company = await prisma.company.create({
       data: {
         ticker: ticker,
         name: brapiData.longName || brapiData.shortName || ticker,
-        sector: profile?.sector || brapiData.sector || null,
-        industry: profile?.industry || null,
-        description: profile?.longBusinessSummary || null,
+        sector: translatedSector,
+        industry: translatedIndustry,
+        description: translatedDescription,
         website: profile?.website || null,
+        
+        // Dados de localização detalhados
         address: profile?.address1 || null,
+        address2: profile?.address2 || null,
+        address3: profile?.address3 || null,
         city: profile?.city || null,
         state: profile?.state || null,
         country: profile?.country || null,
+        zip: profile?.zip || null,
+        
+        // Dados de contato
+        phone: profile?.phone || null,
+        fax: profile?.fax || null,
+        
+        // Dados corporativos detalhados
         fullTimeEmployees: profile?.fullTimeEmployees || null,
+        industryKey: profile?.industryKey || null,
+        industryDisp: profile?.industryDisp || null,
+        sectorKey: profile?.sectorKey || null,
+        sectorDisp: profile?.sectorDisp || null,
+        
         logoUrl: brapiData.logourl || null
       }
     });
@@ -584,6 +965,462 @@ async function createOrUpdateCompany(ticker: string): Promise<{ id: number; tick
   }
 }
 
+// Função para processar dados do balanço patrimonial
+async function processBalanceSheets(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+  const processBalanceSheet = async (balanceSheet: BrapiBalanceSheet, period: 'YEARLY' | 'QUARTERLY') => {
+    if (!balanceSheet.endDate) return;
+    
+    try {
+      const endDate = new Date(balanceSheet.endDate);
+      
+      await prisma.balanceSheet.upsert({
+        where: {
+          companyId_endDate_period: {
+            companyId,
+            endDate,
+            period
+          }
+        },
+        update: {
+          cash: balanceSheet.cash || null,
+          shortTermInvestments: balanceSheet.shortTermInvestments || null,
+          totalCurrentAssets: balanceSheet.totalCurrentAssets || null,
+          longTermInvestments: balanceSheet.longTermInvestments || null,
+          otherAssets: balanceSheet.otherAssets || null,
+          totalAssets: balanceSheet.totalAssets || null,
+          totalCurrentLiabilities: balanceSheet.totalCurrentLiabilities || null,
+          totalLiab: balanceSheet.totalLiab || null,
+          commonStock: balanceSheet.commonStock || null,
+          treasuryStock: balanceSheet.treasuryStock || null,
+          totalStockholderEquity: balanceSheet.totalStockholderEquity || null,
+          netTangibleAssets: balanceSheet.netTangibleAssets || null,
+          goodWill: balanceSheet.goodWill || null,
+          financialAssets: balanceSheet.financialAssets || null,
+          centralBankCompulsoryDeposit: balanceSheet.centralBankCompulsoryDeposit || null,
+          financialAssetsMeasuredAtFairValueThroughProfitOrLoss: balanceSheet.financialAssetsMeasuredAtFairValueThroughProfitOrLoss || null,
+          longTermAssets: balanceSheet.longTermAssets || null,
+          creditsFromOperations: balanceSheet.creditsFromOperations || null,
+          complementaryPension: balanceSheet.complementaryPension || null,
+          deferredSellingExpenses: balanceSheet.deferredSellingExpenses || null,
+          nonCurrentAssets: balanceSheet.nonCurrentAssets || null,
+          deferredTaxes: balanceSheet.deferredTaxes || null,
+          financialLiabilitiesMeasuredAtFairValueThroughIncome: balanceSheet.financialLiabilitiesMeasuredAtFairValueThroughIncome || null,
+          financialLiabilitiesAtAmortizedCost: balanceSheet.financialLiabilitiesAtAmortizedCost || null,
+          provisions: balanceSheet.provisions || null,
+          shareholdersEquity: balanceSheet.shareholdersEquity || null,
+          realizedShareCapital: balanceSheet.realizedShareCapital || null,
+          profitReserves: balanceSheet.profitReserves || null,
+          accumulatedProfitsOrLosses: balanceSheet.accumulatedProfitsOrLosses || null,
+          equityValuationAdjustments: balanceSheet.equityValuationAdjustments || null,
+          currentLiabilities: balanceSheet.currentLiabilities || null,
+          nonCurrentLiabilities: balanceSheet.nonCurrentLiabilities || null,
+          thirdPartyDeposits: balanceSheet.thirdPartyDeposits || null,
+          otherDebits: balanceSheet.otherDebits || null
+        },
+        create: {
+          companyId,
+          period,
+          endDate,
+          cash: balanceSheet.cash || null,
+          shortTermInvestments: balanceSheet.shortTermInvestments || null,
+          totalCurrentAssets: balanceSheet.totalCurrentAssets || null,
+          longTermInvestments: balanceSheet.longTermInvestments || null,
+          otherAssets: balanceSheet.otherAssets || null,
+          totalAssets: balanceSheet.totalAssets || null,
+          totalCurrentLiabilities: balanceSheet.totalCurrentLiabilities || null,
+          totalLiab: balanceSheet.totalLiab || null,
+          commonStock: balanceSheet.commonStock || null,
+          treasuryStock: balanceSheet.treasuryStock || null,
+          totalStockholderEquity: balanceSheet.totalStockholderEquity || null,
+          netTangibleAssets: balanceSheet.netTangibleAssets || null,
+          goodWill: balanceSheet.goodWill || null,
+          financialAssets: balanceSheet.financialAssets || null,
+          centralBankCompulsoryDeposit: balanceSheet.centralBankCompulsoryDeposit || null,
+          financialAssetsMeasuredAtFairValueThroughProfitOrLoss: balanceSheet.financialAssetsMeasuredAtFairValueThroughProfitOrLoss || null,
+          longTermAssets: balanceSheet.longTermAssets || null,
+          creditsFromOperations: balanceSheet.creditsFromOperations || null,
+          complementaryPension: balanceSheet.complementaryPension || null,
+          deferredSellingExpenses: balanceSheet.deferredSellingExpenses || null,
+          nonCurrentAssets: balanceSheet.nonCurrentAssets || null,
+          deferredTaxes: balanceSheet.deferredTaxes || null,
+          financialLiabilitiesMeasuredAtFairValueThroughIncome: balanceSheet.financialLiabilitiesMeasuredAtFairValueThroughIncome || null,
+          financialLiabilitiesAtAmortizedCost: balanceSheet.financialLiabilitiesAtAmortizedCost || null,
+          provisions: balanceSheet.provisions || null,
+          shareholdersEquity: balanceSheet.shareholdersEquity || null,
+          realizedShareCapital: balanceSheet.realizedShareCapital || null,
+          profitReserves: balanceSheet.profitReserves || null,
+          accumulatedProfitsOrLosses: balanceSheet.accumulatedProfitsOrLosses || null,
+          equityValuationAdjustments: balanceSheet.equityValuationAdjustments || null,
+          currentLiabilities: balanceSheet.currentLiabilities || null,
+          nonCurrentLiabilities: balanceSheet.nonCurrentLiabilities || null,
+          thirdPartyDeposits: balanceSheet.thirdPartyDeposits || null,
+          otherDebits: balanceSheet.otherDebits || null
+        }
+      });
+    } catch (error: any) {
+      console.error(`❌ Erro ao processar balanço ${period} de ${balanceSheet.endDate} para ${ticker}:`, error.message);
+    }
+  };
+
+  // Processar balanços anuais
+  if (data.balanceSheetHistory) {
+    for (const balanceSheet of data.balanceSheetHistory) {
+      await processBalanceSheet(balanceSheet, 'YEARLY');
+    }
+    console.log(`  📊 ${data.balanceSheetHistory.length} balanços anuais processados`);
+  }
+
+  // Processar balanços trimestrais
+  if (data.balanceSheetHistoryQuarterly) {
+    for (const balanceSheet of data.balanceSheetHistoryQuarterly) {
+      await processBalanceSheet(balanceSheet, 'QUARTERLY');
+    }
+    console.log(`  📊 ${data.balanceSheetHistoryQuarterly.length} balanços trimestrais processados`);
+  }
+}
+
+// Função para processar dados da DRE
+async function processIncomeStatements(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+  const processIncomeStatement = async (incomeStatement: BrapiIncomeStatement, period: 'YEARLY' | 'QUARTERLY') => {
+    if (!incomeStatement.endDate) return;
+    
+    try {
+      const endDate = new Date(incomeStatement.endDate);
+      
+      await prisma.incomeStatement.upsert({
+        where: {
+          companyId_endDate_period: {
+            companyId,
+            endDate,
+            period
+          }
+        },
+        update: {
+          totalRevenue: incomeStatement.totalRevenue || null,
+          costOfRevenue: incomeStatement.costOfRevenue || null,
+          grossProfit: incomeStatement.grossProfit || null,
+          researchDevelopment: incomeStatement.researchDevelopment || null,
+          sellingGeneralAdministrative: incomeStatement.sellingGeneralAdministrative || null,
+          nonRecurring: incomeStatement.nonRecurring || null,
+          otherOperatingExpenses: incomeStatement.otherOperatingExpenses || null,
+          totalOperatingExpenses: incomeStatement.totalOperatingExpenses || null,
+          operatingIncome: incomeStatement.operatingIncome || null,
+          totalOtherIncomeExpenseNet: incomeStatement.totalOtherIncomeExpenseNet || null,
+          ebit: incomeStatement.ebit || null,
+          interestExpense: incomeStatement.interestExpense || null,
+          incomeBeforeTax: incomeStatement.incomeBeforeTax || null,
+          incomeTaxExpense: incomeStatement.incomeTaxExpense || null,
+          minorityInterest: incomeStatement.minorityInterest || null,
+          netIncomeFromContinuingOps: incomeStatement.netIncomeFromContinuingOps || null,
+          discontinuedOperations: incomeStatement.discontinuedOperations || null,
+          extraordinaryItems: incomeStatement.extraordinaryItems || null,
+          effectOfAccountingCharges: incomeStatement.effectOfAccountingCharges || null,
+          otherItems: incomeStatement.otherItems || null,
+          netIncome: incomeStatement.netIncome || null,
+          netIncomeApplicableToCommonShares: incomeStatement.netIncomeApplicableToCommonShares || null,
+          salesExpenses: incomeStatement.salesExpenses || null,
+          lossesDueToNonRecoverabilityOfAssets: incomeStatement.lossesDueToNonRecoverabilityOfAssets || null,
+          otherOperatingIncome: incomeStatement.otherOperatingIncome || null,
+          equityIncomeResult: incomeStatement.equityIncomeResult || null,
+          financialResult: incomeStatement.financialResult || null,
+          financialIncome: incomeStatement.financialIncome || null,
+          financialExpenses: incomeStatement.financialExpenses || null,
+          currentTaxes: incomeStatement.currentTaxes || null,
+          deferredTaxes: incomeStatement.deferredTaxes || null,
+          incomeBeforeStatutoryParticipationsAndContributions: incomeStatement.incomeBeforeStatutoryParticipationsAndContributions || null,
+          basicEarningsPerCommonShare: incomeStatement.basicEarningsPerCommonShare || null,
+          dilutedEarningsPerCommonShare: incomeStatement.dilutedEarningsPerCommonShare || null,
+          basicEarningsPerPreferredShare: incomeStatement.basicEarningsPerPreferredShare || null,
+          dilutedEarningsPerPreferredShare: incomeStatement.dilutedEarningsPerPreferredShare || null,
+          profitSharingAndStatutoryContributions: incomeStatement.profitSharingAndStatutoryContributions || null,
+          claimsAndOperationsCosts: incomeStatement.claimsAndOperationsCosts || null,
+          administrativeCosts: incomeStatement.administrativeCosts || null,
+          otherOperatingIncomeAndExpenses: incomeStatement.otherOperatingIncomeAndExpenses || null,
+          earningsPerShare: incomeStatement.earningsPerShare || null,
+          basicEarningsPerShare: incomeStatement.basicEarningsPerShare || null,
+          dilutedEarningsPerShare: incomeStatement.dilutedEarningsPerShare || null,
+          insuranceOperations: incomeStatement.insuranceOperations || null,
+          reinsuranceOperations: incomeStatement.reinsuranceOperations || null,
+          complementaryPensionOperations: incomeStatement.complementaryPensionOperations || null,
+          capitalizationOperations: incomeStatement.capitalizationOperations || null
+        },
+        create: {
+          companyId,
+          period,
+          endDate,
+          totalRevenue: incomeStatement.totalRevenue || null,
+          costOfRevenue: incomeStatement.costOfRevenue || null,
+          grossProfit: incomeStatement.grossProfit || null,
+          researchDevelopment: incomeStatement.researchDevelopment || null,
+          sellingGeneralAdministrative: incomeStatement.sellingGeneralAdministrative || null,
+          nonRecurring: incomeStatement.nonRecurring || null,
+          otherOperatingExpenses: incomeStatement.otherOperatingExpenses || null,
+          totalOperatingExpenses: incomeStatement.totalOperatingExpenses || null,
+          operatingIncome: incomeStatement.operatingIncome || null,
+          totalOtherIncomeExpenseNet: incomeStatement.totalOtherIncomeExpenseNet || null,
+          ebit: incomeStatement.ebit || null,
+          interestExpense: incomeStatement.interestExpense || null,
+          incomeBeforeTax: incomeStatement.incomeBeforeTax || null,
+          incomeTaxExpense: incomeStatement.incomeTaxExpense || null,
+          minorityInterest: incomeStatement.minorityInterest || null,
+          netIncomeFromContinuingOps: incomeStatement.netIncomeFromContinuingOps || null,
+          discontinuedOperations: incomeStatement.discontinuedOperations || null,
+          extraordinaryItems: incomeStatement.extraordinaryItems || null,
+          effectOfAccountingCharges: incomeStatement.effectOfAccountingCharges || null,
+          otherItems: incomeStatement.otherItems || null,
+          netIncome: incomeStatement.netIncome || null,
+          netIncomeApplicableToCommonShares: incomeStatement.netIncomeApplicableToCommonShares || null,
+          salesExpenses: incomeStatement.salesExpenses || null,
+          lossesDueToNonRecoverabilityOfAssets: incomeStatement.lossesDueToNonRecoverabilityOfAssets || null,
+          otherOperatingIncome: incomeStatement.otherOperatingIncome || null,
+          equityIncomeResult: incomeStatement.equityIncomeResult || null,
+          financialResult: incomeStatement.financialResult || null,
+          financialIncome: incomeStatement.financialIncome || null,
+          financialExpenses: incomeStatement.financialExpenses || null,
+          currentTaxes: incomeStatement.currentTaxes || null,
+          deferredTaxes: incomeStatement.deferredTaxes || null,
+          incomeBeforeStatutoryParticipationsAndContributions: incomeStatement.incomeBeforeStatutoryParticipationsAndContributions || null,
+          basicEarningsPerCommonShare: incomeStatement.basicEarningsPerCommonShare || null,
+          dilutedEarningsPerCommonShare: incomeStatement.dilutedEarningsPerCommonShare || null,
+          basicEarningsPerPreferredShare: incomeStatement.basicEarningsPerPreferredShare || null,
+          dilutedEarningsPerPreferredShare: incomeStatement.dilutedEarningsPerPreferredShare || null,
+          profitSharingAndStatutoryContributions: incomeStatement.profitSharingAndStatutoryContributions || null,
+          claimsAndOperationsCosts: incomeStatement.claimsAndOperationsCosts || null,
+          administrativeCosts: incomeStatement.administrativeCosts || null,
+          otherOperatingIncomeAndExpenses: incomeStatement.otherOperatingIncomeAndExpenses || null,
+          earningsPerShare: incomeStatement.earningsPerShare || null,
+          basicEarningsPerShare: incomeStatement.basicEarningsPerShare || null,
+          dilutedEarningsPerShare: incomeStatement.dilutedEarningsPerShare || null,
+          insuranceOperations: incomeStatement.insuranceOperations || null,
+          reinsuranceOperations: incomeStatement.reinsuranceOperations || null,
+          complementaryPensionOperations: incomeStatement.complementaryPensionOperations || null,
+          capitalizationOperations: incomeStatement.capitalizationOperations || null
+        }
+      });
+    } catch (error: any) {
+      console.error(`❌ Erro ao processar DRE ${period} de ${incomeStatement.endDate} para ${ticker}:`, error.message);
+    }
+  };
+
+  // Processar DREs anuais
+  if (data.incomeStatementHistory) {
+    for (const incomeStatement of data.incomeStatementHistory) {
+      await processIncomeStatement(incomeStatement, 'YEARLY');
+    }
+    console.log(`  📈 ${data.incomeStatementHistory.length} DREs anuais processadas`);
+  }
+
+  // Processar DREs trimestrais
+  if (data.incomeStatementHistoryQuarterly) {
+    for (const incomeStatement of data.incomeStatementHistoryQuarterly) {
+      await processIncomeStatement(incomeStatement, 'QUARTERLY');
+    }
+    console.log(`  📈 ${data.incomeStatementHistoryQuarterly.length} DREs trimestrais processadas`);
+  }
+}
+
+// Função para processar dados do fluxo de caixa
+async function processCashflowStatements(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+  const processCashflowStatement = async (cashflowStatement: BrapiCashflowStatement, period: 'YEARLY' | 'QUARTERLY') => {
+    if (!cashflowStatement.endDate) return;
+    
+    try {
+      const endDate = new Date(cashflowStatement.endDate);
+      
+      await prisma.cashflowStatement.upsert({
+        where: {
+          companyId_endDate_period: {
+            companyId,
+            endDate,
+            period
+          }
+        },
+        update: {
+          operatingCashFlow: cashflowStatement.operatingCashFlow || null,
+          incomeFromOperations: cashflowStatement.incomeFromOperations || null,
+          netIncomeBeforeTaxes: cashflowStatement.netIncomeBeforeTaxes || null,
+          adjustmentsToProfitOrLoss: cashflowStatement.adjustmentsToProfitOrLoss || null,
+          changesInAssetsAndLiabilities: cashflowStatement.changesInAssetsAndLiabilities || null,
+          otherOperatingActivities: cashflowStatement.otherOperatingActivities || null,
+          investmentCashFlow: cashflowStatement.investmentCashFlow || null,
+          financingCashFlow: cashflowStatement.financingCashFlow || null,
+          increaseOrDecreaseInCash: cashflowStatement.increaseOrDecreaseInCash || null,
+          initialCashBalance: cashflowStatement.initialCashBalance || null,
+          finalCashBalance: cashflowStatement.finalCashBalance || null,
+          cashGeneratedInOperations: cashflowStatement.cashGeneratedInOperations || null
+        },
+        create: {
+          companyId,
+          period,
+          endDate,
+          operatingCashFlow: cashflowStatement.operatingCashFlow || null,
+          incomeFromOperations: cashflowStatement.incomeFromOperations || null,
+          netIncomeBeforeTaxes: cashflowStatement.netIncomeBeforeTaxes || null,
+          adjustmentsToProfitOrLoss: cashflowStatement.adjustmentsToProfitOrLoss || null,
+          changesInAssetsAndLiabilities: cashflowStatement.changesInAssetsAndLiabilities || null,
+          otherOperatingActivities: cashflowStatement.otherOperatingActivities || null,
+          investmentCashFlow: cashflowStatement.investmentCashFlow || null,
+          financingCashFlow: cashflowStatement.financingCashFlow || null,
+          increaseOrDecreaseInCash: cashflowStatement.increaseOrDecreaseInCash || null,
+          initialCashBalance: cashflowStatement.initialCashBalance || null,
+          finalCashBalance: cashflowStatement.finalCashBalance || null,
+          cashGeneratedInOperations: cashflowStatement.cashGeneratedInOperations || null
+        }
+      });
+    } catch (error: any) {
+      console.error(`❌ Erro ao processar DFC ${period} de ${cashflowStatement.endDate} para ${ticker}:`, error.message);
+    }
+  };
+
+  // Processar DFCs anuais
+  if (data.cashflowHistory) {
+    for (const cashflowStatement of data.cashflowHistory) {
+      await processCashflowStatement(cashflowStatement, 'YEARLY');
+    }
+    console.log(`  💰 ${data.cashflowHistory.length} DFCs anuais processadas`);
+  }
+
+  // Processar DFCs trimestrais
+  if (data.cashflowHistoryQuarterly) {
+    for (const cashflowStatement of data.cashflowHistoryQuarterly) {
+      await processCashflowStatement(cashflowStatement, 'QUARTERLY');
+    }
+    console.log(`  💰 ${data.cashflowHistoryQuarterly.length} DFCs trimestrais processadas`);
+  }
+}
+
+// Função para processar estatísticas-chave
+async function processKeyStatistics(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+  const processKeyStatistic = async (keyStatistic: BrapiKeyStatistics, period: 'YEARLY' | 'QUARTERLY') => {
+    if (!keyStatistic.updatedAt) return;
+    
+    try {
+      const endDate = new Date(keyStatistic.updatedAt);
+      
+      await prisma.keyStatistics.upsert({
+        where: {
+          companyId_endDate_period: {
+            companyId,
+            endDate,
+            period
+          }
+        },
+        update: {
+          enterpriseValue: keyStatistic.enterpriseValue || null,
+          forwardPE: keyStatistic.forwardPE || null,
+          profitMargins: keyStatistic.profitMargins || null,
+          sharesOutstanding: keyStatistic.sharesOutstanding || null,
+          bookValue: keyStatistic.bookValue || null,
+          priceToBook: keyStatistic.priceToBook || null,
+          mostRecentQuarter: keyStatistic.mostRecentQuarter ? new Date(keyStatistic.mostRecentQuarter) : null,
+          earningsQuarterlyGrowth: keyStatistic.earningsQuarterlyGrowth || null,
+          earningsAnnualGrowth: keyStatistic.earningsAnnualGrowth || null,
+          trailingEps: keyStatistic.trailingEps || null,
+          enterpriseToRevenue: keyStatistic.enterpriseToRevenue || null,
+          enterpriseToEbitda: keyStatistic.enterpriseToEbitda || null,
+          fiftyTwoWeekChange: keyStatistic["52WeekChange"] || null,
+          ytdReturn: keyStatistic.ytdReturn || null,
+          lastDividendValue: keyStatistic.lastDividendValue || null,
+          lastDividendDate: keyStatistic.lastDividendDate ? new Date(keyStatistic.lastDividendDate) : null,
+          dividendYield: keyStatistic.dividendYield || null,
+          totalAssets: keyStatistic.totalAssets || null
+        },
+        create: {
+          companyId,
+          period,
+          endDate,
+          enterpriseValue: keyStatistic.enterpriseValue || null,
+          forwardPE: keyStatistic.forwardPE || null,
+          profitMargins: keyStatistic.profitMargins || null,
+          sharesOutstanding: keyStatistic.sharesOutstanding || null,
+          bookValue: keyStatistic.bookValue || null,
+          priceToBook: keyStatistic.priceToBook || null,
+          mostRecentQuarter: keyStatistic.mostRecentQuarter ? new Date(keyStatistic.mostRecentQuarter) : null,
+          earningsQuarterlyGrowth: keyStatistic.earningsQuarterlyGrowth || null,
+          earningsAnnualGrowth: keyStatistic.earningsAnnualGrowth || null,
+          trailingEps: keyStatistic.trailingEps || null,
+          enterpriseToRevenue: keyStatistic.enterpriseToRevenue || null,
+          enterpriseToEbitda: keyStatistic.enterpriseToEbitda || null,
+          fiftyTwoWeekChange: keyStatistic["52WeekChange"] || null,
+          ytdReturn: keyStatistic.ytdReturn || null,
+          lastDividendValue: keyStatistic.lastDividendValue || null,
+          lastDividendDate: keyStatistic.lastDividendDate ? new Date(keyStatistic.lastDividendDate) : null,
+          dividendYield: keyStatistic.dividendYield || null,
+          totalAssets: keyStatistic.totalAssets || null
+        }
+      });
+    } catch (error: any) {
+      console.error(`❌ Erro ao processar estatística ${period} de ${keyStatistic.updatedAt} para ${ticker}:`, error.message);
+    }
+  };
+
+  // Processar estatísticas anuais
+  if (data.defaultKeyStatisticsHistory) {
+    for (const keyStatistic of data.defaultKeyStatisticsHistory) {
+      await processKeyStatistic(keyStatistic, 'YEARLY');
+    }
+    console.log(`  📋 ${data.defaultKeyStatisticsHistory.length} estatísticas anuais processadas`);
+  }
+
+  // Processar estatísticas trimestrais
+  if (data.defaultKeyStatisticsHistoryQuarterly) {
+    for (const keyStatistic of data.defaultKeyStatisticsHistoryQuarterly) {
+      await processKeyStatistic(keyStatistic, 'QUARTERLY');
+    }
+    console.log(`  📋 ${data.defaultKeyStatisticsHistoryQuarterly.length} estatísticas trimestrais processadas`);
+  }
+}
+
+// Função para processar DVA
+async function processValueAddedStatements(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+  const processValueAddedStatement = async (valueAddedStatement: BrapiValueAddedStatement, period: 'YEARLY' | 'QUARTERLY') => {
+    if (!valueAddedStatement.endDate) return;
+    
+    try {
+      const endDate = new Date(valueAddedStatement.endDate);
+      
+      await prisma.valueAddedStatement.upsert({
+        where: {
+          companyId_endDate_period: {
+            companyId,
+            endDate,
+            period
+          }
+        },
+        update: {
+          revenue: valueAddedStatement.revenue || null,
+          financialIntermediationRevenue: valueAddedStatement.financialIntermediationRevenue || null
+        },
+        create: {
+          companyId,
+          period,
+          endDate,
+          revenue: valueAddedStatement.revenue || null,
+          financialIntermediationRevenue: valueAddedStatement.financialIntermediationRevenue || null
+        }
+      });
+    } catch (error: any) {
+      console.error(`❌ Erro ao processar DVA ${period} de ${valueAddedStatement.endDate} para ${ticker}:`, error.message);
+    }
+  };
+
+  // Processar DVAs anuais
+  if (data.valueAddedHistory) {
+    for (const valueAddedStatement of data.valueAddedHistory) {
+      await processValueAddedStatement(valueAddedStatement, 'YEARLY');
+    }
+    console.log(`  💡 ${data.valueAddedHistory.length} DVAs anuais processadas`);
+  }
+
+  // Processar DVAs trimestrais
+  if (data.valueAddedHistoryQuarterly) {
+    for (const valueAddedStatement of data.valueAddedHistoryQuarterly) {
+      await processValueAddedStatement(valueAddedStatement, 'QUARTERLY');
+    }
+    console.log(`  💡 ${data.valueAddedHistoryQuarterly.length} DVAs trimestrais processadas`);
+  }
+}
+
 // Função para processar uma empresa
 async function processCompany(ticker: string, enableBrapiComplement: boolean = true): Promise<void> {
   try {
@@ -597,11 +1434,31 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       return;
     }
 
-    // Buscar dados da Ward
+    // Buscar dados completos da Brapi PRO
+    const brapiProData = await fetchBrapiProData(ticker);
+    if (brapiProData) {
+      console.log(`🔄 Processando dados históricos completos da Brapi PRO para ${ticker}...`);
+      
+      // Processar todos os tipos de dados históricos em paralelo
+      await Promise.all([
+        processBalanceSheets(company.id, ticker, brapiProData),
+        processIncomeStatements(company.id, ticker, brapiProData),
+        processCashflowStatements(company.id, ticker, brapiProData),
+        processKeyStatistics(company.id, ticker, brapiProData),
+        processValueAddedStatements(company.id, ticker, brapiProData)
+      ]);
+      
+      console.log(`✅ Dados históricos da Brapi PRO processados para ${ticker}`);
+    }
+
+    // Buscar dados da Ward (mantém compatibilidade com dados existentes)
     const wardData = await fetchWardData(ticker);
     if (!wardData || !wardData.historicalStocks) {
-      console.log(`❌ Nenhum dado histórico encontrado para ${ticker}`);
-      return;
+      console.log(`⚠️  Nenhum dado histórico encontrado na Ward para ${ticker}`);
+      if (!brapiProData) {
+        console.log(`❌ Nenhuma fonte de dados disponível para ${ticker}`);
+        return;
+      }
     }
 
     // Buscar dados da Brapi para complementar (apenas ano atual)
@@ -841,12 +1698,18 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       }
     }
 
+    // Se não temos dados da Ward, mas temos da Brapi PRO, já processamos tudo acima
+    if (!wardData || !wardData.historicalStocks) {
+      console.log(`✅ ${ticker}: Processamento concluído apenas com dados da Brapi PRO`);
+      return;
+    }
+
     let processedYears = 0;
     let updatedYears = 0;
     let createdYears = 0;
     let complementedYears = 0;
 
-    // Função para processar um ano específico
+    // Função para processar um ano específico (dados da Ward)
     const processYear = async (wardStock: WardHistoricalStock) => {
       try {
         const wardFinancialData = await convertWardDataToFinancialData(wardStock, company.id);
@@ -1183,7 +2046,8 @@ async function main() {
         let processed = 0;
         let errors = 0;
         
-        for (const [batchIndex, batch] of wardBatches.entries()) {
+        for (let batchIndex = 0; batchIndex < wardBatches.length; batchIndex++) {
+          const batch = wardBatches[batchIndex];
           try {
             const results = await Promise.allSettled(
               batch.map(wardTicker => processCompany(wardTicker.ticker, enableBrapiComplement))
@@ -1252,4 +2116,17 @@ if (require.main === module) {
   main().catch(console.error);
 }
 
-export { main, processCompany, fetchWardData, fetchWardTickers, createOrUpdateCompany, fetchBrapiBasicData };
+export { 
+  main, 
+  processCompany, 
+  fetchWardData, 
+  fetchWardTickers, 
+  createOrUpdateCompany, 
+  fetchBrapiBasicData,
+  fetchBrapiProData,
+  processBalanceSheets,
+  processIncomeStatements,
+  processCashflowStatements,
+  processKeyStatistics,
+  processValueAddedStatements
+};

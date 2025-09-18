@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
 import { StrategyFactory } from '@/lib/strategies/strategy-factory'
-import { calculateOverallScore, FinancialData } from '@/lib/strategies/overall-score'
+import { calculateOverallScore, FinancialData, analyzeFinancialStatements, FinancialStatementsData } from '@/lib/strategies/overall-score'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -87,22 +87,22 @@ function formatLargeNumber(value: number | null): string {
 }
 
 // Sistema de pontuação ponderada para determinar a melhor empresa
-function calculateWeightedScore(companies: Record<string, unknown>[]): { scores: number[], bestIndex: number, tiedIndices: number[] } {
+async function calculateWeightedScore(companies: Record<string, unknown>[]): Promise<{ scores: number[], bestIndex: number, tiedIndices: number[] }> {
   // Definir pesos para cada indicador (total = 100%)
   const weights = {
     // Indicadores Básicos (40%)
-    pl: 0.10,           // 10% - Valuation fundamental
-    pvp: 0.10,          // 10% - Valor patrimonial
-    roe: 0.10,          // 10% - Rentabilidade principal
-    dy: 0.10,           // 10% - Dividendos
+    pl: 0.03,           // 3% - Valuation fundamental
+    pvp: 0.03,          // 3% - Valor patrimonial
+    roe: 0.03,          // 3% - Rentabilidade principal
+    dy: 0.03,           // 3% - Dividendos
     
     // Indicadores Avançados (25%)
     margemLiquida: 0.10, // 10% - Eficiência operacional
     roic: 0.10,         // 10% - Retorno sobre capital
     dividaLiquidaEbitda: 0.05, // 5% - Endividamento
     
-    // Score Geral (20%)
-    overallScore: 0.20,  // 20% - Análise consolidada
+    // Score Geral (48%)
+    overallScore: 0.48,  // 48% - Análise consolidada
     
     // Estratégias de Investimento (15%)
     graham: 0.025,        // 2.5% - Análise Graham
@@ -113,7 +113,7 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
     gordon: 0.025         // 2.5% - Modelo Gordon
   }
   
-  const scores = companies.map((company) => {
+  const scores = await Promise.all(companies.map(async (company) => {
     let totalScore = 0
     let totalWeight = 0
     let penaltyFactor = 1.0 // Fator de penalização (1.0 = sem penalidade)
@@ -176,6 +176,30 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
         penaltyFactor *= (1 - inflatedPenalty)
         console.log(`Penalidade indicadores inflados aplicada para ${company.ticker}: ${inflatedIndicators} indicadores, penalidade ${(inflatedPenalty * 100).toFixed(0)}%`)
       }
+    }
+    
+    // PENALIZAÇÃO 4: Risco nas demonstrações financeiras
+    try {
+      const statementsAnalysis = await getStatementsAnalysisForCompany(company.ticker as string)
+      if (statementsAnalysis) {
+        switch (statementsAnalysis.riskLevel) {
+          case 'CRITICAL':
+            penaltyFactor *= 0.5 // Penalidade de 50%
+            console.log(`Penalidade CRÍTICA por demonstrações aplicada para ${company.ticker}: risco ${statementsAnalysis.riskLevel}, score ${statementsAnalysis.score}`)
+            break
+          case 'HIGH':
+            penaltyFactor *= 0.7 // Penalidade de 30%
+            console.log(`Penalidade ALTA por demonstrações aplicada para ${company.ticker}: risco ${statementsAnalysis.riskLevel}, score ${statementsAnalysis.score}`)
+            break
+          case 'MEDIUM':
+            penaltyFactor *= 0.9 // Penalidade de 10%
+            console.log(`Penalidade MODERADA por demonstrações aplicada para ${company.ticker}: risco ${statementsAnalysis.riskLevel}, score ${statementsAnalysis.score}`)
+            break
+          // LOW não recebe penalidade
+        }
+      }
+    } catch (error) {
+      console.error(`Erro ao analisar demonstrações para penalização de ${company.ticker}:`, error)
     }
     
     // Função para normalizar e pontuar um indicador com valores de referência absolutos
@@ -303,7 +327,7 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
     }
     
     return finalScore
-  })
+  }))
   
   // Encontrar o melhor score
   const maxScore = Math.max(...scores)
@@ -337,6 +361,89 @@ function calculateWeightedScore(companies: Record<string, unknown>[]): { scores:
   return { scores, bestIndex, tiedIndices }
 }
 
+// Função para obter análise das demonstrações financeiras
+async function getStatementsAnalysisForCompany(ticker: string) {
+  try {
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 2; // Últimos 2 anos
+
+    const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
+      prisma.incomeStatement.findMany({
+        where: {
+          company: { ticker },
+          period: 'QUARTERLY',
+          endDate: {
+            gte: new Date(`${startYear}-01-01`),
+            lte: new Date(`${currentYear}-12-31`)
+          }
+        },
+        orderBy: { endDate: 'desc' },
+        take: 8
+      }),
+      prisma.balanceSheet.findMany({
+        where: {
+          company: { ticker },
+          period: 'QUARTERLY',
+          endDate: {
+            gte: new Date(`${startYear}-01-01`),
+            lte: new Date(`${currentYear}-12-31`)
+          }
+        },
+        orderBy: { endDate: 'desc' },
+        take: 8
+      }),
+      prisma.cashflowStatement.findMany({
+        where: {
+          company: { ticker },
+          period: 'QUARTERLY',
+          endDate: {
+            gte: new Date(`${startYear}-01-01`),
+            lte: new Date(`${currentYear}-12-31`)
+          }
+        },
+        orderBy: { endDate: 'desc' },
+        take: 8
+      })
+    ]);
+
+    if (incomeStatements.length === 0 && balanceSheets.length === 0 && cashflowStatements.length === 0) {
+      return null;
+    }
+
+    // Serializar dados para análise
+    const statementsData: FinancialStatementsData = {
+      incomeStatements: incomeStatements.map(stmt => ({
+        endDate: stmt.endDate.toISOString(),
+        totalRevenue: stmt.totalRevenue?.toNumber() || null,
+        operatingIncome: stmt.operatingIncome?.toNumber() || null,
+        netIncome: stmt.netIncome?.toNumber() || null,
+        grossProfit: stmt.grossProfit?.toNumber() || null,
+      })),
+      balanceSheets: balanceSheets.map(stmt => ({
+        endDate: stmt.endDate.toISOString(),
+        totalAssets: stmt.totalAssets?.toNumber() || null,
+        totalLiab: stmt.totalLiab?.toNumber() || null,
+        totalStockholderEquity: stmt.totalStockholderEquity?.toNumber() || null,
+        cash: stmt.cash?.toNumber() || null,
+        totalCurrentAssets: stmt.totalCurrentAssets?.toNumber() || null,
+        totalCurrentLiabilities: stmt.totalCurrentLiabilities?.toNumber() || null,
+      })),
+      cashflowStatements: cashflowStatements.map(stmt => ({
+        endDate: stmt.endDate.toISOString(),
+        operatingCashFlow: stmt.operatingCashFlow?.toNumber() || null,
+        investmentCashFlow: stmt.investmentCashFlow?.toNumber() || null,
+        financingCashFlow: stmt.financingCashFlow?.toNumber() || null,
+        increaseOrDecreaseInCash: stmt.increaseOrDecreaseInCash?.toNumber() || null,
+      }))
+    };
+
+    return analyzeFinancialStatements(statementsData);
+  } catch (error) {
+    console.error(`Erro ao analisar demonstrações para ${ticker}:`, error);
+    return null;
+  }
+}
+
 // Função para executar estratégias e calcular score geral
 function executeStrategiesForCompany(company: Record<string, unknown>, currentPrice: number) {
   try {
@@ -368,7 +475,7 @@ function executeStrategiesForCompany(company: Record<string, unknown>, currentPr
       })
     }
 
-    // Calcular score geral
+    // Calcular score geral (sem dados das demonstrações para comparação)
     const overallScore = calculateOverallScore(strategies, companyData.financialData as FinancialData, currentPrice)
 
     return { strategies, overallScore }
@@ -597,14 +704,28 @@ export default async function CompareStocksPage({ params }: PageProps) {
 
       {/* Cards das Empresas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {(() => {
+        {await (async () => {
           // Calcular pontuação ponderada uma única vez
-          const { bestIndex, tiedIndices } = calculateWeightedScore(orderedCompanies)
+          const { bestIndex, tiedIndices } = await calculateWeightedScore(orderedCompanies)
           
           return orderedCompanies.map((company, companyIndex) => {
             const latestFinancials = company.financialData[0]
             const latestQuote = company.dailyQuotes[0]
             const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+            
+            // Determinar medalha baseada na posição
+            const getMedal = (index: number) => {
+              if (bestIndex === index || (bestIndex === -1 && tiedIndices.includes(index))) {
+                return { icon: Trophy, color: 'text-yellow-500', bg: 'bg-yellow-50', border: 'border-yellow-200', label: 'Ouro', rank: 1 }
+              } else if (index === 1 || (bestIndex === -1 && tiedIndices.length > 1 && index === tiedIndices[1])) {
+                return { icon: Medal, color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', label: 'Prata', rank: 2 }
+              } else if (index === 2 || (bestIndex === -1 && tiedIndices.length > 2 && index === tiedIndices[2])) {
+                return { icon: Medal, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', label: 'Bronze', rank: 3 }
+              }
+              return null
+            }
+            
+            const medal = getMedal(companyIndex)
 
             // Determinar se é a empresa campeã baseado na pontuação ponderada
             const isBestCompany = userIsPremium && (
@@ -613,12 +734,19 @@ export default async function CompareStocksPage({ params }: PageProps) {
             )
 
           return (
-            <Card key={company.ticker} className={`relative ${isBestCompany ? 'ring-2 ring-yellow-400 shadow-lg' : ''}`}>
-              {isBestCompany && (
+            <Card key={company.ticker} className={`relative ${medal ? `ring-2 ${medal.border} shadow-lg ${medal.bg}` : ''}`}>
+              {medal && (
                 <div className="absolute -top-2 -right-2 z-10">
-                  <div className="bg-yellow-500 rounded-full p-2 shadow-lg">
-                    <Trophy className="w-4 h-4 text-white" />
+                  <div className={`${medal.color === 'text-yellow-500' ? 'bg-yellow-500' : medal.color === 'text-gray-400' ? 'bg-gray-400' : 'bg-amber-600'} rounded-full p-2 shadow-lg`}>
+                    <medal.icon className="w-4 h-4 text-white" />
                   </div>
+                </div>
+              )}
+              {medal && (
+                <div className="absolute -top-1 -left-1 z-10">
+                  <Badge className={`${medal.bg} ${medal.color} ${medal.border} border text-xs font-bold`}>
+                    #{medal.rank} {medal.label}
+                  </Badge>
                 </div>
               )}
               <CardContent className="p-6">

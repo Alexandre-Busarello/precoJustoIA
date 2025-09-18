@@ -54,13 +54,6 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     discountRate: number = 0.10,     // 10% padrão  
     yearsProjection: number = 5      // 5 anos padrão
   ): number | null {
-    console.log('Calculando FCD Fair Value...');
-    console.log('EBITDA:', ebitda);
-    console.log('Fluxo de Caixa Livre:', fluxoCaixaLivre);
-    console.log('Shares Outstanding:', sharesOutstanding);
-    console.log('Growth Rate:', growthRate);
-    console.log('Discount Rate:', discountRate);
-    console.log('Years Projection:', yearsProjection);
     if (!ebitda || !sharesOutstanding || ebitda <= 0 || sharesOutstanding <= 0) return null;
     
     // 1. Fluxo de Caixa Base

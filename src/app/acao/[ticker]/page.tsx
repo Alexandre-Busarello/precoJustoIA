@@ -7,6 +7,8 @@ import HeaderScoreWrapper from '@/components/header-score-wrapper'
 import AIAnalysis from '@/components/ai-analysis'
 import FinancialIndicators from '@/components/financial-indicators'
 import CompanySearch from '@/components/company-search'
+import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
+import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -384,6 +386,9 @@ export default async function TickerPage({ params }: PageProps) {
     notFound()
   }
 
+  // Buscar dados financeiros completos (trimestrais)
+  const comprehensiveData = await getComprehensiveFinancialData(ticker)
+
   const latestFinancials = companyData.financialData[0]
   const latestQuote = companyData.dailyQuotes[0]
   const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
@@ -554,12 +559,11 @@ export default async function TickerPage({ params }: PageProps) {
               />
             )}
 
-
-
             {/* Indicadores Financeiros com Gráficos */}
             <FinancialIndicators 
               ticker={ticker}
               latestFinancials={serializedFinancials}
+              comprehensiveData={comprehensiveData}
             />
 
             {/* Análise com IA */}
@@ -570,6 +574,26 @@ export default async function TickerPage({ params }: PageProps) {
               currentPrice={currentPrice}
               financials={serializedFinancials}
             />
+
+            {/* Dados Financeiros Completos */}
+            {comprehensiveData && (
+              <div className="mt-8">
+                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                      Dados Financeiros Detalhados
+                    </h3>
+                  </div>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Esta seção apresenta <strong>dados trimestrais</strong> mais recentes e detalhados, 
+                    complementando os indicadores anuais mostrados acima. Ideal para análise de tendências 
+                    e performance recente da empresa.
+                  </p>
+                </div>
+                <ComprehensiveFinancialView data={comprehensiveData} />
+              </div>
+            )}
 
             {/* Footer com data da atualização */}
             <div className="mt-8 text-center">

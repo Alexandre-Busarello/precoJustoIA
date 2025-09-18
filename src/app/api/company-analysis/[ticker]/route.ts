@@ -7,7 +7,7 @@ import {
   StrategyAnalysis,
   toNumber
 } from '@/lib/strategies';
-import { calculateOverallScore, OverallScore, FinancialData } from '@/lib/strategies/overall-score';
+import { calculateOverallScore, OverallScore, FinancialData, FinancialStatementsData } from '@/lib/strategies/overall-score';
 
 
 // Interface para resposta da API
@@ -123,8 +123,95 @@ export async function GET(
       margemLiquida: toNumber(latestFinancials.margemLiquida)
     };
 
+    // Buscar dados das demonstrações financeiras para análise inteligente (apenas para Premium)
+    // Otimização: fazer consulta mais leve apenas para análise das demonstrações
+    let statementsData: FinancialStatementsData | undefined;
+    if (isPremium) {
+      try {
+        const currentYear = new Date().getFullYear();
+        const startYear = currentYear - 2; // Apenas 2 anos para análise
+
+        const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
+          prisma.incomeStatement.findMany({
+            where: {
+              companyId: companyData.id,
+              period: 'QUARTERLY',
+              endDate: { gte: new Date(`${startYear}-01-01`) }
+            },
+            orderBy: { endDate: 'desc' },
+            take: 8 // Apenas 8 quarters para análise
+          }),
+          prisma.balanceSheet.findMany({
+            where: {
+              companyId: companyData.id,
+              period: 'QUARTERLY',
+              endDate: { gte: new Date(`${startYear}-01-01`) }
+            },
+            orderBy: { endDate: 'desc' },
+            take: 8
+          }),
+          prisma.cashflowStatement.findMany({
+            where: {
+              companyId: companyData.id,
+              period: 'QUARTERLY',
+              endDate: { gte: new Date(`${startYear}-01-01`) }
+            },
+            orderBy: { endDate: 'desc' },
+            take: 8
+          })
+        ]);
+
+        // Serializar os dados
+        statementsData = {
+          incomeStatements: incomeStatements.map(stmt => {
+            const serialized: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(stmt)) {
+              if (value && typeof value === 'object' && 'toNumber' in value) {
+                serialized[key] = (value as { toNumber: () => number }).toNumber();
+              } else if (value instanceof Date) {
+                serialized[key] = value.toISOString();
+              } else {
+                serialized[key] = value;
+              }
+            }
+            return serialized;
+          }),
+          balanceSheets: balanceSheets.map(stmt => {
+            const serialized: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(stmt)) {
+              if (value && typeof value === 'object' && 'toNumber' in value) {
+                serialized[key] = (value as { toNumber: () => number }).toNumber();
+              } else if (value instanceof Date) {
+                serialized[key] = value.toISOString();
+              } else {
+                serialized[key] = value;
+              }
+            }
+            return serialized;
+          }),
+          cashflowStatements: cashflowStatements.map(stmt => {
+            const serialized: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(stmt)) {
+              if (value && typeof value === 'object' && 'toNumber' in value) {
+                serialized[key] = (value as { toNumber: () => number }).toNumber();
+              } else if (value instanceof Date) {
+                serialized[key] = value.toISOString();
+              } else {
+                serialized[key] = value;
+              }
+            }
+            return serialized;
+          })
+        };
+      } catch (error) {
+        console.error('Erro ao buscar dados das demonstrações:', error);
+        // Continue sem a análise das demonstrações se houver erro
+        statementsData = undefined;
+      }
+    }
+
     // Calcular score geral apenas para usuários Premium
-    const overallScore = isPremium ? calculateOverallScore(strategies, financialData, currentPrice) : null;
+    const overallScore = isPremium ? calculateOverallScore(strategies, financialData, currentPrice, statementsData) : null;
 
     const response: CompanyAnalysisResponse = {
       ticker: companyData.ticker,

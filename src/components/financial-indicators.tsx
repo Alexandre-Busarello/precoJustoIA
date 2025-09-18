@@ -166,6 +166,7 @@ function toNumber(value: PrismaDecimal | Date | string | null): number | null {
   return parseFloat(String(value))
 }
 
+
 // Funções de formatação
 function formatCurrency(value: number | null): string {
   if (value === null || value === undefined) return 'N/A'
@@ -608,11 +609,55 @@ interface FinancialIndicatorsProps {
   ticker: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   latestFinancials: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  comprehensiveData?: any
 }
 
-export default function FinancialIndicators({ ticker, latestFinancials }: FinancialIndicatorsProps) {
+export default function FinancialIndicators({ ticker, latestFinancials, comprehensiveData }: FinancialIndicatorsProps) {
   const [selectedIndicator, setSelectedIndicator] = useState<string | null>(null)
   const [selectedInfoIndicator, setSelectedInfoIndicator] = useState<string | null>(null)
+
+  // Extrair dados de fallback dos dados completos
+  // Para financial-indicators, queremos dados ANUAIS, não trimestrais
+  // Buscar o último dado anual nos incomeStatements e keyStatistics
+  const latestAnnualIncome = comprehensiveData?.incomeStatements?.find((income: Record<string, unknown>) => {
+    // Buscar dados anuais (normalmente dezembro ou final do ano fiscal)
+    const endDate = new Date(income.endDate as string)
+    const month = endDate.getMonth() + 1 // getMonth() retorna 0-11
+    // Considerar como anual se for dezembro (12) ou se for o único dado do ano
+    return month === 12 || income.period === 'YEARLY'
+  }) || comprehensiveData?.incomeStatements?.[0] // fallback para o mais recente se não encontrar anual
+  
+  const latestAnnualStats = comprehensiveData?.keyStatistics?.find((stats: Record<string, unknown>) => {
+    const endDate = new Date(stats.endDate as string)
+    const month = endDate.getMonth() + 1
+    return month === 12 || stats.period === 'YEARLY'
+  }) || comprehensiveData?.keyStatistics?.[0]
+  
+  // Função para calcular margem líquida com fallback (usando dados anuais)
+  const getMargemLiquidaWithFallback = () => {
+    const margemLiquida = toNumber(latestFinancials?.margemLiquida)
+    if (margemLiquida !== null) return margemLiquida
+    
+    // Fallback: calcular margem líquida usando dados ANUAIS netIncome / operatingIncome
+    if (latestAnnualIncome?.netIncome && latestAnnualIncome?.operatingIncome) {
+      const netIncome = toNumber(latestAnnualIncome.netIncome)
+      const operatingIncome = toNumber(latestAnnualIncome.operatingIncome)
+      if (netIncome && operatingIncome && operatingIncome > 0) {
+        return netIncome / operatingIncome
+      }
+    }
+    return null
+  }
+  
+  // Função para obter receita total com fallback (usando dados anuais)
+  const getReceitaTotalWithFallback = () => {
+    const receitaTotal = toNumber(latestFinancials?.receitaTotal)
+    if (receitaTotal !== null) return receitaTotal
+    
+    // Fallback: usar dados ANUAIS - operatingIncome como proxy para receita
+    return toNumber(latestAnnualIncome?.operatingIncome)
+  }
 
   // Mapeamento de títulos dos cards para indicadores da API
   const titleToIndicatorMap: Record<string, string> = {
@@ -686,30 +731,36 @@ export default function FinancialIndicators({ ticker, latestFinancials }: Financ
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <IndicatorCard
               title="P/L"
-              value={toNumber(latestFinancials.pl)?.toFixed(2) || 'N/A'}
+              value={(() => {
+                const pl = toNumber(latestFinancials.pl) ?? toNumber(latestAnnualStats?.forwardPE)
+                return pl?.toFixed(2) || 'N/A'
+              })()}
               icon={BarChart3}
               description="Preço/Lucro por Ação"
-              type={getIndicatorType(toNumber(latestFinancials.pl), undefined, 15)}
+              type={getIndicatorType(toNumber(latestFinancials.pl) ?? toNumber(latestAnnualStats?.forwardPE), undefined, 15)}
               onChartClick={handleChartClick}
               onInfoClick={handleInfoClick}
             />
             
             <IndicatorCard
               title="P/VP"
-              value={toNumber(latestFinancials.pvp)?.toFixed(2) || 'N/A'}
+              value={(() => {
+                const pvp = toNumber(latestFinancials.pvp) ?? toNumber(latestAnnualStats?.priceToBook)
+                return pvp?.toFixed(2) || 'N/A'
+              })()}
               icon={PieChart}
               description="Preço/Valor Patrimonial"
-              type={getIndicatorType(toNumber(latestFinancials.pvp), undefined, 1.5)}
+              type={getIndicatorType(toNumber(latestFinancials.pvp) ?? toNumber(latestAnnualStats?.priceToBook), undefined, 1.5)}
               onChartClick={handleChartClick}
               onInfoClick={handleInfoClick}
             />
             
             <IndicatorCard
               title="Dividend Yield"
-              value={formatPercent(latestFinancials.dy)}
+              value={formatPercent(toNumber(latestFinancials.dy) ?? toNumber(latestAnnualStats?.dividendYield))}
               icon={DollarSign}
               description="Rendimento de Dividendos"
-              type={getIndicatorType(toNumber(latestFinancials.dy), 0.06)}
+              type={getIndicatorType(toNumber(latestFinancials.dy) ?? toNumber(latestAnnualStats?.dividendYield), 0.06)}
               onChartClick={handleChartClick}
               onInfoClick={handleInfoClick}
             />
@@ -766,10 +817,10 @@ export default function FinancialIndicators({ ticker, latestFinancials }: Financ
             
             <IndicatorCard
               title="Margem Líquida"
-              value={formatPercent(latestFinancials.margemLiquida)}
+              value={formatPercent(getMargemLiquidaWithFallback())}
               icon={PieChart}
               description="Margem de Lucro Líquido"
-              type={getIndicatorType(toNumber(latestFinancials.margemLiquida), 0.10)}
+              type={getIndicatorType(getMargemLiquidaWithFallback(), 0.10)}
               onChartClick={handleChartClick}
               onInfoClick={handleInfoClick}
             />
@@ -844,7 +895,7 @@ export default function FinancialIndicators({ ticker, latestFinancials }: Financ
             
             <IndicatorCard
               title="LPA"
-              value={formatCurrency(toNumber(latestFinancials.lpa))}
+              value={formatCurrency(toNumber(latestFinancials.lpa) ?? toNumber(latestAnnualStats?.trailingEps))}
               icon={DollarSign}
               description="Lucro por Ação"
               onChartClick={handleChartClick}
@@ -853,7 +904,7 @@ export default function FinancialIndicators({ ticker, latestFinancials }: Financ
             
             <IndicatorCard
               title="VPA"
-              value={formatCurrency(toNumber(latestFinancials.vpa))}
+              value={formatCurrency(toNumber(latestFinancials.vpa) ?? toNumber(latestAnnualStats?.bookValue))}
               icon={BarChart3}
               description="Valor Patrimonial por Ação"
               onChartClick={handleChartClick}
@@ -862,7 +913,7 @@ export default function FinancialIndicators({ ticker, latestFinancials }: Financ
             
             <IndicatorCard
               title="Receita Total"
-              value={formatLargeNumber(toNumber(latestFinancials.receitaTotal))}
+              value={formatLargeNumber(getReceitaTotalWithFallback())}
               icon={TrendingUp}
               description="Receita Anual"
               onChartClick={handleChartClick}

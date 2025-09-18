@@ -27,7 +27,14 @@ import {
   Calculator,
   Target,
   ChevronDown,
-  DollarSign
+  DollarSign,
+  FileText,
+  AlertTriangle,
+  CheckCircle2,
+  Shield,
+  AlertCircle,
+  Activity,
+  BarChart3
 } from 'lucide-react';
 
 // Interface para análise estratégica
@@ -41,6 +48,14 @@ interface StrategyAnalysis {
   key_metrics?: Record<string, number | null>;
 }
 
+// Interface para análise das demonstrações
+interface StatementsAnalysis {
+  score: number;
+  redFlags: string[];
+  positiveSignals: string[];
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
 // Interface para score geral
 interface OverallScore {
   score: number;
@@ -49,6 +64,7 @@ interface OverallScore {
   strengths: string[];
   weaknesses: string[];
   recommendation: 'Compra Forte' | 'Compra' | 'Neutro' | 'Venda' | 'Venda Forte';
+  statementsAnalysis?: StatementsAnalysis;
 }
 
 // Interface para resposta da API
@@ -210,6 +226,151 @@ function PremiumUpgrade({ strategy }: { strategy: string }) {
   );
 }
 
+// Componente para exibir análise das demonstrações financeiras
+function StatementsAnalysisContent({ analysis }: { analysis: StatementsAnalysis }) {
+  // Função para obter cor do risco
+  const getRiskColor = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'LOW': return 'text-green-600 bg-green-50 border-green-200';
+      case 'MEDIUM': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'HIGH': return 'text-orange-600 bg-orange-50 border-orange-200';
+      case 'CRITICAL': return 'text-red-600 bg-red-50 border-red-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  // Função para obter ícone do risco
+  const getRiskIcon = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'LOW': return <Shield className="w-4 h-4" />;
+      case 'MEDIUM': return <AlertCircle className="w-4 h-4" />;
+      case 'HIGH': return <AlertTriangle className="w-4 h-4" />;
+      case 'CRITICAL': return <AlertTriangle className="w-4 h-4" />;
+      default: return <AlertCircle className="w-4 h-4" />;
+    }
+  };
+
+  // Função para obter texto do risco
+  const getRiskText = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'LOW': return 'Baixo Risco';
+      case 'MEDIUM': return 'Risco Moderado';
+      case 'HIGH': return 'Alto Risco';
+      case 'CRITICAL': return 'Risco Crítico';
+      default: return 'Indefinido';
+    }
+  };
+
+  // Função para obter cor do score
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    if (score >= 40) return 'text-orange-600';
+    return 'text-red-600';
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header com Score e Risco */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center space-x-2">
+              <FileText className="w-5 h-5" />
+              <span>Análise das Demonstrações Financeiras</span>
+            </CardTitle>
+            <Badge className={`${getRiskColor(analysis.riskLevel)} border`}>
+              <div className="flex items-center space-x-1">
+                {getRiskIcon(analysis.riskLevel)}
+                <span className="text-xs font-medium">{getRiskText(analysis.riskLevel)}</span>
+              </div>
+            </Badge>
+          </div>
+          <CardDescription>
+            Análise automatizada da DRE, Balanço Patrimonial e Fluxo de Caixa
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* Score Principal */}
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-white rounded-full shadow-sm">
+                <BarChart3 className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600">Score de Qualidade</p>
+                <p className="text-xs text-gray-500">Baseado em 20+ indicadores</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`text-2xl font-bold ${getScoreColor(analysis.score)}`}>
+                {analysis.score}
+              </p>
+              <p className="text-xs text-gray-500">de 100</p>
+            </div>
+          </div>
+
+          {/* Resumo Rápido */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Sinais Positivos */}
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center space-x-2 mb-3">
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                <span className="font-medium text-green-800">Pontos Fortes</span>
+              </div>
+              {analysis.positiveSignals.length > 0 ? (
+                <div className="space-y-2">
+                  {analysis.positiveSignals.map((signal, index) => (
+                    <div key={index} className="flex items-start space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-green-800">{signal}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-green-700">Nenhum ponto forte identificado</p>
+              )}
+            </div>
+
+            {/* Red Flags */}
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <div className="flex items-center space-x-2 mb-3">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <span className="font-medium text-red-800">Alertas</span>
+              </div>
+              {analysis.redFlags.length > 0 ? (
+                <div className="space-y-2">
+                  {analysis.redFlags.map((flag, index) => (
+                    <div key={index} className="flex items-start space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-red-800">{flag}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-red-700">Nenhum alerta identificado</p>
+              )}
+            </div>
+          </div>
+
+          {/* Metodologia */}
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center space-x-2 mb-2">
+              <Activity className="w-5 h-5 text-blue-600" />
+              <span className="font-medium text-blue-800">Metodologia</span>
+            </div>
+            <p className="text-sm text-blue-700 leading-relaxed">
+              Esta análise examina automaticamente os últimos trimestres das demonstrações financeiras, 
+              detectando anomalias em receitas, margens, liquidez, endividamento, fluxo de caixa e tendências. 
+              O score combina 20+ indicadores para avaliar a qualidade e consistência dos resultados financeiros.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function StrategicAnalysisClient({ ticker, currentPrice, latestFinancials }: Props) {
   const { data: session } = useSession();
   const [analysisData, setAnalysisData] = useState<CompanyAnalysisResponse | null>(null);
@@ -296,20 +457,26 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
       </h2>
 
       <Tabs defaultValue="fair-value" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="fair-value" className="flex items-center space-x-2">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="fair-value" className="flex items-center space-x-1">
             <Calculator className="w-4 h-4" />
             <span className="hidden sm:inline">Preço Justo</span>
             {!isLoggedIn && <Crown className="w-3 h-3 ml-1" />}
           </TabsTrigger>
           
-          <TabsTrigger value="strategies" className="flex items-center space-x-2">
+          <TabsTrigger value="strategies" className="flex items-center space-x-1">
             <Target className="w-4 h-4" />
             <span className="hidden sm:inline">Estratégias</span>
             {!isPremium && <Crown className="w-3 h-3 ml-1 text-yellow-500" />}
           </TabsTrigger>
+
+          <TabsTrigger value="statements" className="flex items-center space-x-1">
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">Demonstrações</span>
+            {!isPremium && <Crown className="w-3 h-3 ml-1 text-yellow-500" />}
+          </TabsTrigger>
           
-          <TabsTrigger value="overview" className="flex items-center space-x-2">
+          <TabsTrigger value="overview" className="flex items-center space-x-1">
             <Eye className="w-4 h-4" />
             <span className="hidden sm:inline">Visão Geral</span>
           </TabsTrigger>
@@ -940,6 +1107,29 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   </CollapsibleContent>
                 </Collapsible>
               </Card>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Demonstrações Tab */}
+        <TabsContent value="statements" className="mt-6">
+          {!isPremium ? (
+            <PremiumUpgrade strategy="Análise Inteligente das Demonstrações Financeiras" />
+          ) : (
+            <div className="space-y-6">
+              {analysisData?.overallScore?.statementsAnalysis ? (
+                <StatementsAnalysisContent analysis={analysisData.overallScore.statementsAnalysis} />
+              ) : (
+                <Card className="border-gray-200 bg-gray-50/30">
+                  <CardContent className="p-6 text-center">
+                    <FileText className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600 font-medium mb-2">Análise não disponível</p>
+                    <p className="text-sm text-gray-500">
+                      Dados insuficientes para realizar a análise das demonstrações financeiras.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </TabsContent>

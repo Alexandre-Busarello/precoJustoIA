@@ -760,29 +760,47 @@ export default async function CompareStocksPage({ params }: PageProps) {
                   badgeStyle: 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-white shadow-lg',
                   ringStyle: 'ring-yellow-300 shadow-yellow-200/50'
                 }
-              } else if (index === tiedCompaniesIndices.length) { // Primeira posição após empates
-                return { 
-                  icon: Medal, 
-                  color: 'text-slate-600', 
-                  bg: 'bg-gradient-to-br from-slate-50 to-slate-100', 
-                  border: 'border-slate-300', 
-                  label: 'Prata', 
-                  rank: tiedCompaniesIndices.length + 1,
-                  medalBg: 'bg-gradient-to-br from-slate-300 to-slate-500',
-                  badgeStyle: 'bg-gradient-to-r from-slate-400 to-slate-500 text-white shadow-lg',
-                  ringStyle: 'ring-slate-300 shadow-slate-200/50'
+              } else if (userIsPremium) {
+                // Para usuários premium: pular prata e mostrar apenas ouro e bronze
+                if (index === tiedCompaniesIndices.length + 1) { // Segunda posição após empates (bronze)
+                  return { 
+                    icon: Medal, 
+                    color: 'text-orange-600', 
+                    bg: 'bg-gradient-to-br from-orange-50 to-orange-100', 
+                    border: 'border-orange-300', 
+                    label: 'Bronze', 
+                    rank: tiedCompaniesIndices.length + 2,
+                    medalBg: 'bg-gradient-to-br from-orange-400 to-orange-600',
+                    badgeStyle: 'bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-lg',
+                    ringStyle: 'ring-orange-300 shadow-orange-200/50'
+                  }
                 }
-              } else if (index === tiedCompaniesIndices.length + 1) { // Segunda posição após empates
-                return { 
-                  icon: Medal, 
-                  color: 'text-orange-600', 
-                  bg: 'bg-gradient-to-br from-orange-50 to-orange-100', 
-                  border: 'border-orange-300', 
-                  label: 'Bronze', 
-                  rank: tiedCompaniesIndices.length + 2,
-                  medalBg: 'bg-gradient-to-br from-orange-400 to-orange-600',
-                  badgeStyle: 'bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-lg',
-                  ringStyle: 'ring-orange-300 shadow-orange-200/50'
+              } else {
+                // Para usuários não-premium: mostrar todas as medalhas (ouro, prata, bronze)
+                if (index === tiedCompaniesIndices.length) { // Primeira posição após empates
+                  return { 
+                    icon: Medal, 
+                    color: 'text-slate-600', 
+                    bg: 'bg-gradient-to-br from-slate-50 to-slate-100', 
+                    border: 'border-slate-300', 
+                    label: 'Prata', 
+                    rank: tiedCompaniesIndices.length + 1,
+                    medalBg: 'bg-gradient-to-br from-slate-300 to-slate-500',
+                    badgeStyle: 'bg-gradient-to-r from-slate-400 to-slate-500 text-white shadow-lg',
+                    ringStyle: 'ring-slate-300 shadow-slate-200/50'
+                  }
+                } else if (index === tiedCompaniesIndices.length + 1) { // Segunda posição após empates
+                  return { 
+                    icon: Medal, 
+                    color: 'text-orange-600', 
+                    bg: 'bg-gradient-to-br from-orange-50 to-orange-100', 
+                    border: 'border-orange-300', 
+                    label: 'Bronze', 
+                    rank: tiedCompaniesIndices.length + 2,
+                    medalBg: 'bg-gradient-to-br from-orange-400 to-orange-600',
+                    badgeStyle: 'bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-lg',
+                    ringStyle: 'ring-orange-300 shadow-orange-200/50'
+                  }
                 }
               }
               return null

@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { backgroundPrisma, backgroundPrismaManager } from './prisma-background';
 // Importar apenas o que precisamos do fetch-data.ts
 // import { DataFetcher } from './fetch-data';
 
@@ -122,7 +122,8 @@ interface BrapiBasicResponse {
 // Carregar variáveis de ambiente
 dotenv.config();
 
-const prisma = new PrismaClient();
+// Usar o cliente Prisma otimizado para background
+const prisma = backgroundPrisma;
 
 // Interface para a lista de tickers da Ward API
 interface WardTickerItem {
@@ -397,14 +398,160 @@ interface BrapiProResponse {
 const WARD_JWT_TOKEN = process.env.WARD_JWT_TOKEN || 'eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjE1MDc5IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvZW1haWxhZGRyZXNzIjoiYnVzYW1hckBnbWFpbC5jb20iLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJVc2VyIiwiaWF0IjoxNzU3NzAwNjE5LCJhdWQiOlsiaHR0cHM6Ly9kZXYud2FyZC5hcHAuYnIiLCJodHRwczovL3dhcmQuYXBwLmJyIiwiaHR0cHM6Ly90YXNrcy53YXJkLmFwcC5iciJdLCJleHAiOjE3NTg5OTY2MTksImlzcyI6Imh0dHBzOi8vd2FyZC5hcHAuYnIifQ.BBtBaqK5a2DL4G0QVd7H3rjFp-jxrjE1IVr8kfpIApW1uepBB_RVBkXPMVqFV6Aia2GGQyD_BDM0oJavhM-NgA';
 const BRAPI_TOKEN = process.env.BRAPI_TOKEN; // Opcional para plano gratuito
 
-// Função para buscar dados completos da Brapi PRO
-async function fetchBrapiProData(ticker: string): Promise<BrapiProResponse['results'][0] | null> {
+// Função para verificar quais dados históricos já existem no banco
+async function checkExistingHistoricalData(companyId: number): Promise<{
+  hasBalanceSheets: { yearly: boolean; quarterly: boolean };
+  hasIncomeStatements: { yearly: boolean; quarterly: boolean };
+  hasCashflowStatements: { yearly: boolean; quarterly: boolean };
+  hasKeyStatistics: { yearly: boolean; quarterly: boolean };
+  hasValueAddedStatements: { yearly: boolean; quarterly: boolean };
+  latestYearlyDate: Date | null;
+  latestQuarterlyDate: Date | null;
+  hasHistoricalData: boolean;
+}> {
+  try {
+    const currentYear = new Date().getFullYear();
+    const twoYearsAgo = new Date(`${currentYear - 2}-01-01`);
+    const oneYearAgo = new Date(`${currentYear - 1}-01-01`);
+
+    // Verificar dados anuais (qualquer dado dos últimos 3 anos para considerar que tem histórico)
+    const yearlyChecks = await Promise.all([
+      prisma.balanceSheet.findFirst({
+        where: { companyId, period: 'YEARLY', endDate: { gte: twoYearsAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.incomeStatement.findFirst({
+        where: { companyId, period: 'YEARLY', endDate: { gte: twoYearsAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.cashflowStatement.findFirst({
+        where: { companyId, period: 'YEARLY', endDate: { gte: twoYearsAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.keyStatistics.findFirst({
+        where: { companyId, period: 'YEARLY', endDate: { gte: twoYearsAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.valueAddedStatement.findFirst({
+        where: { companyId, period: 'YEARLY', endDate: { gte: twoYearsAgo } },
+        orderBy: { endDate: 'desc' }
+      })
+    ]);
+
+    // Verificar dados trimestrais (qualquer dado do último ano para considerar que tem histórico)
+    const quarterlyChecks = await Promise.all([
+      prisma.balanceSheet.findFirst({
+        where: { companyId, period: 'QUARTERLY', endDate: { gte: oneYearAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.incomeStatement.findFirst({
+        where: { companyId, period: 'QUARTERLY', endDate: { gte: oneYearAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.cashflowStatement.findFirst({
+        where: { companyId, period: 'QUARTERLY', endDate: { gte: oneYearAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.keyStatistics.findFirst({
+        where: { companyId, period: 'QUARTERLY', endDate: { gte: oneYearAgo } },
+        orderBy: { endDate: 'desc' }
+      }),
+      prisma.valueAddedStatement.findFirst({
+        where: { companyId, period: 'QUARTERLY', endDate: { gte: oneYearAgo } },
+        orderBy: { endDate: 'desc' }
+      })
+    ]);
+
+    // Encontrar as datas mais recentes
+    const latestYearlyDate = yearlyChecks
+      .filter(check => check?.endDate)
+      .map(check => check!.endDate)
+      .sort((a, b) => b.getTime() - a.getTime())[0] || null;
+
+    const latestQuarterlyDate = quarterlyChecks
+      .filter(check => check?.endDate)
+      .map(check => check!.endDate)
+      .sort((a, b) => b.getTime() - a.getTime())[0] || null;
+
+    // Verificar se tem dados históricos suficientes (pelo menos 2 tipos de dados)
+    const yearlyDataTypes = yearlyChecks.filter(check => !!check).length;
+    const quarterlyDataTypes = quarterlyChecks.filter(check => !!check).length;
+    const hasHistoricalData = yearlyDataTypes >= 2 || quarterlyDataTypes >= 2;
+
+    const result = {
+      hasBalanceSheets: {
+        yearly: !!yearlyChecks[0],
+        quarterly: !!quarterlyChecks[0]
+      },
+      hasIncomeStatements: {
+        yearly: !!yearlyChecks[1],
+        quarterly: !!quarterlyChecks[1]
+      },
+      hasCashflowStatements: {
+        yearly: !!yearlyChecks[2],
+        quarterly: !!quarterlyChecks[2]
+      },
+      hasKeyStatistics: {
+        yearly: !!yearlyChecks[3],
+        quarterly: !!quarterlyChecks[3]
+      },
+      hasValueAddedStatements: {
+        yearly: !!yearlyChecks[4],
+        quarterly: !!quarterlyChecks[4]
+      },
+      latestYearlyDate,
+      latestQuarterlyDate,
+      hasHistoricalData
+    };
+
+    console.log(`📊 Dados existentes: ${yearlyDataTypes} tipos anuais, ${quarterlyDataTypes} tipos trimestrais, histórico: ${hasHistoricalData ? '✅' : '❌'}`);
+    
+    return result;
+  } catch (error: any) {
+    console.error(`❌ Erro ao verificar dados existentes:`, error.message);
+    // Em caso de erro, assumir que não há dados (modo seguro)
+    return {
+      hasBalanceSheets: { yearly: false, quarterly: false },
+      hasIncomeStatements: { yearly: false, quarterly: false },
+      hasCashflowStatements: { yearly: false, quarterly: false },
+      hasKeyStatistics: { yearly: false, quarterly: false },
+      hasValueAddedStatements: { yearly: false, quarterly: false },
+      latestYearlyDate: null,
+      latestQuarterlyDate: null,
+      hasHistoricalData: false
+    };
+  }
+}
+
+// Função para buscar dados completos da Brapi PRO (otimizada)
+async function fetchBrapiProData(ticker: string, forceFullUpdate: boolean = false): Promise<BrapiProResponse['results'][0] | null> {
   try {
     console.log(`🔍 Buscando dados completos da Brapi PRO para ${ticker}...`);
     
     if (!BRAPI_TOKEN) {
       console.log(`⚠️  BRAPI_TOKEN não configurado, pulando dados da Brapi PRO`);
       return null;
+    }
+
+    // Verificar se a empresa existe e se já tem dados históricos
+    const company = await prisma.company.findUnique({
+      where: { ticker }
+    });
+
+    if (!company) {
+      console.log(`⚠️  Empresa ${ticker} não encontrada no banco, fazendo fetch completo`);
+      forceFullUpdate = true;
+    }
+
+    let existingData = null;
+    if (company && !forceFullUpdate) {
+      existingData = await checkExistingHistoricalData(company.id);
+      
+      // Se já tem dados históricos suficientes, buscar apenas módulos TTM
+      if (existingData.hasHistoricalData) {
+        console.log(`📊 ${ticker} já possui dados históricos suficientes, buscando apenas TTM`);
+        return await fetchBrapiTTMData(ticker);
+      }
     }
     
     const headers: Record<string, string> = {
@@ -447,6 +594,46 @@ async function fetchBrapiProData(ticker: string): Promise<BrapiProResponse['resu
     } else {
       console.error(`❌ Erro ao buscar dados da Brapi PRO para ${ticker}:`, error.message);
     }
+    return null;
+  }
+}
+
+// Função para buscar apenas dados TTM (defaultKeyStatistics e financialData)
+async function fetchBrapiTTMData(ticker: string): Promise<BrapiProResponse['results'][0] | null> {
+  try {
+    console.log(`🔍 Buscando dados TTM da Brapi PRO para ${ticker}...`);
+    
+    if (!BRAPI_TOKEN) {
+      console.log(`⚠️  BRAPI_TOKEN não configurado, pulando dados TTM da Brapi PRO`);
+      return null;
+    }
+    
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${BRAPI_TOKEN}`,
+      'User-Agent': 'analisador-acoes/1.0.0'
+    };
+    
+    const response = await axios.get<BrapiProResponse>(
+      `https://brapi.dev/api/quote/${ticker}`,
+      {
+        headers,
+        params: {
+          modules: 'defaultKeyStatistics,financialData,summaryProfile'
+        },
+        timeout: 15000
+      }
+    );
+
+    if (response.status === 200 && response.data.results && response.data.results.length > 0) {
+      const data = response.data.results[0];
+      console.log(`✅ Dados TTM da Brapi PRO obtidos para ${ticker}`);
+      return data;
+    } else {
+      console.log(`⚠️  Nenhum dado TTM encontrado na Brapi PRO para ${ticker}`);
+      return null;
+    }
+  } catch (error: any) {
+    console.error(`❌ Erro ao buscar dados TTM da Brapi PRO para ${ticker}:`, error.message);
     return null;
   }
 }
@@ -965,8 +1152,139 @@ async function createOrUpdateCompany(ticker: string): Promise<{ id: number; tick
   }
 }
 
-// Função para processar dados do balanço patrimonial
-async function processBalanceSheets(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+// Função para verificar quais dados específicos já existem no banco
+async function getExistingDataDates(
+  companyId: number, 
+  period: 'YEARLY' | 'QUARTERLY'
+): Promise<{
+  balanceSheetDates: Set<string>;
+  incomeStatementDates: Set<string>;
+  cashflowStatementDates: Set<string>;
+  keyStatisticsDates: Set<string>;
+  valueAddedStatementDates: Set<string>;
+}> {
+  try {
+    const [balanceSheets, incomeStatements, cashflowStatements, keyStatistics, valueAddedStatements] = await Promise.all([
+      prisma.balanceSheet.findMany({
+        where: { companyId, period },
+        select: { endDate: true }
+      }),
+      prisma.incomeStatement.findMany({
+        where: { companyId, period },
+        select: { endDate: true }
+      }),
+      prisma.cashflowStatement.findMany({
+        where: { companyId, period },
+        select: { endDate: true }
+      }),
+      prisma.keyStatistics.findMany({
+        where: { companyId, period },
+        select: { endDate: true }
+      }),
+      prisma.valueAddedStatement.findMany({
+        where: { companyId, period },
+        select: { endDate: true }
+      })
+    ]);
+
+    return {
+      balanceSheetDates: new Set(balanceSheets.map(item => item.endDate.toISOString().split('T')[0])),
+      incomeStatementDates: new Set(incomeStatements.map(item => item.endDate.toISOString().split('T')[0])),
+      cashflowStatementDates: new Set(cashflowStatements.map(item => item.endDate.toISOString().split('T')[0])),
+      keyStatisticsDates: new Set(keyStatistics.map(item => item.endDate.toISOString().split('T')[0])),
+      valueAddedStatementDates: new Set(valueAddedStatements.map(item => item.endDate.toISOString().split('T')[0]))
+    };
+  } catch (error: any) {
+    console.error(`❌ Erro ao verificar dados existentes específicos:`, error.message);
+    return {
+      balanceSheetDates: new Set(),
+      incomeStatementDates: new Set(),
+      cashflowStatementDates: new Set(),
+      keyStatisticsDates: new Set(),
+      valueAddedStatementDates: new Set()
+    };
+  }
+}
+
+// Função para filtrar dados que ainda não existem no banco
+function filterMissingData<T extends { endDate?: string; updatedAt?: string }>(
+  dataArray: T[] | undefined,
+  existingDates: Set<string>,
+  period: 'YEARLY' | 'QUARTERLY'
+): T[] {
+  if (!dataArray || dataArray.length === 0) return [];
+  
+  // Se não há dados existentes, processar todos os dados históricos
+  const hasExistingData = existingDates.size > 0;
+  
+  return dataArray.filter(item => {
+    const dateToCheck = item.endDate || item.updatedAt;
+    if (!dateToCheck) return false;
+    
+    const itemDate = new Date(dateToCheck);
+    const dateKey = itemDate.toISOString().split('T')[0];
+    
+    // Se já existe no banco, pular
+    if (existingDates.has(dateKey)) return false;
+    
+    // Se não há dados existentes, processar todos os dados históricos
+    if (!hasExistingData) return true;
+    
+    // Se já há dados existentes, filtrar apenas dados recentes (últimos 2 anos para anuais, 1 ano para trimestrais)
+    const cutoffDate = new Date();
+    if (period === 'YEARLY') {
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - 2);
+    } else {
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
+    }
+    
+    return itemDate >= cutoffDate;
+  });
+}
+
+// Função auxiliar para processar dados sequencialmente (sem paralelismo)
+async function processDataSequentially<T>(
+  dataArray: T[],
+  processFn: (item: T) => Promise<void>,
+  delayBetweenItems: number = 100 // Delay pequeno entre itens
+): Promise<void> {
+  if (dataArray.length === 0) return;
+  
+  console.log(`📦 Processando ${dataArray.length} itens sequencialmente`);
+  
+  let successful = 0;
+  let failed = 0;
+  
+  for (let i = 0; i < dataArray.length; i++) {
+    const item = dataArray[i];
+    try {
+      await processFn(item);
+      successful++;
+      
+      // Log de progresso a cada 5 itens ou no final
+      if ((i + 1) % 5 === 0 || i === dataArray.length - 1) {
+        console.log(`  📊 Progresso: ${i + 1}/${dataArray.length} itens processados (${successful} sucessos, ${failed} falhas)`);
+      }
+      
+      // Delay entre itens para não sobrecarregar o banco
+      if (i < dataArray.length - 1 && delayBetweenItems > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayBetweenItems));
+      }
+    } catch (error: any) {
+      failed++;
+      console.error(`    ❌ Item ${i + 1}: ${error.message}`);
+    }
+  }
+  
+  console.log(`  ✅ Processamento concluído: ${successful} sucessos, ${failed} falhas`);
+}
+
+// Função para processar dados do balanço patrimonial (otimizada)
+async function processBalanceSheets(
+  companyId: number, 
+  ticker: string, 
+  data: BrapiProResponse['results'][0]
+): Promise<void> {
   const processBalanceSheet = async (balanceSheet: BrapiBalanceSheet, period: 'YEARLY' | 'QUARTERLY') => {
     if (!balanceSheet.endDate) return;
     
@@ -974,113 +1292,141 @@ async function processBalanceSheets(companyId: number, ticker: string, data: Bra
       const endDate = new Date(balanceSheet.endDate);
       
       await prisma.balanceSheet.upsert({
-        where: {
-          companyId_endDate_period: {
+          where: {
+            companyId_endDate_period: {
+              companyId,
+              endDate,
+              period
+            }
+          },
+          update: {
+            cash: balanceSheet.cash || null,
+            shortTermInvestments: balanceSheet.shortTermInvestments || null,
+            totalCurrentAssets: balanceSheet.totalCurrentAssets || null,
+            longTermInvestments: balanceSheet.longTermInvestments || null,
+            otherAssets: balanceSheet.otherAssets || null,
+            totalAssets: balanceSheet.totalAssets || null,
+            totalCurrentLiabilities: balanceSheet.totalCurrentLiabilities || null,
+            totalLiab: balanceSheet.totalLiab || null,
+            commonStock: balanceSheet.commonStock || null,
+            treasuryStock: balanceSheet.treasuryStock || null,
+            totalStockholderEquity: balanceSheet.totalStockholderEquity || null,
+            netTangibleAssets: balanceSheet.netTangibleAssets || null,
+            goodWill: balanceSheet.goodWill || null,
+            financialAssets: balanceSheet.financialAssets || null,
+            centralBankCompulsoryDeposit: balanceSheet.centralBankCompulsoryDeposit || null,
+            financialAssetsMeasuredAtFairValueThroughProfitOrLoss: balanceSheet.financialAssetsMeasuredAtFairValueThroughProfitOrLoss || null,
+            longTermAssets: balanceSheet.longTermAssets || null,
+            creditsFromOperations: balanceSheet.creditsFromOperations || null,
+            complementaryPension: balanceSheet.complementaryPension || null,
+            deferredSellingExpenses: balanceSheet.deferredSellingExpenses || null,
+            nonCurrentAssets: balanceSheet.nonCurrentAssets || null,
+            deferredTaxes: balanceSheet.deferredTaxes || null,
+            financialLiabilitiesMeasuredAtFairValueThroughIncome: balanceSheet.financialLiabilitiesMeasuredAtFairValueThroughIncome || null,
+            financialLiabilitiesAtAmortizedCost: balanceSheet.financialLiabilitiesAtAmortizedCost || null,
+            provisions: balanceSheet.provisions || null,
+            shareholdersEquity: balanceSheet.shareholdersEquity || null,
+            realizedShareCapital: balanceSheet.realizedShareCapital || null,
+            profitReserves: balanceSheet.profitReserves || null,
+            accumulatedProfitsOrLosses: balanceSheet.accumulatedProfitsOrLosses || null,
+            equityValuationAdjustments: balanceSheet.equityValuationAdjustments || null,
+            currentLiabilities: balanceSheet.currentLiabilities || null,
+            nonCurrentLiabilities: balanceSheet.nonCurrentLiabilities || null,
+            thirdPartyDeposits: balanceSheet.thirdPartyDeposits || null,
+            otherDebits: balanceSheet.otherDebits || null
+          },
+          create: {
             companyId,
+            period,
             endDate,
-            period
+            cash: balanceSheet.cash || null,
+            shortTermInvestments: balanceSheet.shortTermInvestments || null,
+            totalCurrentAssets: balanceSheet.totalCurrentAssets || null,
+            longTermInvestments: balanceSheet.longTermInvestments || null,
+            otherAssets: balanceSheet.otherAssets || null,
+            totalAssets: balanceSheet.totalAssets || null,
+            totalCurrentLiabilities: balanceSheet.totalCurrentLiabilities || null,
+            totalLiab: balanceSheet.totalLiab || null,
+            commonStock: balanceSheet.commonStock || null,
+            treasuryStock: balanceSheet.treasuryStock || null,
+            totalStockholderEquity: balanceSheet.totalStockholderEquity || null,
+            netTangibleAssets: balanceSheet.netTangibleAssets || null,
+            goodWill: balanceSheet.goodWill || null,
+            financialAssets: balanceSheet.financialAssets || null,
+            centralBankCompulsoryDeposit: balanceSheet.centralBankCompulsoryDeposit || null,
+            financialAssetsMeasuredAtFairValueThroughProfitOrLoss: balanceSheet.financialAssetsMeasuredAtFairValueThroughProfitOrLoss || null,
+            longTermAssets: balanceSheet.longTermAssets || null,
+            creditsFromOperations: balanceSheet.creditsFromOperations || null,
+            complementaryPension: balanceSheet.complementaryPension || null,
+            deferredSellingExpenses: balanceSheet.deferredSellingExpenses || null,
+            nonCurrentAssets: balanceSheet.nonCurrentAssets || null,
+            deferredTaxes: balanceSheet.deferredTaxes || null,
+            financialLiabilitiesMeasuredAtFairValueThroughIncome: balanceSheet.financialLiabilitiesMeasuredAtFairValueThroughIncome || null,
+            financialLiabilitiesAtAmortizedCost: balanceSheet.financialLiabilitiesAtAmortizedCost || null,
+            provisions: balanceSheet.provisions || null,
+            shareholdersEquity: balanceSheet.shareholdersEquity || null,
+            realizedShareCapital: balanceSheet.realizedShareCapital || null,
+            profitReserves: balanceSheet.profitReserves || null,
+            accumulatedProfitsOrLosses: balanceSheet.accumulatedProfitsOrLosses || null,
+            equityValuationAdjustments: balanceSheet.equityValuationAdjustments || null,
+            currentLiabilities: balanceSheet.currentLiabilities || null,
+            nonCurrentLiabilities: balanceSheet.nonCurrentLiabilities || null,
+            thirdPartyDeposits: balanceSheet.thirdPartyDeposits || null,
+            otherDebits: balanceSheet.otherDebits || null
           }
-        },
-        update: {
-          cash: balanceSheet.cash || null,
-          shortTermInvestments: balanceSheet.shortTermInvestments || null,
-          totalCurrentAssets: balanceSheet.totalCurrentAssets || null,
-          longTermInvestments: balanceSheet.longTermInvestments || null,
-          otherAssets: balanceSheet.otherAssets || null,
-          totalAssets: balanceSheet.totalAssets || null,
-          totalCurrentLiabilities: balanceSheet.totalCurrentLiabilities || null,
-          totalLiab: balanceSheet.totalLiab || null,
-          commonStock: balanceSheet.commonStock || null,
-          treasuryStock: balanceSheet.treasuryStock || null,
-          totalStockholderEquity: balanceSheet.totalStockholderEquity || null,
-          netTangibleAssets: balanceSheet.netTangibleAssets || null,
-          goodWill: balanceSheet.goodWill || null,
-          financialAssets: balanceSheet.financialAssets || null,
-          centralBankCompulsoryDeposit: balanceSheet.centralBankCompulsoryDeposit || null,
-          financialAssetsMeasuredAtFairValueThroughProfitOrLoss: balanceSheet.financialAssetsMeasuredAtFairValueThroughProfitOrLoss || null,
-          longTermAssets: balanceSheet.longTermAssets || null,
-          creditsFromOperations: balanceSheet.creditsFromOperations || null,
-          complementaryPension: balanceSheet.complementaryPension || null,
-          deferredSellingExpenses: balanceSheet.deferredSellingExpenses || null,
-          nonCurrentAssets: balanceSheet.nonCurrentAssets || null,
-          deferredTaxes: balanceSheet.deferredTaxes || null,
-          financialLiabilitiesMeasuredAtFairValueThroughIncome: balanceSheet.financialLiabilitiesMeasuredAtFairValueThroughIncome || null,
-          financialLiabilitiesAtAmortizedCost: balanceSheet.financialLiabilitiesAtAmortizedCost || null,
-          provisions: balanceSheet.provisions || null,
-          shareholdersEquity: balanceSheet.shareholdersEquity || null,
-          realizedShareCapital: balanceSheet.realizedShareCapital || null,
-          profitReserves: balanceSheet.profitReserves || null,
-          accumulatedProfitsOrLosses: balanceSheet.accumulatedProfitsOrLosses || null,
-          equityValuationAdjustments: balanceSheet.equityValuationAdjustments || null,
-          currentLiabilities: balanceSheet.currentLiabilities || null,
-          nonCurrentLiabilities: balanceSheet.nonCurrentLiabilities || null,
-          thirdPartyDeposits: balanceSheet.thirdPartyDeposits || null,
-          otherDebits: balanceSheet.otherDebits || null
-        },
-        create: {
-          companyId,
-          period,
-          endDate,
-          cash: balanceSheet.cash || null,
-          shortTermInvestments: balanceSheet.shortTermInvestments || null,
-          totalCurrentAssets: balanceSheet.totalCurrentAssets || null,
-          longTermInvestments: balanceSheet.longTermInvestments || null,
-          otherAssets: balanceSheet.otherAssets || null,
-          totalAssets: balanceSheet.totalAssets || null,
-          totalCurrentLiabilities: balanceSheet.totalCurrentLiabilities || null,
-          totalLiab: balanceSheet.totalLiab || null,
-          commonStock: balanceSheet.commonStock || null,
-          treasuryStock: balanceSheet.treasuryStock || null,
-          totalStockholderEquity: balanceSheet.totalStockholderEquity || null,
-          netTangibleAssets: balanceSheet.netTangibleAssets || null,
-          goodWill: balanceSheet.goodWill || null,
-          financialAssets: balanceSheet.financialAssets || null,
-          centralBankCompulsoryDeposit: balanceSheet.centralBankCompulsoryDeposit || null,
-          financialAssetsMeasuredAtFairValueThroughProfitOrLoss: balanceSheet.financialAssetsMeasuredAtFairValueThroughProfitOrLoss || null,
-          longTermAssets: balanceSheet.longTermAssets || null,
-          creditsFromOperations: balanceSheet.creditsFromOperations || null,
-          complementaryPension: balanceSheet.complementaryPension || null,
-          deferredSellingExpenses: balanceSheet.deferredSellingExpenses || null,
-          nonCurrentAssets: balanceSheet.nonCurrentAssets || null,
-          deferredTaxes: balanceSheet.deferredTaxes || null,
-          financialLiabilitiesMeasuredAtFairValueThroughIncome: balanceSheet.financialLiabilitiesMeasuredAtFairValueThroughIncome || null,
-          financialLiabilitiesAtAmortizedCost: balanceSheet.financialLiabilitiesAtAmortizedCost || null,
-          provisions: balanceSheet.provisions || null,
-          shareholdersEquity: balanceSheet.shareholdersEquity || null,
-          realizedShareCapital: balanceSheet.realizedShareCapital || null,
-          profitReserves: balanceSheet.profitReserves || null,
-          accumulatedProfitsOrLosses: balanceSheet.accumulatedProfitsOrLosses || null,
-          equityValuationAdjustments: balanceSheet.equityValuationAdjustments || null,
-          currentLiabilities: balanceSheet.currentLiabilities || null,
-          nonCurrentLiabilities: balanceSheet.nonCurrentLiabilities || null,
-          thirdPartyDeposits: balanceSheet.thirdPartyDeposits || null,
-          otherDebits: balanceSheet.otherDebits || null
-        }
-      });
+        });
     } catch (error: any) {
       console.error(`❌ Erro ao processar balanço ${period} de ${balanceSheet.endDate} para ${ticker}:`, error.message);
     }
   };
 
-  // Processar balanços anuais
-  if (data.balanceSheetHistory) {
-    for (const balanceSheet of data.balanceSheetHistory) {
-      await processBalanceSheet(balanceSheet, 'YEARLY');
-    }
-    console.log(`  📊 ${data.balanceSheetHistory.length} balanços anuais processados`);
+  // Verificar dados existentes específicos
+  const [yearlyExisting, quarterlyExisting] = await Promise.all([
+    getExistingDataDates(companyId, 'YEARLY'),
+    getExistingDataDates(companyId, 'QUARTERLY')
+  ]);
+
+  // Filtrar e processar balanços anuais (apenas os que não existem)
+  const yearlyBalanceSheets = filterMissingData(
+    data.balanceSheetHistory, 
+    yearlyExisting.balanceSheetDates, 
+    'YEARLY'
+  );
+    
+  if (yearlyBalanceSheets.length > 0) {
+    console.log(`  📊 Processando ${yearlyBalanceSheets.length} balanços anuais faltantes (de ${data.balanceSheetHistory?.length || 0} totais)`);
+    await processDataSequentially(
+      yearlyBalanceSheets,
+      (balanceSheet) => processBalanceSheet(balanceSheet, 'YEARLY')
+    );
+  } else {
+    console.log(`  ✅ Todos os balanços anuais já existem no banco`);
   }
 
-  // Processar balanços trimestrais
-  if (data.balanceSheetHistoryQuarterly) {
-    for (const balanceSheet of data.balanceSheetHistoryQuarterly) {
-      await processBalanceSheet(balanceSheet, 'QUARTERLY');
-    }
-    console.log(`  📊 ${data.balanceSheetHistoryQuarterly.length} balanços trimestrais processados`);
+  // Filtrar e processar balanços trimestrais (apenas os que não existem)
+  const quarterlyBalanceSheets = filterMissingData(
+    data.balanceSheetHistoryQuarterly, 
+    quarterlyExisting.balanceSheetDates, 
+    'QUARTERLY'
+  );
+    
+  if (quarterlyBalanceSheets.length > 0) {
+    console.log(`  📊 Processando ${quarterlyBalanceSheets.length} balanços trimestrais faltantes (de ${data.balanceSheetHistoryQuarterly?.length || 0} totais)`);
+    await processDataSequentially(
+      quarterlyBalanceSheets,
+      (balanceSheet) => processBalanceSheet(balanceSheet, 'QUARTERLY')
+    );
+  } else {
+    console.log(`  ✅ Todos os balanços trimestrais já existem no banco`);
   }
 }
 
-// Função para processar dados da DRE
-async function processIncomeStatements(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+// Função para processar dados da DRE (otimizada)
+async function processIncomeStatements(
+  companyId: number, 
+  ticker: string, 
+  data: BrapiProResponse['results'][0], 
+): Promise<void> {
   const processIncomeStatement = async (incomeStatement: BrapiIncomeStatement, period: 'YEARLY' | 'QUARTERLY') => {
     if (!incomeStatement.endDate) return;
     
@@ -1088,14 +1434,14 @@ async function processIncomeStatements(companyId: number, ticker: string, data: 
       const endDate = new Date(incomeStatement.endDate);
       
       await prisma.incomeStatement.upsert({
-        where: {
-          companyId_endDate_period: {
-            companyId,
-            endDate,
-            period
-          }
-        },
-        update: {
+          where: {
+            companyId_endDate_period: {
+              companyId,
+              endDate,
+              period
+            }
+          },
+          update: {
           totalRevenue: incomeStatement.totalRevenue || null,
           costOfRevenue: incomeStatement.costOfRevenue || null,
           grossProfit: incomeStatement.grossProfit || null,
@@ -1195,32 +1541,61 @@ async function processIncomeStatements(companyId: number, ticker: string, data: 
           reinsuranceOperations: incomeStatement.reinsuranceOperations || null,
           complementaryPensionOperations: incomeStatement.complementaryPensionOperations || null,
           capitalizationOperations: incomeStatement.capitalizationOperations || null
-        }
-      });
+        }});
     } catch (error: any) {
       console.error(`❌ Erro ao processar DRE ${period} de ${incomeStatement.endDate} para ${ticker}:`, error.message);
     }
   };
 
-  // Processar DREs anuais
-  if (data.incomeStatementHistory) {
-    for (const incomeStatement of data.incomeStatementHistory) {
-      await processIncomeStatement(incomeStatement, 'YEARLY');
-    }
-    console.log(`  📈 ${data.incomeStatementHistory.length} DREs anuais processadas`);
+  // Verificar dados existentes específicos
+  const [yearlyExisting, quarterlyExisting] = await Promise.all([
+    getExistingDataDates(companyId, 'YEARLY'),
+    getExistingDataDates(companyId, 'QUARTERLY')
+  ]);
+
+  // Filtrar e processar DREs anuais (apenas as que não existem)
+  const yearlyIncomeStatements = filterMissingData(
+    data.incomeStatementHistory, 
+    yearlyExisting.incomeStatementDates, 
+    'YEARLY'
+  );
+    
+  if (yearlyIncomeStatements.length > 0) {
+    console.log(`  📈 Processando ${yearlyIncomeStatements.length} DREs anuais faltantes (de ${data.incomeStatementHistory?.length || 0} totais)`);
+    await processDataSequentially(
+      yearlyIncomeStatements,
+      (incomeStatement) => processIncomeStatement(incomeStatement, 'YEARLY')
+    );
+    console.log(`  ✅ ${yearlyIncomeStatements.length} DREs anuais processadas`);
+  } else {
+    console.log(`  ✅ Todas as DREs anuais já existem no banco`);
   }
 
-  // Processar DREs trimestrais
-  if (data.incomeStatementHistoryQuarterly) {
-    for (const incomeStatement of data.incomeStatementHistoryQuarterly) {
-      await processIncomeStatement(incomeStatement, 'QUARTERLY');
-    }
-    console.log(`  📈 ${data.incomeStatementHistoryQuarterly.length} DREs trimestrais processadas`);
+  // Filtrar e processar DREs trimestrais (apenas as que não existem)
+  const quarterlyIncomeStatements = filterMissingData(
+    data.incomeStatementHistoryQuarterly, 
+    quarterlyExisting.incomeStatementDates, 
+    'QUARTERLY'
+  );
+    
+  if (quarterlyIncomeStatements.length > 0) {
+    console.log(`  📈 Processando ${quarterlyIncomeStatements.length} DREs trimestrais faltantes (de ${data.incomeStatementHistoryQuarterly?.length || 0} totais)`);
+    await processDataSequentially(
+      quarterlyIncomeStatements,
+      (incomeStatement) => processIncomeStatement(incomeStatement, 'QUARTERLY')
+    );
+    console.log(`  ✅ ${quarterlyIncomeStatements.length} DREs trimestrais processadas`);
+  } else {
+    console.log(`  ✅ Todas as DREs trimestrais já existem no banco`);
   }
 }
 
-// Função para processar dados do fluxo de caixa
-async function processCashflowStatements(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+// Função para processar dados do fluxo de caixa (otimizada)
+async function processCashflowStatements(
+  companyId: number, 
+  ticker: string, 
+  data: BrapiProResponse['results'][0], 
+): Promise<void> {
   const processCashflowStatement = async (cashflowStatement: BrapiCashflowStatement, period: 'YEARLY' | 'QUARTERLY') => {
     if (!cashflowStatement.endDate) return;
     
@@ -1228,14 +1603,14 @@ async function processCashflowStatements(companyId: number, ticker: string, data
       const endDate = new Date(cashflowStatement.endDate);
       
       await prisma.cashflowStatement.upsert({
-        where: {
-          companyId_endDate_period: {
-            companyId,
-            endDate,
-            period
-          }
-        },
-        update: {
+          where: {
+            companyId_endDate_period: {
+              companyId,
+              endDate,
+              period
+            }
+          },
+          update: {
           operatingCashFlow: cashflowStatement.operatingCashFlow || null,
           incomeFromOperations: cashflowStatement.incomeFromOperations || null,
           netIncomeBeforeTaxes: cashflowStatement.netIncomeBeforeTaxes || null,
@@ -1265,32 +1640,61 @@ async function processCashflowStatements(companyId: number, ticker: string, data
           initialCashBalance: cashflowStatement.initialCashBalance || null,
           finalCashBalance: cashflowStatement.finalCashBalance || null,
           cashGeneratedInOperations: cashflowStatement.cashGeneratedInOperations || null
-        }
-      });
+        }});
     } catch (error: any) {
       console.error(`❌ Erro ao processar DFC ${period} de ${cashflowStatement.endDate} para ${ticker}:`, error.message);
     }
   };
 
-  // Processar DFCs anuais
-  if (data.cashflowHistory) {
-    for (const cashflowStatement of data.cashflowHistory) {
-      await processCashflowStatement(cashflowStatement, 'YEARLY');
-    }
-    console.log(`  💰 ${data.cashflowHistory.length} DFCs anuais processadas`);
+  // Verificar dados existentes específicos
+  const [yearlyExisting, quarterlyExisting] = await Promise.all([
+    getExistingDataDates(companyId, 'YEARLY'),
+    getExistingDataDates(companyId, 'QUARTERLY')
+  ]);
+
+  // Filtrar e processar DFCs anuais (apenas os que não existem)
+  const yearlyCashflowStatements = filterMissingData(
+    data.cashflowHistory, 
+    yearlyExisting.cashflowStatementDates, 
+    'YEARLY'
+  );
+    
+  if (yearlyCashflowStatements.length > 0) {
+    console.log(`  💰 Processando ${yearlyCashflowStatements.length} DFCs anuais faltantes (de ${data.cashflowHistory?.length || 0} totais)`);
+    await processDataSequentially(
+      yearlyCashflowStatements,
+      (cashflowStatement) => processCashflowStatement(cashflowStatement, 'YEARLY')
+    );
+    console.log(`  ✅ ${yearlyCashflowStatements.length} DFCs anuais processadas`);
+  } else {
+    console.log(`  ✅ Todas as DFCs anuais já existem no banco`);
   }
 
-  // Processar DFCs trimestrais
-  if (data.cashflowHistoryQuarterly) {
-    for (const cashflowStatement of data.cashflowHistoryQuarterly) {
-      await processCashflowStatement(cashflowStatement, 'QUARTERLY');
-    }
-    console.log(`  💰 ${data.cashflowHistoryQuarterly.length} DFCs trimestrais processadas`);
+  // Filtrar e processar DFCs trimestrais (apenas os que não existem)
+  const quarterlyCashflowStatements = filterMissingData(
+    data.cashflowHistoryQuarterly, 
+    quarterlyExisting.cashflowStatementDates, 
+    'QUARTERLY'
+  );
+    
+  if (quarterlyCashflowStatements.length > 0) {
+    console.log(`  💰 Processando ${quarterlyCashflowStatements.length} DFCs trimestrais faltantes (de ${data.cashflowHistoryQuarterly?.length || 0} totais)`);
+    await processDataSequentially(
+      quarterlyCashflowStatements,
+      (cashflowStatement) => processCashflowStatement(cashflowStatement, 'QUARTERLY')
+    );
+    console.log(`  ✅ ${quarterlyCashflowStatements.length} DFCs trimestrais processadas`);
+  } else {
+    console.log(`  ✅ Todas as DFCs trimestrais já existem no banco`);
   }
 }
 
-// Função para processar estatísticas-chave
-async function processKeyStatistics(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+// Função para processar estatísticas-chave (otimizada)
+async function processKeyStatistics(
+  companyId: number, 
+  ticker: string, 
+  data: BrapiProResponse['results'][0]
+): Promise<void> {
   const processKeyStatistic = async (keyStatistic: BrapiKeyStatistics, period: 'YEARLY' | 'QUARTERLY') => {
     if (!keyStatistic.updatedAt) return;
     
@@ -1354,25 +1758,66 @@ async function processKeyStatistics(companyId: number, ticker: string, data: Bra
     }
   };
 
-  // Processar estatísticas anuais
-  if (data.defaultKeyStatisticsHistory) {
-    for (const keyStatistic of data.defaultKeyStatisticsHistory) {
-      await processKeyStatistic(keyStatistic, 'YEARLY');
-    }
-    console.log(`  📋 ${data.defaultKeyStatisticsHistory.length} estatísticas anuais processadas`);
+  // Processar estatística TTM atual (sempre atualizar)
+  if (data.defaultKeyStatistics) {
+    const currentYear = new Date().getFullYear();
+    const ttmKeyStatistic = {
+      ...data.defaultKeyStatistics,
+      updatedAt: new Date().toISOString()
+    };
+    await processKeyStatistic(ttmKeyStatistic, 'YEARLY');
+    console.log(`  📋 Estatística TTM processada para ${currentYear}`);
   }
 
-  // Processar estatísticas trimestrais
-  if (data.defaultKeyStatisticsHistoryQuarterly) {
-    for (const keyStatistic of data.defaultKeyStatisticsHistoryQuarterly) {
-      await processKeyStatistic(keyStatistic, 'QUARTERLY');
-    }
-    console.log(`  📋 ${data.defaultKeyStatisticsHistoryQuarterly.length} estatísticas trimestrais processadas`);
+  // Verificar dados existentes específicos
+  const [yearlyExisting, quarterlyExisting] = await Promise.all([
+    getExistingDataDates(companyId, 'YEARLY'),
+    getExistingDataDates(companyId, 'QUARTERLY')
+  ]);
+
+  // Filtrar e processar estatísticas anuais históricas (apenas as que não existem)
+  const yearlyKeyStatistics = filterMissingData(
+    data.defaultKeyStatisticsHistory, 
+    yearlyExisting.keyStatisticsDates, 
+    'YEARLY'
+  );
+    
+  if (yearlyKeyStatistics.length > 0) {
+    console.log(`  📋 Processando ${yearlyKeyStatistics.length} estatísticas anuais faltantes (de ${data.defaultKeyStatisticsHistory?.length || 0} totais)`);
+    await processDataSequentially(
+      yearlyKeyStatistics,
+      (keyStatistic) => processKeyStatistic(keyStatistic, 'YEARLY')
+    );
+    console.log(`  ✅ ${yearlyKeyStatistics.length} estatísticas anuais processadas`);
+  } else {
+    console.log(`  ✅ Todas as estatísticas anuais já existem no banco`);
+  }
+
+  // Filtrar e processar estatísticas trimestrais (apenas as que não existem)
+  const quarterlyKeyStatistics = filterMissingData(
+    data.defaultKeyStatisticsHistoryQuarterly, 
+    quarterlyExisting.keyStatisticsDates, 
+    'QUARTERLY'
+  );
+    
+  if (quarterlyKeyStatistics.length > 0) {
+    console.log(`  📋 Processando ${quarterlyKeyStatistics.length} estatísticas trimestrais faltantes (de ${data.defaultKeyStatisticsHistoryQuarterly?.length || 0} totais)`);
+    await processDataSequentially(
+      quarterlyKeyStatistics,
+      (keyStatistic) => processKeyStatistic(keyStatistic, 'QUARTERLY')
+    );
+    console.log(`  ✅ ${quarterlyKeyStatistics.length} estatísticas trimestrais processadas`);
+  } else {
+    console.log(`  ✅ Todas as estatísticas trimestrais já existem no banco`);
   }
 }
 
-// Função para processar DVA
-async function processValueAddedStatements(companyId: number, ticker: string, data: BrapiProResponse['results'][0]): Promise<void> {
+// Função para processar DVA (otimizada)
+async function processValueAddedStatements(
+  companyId: number, 
+  ticker: string, 
+  data: BrapiProResponse['results'][0]
+): Promise<void> {
   const processValueAddedStatement = async (valueAddedStatement: BrapiValueAddedStatement, period: 'YEARLY' | 'QUARTERLY') => {
     if (!valueAddedStatement.endDate) return;
     
@@ -1404,25 +1849,138 @@ async function processValueAddedStatements(companyId: number, ticker: string, da
     }
   };
 
-  // Processar DVAs anuais
-  if (data.valueAddedHistory) {
-    for (const valueAddedStatement of data.valueAddedHistory) {
-      await processValueAddedStatement(valueAddedStatement, 'YEARLY');
-    }
-    console.log(`  💡 ${data.valueAddedHistory.length} DVAs anuais processadas`);
+  // Verificar dados existentes específicos
+  const [yearlyExisting, quarterlyExisting] = await Promise.all([
+    getExistingDataDates(companyId, 'YEARLY'),
+    getExistingDataDates(companyId, 'QUARTERLY')
+  ]);
+
+  // Filtrar e processar DVAs anuais (apenas as que não existem)
+  const yearlyValueAddedStatements = filterMissingData(
+    data.valueAddedHistory, 
+    yearlyExisting.valueAddedStatementDates, 
+    'YEARLY'
+  );
+    
+  if (yearlyValueAddedStatements.length > 0) {
+    console.log(`  💡 Processando ${yearlyValueAddedStatements.length} DVAs anuais faltantes (de ${data.valueAddedHistory?.length || 0} totais)`);
+    await processDataSequentially(
+      yearlyValueAddedStatements,
+      (valueAddedStatement) => processValueAddedStatement(valueAddedStatement, 'YEARLY')
+    );
+    console.log(`  ✅ ${yearlyValueAddedStatements.length} DVAs anuais processadas`);
+  } else {
+    console.log(`  ✅ Todas as DVAs anuais já existem no banco`);
   }
 
-  // Processar DVAs trimestrais
-  if (data.valueAddedHistoryQuarterly) {
-    for (const valueAddedStatement of data.valueAddedHistoryQuarterly) {
-      await processValueAddedStatement(valueAddedStatement, 'QUARTERLY');
+  // Filtrar e processar DVAs trimestrais (apenas as que não existem)
+  const quarterlyValueAddedStatements = filterMissingData(
+    data.valueAddedHistoryQuarterly, 
+    quarterlyExisting.valueAddedStatementDates, 
+    'QUARTERLY'
+  );
+    
+  if (quarterlyValueAddedStatements.length > 0) {
+    console.log(`  💡 Processando ${quarterlyValueAddedStatements.length} DVAs trimestrais faltantes (de ${data.valueAddedHistoryQuarterly?.length || 0} totais)`);
+    await processDataSequentially(
+      quarterlyValueAddedStatements,
+      (valueAddedStatement) => processValueAddedStatement(valueAddedStatement, 'QUARTERLY')
+    );
+    console.log(`  ✅ ${quarterlyValueAddedStatements.length} DVAs trimestrais processadas`);
+  } else {
+    console.log(`  ✅ Todas as DVAs trimestrais já existem no banco`);
+  }
+}
+
+// Função para processar dados TTM do financialData
+async function processFinancialDataTTM(companyId: number, ticker: string, financialData: BrapiFinancialData): Promise<void> {
+  try {
+    const currentYear = new Date().getFullYear();
+    
+    console.log(`🔄 Processando dados TTM do financialData para ${ticker} (${currentYear})...`);
+    
+    // Buscar dados financeiros existentes para o ano atual
+    const existingFinancialData = await prisma.financialData.findUnique({
+      where: {
+        companyId_year: {
+          companyId,
+          year: currentYear
+        }
+      }
+    });
+    
+    // Preparar dados TTM para atualização
+    const ttmData = {
+      // === INDICADORES DE VALUATION ===
+      forwardPE: financialData.currentPrice && financialData.earningsGrowth ? 
+        financialData.currentPrice / (financialData.earningsGrowth * financialData.currentPrice) : null,
+      
+      // === DADOS DE MERCADO ===
+      enterpriseValue: financialData.ebitda ? 
+        (existingFinancialData?.marketCap ? Number(existingFinancialData.marketCap) + (financialData.totalDebt || 0) - (financialData.totalCash || 0) : null) : null,
+      
+      // === INDICADORES DE ENDIVIDAMENTO E LIQUIDEZ ===
+      liquidezCorrente: financialData.currentRatio || null,
+      liquidezRapida: financialData.quickRatio || null,
+      debtToEquity: financialData.debtToEquity || null,
+      
+      // === INDICADORES DE RENTABILIDADE ===
+      roe: financialData.returnOnEquity || null,
+      roa: financialData.returnOnAssets || null,
+      margemBruta: financialData.grossMargins || null,
+      margemEbitda: financialData.ebitdaMargins || null,
+      margemLiquida: financialData.profitMargins || null,
+      
+      // === INDICADORES DE CRESCIMENTO ===
+      crescimentoLucros: financialData.earningsGrowth || null,
+      crescimentoReceitas: financialData.revenueGrowth || null,
+      
+      // === DADOS FINANCEIROS OPERACIONAIS ===
+      ebitda: financialData.ebitda || null,
+      receitaTotal: financialData.totalRevenue || null,
+      lucroLiquido: financialData.grossProfits || null,
+      fluxoCaixaOperacional: financialData.operatingCashflow || null,
+      fluxoCaixaLivre: financialData.freeCashflow || null,
+      totalCaixa: financialData.totalCash || null,
+      totalDivida: financialData.totalDebt || null,
+      receitaPorAcao: financialData.revenuePerShare || null,
+      caixaPorAcao: financialData.totalCashPerShare || null,
+      
+      // === METADADOS ===
+      dataSource: existingFinancialData?.dataSource === 'ward+brapi' ? 'ward+brapi' : 'brapi'
+    };
+    
+    // Atualizar apenas os campos TTM, preservando dados históricos da Ward
+    if (existingFinancialData) {
+      await prisma.financialData.update({
+        where: {
+          companyId_year: {
+            companyId,
+            year: currentYear
+          }
+        },
+        data: ttmData
+      });
+      console.log(`✅ Dados TTM atualizados para ${ticker} (${currentYear})`);
+    } else {
+      // Se não existe dados para o ano atual, criar novo registro apenas com TTM
+      await prisma.financialData.create({
+        data: {
+          companyId,
+          year: currentYear,
+          ...ttmData
+        }
+      });
+      console.log(`✅ Dados TTM criados para ${ticker} (${currentYear})`);
     }
-    console.log(`  💡 ${data.valueAddedHistoryQuarterly.length} DVAs trimestrais processadas`);
+    
+  } catch (error: any) {
+    console.error(`❌ Erro ao processar dados TTM para ${ticker}:`, error.message);
   }
 }
 
 // Função para processar uma empresa
-async function processCompany(ticker: string, enableBrapiComplement: boolean = true): Promise<void> {
+async function processCompany(ticker: string, enableBrapiComplement: boolean = true, forceFullUpdate: boolean = false): Promise<void> {
   try {
     console.log(`\n🏢 Processando ${ticker}...`);
     
@@ -1434,19 +1992,29 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       return;
     }
 
-    // Buscar dados completos da Brapi PRO
-    const brapiProData = await fetchBrapiProData(ticker);
+    // Verificar dados existentes para otimização
+    const existingData = await checkExistingHistoricalData(company.id);
+    
+    // Buscar dados completos da Brapi PRO (otimizado)
+    const brapiProData = await fetchBrapiProData(ticker, forceFullUpdate);
     if (brapiProData) {
-      console.log(`🔄 Processando dados históricos completos da Brapi PRO para ${ticker}...`);
+      console.log(`🔄 Processando dados históricos da Brapi PRO para ${ticker}...`);
       
-      // Processar todos os tipos de dados históricos em paralelo
-      await Promise.all([
-        processBalanceSheets(company.id, ticker, brapiProData),
-        processIncomeStatements(company.id, ticker, brapiProData),
-        processCashflowStatements(company.id, ticker, brapiProData),
-        processKeyStatistics(company.id, ticker, brapiProData),
-        processValueAddedStatements(company.id, ticker, brapiProData)
-      ]);
+      // Processar todos os tipos de dados históricos sequencialmente
+      console.log(`🔄 Processando dados históricos sequencialmente para ${ticker}...`);
+      
+      await processBalanceSheets(company.id, ticker, brapiProData);
+      await processIncomeStatements(company.id, ticker, brapiProData);
+      await processCashflowStatements(company.id, ticker, brapiProData);
+      await processKeyStatistics(company.id, ticker, brapiProData);
+      await processValueAddedStatements(company.id, ticker, brapiProData);
+      
+      console.log(`✅ Todos os tipos de dados históricos processados para ${ticker}`);
+      
+      // Processar dados TTM do financialData (sempre atualizar)
+      if (brapiProData.financialData) {
+        await processFinancialDataTTM(company.id, ticker, brapiProData.financialData);
+      }
       
       console.log(`✅ Dados históricos da Brapi PRO processados para ${ticker}`);
     }
@@ -1945,25 +2513,30 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       }
     };
 
-    // Processar anos em lotes paralelos (máximo 5 por vez para não sobrecarregar o banco)
-    const BATCH_SIZE = 5;
-    const batches = [];
-    
-    for (let i = 0; i < wardData.historicalStocks.length; i += BATCH_SIZE) {
-      batches.push(wardData.historicalStocks.slice(i, i + BATCH_SIZE));
-    }
+    // Processar anos sequencialmente
+    console.log(`📦 Processando ${wardData.historicalStocks.length} anos sequencialmente`);
 
-    console.log(`📦 Processando ${wardData.historicalStocks.length} anos em ${batches.length} lotes de até ${BATCH_SIZE} anos cada`);
-
-    for (const batch of batches) {
-      const results = await Promise.all(batch.map(processYear));
-      
-      // Contar sucessos e falhas
-      const successful = results.filter(r => r.success).length;
-      const failed = results.filter(r => !r.success).length;
-      
-      if (failed > 0) {
-        console.log(`⚠️  Lote processado: ${successful} sucessos, ${failed} falhas`);
+    const results = [];
+    for (let i = 0; i < wardData.historicalStocks.length; i++) {
+      const wardStock = wardData.historicalStocks[i];
+      try {
+        const result = await processYear(wardStock);
+        results.push(result);
+        
+        // Log de progresso a cada 5 anos ou no final
+        if ((i + 1) % 5 === 0 || i === wardData.historicalStocks.length - 1) {
+          const successful = results.filter(r => r.success).length;
+          const failed = results.filter(r => !r.success).length;
+          console.log(`  📊 Progresso: ${i + 1}/${wardData.historicalStocks.length} anos processados (${successful} sucessos, ${failed} falhas)`);
+        }
+        
+        // Pequeno delay entre anos para não sobrecarregar o banco
+        if (i < wardData.historicalStocks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error: any) {
+        console.error(`❌ Erro ao processar ano ${wardStock.ano}:`, error.message);
+        results.push({ success: false, year: wardStock.ano, error: error.message });
       }
     }
 
@@ -1981,20 +2554,37 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
 
 // Função principal
 async function main() {
+  const startTime = Date.now();
+  console.log(`🚀 Iniciando fetch de dados da Ward API... [${new Date().toLocaleString('pt-BR')}]\n`);
+  
   try {
-    console.log('🚀 Iniciando fetch de dados da Ward API...\n');
     
-    // Verificar argumentos: tickers e opção --no-brapi
+    // Verificar argumentos: tickers e opções
     const args = process.argv.slice(2);
     const noBrapiIndex = args.indexOf('--no-brapi');
+    const forceFullIndex = args.indexOf('--force-full');
     const enableBrapiComplement = noBrapiIndex === -1;
+    const forceFullUpdate = forceFullIndex !== -1;
     
-    // Remover --no-brapi dos tickers se presente
-    const tickers = noBrapiIndex !== -1 ? args.filter((_, index) => index !== noBrapiIndex) : args;
+    // Remover opções dos tickers
+    const tickers = args.filter((arg, index) => 
+      index !== noBrapiIndex && 
+      index !== forceFullIndex && 
+      arg !== '--no-brapi' && 
+      arg !== '--force-full'
+    );
     
     console.log(`🔧 Complemento Brapi: ${enableBrapiComplement ? '✅ Ativado' : '❌ Desativado'}`);
+    console.log(`🔄 Atualização completa: ${forceFullUpdate ? '✅ Forçada' : '❌ Otimizada'}`);
+    
     if (enableBrapiComplement) {
       console.log('   📊 Dados do ano atual serão complementados com indicadores da Brapi API');
+    }
+    
+    if (forceFullUpdate) {
+      console.log('   🔄 Todos os dados históricos serão reprocessados (ignora otimizações)');
+    } else {
+      console.log('   ⚡ Modo otimizado: apenas dados recentes serão atualizados');
     }
     
     if (tickers.length === 0) {
@@ -2014,61 +2604,59 @@ async function main() {
         
         console.log(`📊 Encontradas ${companies.length} empresas no banco como fallback`);
         
-        // Processar empresas em lotes paralelos
-        const COMPANY_BATCH_SIZE = 3;
-        const companyBatches = [];
+        // Processar empresas sequencialmente
+        console.log(`📦 Processando ${companies.length} empresas sequencialmente`);
         
-        for (let i = 0; i < companies.length; i += COMPANY_BATCH_SIZE) {
-          companyBatches.push(companies.slice(i, i + COMPANY_BATCH_SIZE));
-        }
-        
-        console.log(`📦 Processando ${companies.length} empresas em ${companyBatches.length} lotes de até ${COMPANY_BATCH_SIZE} empresas cada`);
-        
-        for (const batch of companyBatches) {
-          await Promise.all(batch.map(company => processCompany(company.ticker, enableBrapiComplement)));
-          
-          // Delay entre lotes para evitar rate limiting
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        for (let i = 0; i < companies.length; i++) {
+          const company = companies[i];
+          try {
+            console.log(`\n🏢 Processando ${i + 1}/${companies.length}: ${company.ticker}`);
+            
+            await processCompany(company.ticker, enableBrapiComplement, forceFullUpdate);
+            
+            // Log de progresso a cada 10 empresas ou no final
+            if ((i + 1) % 10 === 0 || i === companies.length - 1) {
+              console.log(`📊 Progresso geral: ${i + 1}/${companies.length} empresas processadas`);
+            }
+            
+            // Delay entre empresas para não sobrecarregar o banco
+            if (i < companies.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          } catch (error: any) {
+            console.error(`❌ Erro ao processar empresa ${company.ticker}:`, error.message);
+          }
         }
       } else {
         console.log(`📊 Processando ${wardTickers.length} tickers da Ward API`);
         
-        // Processar tickers da Ward em lotes paralelos
-        const WARD_BATCH_SIZE = 3;
-        const wardBatches = [];
-        
-        for (let i = 0; i < wardTickers.length; i += WARD_BATCH_SIZE) {
-          wardBatches.push(wardTickers.slice(i, i + WARD_BATCH_SIZE));
-        }
-        
-        console.log(`📦 Processando ${wardTickers.length} tickers em ${wardBatches.length} lotes de até ${WARD_BATCH_SIZE} empresas cada`);
+        // Processar tickers da Ward sequencialmente
+        console.log(`📦 Processando ${wardTickers.length} tickers sequencialmente`);
         
         let processed = 0;
         let errors = 0;
         
-        for (let batchIndex = 0; batchIndex < wardBatches.length; batchIndex++) {
-          const batch = wardBatches[batchIndex];
+        for (let i = 0; i < wardTickers.length; i++) {
+          const wardTicker = wardTickers[i];
           try {
-            const results = await Promise.allSettled(
-              batch.map(wardTicker => processCompany(wardTicker.ticker, enableBrapiComplement))
-            );
+            console.log(`\n🏢 Processando ${i + 1}/${wardTickers.length}: ${wardTicker.ticker}`);
             
-            // Contar sucessos e falhas
-            const successful = results.filter(r => r.status === 'fulfilled').length;
-            const failed = results.filter(r => r.status === 'rejected').length;
+            await processCompany(wardTicker.ticker, enableBrapiComplement, forceFullUpdate);
+            processed++;
             
-            processed += successful;
-            errors += failed;
+            // Log de progresso a cada 10 empresas ou no final
+            if ((i + 1) % 10 === 0 || i === wardTickers.length - 1) {
+              console.log(`📊 Progresso geral: ${processed}/${wardTickers.length} sucessos, ${errors} erros`);
+            }
             
-            // Log de progresso
-            console.log(`📈 Lote ${batchIndex + 1}/${wardBatches.length}: ${successful} sucessos, ${failed} falhas`);
-            
-            // Delay entre lotes para evitar rate limiting
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Delay entre empresas para não sobrecarregar o banco
+            if (i < wardTickers.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
             
           } catch (error: any) {
-            console.error(`❌ Erro no lote ${batchIndex + 1}:`, error.message);
-            errors += batch.length;
+            console.error(`❌ Erro ao processar ${wardTicker.ticker}:`, error.message);
+            errors++;
           }
         }
         
@@ -2079,35 +2667,48 @@ async function main() {
     } else {
       console.log(`📋 Processando tickers especificados: ${tickers.join(', ')}`);
       
-      // Para poucos tickers, processar em paralelo sem lotes
-      if (tickers.length <= 5) {
-        await Promise.all(tickers.map(ticker => processCompany(ticker.toUpperCase(), enableBrapiComplement)));
-      } else {
-        // Para muitos tickers, usar lotes
-        const SPECIFIED_BATCH_SIZE = 3;
-        const specifiedBatches = [];
-        
-        for (let i = 0; i < tickers.length; i += SPECIFIED_BATCH_SIZE) {
-          specifiedBatches.push(tickers.slice(i, i + SPECIFIED_BATCH_SIZE));
-        }
-        
-        console.log(`📦 Processando ${tickers.length} tickers em ${specifiedBatches.length} lotes de até ${SPECIFIED_BATCH_SIZE} empresas cada`);
-        
-        for (const batch of specifiedBatches) {
-          await Promise.all(batch.map(ticker => processCompany(ticker.toUpperCase(), enableBrapiComplement)));
+      // Processar tickers especificados sequencialmente
+      console.log(`📦 Processando ${tickers.length} tickers sequencialmente`);
+      
+      for (let i = 0; i < tickers.length; i++) {
+        const ticker = tickers[i];
+        try {
+          console.log(`\n🏢 Processando ${i + 1}/${tickers.length}: ${ticker.toUpperCase()}`);
           
-          // Delay entre lotes
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await processCompany(ticker.toUpperCase(), enableBrapiComplement, forceFullUpdate);
+          
+          console.log(`📊 Ticker ${i + 1}/${tickers.length} concluído`);
+          
+          // Delay entre tickers
+          if (i < tickers.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (error: any) {
+          console.error(`❌ Erro ao processar ticker ${ticker}:`, error.message);
         }
       }
     }
     
+    const endTime = Date.now();
+    const totalTime = endTime - startTime;
+    const minutes = Math.floor(totalTime / 60000);
+    const seconds = Math.floor((totalTime % 60000) / 1000);
+    
     console.log('\n✅ Fetch de dados da Ward concluído!');
+    console.log(`⏱️  Tempo total de processamento: ${minutes}m ${seconds}s`);
+    console.log(`📅 Finalizado em: ${new Date().toLocaleString('pt-BR')}`);
     
   } catch (error: any) {
+    const endTime = Date.now();
+    const totalTime = endTime - startTime;
+    const minutes = Math.floor(totalTime / 60000);
+    const seconds = Math.floor((totalTime % 60000) / 1000);
+    
     console.error('❌ Erro geral:', error.message);
+    console.log(`⏱️  Tempo até erro: ${minutes}m ${seconds}s`);
   } finally {
-    await prisma.$disconnect();
+    // Desconectar o cliente Prisma de background
+    await backgroundPrismaManager.disconnect();
   }
 }
 
@@ -2124,9 +2725,15 @@ export {
   createOrUpdateCompany, 
   fetchBrapiBasicData,
   fetchBrapiProData,
+  fetchBrapiTTMData,
   processBalanceSheets,
   processIncomeStatements,
   processCashflowStatements,
   processKeyStatistics,
-  processValueAddedStatements
+  processValueAddedStatements,
+  processFinancialDataTTM,
+  checkExistingHistoricalData,
+  getExistingDataDates,
+  filterMissingData,
+  processDataSequentially
 };

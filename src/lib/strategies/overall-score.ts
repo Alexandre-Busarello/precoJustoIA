@@ -26,6 +26,11 @@ export interface FinancialStatementsData {
   incomeStatements: Record<string, unknown>[];
   balanceSheets: Record<string, unknown>[];
   cashflowStatements: Record<string, unknown>[];
+  company?: {
+    sector?: string | null;
+    industry?: string | null;
+    marketCap?: number | null;
+  };
 }
 
 // Interface para análise das demonstrações
@@ -34,231 +39,729 @@ export interface StatementsAnalysis {
   redFlags: string[];
   positiveSignals: string[];
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  companyStrength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+  contextualFactors: string[];
 }
 
-// === ANÁLISE INTELIGENTE DAS DEMONSTRAÇÕES FINANCEIRAS ===
+// === ANÁLISE INTELIGENTE E CONTEXTUAL DAS DEMONSTRAÇÕES FINANCEIRAS ===
 export function analyzeFinancialStatements(data: FinancialStatementsData): StatementsAnalysis {
-  const { incomeStatements, balanceSheets, cashflowStatements } = data;
+  const { incomeStatements, balanceSheets, cashflowStatements, company } = data;
   
   let score = 100;
   const redFlags: string[] = [];
   const positiveSignals: string[] = [];
+  const contextualFactors: string[] = [];
   
-  // Verificar se temos dados suficientes (pelo menos 4 trimestres)
-  if (incomeStatements.length < 4 || balanceSheets.length < 4 || cashflowStatements.length < 4) {
-    score -= 10;
+  // === ANÁLISE DE ROBUSTEZ FINANCEIRA ===
+  const companyStrength = assessCompanyStrength(data);
+  
+  // === CONTEXTO SETORIAL E TAMANHO ===
+  const sectorContext = getSectorContext(company?.sector || null, company?.industry || null);
+  const sizeContext = getSizeContext(company?.marketCap || null);
+  
+  // Verificar se temos dados suficientes - expandir para 8-12 trimestres
+  const minQuarters = 8;
+  const hasInsufficientData = incomeStatements.length < 4 || balanceSheets.length < 4 || cashflowStatements.length < 4;
+  const hasLimitedHistory = incomeStatements.length < minQuarters;
+  
+  if (hasInsufficientData) {
+    score -= 15;
     redFlags.push('Dados históricos insuficientes para análise completa');
+  } else if (hasLimitedHistory) {
+    score -= 5;
+    contextualFactors.push('Histórico limitado - análise baseada em dados parciais');
   }
 
-  // === ANÁLISE DA DRE ===
-  if (incomeStatements.length >= 2) {
-    const latest = incomeStatements[0];
-    const previous = incomeStatements[1];
-    
-    // 1. Receita Total - Verificar volatilidade excessiva
-    const currentRevenue = toNumber(latest.totalRevenue) || toNumber(latest.operatingIncome);
-    const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome);
-    
-    if (currentRevenue && previousRevenue && previousRevenue > 0) {
-      const revenueChange = (currentRevenue - previousRevenue) / previousRevenue;
-      
-      if (revenueChange < -0.5) {
-        score -= 15;
-        redFlags.push('Queda drástica de receita (>50%)');
-      } else if (revenueChange > 2.0) {
-        score -= 10;
-        redFlags.push('Crescimento de receita suspeito (>200%)');
-      } else if (revenueChange > 0.1) {
-        positiveSignals.push('Crescimento consistente de receita');
-      }
-    }
-    
-    // 2. Margem Líquida - Verificar deterioração
-    const currentNetIncome = toNumber(latest.netIncome);
-    const currentOperatingIncome = toNumber(latest.operatingIncome);
-    const previousNetIncome = toNumber(previous.netIncome);
-    const previousOperatingIncome = toNumber(previous.operatingIncome);
-    
-    if (currentNetIncome && currentOperatingIncome && previousNetIncome && previousOperatingIncome) {
-      const currentMargin = currentOperatingIncome > 0 ? currentNetIncome / currentOperatingIncome : 0;
-      const previousMargin = previousOperatingIncome > 0 ? previousNetIncome / previousOperatingIncome : 0;
-      
-      if (currentMargin < -0.2) {
-        score -= 20;
-        redFlags.push('Margem líquida muito negativa (<-20%)');
-      } else if (previousMargin > 0.05 && currentMargin < previousMargin * 0.5) {
-        score -= 15;
-        redFlags.push('Deterioração significativa da margem líquida');
-      } else if (currentMargin > 0.15) {
-        positiveSignals.push('Margem líquida saudável (>15%)');
-      }
-    }
-    
-    // 3. Despesas Operacionais - Verificar crescimento descontrolado
-    const currentOpExpenses = toNumber(latest.totalOperatingExpenses);
-    const previousOpExpenses = toNumber(previous.totalOperatingExpenses);
-    
-    if (currentOpExpenses && previousOpExpenses && previousOpExpenses > 0 && currentRevenue && previousRevenue) {
-      const expenseGrowth = (currentOpExpenses - previousOpExpenses) / previousOpExpenses;
-      const revenueGrowthRate = (currentRevenue - previousRevenue) / previousRevenue;
-      
-      if (expenseGrowth > revenueGrowthRate + 0.2) {
-        score -= 10;
-        redFlags.push('Crescimento de despesas superior ao de receitas');
-      }
-    }
+  // === ANÁLISE HISTÓRICA EXPANDIDA (8-12 TRIMESTRES) ===
+  const maxPeriods = Math.min(12, incomeStatements.length);
+  const historicalAnalysis = analyzeHistoricalTrends(incomeStatements, balanceSheets, cashflowStatements, maxPeriods);
+  
+  // Aplicar resultados da análise histórica
+  score += historicalAnalysis.scoreAdjustment;
+  redFlags.push(...historicalAnalysis.redFlags);
+  positiveSignals.push(...historicalAnalysis.positiveSignals);
+
+  // === ANÁLISE CONTEXTUAL DE LIQUIDEZ E CAIXA ===
+  const cashAnalysis = analyzeCashPosition(balanceSheets, cashflowStatements, companyStrength, sectorContext);
+  score += cashAnalysis.scoreAdjustment;
+  redFlags.push(...cashAnalysis.redFlags);
+  positiveSignals.push(...cashAnalysis.positiveSignals);
+  contextualFactors.push(...(cashAnalysis.contextualFactors || []));
+
+  // === ANÁLISE CONTEXTUAL DE RECEITAS ===
+  const revenueAnalysis = analyzeRevenueQuality(incomeStatements, companyStrength, sectorContext, sizeContext);
+  score += revenueAnalysis.scoreAdjustment;
+  redFlags.push(...revenueAnalysis.redFlags);
+  positiveSignals.push(...revenueAnalysis.positiveSignals);
+  contextualFactors.push(...(revenueAnalysis.contextualFactors || []));
+
+  // === ANÁLISE CONTEXTUAL DE MARGENS ===
+  const marginAnalysis = analyzeMarginQuality(incomeStatements, companyStrength, sectorContext);
+  score += marginAnalysis.scoreAdjustment;
+  redFlags.push(...marginAnalysis.redFlags);
+  positiveSignals.push(...marginAnalysis.positiveSignals);
+
+  // === ANÁLISE CONTEXTUAL DE ENDIVIDAMENTO ===
+  const debtAnalysis = analyzeDebtContext(balanceSheets, companyStrength, sectorContext);
+  score += debtAnalysis.scoreAdjustment;
+  redFlags.push(...debtAnalysis.redFlags);
+  positiveSignals.push(...debtAnalysis.positiveSignals);
+
+  // === ANÁLISE DE RESILIÊNCIA OPERACIONAL ===
+  const resilienceAnalysis = analyzeOperationalResilience(incomeStatements, balanceSheets, cashflowStatements, companyStrength);
+  score += resilienceAnalysis.scoreAdjustment;
+  redFlags.push(...resilienceAnalysis.redFlags);
+  positiveSignals.push(...resilienceAnalysis.positiveSignals);
+  contextualFactors.push(...(resilienceAnalysis.contextualFactors || []));
+
+  // Determinar nível de risco considerando força da empresa
+  let riskLevel: StatementsAnalysis['riskLevel'] = 'LOW';
+  if (score < 20 || (score < 40 && companyStrength === 'WEAK')) {
+    riskLevel = 'CRITICAL';
+  } else if (score < 40 || (score < 60 && companyStrength === 'WEAK')) {
+    riskLevel = 'HIGH';
+  } else if (score < 60 || (score < 75 && companyStrength === 'MODERATE')) {
+    riskLevel = 'MEDIUM';
   }
 
-  // === ANÁLISE DO BALANÇO ===
-  if (balanceSheets.length >= 2) {
+  // Ajustar score final baseado na força da empresa
+  const strengthMultiplier = getStrengthMultiplier(companyStrength);
+  const finalScore = Math.max(0, Math.min(100, Math.round(score * strengthMultiplier)));
+
+  return {
+    score: finalScore,
+    redFlags: redFlags.filter(Boolean).slice(0, 10), // Máximo 10 red flags
+    positiveSignals: positiveSignals.filter(Boolean).slice(0, 8), // Máximo 8 sinais positivos
+    riskLevel,
+    companyStrength,
+    contextualFactors: contextualFactors.filter(Boolean).slice(0, 5)
+  };
+}
+
+// === FUNÇÕES AUXILIARES PARA ANÁLISE CONTEXTUAL ===
+
+// Tipos para análises contextuais
+interface AnalysisResult {
+  scoreAdjustment: number;
+  redFlags: string[];
+  positiveSignals: string[];
+  contextualFactors?: string[];
+}
+
+interface SectorContext {
+  type: 'FINANCIAL' | 'CYCLICAL' | 'DEFENSIVE' | 'GROWTH' | 'COMMODITY' | 'TECH' | 'UTILITY' | 'OTHER';
+  volatilityTolerance: 'LOW' | 'MEDIUM' | 'HIGH';
+  marginExpectation: 'LOW' | 'MEDIUM' | 'HIGH';
+  cashIntensive: boolean;
+}
+
+interface SizeContext {
+  category: 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE' | 'MEGA';
+  volatilityTolerance: 'LOW' | 'MEDIUM' | 'HIGH';
+  growthExpectation: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+// Avaliar força geral da empresa
+function assessCompanyStrength(data: FinancialStatementsData): StatementsAnalysis['companyStrength'] {
+  const { incomeStatements, balanceSheets, cashflowStatements } = data;
+  
+  if (!incomeStatements.length || !balanceSheets.length || !cashflowStatements.length) {
+    return 'WEAK';
+  }
+
+  let strengthScore = 0;
+  const latest = {
+    income: incomeStatements[0],
+    balance: balanceSheets[0],
+    cashflow: cashflowStatements[0]
+  };
+
+  // 1. Posição de caixa (25 pontos)
+  const cash = toNumber(latest.balance.cash) || 0;
+  const totalAssets = toNumber(latest.balance.totalAssets) || 1;
+  const cashRatio = cash / totalAssets;
+  
+  if (cashRatio > 0.15) strengthScore += 25;
+  else if (cashRatio > 0.08) strengthScore += 15;
+  else if (cashRatio > 0.03) strengthScore += 8;
+
+  // 2. Liquidez corrente (20 pontos)
+  const currentAssets = toNumber(latest.balance.totalCurrentAssets) || 0;
+  const currentLiabilities = toNumber(latest.balance.totalCurrentLiabilities) || 1;
+  const currentRatio = currentAssets / currentLiabilities;
+  
+  if (currentRatio > 2.0) strengthScore += 20;
+  else if (currentRatio > 1.5) strengthScore += 15;
+  else if (currentRatio > 1.2) strengthScore += 10;
+  else if (currentRatio > 1.0) strengthScore += 5;
+
+  // 3. Rentabilidade (25 pontos)
+  const netIncome = toNumber(latest.income.netIncome) || 0;
+  const revenue = toNumber(latest.income.totalRevenue) || toNumber(latest.income.operatingIncome) || 1;
+  const netMargin = netIncome / revenue;
+  
+  if (netMargin > 0.15) strengthScore += 25;
+  else if (netMargin > 0.08) strengthScore += 18;
+  else if (netMargin > 0.03) strengthScore += 10;
+  else if (netMargin > 0) strengthScore += 5;
+
+  // 4. Endividamento (15 pontos)
+  const totalLiab = toNumber(latest.balance.totalLiab) || 0;
+  const equity = toNumber(latest.balance.totalStockholderEquity) || 1;
+  const debtRatio = totalLiab / (totalLiab + equity);
+  
+  if (debtRatio < 0.3) strengthScore += 15;
+  else if (debtRatio < 0.5) strengthScore += 10;
+  else if (debtRatio < 0.7) strengthScore += 5;
+
+  // 5. Fluxo de caixa operacional (15 pontos)
+  const opCashFlow = toNumber(latest.cashflow.operatingCashFlow) || 0;
+  if (opCashFlow > 0) {
+    const cashFlowMargin = opCashFlow / revenue;
+    if (cashFlowMargin > 0.12) strengthScore += 15;
+    else if (cashFlowMargin > 0.06) strengthScore += 10;
+    else if (cashFlowMargin > 0.02) strengthScore += 5;
+  }
+
+  // Classificar força da empresa
+  if (strengthScore >= 80) return 'VERY_STRONG';
+  if (strengthScore >= 60) return 'STRONG';
+  if (strengthScore >= 40) return 'MODERATE';
+  return 'WEAK';
+}
+
+// Obter contexto setorial
+function getSectorContext(sector: string | null, industry: string | null): SectorContext {
+  const sectorLower = sector?.toLowerCase() || '';
+  const industryLower = industry?.toLowerCase() || '';
+  
+  // Setor financeiro
+  if (sectorLower.includes('financial') || sectorLower.includes('bank') || 
+      industryLower.includes('insurance') || industryLower.includes('seguros')) {
+    return {
+      type: 'FINANCIAL',
+      volatilityTolerance: 'MEDIUM',
+      marginExpectation: 'MEDIUM',
+      cashIntensive: true
+    };
+  }
+  
+  // Setor de tecnologia
+  if (sectorLower.includes('technology') || sectorLower.includes('software') ||
+      industryLower.includes('tech') || industryLower.includes('internet')) {
+    return {
+      type: 'TECH',
+      volatilityTolerance: 'HIGH',
+      marginExpectation: 'HIGH',
+      cashIntensive: false
+    };
+  }
+  
+  // Setor cíclico (varejo, automotivo, construção)
+  if (sectorLower.includes('consumer') || sectorLower.includes('retail') ||
+      sectorLower.includes('automotive') || sectorLower.includes('construction')) {
+    return {
+      type: 'CYCLICAL',
+      volatilityTolerance: 'HIGH',
+      marginExpectation: 'MEDIUM',
+      cashIntensive: false
+    };
+  }
+  
+  // Setor defensivo (utilities, saúde, alimentos)
+  if (sectorLower.includes('utilities') || sectorLower.includes('healthcare') ||
+      sectorLower.includes('food') || sectorLower.includes('pharmaceutical')) {
+    return {
+      type: 'DEFENSIVE',
+      volatilityTolerance: 'LOW',
+      marginExpectation: 'MEDIUM',
+      cashIntensive: false
+    };
+  }
+  
+  // Commodities
+  if (sectorLower.includes('materials') || sectorLower.includes('mining') ||
+      sectorLower.includes('oil') || sectorLower.includes('steel')) {
+    return {
+      type: 'COMMODITY',
+      volatilityTolerance: 'HIGH',
+      marginExpectation: 'LOW',
+      cashIntensive: false
+    };
+  }
+  
+  return {
+    type: 'OTHER',
+    volatilityTolerance: 'MEDIUM',
+    marginExpectation: 'MEDIUM',
+    cashIntensive: false
+  };
+}
+
+// Obter contexto de tamanho
+function getSizeContext(marketCap: number | null): SizeContext {
+  if (!marketCap || marketCap <= 0) {
+    return {
+      category: 'SMALL',
+      volatilityTolerance: 'HIGH',
+      growthExpectation: 'MEDIUM'
+    };
+  }
+  
+  // Valores em bilhões de reais (aproximado)
+  if (marketCap > 100_000_000_000) { // > 100B
+    return {
+      category: 'MEGA',
+      volatilityTolerance: 'LOW',
+      growthExpectation: 'LOW'
+    };
+  } else if (marketCap > 20_000_000_000) { // > 20B
+    return {
+      category: 'LARGE',
+      volatilityTolerance: 'LOW',
+      growthExpectation: 'MEDIUM'
+    };
+  } else if (marketCap > 5_000_000_000) { // > 5B
+    return {
+      category: 'MEDIUM',
+      volatilityTolerance: 'MEDIUM',
+      growthExpectation: 'MEDIUM'
+    };
+  } else if (marketCap > 1_000_000_000) { // > 1B
+    return {
+      category: 'SMALL',
+      volatilityTolerance: 'HIGH',
+      growthExpectation: 'HIGH'
+    };
+  } else {
+    return {
+      category: 'MICRO',
+      volatilityTolerance: 'HIGH',
+      growthExpectation: 'HIGH'
+    };
+  }
+}
+
+// Análise histórica expandida
+function analyzeHistoricalTrends(
+  incomeStatements: Record<string, unknown>[],
+  balanceSheets: Record<string, unknown>[],
+  cashflowStatements: Record<string, unknown>[],
+  periods: number
+): AnalysisResult {
+  const result: AnalysisResult = {
+    scoreAdjustment: 0,
+    redFlags: [],
+    positiveSignals: []
+  };
+
+  if (periods < 4) return result;
+
+  // Analisar tendências de receita (últimos 8-12 trimestres)
+  const revenues = incomeStatements.slice(0, periods).map(stmt => 
+    toNumber(stmt.totalRevenue) || toNumber(stmt.operatingIncome) || 0
+  ).reverse();
+
+  const netIncomes = incomeStatements.slice(0, periods).map(stmt => 
+    toNumber(stmt.netIncome) || 0
+  ).reverse();
+
+  // Calcular tendências
+  let revenueGrowthCount = 0;
+  let revenueDeclineCount = 0;
+  let profitGrowthCount = 0;
+  let profitDeclineCount = 0;
+
+  for (let i = 1; i < revenues.length; i++) {
+    const revenueChange = revenues[i-1] > 0 ? (revenues[i] - revenues[i-1]) / revenues[i-1] : 0;
+    const profitChange = netIncomes[i-1] !== 0 ? (netIncomes[i] - netIncomes[i-1]) / Math.abs(netIncomes[i-1]) : 0;
+    
+    if (revenueChange > 0.02) revenueGrowthCount++;
+    else if (revenueChange < -0.05) revenueDeclineCount++;
+    
+    if (profitChange > 0.05) profitGrowthCount++;
+    else if (profitChange < -0.1) profitDeclineCount++;
+  }
+
+  const totalPeriods = revenues.length - 1;
+  const revenueGrowthRatio = revenueGrowthCount / totalPeriods;
+  const revenueDeclineRatio = revenueDeclineCount / totalPeriods;
+  const profitGrowthRatio = profitGrowthCount / totalPeriods;
+  const profitDeclineRatio = profitDeclineCount / totalPeriods;
+
+  // Avaliar consistência histórica
+  if (revenueGrowthRatio > 0.6) {
+    result.scoreAdjustment += 10;
+    result.positiveSignals.push('Histórico consistente de crescimento de receita');
+  } else if (revenueDeclineRatio > 0.4) {
+    result.scoreAdjustment -= 15;
+    result.redFlags.push('Padrão histórico de declínio de receita');
+  }
+
+  if (profitGrowthRatio > 0.5) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push('Histórico consistente de crescimento de lucro');
+  } else if (profitDeclineRatio > 0.4) {
+    result.scoreAdjustment -= 12;
+    result.redFlags.push('Padrão histórico de declínio de lucro');
+  }
+
+  return result;
+}
+
+// Análise contextual de posição de caixa
+function analyzeCashPosition(
+  balanceSheets: Record<string, unknown>[],
+  cashflowStatements: Record<string, unknown>[],
+  companyStrength: StatementsAnalysis['companyStrength'],
+  sectorContext: SectorContext
+): AnalysisResult {
+  const result: AnalysisResult = {
+    scoreAdjustment: 0,
+    redFlags: [],
+    positiveSignals: [],
+    contextualFactors: []
+  };
+
+  if (!balanceSheets.length || !cashflowStatements.length) return result;
+
     const latest = balanceSheets[0];
-    const previous = balanceSheets[1];
-    
-    // 1. Liquidez - Verificar deterioração
-    const currentAssets = toNumber(latest.totalCurrentAssets);
-    const currentLiabilities = toNumber(latest.totalCurrentLiabilities);
-    const previousAssets = toNumber(previous.totalCurrentAssets);
-    const previousLiabilities = toNumber(previous.totalCurrentLiabilities);
-    
-    if (currentAssets && currentLiabilities && previousAssets && previousLiabilities) {
+  const latestCashflow = cashflowStatements[0];
+  
+  const cash = toNumber(latest.cash) || 0;
+  const totalAssets = toNumber(latest.totalAssets) || 1;
+  const currentAssets = toNumber(latest.totalCurrentAssets) || 0;
+  const currentLiabilities = toNumber(latest.totalCurrentLiabilities) || 1;
+  const opCashFlow = toNumber(latestCashflow.operatingCashFlow) || 0;
+
+  const cashRatio = cash / totalAssets;
       const currentRatio = currentAssets / currentLiabilities;
-      const previousRatio = previousAssets / previousLiabilities;
-      
-      if (currentRatio < 0.8) {
-        score -= 20;
-        redFlags.push('Liquidez corrente crítica (<0.8)');
-      } else if (previousRatio > 1.2 && currentRatio < previousRatio * 0.7) {
-        score -= 15;
-        redFlags.push('Deterioração significativa da liquidez');
-      } else if (currentRatio > 1.5) {
-        positiveSignals.push('Liquidez corrente saudável');
+
+  // Análise contextual baseada na força da empresa
+  if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+    // Empresas fortes podem suportar quedas temporárias de fluxo de caixa
+    if (opCashFlow < 0) {
+      if (cashRatio > 0.1) {
+        result.scoreAdjustment -= 5; // Penalidade menor
+        result.contextualFactors?.push('Empresa robusta com reservas para superar dificuldades temporárias');
+      } else {
+        result.scoreAdjustment -= 10;
+        result.redFlags.push('Queima de caixa em empresa sólida - monitorar de perto');
       }
     }
     
-    // 2. Endividamento - Verificar crescimento perigoso
-    const currentTotalLiab = toNumber(latest.totalLiab);
-    const currentEquity = toNumber(latest.totalStockholderEquity);
-    const previousTotalLiab = toNumber(previous.totalLiab);
-    const previousEquity = toNumber(previous.totalStockholderEquity);
-    
-    if (currentTotalLiab && currentEquity && previousTotalLiab && previousEquity) {
-      const currentDebtRatio = currentTotalLiab / (currentTotalLiab + currentEquity);
-      const previousDebtRatio = previousTotalLiab / (previousTotalLiab + previousEquity);
-      
-      if (currentDebtRatio > 0.8) {
-        score -= 25;
-        redFlags.push('Endividamento excessivo (>80%)');
-      } else if (currentDebtRatio > previousDebtRatio + 0.15) {
-        score -= 15;
-        redFlags.push('Crescimento acelerado do endividamento');
-      } else if (currentDebtRatio < 0.4) {
-        positiveSignals.push('Endividamento controlado');
-      }
+    if (currentRatio > 1.5) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push('Liquidez robusta em empresa sólida');
+    }
+  } else {
+    // Empresas fracas precisam de mais caixa
+    if (opCashFlow < 0) {
+      result.scoreAdjustment -= 20;
+      result.redFlags.push('Queima de caixa em empresa frágil - risco elevado');
     }
     
-    // 3. Patrimônio Líquido - Verificar erosão
-    if (currentEquity && previousEquity && previousEquity > 0) {
-      const equityChange = (currentEquity - previousEquity) / previousEquity;
-      
-      if (equityChange < -0.3) {
-        score -= 20;
-        redFlags.push('Erosão significativa do patrimônio líquido');
-      } else if (currentEquity < 0) {
-        score -= 30;
-        redFlags.push('Patrimônio líquido negativo');
-      } else if (equityChange > 0.1) {
-        positiveSignals.push('Crescimento do patrimônio líquido');
-      }
+    if (currentRatio < 1.2) {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push('Liquidez baixa em empresa frágil');
     }
   }
 
-  // === ANÁLISE DO FLUXO DE CAIXA ===
-  if (cashflowStatements.length >= 2) {
-    const latest = cashflowStatements[0];
-    const previous = cashflowStatements[1];
-    
-    // 1. Fluxo de Caixa Operacional - Verificar consistência
-    const currentOpCashFlow = toNumber(latest.operatingCashFlow);
-    const previousOpCashFlow = toNumber(previous.operatingCashFlow);
-    const currentNetIncome = toNumber(incomeStatements[0]?.netIncome);
-    
-    if (currentOpCashFlow !== null && currentNetIncome !== null) {
-      if (currentOpCashFlow < 0 && currentNetIncome > 0) {
-        score -= 15;
-        redFlags.push('Fluxo de caixa operacional negativo apesar do lucro');
-      } else if (currentNetIncome > 0 && currentOpCashFlow < currentNetIncome * 0.5) {
-        score -= 10;
-        redFlags.push('Fluxo de caixa operacional muito inferior ao lucro');
-      }
-    }
-    
-    // 2. Verificar padrão de queima de caixa
-    if (currentOpCashFlow && previousOpCashFlow) {
-      if (currentOpCashFlow < 0 && previousOpCashFlow < 0) {
-        score -= 20;
-        redFlags.push('Queima de caixa operacional persistente');
-      } else if (currentOpCashFlow > 0 && previousOpCashFlow < 0) {
-        positiveSignals.push('Recuperação do fluxo de caixa operacional');
-      }
-    }
-    
-    // 3. Fluxo de Caixa de Investimento - Verificar padrões anômalos
-    const currentInvCashFlow = toNumber(latest.investmentCashFlow);
-    const previousInvCashFlow = toNumber(previous.investmentCashFlow);
-    
-    if (currentInvCashFlow && previousInvCashFlow) {
-      // Investimento muito alto pode indicar aquisições arriscadas
-      if (Math.abs(currentInvCashFlow) > Math.abs(currentOpCashFlow || 0) * 2) {
-        score -= 10;
-        redFlags.push('Investimentos desproporcionais ao fluxo operacional');
-      }
+  // Contexto setorial
+  if (sectorContext.cashIntensive) {
+    if (cashRatio > 0.15) {
+      result.positiveSignals.push('Posição de caixa adequada para setor intensivo em capital');
+    } else if (cashRatio < 0.05) {
+      result.redFlags.push('Posição de caixa baixa para setor que requer reservas');
     }
   }
 
-  // === ANÁLISE DE TENDÊNCIAS (4+ trimestres) ===
+  return result;
+}
+
+// Análise contextual de qualidade de receita
+function analyzeRevenueQuality(
+  incomeStatements: Record<string, unknown>[],
+  companyStrength: StatementsAnalysis['companyStrength'],
+  sectorContext: SectorContext,
+  sizeContext: SizeContext
+): AnalysisResult {
+  const result: AnalysisResult = {
+    scoreAdjustment: 0,
+    redFlags: [],
+    positiveSignals: [],
+    contextualFactors: []
+  };
+
+  if (incomeStatements.length < 2) return result;
+
+  const latest = incomeStatements[0];
+  const previous = incomeStatements[1];
+  
+  const currentRevenue = toNumber(latest.totalRevenue) || toNumber(latest.operatingIncome) || 0;
+  const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome) || 1;
+  
+  const revenueChange = (currentRevenue - previousRevenue) / previousRevenue;
+
+  // Análise contextual baseada no setor
+  let volatilityThreshold = 0.3; // Padrão
+  if (sectorContext.volatilityTolerance === 'HIGH') {
+    volatilityThreshold = 0.5; // Setores cíclicos podem ter mais volatilidade
+  } else if (sectorContext.volatilityTolerance === 'LOW') {
+    volatilityThreshold = 0.15; // Setores defensivos devem ser mais estáveis
+  }
+
+  // Análise contextual baseada no tamanho
+  if (sizeContext.category === 'MICRO' || sizeContext.category === 'SMALL') {
+    volatilityThreshold *= 1.5; // Empresas menores podem ter mais volatilidade
+  }
+
+  // Avaliar mudanças de receita no contexto
+  if (Math.abs(revenueChange) > volatilityThreshold) {
+    if (revenueChange > 0) {
+      if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+        result.positiveSignals.push('Crescimento acelerado em empresa sólida');
+        result.scoreAdjustment += 5;
+      } else {
+        result.contextualFactors?.push('Crescimento acelerado - verificar sustentabilidade');
+      }
+    } else {
+      if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+        result.scoreAdjustment -= 8; // Penalidade menor para empresas fortes
+        result.contextualFactors?.push('Queda de receita em empresa robusta - possível recuperação');
+      } else {
+        result.scoreAdjustment -= 20;
+        result.redFlags.push('Queda significativa de receita em empresa frágil');
+      }
+    }
+  } else if (revenueChange > 0.05) {
+    result.positiveSignals.push('Crescimento consistente de receita');
+    result.scoreAdjustment += 3;
+  }
+
+  return result;
+}
+
+// Análise contextual de qualidade de margens
+function analyzeMarginQuality(
+  incomeStatements: Record<string, unknown>[],
+  companyStrength: StatementsAnalysis['companyStrength'],
+  sectorContext: SectorContext
+): AnalysisResult {
+  const result: AnalysisResult = {
+    scoreAdjustment: 0,
+    redFlags: [],
+    positiveSignals: []
+  };
+
+  if (incomeStatements.length < 2) return result;
+
+  const latest = incomeStatements[0];
+  const previous = incomeStatements[1];
+  
+  const currentNetIncome = toNumber(latest.netIncome) || 0;
+  const currentRevenue = toNumber(latest.totalRevenue) || toNumber(latest.operatingIncome) || 1;
+  const previousNetIncome = toNumber(previous.netIncome) || 0;
+  const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome) || 1;
+  
+  const currentMargin = currentNetIncome / currentRevenue;
+  const previousMargin = previousNetIncome / previousRevenue;
+
+  // Benchmarks setoriais
+  let goodMarginThreshold = 0.1; // Padrão 10%
+  let excellentMarginThreshold = 0.15; // Padrão 15%
+  
+  if (sectorContext.marginExpectation === 'HIGH') {
+    goodMarginThreshold = 0.15;
+    excellentMarginThreshold = 0.25;
+  } else if (sectorContext.marginExpectation === 'LOW') {
+    goodMarginThreshold = 0.05;
+    excellentMarginThreshold = 0.1;
+  }
+
+  // Avaliar margens no contexto setorial
+  if (currentMargin > excellentMarginThreshold) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push('Margem líquida excelente para o setor');
+  } else if (currentMargin > goodMarginThreshold) {
+    result.scoreAdjustment += 4;
+    result.positiveSignals.push('Margem líquida saudável');
+  } else if (currentMargin < 0) {
+    if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+      result.scoreAdjustment -= 10; // Penalidade menor para empresas fortes
+    } else {
+      result.scoreAdjustment -= 20;
+      result.redFlags.push('Margem líquida negativa');
+    }
+  }
+
+  // Avaliar deterioração de margem
+  if (previousMargin > goodMarginThreshold && currentMargin < previousMargin * 0.6) {
+    if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+      result.scoreAdjustment -= 8;
+    } else {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push('Deterioração significativa da margem líquida');
+    }
+  }
+
+  return result;
+}
+
+// Análise contextual de endividamento
+function analyzeDebtContext(
+  balanceSheets: Record<string, unknown>[],
+  companyStrength: StatementsAnalysis['companyStrength'],
+  sectorContext: SectorContext
+): AnalysisResult {
+  const result: AnalysisResult = {
+    scoreAdjustment: 0,
+    redFlags: [],
+    positiveSignals: []
+  };
+
+  if (balanceSheets.length < 2) return result;
+
+  const latest = balanceSheets[0];
+  const previous = balanceSheets[1];
+  
+  const currentTotalLiab = toNumber(latest.totalLiab) || 0;
+  const currentEquity = toNumber(latest.totalStockholderEquity) || 1;
+  const previousTotalLiab = toNumber(previous.totalLiab) || 0;
+  const previousEquity = toNumber(previous.totalStockholderEquity) || 1;
+  
+  const currentDebtRatio = currentTotalLiab / (currentTotalLiab + currentEquity);
+  const previousDebtRatio = previousTotalLiab / (previousTotalLiab + previousEquity);
+
+  // Tolerância setorial ao endividamento
+  let highDebtThreshold = 0.6; // Padrão
+  let criticalDebtThreshold = 0.8;
+  
+  if (sectorContext.type === 'FINANCIAL') {
+    highDebtThreshold = 0.8; // Bancos naturalmente têm mais "dívida"
+    criticalDebtThreshold = 0.9;
+  } else if (sectorContext.type === 'UTILITY') {
+    highDebtThreshold = 0.7; // Utilities podem ter mais dívida
+    criticalDebtThreshold = 0.85;
+  }
+
+  // Avaliar endividamento no contexto
+  if (currentDebtRatio > criticalDebtThreshold) {
+    if (companyStrength === 'VERY_STRONG') {
+      result.scoreAdjustment -= 15; // Penalidade menor para empresas muito fortes
+    } else {
+      result.scoreAdjustment -= 25;
+      result.redFlags.push('Endividamento excessivo');
+    }
+  } else if (currentDebtRatio > highDebtThreshold) {
+    if (companyStrength === 'WEAK') {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push('Alto endividamento em empresa frágil');
+    } else {
+      result.scoreAdjustment -= 8;
+    }
+  } else if (currentDebtRatio < 0.3) {
+    result.scoreAdjustment += 5;
+    result.positiveSignals.push('Endividamento controlado');
+  }
+
+  // Avaliar crescimento do endividamento
+  const debtGrowth = currentDebtRatio - previousDebtRatio;
+  if (debtGrowth > 0.15) {
+    if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+      result.scoreAdjustment -= 8;
+    } else {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push('Crescimento acelerado do endividamento');
+    }
+  }
+
+  return result;
+}
+
+// Análise de resiliência operacional
+function analyzeOperationalResilience(
+  incomeStatements: Record<string, unknown>[],
+  balanceSheets: Record<string, unknown>[],
+  cashflowStatements: Record<string, unknown>[],
+  companyStrength: StatementsAnalysis['companyStrength']
+): AnalysisResult {
+  const result: AnalysisResult = {
+    scoreAdjustment: 0,
+    redFlags: [],
+    positiveSignals: [],
+    contextualFactors: []
+  };
+
+  if (!incomeStatements.length || !balanceSheets.length || !cashflowStatements.length) return result;
+
+  const latest = {
+    income: incomeStatements[0],
+    balance: balanceSheets[0],
+    cashflow: cashflowStatements[0]
+  };
+
+  // Avaliar capacidade de geração de caixa vs lucro
+  const netIncome = toNumber(latest.income.netIncome) || 0;
+  const opCashFlow = toNumber(latest.cashflow.operatingCashFlow) || 0;
+  const revenue = toNumber(latest.income.totalRevenue) || toNumber(latest.income.operatingIncome) || 1;
+
+  if (netIncome > 0 && opCashFlow > 0) {
+    const cashConversionRatio = opCashFlow / netIncome;
+    if (cashConversionRatio > 1.2) {
+      result.scoreAdjustment += 8;
+      result.positiveSignals.push('Excelente conversão de lucro em caixa');
+    } else if (cashConversionRatio < 0.5) {
+      result.scoreAdjustment -= 10;
+      result.redFlags.push('Baixa conversão de lucro em caixa');
+    }
+  }
+
+  // Avaliar diversificação de receitas (proxy: estabilidade)
   if (incomeStatements.length >= 4) {
     const revenues = incomeStatements.slice(0, 4).map(stmt => 
       toNumber(stmt.totalRevenue) || toNumber(stmt.operatingIncome) || 0
-    ).reverse(); // Ordem cronológica
+    );
     
-    const netIncomes = incomeStatements.slice(0, 4).map(stmt => 
-      toNumber(stmt.netIncome) || 0
-    ).reverse();
+    const avgRevenue = revenues.reduce((a, b) => a + b, 0) / revenues.length;
+    const volatility = Math.sqrt(revenues.reduce((sum, rev) => sum + Math.pow(rev - avgRevenue, 2), 0) / revenues.length) / avgRevenue;
     
-    // Verificar tendência de receita
-    let revenueDeclineCount = 0;
-    let profitDeclineCount = 0;
-    
-    for (let i = 1; i < revenues.length; i++) {
-      if (revenues[i] < revenues[i-1] * 0.95) revenueDeclineCount++;
-      if (netIncomes[i] < netIncomes[i-1]) profitDeclineCount++;
-    }
-    
-    if (revenueDeclineCount >= 3) {
-      score -= 20;
-      redFlags.push('Tendência consistente de queda de receita');
-    } else if (revenueDeclineCount === 0) {
-      positiveSignals.push('Crescimento consistente de receita');
-    }
-    
-    if (profitDeclineCount >= 3) {
-      score -= 15;
-      redFlags.push('Tendência consistente de queda de lucro');
+    if (volatility < 0.15) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push('Receitas estáveis e previsíveis');
+    } else if (volatility > 0.4) {
+      if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+        result.contextualFactors?.push('Alta volatilidade de receitas, mas empresa robusta');
+      } else {
+        result.scoreAdjustment -= 8;
+        result.redFlags.push('Alta volatilidade de receitas');
+      }
     }
   }
 
-  // Determinar nível de risco
-  let riskLevel: StatementsAnalysis['riskLevel'] = 'LOW';
-  if (score < 30) riskLevel = 'CRITICAL';
-  else if (score < 50) riskLevel = 'HIGH';
-  else if (score < 70) riskLevel = 'MEDIUM';
+  // Avaliar eficiência operacional
+  const totalAssets = toNumber(latest.balance.totalAssets) || 1;
+  const assetTurnover = revenue / totalAssets;
+  
+  if (assetTurnover > 1.0) {
+    result.scoreAdjustment += 3;
+    result.positiveSignals.push('Boa eficiência no uso de ativos');
+  } else if (assetTurnover < 0.3) {
+    result.scoreAdjustment -= 5;
+  }
 
-  return {
-    score: Math.max(0, Math.min(100, score)),
-    redFlags: redFlags.slice(0, 8), // Máximo 8 red flags
-    positiveSignals: positiveSignals.slice(0, 5), // Máximo 5 sinais positivos
-    riskLevel
-  };
+  return result;
+}
+
+// Obter multiplicador baseado na força da empresa
+function getStrengthMultiplier(companyStrength: StatementsAnalysis['companyStrength']): number {
+  switch (companyStrength) {
+    case 'VERY_STRONG': return 1.1; // Boost de 10%
+    case 'STRONG': return 1.05; // Boost de 5%
+    case 'MODERATE': return 1.0; // Neutro
+    case 'WEAK': return 0.9; // Penalidade de 10%
+    default: return 1.0;
+  }
 }
 
 // === FUNÇÃO CENTRALIZADA PARA CALCULAR SCORE GERAL ===
@@ -426,7 +929,7 @@ export function calculateOverallScore(strategies: {
     totalScore += statementsContribution;
     totalWeight += statementsWeight;
 
-    // Adicionar red flags e sinais positivos às listas
+    // Adicionar análise contextual às listas
     if (statementsAnalysis.riskLevel === 'CRITICAL') {
       weaknesses.push('Demonstrações financeiras indicam risco crítico');
     } else if (statementsAnalysis.riskLevel === 'HIGH') {
@@ -435,15 +938,24 @@ export function calculateOverallScore(strategies: {
       strengths.push('Demonstrações financeiras saudáveis');
     }
 
-    // Adicionar red flags específicos
-    statementsAnalysis.redFlags.forEach(flag => {
+    // Adicionar força da empresa como contexto
+    if (statementsAnalysis.companyStrength === 'VERY_STRONG') {
+      strengths.push('Empresa muito robusta financeiramente');
+    } else if (statementsAnalysis.companyStrength === 'STRONG') {
+      strengths.push('Empresa robusta financeiramente');
+    } else if (statementsAnalysis.companyStrength === 'WEAK') {
+      weaknesses.push('Empresa financeiramente frágil');
+    }
+
+    // Adicionar red flags específicos (limitado para não sobrecarregar)
+    statementsAnalysis.redFlags.slice(0, 3).forEach(flag => {
       if (!weaknesses.includes(flag)) {
         weaknesses.push(flag);
       }
     });
 
-    // Adicionar sinais positivos específicos
-    statementsAnalysis.positiveSignals.forEach(signal => {
+    // Adicionar sinais positivos específicos (limitado para não sobrecarregar)
+    statementsAnalysis.positiveSignals.slice(0, 3).forEach(signal => {
       if (!strengths.includes(signal)) {
         strengths.push(signal);
       }

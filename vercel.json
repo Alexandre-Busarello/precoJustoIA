@@ -1,13 +1,16 @@
 {
-  "buildCommand": "npm run build:vercel",
-  "installCommand": "npm install",
-  "env": {
-    "PRISMA_GENERATE_DATAPROXY": "true"
-  },
-  "functions": {
-    "app/api/**/*.ts": {
-      "maxDuration": 30
+  "crons": [
+    {
+      "path": "/api/cron/fetch-ward",
+      "schedule": "0 2 * * *"
     }
-  },
-  "regions": ["gru1"]
+  ],
+  "functions": {
+    "src/app/api/fetch-ward-data/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/fetch-ward/route.ts": {
+      "maxDuration": 300
+    }
+  }
 }

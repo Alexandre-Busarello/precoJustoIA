@@ -367,6 +367,15 @@ async function getStatementsAnalysisForCompany(ticker: string) {
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 2; // Últimos 2 anos
 
+    // Buscar dados da empresa primeiro
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      select: {
+        sector: true,
+        industry: true
+      }
+    });
+
     const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
       prisma.incomeStatement.findMany({
         where: {
@@ -434,7 +443,12 @@ async function getStatementsAnalysisForCompany(ticker: string) {
         investmentCashFlow: stmt.investmentCashFlow?.toNumber() || null,
         financingCashFlow: stmt.financingCashFlow?.toNumber() || null,
         increaseOrDecreaseInCash: stmt.increaseOrDecreaseInCash?.toNumber() || null,
-      }))
+      })),
+      company: company ? {
+        sector: company.sector,
+        industry: company.industry,
+        marketCap: null // MarketCap será obtido de outra fonte se necessário
+      } : undefined
     };
 
     return analyzeFinancialStatements(statementsData);

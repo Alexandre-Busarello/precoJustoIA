@@ -9,13 +9,15 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy --schema=./prisma/schema.prisma",
+    "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "fetch:data": "tsx scripts/fetch-data.ts",
     "fetch:data:free": "tsx scripts/fetch-data.ts 1",
     "fetch:data:paid": "tsx scripts/fetch-data.ts 10",
     "fetch:data:ward": "tsx scripts/fetch-data-ward.ts",
+    "fetch:ward:local": "node scripts/run-fetch-ward.js --local",
+    "fetch:ward:remote": "node scripts/run-fetch-ward.js",
     "debug:api": "curl -s http://localhost:3000/api/debug-ranking-history | jq ."
   },
   "dependencies": {

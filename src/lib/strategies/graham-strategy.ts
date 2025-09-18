@@ -38,7 +38,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       { label: 'VPA positivo', value: !!(vpa && vpa > 0), description: `VPA: ${formatCurrency(vpa)}` },
       { label: 'ROE ≥ 10%', value: !!(roe && roe >= 0.10), description: `ROE: ${formatPercent(roe)}` },
       { label: 'Liquidez Corrente ≥ 1.0', value: !!(liquidezCorrente && liquidezCorrente >= 1.0), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
-      { label: 'Margem Líquida positiva', value: !!(margemLiquida && margemLiquida > 0), description: `Margem: ${formatPercent(margemLiquida)}` },
+      { label: 'Margem Líquida positiva', value: margemLiquida ? !!(margemLiquida > 0) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
       { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
       { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15, description: `Crescimento: ${formatPercent(crescimentoLucros)}` },
       { label: 'Market Cap ≥ R$ 2B', value: !!(marketCap && marketCap >= 2000000000), description: `Market Cap: ${formatCurrency(marketCap)}` }

@@ -230,6 +230,48 @@ enum ReportPeriod {
   QUARTERLY
 }
 
+enum ProcessingPhase {
+  DISCOVERING
+  PROCESSING_HISTORICAL
+  PROCESSING_TTM
+  COMPLETED
+  ERROR
+}
+
+enum TickerStatus {
+  PENDING         // Ainda não processado
+  PROCESSING      // Em processamento no momento
+  COMPLETED       // Processamento completo (todos os dados)
+  PARTIAL         // Processamento parcial (alguns dados faltando)
+  ERROR           // Erro no processamento
+  SKIPPED         // Pulado por algum motivo (ex: ticker inválido)
+}
+
+// Status de processamento individual por ticker
+model TickerProcessingStatus {
+  id                    Int                    @id @default(autoincrement())
+  ticker                String                 @unique
+  processType           String                 @default("ward_data_fetch") @map("process_type")
+  status                TickerStatus @default(PENDING)
+  hasBasicData          Boolean                @default(false) @map("has_basic_data")
+  hasHistoricalData     Boolean                @default(false) @map("has_historical_data")
+  hasTTMData            Boolean                @default(false) @map("has_ttm_data")
+  hasBrapiProData       Boolean                @default(false) @map("has_brapi_pro_data")
+  lastProcessedAt       DateTime?              @map("last_processed_at")
+  lastSuccessAt         DateTime?              @map("last_success_at")
+  lastError             String?                @map("last_error")
+  errorCount            Int                    @default(0) @map("error_count")
+  priority              Int                    @default(0) // 0=normal, 1=high, 2=urgent
+  metadata              Json?
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+
+  @@index([processType, status])
+  @@index([lastProcessedAt])
+  @@index([priority, status])
+  @@map("ticker_processing_status")
+}
+
 // Balanço Patrimonial
 model BalanceSheet {
   id                                                    Int           @id @default(autoincrement())

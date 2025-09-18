@@ -9,6 +9,7 @@ async function runFetchWard() {
   const tickers = args.filter(arg => !arg.startsWith('--'));
   const noBrapi = args.includes('--no-brapi');
   const forceFullUpdate = args.includes('--force-full');
+  const resetState = args.includes('--reset');
 
   if (isLocal) {
     // Executar localmente
@@ -19,6 +20,7 @@ async function runFetchWard() {
     // Executar na Vercel
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
     const apiSecret = process.env.FETCH_API_SECRET;
+    const bypassToken = process.env.VERCEL_BYPASS_TOKEN;
     
     if (!apiSecret) {
       console.error('❌ FETCH_API_SECRET não configurado');
@@ -28,15 +30,24 @@ async function runFetchWard() {
     console.log('☁️  Executando na Vercel...');
     
     try {
+      const headers = {
+        'Authorization': `Bearer ${apiSecret}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Adicionar bypass token se disponível
+      if (bypassToken) {
+        headers['x-vercel-protection-bypass'] = bypassToken;
+        console.log('🔓 Usando bypass token para deployment protection');
+      }
+
       const response = await axios.post(`${baseUrl}/api/fetch-ward-data`, {
         tickers: tickers.length > 0 ? tickers : undefined,
         noBrapi,
-        forceFullUpdate
+        forceFullUpdate,
+        resetState
       }, {
-        headers: {
-          'Authorization': `Bearer ${apiSecret}`,
-          'Content-Type': 'application/json'
-        },
+        headers,
         timeout: 300000 // 5 minutos
       });
 

@@ -216,7 +216,7 @@ function assessCompanyStrength(data: FinancialStatementsData): StatementsAnalysi
 
   // 5. Fluxo de caixa operacional (15 pontos)
   const opCashFlow = toNumber(latest.cashflow.operatingCashFlow) || 0;
-  if (opCashFlow > 0) {
+  if (opCashFlow > 0) {   
     const cashFlowMargin = opCashFlow / revenue;
     if (cashFlowMargin > 0.12) strengthScore += 15;
     else if (cashFlowMargin > 0.06) strengthScore += 10;
@@ -357,56 +357,117 @@ function analyzeHistoricalTrends(
 
   if (periods < 4) return result;
 
-  // Analisar tendências de receita (últimos 8-12 trimestres)
+  // Analisar tendências de receita usando comparação YoY (Year-over-Year)
   const revenues = incomeStatements.slice(0, periods).map(stmt => 
     toNumber(stmt.totalRevenue) || toNumber(stmt.operatingIncome) || 0
-  ).reverse();
+  ).reverse(); // Mais antigo primeiro
 
   const netIncomes = incomeStatements.slice(0, periods).map(stmt => 
     toNumber(stmt.netIncome) || 0
-  ).reverse();
+  ).reverse(); // Mais antigo primeiro
 
-  // Calcular tendências
+  // Calcular tendências YoY (comparar com mesmo trimestre do ano anterior)
+  const yoyAnalysis = calculateYoYTrends(revenues, netIncomes);
+  
+  // Avaliar consistência histórica baseada em YoY
+  // Só considerar se temos pelo menos 2 anos de dados (8 trimestres)
+  if (yoyAnalysis.validComparisons >= 4) {
+    if (yoyAnalysis.revenueGrowthRatio > 0.6) {
+      result.scoreAdjustment += 10;
+      result.positiveSignals.push('Histórico consistente de crescimento de receita (YoY)');
+    } else if (yoyAnalysis.revenueDeclineRatio > 0.6) {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push('Padrão histórico de declínio de receita (YoY)');
+    }
+
+    if (yoyAnalysis.profitGrowthRatio > 0.5) {
+      result.scoreAdjustment += 8;
+      result.positiveSignals.push('Histórico consistente de crescimento de lucro (YoY)');
+    } else if (yoyAnalysis.profitDeclineRatio > 0.6) {
+      result.scoreAdjustment -= 12;
+      result.redFlags.push('Padrão histórico de declínio de lucro (YoY)');
+    }
+  } else if (yoyAnalysis.validComparisons >= 2) {
+    // Para empresas com dados limitados, ser mais conservador
+    if (yoyAnalysis.revenueDeclineRatio > 0.8) {
+      result.scoreAdjustment -= 8;
+      result.redFlags.push('Tendência de declínio de receita (dados limitados)');
+    }
+    if (yoyAnalysis.profitDeclineRatio > 0.8) {
+      result.scoreAdjustment -= 6;
+      result.redFlags.push('Tendência de declínio de lucro (dados limitados)');
+    }
+  }
+
+  // Análise adicional de volatilidade
+  if (yoyAnalysis.revenueVolatility > 0.3) {
+    result.scoreAdjustment -= 3;
+    result.redFlags.push('Alta volatilidade nas receitas');
+  } else if (yoyAnalysis.revenueVolatility < 0.1) {
+    result.scoreAdjustment += 3;
+    result.positiveSignals.push('Receitas estáveis e previsíveis');
+  }
+
+  return result;
+}
+
+// Nova função para calcular tendências Year-over-Year
+function calculateYoYTrends(revenues: number[], netIncomes: number[]) {
   let revenueGrowthCount = 0;
   let revenueDeclineCount = 0;
   let profitGrowthCount = 0;
   let profitDeclineCount = 0;
-
-  for (let i = 1; i < revenues.length; i++) {
-    const revenueChange = revenues[i-1] > 0 ? (revenues[i] - revenues[i-1]) / revenues[i-1] : 0;
-    const profitChange = netIncomes[i-1] !== 0 ? (netIncomes[i] - netIncomes[i-1]) / Math.abs(netIncomes[i-1]) : 0;
+  let validRevenueComparisons = 0;
+  let validProfitComparisons = 0;
+  
+  const revenueChanges: number[] = [];
+  
+  // Comparar com mesmo trimestre do ano anterior (4 trimestres atrás)
+  for (let i = 4; i < revenues.length; i++) {
+    const currentRevenue = revenues[i];
+    const previousYearRevenue = revenues[i - 4];
+    const currentProfit = netIncomes[i];
+    const previousYearProfit = netIncomes[i - 4];
     
-    if (revenueChange > 0.02) revenueGrowthCount++;
-    else if (revenueChange < -0.05) revenueDeclineCount++;
+    // Análise de receita YoY
+    if (previousYearRevenue > 0 && currentRevenue > 0) {
+      const revenueChange = (currentRevenue - previousYearRevenue) / previousYearRevenue;
+      revenueChanges.push(Math.abs(revenueChange));
+      validRevenueComparisons++;
+      
+      if (revenueChange > 0.03) { // Crescimento > 3%
+        revenueGrowthCount++;
+      } else if (revenueChange < -0.05) { // Declínio > 5%
+        revenueDeclineCount++;
+      }
+    }
     
-    if (profitChange > 0.05) profitGrowthCount++;
-    else if (profitChange < -0.1) profitDeclineCount++;
+    // Análise de lucro YoY
+    if (previousYearProfit !== 0 && currentProfit !== 0) {
+      const profitChange = (currentProfit - previousYearProfit) / Math.abs(previousYearProfit);
+      validProfitComparisons++;
+      
+      if (profitChange > 0.05) { // Crescimento > 5%
+        profitGrowthCount++;
+      } else if (profitChange < -0.1) { // Declínio > 10%
+        profitDeclineCount++;
+      }
+    }
   }
-
-  const totalPeriods = revenues.length - 1;
-  const revenueGrowthRatio = revenueGrowthCount / totalPeriods;
-  const revenueDeclineRatio = revenueDeclineCount / totalPeriods;
-  const profitGrowthRatio = profitGrowthCount / totalPeriods;
-  const profitDeclineRatio = profitDeclineCount / totalPeriods;
-
-  // Avaliar consistência histórica
-  if (revenueGrowthRatio > 0.6) {
-    result.scoreAdjustment += 10;
-    result.positiveSignals.push('Histórico consistente de crescimento de receita');
-  } else if (revenueDeclineRatio > 0.4) {
-    result.scoreAdjustment -= 15;
-    result.redFlags.push('Padrão histórico de declínio de receita');
-  }
-
-  if (profitGrowthRatio > 0.5) {
-    result.scoreAdjustment += 8;
-    result.positiveSignals.push('Histórico consistente de crescimento de lucro');
-  } else if (profitDeclineRatio > 0.4) {
-    result.scoreAdjustment -= 12;
-    result.redFlags.push('Padrão histórico de declínio de lucro');
-  }
-
-  return result;
+  
+  // Calcular volatilidade da receita
+  const avgRevenueChange = revenueChanges.length > 0 
+    ? revenueChanges.reduce((sum, change) => sum + change, 0) / revenueChanges.length 
+    : 0;
+  
+  return {
+    revenueGrowthRatio: validRevenueComparisons > 0 ? revenueGrowthCount / validRevenueComparisons : 0,
+    revenueDeclineRatio: validRevenueComparisons > 0 ? revenueDeclineCount / validRevenueComparisons : 0,
+    profitGrowthRatio: validProfitComparisons > 0 ? profitGrowthCount / validProfitComparisons : 0,
+    profitDeclineRatio: validProfitComparisons > 0 ? profitDeclineCount / validProfitComparisons : 0,
+    revenueVolatility: avgRevenueChange,
+    validComparisons: Math.min(validRevenueComparisons, validProfitComparisons)
+  };
 }
 
 // Análise contextual de posição de caixa
@@ -774,13 +835,13 @@ export function calculateOverallScore(strategies: {
   gordon: StrategyAnalysis | null;
 }, financialData: FinancialData, currentPrice: number, statementsData?: FinancialStatementsData): OverallScore {
   const weights = {
-    graham: 0.12,        // 12% - Base fundamentalista
-    dividendYield: 0.12, // 12% - Sustentabilidade de dividendos
-    lowPE: 0.16,         // 16% - Value investing
-    magicFormula: 0.12,  // 12% - Qualidade operacional
-    fcd: 0.16,           // 16% - Valor intrínseco
+    graham: 0.13,        // 13% - Base fundamentalista
+    dividendYield: 0.13, // 13% - Sustentabilidade de dividendos
+    lowPE: 0.18,         // 16% - Value investing
+    magicFormula: 0.13,  // 13% - Qualidade operacional
+    fcd: 0.18,           // 18% - Valor intrínseco
     gordon: 0.12,        // 12% - Método dos dividendos
-    statements: 0.20     // 20% - Análise das demonstrações financeiras
+    statements: 0.15     // 15% - Análise das demonstrações financeiras
   };
 
   let totalScore = 0;

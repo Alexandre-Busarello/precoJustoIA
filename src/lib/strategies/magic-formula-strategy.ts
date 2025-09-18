@@ -37,7 +37,7 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
       { label: `Earnings Yield ≥ ${(minEY * 100).toFixed(0)}%`, value: !!(earningsYield && earningsYield >= minEY), description: `EY: ${formatPercent(earningsYield)}` },
       { label: 'ROE ≥ 15%', value: !!(roe && roe >= 0.15), description: `ROE: ${formatPercent(roe)}` },
       { label: 'Crescimento Receitas ≥ -5%', value: !crescimentoReceitas || crescimentoReceitas >= -0.05, description: `Crescimento: ${formatPercent(crescimentoReceitas)}` },
-      { label: 'Margem Líquida ≥ 5%', value: !!(margemLiquida && margemLiquida >= 0.05), description: `Margem: ${formatPercent(margemLiquida)}` },
+      { label: 'Margem Líquida ≥ 5%', value: margemLiquida ? (margemLiquida >= 0.05) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
       { label: 'Liquidez Corrente ≥ 1.2', value: !!(liquidezCorrente && liquidezCorrente >= 1.2), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
       { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
       { label: 'Market Cap ≥ R$ 1B', value: !!(marketCap && marketCap >= 1000000000), description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A'}` }

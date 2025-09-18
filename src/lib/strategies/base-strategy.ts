@@ -64,8 +64,6 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
       // Estimativa conservadora: EBITDA * 0.6
       fcffBase = ebitda * 0.6;
     }
-
-    console.log('FCFF Base:', fcffBase);
     
     if (fcffBase <= 0) return null;
     

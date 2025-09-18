@@ -15,6 +15,7 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 // Lucide Icons
 import {
@@ -23,7 +24,9 @@ import {
   Eye,
   User,
   LineChart,
-  GitCompare
+  GitCompare,
+  ChevronDown,
+  Info
 } from 'lucide-react'
 
 interface PageProps {
@@ -215,7 +218,7 @@ function IndicatorCard({
 }: {
   title: string
   value: string | number
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   icon: any
   description?: string
   type?: 'positive' | 'negative' | 'neutral' | 'default'
@@ -302,7 +305,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const currentPrice = toNumber(company.dailyQuotes[0]?.price) || 0
     
     const title = `${ticker} - ${company.name} | Análise de Ação Completa - Preço Justo AI`
-    const description = `Análise fundamentalista completa da ação ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}. Análise com IA, indicadores financeiros e estratégias de investimento.`
+    
+    // Incluir descrição da empresa no SEO quando disponível
+    const baseDescription = `Análise fundamentalista completa da ação ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
+    
+    const companyInfo = company.description 
+      ? ` ${company.description.substring(0, 100)}...` 
+      : ''
+    
+    const description = `${baseDescription}${companyInfo} Análise com IA, indicadores financeiros e estratégias de investimento.`
 
     return {
       title,
@@ -412,7 +423,7 @@ export default async function TickerPage({ params }: PageProps) {
         ? value.toNumber() 
         : value
     ])
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   ) as any : null
 
   return (
@@ -484,6 +495,28 @@ export default async function TickerPage({ params }: PageProps) {
                     <h2 className="text-xl text-muted-foreground mb-4">
                       Análise da Ação {companyData.name}
                     </h2>
+
+                    {/* Descrição da Empresa - Collapsible para SEO */}
+                    {companyData.description && (
+                      <div className="mb-4">
+                        <Collapsible>
+                          <CollapsibleTrigger className="flex items-center space-x-2 text-left p-0 hover:no-underline">
+                            <Info className="w-4 h-4 text-muted-foreground" />
+                            <span className="font-medium text-muted-foreground">
+                              Sobre a {companyData.name}
+                            </span>
+                            <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform duration-200" />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-3">
+                            <div className="p-4 bg-muted/50 rounded-lg border">
+                              <p className="text-sm leading-relaxed text-muted-foreground">
+                                {companyData.description}
+                              </p>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </div>
+                    )}
 
                     {/* Botão de Ação */}
                     {smartComparatorUrl && (
@@ -619,7 +652,7 @@ export default async function TickerPage({ params }: PageProps) {
               "@type": "Corporation",
               "name": companyData.name,
               "alternateName": ticker,
-              "description": `Análise fundamentalista completa de ${companyData.name} (${ticker}) com indicadores financeiros, valuation e estratégias de investimento. Descubra se a ação está subvalorizada.`,
+              "description": companyData.description || `Análise fundamentalista completa de ${companyData.name} (${ticker}) com indicadores financeiros, valuation e estratégias de investimento. Descubra se a ação está subvalorizada.`,
               "url": `https://preço-justo.ai/acao/${ticker}`,
               "logo": companyData.logoUrl || undefined,
               "sameAs": companyData.website ? [companyData.website] : undefined,

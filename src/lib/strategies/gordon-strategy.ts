@@ -121,11 +121,6 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     // D = Dividendo próximos 12 meses
     // K = Taxa de desconto (retorno esperado)
     // G = Taxa de crescimento dos dividendos
-
-    console.log('Calculando Fórmula de Gordon...');
-    console.log('Dividendo próximos 12 meses:', dividendNext12m);
-    console.log('Taxa de desconto:', discountRate);
-    console.log('Taxa de crescimento:', growthRate);
     
     const fairValue = dividendNext12m / (discountRate - growthRate);
     return fairValue > 0 ? fairValue : null;

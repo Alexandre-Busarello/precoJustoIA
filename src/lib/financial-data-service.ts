@@ -53,13 +53,25 @@ function serializePrismaData(data: unknown): unknown {
 }
 
 // Função para determinar se uma empresa é do setor financeiro
-export function isFinancialSector(sector: string | null, industry: string | null): boolean {
-  if (!sector && !industry) return false
+export function isFinancialSector(sector: string | null, industry: string | null, ticker?: string): boolean {
+  if (!sector && !industry && !ticker) return false
+  
+  // Tickers específicos conhecidos de empresas financeiras/seguradoras
+  const knownFinancialTickers = [
+    'BBSE3', 'SULA11', 'PSSA3', 'BBAS3', 'ITUB4', 'SANB11', 
+    'BPAC11', 'BRSR6', 'PINE4', 'WIZS3', 'ABCB4', 'BPAN4'
+  ]
+  
+  if (ticker && knownFinancialTickers.includes(ticker.toUpperCase())) {
+    console.log('🏦 Ticker financeiro conhecido detectado:', ticker)
+    return true
+  }
   
   const financialKeywords = [
     'financial', 'insurance', 'bank', 'seguros', 'financeiro', 
     'previdência', 'capitalização', 'crédito', 'investimento',
-    'seguridade', 'participações', 'holdings', 'caixa'
+    'seguridade', 'participações', 'holdings', 'caixa', 'bancário',
+    'vida e previdência', 'corretora', 'asset management'
   ]
   
   const sectorLower = sector?.toLowerCase() || ''
@@ -70,6 +82,7 @@ export function isFinancialSector(sector: string | null, industry: string | null
   )
   
   console.log('🔍 Verificando setor financeiro:', {
+    ticker,
     sector,
     industry,
     sectorLower,

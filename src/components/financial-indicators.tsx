@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { isFinancialSector } from '@/lib/financial-data-service'
 import {
   TrendingUp,
   TrendingDown,
@@ -269,7 +270,7 @@ function IndicatorCard({
 }: {
   title: string
   value: string | number
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   icon: any
   description?: string
   type?: 'positive' | 'negative' | 'neutral' | 'default'
@@ -346,7 +347,7 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
   isOpen: boolean
   onClose: () => void
 }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [chartData, setChartData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -420,9 +421,9 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
 
     // Renderizar gráfico com dados
     const data = chartData.data
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const maxValue = Math.max(...data.map((d: any) => d.value))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const minValue = Math.min(...data.map((d: any) => d.value))
     const range = maxValue - minValue || 1
 
@@ -463,7 +464,7 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
                     />
                   ))}
                   {/* Linhas verticais */}
-                  {data.map((d: any, i: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                  {data.map((d: any, i: number) => {  
                     const x = (i / (data.length - 1)) * 100
                     return (
                       <div
@@ -487,7 +488,7 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
                   {/* Área sombreada */}
                   <polygon
                     fill="url(#areaGradient)"
-                    points={`0,100 ${data.map((d: any, i: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                    points={`0,100 ${data.map((d: any, i: number) => {  
                       const x = (i / (data.length - 1)) * 100
                       const y = 100 - ((d.value - minValue) / range) * 100
                       return `${x},${y}`
@@ -501,7 +502,7 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    points={data.map((d: any, i: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                    points={data.map((d: any, i: number) => {  
                       const x = (i / (data.length - 1)) * 100
                       const y = 100 - ((d.value - minValue) / range) * 100
                       return `${x},${y}`
@@ -510,7 +511,7 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
                   />
                   
                   {/* Pontos do gráfico */}
-                  {data.map((d: any, i: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                  {data.map((d: any, i: number) => {  
                     const x = (i / (data.length - 1)) * 100
                     const y = 100 - ((d.value - minValue) / range) * 100
                     return (
@@ -545,7 +546,7 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
             {/* Eixo X - anos */}
             <div className="mt-3 ml-20">
               <div className="relative h-6">
-                {data.map((d: any, i: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                {data.map((d: any, i: number) => {  
                   const x = (i / (data.length - 1)) * 100
                   return (
                     <div
@@ -607,9 +608,9 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
 
 interface FinancialIndicatorsProps {
   ticker: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   latestFinancials: any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   comprehensiveData?: any
 }
 
@@ -639,14 +640,37 @@ export default function FinancialIndicators({ ticker, latestFinancials, comprehe
     const margemLiquida = toNumber(latestFinancials?.margemLiquida)
     if (margemLiquida !== null) return margemLiquida
     
-    // Fallback: calcular margem líquida usando dados ANUAIS netIncome / operatingIncome
+    // Verificar se é empresa de seguros/financeira
+    const isInsuranceOrFinancial = isFinancialSector(null, null, ticker)
+    
+    // Para empresas de seguros/financeiras, não calcular margem líquida com fallback
+    // pois a estrutura contábil é muito diferente
+    if (isInsuranceOrFinancial) {
+      console.log('🏦 Empresa financeira/seguradora detectada - não aplicando fallback de margem líquida')
+      return null
+    }
+    
+    // Fallback apenas para empresas tradicionais: calcular margem líquida usando dados ANUAIS netIncome / totalRevenue
+    if (latestAnnualIncome?.netIncome && latestAnnualIncome?.totalRevenue) {
+      console.log('latestAnnualIncome.netIncome', latestAnnualIncome.netIncome);
+      console.log('latestAnnualIncome.totalRevenue', latestAnnualIncome.totalRevenue);
+      const netIncome = toNumber(latestAnnualIncome.netIncome)
+      const totalRevenue = toNumber(latestAnnualIncome.totalRevenue)
+      if (netIncome && totalRevenue && totalRevenue > 0) {
+        return netIncome / totalRevenue
+      }
+    }
+    
+    // Fallback secundário: usar operatingIncome apenas se totalRevenue não disponível
     if (latestAnnualIncome?.netIncome && latestAnnualIncome?.operatingIncome) {
       const netIncome = toNumber(latestAnnualIncome.netIncome)
       const operatingIncome = toNumber(latestAnnualIncome.operatingIncome)
       if (netIncome && operatingIncome && operatingIncome > 0) {
+        console.log('⚠️ Usando operatingIncome como fallback para margem líquida')
         return netIncome / operatingIncome
       }
     }
+    
     return null
   }
   
@@ -655,8 +679,39 @@ export default function FinancialIndicators({ ticker, latestFinancials, comprehe
     const receitaTotal = toNumber(latestFinancials?.receitaTotal)
     if (receitaTotal !== null) return receitaTotal
     
-    // Fallback: usar dados ANUAIS - operatingIncome como proxy para receita
-    return toNumber(latestAnnualIncome?.operatingIncome)
+    // Verificar se é empresa de seguros/financeira
+    const isInsuranceOrFinancial = isFinancialSector(null, null, ticker)
+    
+    // Para empresas de seguros/financeiras, não usar fallbacks tradicionais
+    // pois receita pode ser negativa ou ter estrutura contábil específica
+    if (isInsuranceOrFinancial) {
+      console.log('🏦 Empresa financeira/seguradora detectada - não aplicando fallback de receita total')
+      
+      // Para seguradoras, tentar usar totalRevenue se disponível, mas não operatingIncome
+      const totalRevenue = toNumber(latestAnnualIncome?.totalRevenue)
+      if (totalRevenue !== null) {
+        console.log('📊 Usando totalRevenue para seguradora:', totalRevenue)
+        return totalRevenue
+      }
+      
+      return null
+    }
+    
+    // Fallback para empresas tradicionais: usar dados ANUAIS - totalRevenue primeiro
+    const totalRevenue = toNumber(latestAnnualIncome?.totalRevenue)
+    if (totalRevenue !== null) {
+      console.log('📊 Usando totalRevenue como fallback:', totalRevenue)
+      return totalRevenue
+    }
+    
+    // Fallback secundário: operatingIncome apenas para empresas não-financeiras
+    const operatingIncome = toNumber(latestAnnualIncome?.operatingIncome)
+    if (operatingIncome !== null) {
+      console.log('⚠️ Usando operatingIncome como fallback para receita total')
+      return operatingIncome
+    }
+    
+    return null
   }
 
   // Mapeamento de títulos dos cards para indicadores da API

@@ -2,6 +2,8 @@ import axios from 'axios';
 import * as dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { backgroundPrisma, backgroundPrismaManager } from './prisma-background';
+import { TickerProcessingManager } from './ticker-processing-manager';
+import { ConcurrencyManager, executeWithRetry, executeWithTimeout } from './concurrency-manager';
 // Importar apenas o que precisamos do fetch-data.ts
 // import { DataFetcher } from './fetch-data';
 
@@ -525,7 +527,7 @@ async function checkExistingHistoricalData(companyId: number): Promise<{
 
 // Função para buscar dados completos da Brapi PRO (otimizada)
 async function fetchBrapiProData(ticker: string, forceFullUpdate: boolean = false): Promise<BrapiProResponse['results'][0] | null> {
-  try {
+  return executeWithRetry(async () => {
     console.log(`🔍 Buscando dados completos da Brapi PRO para ${ticker}...`);
     
     if (!BRAPI_TOKEN) {
@@ -583,19 +585,7 @@ async function fetchBrapiProData(ticker: string, forceFullUpdate: boolean = fals
       console.log(`⚠️  Nenhum dado encontrado na Brapi PRO para ${ticker}`);
       return null;
     }
-  } catch (error: any) {
-    if (error.response?.status === 404) {
-      console.log(`❌ Empresa ${ticker} não encontrada na Brapi PRO`);
-    } else if (error.response?.status === 429) {
-      console.log(`⏳ Rate limit atingido na Brapi PRO para ${ticker}, aguardando...`);
-      await new Promise(resolve => setTimeout(resolve, 10000));
-    } else if (error.response?.status === 401) {
-      console.log(`🔐 Token inválido ou expirado na Brapi PRO para ${ticker}`);
-    } else {
-      console.error(`❌ Erro ao buscar dados da Brapi PRO para ${ticker}:`, error.message);
-    }
-    return null;
-  }
+  }, 2, 2000); // 2 tentativas, 2s de delay inicial
 }
 
 // Função para buscar apenas dados TTM (defaultKeyStatistics e financialData)
@@ -729,7 +719,7 @@ async function fetchWardTickers(): Promise<WardTickerItem[]> {
 
 // Função para buscar dados de uma empresa na Ward API
 async function fetchWardData(ticker: string): Promise<WardApiResponse | null> {
-  try {
+  return executeWithRetry(async () => {
     console.log(`🔍 Buscando dados da Ward para ${ticker}...`);
     
     const response = await axios.get(
@@ -759,16 +749,7 @@ async function fetchWardData(ticker: string): Promise<WardApiResponse | null> {
       console.log(`⚠️  Resposta inesperada da Ward para ${ticker}: Status ${response.status}`);
       return null;
     }
-  } catch (error: any) {
-    if (error.response?.status === 404) {
-      console.log(`❌ Empresa ${ticker} não encontrada na Ward API`);
-    } else if (error.response?.status === 401) {
-      console.log(`🔐 Token JWT expirado ou inválido para ${ticker}`);
-    } else {
-      console.error(`❌ Erro ao buscar dados da Ward para ${ticker}:`, error.message);
-    }
-    return null;
-  }
+  }, 3, 1500); // 3 tentativas, 1.5s de delay inicial
 }
 
 // Interface para dados financeiros completos
@@ -1242,41 +1223,68 @@ function filterMissingData<T extends { endDate?: string; updatedAt?: string }>(
   });
 }
 
-// Função auxiliar para processar dados sequencialmente (sem paralelismo)
-async function processDataSequentially<T>(
+// Função auxiliar para processar dados com paralelismo controlado
+async function processDataConcurrently<T>(
   dataArray: T[],
   processFn: (item: T) => Promise<void>,
-  delayBetweenItems: number = 100 // Delay pequeno entre itens
+  maxConcurrency: number = 3,
+  batchSize: number = 10
 ): Promise<void> {
   if (dataArray.length === 0) return;
   
-  console.log(`📦 Processando ${dataArray.length} itens sequencialmente`);
+  console.log(`📦 Processando ${dataArray.length} itens com paralelismo (max ${maxConcurrency})`);
   
+  const concurrencyManager = new ConcurrencyManager(maxConcurrency);
   let successful = 0;
   let failed = 0;
   
-  for (let i = 0; i < dataArray.length; i++) {
-    const item = dataArray[i];
-    try {
-      await processFn(item);
-      successful++;
-      
-      // Log de progresso a cada 5 itens ou no final
-      if ((i + 1) % 5 === 0 || i === dataArray.length - 1) {
-        console.log(`  📊 Progresso: ${i + 1}/${dataArray.length} itens processados (${successful} sucessos, ${failed} falhas)`);
-      }
-      
-      // Delay entre itens para não sobrecarregar o banco
-      if (i < dataArray.length - 1 && delayBetweenItems > 0) {
-        await new Promise(resolve => setTimeout(resolve, delayBetweenItems));
-      }
-    } catch (error: any) {
-      failed++;
-      console.error(`    ❌ Item ${i + 1}: ${error.message}`);
+  // Processar em lotes para controlar melhor o progresso
+  for (let i = 0; i < dataArray.length; i += batchSize) {
+    const batch = dataArray.slice(i, i + batchSize);
+    const batchStartTime = Date.now();
+    
+    console.log(`  📦 Processando lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(dataArray.length / batchSize)} (${batch.length} itens)`);
+    
+    const results = await concurrencyManager.executeBatch(
+      batch,
+      async (item) => {
+        try {
+          await executeWithTimeout(() => processFn(item), 30000); // 30s timeout por item
+          return { success: true };
+        } catch (error: any) {
+          console.error(`    ❌ Erro no item: ${error.message}`);
+          return { success: false, error: error.message };
+        }
+      },
+      maxConcurrency
+    );
+    
+    // Contar sucessos e falhas do lote
+    const batchSuccessful = results.filter(r => r.success).length;
+    const batchFailed = results.filter(r => !r.success).length;
+    successful += batchSuccessful;
+    failed += batchFailed;
+    
+    const batchTime = Date.now() - batchStartTime;
+    console.log(`  ✅ Lote concluído em ${Math.round(batchTime / 1000)}s: ${batchSuccessful} sucessos, ${batchFailed} falhas`);
+    
+    // Log de progresso geral
+    if (i + batchSize >= dataArray.length || (i + batchSize) % (batchSize * 2) === 0) {
+      const processed = Math.min(i + batchSize, dataArray.length);
+      console.log(`  📊 Progresso geral: ${processed}/${dataArray.length} itens processados (${successful} sucessos, ${failed} falhas)`);
     }
   }
   
-  console.log(`  ✅ Processamento concluído: ${successful} sucessos, ${failed} falhas`);
+  console.log(`  🎉 Processamento concluído: ${successful} sucessos, ${failed} falhas`);
+}
+
+// Manter função sequencial para casos específicos
+async function processDataSequentially<T>(
+  dataArray: T[],
+  processFn: (item: T) => Promise<void>,
+  delayBetweenItems: number = 100
+): Promise<void> {
+  return processDataConcurrently(dataArray, processFn, 1, dataArray.length);
 }
 
 // Função para processar dados do balanço patrimonial (otimizada)
@@ -1395,9 +1403,11 @@ async function processBalanceSheets(
     
   if (yearlyBalanceSheets.length > 0) {
     console.log(`  📊 Processando ${yearlyBalanceSheets.length} balanços anuais faltantes (de ${data.balanceSheetHistory?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       yearlyBalanceSheets,
-      (balanceSheet) => processBalanceSheet(balanceSheet, 'YEARLY')
+      (balanceSheet) => processBalanceSheet(balanceSheet, 'YEARLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
   } else {
     console.log(`  ✅ Todos os balanços anuais já existem no banco`);
@@ -1412,9 +1422,11 @@ async function processBalanceSheets(
     
   if (quarterlyBalanceSheets.length > 0) {
     console.log(`  📊 Processando ${quarterlyBalanceSheets.length} balanços trimestrais faltantes (de ${data.balanceSheetHistoryQuarterly?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       quarterlyBalanceSheets,
-      (balanceSheet) => processBalanceSheet(balanceSheet, 'QUARTERLY')
+      (balanceSheet) => processBalanceSheet(balanceSheet, 'QUARTERLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
   } else {
     console.log(`  ✅ Todos os balanços trimestrais já existem no banco`);
@@ -1562,11 +1574,12 @@ async function processIncomeStatements(
     
   if (yearlyIncomeStatements.length > 0) {
     console.log(`  📈 Processando ${yearlyIncomeStatements.length} DREs anuais faltantes (de ${data.incomeStatementHistory?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       yearlyIncomeStatements,
-      (incomeStatement) => processIncomeStatement(incomeStatement, 'YEARLY')
+      (incomeStatement) => processIncomeStatement(incomeStatement, 'YEARLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${yearlyIncomeStatements.length} DREs anuais processadas`);
   } else {
     console.log(`  ✅ Todas as DREs anuais já existem no banco`);
   }
@@ -1580,11 +1593,12 @@ async function processIncomeStatements(
     
   if (quarterlyIncomeStatements.length > 0) {
     console.log(`  📈 Processando ${quarterlyIncomeStatements.length} DREs trimestrais faltantes (de ${data.incomeStatementHistoryQuarterly?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       quarterlyIncomeStatements,
-      (incomeStatement) => processIncomeStatement(incomeStatement, 'QUARTERLY')
+      (incomeStatement) => processIncomeStatement(incomeStatement, 'QUARTERLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${quarterlyIncomeStatements.length} DREs trimestrais processadas`);
   } else {
     console.log(`  ✅ Todas as DREs trimestrais já existem no banco`);
   }
@@ -1661,11 +1675,12 @@ async function processCashflowStatements(
     
   if (yearlyCashflowStatements.length > 0) {
     console.log(`  💰 Processando ${yearlyCashflowStatements.length} DFCs anuais faltantes (de ${data.cashflowHistory?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       yearlyCashflowStatements,
-      (cashflowStatement) => processCashflowStatement(cashflowStatement, 'YEARLY')
+      (cashflowStatement) => processCashflowStatement(cashflowStatement, 'YEARLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${yearlyCashflowStatements.length} DFCs anuais processadas`);
   } else {
     console.log(`  ✅ Todas as DFCs anuais já existem no banco`);
   }
@@ -1679,11 +1694,12 @@ async function processCashflowStatements(
     
   if (quarterlyCashflowStatements.length > 0) {
     console.log(`  💰 Processando ${quarterlyCashflowStatements.length} DFCs trimestrais faltantes (de ${data.cashflowHistoryQuarterly?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       quarterlyCashflowStatements,
-      (cashflowStatement) => processCashflowStatement(cashflowStatement, 'QUARTERLY')
+      (cashflowStatement) => processCashflowStatement(cashflowStatement, 'QUARTERLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${quarterlyCashflowStatements.length} DFCs trimestrais processadas`);
   } else {
     console.log(`  ✅ Todas as DFCs trimestrais já existem no banco`);
   }
@@ -1784,11 +1800,12 @@ async function processKeyStatistics(
     
   if (yearlyKeyStatistics.length > 0) {
     console.log(`  📋 Processando ${yearlyKeyStatistics.length} estatísticas anuais faltantes (de ${data.defaultKeyStatisticsHistory?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       yearlyKeyStatistics,
-      (keyStatistic) => processKeyStatistic(keyStatistic, 'YEARLY')
+      (keyStatistic) => processKeyStatistic(keyStatistic, 'YEARLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${yearlyKeyStatistics.length} estatísticas anuais processadas`);
   } else {
     console.log(`  ✅ Todas as estatísticas anuais já existem no banco`);
   }
@@ -1802,11 +1819,12 @@ async function processKeyStatistics(
     
   if (quarterlyKeyStatistics.length > 0) {
     console.log(`  📋 Processando ${quarterlyKeyStatistics.length} estatísticas trimestrais faltantes (de ${data.defaultKeyStatisticsHistoryQuarterly?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       quarterlyKeyStatistics,
-      (keyStatistic) => processKeyStatistic(keyStatistic, 'QUARTERLY')
+      (keyStatistic) => processKeyStatistic(keyStatistic, 'QUARTERLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${quarterlyKeyStatistics.length} estatísticas trimestrais processadas`);
   } else {
     console.log(`  ✅ Todas as estatísticas trimestrais já existem no banco`);
   }
@@ -1864,11 +1882,12 @@ async function processValueAddedStatements(
     
   if (yearlyValueAddedStatements.length > 0) {
     console.log(`  💡 Processando ${yearlyValueAddedStatements.length} DVAs anuais faltantes (de ${data.valueAddedHistory?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       yearlyValueAddedStatements,
-      (valueAddedStatement) => processValueAddedStatement(valueAddedStatement, 'YEARLY')
+      (valueAddedStatement) => processValueAddedStatement(valueAddedStatement, 'YEARLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${yearlyValueAddedStatements.length} DVAs anuais processadas`);
   } else {
     console.log(`  ✅ Todas as DVAs anuais já existem no banco`);
   }
@@ -1882,11 +1901,12 @@ async function processValueAddedStatements(
     
   if (quarterlyValueAddedStatements.length > 0) {
     console.log(`  💡 Processando ${quarterlyValueAddedStatements.length} DVAs trimestrais faltantes (de ${data.valueAddedHistoryQuarterly?.length || 0} totais)`);
-    await processDataSequentially(
+    await processDataConcurrently(
       quarterlyValueAddedStatements,
-      (valueAddedStatement) => processValueAddedStatement(valueAddedStatement, 'QUARTERLY')
+      (valueAddedStatement) => processValueAddedStatement(valueAddedStatement, 'QUARTERLY'),
+      3, // max 3 concurrent
+      5   // lotes de 5
     );
-    console.log(`  ✅ ${quarterlyValueAddedStatements.length} DVAs trimestrais processadas`);
   } else {
     console.log(`  ✅ Todas as DVAs trimestrais já existem no banco`);
   }
@@ -2552,141 +2572,65 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
   }
 }
 
-// Função principal
+// Função principal com gerenciamento de estado baseado em tickers individuais
 async function main() {
   const startTime = Date.now();
   console.log(`🚀 Iniciando fetch de dados da Ward API... [${new Date().toLocaleString('pt-BR')}]\n`);
   
+  const tickerManager = new TickerProcessingManager('ward_data_fetch');
+  
   try {
-    
     // Verificar argumentos: tickers e opções
     const args = process.argv.slice(2);
     const noBrapiIndex = args.indexOf('--no-brapi');
     const forceFullIndex = args.indexOf('--force-full');
+    const resetIndex = args.indexOf('--reset');
+    const discoverIndex = args.indexOf('--discover');
     const enableBrapiComplement = noBrapiIndex === -1;
     const forceFullUpdate = forceFullIndex !== -1;
+    const resetState = resetIndex !== -1;
+    const discoverTickers = discoverIndex !== -1;
     
     // Remover opções dos tickers
     const tickers = args.filter((arg, index) => 
       index !== noBrapiIndex && 
       index !== forceFullIndex && 
+      index !== resetIndex &&
+      index !== discoverIndex &&
       arg !== '--no-brapi' && 
-      arg !== '--force-full'
-    );
+      arg !== '--force-full' &&
+      arg !== '--reset' &&
+      arg !== '--discover'
+    ).map(t => t.toUpperCase());
     
     console.log(`🔧 Complemento Brapi: ${enableBrapiComplement ? '✅ Ativado' : '❌ Desativado'}`);
-    console.log(`🔄 Atualização completa: ${forceFullUpdate ? '✅ Forçada' : '❌ Otimizada'}`);
+    console.log(`🔄 Atualização completa: ${forceFullUpdate ? '✅ Forçada' : '❌ Inteligente'}`);
+    console.log(`🔄 Reset de estado: ${resetState ? '✅ Sim' : '❌ Não'}`);
+    console.log(`🔍 Descobrir tickers: ${discoverTickers ? '✅ Sim' : '❌ Não'}`);
     
-    if (enableBrapiComplement) {
-      console.log('   📊 Dados do ano atual serão complementados com indicadores da Brapi API');
+    // Reset do estado se solicitado
+    if (resetState) {
+      await tickerManager.resetAllTickers();
+      console.log('🔄 Estado de todos os tickers resetado.\n');
     }
     
-    if (forceFullUpdate) {
-      console.log('   🔄 Todos os dados históricos serão reprocessados (ignora otimizações)');
-    } else {
-      console.log('   ⚡ Modo otimizado: apenas dados recentes serão atualizados');
+    // Descobrir novos tickers se solicitado
+    if (discoverTickers || tickers.length === 0 && !resetState) {
+      await discoverAndInitializeTickers(tickerManager);
     }
     
-    if (tickers.length === 0) {
-      console.log('📋 Nenhum ticker especificado. Buscando todos os tickers da Ward API...');
-      
-      // Buscar todos os tickers disponíveis na Ward API
-      const wardTickers = await fetchWardTickers();
-      
-      if (wardTickers.length === 0) {
-        console.log('❌ Nenhum ticker encontrado na Ward API. Tentando buscar do banco...');
-        
-        // Fallback: buscar empresas do banco
-        const companies = await prisma.company.findMany({
-          select: { ticker: true },
-          orderBy: { ticker: 'asc' }
-        });
-        
-        console.log(`📊 Encontradas ${companies.length} empresas no banco como fallback`);
-        
-        // Processar empresas sequencialmente
-        console.log(`📦 Processando ${companies.length} empresas sequencialmente`);
-        
-        for (let i = 0; i < companies.length; i++) {
-          const company = companies[i];
-          try {
-            console.log(`\n🏢 Processando ${i + 1}/${companies.length}: ${company.ticker}`);
-            
-            await processCompany(company.ticker, enableBrapiComplement, forceFullUpdate);
-            
-            // Log de progresso a cada 10 empresas ou no final
-            if ((i + 1) % 10 === 0 || i === companies.length - 1) {
-              console.log(`📊 Progresso geral: ${i + 1}/${companies.length} empresas processadas`);
-            }
-            
-            // Delay entre empresas para não sobrecarregar o banco
-            if (i < companies.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-          } catch (error: any) {
-            console.error(`❌ Erro ao processar empresa ${company.ticker}:`, error.message);
-          }
-        }
-      } else {
-        console.log(`📊 Processando ${wardTickers.length} tickers da Ward API`);
-        
-        // Processar tickers da Ward sequencialmente
-        console.log(`📦 Processando ${wardTickers.length} tickers sequencialmente`);
-        
-        let processed = 0;
-        let errors = 0;
-        
-        for (let i = 0; i < wardTickers.length; i++) {
-          const wardTicker = wardTickers[i];
-          try {
-            console.log(`\n🏢 Processando ${i + 1}/${wardTickers.length}: ${wardTicker.ticker}`);
-            
-            await processCompany(wardTicker.ticker, enableBrapiComplement, forceFullUpdate);
-            processed++;
-            
-            // Log de progresso a cada 10 empresas ou no final
-            if ((i + 1) % 10 === 0 || i === wardTickers.length - 1) {
-              console.log(`📊 Progresso geral: ${processed}/${wardTickers.length} sucessos, ${errors} erros`);
-            }
-            
-            // Delay entre empresas para não sobrecarregar o banco
-            if (i < wardTickers.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
-          } catch (error: any) {
-            console.error(`❌ Erro ao processar ${wardTicker.ticker}:`, error.message);
-            errors++;
-          }
-        }
-        
-        console.log(`\n📊 Resumo final:`);
-        console.log(`  ✅ Processadas: ${processed}/${wardTickers.length}`);
-        console.log(`  ❌ Erros: ${errors}`);
-      }
-    } else {
+    // Mostrar estado atual
+    const summary = await tickerManager.getProcessingSummary();
+    console.log('📊 Estado atual do processamento:');
+    console.log(`   ${tickerManager.getFormattedSummary(summary)}\n`);
+    
+    // Determinar estratégia de processamento
+    if (tickers.length > 0) {
       console.log(`📋 Processando tickers especificados: ${tickers.join(', ')}`);
-      
-      // Processar tickers especificados sequencialmente
-      console.log(`📦 Processando ${tickers.length} tickers sequencialmente`);
-      
-      for (let i = 0; i < tickers.length; i++) {
-        const ticker = tickers[i];
-        try {
-          console.log(`\n🏢 Processando ${i + 1}/${tickers.length}: ${ticker.toUpperCase()}`);
-          
-          await processCompany(ticker.toUpperCase(), enableBrapiComplement, forceFullUpdate);
-          
-          console.log(`📊 Ticker ${i + 1}/${tickers.length} concluído`);
-          
-          // Delay entre tickers
-          if (i < tickers.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        } catch (error: any) {
-          console.error(`❌ Erro ao processar ticker ${ticker}:`, error.message);
-        }
-      }
+      await processSpecificTickersNew(tickers, enableBrapiComplement, forceFullUpdate, tickerManager);
+    } else {
+      console.log('⚡ Processando tickers pendentes automaticamente');
+      await processWithTickerManagement(enableBrapiComplement, forceFullUpdate, tickerManager);
     }
     
     const endTime = Date.now();
@@ -2694,9 +2638,14 @@ async function main() {
     const minutes = Math.floor(totalTime / 60000);
     const seconds = Math.floor((totalTime % 60000) / 1000);
     
-    console.log('\n✅ Fetch de dados da Ward concluído!');
-    console.log(`⏱️  Tempo total de processamento: ${minutes}m ${seconds}s`);
+    console.log('\n✅ Execução concluída!');
+    console.log(`⏱️  Tempo de processamento: ${minutes}m ${seconds}s`);
     console.log(`📅 Finalizado em: ${new Date().toLocaleString('pt-BR')}`);
+    
+    // Mostrar estado final
+    const finalSummary = await tickerManager.getProcessingSummary();
+    console.log('\n📊 Estado final:');
+    console.log(`   ${tickerManager.getFormattedSummary(finalSummary)}`);
     
   } catch (error: any) {
     const endTime = Date.now();
@@ -2712,9 +2661,291 @@ async function main() {
   }
 }
 
+
+
+
+
 // Executar se chamado diretamente
 if (require.main === module) {
   main().catch(console.error);
+}
+
+// Função para descobrir e inicializar tickers da Ward API
+async function discoverAndInitializeTickers(tickerManager: TickerProcessingManager): Promise<void> {
+  console.log('🔍 Descobrindo tickers disponíveis na Ward API...');
+  
+  try {
+    const wardTickers = await fetchWardTickers();
+    
+    if (wardTickers.length === 0) {
+      console.log('⚠️  Nenhum ticker encontrado na Ward API');
+      return;
+    }
+    
+    console.log(`📋 Encontrados ${wardTickers.length} tickers na Ward API`);
+    
+    // Extrair apenas os tickers únicos
+    const tickerList = wardTickers.map(item => item.ticker.toUpperCase());
+    const uniqueTickers = [...new Set(tickerList)];
+    
+    console.log(`📋 Inicializando ${uniqueTickers.length} tickers únicos...`);
+    
+    // Inicializar todos os tickers com prioridade normal
+    await tickerManager.initializeTickers(uniqueTickers, 0);
+    
+    console.log(`✅ ${uniqueTickers.length} tickers inicializados no sistema`);
+    
+  } catch (error: any) {
+    console.error('❌ Erro ao descobrir tickers:', error.message);
+    throw error;
+  }
+}
+
+// Função para processar tickers específicos (nova versão com paralelismo)
+async function processSpecificTickersNew(
+  tickers: string[], 
+  enableBrapiComplement: boolean, 
+  forceFullUpdate: boolean,
+  tickerManager: TickerProcessingManager
+): Promise<void> {
+  console.log(`📦 Processando ${tickers.length} tickers especificados`);
+  
+  // Inicializar tickers específicos com prioridade alta
+  await tickerManager.initializeTickers(tickers, 1);
+  
+  // Buscar informações dos tickers
+  const tickerInfos = await tickerManager.getSpecificTickers(tickers);
+  
+  // Processar em lotes de 5 empresas paralelas
+  const batchSize = 5;
+  const concurrencyManager = new ConcurrencyManager(batchSize);
+  
+  console.log(`🔄 Processando ${tickerInfos.length} tickers em lotes de ${batchSize} paralelos\n`);
+  
+  for (let i = 0; i < tickerInfos.length; i += batchSize) {
+    const batch = tickerInfos.slice(i, i + batchSize);
+    const batchStartTime = Date.now();
+    
+    console.log(`📦 Lote ${Math.floor(i / batchSize) + 1}: ${batch.map(t => t.ticker).join(', ')}`);
+    
+    // Processar lote em paralelo
+    const batchPromises = batch.map((tickerInfo, batchIndex) => 
+      concurrencyManager.execute(async () => {
+        const ticker = tickerInfo.ticker;
+        const tickerStartTime = Date.now();
+        
+        try {
+          console.log(`🏢 [${i + batchIndex + 1}/${tickerInfos.length}] Processando ${ticker}...`);
+          
+          // Marcar como em processamento
+          await tickerManager.markProcessing(ticker);
+          
+          // Processar empresa com timeout
+          await executeWithTimeout(
+            () => processCompanyWithTracking(ticker, enableBrapiComplement, forceFullUpdate, tickerManager),
+            120000 // 2 minutos timeout por ticker
+          );
+          
+          const tickerTime = Date.now() - tickerStartTime;
+          console.log(`✅ ${ticker} processado em ${Math.round(tickerTime / 1000)}s`);
+          
+          return { success: true, ticker, time: tickerTime };
+          
+        } catch (error: any) {
+          console.error(`❌ Erro ao processar ticker ${ticker}:`, error.message);
+          await tickerManager.markError(ticker, error.message);
+          return { success: false, ticker, error: error.message };
+        }
+      })
+    );
+    
+    // Aguardar lote completo
+    try {
+      const results = await Promise.all(batchPromises);
+      const successful = results.filter((r: any) => r.success).length;
+      const failed = results.filter((r: any) => !r.success).length;
+      
+      const batchTime = Date.now() - batchStartTime;
+      console.log(`📦 Lote processado em ${Math.round(batchTime / 1000)}s: ${successful} sucessos, ${failed} falhas\n`);
+      
+    } catch (error: any) {
+      console.error(`❌ Erro no lote:`, error.message);
+    }
+    
+    // Pequeno delay entre lotes para não sobrecarregar
+    if (i + batchSize < tickerInfos.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+// Função para processar empresa com rastreamento de progresso
+async function processCompanyWithTracking(
+  ticker: string, 
+  enableBrapiComplement: boolean, 
+  forceFullUpdate: boolean, 
+  tickerManager: TickerProcessingManager
+): Promise<void> {
+  try {
+    console.log(`🏢 Processando ${ticker}...`);
+    
+    // Primeiro, garantir que a empresa existe (criar se necessário)
+    const company = await createOrUpdateCompany(ticker);
+
+    if (!company) {
+      console.log(`❌ Não foi possível criar/encontrar empresa ${ticker}. Pulando...`);
+      await tickerManager.updateProgress(ticker, { 
+        status: 'SKIPPED',
+        error: 'Empresa não encontrada/criada'
+      });
+      return;
+    }
+
+    // Marcar que tem dados básicos
+    await tickerManager.updateProgress(ticker, { hasBasicData: true });
+
+    // Usar a função original de processamento
+    await processCompany(ticker, enableBrapiComplement, forceFullUpdate);
+
+    // Atualizar progresso final como completo
+    await tickerManager.updateProgress(ticker, {
+      hasBasicData: true,
+      hasHistoricalData: true,
+      hasTTMData: true,
+      hasBrapiProData: true,
+      status: 'COMPLETED'
+    });
+    
+  } catch (error: any) {
+    console.error(`❌ Erro ao processar empresa ${ticker}:`, error.message);
+    throw error;
+  }
+}
+
+// Função para processar com gerenciamento de tickers
+async function processWithTickerManagement(
+  enableBrapiComplement: boolean, 
+  forceFullUpdate: boolean,
+  tickerManager: TickerProcessingManager
+): Promise<void> {
+  
+  const maxProcessingTime = 50 * 60 * 1000; // 4.5 minutos em ms
+  const startTime = Date.now();
+  let processedCount = 0;
+  let errorCount = 0;
+  
+  console.log(`⏱️  Tempo máximo de processamento: 4.5 minutos\n`);
+  
+  while (true) {
+    // Verificar se ainda temos tempo
+    const elapsedTime = Date.now() - startTime;
+    if (elapsedTime >= maxProcessingTime) {
+      console.log(`⏰ Tempo limite atingido (${Math.round(elapsedTime / 1000)}s). Parando...`);
+      break;
+    }
+    
+    // Buscar próximos tickers para processar
+    const remainingTime = maxProcessingTime - elapsedTime;
+    const estimatedTimePerTicker = 45 * 1000; // 45s por ticker
+    const maxBatchSize = Math.floor(remainingTime / estimatedTimePerTicker);
+    const batchSize = Math.min(Math.max(1, maxBatchSize), 4); // Entre 1 e 4 tickers
+    
+    console.log(`⏱️  Tempo restante: ${Math.round(remainingTime / 1000)}s, lote: ${batchSize} tickers`);
+    
+    const tickers = await tickerManager.getTickersToProcess(batchSize, {
+      excludeErrors: true,
+      maxErrorCount: 2
+    });
+    
+    if (tickers.length === 0) {
+      console.log('🎉 Não há mais tickers para processar');
+      break;
+    }
+    
+    console.log(`📦 Processando lote de ${tickers.length} tickers:`);
+    tickers.forEach((t, i) => {
+      const needs = [];
+      if (t.needsHistoricalData) needs.push('histórico');
+      if (t.needsTTMUpdate) needs.push('TTM');
+      if (t.needsBrapiProData) needs.push('Brapi Pro');
+      console.log(`   ${i + 1}. ${t.ticker} (${needs.join(', ') || 'atualização'})`);
+    });
+    console.log('');
+    
+    // Processar lote em paralelo (2 empresas simultâneas)
+    const concurrencyManager = new ConcurrencyManager(2);
+    const batchStartTime = Date.now();
+    
+    const tickerPromises = tickers.map((tickerInfo, index) => 
+      concurrencyManager.execute(async () => {
+        const tickerStartTime = Date.now();
+        
+        try {
+          console.log(`🏢 [${processedCount + index + 1}] Processando ${tickerInfo.ticker}...`);
+          
+          // Marcar como em processamento
+          await tickerManager.markProcessing(tickerInfo.ticker);
+          
+          // Determinar tipo de processamento baseado nas necessidades
+          const shouldProcessHistorical = tickerInfo.needsHistoricalData || forceFullUpdate;
+          
+          // Processar com timeout
+          await executeWithTimeout(
+            () => processCompanyWithTracking(tickerInfo.ticker, enableBrapiComplement, shouldProcessHistorical, tickerManager),
+            120000 // 2 minutos timeout por ticker          
+          );
+          
+          const tickerTime = Date.now() - tickerStartTime;
+          console.log(`✅ ${tickerInfo.ticker} processado em ${Math.round(tickerTime / 1000)}s`);
+          
+          return { success: true, ticker: tickerInfo.ticker, time: tickerTime };
+          
+        } catch (error: any) {
+          console.error(`❌ Erro ao processar ${tickerInfo.ticker}:`, error.message);
+          await tickerManager.markError(tickerInfo.ticker, error.message);
+          return { success: false, ticker: tickerInfo.ticker, error: error.message };
+        }
+      })
+    );
+    
+    // Aguardar todas os tickers do lote com timeout geral
+    const batchTimeout = Math.min(maxProcessingTime - (Date.now() - startTime) - 30000, 240000);
+    
+    try {
+      const results = await executeWithTimeout(
+        () => Promise.all(tickerPromises),
+        batchTimeout
+      );
+      
+      // Contar resultados
+      const successful = results.filter((r: any) => r.success).length;
+      const failed = results.filter((r: any) => !r.success).length;
+      
+      processedCount += successful;
+      errorCount += failed;
+      
+      const batchTime = Date.now() - batchStartTime;
+      console.log(`📦 Lote processado em ${Math.round(batchTime / 1000)}s: ${successful} sucessos, ${failed} falhas`);
+      
+    } catch (timeoutError) {
+      console.log(`⏰ Timeout do lote - algumas empresas podem não ter terminado`);
+      
+      // Contar quantos conseguimos processar
+      const completedResults = await Promise.allSettled(tickerPromises);
+      const successful = completedResults.filter((r: any) => r.status === 'fulfilled' && r.value.success).length;
+      const failed = completedResults.length - successful;
+      
+      processedCount += successful;
+      errorCount += failed;
+    }
+    
+    console.log(`📊 Progresso: ${processedCount} sucessos, ${errorCount} erros\n`);
+  }
+  
+  console.log(`\n📊 Resumo da execução:`);
+  console.log(`   ✅ Tickers processados: ${processedCount}`);
+  console.log(`   ❌ Erros: ${errorCount}`);
+  console.log(`   ⏱️  Tempo total: ${Math.round((Date.now() - startTime) / 1000)}s`);
 }
 
 export { 
@@ -2735,5 +2966,9 @@ export {
   checkExistingHistoricalData,
   getExistingDataDates,
   filterMissingData,
-  processDataSequentially
+  processDataSequentially,
+  discoverAndInitializeTickers,
+  processSpecificTickersNew,
+  processCompanyWithTracking,
+  processWithTickerManagement
 };

@@ -37,7 +37,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
       { label: `P/L entre 3-${maxPE}`, value: !!(pl && pl > 3 && pl <= maxPE), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
       { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%`, value: !!(roe && roe >= minROE), description: `ROE: ${formatPercent(roe)}` },
       { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas)}` },
-      { label: 'Margem Líquida ≥ 3%', value: !!(margemLiquida && margemLiquida >= 0.03), description: `Margem: ${formatPercent(margemLiquida)}` },
+      { label: 'Margem Líquida ≥ 3%', value: margemLiquida ? (margemLiquida >= 0.03) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
       { label: 'Liquidez Corrente ≥ 1.0', value: !!(liquidezCorrente && liquidezCorrente >= 1.0), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
       { label: 'ROA ≥ 5%', value: !!(roa && roa >= 0.05), description: `ROA: ${formatPercent(roa)}` },
       { label: 'Dív. Líq./PL ≤ 200%', value: !dividaLiquidaPl || dividaLiquidaPl <= 2.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },

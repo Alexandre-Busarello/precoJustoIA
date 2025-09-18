@@ -49,7 +49,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       { label: 'EBITDA > 0', value: !!(ebitda && ebitda > 0), description: `EBITDA: ${formatCurrency(ebitda)}` },
       { label: 'FCO > 0', value: !!(fluxoCaixaOperacional && fluxoCaixaOperacional > 0), description: `FCO: ${formatCurrency(fluxoCaixaOperacional)}` },
       { label: 'ROE ≥ 12%', value: !!(roe && roe >= 0.12), description: `ROE: ${formatPercent(roe)}` },
-      { label: 'Margem EBITDA ≥ 15%', value: !!(margemEbitda && margemEbitda >= 0.15), description: `Margem EBITDA: ${formatPercent(margemEbitda)}` },
+      { label: 'Margem EBITDA ≥ 15%', value: margemEbitda ? !!(margemEbitda >= 0.15) : true, description: `Margem EBITDA: ${formatPercent(margemEbitda)}` },
       { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas)}` },
       { label: 'Liquidez Corrente ≥ 1.2', value: !!(liquidezCorrente && liquidezCorrente >= 1.2), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
       { label: 'Market Cap ≥ R$ 2B', value: !!(marketCap && marketCap >= 2000000000), description: `Market Cap: ${formatCurrency(marketCap)}` }

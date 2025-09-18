@@ -89,28 +89,21 @@ function formatLargeNumber(value: number | null): string {
 // Sistema de pontuação ponderada para determinar a melhor empresa
 async function calculateWeightedScore(companies: Record<string, unknown>[]): Promise<{ scores: number[], bestIndex: number, tiedIndices: number[] }> {
   // Definir pesos para cada indicador (total = 100%)
+  // NOTA: Estratégias individuais foram removidas pois já estão incluídas no overallScore
   const weights = {
-    // Indicadores Básicos (40%)
-    pl: 0.03,           // 3% - Valuation fundamental
-    pvp: 0.03,          // 3% - Valor patrimonial
-    roe: 0.03,          // 3% - Rentabilidade principal
-    dy: 0.03,           // 3% - Dividendos
+    // Indicadores Básicos (30%)
+    pl: 0.1,           // 10% - Valuation fundamental
+    pvp: 0.05,          // 5% - Valor patrimonial
+    roe: 0.1,          // 10% - Rentabilidade principal
+    dy: 0.05,           // 5% - Dividendos
     
-    // Indicadores Avançados (25%)
-    margemLiquida: 0.10, // 10% - Eficiência operacional
-    roic: 0.10,         // 10% - Retorno sobre capital
-    dividaLiquidaEbitda: 0.05, // 5% - Endividamento
+    // Indicadores Avançados (20%)
+    margemLiquida: 0.08, // 8% - Eficiência operacional
+    roic: 0.08,         // 8% - Retorno sobre capital
+    dividaLiquidaEbitda: 0.04, // 4% - Endividamento
     
-    // Score Geral (48%)
-    overallScore: 0.48,  // 48% - Análise consolidada
-    
-    // Estratégias de Investimento (15%)
-    graham: 0.025,        // 2.5% - Análise Graham
-    dividendYield: 0.025, // 2.5% - Estratégia dividendos
-    lowPE: 0.025,         // 2.5% - Value investing
-    magicFormula: 0.025,  // 2.5% - Greenblatt
-    fcd: 0.025,           // 2.5% - Fluxo de caixa
-    gordon: 0.025         // 2.5% - Modelo Gordon
+    // Score Geral (50%) - Peso principal pois inclui análise completa
+    overallScore: 0.50,  // 50% - Análise consolidada (inclui Graham, DY, LowPE, Magic Formula, FCD, Gordon + Demonstrações)
   }
   
   const scores = await Promise.all(companies.map(async (company) => {
@@ -118,11 +111,11 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     let totalWeight = 0
     let penaltyFactor = 1.0 // Fator de penalização (1.0 = sem penalidade)
     
-    // Executar estratégias para obter dados completos
+    // Executar estratégias para obter overallScore
     const dailyQuotes = company.dailyQuotes as Record<string, unknown>[]
     const financialData = company.financialData as Record<string, unknown>[]
     const currentPrice = toNumber(dailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(financialData?.[0]?.lpa as PrismaDecimal) || 0
-    const { strategies, overallScore } = executeStrategiesForCompany(company, currentPrice)
+    const { overallScore } = executeStrategiesForCompany(company, currentPrice)
     
     // PENALIZAÇÃO 1: Empresas com valor de mercado menor que 2B
     const companyFinancialData = financialData?.[0] as Record<string, unknown>
@@ -134,10 +127,18 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
       }
     }
     
-    // PENALIZAÇÃO 2: Score Geral menor que 50
+    // PENALIZAÇÃO 2: Score Geral menor que 50,70 e 80
     if (overallScore?.score && overallScore.score < 50) {
+      penaltyFactor *= 0.6 // Penalidade de 40%
+      console.log(`Penalidade de 40% para score geral aplicada para ${company.ticker}: ${overallScore.score.toFixed(1)}`)
+    }
+    if (overallScore?.score && overallScore.score < 70) {
       penaltyFactor *= 0.7 // Penalidade de 30%
-      console.log(`Penalidade score geral aplicada para ${company.ticker}: ${overallScore.score.toFixed(1)}`)
+      console.log(`Penalidade de 30% para score geral aplicada para ${company.ticker}: ${overallScore.score.toFixed(1)}`)
+    }
+    if (overallScore?.score && overallScore.score < 80) {
+      penaltyFactor *= 0.8 // Penalidade de 20%
+      console.log(`Penalidade de 10% para score geral aplicada para ${company.ticker}: ${overallScore.score.toFixed(1)}`)
     }
     
     // PENALIZAÇÃO 3: Indicadores ausentes (N/A) ou super inflados
@@ -188,11 +189,11 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
             console.log(`Penalidade CRÍTICA por demonstrações aplicada para ${company.ticker}: risco ${statementsAnalysis.riskLevel}, score ${statementsAnalysis.score}`)
             break
           case 'HIGH':
-            penaltyFactor *= 0.7 // Penalidade de 30%
+            penaltyFactor *= 0.9 // Penalidade de 10%
             console.log(`Penalidade ALTA por demonstrações aplicada para ${company.ticker}: risco ${statementsAnalysis.riskLevel}, score ${statementsAnalysis.score}`)
             break
           case 'MEDIUM':
-            penaltyFactor *= 0.9 // Penalidade de 10%
+            penaltyFactor *= 0.95 // Penalidade de 5%
             console.log(`Penalidade MODERADA por demonstrações aplicada para ${company.ticker}: risco ${statementsAnalysis.riskLevel}, score ${statementsAnalysis.score}`)
             break
           // LOW não recebe penalidade
@@ -297,25 +298,8 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
       totalWeight += weights.overallScore
     }
     
-    // Estratégias
-    if (strategies) {
-      const strategyKeys = ['graham', 'dividendYield', 'lowPE', 'magicFormula', 'fcd', 'gordon'] as const
-      
-      strategyKeys.forEach(key => {
-        const strategyScore = strategies[key]?.score
-        if (strategyScore !== undefined) {
-          const allStrategyScores = companies.map(c => {
-            const cDailyQuotes = c.dailyQuotes as Record<string, unknown>[]
-            const cFinancialData = c.financialData as Record<string, unknown>[]
-            const price = toNumber(cDailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(cFinancialData?.[0]?.lpa as PrismaDecimal) || 0
-            const { strategies: s } = executeStrategiesForCompany(c, price)
-            return s?.[key]?.score || null
-          })
-          totalScore += scoreIndicator(allStrategyScores, strategyScore, weights[key], true, key)
-          totalWeight += weights[key]
-        }
-      })
-    }
+    // Estratégias individuais removidas - já incluídas no overallScore
+    // (Graham, DividendYield, LowPE, MagicFormula, FCD, Gordon já estão no overallScore)
     
     // Normalizar pela soma dos pesos utilizados e aplicar penalidades
     const baseScore = totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0
@@ -684,10 +668,48 @@ export default async function CompareStocksPage({ params }: PageProps) {
     notFound()
   }
 
-  // Organizar dados na ordem dos tickers solicitados
-  const orderedCompanies = tickers.map(ticker => 
+  // Organizar dados na ordem dos tickers solicitados (inicialmente)
+  const initialOrderedCompanies = tickers.map(ticker => 
     companiesData.find(c => c.ticker === ticker)!
   )
+
+  // Calcular scores e ordenar por ranking
+  const { scores } = await calculateWeightedScore(initialOrderedCompanies)
+  
+  // Criar array com empresas e seus scores para ordenação
+  const companiesWithScores = initialOrderedCompanies.map((company, index) => ({
+    company,
+    score: scores[index],
+    originalIndex: index
+  }))
+  
+  // Ordenar por score (maior para menor)
+  companiesWithScores.sort((a, b) => b.score - a.score)
+  
+  // Extrair empresas ordenadas por score
+  const orderedCompanies = companiesWithScores.map(item => item.company)
+  
+  // Calcular empates com tolerância de 0.1 pontos
+  const tolerance = 0.1
+  const maxScore = companiesWithScores[0]?.score || 0
+  const tiedCompaniesIndices = companiesWithScores
+    .map((item, index) => ({ score: item.score, index }))
+    .filter(item => Math.abs(item.score - maxScore) <= tolerance)
+    .map(item => item.index)
+
+  // Debug melhorado para mostrar ranking com empates
+  if (companiesWithScores.length <= 6) {
+    console.log('=== RANKING COM EMPATES DEBUG ===')
+    console.log('Empresas ordenadas por score:')
+    companiesWithScores.forEach((item, index) => {
+      const isTied = tiedCompaniesIndices.includes(index)
+      const position = isTied ? `#1 (empate)` : `#${index + 1}`
+      console.log(`${position} ${item.company.ticker}: ${item.score.toFixed(2)} pontos${isTied ? ' 🏆' : ''}`)
+    })
+    console.log(`Tolerância para empates: ${tolerance} pontos`)
+    console.log(`Empresas empatadas na liderança: ${tiedCompaniesIndices.length > 1 ? tiedCompaniesIndices.map(i => companiesWithScores[i].company.ticker).join(', ') : 'Nenhuma'}`)
+    console.log('=== END RANKING DEBUG ===')
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -718,47 +740,71 @@ export default async function CompareStocksPage({ params }: PageProps) {
 
       {/* Cards das Empresas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {await (async () => {
-          // Calcular pontuação ponderada uma única vez
-          const { bestIndex, tiedIndices } = await calculateWeightedScore(orderedCompanies)
-          
-          return orderedCompanies.map((company, companyIndex) => {
+        {orderedCompanies.map((company, companyIndex) => {
             const latestFinancials = company.financialData[0]
             const latestQuote = company.dailyQuotes[0]
             const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
             
-            // Determinar medalha baseada na posição
+            // Determinar medalha baseada na posição e empates
             const getMedal = (index: number) => {
-              if (bestIndex === index || (bestIndex === -1 && tiedIndices.includes(index))) {
-                return { icon: Trophy, color: 'text-yellow-500', bg: 'bg-yellow-50', border: 'border-yellow-200', label: 'Ouro', rank: 1 }
-              } else if (index === 1 || (bestIndex === -1 && tiedIndices.length > 1 && index === tiedIndices[1])) {
-                return { icon: Medal, color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', label: 'Prata', rank: 2 }
-              } else if (index === 2 || (bestIndex === -1 && tiedIndices.length > 2 && index === tiedIndices[2])) {
-                return { icon: Medal, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', label: 'Bronze', rank: 3 }
+              // Verificar se está empatado na primeira posição
+              if (tiedCompaniesIndices.includes(index)) {
+                return { 
+                  icon: Trophy, 
+                  color: 'text-yellow-600', 
+                  bg: 'bg-gradient-to-br from-yellow-50 to-yellow-100', 
+                  border: 'border-yellow-300', 
+                  label: tiedCompaniesIndices.length > 1 ? 'Empate Ouro' : 'Ouro', 
+                  rank: 1,
+                  medalBg: 'bg-gradient-to-br from-yellow-400 to-yellow-600',
+                  badgeStyle: 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-white shadow-lg',
+                  ringStyle: 'ring-yellow-300 shadow-yellow-200/50'
+                }
+              } else if (index === tiedCompaniesIndices.length) { // Primeira posição após empates
+                return { 
+                  icon: Medal, 
+                  color: 'text-slate-600', 
+                  bg: 'bg-gradient-to-br from-slate-50 to-slate-100', 
+                  border: 'border-slate-300', 
+                  label: 'Prata', 
+                  rank: tiedCompaniesIndices.length + 1,
+                  medalBg: 'bg-gradient-to-br from-slate-300 to-slate-500',
+                  badgeStyle: 'bg-gradient-to-r from-slate-400 to-slate-500 text-white shadow-lg',
+                  ringStyle: 'ring-slate-300 shadow-slate-200/50'
+                }
+              } else if (index === tiedCompaniesIndices.length + 1) { // Segunda posição após empates
+                return { 
+                  icon: Medal, 
+                  color: 'text-orange-600', 
+                  bg: 'bg-gradient-to-br from-orange-50 to-orange-100', 
+                  border: 'border-orange-300', 
+                  label: 'Bronze', 
+                  rank: tiedCompaniesIndices.length + 2,
+                  medalBg: 'bg-gradient-to-br from-orange-400 to-orange-600',
+                  badgeStyle: 'bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-lg',
+                  ringStyle: 'ring-orange-300 shadow-orange-200/50'
+                }
               }
               return null
             }
             
             const medal = getMedal(companyIndex)
 
-            // Determinar se é a empresa campeã baseado na pontuação ponderada
-            const isBestCompany = userIsPremium && (
-              bestIndex === companyIndex || // Campeã única
-              (bestIndex === -1 && tiedIndices.includes(companyIndex)) // Empate
-            )
+            // Determinar se é a empresa campeã (empatadas na primeira posição ou primeira única)
+            const isBestCompany = userIsPremium && tiedCompaniesIndices.includes(companyIndex)
 
           return (
-            <Card key={company.ticker} className={`relative ${medal ? `ring-2 ${medal.border} shadow-lg ${medal.bg}` : ''}`}>
+            <Card key={company.ticker} className={`relative transition-all duration-300 hover:scale-105 ${medal ? `ring-2 ${medal.border} shadow-xl ${medal.bg} ${medal.ringStyle}` : 'hover:shadow-lg'}`}>
               {medal && (
-                <div className="absolute -top-2 -right-2 z-10">
-                  <div className={`${medal.color === 'text-yellow-500' ? 'bg-yellow-500' : medal.color === 'text-gray-400' ? 'bg-gray-400' : 'bg-amber-600'} rounded-full p-2 shadow-lg`}>
-                    <medal.icon className="w-4 h-4 text-white" />
+                <div className="absolute -top-3 -right-3 z-10">
+                  <div className={`${medal.medalBg} rounded-full p-3 shadow-xl border-2 border-white transform rotate-12 hover:rotate-0 transition-transform duration-300`}>
+                    <medal.icon className="w-5 h-5 text-white drop-shadow-sm" />
                   </div>
                 </div>
               )}
               {medal && (
-                <div className="absolute -top-1 -left-1 z-10">
-                  <Badge className={`${medal.bg} ${medal.color} ${medal.border} border text-xs font-bold`}>
+                <div className="absolute -top-2 -left-2 z-10">
+                  <Badge className={`${medal.badgeStyle} border-0 text-xs font-bold px-3 py-1 transform -rotate-3 hover:rotate-0 transition-transform duration-300`}>
                     #{medal.rank} {medal.label}
                   </Badge>
                 </div>
@@ -778,8 +824,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
                         {company.sector || 'N/A'}
                       </Badge>
                       {isBestCompany && (
-                        <Badge className="bg-yellow-500 text-white text-xs">
-                          <Medal className="w-3 h-3 mr-1" />
+                        <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white text-xs shadow-md border-0 animate-pulse">
+                          <Crown className="w-3 h-3 mr-1" />
                           Destaque
                         </Badge>
                       )}
@@ -829,8 +875,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               </CardContent>
             </Card>
           )
-        })
-        })()}
+        })}
       </div>
 
       {/* Indicadores Comparativos */}
@@ -849,7 +894,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const pl = toNumber(c.financialData[0]?.pl)
                 return pl ? pl.toFixed(2) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={DollarSign}
               description="Quanto o mercado paga por cada R$ 1 de lucro"
             />
@@ -860,7 +905,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const pvp = toNumber(c.financialData[0]?.pvp)
                 return pvp ? pvp.toFixed(2) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={Building2}
               description="Relação entre preço da ação e valor patrimonial"
             />
@@ -871,7 +916,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const roe = toNumber(c.financialData[0]?.roe)
                 return roe ? formatPercent(roe) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={TrendingUp}
               description="Capacidade de gerar lucro com o patrimônio"
             />
@@ -882,7 +927,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const dy = toNumber(c.financialData[0]?.dy)
                 return dy ? formatPercent(dy) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={Percent}
               description="Rendimento anual em dividendos"
             />
@@ -893,7 +938,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const ml = toNumber(c.financialData[0]?.margemLiquida)
                 return ml ? formatPercent(ml) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={Activity}
               description="Percentual de lucro sobre a receita"
               isPremium={true}
@@ -906,7 +951,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const roic = toNumber(c.financialData[0]?.roic)
                 return roic ? formatPercent(roic) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={Target}
               description="Eficiência no uso do capital investido"
               isPremium={true}
@@ -929,7 +974,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const marketCap = toNumber(c.financialData[0]?.marketCap)
                 return marketCap ? formatLargeNumber(marketCap) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={DollarSign}
               description="Valor total da empresa no mercado"
             />
@@ -940,7 +985,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const receita = toNumber(c.financialData[0]?.receitaTotal)
                 return receita ? formatLargeNumber(receita) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={TrendingUp}
               description="Faturamento anual da empresa"
             />
@@ -951,7 +996,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const lucro = toNumber(c.financialData[0]?.lucroLiquido)
                 return lucro ? formatLargeNumber(lucro) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={Activity}
               description="Lucro após todos os custos e impostos"
               isPremium={true}
@@ -975,7 +1020,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const divEbitda = toNumber(c.financialData[0]?.dividaLiquidaEbitda)
                 return divEbitda ? divEbitda.toFixed(2) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={TrendingDown}
               description="Capacidade de pagamento da dívida"
               isPremium={true}
@@ -988,7 +1033,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const divPat = toNumber(c.financialData[0]?.dividaLiquidaPl)
                 return divPat ? divPat.toFixed(2) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={Building2}
               description="Endividamento em relação ao patrimônio"
               isPremium={true}
@@ -1001,7 +1046,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 const lc = toNumber(c.financialData[0]?.liquidezCorrente)
                 return lc ? lc.toFixed(2) : 'N/A'
               })}
-              tickers={tickers}
+              tickers={orderedCompanies.map(c => c.ticker)}
               icon={Activity}
               description="Capacidade de honrar compromissos de curto prazo"
               isPremium={true}

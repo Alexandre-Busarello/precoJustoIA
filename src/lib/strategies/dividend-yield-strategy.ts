@@ -37,7 +37,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
       { label: 'Liquidez Corrente ≥ 1.2', value: !!(liquidezCorrente && liquidezCorrente >= 1.2), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
       { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
       { label: 'P/L entre 4-25', value: !!(pl && pl >= 4 && pl <= 25), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
-      { label: 'Margem Líquida ≥ 5%', value: !!(margemLiquida && margemLiquida >= 0.05), description: `Margem: ${formatPercent(margemLiquida)}` },
+      { label: 'Margem Líquida ≥ 5%', value: margemLiquida ? (margemLiquida >= 0.05) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
       { label: 'Market Cap ≥ R$ 1B', value: !!(marketCap && marketCap >= 1000000000), description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000000).toFixed(1)}B` : 'N/A'}` }
     ];
     

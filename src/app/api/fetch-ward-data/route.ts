@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     // Obter parâmetros do body
     const body = await request.json().catch(() => ({}));
-    const { tickers, noBrapi, forceFullUpdate } = body;
+    const { tickers, noBrapi, forceFullUpdate, resetState } = body;
 
     // Simular argumentos do processo para o script
     const originalArgv = process.argv;
@@ -35,6 +35,10 @@ export async function POST(request: NextRequest) {
     
     if (forceFullUpdate) {
       process.argv.push('--force-full');
+    }
+    
+    if (resetState) {
+      process.argv.push('--reset');
     }
 
     // Capturar logs
@@ -97,8 +101,14 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   return NextResponse.json({
-    message: 'API para fetch de dados da Ward',
-    usage: 'Use POST com { "tickers": ["PETR4"], "noBrapi": false, "forceFullUpdate": false }',
-    auth: 'Requer header Authorization: Bearer <FETCH_API_SECRET>'
+    message: 'API para fetch de dados da Ward com gerenciamento inteligente de estado',
+    usage: 'Use POST com { "tickers": ["PETR4"], "noBrapi": false, "forceFullUpdate": false, "resetState": false }',
+    auth: 'Requer header Authorization: Bearer <FETCH_API_SECRET>',
+    features: [
+      'Gerenciamento de estado persistente',
+      'Processamento incremental inteligente',
+      'Nunca atinge timeout da Vercel',
+      'Continua automaticamente de onde parou'
+    ]
   });
 }

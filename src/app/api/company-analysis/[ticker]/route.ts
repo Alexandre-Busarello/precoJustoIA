@@ -2,12 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, safeQuery } from '@/lib/prisma-wrapper';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { 
-  StrategyFactory,
-  StrategyAnalysis,
-  toNumber
-} from '@/lib/strategies';
-import { calculateOverallScore, OverallScore, FinancialData, FinancialStatementsData } from '@/lib/strategies/overall-score';
+import { StrategyAnalysis, toNumber } from '@/lib/strategies';
+import { OverallScore } from '@/lib/strategies/overall-score';
+import { executeCompanyAnalysis, CompanyAnalysisData } from '@/lib/company-analysis-service';
 
 
 // Interface para resposta da API
@@ -97,7 +94,7 @@ export async function GET(
     const currentPrice = toNumber(latestQuote?.price) || 0;
 
     // Preparar dados da empresa para análise
-    const companyAnalysisData = {
+    const companyAnalysisData: CompanyAnalysisData = {
       ticker: companyData.ticker,
       name: companyData.name,
       sector: companyData.sector,
@@ -105,113 +102,16 @@ export async function GET(
       financials: latestFinancials
     };
 
-    // Executar análises estratégicas usando StrategyFactory
-    const strategies = {
-      graham: isLoggedIn ? StrategyFactory.runGrahamAnalysis(companyAnalysisData, { marginOfSafety: 0.10 }) : null,
-      dividendYield: isPremium ? StrategyFactory.runDividendYieldAnalysis(companyAnalysisData, { minYield: 0.04 }) : null,
-      lowPE: isPremium ? StrategyFactory.runLowPEAnalysis(companyAnalysisData, { maxPE: 12, minROE: 0 }) : null,
-      magicFormula: isPremium ? StrategyFactory.runMagicFormulaAnalysis(companyAnalysisData, { limit: 10, minROIC: 0.15, minEY: 0.08 }) : null,
-      fcd: isPremium ? StrategyFactory.runFCDAnalysis(companyAnalysisData, { growthRate: 0.025, discountRate: 0.10, yearsProjection: 5, minMarginOfSafety: 0.15 }) : null,
-      gordon: isPremium ? StrategyFactory.runGordonAnalysis(companyAnalysisData, { discountRate: 0.12, dividendGrowthRate: 0.05 }) : null
-    };
+    // Executar análise completa usando o serviço centralizado
+    const analysisResult = await executeCompanyAnalysis(companyAnalysisData, {
+      isLoggedIn,
+      isPremium,
+      includeStatements: isPremium, // Incluir demonstrações apenas para premium
+      companyId: String(companyData.id),
+      industry: companyData.industry
+    });
 
-    // Converter dados financeiros para o tipo esperado
-    const financialData: FinancialData = {
-      roe: toNumber(latestFinancials.roe),
-      liquidezCorrente: toNumber(latestFinancials.liquidezCorrente),
-      dividaLiquidaPl: toNumber(latestFinancials.dividaLiquidaPl),
-      margemLiquida: toNumber(latestFinancials.margemLiquida)
-    };
-
-    // Buscar dados das demonstrações financeiras para análise inteligente (apenas para Premium)
-    // Otimização: fazer consulta mais leve apenas para análise das demonstrações
-    let statementsData: FinancialStatementsData | undefined;
-    if (isPremium) {
-      try {
-        const currentYear = new Date().getFullYear();
-        const startYear = currentYear - 2; // Apenas 2 anos para análise
-
-        const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
-          prisma.incomeStatement.findMany({
-            where: {
-              companyId: companyData.id,
-              period: 'QUARTERLY',
-              endDate: { gte: new Date(`${startYear}-01-01`) }
-            },
-            orderBy: { endDate: 'desc' },
-            take: 8 // Apenas 8 quarters para análise
-          }),
-          prisma.balanceSheet.findMany({
-            where: {
-              companyId: companyData.id,
-              period: 'QUARTERLY',
-              endDate: { gte: new Date(`${startYear}-01-01`) }
-            },
-            orderBy: { endDate: 'desc' },
-            take: 8
-          }),
-          prisma.cashflowStatement.findMany({
-            where: {
-              companyId: companyData.id,
-              period: 'QUARTERLY',
-              endDate: { gte: new Date(`${startYear}-01-01`) }
-            },
-            orderBy: { endDate: 'desc' },
-            take: 8
-          })
-        ]);
-
-        // Serializar os dados
-        statementsData = {
-          incomeStatements: incomeStatements.map(stmt => {
-            const serialized: Record<string, unknown> = {};
-            for (const [key, value] of Object.entries(stmt)) {
-              if (value && typeof value === 'object' && 'toNumber' in value) {
-                serialized[key] = (value as { toNumber: () => number }).toNumber();
-              } else if (value instanceof Date) {
-                serialized[key] = value.toISOString();
-              } else {
-                serialized[key] = value;
-              }
-            }
-            return serialized;
-          }),
-          balanceSheets: balanceSheets.map(stmt => {
-            const serialized: Record<string, unknown> = {};
-            for (const [key, value] of Object.entries(stmt)) {
-              if (value && typeof value === 'object' && 'toNumber' in value) {
-                serialized[key] = (value as { toNumber: () => number }).toNumber();
-              } else if (value instanceof Date) {
-                serialized[key] = value.toISOString();
-              } else {
-                serialized[key] = value;
-              }
-            }
-            return serialized;
-          }),
-          cashflowStatements: cashflowStatements.map(stmt => {
-            const serialized: Record<string, unknown> = {};
-            for (const [key, value] of Object.entries(stmt)) {
-              if (value && typeof value === 'object' && 'toNumber' in value) {
-                serialized[key] = (value as { toNumber: () => number }).toNumber();
-              } else if (value instanceof Date) {
-                serialized[key] = value.toISOString();
-              } else {
-                serialized[key] = value;
-              }
-            }
-            return serialized;
-          })
-        };
-      } catch (error) {
-        console.error('Erro ao buscar dados das demonstrações:', error);
-        // Continue sem a análise das demonstrações se houver erro
-        statementsData = undefined;
-      }
-    }
-
-    // Calcular score geral apenas para usuários Premium
-    const overallScore = isPremium ? calculateOverallScore(strategies, financialData, currentPrice, statementsData) : null;
+    const { strategies, overallScore } = analysisResult;
 
     const response: CompanyAnalysisResponse = {
       ticker: companyData.ticker,

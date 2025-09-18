@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
 import StrategicAnalysisClient from '@/components/strategic-analysis-client'
@@ -376,7 +378,22 @@ export default async function TickerPage({ params }: PageProps) {
   const resolvedParams = await params
   const ticker = resolvedParams.ticker.toUpperCase()
 
-  // Sessão do usuário é agora verificada no componente cliente via useSession()
+  // Verificar sessão do usuário para recursos premium
+  const session = await getServerSession(authOptions)
+  let userIsPremium = false
+
+  if (session?.user?.id) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { 
+        subscriptionTier: true, 
+        premiumExpiresAt: true 
+      }
+    })
+
+    userIsPremium = user?.subscriptionTier === 'PREMIUM' && 
+                   (!user.premiumExpiresAt || user.premiumExpiresAt > new Date())
+  }
 
   // Buscar dados da empresa
   const companyData = await prisma.company.findUnique({
@@ -606,6 +623,7 @@ export default async function TickerPage({ params }: PageProps) {
               sector={companyData.sector}
               currentPrice={currentPrice}
               financials={serializedFinancials}
+              userIsPremium={userIsPremium}
             />
 
             {/* Dados Financeiros Completos */}

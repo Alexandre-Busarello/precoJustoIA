@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { prisma } from '@/lib/prisma';
 
 // Importar estratégias para análises comparativas
 import { GrahamStrategy } from '@/lib/strategies/graham-strategy';
@@ -8,6 +9,7 @@ import { LowPEStrategy } from '@/lib/strategies/lowpe-strategy';
 import { MagicFormulaStrategy } from '@/lib/strategies/magic-formula-strategy';
 import { CompanyData, CompanyFinancialData } from '@/lib/strategies/types';
 import { toNumber, formatCurrency, formatPercent } from '@/lib/strategies/base-strategy';
+import { analyzeFinancialStatements, FinancialStatementsData } from '@/lib/strategies/overall-score';
 
 // Validar se a API key do Gemini está configurada
 function validateGeminiConfig() {
@@ -127,6 +129,103 @@ function runStrategicAnalyses(companyData: CompanyData) {
   return analyses;
 }
 
+// Função para obter análise das demonstrações financeiras
+async function getStatementsAnalysis(ticker: string) {
+  try {
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 2; // Últimos 2 anos
+
+    // Buscar dados da empresa primeiro
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      select: {
+        sector: true,
+        industry: true
+      }
+    });
+
+    const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
+      prisma.incomeStatement.findMany({
+        where: {
+          company: { ticker },
+          period: 'QUARTERLY',
+          endDate: {
+            gte: new Date(`${startYear}-01-01`),
+            lte: new Date(`${currentYear}-12-31`)
+          }
+        },
+        orderBy: { endDate: 'desc' },
+        take: 8
+      }),
+      prisma.balanceSheet.findMany({
+        where: {
+          company: { ticker },
+          period: 'QUARTERLY',
+          endDate: {
+            gte: new Date(`${startYear}-01-01`),
+            lte: new Date(`${currentYear}-12-31`)
+          }
+        },
+        orderBy: { endDate: 'desc' },
+        take: 8
+      }),
+      prisma.cashflowStatement.findMany({
+        where: {
+          company: { ticker },
+          period: 'QUARTERLY',
+          endDate: {
+            gte: new Date(`${startYear}-01-01`),
+            lte: new Date(`${currentYear}-12-31`)
+          }
+        },
+        orderBy: { endDate: 'desc' },
+        take: 8
+      })
+    ]);
+
+    if (incomeStatements.length === 0 && balanceSheets.length === 0 && cashflowStatements.length === 0) {
+      return null;
+    }
+
+    // Serializar dados para análise
+    const statementsData: FinancialStatementsData = {
+      incomeStatements: incomeStatements.map(stmt => ({
+        endDate: stmt.endDate.toISOString(),
+        totalRevenue: stmt.totalRevenue?.toNumber() || null,
+        operatingIncome: stmt.operatingIncome?.toNumber() || null,
+        netIncome: stmt.netIncome?.toNumber() || null,
+        grossProfit: stmt.grossProfit?.toNumber() || null,
+      })),
+      balanceSheets: balanceSheets.map(stmt => ({
+        endDate: stmt.endDate.toISOString(),
+        totalAssets: stmt.totalAssets?.toNumber() || null,
+        totalLiab: stmt.totalLiab?.toNumber() || null,
+        totalStockholderEquity: stmt.totalStockholderEquity?.toNumber() || null,
+        cash: stmt.cash?.toNumber() || null,
+        totalCurrentAssets: stmt.totalCurrentAssets?.toNumber() || null,
+        totalCurrentLiabilities: stmt.totalCurrentLiabilities?.toNumber() || null,
+      })),
+      cashflowStatements: cashflowStatements.map(stmt => ({
+        endDate: stmt.endDate.toISOString(),
+        operatingCashFlow: stmt.operatingCashFlow?.toNumber() || null,
+        investmentCashFlow: stmt.investmentCashFlow?.toNumber() || null,
+        financingCashFlow: stmt.financingCashFlow?.toNumber() || null,
+        increaseOrDecreaseInCash: stmt.increaseOrDecreaseInCash?.toNumber() || null,
+      })),
+      company: company ? {
+        sector: company.sector,
+        industry: company.industry,
+        marketCap: null // MarketCap será obtido de outra fonte se necessário
+      } : undefined
+    };
+
+    return analyzeFinancialStatements(statementsData);
+  } catch (error) {
+    console.error(`Erro ao analisar demonstrações para ${ticker}:`, error);
+    return null;
+  }
+}
+
 // Construir o prompt para o Gemini
 function buildAnalysisPrompt(data: {
   ticker: string;
@@ -135,10 +234,23 @@ function buildAnalysisPrompt(data: {
   currentPrice: number;
   financials: CompanyFinancialData;
   strategicAnalyses: Record<string, StrategicAnalysisResult>;
+  statementsAnalysis?: any;
 }) {
-  const { ticker, name, sector, currentPrice, financials, strategicAnalyses } = data;
+  const { ticker, name, sector, currentPrice, financials, strategicAnalyses, statementsAnalysis } = data;
   
   const financialIndicators = formatFinancialIndicators(financials);
+  
+  // Incluir análise de demonstrativos se disponível
+  const statementsSection = statementsAnalysis ? `
+
+#### **Análise de Demonstrativos Financeiros (Últimos 2 Anos)**
+**Score de Qualidade:** ${statementsAnalysis.score}/100
+**Nível de Risco:** ${statementsAnalysis.riskLevel}
+**Principais Insights:**
+${statementsAnalysis.positiveSignals && statementsAnalysis.positiveSignals.length > 0 ? statementsAnalysis.positiveSignals.map((insight: string) => `  • ${insight}`).join('\n') : '  • Nenhum insight positivo identificado'}
+**Alertas Identificados:**
+${statementsAnalysis.redFlags && statementsAnalysis.redFlags.length > 0 ? statementsAnalysis.redFlags.map((alert: string) => `  ⚠️ ${alert}`).join('\n') : '  • Nenhum alerta crítico identificado'}
+` : '';
   
   const strategicSummary = Object.entries(strategicAnalyses)
     .map(([strategy, result]) => {
@@ -154,6 +266,9 @@ function buildAnalysisPrompt(data: {
     .join('\n  ');
 
   return `# Análise Fundamentalista Completa e Padronizada
+
+## **IMPORTANTE: RESPONDA SEMPRE EM PORTUGUÊS BRASILEIRO**
+Toda a análise deve ser escrita exclusivamente em português brasileiro, incluindo títulos, subtítulos, conteúdo e conclusões.
 
 ### **1. PERSONA**
 Incorpore a persona de um **Analista de Investimentos Sênior, CNPI, com especialização no mercado de capitais brasileiro**. Sua comunicação deve ser:
@@ -178,6 +293,8 @@ ${financialIndicators}
 
 #### **Análises Estratégicas Aplicadas**
 ${strategicSummary}
+
+${statementsSection}
 
 ---
 
@@ -212,6 +329,7 @@ ${strategicSummary}
 4.3. **Conclusão Educativa:** Finalize com uma recomendação clara, mas sempre enquadrada como educacional e não como uma consultoria financeira.
 
 ### **5. DIRETRIZES E REGRAS DE OURO**
+* **IDIOMA OBRIGATÓRIO:** Toda a análise deve ser escrita em português brasileiro. NUNCA use inglês ou outros idiomas.
 * **Siga a Estrutura de Resposta:** Use o template abaixo para formatar sua resposta final. Não pule nenhuma seção.
 * **Mencione Limitações:** Se alguma informação crucial não for encontrada ou se os dados forem insuficientes, declare isso explicitamente.
 * **Disclaimer Obrigatório:** Sempre inclua o aviso legal no final da análise.
@@ -276,7 +394,7 @@ export async function POST(request: NextRequest) {
     validateGeminiConfig();
 
     const body = await request.json();
-    const { ticker, name, sector, currentPrice, financials } = body;
+    const { ticker, name, sector, currentPrice, financials, includeStatements = false } = body;
 
     // Validar dados obrigatórios
     if (!ticker || !name || !currentPrice || !financials) {
@@ -298,6 +416,12 @@ export async function POST(request: NextRequest) {
     // Executar análises estratégicas
     const strategicAnalyses = runStrategicAnalyses(companyData);
 
+    // Buscar análise de demonstrativos se solicitado
+    let statementsAnalysis = null;
+    if (includeStatements) {
+      statementsAnalysis = await getStatementsAnalysis(ticker);
+    }
+
     // Construir prompt para o Gemini
     const prompt = buildAnalysisPrompt({
       ticker,
@@ -305,7 +429,8 @@ export async function POST(request: NextRequest) {
       sector,
       currentPrice: Number(currentPrice),
       financials,
-      strategicAnalyses
+      strategicAnalyses,
+      statementsAnalysis
     });
 
     // Configurar Gemini AI

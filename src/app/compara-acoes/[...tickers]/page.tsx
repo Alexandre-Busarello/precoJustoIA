@@ -5,8 +5,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
-import { StrategyFactory } from '@/lib/strategies/strategy-factory'
-import { calculateOverallScore, FinancialData, analyzeFinancialStatements, FinancialStatementsData } from '@/lib/strategies/overall-score'
+import { analyzeFinancialStatements, FinancialStatementsData } from '@/lib/strategies/overall-score'
+import { executeMultipleCompanyAnalysis } from '@/lib/company-analysis-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -115,7 +115,7 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     const dailyQuotes = company.dailyQuotes as Record<string, unknown>[]
     const financialData = company.financialData as Record<string, unknown>[]
     const currentPrice = toNumber(dailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(financialData?.[0]?.lpa as PrismaDecimal) || 0
-    const { overallScore } = executeStrategiesForCompany(company, currentPrice)
+    const { overallScore } = await executeStrategiesForCompany(company, currentPrice, true)
     
     // PENALIZAÇÃO 1: Empresas com valor de mercado menor que 2B
     const companyFinancialData = financialData?.[0] as Record<string, unknown>
@@ -287,13 +287,13 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     
     // Score geral
     if (overallScore?.score) {
-      const allOverallScores = companies.map(c => {
+      const allOverallScores = await Promise.all(companies.map(async c => {
         const cDailyQuotes = c.dailyQuotes as Record<string, unknown>[]
         const cFinancialData = c.financialData as Record<string, unknown>[]
         const price = toNumber(cDailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(cFinancialData?.[0]?.lpa as PrismaDecimal) || 0
-        const { overallScore: os } = executeStrategiesForCompany(c, price)
+        const { overallScore: os } = await executeStrategiesForCompany(c, price, true)
         return os?.score || null
-      })
+      }))
       totalScore += scoreIndicator(allOverallScores, overallScore.score, weights.overallScore, true, 'overallScore')
       totalWeight += weights.overallScore
     }
@@ -442,41 +442,31 @@ async function getStatementsAnalysisForCompany(ticker: string) {
   }
 }
 
-// Função para executar estratégias e calcular score geral
-function executeStrategiesForCompany(company: Record<string, unknown>, currentPrice: number) {
+// Função para executar estratégias e calcular score geral usando serviço centralizado
+async function executeStrategiesForCompany(company: Record<string, unknown>, currentPrice: number, userIsPremium: boolean) {
   try {
-    // Preparar dados da empresa no formato esperado pelas estratégias
-    const companyData = {
+    const companyForAnalysis = {
       ticker: company.ticker as string,
       name: company.name as string,
-      sector: company.sector as string,
-      currentPrice,
-      financials: (company.financialData as Record<string, unknown>[])[0],
-      financialData: (company.financialData as Record<string, unknown>[])[0]
-    }
+      sector: company.sector as string | null,
+      industry: company.industry as string | null,
+      id: company.id as string,
+      financialData: company.financialData as Record<string, unknown>[],
+      dailyQuotes: company.dailyQuotes as Record<string, unknown>[]
+    };
 
-    // Executar todas as estratégias
-    const strategies = {
-      graham: StrategyFactory.runGrahamAnalysis(companyData, { marginOfSafety: 0.20 }),
-      dividendYield: StrategyFactory.runDividendYieldAnalysis(companyData, { minYield: 0.04 }),
-      lowPE: StrategyFactory.runLowPEAnalysis(companyData, { maxPE: 15, minROE: 0.12 }),
-      magicFormula: StrategyFactory.runMagicFormulaAnalysis(companyData, { limit: 10, minROIC: 0.15, minEY: 0.08 }),
-      fcd: StrategyFactory.runFCDAnalysis(companyData, {
-        growthRate: 0.025,
-        discountRate: 0.10,
-        yearsProjection: 5,
-        minMarginOfSafety: 0.15
-      }),
-      gordon: StrategyFactory.runGordonAnalysis(companyData, {
-        discountRate: 0.12,
-        dividendGrowthRate: 0.05
-      })
-    }
+    // Usar o serviço centralizado para análise
+    const results = await executeMultipleCompanyAnalysis([companyForAnalysis], {
+      isLoggedIn: true, // Assumir logado para comparação
+      isPremium: userIsPremium,
+      includeStatements: true // Sempre incluir demonstrações para consistência
+    });
 
-    // Calcular score geral (sem dados das demonstrações para comparação)
-    const overallScore = calculateOverallScore(strategies, companyData.financialData as FinancialData, currentPrice)
-
-    return { strategies, overallScore }
+    const result = results[0];
+    return { 
+      strategies: result.strategies, 
+      overallScore: result.overallScore 
+    };
   } catch (error) {
     console.error(`Erro ao executar estratégias para ${company.ticker}:`, error)
     return { strategies: null, overallScore: null }
@@ -648,7 +638,17 @@ export default async function CompareStocksPage({ params }: PageProps) {
     where: { 
       ticker: { in: tickers }
     },
-    include: {
+    select: {
+      id: true,
+      ticker: true,
+      name: true,
+      sector: true,
+      industry: true,
+      logoUrl: true,
+      city: true,
+      state: true,
+      website: true,
+      fullTimeEmployees: true,
       financialData: {
         orderBy: { year: 'desc' },
         take: 1
@@ -1059,9 +1059,9 @@ export default async function CompareStocksPage({ params }: PageProps) {
       {/* Tabela de Comparação Detalhada */}
       <div className="mb-8">
         <ComparisonTable 
-          companies={orderedCompanies.map(company => {
+          companies={await Promise.all(orderedCompanies.map(async company => {
             const currentPrice = toNumber(company.dailyQuotes[0]?.price) || toNumber(company.financialData[0]?.lpa) || 0
-            const { strategies, overallScore } = executeStrategiesForCompany(company, currentPrice)
+            const { strategies, overallScore } = await executeStrategiesForCompany(company, currentPrice, userIsPremium)
             
             return {
               ticker: company.ticker,
@@ -1085,7 +1085,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               strategies,
               overallScore
             }
-          })}
+          }))}
           userIsPremium={userIsPremium}
         />
       </div>

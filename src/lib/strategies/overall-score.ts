@@ -411,6 +411,41 @@ function analyzeHistoricalTrends(
   return result;
 }
 
+// Função auxiliar para comparação YoY de métricas individuais
+function getYoYComparison(
+  statements: Record<string, unknown>[],
+  currentIndex: number,
+  fieldName: string,
+  alternativeFieldName?: string
+): { current: number; previous: number; hasComparison: boolean; change: number } {
+  const result = {
+    current: 0,
+    previous: 0,
+    hasComparison: false,
+    change: 0
+  };
+
+  if (statements.length <= currentIndex) return result;
+
+  const yoyIndex = currentIndex + 4; // 4 trimestres atrás (mesmo trimestre do ano anterior)
+  
+  if (statements.length <= yoyIndex) return result;
+
+  const currentValue = toNumber(statements[currentIndex][fieldName]) || 
+                      (alternativeFieldName ? toNumber(statements[currentIndex][alternativeFieldName]) : 0) || 0;
+  const yoyValue = toNumber(statements[yoyIndex][fieldName]) || 
+                   (alternativeFieldName ? toNumber(statements[yoyIndex][alternativeFieldName]) : 0) || 0;
+
+  if (yoyValue !== 0) {
+    result.current = currentValue;
+    result.previous = yoyValue;
+    result.hasComparison = true;
+    result.change = (currentValue - yoyValue) / Math.abs(yoyValue);
+  }
+
+  return result;
+}
+
 // Nova função para calcular tendências Year-over-Year
 function calculateYoYTrends(revenues: number[], netIncomes: number[]) {
   let revenueGrowthCount = 0;
@@ -556,13 +591,24 @@ function analyzeRevenueQuality(
 
   if (incomeStatements.length < 2) return result;
 
-  const latest = incomeStatements[0];
-  const previous = incomeStatements[1];
-  
-  const currentRevenue = toNumber(latest.totalRevenue) || toNumber(latest.operatingIncome) || 0;
-  const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome) || 1;
-  
-  const revenueChange = (currentRevenue - previousRevenue) / previousRevenue;
+  // Usar comparação YoY para receita
+  const revenueComparison = getYoYComparison(incomeStatements, 0, 'totalRevenue', 'operatingIncome');
+  let revenueChange = 0;
+
+  if (revenueComparison.hasComparison) {
+    revenueChange = revenueComparison.change;
+  } else {
+    // Fallback para comparação sequencial se não tiver dados YoY suficientes
+    if (incomeStatements.length >= 2) {
+      const latest = incomeStatements[0];
+      const previous = incomeStatements[1];
+      const currentRevenue = toNumber(latest.totalRevenue) || toNumber(latest.operatingIncome) || 0;
+      const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome) || 1;
+      revenueChange = (currentRevenue - previousRevenue) / previousRevenue;
+      
+      result.contextualFactors?.push('Comparação sequencial - dados YoY insuficientes');
+    }
+  }
 
   // Análise contextual baseada no setor
   let volatilityThreshold = 0.3; // Padrão
@@ -617,16 +663,29 @@ function analyzeMarginQuality(
 
   if (incomeStatements.length < 2) return result;
 
+  // Calcular margem atual
   const latest = incomeStatements[0];
-  const previous = incomeStatements[1];
-  
   const currentNetIncome = toNumber(latest.netIncome) || 0;
   const currentRevenue = toNumber(latest.totalRevenue) || toNumber(latest.operatingIncome) || 1;
-  const previousNetIncome = toNumber(previous.netIncome) || 0;
-  const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome) || 1;
-  
   const currentMargin = currentNetIncome / currentRevenue;
-  const previousMargin = previousNetIncome / previousRevenue;
+  
+  // Usar comparação YoY para margem
+  const revenueComparison = getYoYComparison(incomeStatements, 0, 'totalRevenue', 'operatingIncome');
+  const netIncomeComparison = getYoYComparison(incomeStatements, 0, 'netIncome');
+  
+  let previousMargin = 0;
+
+  if (revenueComparison.hasComparison && netIncomeComparison.hasComparison && revenueComparison.previous > 0) {
+    previousMargin = netIncomeComparison.previous / revenueComparison.previous;
+  } else {
+    // Fallback para comparação sequencial se não tiver dados YoY suficientes
+    if (incomeStatements.length >= 2) {
+      const previous = incomeStatements[1];
+      const previousNetIncome = toNumber(previous.netIncome) || 0;
+      const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome) || 1;
+      previousMargin = previousNetIncome / previousRevenue;
+    }
+  }
 
   // Benchmarks setoriais
   let goodMarginThreshold = 0.1; // Padrão 10%
@@ -683,16 +742,30 @@ function analyzeDebtContext(
 
   if (balanceSheets.length < 2) return result;
 
+  // Calcular índice de endividamento atual
   const latest = balanceSheets[0];
-  const previous = balanceSheets[1];
-  
   const currentTotalLiab = toNumber(latest.totalLiab) || 0;
   const currentEquity = toNumber(latest.totalStockholderEquity) || 1;
-  const previousTotalLiab = toNumber(previous.totalLiab) || 0;
-  const previousEquity = toNumber(previous.totalStockholderEquity) || 1;
-  
   const currentDebtRatio = currentTotalLiab / (currentTotalLiab + currentEquity);
-  const previousDebtRatio = previousTotalLiab / (previousTotalLiab + previousEquity);
+  
+  // Usar comparação YoY para endividamento
+  const liabComparison = getYoYComparison(balanceSheets, 0, 'totalLiab');
+  const equityComparison = getYoYComparison(balanceSheets, 0, 'totalStockholderEquity');
+  
+  let previousDebtRatio = 0;
+
+  if (liabComparison.hasComparison && equityComparison.hasComparison && 
+      (liabComparison.previous + equityComparison.previous) > 0) {
+    previousDebtRatio = liabComparison.previous / (liabComparison.previous + equityComparison.previous);
+  } else {
+    // Fallback para comparação sequencial se não tiver dados YoY suficientes
+    if (balanceSheets.length >= 2) {
+      const previous = balanceSheets[1];
+      const previousTotalLiab = toNumber(previous.totalLiab) || 0;
+      const previousEquity = toNumber(previous.totalStockholderEquity) || 1;
+      previousDebtRatio = previousTotalLiab / (previousTotalLiab + previousEquity);
+    }
+  }
 
   // Tolerância setorial ao endividamento
   let highDebtThreshold = 0.6; // Padrão
@@ -835,13 +908,13 @@ export function calculateOverallScore(strategies: {
   gordon: StrategyAnalysis | null;
 }, financialData: FinancialData, currentPrice: number, statementsData?: FinancialStatementsData): OverallScore {
   const weights = {
-    graham: 0.13,        // 13% - Base fundamentalista
-    dividendYield: 0.13, // 13% - Sustentabilidade de dividendos
-    lowPE: 0.18,         // 16% - Value investing
-    magicFormula: 0.13,  // 13% - Qualidade operacional
-    fcd: 0.18,           // 18% - Valor intrínseco
-    gordon: 0.12,        // 12% - Método dos dividendos
-    statements: 0.15     // 15% - Análise das demonstrações financeiras
+    graham: 0.15,        // 15% - Base fundamentalista
+    dividendYield: 0.15, // 15% - Sustentabilidade de dividendos
+    lowPE: 0.2,          // 20% - Value investing
+    magicFormula: 0.15,  // 15% - Qualidade operacional
+    fcd: 0.2,            // 20% - Valor intrínseco
+    gordon: 0.05,        // 5% - Método dos dividendos
+    statements: 0.1     // 10% - Análise das demonstrações financeiras
   };
 
   let totalScore = 0;

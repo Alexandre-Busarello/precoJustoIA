@@ -306,7 +306,76 @@ export default async function Home() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+          {/* AI Analysis - Featured at Top */}
+          <div className="mb-8">
+            <Link href="/metodologia#ia" className="block">
+              <Card className="border-2 border-violet-200 dark:border-violet-800 shadow-xl hover:shadow-2xl transition-all duration-500 group relative overflow-hidden bg-gradient-to-br from-violet-50 via-white to-pink-50 dark:from-violet-950/20 dark:via-background dark:to-pink-950/20 cursor-pointer hover:scale-[1.01] hover:border-violet-300 dark:hover:border-violet-700">
+                {/* Animated Background Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-r from-violet-600/5 via-pink-600/5 to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                {/* Floating Badge */}
+                <div className="absolute top-4 right-4 xl:top-6 xl:right-6 z-10">
+                  <Badge className="bg-gradient-to-r from-violet-600 to-pink-600 text-white text-sm px-3 py-1 xl:px-4 xl:py-2 shadow-lg animate-pulse">
+                    🔥 IA Premium
+                  </Badge>
+                </div>
+                
+                {/* Decorative Elements */}
+                <div className="absolute top-0 left-0 w-24 h-24 xl:w-32 xl:h-32 bg-gradient-to-br from-violet-200/20 to-transparent rounded-full -translate-x-12 -translate-y-12 xl:-translate-x-16 xl:-translate-y-16"></div>
+                <div className="absolute bottom-0 right-0 w-20 h-20 xl:w-24 xl:h-24 bg-gradient-to-tl from-pink-200/20 to-transparent rounded-full translate-x-10 translate-y-10 xl:translate-x-12 xl:translate-y-12"></div>
+                
+                <CardContent className="p-6 xl:p-8 2xl:p-10 relative z-10">
+                  <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 gap-6 xl:gap-8 items-center">
+                    <div className="lg:col-span-1 flex justify-center lg:justify-start">
+                      <div className="relative">
+                        <div className="w-20 h-20 xl:w-24 xl:h-24 2xl:w-28 2xl:h-28 bg-gradient-to-br from-violet-500 to-pink-500 rounded-2xl xl:rounded-3xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-xl group-hover:shadow-2xl">
+                          <Brain className="w-10 h-10 xl:w-12 xl:h-12 2xl:w-14 2xl:h-14 text-white" />
+                        </div>
+                        {/* Glow Effect */}
+                        <div className="absolute inset-0 w-20 h-20 xl:w-24 xl:h-24 2xl:w-28 2xl:h-28 bg-gradient-to-br from-violet-400 to-pink-400 rounded-2xl xl:rounded-3xl opacity-0 group-hover:opacity-30 blur-xl transition-all duration-500 -z-10"></div>
+                      </div>
+                    </div>
+                    <div className="lg:col-span-3 xl:col-span-4 text-center lg:text-left">
+                      <h3 className="text-2xl xl:text-3xl 2xl:text-4xl font-bold mb-3 xl:mb-4 transition-all duration-300">
+                        <span className="inline-block mr-2 xl:mr-3 text-3xl xl:text-4xl 2xl:text-5xl group-hover:animate-bounce">🤖</span>
+                        <span className="group-hover:bg-gradient-to-r group-hover:from-violet-600 group-hover:to-pink-600 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
+                          Análise Preditiva com IA
+                        </span>
+                      </h3>
+                      <p className="text-muted-foreground mb-4 xl:mb-6 text-base xl:text-lg leading-relaxed group-hover:text-foreground/80 transition-colors duration-300">
+                        <strong className="text-violet-600">Inteligência Artificial</strong> analisa TODOS os 7 modelos simultaneamente, 
+                        busca notícias na internet e cria ranking preditivo personalizado. 
+                        <span className="text-violet-600 font-bold bg-violet-100 dark:bg-violet-900/30 px-2 py-1 rounded-md">
+                          Único no mercado brasileiro!
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap gap-2 xl:gap-3 justify-center lg:justify-start mb-4 xl:mb-6">
+                        <Badge variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors text-xs xl:text-sm">
+                          <Sparkles className="w-3 h-3 mr-1" />
+                          Google Gemini AI
+                        </Badge>
+                        <Badge variant="outline" className="border-pink-200 text-pink-700 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors text-xs xl:text-sm">
+                          <Target className="w-3 h-3 mr-1" />
+                          Análise Preditiva
+                        </Badge>
+                        <Badge variant="outline" className="border-purple-200 text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-xs xl:text-sm">
+                          <BarChart3 className="w-3 h-3 mr-1" />
+                          7 Modelos Integrados
+                        </Badge>
+                      </div>
+                      <div className="inline-flex items-center gap-2 text-base xl:text-lg font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent group-hover:from-violet-700 group-hover:to-pink-700 transition-all duration-300">
+                        Ver metodologia completa
+                        <ArrowRight className="w-4 h-4 text-violet-600 group-hover:translate-x-1 transition-transform duration-300" />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+
+          {/* Other Models Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6 xl:gap-8 mb-12">
             {/* Graham */}
             <Link href="/metodologia#graham" className="block">
               <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group relative overflow-hidden cursor-pointer">
@@ -315,16 +384,16 @@ export default async function Home() {
                     Gratuito
                   </Badge>
                 </div>
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <Target className="w-8 h-8 text-white" />
+                <CardContent className="p-6 xl:p-8">
+                  <div className="w-14 h-14 xl:w-16 xl:h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-4 xl:mb-6 group-hover:scale-110 transition-transform">
+                    <Target className="w-7 h-7 xl:w-8 xl:h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:text-blue-600 transition-colors">Fórmula de Graham</h3>
-                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                  <h3 className="text-lg xl:text-xl font-bold mb-2 xl:mb-3 group-hover:text-blue-600 transition-colors">Fórmula de Graham</h3>
+                  <p className="text-muted-foreground mb-3 xl:mb-4 text-xs xl:text-sm leading-relaxed">
                     O método clássico do &quot;pai do value investing&quot;. Encontra ações baratas de empresas sólidas 
                     usando a fórmula: √(22.5 × LPA × VPA)
                   </p>
-                  <div className="text-sm text-blue-600 font-medium group-hover:text-blue-700 flex items-center gap-1">
+                  <div className="text-xs xl:text-sm text-blue-600 font-medium group-hover:text-blue-700 flex items-center gap-1">
                     Ver metodologia completa
                     <ArrowRight className="w-3 h-3" />
                   </div>
@@ -340,16 +409,16 @@ export default async function Home() {
                     Premium
                   </Badge>
                 </div>
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <DollarSign className="w-8 h-8 text-white" />
+                <CardContent className="p-6 xl:p-8">
+                  <div className="w-14 h-14 xl:w-16 xl:h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mb-4 xl:mb-6 group-hover:scale-110 transition-transform">
+                    <DollarSign className="w-7 h-7 xl:w-8 xl:h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:text-green-600 transition-colors">Anti-Dividend Trap</h3>
-                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                  <h3 className="text-lg xl:text-xl font-bold mb-2 xl:mb-3 group-hover:text-green-600 transition-colors">Anti-Dividend Trap</h3>
+                  <p className="text-muted-foreground mb-3 xl:mb-4 text-xs xl:text-sm leading-relaxed">
                     Renda passiva sustentável evitando &quot;dividend traps&quot;. Filtra empresas com 
                     dividendos altos mas em declínio financeiro.
                   </p>
-                  <div className="text-sm text-green-600 font-medium group-hover:text-green-700 flex items-center gap-1">
+                  <div className="text-xs xl:text-sm text-green-600 font-medium group-hover:text-green-700 flex items-center gap-1">
                     Ver metodologia completa
                     <ArrowRight className="w-3 h-3" />
                   </div>
@@ -365,16 +434,16 @@ export default async function Home() {
                     Premium
                   </Badge>
                 </div>
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <Sparkles className="w-8 h-8 text-white" />
+                <CardContent className="p-6 xl:p-8">
+                  <div className="w-14 h-14 xl:w-16 xl:h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 xl:mb-6 group-hover:scale-110 transition-transform">
+                    <Sparkles className="w-7 h-7 xl:w-8 xl:h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:text-purple-600 transition-colors">Fórmula Mágica</h3>
-                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                  <h3 className="text-lg xl:text-xl font-bold mb-2 xl:mb-3 group-hover:text-purple-600 transition-colors">Fórmula Mágica</h3>
+                  <p className="text-muted-foreground mb-3 xl:mb-4 text-xs xl:text-sm leading-relaxed">
                     Estratégia de Joel Greenblatt que combina alta qualidade operacional (ROIC) 
                     com preços atrativos (Earnings Yield).
                   </p>
-                  <div className="text-sm text-purple-600 font-medium group-hover:text-purple-700 flex items-center gap-1">
+                  <div className="text-xs xl:text-sm text-purple-600 font-medium group-hover:text-purple-700 flex items-center gap-1">
                     Ver metodologia completa
                     <ArrowRight className="w-3 h-3" />
                   </div>
@@ -390,16 +459,16 @@ export default async function Home() {
                     Premium
                   </Badge>
                 </div>
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <BarChart3 className="w-8 h-8 text-white" />
+                <CardContent className="p-6 xl:p-8">
+                  <div className="w-14 h-14 xl:w-16 xl:h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center mb-4 xl:mb-6 group-hover:scale-110 transition-transform">
+                    <BarChart3 className="w-7 h-7 xl:w-8 xl:h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:text-teal-600 transition-colors">Fundamentalista 3+1</h3>
-                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                  <h3 className="text-lg xl:text-xl font-bold mb-2 xl:mb-3 group-hover:text-teal-600 transition-colors">Fundamentalista 3+1</h3>
+                  <p className="text-muted-foreground mb-3 xl:mb-4 text-xs xl:text-sm leading-relaxed">
                     Análise simplificada com apenas 3 indicadores essenciais que se adaptam ao perfil da empresa 
                     (com/sem dívida, setor especial) + bônus dividendos.
                   </p>
-                  <div className="text-sm text-teal-600 font-medium group-hover:text-teal-700 flex items-center gap-1">
+                  <div className="text-xs xl:text-sm text-teal-600 font-medium group-hover:text-teal-700 flex items-center gap-1">
                     Ver metodologia completa
                     <ArrowRight className="w-3 h-3" />
                   </div>
@@ -415,16 +484,16 @@ export default async function Home() {
                     Premium
                   </Badge>
                 </div>
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <Calculator className="w-8 h-8 text-white" />
+                <CardContent className="p-6 xl:p-8">
+                  <div className="w-14 h-14 xl:w-16 xl:h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-4 xl:mb-6 group-hover:scale-110 transition-transform">
+                    <Calculator className="w-7 h-7 xl:w-8 xl:h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:text-orange-600 transition-colors">Fluxo de Caixa Descontado</h3>
-                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                  <h3 className="text-lg xl:text-xl font-bold mb-2 xl:mb-3 group-hover:text-orange-600 transition-colors">Fluxo de Caixa Descontado</h3>
+                  <p className="text-muted-foreground mb-3 xl:mb-4 text-xs xl:text-sm leading-relaxed">
                     Método sofisticado usado por analistas profissionais. Projeta fluxos de caixa 
                     futuros e calcula o valor intrínseco da empresa.
                   </p>
-                  <div className="text-sm text-orange-600 font-medium group-hover:text-orange-700 flex items-center gap-1">
+                  <div className="text-xs xl:text-sm text-orange-600 font-medium group-hover:text-orange-700 flex items-center gap-1">
                     Ver metodologia completa
                     <ArrowRight className="w-3 h-3" />
                   </div>
@@ -440,41 +509,16 @@ export default async function Home() {
                     Premium
                   </Badge>
                 </div>
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <PieChart className="w-8 h-8 text-white" />
+                <CardContent className="p-6 xl:p-8">
+                  <div className="w-14 h-14 xl:w-16 xl:h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center mb-4 xl:mb-6 group-hover:scale-110 transition-transform">
+                    <PieChart className="w-7 h-7 xl:w-8 xl:h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:text-teal-600 transition-colors">Fórmula de Gordon</h3>
-                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                  <h3 className="text-lg xl:text-xl font-bold mb-2 xl:mb-3 group-hover:text-teal-600 transition-colors">Fórmula de Gordon</h3>
+                  <p className="text-muted-foreground mb-3 xl:mb-4 text-xs xl:text-sm leading-relaxed">
                     Especializado em empresas pagadoras de dividendos. Avalia o crescimento 
                     sustentável dos pagamentos ao longo do tempo.
                   </p>
-                  <div className="text-sm text-teal-600 font-medium group-hover:text-teal-700 flex items-center gap-1">
-                    Ver metodologia completa
-                    <ArrowRight className="w-3 h-3" />
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-
-            {/* AI Analysis */}
-            <Link href="/metodologia#ia" className="block">
-              <Card className="border-2 border-gradient-to-r from-violet-200 to-pink-200 shadow-xl hover:shadow-2xl transition-all duration-300 group relative overflow-hidden bg-gradient-to-br from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20 cursor-pointer">
-                <div className="absolute top-4 right-4">
-                  <Badge className="bg-gradient-to-r from-violet-600 to-pink-600 text-white">
-                    IA Premium
-                  </Badge>
-                </div>
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-pink-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <Brain className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:bg-gradient-to-r group-hover:from-violet-600 group-hover:to-pink-600 group-hover:bg-clip-text group-hover:text-transparent transition-all">Análise Preditiva com IA</h3>
-                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
-                    <strong>Inteligência Artificial</strong> analisa TODOS os 7 modelos simultaneamente, 
-                    busca notícias na internet e cria ranking preditivo personalizado.
-                  </p>
-                  <div className="text-sm bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent font-bold group-hover:from-violet-700 group-hover:to-pink-700 flex items-center gap-1">
+                  <div className="text-xs xl:text-sm text-teal-600 font-medium group-hover:text-teal-700 flex items-center gap-1">
                     Ver metodologia completa
                     <ArrowRight className="w-3 h-3" />
                   </div>
@@ -484,7 +528,7 @@ export default async function Home() {
           </div>
 
           {/* Additional Features */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6 xl:gap-8">
             <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
               <CardContent className="p-6 text-center">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition-transform">

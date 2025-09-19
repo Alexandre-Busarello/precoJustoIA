@@ -5,8 +5,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
-import { analyzeFinancialStatements, FinancialStatementsData } from '@/lib/strategies/overall-score'
-import { executeMultipleCompanyAnalysis } from '@/lib/company-analysis-service'
+import { analyzeFinancialStatements } from '@/lib/strategies/overall-score'
+import { executeMultipleCompanyAnalysis, getStatementsData } from '@/lib/company-analysis-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -86,7 +86,15 @@ function formatLargeNumber(value: number | null): string {
   return formatCurrency(value)
 }
 
-// Sistema de pontuação ponderada para determinar a melhor empresa
+// Cache para estratégias calculadas (válido por 10 minutos)
+const strategiesCache = new Map<string, { data: any; timestamp: number }>();
+const STRATEGIES_CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
+
+// Cache para análise de demonstrações (válido por 15 minutos)
+const statementsAnalysisCache = new Map<string, { data: any; timestamp: number }>();
+const STATEMENTS_ANALYSIS_CACHE_DURATION = 15 * 60 * 1000; // 15 minutos
+
+// Sistema de pontuação ponderada para determinar a melhor empresa (OTIMIZADO)
 async function calculateWeightedScore(companies: Record<string, unknown>[]): Promise<{ scores: number[], bestIndex: number, tiedIndices: number[] }> {
   // Definir pesos para cada indicador (total = 100%)
   // NOTA: Estratégias individuais foram removidas pois já estão incluídas no overallScore
@@ -106,18 +114,70 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     overallScore: 0.50,  // 50% - Análise consolidada (inclui Graham, DY, LowPE, Magic Formula, FCD, Gordon + Demonstrações)
   }
   
-  const scores = await Promise.all(companies.map(async (company) => {
+  // OTIMIZAÇÃO 1: Executar todas as estratégias em paralelo primeiro
+  console.time('Estratégias em paralelo');
+  const companiesWithStrategies = await Promise.all(companies.map(async (company) => {
+    const dailyQuotes = company.dailyQuotes as Record<string, unknown>[]
+    const financialData = company.financialData as Record<string, unknown>[]
+    const currentPrice = toNumber(dailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(financialData?.[0]?.lpa as PrismaDecimal) || 0
+    
+    // Verificar cache primeiro
+    const cacheKey = `strategies-${company.ticker}-${currentPrice}`;
+    const cached = strategiesCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < STRATEGIES_CACHE_DURATION) {
+      return { company, strategies: cached.data, currentPrice };
+    }
+    
+    const strategies = await executeStrategiesForCompany(company, currentPrice, true);
+    
+    // Armazenar no cache
+    strategiesCache.set(cacheKey, {
+      data: strategies,
+      timestamp: Date.now()
+    });
+    
+    return { company, strategies, currentPrice };
+  }));
+  console.timeEnd('Estratégias em paralelo');
+
+  // OTIMIZAÇÃO 2: Executar análise de demonstrações em paralelo
+  console.time('Análise demonstrações em paralelo');
+  const statementsAnalyses = await Promise.all(companies.map(async (company) => {
+    const ticker = company.ticker as string;
+    
+    // Verificar cache primeiro
+    const cached = statementsAnalysisCache.get(ticker);
+    if (cached && Date.now() - cached.timestamp < STATEMENTS_ANALYSIS_CACHE_DURATION) {
+      return { ticker, analysis: cached.data };
+    }
+    
+    const analysis = await getStatementsAnalysisForCompany(ticker);
+    
+    // Armazenar no cache
+    statementsAnalysisCache.set(ticker, {
+      data: analysis,
+      timestamp: Date.now()
+    });
+    
+    return { ticker, analysis };
+  }));
+  console.timeEnd('Análise demonstrações em paralelo');
+
+  // Criar mapa para acesso rápido
+  const statementsMap = new Map(statementsAnalyses.map(s => [s.ticker, s.analysis]));
+
+  // OTIMIZAÇÃO 3: Calcular scores usando dados já carregados
+  console.time('Cálculo de scores');
+  const scores = companiesWithStrategies.map((companyData) => {
+    const { company, strategies } = companyData;
+    const { overallScore } = strategies;
+    
     let totalScore = 0
     let totalWeight = 0
     let penaltyFactor = 1.0 // Fator de penalização (1.0 = sem penalidade)
     
-    // Executar estratégias para obter overallScore
-    const dailyQuotes = company.dailyQuotes as Record<string, unknown>[]
-    const financialData = company.financialData as Record<string, unknown>[]
-    const currentPrice = toNumber(dailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(financialData?.[0]?.lpa as PrismaDecimal) || 0
-    const { overallScore } = await executeStrategiesForCompany(company, currentPrice, true)
-    
     // PENALIZAÇÃO 1: Empresas com valor de mercado menor que 2B
+    const financialData = company.financialData as Record<string, unknown>[]
     const companyFinancialData = financialData?.[0] as Record<string, unknown>
     if (companyFinancialData) {
       const marketCap = toNumber(companyFinancialData.valorMercado as PrismaDecimal) || 0
@@ -179,9 +239,9 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
       }
     }
     
-    // PENALIZAÇÃO 4: Risco nas demonstrações financeiras
+    // PENALIZAÇÃO 4: Risco nas demonstrações financeiras (usando dados já carregados)
     try {
-      const statementsAnalysis = await getStatementsAnalysisForCompany(company.ticker as string)
+      const statementsAnalysis = statementsMap.get(company.ticker as string)
       if (statementsAnalysis) {
         switch (statementsAnalysis.riskLevel) {
           case 'CRITICAL':
@@ -263,14 +323,14 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
       return normalizedScore * weight
     }
     
-    // Coletar todos os valores para normalização
-    const allPL = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.pl as PrismaDecimal))
-    const allPVP = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.pvp as PrismaDecimal))
-    const allROE = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.roe as PrismaDecimal))
-    const allDY = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.dy as PrismaDecimal))
-    const allMargemLiquida = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.margemLiquida as PrismaDecimal))
-    const allROIC = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.roic as PrismaDecimal))
-    const allDividaEbitda = companies.map(c => toNumber((c.financialData as Record<string, unknown>[])?.[0]?.dividaLiquidaEbitda as PrismaDecimal))
+    // Coletar todos os valores para normalização (usando dados já carregados)
+    const allPL = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.pl as PrismaDecimal))
+    const allPVP = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.pvp as PrismaDecimal))
+    const allROE = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.roe as PrismaDecimal))
+    const allDY = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.dy as PrismaDecimal))
+    const allMargemLiquida = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.margemLiquida as PrismaDecimal))
+    const allROIC = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.roic as PrismaDecimal))
+    const allDividaEbitda = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.dividaLiquidaEbitda as PrismaDecimal))
     
     // Calcular scores dos indicadores básicos
     if (companyFinancialData) {
@@ -285,15 +345,9 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
       totalWeight += weights.pl + weights.pvp + weights.roe + weights.dy + weights.margemLiquida + weights.roic + weights.dividaLiquidaEbitda
     }
     
-    // Score geral
+    // Score geral (usando dados já carregados)
     if (overallScore?.score) {
-      const allOverallScores = await Promise.all(companies.map(async c => {
-        const cDailyQuotes = c.dailyQuotes as Record<string, unknown>[]
-        const cFinancialData = c.financialData as Record<string, unknown>[]
-        const price = toNumber(cDailyQuotes?.[0]?.price as PrismaDecimal) || toNumber(cFinancialData?.[0]?.lpa as PrismaDecimal) || 0
-        const { overallScore: os } = await executeStrategiesForCompany(c, price, true)
-        return os?.score || null
-      }))
+      const allOverallScores = companiesWithStrategies.map(c => c.strategies.overallScore?.score || null)
       totalScore += scoreIndicator(allOverallScores, overallScore.score, weights.overallScore, true, 'overallScore')
       totalWeight += weights.overallScore
     }
@@ -311,7 +365,8 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     }
     
     return finalScore
-  }))
+  })
+  console.timeEnd('Cálculo de scores');
   
   // Encontrar o melhor score
   const maxScore = Math.max(...scores)
@@ -346,94 +401,30 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
 }
 
 // Função para obter análise das demonstrações financeiras
+// Função otimizada para obter análise das demonstrações financeiras (usando serviço centralizado)
 async function getStatementsAnalysisForCompany(ticker: string) {
   try {
-    const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 2; // Últimos 2 anos
-
     // Buscar dados da empresa primeiro
     const company = await prisma.company.findUnique({
       where: { ticker },
       select: {
+        id: true,
         sector: true,
         industry: true
       }
     });
 
-    const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
-      prisma.incomeStatement.findMany({
-        where: {
-          company: { ticker },
-          period: 'QUARTERLY',
-          endDate: {
-            gte: new Date(`${startYear}-01-01`),
-            lte: new Date(`${currentYear}-12-31`)
-          }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 8
-      }),
-      prisma.balanceSheet.findMany({
-        where: {
-          company: { ticker },
-          period: 'QUARTERLY',
-          endDate: {
-            gte: new Date(`${startYear}-01-01`),
-            lte: new Date(`${currentYear}-12-31`)
-          }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 8
-      }),
-      prisma.cashflowStatement.findMany({
-        where: {
-          company: { ticker },
-          period: 'QUARTERLY',
-          endDate: {
-            gte: new Date(`${startYear}-01-01`),
-            lte: new Date(`${currentYear}-12-31`)
-          }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 8
-      })
-    ]);
+    if (!company) return null;
 
-    if (incomeStatements.length === 0 && balanceSheets.length === 0 && cashflowStatements.length === 0) {
-      return null;
-    }
+    // Usar a função otimizada do serviço centralizado que já tem cache e serialização
+    const statementsData = await getStatementsData(
+      company.id.toString(), 
+      ticker, 
+      company.sector, 
+      company.industry
+    );
 
-    // Serializar dados para análise
-    const statementsData: FinancialStatementsData = {
-      incomeStatements: incomeStatements.map(stmt => ({
-        endDate: stmt.endDate.toISOString(),
-        totalRevenue: stmt.totalRevenue?.toNumber() || null,
-        operatingIncome: stmt.operatingIncome?.toNumber() || null,
-        netIncome: stmt.netIncome?.toNumber() || null,
-        grossProfit: stmt.grossProfit?.toNumber() || null,
-      })),
-      balanceSheets: balanceSheets.map(stmt => ({
-        endDate: stmt.endDate.toISOString(),
-        totalAssets: stmt.totalAssets?.toNumber() || null,
-        totalLiab: stmt.totalLiab?.toNumber() || null,
-        totalStockholderEquity: stmt.totalStockholderEquity?.toNumber() || null,
-        cash: stmt.cash?.toNumber() || null,
-        totalCurrentAssets: stmt.totalCurrentAssets?.toNumber() || null,
-        totalCurrentLiabilities: stmt.totalCurrentLiabilities?.toNumber() || null,
-      })),
-      cashflowStatements: cashflowStatements.map(stmt => ({
-        endDate: stmt.endDate.toISOString(),
-        operatingCashFlow: stmt.operatingCashFlow?.toNumber() || null,
-        investmentCashFlow: stmt.investmentCashFlow?.toNumber() || null,
-        financingCashFlow: stmt.financingCashFlow?.toNumber() || null,
-        increaseOrDecreaseInCash: stmt.increaseOrDecreaseInCash?.toNumber() || null,
-      })),
-      company: company ? {
-        sector: company.sector,
-        industry: company.industry,
-        marketCap: null // MarketCap será obtido de outra fonte se necessário
-      } : undefined
-    };
+    if (!statementsData) return null;
 
     return analyzeFinancialStatements(statementsData);
   } catch (error) {
@@ -1065,9 +1056,13 @@ export default async function CompareStocksPage({ params }: PageProps) {
       {/* Tabela de Comparação Detalhada */}
       <div className="mb-8">
         <ComparisonTable 
-          companies={await Promise.all(orderedCompanies.map(async company => {
+          companies={orderedCompanies.map(company => {
             const currentPrice = toNumber(company.dailyQuotes[0]?.price) || toNumber(company.financialData[0]?.lpa) || 0
-            const { strategies, overallScore } = await executeStrategiesForCompany(company, currentPrice, userIsPremium)
+            
+            // Buscar dados já calculados no cache
+            const cacheKey = `strategies-${company.ticker}-${currentPrice}`;
+            const cached = strategiesCache.get(cacheKey);
+            const { strategies, overallScore } = cached?.data || { strategies: {}, overallScore: null };
             
             return {
               ticker: company.ticker,
@@ -1091,7 +1086,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               strategies,
               overallScore
             }
-          }))}
+          })}
           userIsPremium={userIsPremium}
         />
       </div>

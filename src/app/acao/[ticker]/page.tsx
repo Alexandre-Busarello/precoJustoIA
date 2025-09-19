@@ -409,8 +409,8 @@ export default async function TickerPage({ params }: PageProps) {
     notFound()
   }
 
-  // Buscar dados financeiros completos (trimestrais)
-  const comprehensiveData = await getComprehensiveFinancialData(ticker)
+  // Buscar dados financeiros completos (anuais)
+  const comprehensiveData = await getComprehensiveFinancialData(ticker, 'YEARLY', 5)
 
   const latestFinancials = companyData.financialData[0]
   const latestQuote = companyData.dailyQuotes[0]
@@ -632,9 +632,9 @@ export default async function TickerPage({ params }: PageProps) {
                     </h3>
                   </div>
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Esta seção apresenta <strong>dados trimestrais</strong> mais recentes e detalhados, 
-                    complementando os indicadores anuais mostrados acima. Ideal para análise de tendências 
-                    e performance recente da empresa.
+                    Esta seção apresenta <strong>dados anuais</strong> detalhados dos últimos 5 anos, 
+                    complementando os indicadores mostrados acima. Ideal para análise de tendências 
+                    e performance histórica da empresa.
                   </p>
                 </div>
                 <ComprehensiveFinancialView data={comprehensiveData} />

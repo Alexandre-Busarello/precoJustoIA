@@ -42,35 +42,35 @@ export async function getStatementsData(
 ): Promise<FinancialStatementsData | undefined> {
   try {
     const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 2; // Últimos 2 anos
+    const startYear = currentYear - 4; // Últimos 5 anos
 
     const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
       prisma.incomeStatement.findMany({
         where: {
           companyId: parseInt(companyId),
-          period: 'QUARTERLY',
+          period: 'YEARLY',
           endDate: { gte: new Date(`${startYear}-01-01`) }
         },
         orderBy: { endDate: 'desc' },
-        take: 8 // Apenas 8 quarters para análise
+        take: 5 // Últimos 5 anos para análise
       }),
       prisma.balanceSheet.findMany({
         where: {
           companyId: parseInt(companyId),
-          period: 'QUARTERLY',
+          period: 'YEARLY',
           endDate: { gte: new Date(`${startYear}-01-01`) }
         },
         orderBy: { endDate: 'desc' },
-        take: 8
+        take: 5
       }),
       prisma.cashflowStatement.findMany({
         where: {
           companyId: parseInt(companyId),
-          period: 'QUARTERLY',
+          period: 'YEARLY',
           endDate: { gte: new Date(`${startYear}-01-01`) }
         },
         orderBy: { endDate: 'desc' },
-        take: 8
+        take: 5
       })
     ]);
 

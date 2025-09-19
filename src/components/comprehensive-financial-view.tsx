@@ -74,12 +74,6 @@ function formatNumber(value: unknown, decimals: number = 2): string {
   return numValue.toFixed(decimals)
 }
 
-function formatDate(date: Date | string | unknown): string {
-  if (!date) return 'N/A'
-  const d = new Date(date as string | Date)
-  if (isNaN(d.getTime())) return 'N/A'
-  return d.toLocaleDateString('pt-BR')
-}
 
 // Componente para indicador com fallback
 function IndicatorWithFallback({ 
@@ -150,7 +144,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                   </Badge>
                 )}
                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
-                  📊 Dados Trimestrais
+                  📊 Dados Anuais
                 </Badge>
               </div>
             </div>
@@ -312,12 +306,12 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
             </Card>
           </div>
 
-          {/* Dados Históricos Trimestrais */}
+          {/* Dados Históricos Anuais */}
           <Card>
             <CardHeader>
-              <CardTitle>Evolução Trimestral (Últimos 8 Quarters)</CardTitle>
+              <CardTitle>Evolução Anual (Últimos 5 Anos)</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Dados trimestrais mais recentes para análise detalhada
+                Dados anuais históricos para análise de tendências
               </p>
             </CardHeader>
             <CardContent>
@@ -326,7 +320,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-2 min-w-[100px]">Trimestre</th>
+                        <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
                         <th className="text-right py-2 px-2 min-w-[90px]">Receita</th>
                         <th className="text-right py-2 px-2 min-w-[100px]">Lucro Líquido</th>
                         <th className="text-right py-2 px-2 min-w-[90px]">Margem Líquida</th>
@@ -335,26 +329,23 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                       </tr>
                     </thead>
                   <tbody>
-                    {incomeStatements.slice(0, 8).map((item, index) => {
-                      // Encontrar dados trimestrais correspondentes por data aproximada
+                    {incomeStatements.slice(0, 5).map((item, index) => {
+                      // Encontrar dados anuais correspondentes por ano
+                      const itemYear = new Date(item.endDate as string).getFullYear()
                       const correspondingStats = keyStatistics.find(ks => {
-                        const itemDate = new Date(item.endDate as string)
-                        const statsDate = new Date(ks.endDate as string)
-                        // Buscar dados do mesmo trimestre (diferença máxima de 3 meses)
-                        const diffMonths = Math.abs(itemDate.getTime() - statsDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
-                        return diffMonths <= 3
+                        const statsYear = new Date(ks.endDate as string).getFullYear()
+                        return statsYear === itemYear
                       })
                       
-                      // Fallback para dados anuais se não encontrar trimestrais
+                      // Buscar dados financeiros do mesmo ano
                       const correspondingFinancial = financialData.find(fd => {
-                        const itemYear = new Date(item.endDate as string).getFullYear()
                         return fd.year === itemYear
                       })
                       
                       return (
                         <tr key={index} className="border-b">
                           <td className="py-2 px-2">
-                            {formatDate(item.endDate)}
+                            {new Date(item.endDate as string).getFullYear()}
                           </td>
                           <td className="text-right py-2 px-2">
                             {item.totalRevenue ? formatCurrency(toNumber(item.totalRevenue), true) : 
@@ -390,9 +381,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         <TabsContent value="income" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Demonstração do Resultado do Exercício (Trimestral)</CardTitle>
+              <CardTitle>Demonstração do Resultado do Exercício (Anual)</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Último trimestre: {latestIncome ? formatDate(latestIncome.endDate) : 'N/A'}
+                Último ano: {latestIncome ? new Date(latestIncome.endDate as string).getFullYear() : 'N/A'}
               </p>
             </CardHeader>
             <CardContent>
@@ -443,13 +434,13 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico DRE */}
               <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Trimestral (Últimos 8 Quarters)</h4>
+                <h4 className="font-semibold mb-4">Histórico Anual (Últimos 5 Anos)</h4>
                 <div className="overflow-x-auto">
                   <div className="min-w-[600px]">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Trimestre</th>
+                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
                           <th className="text-right py-2 px-2 min-w-[100px]">Receita Total</th>
                           <th className="text-right py-2 px-2 min-w-[100px]">Lucro Bruto</th>
                           <th className="text-right py-2 px-2 min-w-[80px]">EBIT</th>
@@ -457,9 +448,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                     <tbody>
-                      {incomeStatements.slice(0, 8).map((item, index) => (
+                      {incomeStatements.slice(0, 5).map((item, index) => (
                         <tr key={index} className="border-b">
-                          <td className="py-2 px-2">{formatDate(item.endDate)}</td>
+                          <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
                           <td className="text-right py-2 px-2">
                             {item.totalRevenue ? formatCurrency(toNumber(item.totalRevenue), true) : 
                              formatCurrency(toNumber(item.operatingIncome), true)}
@@ -488,9 +479,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         <TabsContent value="balance" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Balanço Patrimonial (Trimestral)</CardTitle>
+              <CardTitle>Balanço Patrimonial (Anual)</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Último trimestre: {latestBalance ? formatDate(latestBalance.endDate) : 'N/A'}
+                Último ano: {latestBalance ? new Date(latestBalance.endDate as string).getFullYear() : 'N/A'}
               </p>
             </CardHeader>
             <CardContent>
@@ -545,13 +536,13 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico Balanço */}
               <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Trimestral - Balanço (Últimos 8 Quarters)</h4>
+                <h4 className="font-semibold mb-4">Histórico Anual - Balanço (Últimos 5 Anos)</h4>
                 <div className="overflow-x-auto">
                   <div className="min-w-[650px]">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Trimestre</th>
+                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
                           <th className="text-right py-2 px-2 min-w-[110px]">Ativo Total</th>
                           <th className="text-right py-2 px-2 min-w-[110px]">Passivo Total</th>
                           <th className="text-right py-2 px-2 min-w-[120px]">Patrimônio Líquido</th>
@@ -559,9 +550,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                       <tbody>
-                        {balanceSheets.slice(0, 8).map((item, index) => (
+                        {balanceSheets.slice(0, 5).map((item, index) => (
                           <tr key={index} className="border-b">
-                            <td className="py-2 px-2">{formatDate(item.endDate)}</td>
+                            <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
                             <td className="text-right py-2 px-2">
                               {formatCurrency(toNumber(item.totalAssets), true)}
                             </td>
@@ -589,9 +580,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         <TabsContent value="cashflow" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Demonstração do Fluxo de Caixa (Trimestral)</CardTitle>
+              <CardTitle>Demonstração do Fluxo de Caixa (Anual)</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Último trimestre: {latestCashflow ? formatDate(latestCashflow.endDate) : 'N/A'}
+                Último ano: {latestCashflow ? new Date(latestCashflow.endDate as string).getFullYear() : 'N/A'}
               </p>
             </CardHeader>
             <CardContent>
@@ -636,13 +627,13 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico Fluxo de Caixa */}
               <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Trimestral - Fluxo de Caixa (Últimos 8 Quarters)</h4>
+                <h4 className="font-semibold mb-4">Histórico Anual - Fluxo de Caixa (Últimos 5 Anos)</h4>
                 <div className="overflow-x-auto">
                   <div className="min-w-[700px]">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Trimestre</th>
+                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
                           <th className="text-right py-2 px-2 min-w-[120px]">FC Operacional</th>
                           <th className="text-right py-2 px-2 min-w-[120px]">FC Investimento</th>
                           <th className="text-right py-2 px-2 min-w-[130px]">FC Financiamento</th>
@@ -650,9 +641,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                       <tbody>
-                        {cashflowStatements.slice(0, 8).map((item, index) => (
+                        {cashflowStatements.slice(0, 5).map((item, index) => (
                           <tr key={index} className="border-b">
-                            <td className="py-2 px-2">{formatDate(item.endDate)}</td>
+                            <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
                             <td className="text-right py-2 px-2">
                               {formatCurrency(toNumber(item.operatingCashFlow), true)}
                             </td>
@@ -680,9 +671,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         <TabsContent value="valuation" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Indicadores de Valuation (Dados Trimestrais)</CardTitle>
+              <CardTitle>Indicadores de Valuation (Dados Anuais)</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Baseado nos dados trimestrais mais recentes disponíveis
+                Baseado nos dados anuais mais recentes disponíveis
               </p>
             </CardHeader>
             <CardContent>
@@ -758,13 +749,13 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico Valuation */}
               <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Trimestral - Valuation (Últimos 8 Quarters)</h4>
+                <h4 className="font-semibold mb-4">Histórico Anual - Valuation (Últimos 5 Anos)</h4>
                 <div className="overflow-x-auto">
                   <div className="min-w-[750px]">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Trimestre</th>
+                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
                           <th className="text-right py-2 px-2 min-w-[70px]">P/L</th>
                           <th className="text-right py-2 px-2 min-w-[70px]">P/VP</th>
                           <th className="text-right py-2 px-2 min-w-[100px]">Dividend Yield</th>
@@ -773,9 +764,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                       <tbody>
-                        {keyStatistics.slice(0, 8).map((item, index) => (
+                        {keyStatistics.slice(0, 5).map((item, index) => (
                           <tr key={index} className="border-b">
-                            <td className="py-2 px-2">{formatDate(item.endDate)}</td>
+                            <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
                             <td className="text-right py-2 px-2">
                               {(() => {
                                 const forwardPE = toNumber(item.forwardPE)

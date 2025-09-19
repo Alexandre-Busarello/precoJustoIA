@@ -970,13 +970,13 @@ export default async function Home() {
                     <span className="text-sm text-muted-foreground">Lojas Renner</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="font-medium">VIIA3</span>
-                    <span className="text-sm text-muted-foreground">Via Varejo</span>
+                    <span className="font-medium">BHIA3</span>
+                    <span className="text-sm text-muted-foreground">Casas Bahia</span>
                   </div>
                 </div>
                 
                 <Button className="w-full group-hover:bg-purple-600 transition-colors" asChild>
-                  <Link href="/compara-acoes/MGLU3/LREN3/VIIA3" className="flex items-center justify-center gap-2">
+                  <Link href="/compara-acoes/MGLU3/LREN3/BHIA3" className="flex items-center justify-center gap-2">
                     <BarChart3 className="w-4 h-4" />
                     Comparar Varejo
                   </Link>

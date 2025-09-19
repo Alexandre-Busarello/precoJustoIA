@@ -60,9 +60,9 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   const sizeContext = getSizeContext(company?.marketCap || null);
   
   // Verificar se temos dados suficientes - dar benefício da dúvida
-  const minQuarters = 8;
-  const hasInsufficientData = incomeStatements.length < 4 || balanceSheets.length < 4 || cashflowStatements.length < 4;
-  const hasLimitedHistory = incomeStatements.length < minQuarters;
+  const minYears = 3;
+  const hasInsufficientData = incomeStatements.length < 2 || balanceSheets.length < 2 || cashflowStatements.length < 2;
+  const hasLimitedHistory = incomeStatements.length < minYears;
   
   // Não penalizar por dados insuficientes - dar benefício da dúvida
   if (hasInsufficientData) {
@@ -71,8 +71,8 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
     contextualFactors.push('Histórico parcial - análise baseada em dados disponíveis');
   }
 
-  // === ANÁLISE HISTÓRICA EXPANDIDA (8-12 TRIMESTRES) ===
-  const maxPeriods = Math.min(12, incomeStatements.length);
+  // === ANÁLISE HISTÓRICA EXPANDIDA (3-5 ANOS) ===
+  const maxPeriods = Math.min(5, incomeStatements.length);
   const historicalAnalysis = analyzeHistoricalTrends(incomeStatements, balanceSheets, cashflowStatements, maxPeriods);
   
   // Aplicar resultados da análise histórica
@@ -379,9 +379,9 @@ function analyzeHistoricalTrends(
     positiveSignals: []
   };
 
-  if (periods < 4) return result;
+  if (periods < 2) return result;
 
-  // Analisar tendências de receita usando comparação YoY (Year-over-Year)
+  // Analisar tendências de receita usando comparação ano a ano
   const revenues = incomeStatements.slice(0, periods).map(stmt => 
     toNumber(stmt.totalRevenue) || toNumber(stmt.operatingIncome) || 0
   ).reverse(); // Mais antigo primeiro
@@ -390,44 +390,44 @@ function analyzeHistoricalTrends(
     toNumber(stmt.netIncome) || 0
   ).reverse(); // Mais antigo primeiro
 
-  // Calcular tendências YoY (comparar com mesmo trimestre do ano anterior)
-  const yoyAnalysis = calculateYoYTrends(revenues, netIncomes);
+  // Calcular tendências anuais (comparar ano com ano anterior)
+  const annualAnalysis = calculateAnnualTrends(revenues, netIncomes);
   
-  // Avaliar consistência histórica baseada em YoY
-  // Só considerar se temos pelo menos 2 anos de dados (8 trimestres)
-  if (yoyAnalysis.validComparisons >= 4) {
-    if (yoyAnalysis.revenueGrowthRatio > 0.6) {
+  // Avaliar consistência histórica baseada em dados anuais
+  // Só considerar se temos pelo menos 3 anos de dados
+  if (annualAnalysis.validComparisons >= 2) {
+    if (annualAnalysis.revenueGrowthRatio > 0.6) {
       result.scoreAdjustment += 10;
-      result.positiveSignals.push('Histórico consistente de crescimento de receita (YoY)');
-    } else if (yoyAnalysis.revenueDeclineRatio > 0.6) {
+      result.positiveSignals.push('Histórico consistente de crescimento de receita anual');
+    } else if (annualAnalysis.revenueDeclineRatio > 0.6) {
       result.scoreAdjustment -= 15;
-      result.redFlags.push('Padrão histórico de declínio de receita (YoY)');
+      result.redFlags.push('Padrão histórico de declínio de receita anual');
     }
 
-    if (yoyAnalysis.profitGrowthRatio > 0.5) {
+    if (annualAnalysis.profitGrowthRatio > 0.5) {
       result.scoreAdjustment += 8;
-      result.positiveSignals.push('Histórico consistente de crescimento de lucro (YoY)');
-    } else if (yoyAnalysis.profitDeclineRatio > 0.6) {
+      result.positiveSignals.push('Histórico consistente de crescimento de lucro anual');
+    } else if (annualAnalysis.profitDeclineRatio > 0.6) {
       result.scoreAdjustment -= 12;
-      result.redFlags.push('Padrão histórico de declínio de lucro (YoY)');
+      result.redFlags.push('Padrão histórico de declínio de lucro anual');
     }
-  } else if (yoyAnalysis.validComparisons >= 2) {
+  } else if (annualAnalysis.validComparisons >= 1) {
     // Para empresas com dados limitados, ser mais conservador
-    if (yoyAnalysis.revenueDeclineRatio > 0.8) {
+    if (annualAnalysis.revenueDeclineRatio > 0.8) {
       // Não penalizar por dados limitados - dar benefício da dúvida
       result.contextualFactors?.push('Possível tendência de declínio de receita - dados limitados');
     }
-    if (yoyAnalysis.profitDeclineRatio > 0.8) {
+    if (annualAnalysis.profitDeclineRatio > 0.8) {
       // Não penalizar por dados limitados - dar benefício da dúvida
       result.contextualFactors?.push('Possível tendência de declínio de lucro - dados limitados');
     }
   }
 
   // Análise adicional de volatilidade
-  if (yoyAnalysis.revenueVolatility > 0.3) {
+  if (annualAnalysis.revenueVolatility > 0.3) {
     result.scoreAdjustment -= 3;
     result.redFlags.push('Alta volatilidade nas receitas');
-  } else if (yoyAnalysis.revenueVolatility < 0.1) {
+  } else if (annualAnalysis.revenueVolatility < 0.1) {
     result.scoreAdjustment += 3;
     result.positiveSignals.push('Receitas estáveis e previsíveis');
   }
@@ -470,8 +470,8 @@ function getYoYComparison(
   return result;
 }
 
-// Nova função para calcular tendências Year-over-Year
-function calculateYoYTrends(revenues: number[], netIncomes: number[]) {
+// Nova função para calcular tendências anuais
+function calculateAnnualTrends(revenues: number[], netIncomes: number[]) {
   let revenueGrowthCount = 0;
   let revenueDeclineCount = 0;
   let profitGrowthCount = 0;
@@ -481,32 +481,32 @@ function calculateYoYTrends(revenues: number[], netIncomes: number[]) {
   
   const revenueChanges: number[] = [];
   
-  // Comparar com mesmo trimestre do ano anterior (4 trimestres atrás)
-  for (let i = 4; i < revenues.length; i++) {
+  // Comparar ano com ano anterior (1 ano atrás)
+  for (let i = 1; i < revenues.length; i++) {
     const currentRevenue = revenues[i];
-    const previousYearRevenue = revenues[i - 4];
+    const previousYearRevenue = revenues[i - 1];
     const currentProfit = netIncomes[i];
-    const previousYearProfit = netIncomes[i - 4];
+    const previousYearProfit = netIncomes[i - 1];
     
-    // Análise de receita YoY
+    // Análise de receita anual
     if (previousYearRevenue > 0 && currentRevenue > 0) {
       const revenueChange = (currentRevenue - previousYearRevenue) / previousYearRevenue;
       revenueChanges.push(Math.abs(revenueChange));
       validRevenueComparisons++;
       
-      if (revenueChange > 0.03) { // Crescimento > 3%
+      if (revenueChange > 0.05) { // Crescimento > 5%
         revenueGrowthCount++;
       } else if (revenueChange < -0.05) { // Declínio > 5%
         revenueDeclineCount++;
       }
     }
     
-    // Análise de lucro YoY
+    // Análise de lucro anual
     if (previousYearProfit !== 0 && currentProfit !== 0) {
       const profitChange = (currentProfit - previousYearProfit) / Math.abs(previousYearProfit);
       validProfitComparisons++;
       
-      if (profitChange > 0.05) { // Crescimento > 5%
+      if (profitChange > 0.1) { // Crescimento > 10%
         profitGrowthCount++;
       } else if (profitChange < -0.1) { // Declínio > 10%
         profitDeclineCount++;

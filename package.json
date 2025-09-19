@@ -21,6 +21,7 @@
     "fetch:ward:reset": "node scripts/run-fetch-ward.js --reset",
     "update:profiles": "tsx scripts/update-company-profiles.ts",
     "update:profiles:dry": "tsx scripts/update-company-profiles.ts --dry-run",
+    "update:financial-data": "tsx scripts/update-financial-data-brapi.ts",
     "debug:api": "curl -s http://localhost:3000/api/debug-ranking-history | jq ."
   },
   "dependencies": {

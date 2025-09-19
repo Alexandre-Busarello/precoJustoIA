@@ -41,7 +41,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
-    const hasMinimumCriteria = passedCriteria >= 3; // Reduzido para dar benefício da dúvida
+    const hasMinimumCriteria = passedCriteria >= 6; // Reduzido para dar benefício da dúvida
     const hasValidFairValue = !!fairValue;
     const hasValidUpside = !!upside;
     const hasMinimumUpside = !!(upside && upside >= 10);

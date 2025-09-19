@@ -50,7 +50,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 2 && !!fairValue && !!upside && upside >= (minMarginOfSafety * 100); // Reduzido para dar benefício da dúvida
+    const isEligible = passedCriteria >= 6 && !!fairValue && !!upside && upside >= (minMarginOfSafety * 100); // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
     
     // Calcular quality score como no backend

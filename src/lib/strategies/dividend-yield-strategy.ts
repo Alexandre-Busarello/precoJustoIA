@@ -37,7 +37,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 1 && !!dy && dy >= minYield; // Reduzido para dar benefício da dúvida
+    const isEligible = passedCriteria >= 5 && !!dy && dy >= minYield; // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular sustainability score como no backend

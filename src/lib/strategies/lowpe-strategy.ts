@@ -39,7 +39,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 1 && !!pl && pl > 3 && pl <= maxPE; // Reduzido para dar benefício da dúvida
+    const isEligible = passedCriteria >= 6 && !!pl && pl > 3 && pl <= maxPE; // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular value score como no backend

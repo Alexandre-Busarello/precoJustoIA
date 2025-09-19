@@ -39,7 +39,7 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 2 && !!roic && !!earningsYield && roic >= minROIC && earningsYield >= minEY; // Reduzido para dar benefício da dúvida
+    const isEligible = passedCriteria >= 6 && !!roic && !!earningsYield && roic >= minROIC && earningsYield >= minEY; // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular magic formula score como no backend

@@ -67,7 +67,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       const reasons: string[] = [];
       
       if (!hasMinimumCriteria) {
-        reasons.push(`critérios fundamentais insuficientes (${passedCriteria}/7 aprovados)`);
+        reasons.push(`critérios fundamentais insuficientes (${passedCriteria}/${criteria.length} aprovados)`);
       }
       
       if (!hasValidFairValue) {

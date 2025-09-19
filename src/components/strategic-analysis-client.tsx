@@ -508,9 +508,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                           isLoggedIn && strategies.graham?.score
                             ? !strategies.graham?.isEligible
                               ? "text-yellow-700 dark:text-yellow-400"
-                              : strategies.graham.score === 100 
+                              : strategies.graham.score >= 80
                               ? "text-green-700 dark:text-green-400" 
-                              : strategies.graham.score >= 70 
+                              : strategies.graham.score >= 60 
                               ? "text-yellow-700 dark:text-yellow-400" 
                               : "text-red-700 dark:text-red-400"
                             : ""
@@ -519,9 +519,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                           isLoggedIn && strategies.graham?.score
                             ? !strategies.graham?.isEligible
                               ? "text-yellow-900 dark:text-yellow-100"
-                              : strategies.graham.score === 100 
+                              : strategies.graham.score >= 80
                               ? "text-green-900 dark:text-green-100" 
-                              : strategies.graham.score >= 70 
+                              : strategies.graham.score >= 60
                               ? "text-yellow-900 dark:text-yellow-100" 
                               : "text-red-900 dark:text-red-100"
                             : ""
@@ -620,9 +620,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                             isPremium && strategies.fcd?.score
                               ? !strategies.fcd?.isEligible
                                 ? "text-yellow-700 dark:text-yellow-400"
-                                : strategies.fcd.score === 100 
+                                : strategies.fcd.score >= 80
                                 ? "text-green-700 dark:text-green-400" 
-                                : strategies.fcd.score >= 70 
+                                : strategies.fcd.score >= 60 
                                 ? "text-yellow-700 dark:text-yellow-400" 
                                 : "text-red-700 dark:text-red-400"
                               : "text-purple-600"
@@ -631,9 +631,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                             isPremium && strategies.fcd?.score
                               ? !strategies.fcd?.isEligible
                                 ? "text-yellow-900 dark:text-yellow-100"
-                                : strategies.fcd.score === 100 
+                                : strategies.fcd.score >= 80 
                                 ? "text-green-900 dark:text-green-100" 
-                                : strategies.fcd.score >= 70 
+                                : strategies.fcd.score >= 60
                                 ? "text-yellow-900 dark:text-yellow-100" 
                                 : "text-red-900 dark:text-red-100"
                               : ""
@@ -733,9 +733,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                             isPremium && strategies.gordon?.score
                               ? !strategies.gordon?.isEligible
                                 ? "text-yellow-700 dark:text-yellow-400"
-                                : strategies.gordon.score === 100 
+                                : strategies.gordon.score >= 80
                                 ? "text-green-700 dark:text-green-400" 
-                                : strategies.gordon.score >= 70 
+                                : strategies.gordon.score >= 60
                                 ? "text-yellow-700 dark:text-yellow-400" 
                                 : "text-red-700 dark:text-red-400"
                               : "text-orange-600"
@@ -744,9 +744,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                             isPremium && strategies.gordon?.score
                               ? !strategies.gordon?.isEligible
                                 ? "text-yellow-900 dark:text-yellow-100"
-                                : strategies.gordon.score === 100 
+                                : strategies.gordon.score >= 80
                                 ? "text-green-900 dark:text-green-100" 
-                                : strategies.gordon.score >= 70 
+                                : strategies.gordon.score >= 60
                                 ? "text-yellow-900 dark:text-yellow-100" 
                                 : "text-red-900 dark:text-red-100"
                               : ""
@@ -1215,9 +1215,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     isLoggedIn && strategies.graham?.score 
                       ? !strategies.graham?.isEligible
                         ? "bg-yellow-100 dark:bg-yellow-950/30"
-                        : strategies.graham.score === 100 
+                        : strategies.graham.score >= 80
                         ? "bg-green-100 dark:bg-green-950/30" 
-                        : strategies.graham.score >= 70 
+                        : strategies.graham.score >= 60
                         ? "bg-yellow-100 dark:bg-yellow-950/30" 
                         : "bg-red-100 dark:bg-red-950/30"
                       : "bg-muted/50"
@@ -1244,9 +1244,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     isPremium && strategies.fcd?.score 
                       ? !strategies.fcd?.isEligible
                         ? "bg-yellow-100 dark:bg-yellow-950/30"
-                        : strategies.fcd.score === 100 
+                        : strategies.fcd.score >= 80
                         ? "bg-green-100 dark:bg-green-950/30" 
-                        : strategies.fcd.score >= 70 
+                        : strategies.fcd.score >= 60 
                         ? "bg-yellow-100 dark:bg-yellow-950/30" 
                         : "bg-red-100 dark:bg-red-950/30"
                       : "bg-muted/50"
@@ -1273,9 +1273,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     isPremium && strategies.gordon?.score 
                       ? !strategies.gordon?.isEligible
                         ? "bg-yellow-100 dark:bg-yellow-950/30"
-                        : strategies.gordon.score === 100 
+                        : strategies.gordon.score >= 80
                         ? "bg-green-100 dark:bg-green-950/30" 
-                        : strategies.gordon.score >= 70 
+                        : strategies.gordon.score >= 60 
                         ? "bg-yellow-100 dark:bg-yellow-950/30" 
                         : "bg-red-100 dark:bg-red-950/30"
                       : "bg-muted/50"
@@ -1299,9 +1299,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
 
                   <div className={`flex items-center justify-between p-3 rounded-lg ${
                     isPremium && strategies.dividendYield?.score 
-                      ? strategies.dividendYield.score === 100 
+                      ? strategies.dividendYield.score >= 80
                         ? "bg-green-100 dark:bg-green-950/30" 
-                        : strategies.dividendYield.score >= 70 
+                        : strategies.dividendYield.score >= 60 
                         ? "bg-yellow-100 dark:bg-yellow-950/30" 
                         : "bg-red-100 dark:bg-red-950/30"
                       : "bg-muted/50"
@@ -1325,9 +1325,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
 
                   <div className={`flex items-center justify-between p-3 rounded-lg ${
                     isPremium && strategies.lowPE?.score 
-                      ? strategies.lowPE.score === 100 
+                      ? strategies.lowPE.score >= 80 
                         ? "bg-green-100 dark:bg-green-950/30" 
-                        : strategies.lowPE.score >= 70 
+                        : strategies.lowPE.score >= 60 
                         ? "bg-yellow-100 dark:bg-yellow-950/30" 
                         : "bg-red-100 dark:bg-red-950/30"
                       : "bg-muted/50"
@@ -1351,9 +1351,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
 
                   <div className={`flex items-center justify-between p-3 rounded-lg ${
                     isPremium && strategies.magicFormula?.score 
-                      ? strategies.magicFormula.score === 100 
+                      ? strategies.magicFormula.score >= 80
                         ? "bg-green-100 dark:bg-green-950/30" 
-                        : strategies.magicFormula.score >= 70 
+                        : strategies.magicFormula.score >= 60 
                         ? "bg-yellow-100 dark:bg-yellow-950/30" 
                         : "bg-red-100 dark:bg-red-950/30"
                       : "bg-muted/50"

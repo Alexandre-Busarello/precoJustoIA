@@ -194,7 +194,7 @@ export async function getComprehensiveFinancialData(
         applyFinancialSectorFallbacks(data as Record<string, unknown>, isFinancial)
       )
       const processedFinancialData = financialData.map((data: any, index: number) => {
-        let processedData = applyFinancialSectorFallbacks(data as Record<string, unknown>, isFinancial)
+        const processedData = applyFinancialSectorFallbacks(data as Record<string, unknown>, isFinancial)
         if (isFinancial && processedIncomeStatements[index]) {
           const incomeData = processedIncomeStatements[index]
           if (!processedData.receitaTotal && incomeData.totalRevenue) {
@@ -514,7 +514,7 @@ export async function getMultipleCompaniesData(
       )
 
       const processedFinancialData = financialData.map((data: any, index: number) => {
-        let processedData = applyFinancialSectorFallbacks(data as Record<string, unknown>, isFinancial)
+        const processedData = applyFinancialSectorFallbacks(data as Record<string, unknown>, isFinancial)
         
         if (isFinancial && processedIncomeStatements[index]) {
           const incomeData = processedIncomeStatements[index]

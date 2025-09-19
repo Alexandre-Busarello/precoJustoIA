@@ -133,7 +133,7 @@ function runStrategicAnalyses(companyData: CompanyData) {
 async function getStatementsAnalysis(ticker: string) {
   try {
     const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 2; // Últimos 2 anos
+    const startYear = currentYear - 5; // Últimos 5 anos
 
     // Buscar dados da empresa primeiro
     const company = await prisma.company.findUnique({
@@ -148,38 +148,38 @@ async function getStatementsAnalysis(ticker: string) {
       prisma.incomeStatement.findMany({
         where: {
           company: { ticker },
-          period: 'QUARTERLY',
+          period: 'YEARLY',
           endDate: {
             gte: new Date(`${startYear}-01-01`),
             lte: new Date(`${currentYear}-12-31`)
           }
         },
         orderBy: { endDate: 'desc' },
-        take: 8
+        take: 5
       }),
       prisma.balanceSheet.findMany({
         where: {
           company: { ticker },
-          period: 'QUARTERLY',
+          period: 'YEARLY',
           endDate: {
             gte: new Date(`${startYear}-01-01`),
             lte: new Date(`${currentYear}-12-31`)
           }
         },
         orderBy: { endDate: 'desc' },
-        take: 8
+        take: 5
       }),
       prisma.cashflowStatement.findMany({
         where: {
           company: { ticker },
-          period: 'QUARTERLY',
+          period: 'YEARLY',
           endDate: {
             gte: new Date(`${startYear}-01-01`),
             lte: new Date(`${currentYear}-12-31`)
           }
         },
         orderBy: { endDate: 'desc' },
-        take: 8
+        take: 5
       })
     ]);
 
@@ -420,6 +420,7 @@ export async function POST(request: NextRequest) {
     let statementsAnalysis = null;
     if (includeStatements) {
       statementsAnalysis = await getStatementsAnalysis(ticker);
+      console.log('statementsAnalysis', statementsAnalysis);
     }
 
     // Construir prompt para o Gemini

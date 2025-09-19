@@ -163,8 +163,8 @@ const MULTI_COMPANIES_CACHE_DURATION = 20 * 60 * 1000; // 20 minutos
 // Buscar dados financeiros completos de uma empresa
 export async function getComprehensiveFinancialData(
   ticker: string,
-  period: ReportPeriod = 'QUARTERLY',
-  yearsBack: number = 3
+  period: ReportPeriod = 'YEARLY',
+  yearsBack: number = 5
 ): Promise<ComprehensiveFinancialData | null> {
   try {
     // Verificar cache primeiro

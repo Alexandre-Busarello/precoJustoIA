@@ -951,10 +951,10 @@ export function calculateOverallScore(strategies: {
     graham: 0.08,        // 8% - Base fundamentalista
     dividendYield: 0.08, // 8% - Sustentabilidade de dividendos
     lowPE: 0.15,         // 15% - Value investing
-    magicFormula: 0.12,  // 12% - Qualidade operacional
+    magicFormula: 0.13,  // 13% - Qualidade operacional
     fcd: 0.15,           // 15% - Valor intrínseco
-    gordon: 0.05,        // 5% - Método dos dividendos
-    fundamentalist: 0.17, // 17% - Análise fundamentalista simplificada
+    gordon: 0.01,        // 1% - Método dos dividendos (menor pesos possível sempre)
+    fundamentalist: 0.20, // 20% - Análise fundamentalista simplificada
     statements: 0.20     // 20% - Análise das demonstrações financeiras
   };
 

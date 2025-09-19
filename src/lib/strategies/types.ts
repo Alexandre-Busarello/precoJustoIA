@@ -35,6 +35,8 @@ export interface FCDParams extends StrategyParams {
 export interface GordonParams extends StrategyParams {
   discountRate: number; // Taxa de desconto/retorno esperado (ex: 0.12 para 12%)
   dividendGrowthRate: number; // Taxa de crescimento dos dividendos (ex: 0.05 para 5%)
+  useSectoralAdjustment?: boolean; // Se deve usar ajuste setorial automático (padrão: true)
+  sectoralWaccAdjustment?: number; // Ajuste manual do WACC setorial (-0.02 a +0.05)
 }
 
 export interface AIParams extends StrategyParams {

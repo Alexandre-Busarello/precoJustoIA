@@ -38,10 +38,12 @@ export const STRATEGY_CONFIG = {
     companySize: 'all'          // Filtro de tamanho: todas as empresas
   },
   
-  // Modelo de Gordon (Crescimento de Dividendos)
+  // Modelo de Gordon (Crescimento de Dividendos) - Calibrado por Setor
   gordon: {
-    discountRate: 0.12,         // Taxa de desconto de 12%
-    dividendGrowthRate: 0.05,   // Taxa de crescimento de dividendos de 5%
+    discountRate: 0.11,         // Taxa de desconto base de 11% (ajustada para mercado brasileiro)
+    dividendGrowthRate: 0.04,   // Taxa de crescimento base de 4% (conservadora)
+    useSectoralAdjustment: true, // Ativar ajuste automático por setor
+    sectoralWaccAdjustment: 0,  // Ajuste manual adicional (0% por padrão)
     companySize: 'all'          // Filtro de tamanho: todas as empresas
   },
   

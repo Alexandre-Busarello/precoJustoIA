@@ -16,7 +16,6 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
 
   runAnalysis(companyData: CompanyData, params: FundamentalistParams = {}): StrategyAnalysis {
     const financialData = companyData.financials;
-    const currentPrice = companyData.currentPrice;
     // Parâmetros padrão
     const minROE = params.minROE || 0.15; // 15%
     const minROIC = params.minROIC || 0.15; // 15%

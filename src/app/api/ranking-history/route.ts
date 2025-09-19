@@ -108,6 +108,8 @@ function getModelDisplayName(model: string): string {
       return 'Fórmula Mágica';
     case 'fcd':
       return 'Fluxo de Caixa Descontado';
+    case 'fundamentalist':
+      return 'Fundamentalista 3+1';      
     default:
       return model;
   }

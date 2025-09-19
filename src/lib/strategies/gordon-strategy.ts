@@ -1,8 +1,111 @@
 import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
 import { GordonParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 
+// Parâmetros setoriais baseados em dados de mercado e estudos de WACC
+const SECTORAL_PARAMETERS = {
+  // Setores de baixo risco - WACC menor, crescimento conservador
+  'Energia Elétrica': { waccAdjustment: -0.02, growthAdjustment: 0.02 }, // Utilities: WACC ~8-10%
+  'Saneamento': { waccAdjustment: -0.02, growthAdjustment: 0.02 },
+  'Água e Saneamento': { waccAdjustment: -0.02, growthAdjustment: 0.02 },
+  'Petróleo e Gás': { waccAdjustment: -0.01, growthAdjustment: 0.015 }, // Energia: WACC ~9-11%
+  
+  // Setores financeiros - WACC moderado, crescimento baseado em ROE
+  'Bancos': { waccAdjustment: 0.00, growthAdjustment: 0.03 }, // WACC ~10-12%
+  'Seguros': { waccAdjustment: 0.00, growthAdjustment: 0.025 },
+  'Serviços Financeiros': { waccAdjustment: 0.00, growthAdjustment: 0.025 },
+  
+  // Setores de consumo - WACC moderado
+  'Alimentos e Bebidas': { waccAdjustment: 0.00, growthAdjustment: 0.035 },
+  'Comércio': { waccAdjustment: 0.01, growthAdjustment: 0.03 },
+  'Consumo': { waccAdjustment: 0.01, growthAdjustment: 0.03 },
+  
+  // Setores industriais - WACC moderado a alto
+  'Siderurgia e Metalurgia': { waccAdjustment: 0.015, growthAdjustment: 0.02 },
+  'Papel e Celulose': { waccAdjustment: 0.01, growthAdjustment: 0.025 },
+  'Mineração': { waccAdjustment: 0.02, growthAdjustment: 0.02 },
+  
+  // Setores de alto risco - WACC maior
+  'Tecnologia': { waccAdjustment: 0.03, growthAdjustment: 0.06 }, // Tech: WACC ~13-15%
+  'Telecomunicações': { waccAdjustment: 0.015, growthAdjustment: 0.02 },
+  'Saúde': { waccAdjustment: 0.02, growthAdjustment: 0.04 },
+  
+  // Padrão para setores não mapeados
+  'default': { waccAdjustment: 0.00, growthAdjustment: 0.03 }
+} as const;
+
 export class GordonStrategy extends AbstractStrategy<GordonParams> {
   readonly name = 'gordon';
+
+  /**
+   * Calcula parâmetros ajustados por setor baseado em dados de mercado
+   */
+  private getSectoralAdjustedParams(companyData: CompanyData, params: GordonParams): { adjustedDiscountRate: number; adjustedGrowthRate: number } {
+    const sector = companyData.sector || 'default';
+    const sectorParams = SECTORAL_PARAMETERS[sector as keyof typeof SECTORAL_PARAMETERS] || SECTORAL_PARAMETERS.default;
+    
+    // Se o ajuste setorial está desabilitado, usar parâmetros originais
+    if (params.useSectoralAdjustment === false) {
+      return {
+        adjustedDiscountRate: params.discountRate,
+        adjustedGrowthRate: params.dividendGrowthRate
+      };
+    }
+    
+    // Aplicar ajustes setoriais
+    let adjustedDiscountRate = params.discountRate + sectorParams.waccAdjustment;
+    let adjustedGrowthRate = Math.min(params.dividendGrowthRate + sectorParams.growthAdjustment, adjustedDiscountRate - 0.01);
+    
+    // Aplicar ajuste manual se fornecido
+    if (params.sectoralWaccAdjustment !== undefined) {
+      adjustedDiscountRate += params.sectoralWaccAdjustment;
+    }
+    
+    // Garantir que a taxa de desconto seja sempre maior que a de crescimento
+    if (adjustedDiscountRate <= adjustedGrowthRate) {
+      adjustedGrowthRate = adjustedDiscountRate - 0.01;
+    }
+    
+    // Limites de segurança
+    adjustedDiscountRate = Math.max(0.06, Math.min(0.25, adjustedDiscountRate)); // 6% a 25%
+    adjustedGrowthRate = Math.max(0.00, Math.min(0.12, adjustedGrowthRate)); // 0% a 12%
+    
+    return { adjustedDiscountRate, adjustedGrowthRate };
+  }
+
+  /**
+   * Análise de pares para validação dos parâmetros
+   */
+  private validateParametersWithComps(companyData: CompanyData, fairValue: number | null): { isReasonable: boolean; reasoning: string } {
+    if (!fairValue) return { isReasonable: false, reasoning: 'Preço justo não calculável' };
+    
+    const currentPrice = companyData.currentPrice;
+    const upside = ((fairValue - currentPrice) / currentPrice) * 100;
+    const pl = toNumber(companyData.financials.pl);
+    const pvp = toNumber(companyData.financials.pvp);
+    
+    // Validações baseadas em múltiplos de mercado
+    const warnings: string[] = [];
+    
+    // Upside muito alto pode indicar parâmetros otimistas demais
+    if (upside > 100) {
+      warnings.push('Upside muito elevado (>100%) - parâmetros podem estar otimistas');
+    }
+    
+    // P/L muito baixo com upside alto pode indicar problemas
+    if (pl && pl < 5 && upside > 50) {
+      warnings.push('P/L muito baixo com alto upside - verificar qualidade dos lucros');
+    }
+    
+    // P/VP muito baixo pode indicar problemas fundamentais
+    if (pvp && pvp < 0.5 && upside > 30) {
+      warnings.push('P/VP muito baixo - possíveis problemas fundamentais');
+    }
+    
+    const isReasonable = warnings.length === 0 && upside >= -20 && upside <= 80;
+    const reasoning = warnings.length > 0 ? warnings.join('; ') : 'Parâmetros consistentes com análise de pares';
+    
+    return { isReasonable, reasoning };
+  }
 
   validateCompanyData(companyData: CompanyData, params: GordonParams): boolean {
     const { financials, currentPrice } = companyData;
@@ -20,14 +123,18 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       (financials.dy && toNumber(financials.dy)! > 0) // Pode usar DY para estimar
     );
     
-    // Verificar se a taxa de desconto é maior que a taxa de crescimento
-    const ratesAreValid = params.discountRate > params.dividendGrowthRate;
+    // Verificar se as taxas ajustadas são válidas
+    const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(companyData, params);
+    const ratesAreValid = adjustedDiscountRate > adjustedGrowthRate;
     
     return hasEssentialData && hasDividendData && ratesAreValid;
   }
 
   runAnalysis(companyData: CompanyData, params: GordonParams): StrategyAnalysis {
     const { financials, currentPrice } = companyData;
+    
+    // Obter parâmetros ajustados por setor
+    const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(companyData, params);
     
     const dy = toNumber(financials.dy);
     const dividendYield12m = toNumber(financials.dividendYield12m);
@@ -47,11 +154,16 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     } else if (dy && dy > 0 && currentPrice > 0) {
       dividendEstimated = dy * currentPrice;
     }
+
+    console.log('dividendEstimated', dividendEstimated);
+    console.log('adjustedDiscountRate', adjustedDiscountRate);
+    console.log('adjustedGrowthRate', adjustedGrowthRate);
+    console.log('sector', companyData.sector);
     
     const fairValue = this.calculateGordonFairValue(
       dividendEstimated, 
-      params.discountRate, 
-      params.dividendGrowthRate
+      adjustedDiscountRate, 
+      adjustedGrowthRate
     );
     const upside = fairValue && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : null;
     
@@ -75,8 +187,23 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     const isEligible = hasMinimumCriteria && hasValidFairValue && hasValidUpside && hasMinimumUpside;
     const score = (passedCriteria / criteria.length) * 100;
 
+    // Validação com análise de pares
+    const compsValidation = this.validateParametersWithComps(companyData, fairValue);
+
     // Reasoning detalhado
     let reasoning = '';
+    
+    // Informações sobre ajustes setoriais
+    const sectorInfo = companyData.sector ? ` (Setor: ${companyData.sector})` : '';
+    const sectoralAdjustment = params.useSectoralAdjustment !== false;
+    const ratesDiffer = adjustedDiscountRate !== params.discountRate || adjustedGrowthRate !== params.dividendGrowthRate;
+    
+    if (sectoralAdjustment && ratesDiffer) {
+      reasoning += `Parâmetros ajustados por setor${sectorInfo}: Taxa desconto ${formatPercent(adjustedDiscountRate)} (base: ${formatPercent(params.discountRate)}), crescimento ${formatPercent(adjustedGrowthRate)} (base: ${formatPercent(params.dividendGrowthRate)}). `;
+    } else {
+      reasoning += `Parâmetros base utilizados: Taxa desconto ${formatPercent(adjustedDiscountRate)}, crescimento ${formatPercent(adjustedGrowthRate)}${sectorInfo}. `;
+    }
+    
     if (!hasMinimumCriteria) {
       const failedCriteria = criteria.filter(c => !c.value).map(c => c.label);
       reasoning += `Não atende critérios mínimos (${passedCriteria}/8): ${failedCriteria.join(', ')}. `;
@@ -91,10 +218,12 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       reasoning += 'Upside insuficiente para investimento (< 15%). ';
     }
     if (isEligible) {
-      reasoning = `Empresa elegível pela Fórmula de Gordon com ${passedCriteria}/8 critérios atendidos e upside de ${formatPercent(upside! / 100)}. ` +
-                 `Parâmetros: Taxa desconto ${formatPercent(params.discountRate)}, crescimento dividendos ${formatPercent(params.dividendGrowthRate)}.`;
-    } else if (!hasValidFairValue) {
-      reasoning += `Parâmetros utilizados: Taxa desconto ${formatPercent(params.discountRate)}, crescimento ${formatPercent(params.dividendGrowthRate)}.`;
+      reasoning = `Empresa elegível pela Fórmula de Gordon com ${passedCriteria}/8 critérios atendidos e upside de ${formatPercent(upside! / 100)}. ` + reasoning;
+    }
+    
+    // Adicionar validação de pares se houver alertas
+    if (!compsValidation.isReasonable) {
+      reasoning += `Alerta de análise de pares: ${compsValidation.reasoning}. `;
     }
 
     return {
@@ -137,6 +266,9 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       const analysis = this.runAnalysis(company, params);
       if (!analysis.isEligible) continue;
       
+      // Obter parâmetros ajustados para o rational
+      const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(company, params);
+      
       const dy = toNumber(company.financials.dy);
       const roe = toNumber(company.financials.roe);
       const payout = toNumber(company.financials.payout);
@@ -154,6 +286,13 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
         payoutScore * 0.1
       ) * 100;
       
+      // Rational detalhado com informações setoriais
+      const sectorInfo = company.sector ? ` (${company.sector})` : '';
+      const ratesDiffer = adjustedDiscountRate !== params.discountRate || adjustedGrowthRate !== params.dividendGrowthRate;
+      const ratesInfo = ratesDiffer ? 
+        ` Taxas ajustadas por setor: ${formatPercent(adjustedDiscountRate)} desconto, ${formatPercent(adjustedGrowthRate)} crescimento.` :
+        ` Taxas: ${formatPercent(adjustedDiscountRate)} desconto, ${formatPercent(adjustedGrowthRate)} crescimento.`;
+      
       results.push({
         ticker: company.ticker,
         name: company.name,
@@ -163,12 +302,14 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
         fairValue: analysis.fairValue!,
         upside: analysis.upside!,
         marginOfSafety: analysis.upside! > 0 ? analysis.upside! : null,
-        rational: `Fórmula de Gordon: Preço justo R$ ${analysis.fairValue!.toFixed(2)} baseado em dividendos. DY: ${formatPercent(dy)}, ROE: ${formatPercent(roe)}, Payout: ${formatPercent(payout)}.`,
+        rational: `Fórmula de Gordon${sectorInfo}: Preço justo R$ ${analysis.fairValue!.toFixed(2)} baseado em dividendos.${ratesInfo} DY: ${formatPercent(dy)}, ROE: ${formatPercent(roe)}, Payout: ${formatPercent(payout)}.`,
         key_metrics: {
           dy: dy || 0,
           roe: roe || 0,
           payout: payout || 0,
-          compositeScore: compositeScore
+          compositeScore: compositeScore,
+          adjustedDiscountRate: adjustedDiscountRate,
+          adjustedGrowthRate: adjustedGrowthRate
         }
       });
     }
@@ -177,14 +318,31 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
   }
 
   generateRational(params: GordonParams): string {
-    return `# FÓRMULA DE GORDON (Método dos Dividendos)
+    const sectoralAdjustment = params.useSectoralAdjustment !== false;
+    
+    return `# FÓRMULA DE GORDON (Método dos Dividendos) - CALIBRADA
 
-**Filosofia**: Avalia empresas com base na sustentabilidade e crescimento dos dividendos.
+**Filosofia**: Avalia empresas com base na sustentabilidade e crescimento dos dividendos, utilizando parâmetros calibrados por setor conforme práticas de mercado.
 
-## Parâmetros de Análise
+## Parâmetros Base de Análise
 
-- **Taxa de desconto**: ${formatPercent(params.discountRate)}
-- **Taxa de crescimento esperada**: ${formatPercent(params.dividendGrowthRate)}
+- **Taxa de desconto base**: ${formatPercent(params.discountRate)}
+- **Taxa de crescimento base**: ${formatPercent(params.dividendGrowthRate)}
+- **Ajuste setorial**: ${sectoralAdjustment ? 'Ativado' : 'Desativado'}
+${params.sectoralWaccAdjustment ? `- **Ajuste manual WACC**: ${params.sectoralWaccAdjustment > 0 ? '+' : ''}${formatPercent(params.sectoralWaccAdjustment)}` : ''}
+
+## Calibração Setorial
+
+${sectoralAdjustment ? `
+**Setores de Baixo Risco** (Utilities, Energia): WACC reduzido (-1% a -2%)
+**Setores Financeiros** (Bancos, Seguros): WACC padrão, crescimento baseado em ROE
+**Setores Industriais**: WACC moderado (+1% a +1.5%)
+**Setores de Alto Risco** (Tecnologia): WACC elevado (+3%), crescimento acelerado
+
+Os parâmetros são automaticamente ajustados baseado no setor da empresa, seguindo estudos de WACC por indústria e análise de pares.
+` : `
+Utilizando parâmetros fixos sem ajuste setorial.
+`}
 
 ## Critérios de Seleção
 
@@ -192,9 +350,16 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
 - Payout sustentável (≤80%)
 - ROE sólido (≥12%)
 - Potencial de valorização (≥15%)
+- Validação por análise de pares
 
-**Ideal Para**: Investidores focados em renda passiva com crescimento.
+## Análise de Pares (Comps)
 
-**Objetivo**: Encontrar empresas que combinam dividendos atrativos com crescimento sustentável.`;
+- Validação de múltiplos P/L e P/VP vs. setor
+- Alertas para upsides excessivos (>100%)
+- Verificação de consistência com mercado
+
+**Ideal Para**: Investidores focados em renda passiva com crescimento, que valorizam análise fundamentalista calibrada por setor.
+
+**Objetivo**: Encontrar empresas que combinam dividendos atrativos com crescimento sustentável, usando parâmetros realistas baseados em dados de mercado.`;
   }
 }

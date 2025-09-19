@@ -33,7 +33,8 @@ import {
   CheckCircle,
   AlertCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Flame
 } from "lucide-react"
 import Link from "next/link"
 
@@ -51,6 +52,8 @@ interface RankingParams {
   minMarginOfSafety?: number;
   // Parâmetros Gordon
   dividendGrowthRate?: number;
+  useSectoralAdjustment?: boolean;
+  sectoralWaccAdjustment?: number;
   // Parâmetros Fundamentalista 3+1
   minROIC?: number;
   maxDebtToEbitda?: number;
@@ -91,8 +94,8 @@ const models = [
     description: "Inteligência Artificial analisa TODAS as estratégias e cria ranking preditivo",
     icon: <Brain className="w-4 h-4" />,
     free: false,
-    badge: "IA Premium",
-    special: true,
+    badge: "HOT",
+    hot: true,
     disclaimer: "⚠️ Utiliza IA e pode gerar resultados ligeiramente diferentes em novas execuções"
   },
   { 
@@ -104,12 +107,22 @@ const models = [
     badge: "Gratuito"
   },
   { 
-    id: "dividendYield", 
-    name: "Dividend Yield Anti-Trap", 
-    description: "Renda passiva sustentável com filtros que evitam armadilhas",
-    icon: <DollarSign className="w-4 h-4" />,
+    id: "fundamentalist", 
+    name: "Fundamentalista 3+1", 
+    description: "Análise simplificada com 3 indicadores essenciais + bônus dividendos",
+    icon: <BarChart3 className="w-4 h-4" />,
     free: false,
-    badge: "Premium"
+    badge: "HOT",
+    hot: true
+  },
+  { 
+    id: "fcd", 
+    name: "Fluxo de Caixa Descontado", 
+    description: "Avaliação intrínseca por DCF com projeções sofisticadas de fluxo de caixa",
+    icon: <Calculator className="w-4 h-4" />,
+    free: false,
+    badge: "HOT",
+    hot: true
   },
   { 
     id: "lowPE", 
@@ -117,7 +130,8 @@ const models = [
     description: "P/L baixo combinado com indicadores de qualidade comprovada",
     icon: <BarChart3 className="w-4 h-4" />,
     free: false,
-    badge: "Premium"
+    badge: "HOT",
+    hot: true
   },
   { 
     id: "magicFormula", 
@@ -128,10 +142,10 @@ const models = [
     badge: "Premium"
   },
   { 
-    id: "fcd", 
-    name: "Fluxo de Caixa Descontado", 
-    description: "Avaliação intrínseca por DCF com projeções sofisticadas de fluxo de caixa",
-    icon: <Calculator className="w-4 h-4" />,
+    id: "dividendYield", 
+    name: "Dividend Yield Anti-Trap", 
+    description: "Renda passiva sustentável com filtros que evitam armadilhas",
+    icon: <DollarSign className="w-4 h-4" />,
     free: false,
     badge: "Premium"
   },
@@ -140,14 +154,6 @@ const models = [
     name: "Fórmula de Gordon", 
     description: "Método dos dividendos para empresas com distribuições consistentes",
     icon: <DollarSign className="w-4 h-4" />,
-    free: false,
-    badge: "Premium"
-  },
-  { 
-    id: "fundamentalist", 
-    name: "Fundamentalista 3+1", 
-    description: "Análise simplificada com 3 indicadores essenciais + bônus dividendos",
-    icon: <BarChart3 className="w-4 h-4" />,
     free: false,
     badge: "Premium"
   },
@@ -217,7 +223,7 @@ export function QuickRanker() {
   const isLoggedIn = !!session
   const isPremium = session?.user?.subscriptionTier === 'PREMIUM'
   
-  // Filtrar modelos baseado no status do usuário
+  // Filtrar e ordenar modelos baseado no status do usuário
   const availableModels = models.filter(model => {
     if (!isLoggedIn) {
       return model.free // Usuários não logados só veem modelos gratuitos
@@ -226,6 +232,24 @@ export function QuickRanker() {
       return model.free // Usuários gratuitos só veem modelos gratuitos
     }
     return true // Usuários premium veem todos
+  }).sort((a, b) => {
+    if (isPremium) {
+      // Para usuários Premium: IA primeiro, depois HOT, depois Graham, depois resto
+      if (a.id === 'ai') return -1
+      if (b.id === 'ai') return 1
+      
+      // Se não é IA, priorizar HOT
+      if (a.hot && !b.hot) return -1
+      if (!a.hot && b.hot) return 1
+      
+      // Se ambos são HOT ou ambos não são HOT, manter ordem original
+      return 0
+    } else {
+      // Para usuários gratuitos: Graham primeiro (único disponível)
+      if (a.id === 'graham') return -1
+      if (b.id === 'graham') return 1
+      return 0
+    }
   })
 
   // Reset params quando trocar de modelo
@@ -274,8 +298,10 @@ export function QuickRanker() {
         break
       case "gordon":
         setParams({ 
-          discountRate: 0.12,       // 12% taxa de desconto
-          dividendGrowthRate: 0.05, // 5% crescimento dos dividendos
+          discountRate: 0.11,       // 11% taxa de desconto base
+          dividendGrowthRate: 0.04, // 4% crescimento base dos dividendos
+          useSectoralAdjustment: true, // Ativar ajuste setorial
+          sectoralWaccAdjustment: 0,   // Sem ajuste manual adicional
           limit: 10,                // 10 resultados
           companySize: 'all'        // Todas as empresas
         })
@@ -629,17 +655,21 @@ export function QuickRanker() {
 **Resultado**: Preço justo calculado por metodologia robusta utilizada por analistas profissionais.`;
 
       case 'gordon':
-        const discountRateGordon = ((params.discountRate || 0.12) * 100).toFixed(1);
-        const dividendGrowthRateGordon = ((params.dividendGrowthRate || 0.05) * 100).toFixed(1);
+        const discountRateGordon = ((params.discountRate || 0.11) * 100).toFixed(1);
+        const dividendGrowthRateGordon = ((params.dividendGrowthRate || 0.04) * 100).toFixed(1);
+        const sectoralAdjustment = params.useSectoralAdjustment !== false;
+        const manualAdjustment = params.sectoralWaccAdjustment || 0;
         
-        return `**FÓRMULA DE GORDON (MÉTODO DOS DIVIDENDOS) - PREMIUM**
+        return `**FÓRMULA DE GORDON CALIBRADA (MÉTODO DOS DIVIDENDOS) - PREMIUM**
 
 **Filosofia**: Avaliação baseada na capacidade de distribuição de dividendos da empresa, utilizando a fórmula clássica de Gordon para calcular o preço justo.
 
 **Metodologia Aplicada**:
 • **Fórmula**: Preço Justo = Dividendo Próximos 12m / (Taxa Desconto - Taxa Crescimento)
-• **Taxa de Desconto**: ${discountRateGordon}% (retorno esperado pelo investidor)
-• **Taxa de Crescimento**: ${dividendGrowthRateGordon}% (crescimento esperado dos dividendos)
+• **Taxa de Desconto Base**: ${discountRateGordon}% (retorno esperado pelo investidor)
+• **Taxa de Crescimento Base**: ${dividendGrowthRateGordon}% (crescimento esperado dos dividendos)
+• **Calibração Setorial**: ${sectoralAdjustment ? 'Ativada' : 'Desativada'} (ajuste automático por setor)
+${manualAdjustment !== 0 ? `• **Ajuste Manual**: ${manualAdjustment > 0 ? '+' : ''}${(manualAdjustment * 100).toFixed(1)}% adicional no WACC` : ''}
 • **Margem de Segurança**: Mínima de 15% (upside mínimo exigido)
 
 **Filtros de Qualidade Premium**:
@@ -651,8 +681,20 @@ export function QuickRanker() {
 • Liquidez Corrente ≥ 1.2 (capacidade de honrar compromissos)
 • Dívida Líquida/PL ≤ 100% (endividamento controlado)
 
+**Calibração Setorial Premium**:
+${sectoralAdjustment ? `
+• **Utilities/Energia**: WACC reduzido (-1% a -2%) - setores estáveis
+• **Bancos/Seguros**: WACC padrão, crescimento baseado em ROE
+• **Industriais**: WACC moderado (+1% a +1.5%) - risco médio
+• **Tecnologia**: WACC elevado (+3%) - alta volatilidade
+• **Análise de Pares**: Validação automática vs. múltiplos do setor
+` : `
+• Utilizando parâmetros fixos sem ajuste setorial
+`}
+
 **Diferencial Premium**:
 • Foco específico em empresas pagadoras de dividendos
+• Parâmetros calibrados por setor baseado em dados de mercado
 • Avalia sustentabilidade e crescimento das distribuições
 • Identifica oportunidades para renda passiva consistente
 • Combina yield atrativo com qualidade financeira
@@ -1024,22 +1066,14 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     key={model.id}
                     onClick={() => handleModelChange(model.id)}
                     className={`relative p-4 rounded-xl border-2 transition-all duration-200 text-left group ${
-                      model.id === 'ai' 
-                        ? selectedModel === model.id
-                          ? "border-purple-500 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 shadow-lg"
-                          : "border-purple-300 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 hover:border-purple-400 hover:shadow-md"
-                        : selectedModel === model.id
-                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                        : "border-border hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-background/50"
+                      selectedModel === model.id
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20 shadow-lg"
+                        : "border-border hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-background/50 hover:shadow-md"
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`p-2 rounded-lg ${
-                        model.id === 'ai'
-                          ? selectedModel === model.id 
-                            ? "bg-gradient-to-br from-purple-500 to-blue-500 text-white" 
-                            : "bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900 dark:to-blue-900 text-purple-600 dark:text-purple-400 group-hover:from-purple-200 group-hover:to-blue-200"
-                          : selectedModel === model.id 
+                        selectedModel === model.id 
                           ? "bg-blue-500 text-white" 
                           : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600"
                       }`}>
@@ -1050,22 +1084,23 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <span className="font-medium text-sm">{model.name}</span>
                           <Badge 
                             variant={model.free ? "secondary" : "default"}
-                            className={`text-xs ${
-                              model.id === 'ai' 
-                                ? "bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 dark:from-purple-900/50 dark:to-blue-900/50 dark:text-purple-300 border border-purple-200 dark:border-purple-700"
-                                : model.free 
+                            className={`text-xs flex items-center gap-1 ${
+                              model.free 
                                 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+                                : model.hot
+                                ? "bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 dark:from-orange-900/50 dark:to-red-900/50 dark:text-orange-300 border border-orange-200 dark:border-orange-700"
                                 : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
                             }`}
                           >
+                            {model.hot && <Flame className="w-3 h-3" />}
                             {model.badge}
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground leading-tight">
                           {model.description}
                         </p>
-                        {model.id === 'ai' && model.disclaimer && (
-                          <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 font-medium">
+                        {model.disclaimer && (
+                          <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
                             {model.disclaimer}
                           </p>
                         )}
@@ -1119,7 +1154,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         <div className="min-w-0 flex-1">
                           <h4 className="font-semibold text-xs sm:text-sm">Desbloqueie todos os modelos</h4>
                           <p className="text-xs text-muted-foreground">
-                            Acesse Dividend Yield, Value Investing, Fórmula Mágica, Fórmula de Gordon, Fluxo de Caixa Descontado, Fundamentalista 3+1 e Análise Preditiva com IA
+                            Acesse Análise Preditiva com IA, Fundamentalista 3+1, Fluxo de Caixa Descontado, Value Investing, Fórmula Mágica, Dividend Yield Anti-Trap e Fórmula de Gordon
                           </p>
                         </div>
                       </div>
@@ -1593,7 +1628,61 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </div>
                     </div>
 
-                    {/* Segunda linha - Número de Resultados */}
+                    {/* Segunda linha - Controles de Ajuste Setorial */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Ajuste Setorial Automático</Label>
+                          <Badge variant={params.useSectoralAdjustment !== false ? "default" : "outline"} className="text-xs">
+                            {params.useSectoralAdjustment !== false ? "Ativado" : "Desativado"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="sectoralAdjustment"
+                            checked={params.useSectoralAdjustment !== false}
+                            onChange={(e) => setParams({ ...params, useSectoralAdjustment: e.target.checked })}
+                            className="rounded border-gray-300"
+                          />
+                          <label htmlFor="sectoralAdjustment" className="text-sm text-muted-foreground">
+                            Calibrar WACC e crescimento por setor
+                          </label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Ajusta automaticamente os parâmetros baseado no setor da empresa (Utilities: WACC menor, Tech: WACC maior)
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Ajuste Manual WACC</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {params.sectoralWaccAdjustment ? 
+                              `${params.sectoralWaccAdjustment > 0 ? '+' : ''}${formatPercentage(params.sectoralWaccAdjustment * 100)}` : 
+                              '0.0%'
+                            }
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.sectoralWaccAdjustment ? params.sectoralWaccAdjustment * 100 : 0]}
+                          onValueChange={(value) => setParams({ ...params, sectoralWaccAdjustment: value[0] / 100 })}
+                          max={5}
+                          min={-2}
+                          step={0.5}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>-2.0%</span>
+                          <span>+5.0%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Ajuste adicional manual sobre o WACC setorial (positivo = mais conservador)
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Terceira linha - Número de Resultados */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Número de Resultados</Label>
@@ -1613,9 +1702,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         <span>Top 5</span>
                         <span>Top 20</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Fórmula de Gordon: avalia empresas com base na sustentabilidade dos dividendos
-                      </p>
+                        <p className="text-xs text-muted-foreground">
+                          Fórmula de Gordon calibrada: avalia empresas com parâmetros ajustados por setor baseado em dados de mercado
+                        </p>
                     </div>
                   </div>
                 )}

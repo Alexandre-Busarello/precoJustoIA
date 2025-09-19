@@ -184,7 +184,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
 
   // NOVA ETAPA 2: Executar estratégias para empresas selecionadas
   private async executeAllStrategies(companies: CompanyData[]): Promise<Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>> {
-    console.log(`⚙️ [AI-STRATEGY] Executando 7 estratégias para ${companies.length} empresas`);
+    console.log(`⚙️ [AI-STRATEGY] Executando 6 estratégias para ${companies.length} empresas`);
     
     const results = [];
     
@@ -192,7 +192,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
       console.log(`📊 [AI-STRATEGY] Processando ${company.ticker}...`);
       
       try {
-        // Executar todas as 7 estratégias tradicionais
+        // Executar todas as 6 estratégias tradicionais
         const strategies = {
           graham: StrategyFactory.runGrahamAnalysis(company, { marginOfSafety: 0.20 }),
           dividendYield: StrategyFactory.runDividendYieldAnalysis(company, { minYield: 0.04 }),
@@ -203,10 +203,6 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
             discountRate: 0.10,
             yearsProjection: 5,
             minMarginOfSafety: 0.15
-          }),
-          gordon: StrategyFactory.runGordonAnalysis(company, {
-            discountRate: 0.12,
-            dividendGrowthRate: 0.05
           }),
           fundamentalist: StrategyFactory.runFundamentalistAnalysis(company, {
             minROE: 0.15,
@@ -230,7 +226,6 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
             lowPE: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
             magicFormula: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
             fcd: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
-            gordon: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
             fundamentalist: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] }
           }
         });
@@ -446,7 +441,6 @@ Estratégias Elegíveis: ${eligibleStrategies}/7
 - Low P/E: ${strategies.lowPE.isEligible ? '✅' : '❌'} (Score: ${strategies.lowPE.score}) - ${strategies.lowPE.reasoning}
 - Fórmula Mágica: ${strategies.magicFormula.isEligible ? '✅' : '❌'} (Score: ${strategies.magicFormula.score}) - ${strategies.magicFormula.reasoning}
 - FCD: ${strategies.fcd.isEligible ? '✅' : '❌'} (Score: ${strategies.fcd.score}) - ${strategies.fcd.reasoning}
-- Gordon: ${strategies.gordon.isEligible ? '✅' : '❌'} (Score: ${strategies.gordon.score}) - ${strategies.gordon.reasoning}
 - Fundamentalista 3+1: ${strategies.fundamentalist.isEligible ? '✅' : '❌'} (Score: ${strategies.fundamentalist.score}) - ${strategies.fundamentalist.reasoning}`;
     }).join('\n\n');
 
@@ -805,7 +799,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 ## Metodologia Aplicada
 
 - **Seleção Inteligente com IA**: Primeira chamada LLM seleciona empresas baseada no perfil do investidor
-- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD, Gordon e Fundamentalista 3+1
+- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Fundamentalista 3+1
 - **Pesquisa em Tempo Real**: IA busca notícias e dados atualizados na internet
 - **Processamento Batch**: Segunda chamada LLM analisa todas as empresas simultaneamente
 - **Síntese Inteligente**: IA analisa consistência e convergência entre estratégias

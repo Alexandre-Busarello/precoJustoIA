@@ -492,10 +492,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
               <Card className={
                 isLoggedIn && strategies.graham?.score
                   ? !strategies.graham?.isEligible
-                    ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800"
-                    : strategies.graham.score === 100 
+                    ? "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
+                    : strategies.graham.score >= 80 
                     ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
-                    : strategies.graham.score >= 70 
+                    : strategies.graham.score >= 60 
                     ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
                     : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
                   : ""
@@ -604,10 +604,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                 <Card className={
                   isPremium && strategies.fcd?.score
                     ? !strategies.fcd?.isEligible
-                      ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800"
-                      : strategies.fcd.score === 100 
+                      ? "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
+                      : strategies.fcd.score >= 80 
                       ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
-                      : strategies.fcd.score >= 70 
+                      : strategies.fcd.score >= 60 
                       ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
                       : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
                     : "border-purple-200 bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20"
@@ -717,10 +717,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                 <Card className={
                   isPremium && strategies.gordon?.score
                     ? !strategies.gordon?.isEligible
-                      ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800"
-                      : strategies.gordon.score === 100 
+                      ? "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
+                      : strategies.gordon.score >= 80 
                       ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
-                      : strategies.gordon.score >= 70 
+                      : strategies.gordon.score >= 60
                       ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
                       : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
                     : "border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20"
@@ -839,9 +839,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
               {/* Dividend Yield Analysis */}
               <Card className={
                 isPremium && strategies.dividendYield?.score
-                  ? strategies.dividendYield.score === 100 
+                  ? strategies.dividendYield.score >= 80 
                     ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
-                    : strategies.dividendYield.score >= 70 
+                    : strategies.dividendYield.score >= 60
                     ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
                     : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
                   : ""
@@ -852,18 +852,18 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <div className="flex items-center space-x-2">
                         <Coins className={`w-5 h-5 ${
                           isPremium && strategies.dividendYield?.score
-                            ? strategies.dividendYield.score === 100 
+                            ? strategies.dividendYield.score >= 80  
                               ? "text-green-700 dark:text-green-400" 
-                              : strategies.dividendYield.score >= 70 
+                              : strategies.dividendYield.score >= 60
                               ? "text-yellow-700 dark:text-yellow-400" 
                               : "text-red-700 dark:text-red-400"
                             : ""
                         }`} />
                         <span className={`text-lg font-semibold ${
                           isPremium && strategies.dividendYield?.score
-                            ? strategies.dividendYield.score === 100 
+                            ? strategies.dividendYield.score >= 80 
                               ? "text-green-900 dark:text-green-100" 
-                              : strategies.dividendYield.score >= 70 
+                              : strategies.dividendYield.score >= 60 
                               ? "text-yellow-900 dark:text-yellow-100" 
                               : "text-red-900 dark:text-red-100"
                             : ""
@@ -942,9 +942,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
               {/* Value Investing Analysis */}
               <Card className={
                 isPremium && strategies.lowPE?.score
-                  ? strategies.lowPE.score === 100 
+                  ? strategies.lowPE.score >= 80 
                     ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
-                    : strategies.lowPE.score >= 70 
+                    : strategies.lowPE.score >= 60 
                     ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
                     : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
                   : ""
@@ -955,18 +955,18 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <div className="flex items-center space-x-2">
                         <Target className={`w-5 h-5 ${
                           isPremium && strategies.lowPE?.score
-                            ? strategies.lowPE.score === 100 
+                            ? strategies.lowPE.score >= 80  
                               ? "text-green-700 dark:text-green-400" 
-                              : strategies.lowPE.score >= 70 
+                              : strategies.lowPE.score >= 60
                               ? "text-yellow-700 dark:text-yellow-400" 
                               : "text-red-700 dark:text-red-400"
                             : ""
                         }`} />
                         <span className={`text-lg font-semibold ${
                           isPremium && strategies.lowPE?.score
-                            ? strategies.lowPE.score === 100 
+                            ? strategies.lowPE.score >= 80  
                               ? "text-green-900 dark:text-green-100" 
-                              : strategies.lowPE.score >= 70 
+                              : strategies.lowPE.score >= 60
                               ? "text-yellow-900 dark:text-yellow-100" 
                               : "text-red-900 dark:text-red-100"
                             : ""
@@ -1010,9 +1010,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
               {/* Magic Formula Analysis */}
               <Card className={
                 isPremium && strategies.magicFormula?.score
-                  ? strategies.magicFormula.score === 100 
+                  ? strategies.magicFormula.score >= 80  
                     ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
-                    : strategies.magicFormula.score >= 70 
+                    : strategies.magicFormula.score >= 60 
                     ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
                     : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
                   : ""
@@ -1023,18 +1023,18 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <div className="flex items-center space-x-2">
                         <Crown className={`w-5 h-5 ${
                           isPremium && strategies.magicFormula?.score
-                            ? strategies.magicFormula.score === 100 
+                            ? strategies.magicFormula.score >= 80  
                               ? "text-green-700 dark:text-green-400" 
-                              : strategies.magicFormula.score >= 70 
+                              : strategies.magicFormula.score >= 60 
                               ? "text-yellow-700 dark:text-yellow-400" 
                               : "text-red-700 dark:text-red-400"
                             : ""
                         }`} />
                         <span className={`text-lg font-semibold ${
                           isPremium && strategies.magicFormula?.score
-                            ? strategies.magicFormula.score === 100 
+                            ? strategies.magicFormula.score >= 80  
                               ? "text-green-900 dark:text-green-100" 
-                              : strategies.magicFormula.score >= 70 
+                              : strategies.magicFormula.score >= 60 
                               ? "text-yellow-900 dark:text-yellow-100" 
                               : "text-red-900 dark:text-red-100"
                             : ""

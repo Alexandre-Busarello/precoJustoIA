@@ -1,6 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { 
   Shield, 
   Zap, 
@@ -10,18 +9,11 @@ import {
   ArrowRight,
   BarChart3,
   DollarSign,
-  PieChart,
   Sparkles,
-  Calculator,
   Target,
-  Crown,
-  Building2,
-  Users,
-  TrendingUp,
   Clock,
   Star,
   Rocket,
-  Lightbulb,
   HelpCircle,
   Mail
 } from "lucide-react"
@@ -421,7 +413,7 @@ export default function PlanosPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-red-600 mb-2">-R$ 5.000</div>
-                  <p className="text-muted-foreground">Perda média em uma "dividend trap"</p>
+                  <p className="text-muted-foreground">Perda média em uma &ldquo;dividend trap&rdquo;</p>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-red-600 mb-2">-R$ 10.000</div>
@@ -461,7 +453,7 @@ export default function PlanosPage() {
                     <div>
                       <h3 className="text-xl font-bold mb-3">Filtros Anti-Armadilha</h3>
                       <p className="text-muted-foreground text-sm leading-relaxed">
-                        Nossos algoritmos eliminam automaticamente "dividend traps" e empresas 
+                        Nossos algoritmos eliminam automaticamente &ldquo;dividend traps&rdquo; e empresas 
                         problemáticas, protegendo você de perdas desnecessárias.
                       </p>
                     </div>

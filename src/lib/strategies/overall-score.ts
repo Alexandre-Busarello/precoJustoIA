@@ -947,13 +947,13 @@ export function calculateOverallScore(strategies: {
   gordon: StrategyAnalysis | null;
 }, financialData: FinancialData, currentPrice: number, statementsData?: FinancialStatementsData): OverallScore {
   const weights = {
-    graham: 0.15,        // 15% - Base fundamentalista
-    dividendYield: 0.15, // 15% - Sustentabilidade de dividendos
+    graham: 0.10,        // 10% - Base fundamentalista
+    dividendYield: 0.10, // 10% - Sustentabilidade de dividendos
     lowPE: 0.2,          // 20% - Value investing
     magicFormula: 0.15,  // 15% - Qualidade operacional
     fcd: 0.2,            // 20% - Valor intrínseco
     gordon: 0.05,        // 5% - Método dos dividendos
-    statements: 0.1     // 10% - Análise das demonstrações financeiras
+    statements: 0.20     // 20% - Análise das demonstrações financeiras
   };
 
   let totalScore = 0;
@@ -1098,18 +1098,24 @@ export function calculateOverallScore(strategies: {
   if (statementsData) {
     statementsAnalysis = analyzeFinancialStatements(statementsData);
     const statementsWeight = weights.statements;
-    const statementsContribution = statementsAnalysis.score * statementsWeight;
+    
+    // Aplicar penalização severa para risco crítico
+    let adjustedStatementsScore = statementsAnalysis.score;
+    if (statementsAnalysis.riskLevel === 'CRITICAL') {
+      // Penalização severa: reduzir o score das demonstrações para no máximo 20
+      adjustedStatementsScore = Math.min(statementsAnalysis.score, 20);
+      weaknesses.push('🚨 RISCO CRÍTICO: Demonstrações financeiras indicam sérios problemas');
+    } else if (statementsAnalysis.riskLevel === 'HIGH') {
+      // Penalização moderada para alto risco
+      adjustedStatementsScore = Math.min(statementsAnalysis.score, 40);
+      weaknesses.push('⚠️ ALTO RISCO: Demonstrações financeiras preocupantes');
+    } else if (statementsAnalysis.riskLevel === 'LOW' && statementsAnalysis.score >= 80) {
+      strengths.push('✅ Demonstrações financeiras saudáveis');
+    }
+    
+    const statementsContribution = adjustedStatementsScore * statementsWeight;
     totalScore += statementsContribution;
     totalWeight += statementsWeight;
-
-    // Adicionar análise contextual às listas
-    if (statementsAnalysis.riskLevel === 'CRITICAL') {
-      weaknesses.push('Demonstrações financeiras indicam risco crítico');
-    } else if (statementsAnalysis.riskLevel === 'HIGH') {
-      weaknesses.push('Demonstrações financeiras indicam alto risco');
-    } else if (statementsAnalysis.riskLevel === 'LOW' && statementsAnalysis.score >= 80) {
-      strengths.push('Demonstrações financeiras saudáveis');
-    }
 
     // Adicionar força da empresa como contexto
     if (statementsAnalysis.companyStrength === 'VERY_STRONG') {
@@ -1136,7 +1142,20 @@ export function calculateOverallScore(strategies: {
   }
 
   // Calcular score final normalizado
-  const finalScore = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
+  let finalScore = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
+  
+  // Aplicar penalização adicional no score geral para risco crítico
+  if (statementsAnalysis?.riskLevel === 'CRITICAL') {
+    // Penalização adicional de 15 pontos no score final para risco crítico
+    finalScore = Math.max(0, finalScore - 15);
+    // Garantir que empresas com risco crítico nunca tenham score superior a 50
+    finalScore = Math.min(finalScore, 50);
+  } else if (statementsAnalysis?.riskLevel === 'HIGH') {
+    // Penalização adicional de 8 pontos no score final para alto risco
+    finalScore = Math.max(0, finalScore - 8);
+    // Garantir que empresas com alto risco nunca tenham score superior a 70
+    finalScore = Math.min(finalScore, 70);
+  }
 
   // Adicionar análises de indicadores básicos - dar benefício da dúvida quando dados faltam
   const roe = toNumber(financialData.roe);

@@ -1144,6 +1144,76 @@ export function calculateOverallScore(strategies: {
   // Calcular score final normalizado
   let finalScore = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
   
+  // Obter dados financeiros para análise de penalizações
+  const roe = toNumber(financialData.roe);
+  const liquidezCorrente = toNumber(financialData.liquidezCorrente);
+  const dividaLiquidaPl = toNumber(financialData.dividaLiquidaPl);
+  const margemLiquida = toNumber(financialData.margemLiquida);
+  
+  // Aplicar penalização por endividamento elevado
+  if (dividaLiquidaPl !== null) {
+    let debtPenalty = 0;
+    if (dividaLiquidaPl > 3.0) {
+      // Endividamento muito alto: penalização severa de 20 pontos
+      debtPenalty = 20;
+      weaknesses.push('🚨 Endividamento crítico');
+    } else if (dividaLiquidaPl > 2.0) {
+      // Endividamento alto: penalização de 12 pontos
+      debtPenalty = 12;
+      if (!weaknesses.includes('Alto endividamento')) {
+        weaknesses.push('Alto endividamento');
+      }
+    } else if (dividaLiquidaPl > 1.5) {
+      // Endividamento moderadamente alto: penalização de 6 pontos
+      debtPenalty = 6;
+      weaknesses.push('Endividamento moderadamente alto');
+    } else if (dividaLiquidaPl > 1.0) {
+      // Endividamento moderado: penalização leve de 3 pontos
+      debtPenalty = 3;
+      weaknesses.push('Endividamento moderado');
+    } else if (dividaLiquidaPl > 0.9) {
+      // Endividamento leve: penalização leve de 2 ponto
+      debtPenalty = 2;
+      weaknesses.push('Endividamento leve');
+    }
+    
+    if (debtPenalty > 0) {
+      finalScore = Math.max(0, finalScore - debtPenalty);
+    }
+  }
+  
+  // Aplicar penalização por baixa margem líquida
+  if (margemLiquida !== null) {
+    let marginPenalty = 0;
+    if (margemLiquida < -0.05) {
+      // Margem líquida muito negativa: penalização severa de 18 pontos
+      marginPenalty = 18;
+      weaknesses.push('🚨 Margem líquida crítica (prejuízo)');
+    } else if (margemLiquida < 0) {
+      // Margem líquida negativa: penalização de 12 pontos
+      marginPenalty = 12;
+      weaknesses.push('Margem líquida negativa');
+    } else if (margemLiquida < 0.02) {
+      // Margem líquida muito baixa: penalização de 8 pontos
+      marginPenalty = 8;
+      if (!weaknesses.includes('Margem de lucro baixa')) {
+        weaknesses.push('Margem de lucro baixa');
+      }
+    } else if (margemLiquida < 0.05) {
+      // Margem líquida baixa: penalização de 4 pontos
+      marginPenalty = 6;
+      weaknesses.push('Margem de lucro abaixo da média');
+    } else if (margemLiquida < 0.08) {
+      // Margem líquida moderada: penalização leve de 2 pontos
+      marginPenalty = 4;
+      weaknesses.push('Margem de lucro moderada');
+    }
+    
+    if (marginPenalty > 0) {
+      finalScore = Math.max(0, finalScore - marginPenalty);
+    }
+  }
+  
   // Aplicar penalização adicional no score geral para risco crítico
   if (statementsAnalysis?.riskLevel === 'CRITICAL') {
     // Penalização adicional de 15 pontos no score final para risco crítico
@@ -1158,10 +1228,6 @@ export function calculateOverallScore(strategies: {
   }
 
   // Adicionar análises de indicadores básicos - dar benefício da dúvida quando dados faltam
-  const roe = toNumber(financialData.roe);
-  const liquidezCorrente = toNumber(financialData.liquidezCorrente);
-  const dividaLiquidaPl = toNumber(financialData.dividaLiquidaPl);
-  const margemLiquida = toNumber(financialData.margemLiquida);
 
   // Só adicionar pontos positivos ou negativos se o dado existir
   if (roe !== null) {
@@ -1175,16 +1241,22 @@ export function calculateOverallScore(strategies: {
   }
 
   if (dividaLiquidaPl !== null) {
-    if (dividaLiquidaPl <= 0.5) strengths.push('Endividamento controlado');
-    else if (dividaLiquidaPl > 2.0) weaknesses.push('Alto endividamento');
+    if (dividaLiquidaPl <= 0.5) {
+      strengths.push('Endividamento controlado');
+    }
+    // Casos de endividamento alto já foram tratados na penalização acima
   } else {
     // Se não tem dado de dívida, assumir que é controlado (benefício da dúvida)
     strengths.push('Endividamento controlado (dado não disponível)');
   }
 
   if (margemLiquida !== null) {
-    if (margemLiquida >= 0.10) strengths.push('Boa margem de lucro');
-    else if (margemLiquida < 0.02) weaknesses.push('Margem de lucro baixa');
+    if (margemLiquida >= 0.15) {
+      strengths.push('Excelente margem de lucro');
+    } else if (margemLiquida >= 0.10) {
+      strengths.push('Boa margem de lucro');
+    }
+    // Casos de margem baixa já foram tratados na penalização acima
   }
 
   // Determinar grade e classificação

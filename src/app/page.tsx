@@ -530,7 +530,7 @@ export default async function Home() {
           <div className="text-center mb-20">
             <h2 className="text-4xl sm:text-5xl font-bold mb-6">
               Invista em você por{" "}
-              <span className="text-violet-600">menos de R$ 1 por dia</span>
+              <span className="text-violet-600">menos de R$ 1,60 por dia</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
               <strong>Economize milhares</strong> em decisões ruins de investimento. 
@@ -539,7 +539,7 @@ export default async function Home() {
             <div className="inline-flex items-center gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-full px-4 py-2 mt-4">
               <CheckCircle className="w-4 h-4 text-green-600" />
               <span className="text-sm font-medium text-green-700 dark:text-green-400">
-                💳 Pagamento 100% via PIX • Ativação instantânea
+                💳 PIX ou Cartão • Ativação instantânea
               </span>
             </div>
           </div>
@@ -603,10 +603,10 @@ export default async function Home() {
                   </div>
                   <h3 className="text-2xl font-bold mb-2">Premium Mensal</h3>
                   <div className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent mb-2">
-                    R$ 29,90
+                    R$ 47,00
                   </div>
-                  <p className="text-sm text-muted-foreground">por mês • via PIX</p>
-                  <p className="text-xs text-green-600 font-medium mt-1">Menos de R$ 1 por dia</p>
+                  <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
+                  <p className="text-xs text-green-600 font-medium mt-1">Apenas R$ 1,57 por dia</p>
                 </div>
                 
                 <div className="space-y-4 mb-8">
@@ -656,7 +656,7 @@ export default async function Home() {
             <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 hover:shadow-xl transition-all duration-300 relative">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                 <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
-                  💰 ECONOMIZE 40%
+                  💰 ECONOMIZE 12%
                 </div>
               </div>
               
@@ -667,13 +667,13 @@ export default async function Home() {
                   </div>
                   <h3 className="text-2xl font-bold mb-2">Premium Anual</h3>
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <span className="text-lg text-muted-foreground line-through">R$ 358,80</span>
+                    <span className="text-lg text-muted-foreground line-through">R$ 564,00</span>
                     <div className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                      R$ 215,00
+                      R$ 497,00
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">por ano • via PIX</p>
-                  <p className="text-xs text-green-600 font-medium mt-1">R$ 17,92 por mês</p>
+                  <p className="text-sm text-muted-foreground">por ano • PIX ou Cartão</p>
+                  <p className="text-xs text-green-600 font-medium mt-1">R$ 41,42 por mês</p>
                 </div>
                 
                 <div className="space-y-4 mb-8">
@@ -683,7 +683,7 @@ export default async function Home() {
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>40% de desconto</strong></span>
+                    <span><strong>12% de desconto</strong></span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -706,7 +706,7 @@ export default async function Home() {
                 </Button>
                 
                 <p className="text-xs text-center text-muted-foreground mt-3">
-                  💰 Economia de R$ 143,80 por ano
+                  💰 Economia de R$ 67,00 por ano
                 </p>
               </CardContent>
             </Card>
@@ -728,7 +728,7 @@ export default async function Home() {
                   <p className="text-muted-foreground">Perda média em empresa problemática</p>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600 mb-2">+R$ 215</div>
+                  <div className="text-2xl font-bold text-green-600 mb-2">+R$ 497</div>
                   <p className="text-muted-foreground">Custo do Premium Anual</p>
                 </div>
               </div>
@@ -1076,7 +1076,7 @@ export default async function Home() {
                 <p className="text-muted-foreground leading-relaxed">
                   Não! Oferecemos acesso gratuito aos rankings e análises básicas. 
                   Os recursos premium (análise com IA, comparações avançadas) custam 
-                  apenas R$ 29,90/mês, sem fidelidade.
+                  apenas R$ 47,00/mês, sem fidelidade.
                 </p>
               </CardContent>
             </Card>
@@ -1653,7 +1653,7 @@ export default async function Home() {
               {
                 "@type": "Offer", 
                 "name": "Premium Mensal",
-                "price": "29.90",
+                "price": "47.00",
                 "priceCurrency": "BRL",
                 "billingIncrement": "P1M",
                 "description": "Acesso completo a 8 modelos de valuation e análise com IA"
@@ -1661,10 +1661,10 @@ export default async function Home() {
               {
                 "@type": "Offer",
                 "name": "Premium Anual", 
-                "price": "215.00",
+                "price": "497.00",
                 "priceCurrency": "BRL",
                 "billingIncrement": "P1Y",
-                "description": "Plano anual com 40% de desconto e recursos exclusivos"
+                "description": "Plano anual com 12% de desconto e recursos exclusivos"
               }
             ],
             "featureList": [

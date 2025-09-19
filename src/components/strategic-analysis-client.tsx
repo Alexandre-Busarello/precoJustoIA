@@ -212,13 +212,13 @@ function PremiumUpgrade({ strategy }: { strategy: string }) {
 
       <div className="flex flex-col sm:flex-row gap-3">
         <Button asChild size="lg" className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
-          <Link href="/premium">
+          <Link href="/planos">
             <Crown className="w-4 h-4 mr-2" />
             Assinar Premium
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg">
-          <Link href="/pricing">
+          <Link href="/planos">
             Ver planos
           </Link>
         </Button>

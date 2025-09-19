@@ -651,7 +651,8 @@ function ComparisonIndicatorCard({
 // Gerar metadata dinâmico para SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const resolvedParams = await params
-  const tickers = resolvedParams.tickers.map(t => t.toUpperCase())
+  const tickersParam = resolvedParams.tickers // Manter tickers originais da URL
+  const tickers = tickersParam.map(t => t.toUpperCase()) // Converter para maiúsculo apenas para consulta no BD
   
   if (tickers.length < 2) {
     return {
@@ -686,7 +687,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         title,
         description,
         type: 'article',
-        url: `/compara-acoes/${tickers.join('/')}`,
+        url: `/compara-acoes/${tickersParam.map(t => t.toLowerCase()).join('/')}`,
         siteName: 'Preço Justo AI',
       },
       twitter: {
@@ -697,7 +698,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         site: '@PrecoJustoAI'
       },
       alternates: {
-        canonical: `/compara-acoes/${tickers.join('/')}`,
+        canonical: `/compara-acoes/${tickersParam.map(t => t.toLowerCase()).join('/')}`,
       },
       robots: {
         index: true,
@@ -716,7 +717,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: `Comparação ${tickers.join(' vs ')} | Análise Comparativa de Ações - Preço Justo AI`,
       description: `Compare as ações ${tickers.join(', ')} com análise fundamentalista completa, indicadores financeiros e estratégias de investimento.`,
       alternates: {
-        canonical: `/compara-acoes/${tickers.join('/')}`,
+        canonical: `/compara-acoes/${tickersParam.map(t => t.toLowerCase()).join('/')}`,
       }
     }
   }
@@ -724,7 +725,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function CompareStocksPage({ params }: PageProps) {
   const resolvedParams = await params
-  const tickers = resolvedParams.tickers.map(t => t.toUpperCase())
+  const tickersParam = resolvedParams.tickers // Manter tickers originais da URL
+  const tickers = tickersParam.map(t => t.toUpperCase()) // Converter para maiúsculo apenas para consulta no BD
 
   // Validar se há pelo menos 2 tickers
   if (tickers.length < 2) {

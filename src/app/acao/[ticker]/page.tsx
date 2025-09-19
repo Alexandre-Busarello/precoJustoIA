@@ -227,7 +227,8 @@ function formatCurrency(value: number | null): string {
 // Gerar metadata dinâmico para SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const resolvedParams = await params
-  const ticker = resolvedParams.ticker.toUpperCase()
+  const tickerParam = resolvedParams.ticker // Manter ticker original da URL
+  const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
   
   try {
     const company = await prisma.company.findUnique({
@@ -273,7 +274,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         title,
         description,
         type: 'article',
-        url: `/acao/${ticker}`,
+        url: `/acao/${tickerParam.toLowerCase()}`,
         siteName: 'Preço Justo AI',
         images: company.logoUrl ? [{ 
           url: company.logoUrl, 
@@ -291,7 +292,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         site: '@PrecoJustoAI'
       },
       alternates: {
-        canonical: `/acao/${ticker}`,
+        canonical: `/acao/${tickerParam.toLowerCase()}`,
       },
       robots: {
         index: true,
@@ -316,7 +317,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: `${ticker} - Análise de Ação | Preço Justo AI`,
       description: `Análise fundamentalista completa da ação ${ticker} com indicadores financeiros, valuation e estratégias de investimento. Descubra se ${ticker} está subvalorizada ou sobrevalorizada.`,
       alternates: {
-        canonical: `/acao/${ticker}`,
+        canonical: `/acao/${tickerParam.toLowerCase()}`,
       }
     }
   }
@@ -324,7 +325,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function TickerPage({ params }: PageProps) {
   const resolvedParams = await params
-  const ticker = resolvedParams.ticker.toUpperCase()
+  const tickerParam = resolvedParams.ticker // Manter ticker original da URL
+  const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
 
   // Verificar sessão do usuário para recursos premium
   const session = await getServerSession(authOptions)
@@ -400,7 +402,7 @@ export default async function TickerPage({ params }: PageProps) {
         <div className="container mx-auto py-4 px-4">
           <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
             <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
-              <h1 className="text-base sm:text-lg font-semibold truncate">Análise de Ações</h1>
+              <h2 className="text-base sm:text-lg font-semibold truncate">Análise de Ações</h2>
               <div className="hidden md:block text-sm text-muted-foreground truncate">
                 {companyData.name} ({ticker})
               </div>

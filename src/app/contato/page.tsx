@@ -346,9 +346,8 @@ export default function ContatoPage() {
               <CardContent className="p-6">
                 <h3 className="text-lg font-bold mb-3">Qual a diferença entre os planos?</h3>
                 <p className="text-muted-foreground text-sm leading-relaxed">
-                  O plano gratuito inclui a Fórmula de Graham. O Premium adiciona 
-                  6 modelos de valuation. O IA Premium inclui análises com 
-                  inteligência artificial do Google Gemini.
+                  O plano gratuito inclui a Fórmula de Graham. O Premium (R$ 47/mês) adiciona 
+                  8 modelos de valuation e análises com inteligência artificial do Google Gemini.
                 </p>
               </CardContent>
             </Card>

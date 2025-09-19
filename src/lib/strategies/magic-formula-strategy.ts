@@ -39,7 +39,7 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 6 && !!roic && !!earningsYield && roic >= minROIC && earningsYield >= minEY; // Reduzido para dar benefício da dúvida
+    const isEligible = passedCriteria >= 6 && !!roic // && !!earningsYield && roic >= minROIC && earningsYield >= minEY; 
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular magic formula score como no backend
@@ -76,7 +76,10 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     // const { minROIC = 0, minEY = 0 } = params; // Não usado atualmente
     const results: RankBuilderResult[] = [];
 
-    for (const company of companies) {
+    // Filtrar empresas por tamanho se especificado
+    const filteredCompanies = this.filterCompaniesBySize(companies, params.companySize || 'all');
+
+    for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company, params)) continue;
 
       const { financials, currentPrice } = company;

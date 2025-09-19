@@ -2,6 +2,7 @@
 export interface StrategyParams {
   // Parâmetros comuns a todas as estratégias
   limit?: number;
+  companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
 }
 
 export interface GrahamParams extends StrategyParams {
@@ -135,8 +136,8 @@ export interface BaseStrategy<T extends StrategyParams> {
   // Para análise individual de empresa
   runAnalysis(companyData: CompanyData, params: T): StrategyAnalysis;
   
-  // Para ranking de múltiplas empresas
-  runRanking(companies: CompanyData[], params: T): RankBuilderResult[];
+  // Para ranking de múltiplas empresas (pode ser assíncrono para IA)
+  runRanking(companies: CompanyData[], params: T): RankBuilderResult[] | Promise<RankBuilderResult[]>;
   
   // Gerar racional da estratégia
   generateRational(params: T): string;

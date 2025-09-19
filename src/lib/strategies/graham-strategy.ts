@@ -105,7 +105,10 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const { marginOfSafety } = params;
     const results: RankBuilderResult[] = [];
 
-    for (const company of companies) {
+    // Filtrar empresas por tamanho se especificado
+    const filteredCompanies = this.filterCompaniesBySize(companies, params.companySize || 'all');
+
+    for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company)) continue;
 
       const { financials, currentPrice } = company;

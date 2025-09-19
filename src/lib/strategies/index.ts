@@ -6,5 +6,6 @@ export * from './dividend-yield-strategy';
 export * from './lowpe-strategy';
 export * from './magic-formula-strategy';
 export * from './gordon-strategy';
+export * from './fundamentalist-strategy';
 export * from './ai-strategy';
 export * from './strategy-factory';

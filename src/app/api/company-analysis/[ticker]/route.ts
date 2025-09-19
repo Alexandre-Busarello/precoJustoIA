@@ -21,6 +21,7 @@ interface CompanyAnalysisResponse {
     magicFormula: StrategyAnalysis;
     fcd: StrategyAnalysis;
     gordon: StrategyAnalysis;
+    fundamentalist: StrategyAnalysis;
   };
 }
 
@@ -166,6 +167,14 @@ export async function GET(
           fairValue: null,
           upside: null,
           reasoning: isPremium ? '' : 'Premium necessário para análise Fórmula de Gordon',
+          criteria: [],
+        },
+        fundamentalist: strategies.fundamentalist || {
+          isEligible: false,
+          score: 0,
+          fairValue: null,
+          upside: null,
+          reasoning: isPremium ? '' : 'Premium necessário para análise Fundamentalista 3+1',
           criteria: [],
         }
       }

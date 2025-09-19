@@ -25,7 +25,6 @@ import {
   PieChart,
   Eye,
   User,
-  LineChart,
   GitCompare,
   ChevronDown,
   Info
@@ -40,21 +39,26 @@ interface PageProps {
 
 // Funções de formatação definidas mais abaixo
 
-// Função helper para determinar tipo de indicador
-function getIndicatorType(value: number | null, positiveThreshold?: number, negativeThreshold?: number): 'positive' | 'negative' | 'neutral' | 'default' {
-  if (value === null) return 'default'
-  
-  if (positiveThreshold !== undefined && value >= positiveThreshold) return 'positive'
-  if (negativeThreshold !== undefined && value <= negativeThreshold) return 'positive'
-  if (positiveThreshold !== undefined && value < positiveThreshold) return 'negative'
-  if (negativeThreshold !== undefined && value > negativeThreshold) return 'negative'
-  
-  return 'neutral'
-}
 
 // Função para extrair prefixo do ticker (remove números finais)
 function getTickerPrefix(ticker: string): string {
   return ticker.replace(/\d+$/, '') // Remove números no final
+}
+
+// Função para determinar o tamanho da empresa (reutiliza lógica do filterCompaniesBySize)
+function getCompanySize(marketCap: number | null): 'small_caps' | 'mid_caps' | 'blue_chips' | null {
+  if (!marketCap) return null;
+  
+  // Valores em bilhões de reais
+  const marketCapBillions = marketCap / 1_000_000_000;
+  
+  if (marketCapBillions < 2) {
+    return 'small_caps'; // Menos de R$ 2 bilhões
+  } else if (marketCapBillions >= 2 && marketCapBillions < 10) {
+    return 'mid_caps'; // R$ 2-10 bilhões
+  } else {
+    return 'blue_chips'; // Mais de R$ 10 bilhões
+  }
 }
 
 // Cache para concorrentes (válido por 30 minutos)
@@ -62,12 +66,15 @@ const competitorsCache = new Map<string, { competitors: { ticker: string; name: 
 const COMPETITORS_CACHE_DURATION = 30 * 60 * 1000 // 30 minutos
 
 // Função para buscar concorrentes do mesmo setor com priorização de subsetor (otimizada)
-async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, limit: number = 5) {
+async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, currentMarketCap: number | null = null, limit: number = 5) {
   if (!sector) return []
   
   try {
-    // Verificar cache primeiro
-    const cacheKey = `${currentTicker}-${sector}-${industry}-${limit}`
+    // Determinar o tamanho da empresa atual
+    const currentCompanySize = getCompanySize(currentMarketCap)
+    
+    // Verificar cache primeiro (incluir tamanho na chave do cache)
+    const cacheKey = `${currentTicker}-${sector}-${industry}-${currentCompanySize}-${limit}`
     const cached = competitorsCache.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < COMPETITORS_CACHE_DURATION) {
       console.log('📋 Usando concorrentes do cache para', currentTicker)
@@ -78,6 +85,9 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
     const currentYear = new Date().getFullYear()
     
     // Query otimizada: buscar todas as empresas do setor/industry de uma vez
+    // Para blue chips, incluir dados financiais para filtrar por market cap
+    const includeFinancials = currentCompanySize === 'blue_chips'
+    
     const allCompetitors = await prisma.company.findMany({
       where: {
         OR: [
@@ -96,25 +106,52 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
         ticker: true,
         name: true,
         sector: true,
-        industry: true
+        industry: true,
+        // Incluir dados financiais apenas se for blue chip
+        financialData: includeFinancials ? {
+          select: {
+            marketCap: true,
+            year: true
+          },
+          orderBy: { year: 'desc' },
+          take: 1
+        } : false
       },
       orderBy: [
         { industry: industry ? 'asc' : 'desc' }, // Priorizar industry se especificado
         { ticker: 'asc' }
       ],
-      take: limit * 3 // Buscar mais para ter opções após filtrar prefixos
+      take: limit * 5 // Buscar mais para ter opções após filtrar prefixos e tamanho
     })
 
     // Filtrar empresas com mesmo prefixo e priorizar por industry
     const seenPrefixes = new Set([currentPrefix])
     const competitors: { ticker: string; name: string; sector: string | null }[] = []
     
+    // Função auxiliar para verificar se a empresa atende aos critérios de tamanho
+    const isValidCompetitor = (company: any): boolean => {
+      const companyPrefix = getTickerPrefix(company.ticker)
+      if (seenPrefixes.has(companyPrefix)) return false
+      
+      // Se a empresa atual for blue chip, filtrar apenas outras blue chips
+      if (currentCompanySize === 'blue_chips' && includeFinancials) {
+        const competitorMarketCap = company.financialData?.[0]?.marketCap
+        if (competitorMarketCap) {
+          const competitorSize = getCompanySize(toNumber(competitorMarketCap))
+          return competitorSize === 'blue_chips'
+        }
+        return false // Se não tem market cap, não incluir
+      }
+      
+      return true
+    }
+    
     // Primeiro: empresas do mesmo industry
     if (industry) {
       for (const company of allCompetitors) {
         if (company.industry === industry && competitors.length < limit) {
-          const companyPrefix = getTickerPrefix(company.ticker)
-          if (!seenPrefixes.has(companyPrefix)) {
+          if (isValidCompetitor(company)) {
+            const companyPrefix = getTickerPrefix(company.ticker)
             seenPrefixes.add(companyPrefix)
             competitors.push({
               ticker: company.ticker,
@@ -130,8 +167,8 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
     if (competitors.length < limit) {
       for (const company of allCompetitors) {
         if (company.sector === sector && competitors.length < limit) {
-          const companyPrefix = getTickerPrefix(company.ticker)
-          if (!seenPrefixes.has(companyPrefix)) {
+          if (isValidCompetitor(company)) {
+            const companyPrefix = getTickerPrefix(company.ticker)
             seenPrefixes.add(companyPrefix)
             competitors.push({
               ticker: company.ticker,
@@ -182,93 +219,9 @@ function formatCurrency(value: number | null): string {
   }).format(value)
 }
 
-function formatPercent(value: PrismaDecimal | Date | string | null): string {
-  const numValue = toNumber(value)
-  if (numValue === null || numValue === undefined) return 'N/A'
-  return `${(numValue * 100).toFixed(2)}%`
-}
-
-function formatLargeNumber(value: number | null): string {
-  if (value === null || value === undefined) return 'N/A'
-  
-  if (value >= 1_000_000_000) {
-    return `R$ ${(value / 1_000_000_000).toFixed(2)}B`
-  } else if (value >= 1_000_000) {
-    return `R$ ${(value / 1_000_000).toFixed(2)}M`
-  } else if (value >= 1_000) {
-    return `R$ ${(value / 1_000).toFixed(2)}K`
-  }
-  return formatCurrency(value)
-}
 
 
 
-// Componente para indicador com ícone - copiado exatamente do ticker-page-client
-function IndicatorCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  description,
-  type = 'default',
-  onChartClick,
-  ticker
-}: {
-  title: string
-  value: string | number
-   
-  icon: any
-  description?: string
-  type?: 'positive' | 'negative' | 'neutral' | 'default'
-  onChartClick?: (indicator: string) => void
-  ticker?: string
-}) {
-  const getColorClass = () => {
-    switch (type) {
-      case 'positive': return 'text-green-600 dark:text-green-400'
-      case 'negative': return 'text-red-600 dark:text-red-400'
-      case 'neutral': return 'text-blue-600 dark:text-blue-400'
-      default: return 'text-gray-600 dark:text-gray-400'
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3 flex-1">
-            <div className={`p-2 rounded-lg bg-gray-100 dark:bg-gray-800 ${getColorClass()}`}>
-              <Icon className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-muted-foreground truncate">
-                {title}
-              </p>
-              <p className="text-xl font-bold">
-                {value}
-              </p>
-              {description && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {description}
-                </p>
-              )}
-            </div>
-          </div>
-          {onChartClick && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onChartClick(title)}
-              className="ml-2 p-2 h-8 w-8"
-              title={`Ver gráfico de evolução do ${title}`}
-            >
-              <LineChart className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
 
 
 // Gerar metadata dinâmico para SEO
@@ -417,7 +370,9 @@ export default async function TickerPage({ params }: PageProps) {
   const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
 
   // Buscar concorrentes do mesmo setor/subsetor (5 concorrentes + empresa atual = 6 total)
-  const competitors = await getSectorCompetitors(ticker, companyData.sector, companyData.industry, 5)
+  // Passar o marketCap da empresa atual para filtro por tamanho
+  const currentMarketCap = toNumber(latestFinancials?.marketCap)
+  const competitors = await getSectorCompetitors(ticker, companyData.sector, companyData.industry, currentMarketCap, 5)
   
   // Criar URL do comparador inteligente
   const smartComparatorUrl = competitors.length > 0 
@@ -443,14 +398,14 @@ export default async function TickerPage({ params }: PageProps) {
       {/* Barra de Busca no Topo */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto py-4 px-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-lg font-semibold">Análise de Ações</h1>
-              <div className="hidden sm:block text-sm text-muted-foreground">
+          <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
+              <h1 className="text-base sm:text-lg font-semibold truncate">Análise de Ações</h1>
+              <div className="hidden md:block text-sm text-muted-foreground truncate">
                 {companyData.name} ({ticker})
               </div>
             </div>
-            <div className="w-full max-w-md">
+            <div className="w-full sm:w-auto sm:max-w-md">
               <CompanySearch 
                 placeholder="Buscar outras empresas..."
                 className="w-full"
@@ -468,10 +423,10 @@ export default async function TickerPage({ params }: PageProps) {
             
             {/* Card do Header da Empresa */}
             <Card className="flex-1">
-              <CardContent className="p-6">
-                <div className="flex items-start space-x-6">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-start space-y-4 sm:space-y-0 sm:space-x-4 lg:space-x-6">
                   {/* Logo da empresa com fallback */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 self-center sm:self-start">
                     <CompanyLogo
                       logoUrl={companyData.logoUrl}
                       companyName={companyData.name}
@@ -481,21 +436,21 @@ export default async function TickerPage({ params }: PageProps) {
                   </div>
 
                   {/* Informações básicas */}
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     {/* Header: Ticker + Preço (Responsivo) */}
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-3">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3">
                       {/* Ticker e Setor */}
-                      <div className="flex items-center space-x-3 mb-3 md:mb-0">
-                        <h1 className="text-3xl font-bold">{ticker}</h1>
-                        <Badge variant="secondary" className="text-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-3 lg:mb-0">
+                        <h1 className="text-2xl sm:text-3xl font-bold truncate">{ticker}</h1>
+                        <Badge variant="secondary" className="text-sm w-fit">
                           {companyData.sector || 'N/A'}
                         </Badge>
                       </div>
                       
                       {/* Preço - Mobile: abaixo do ticker, Desktop: ao lado direito */}
-                      <div className="md:text-right md:flex-shrink-0">
+                      <div className="lg:text-right lg:flex-shrink-0">
                         <p className="text-sm text-muted-foreground">Preço Atual</p>
-                        <p className="text-2xl font-bold text-green-600">
+                        <p className="text-xl sm:text-2xl font-bold text-green-600">
                           {formatCurrency(currentPrice)}
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -504,7 +459,7 @@ export default async function TickerPage({ params }: PageProps) {
                       </div>
                     </div>
                     
-                    <h2 className="text-xl text-muted-foreground mb-4">
+                    <h2 className="text-lg sm:text-xl text-muted-foreground mb-4 truncate">
                       Análise da Ação {companyData.name}
                     </h2>
 
@@ -542,22 +497,22 @@ export default async function TickerPage({ params }: PageProps) {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
                       {companyData.industry && (
-                        <div className="flex items-center space-x-2">
-                          <PieChart className="w-4 h-4 text-muted-foreground" />
-                          <span>{companyData.industry}</span>
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <PieChart className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{companyData.industry}</span>
                         </div>
                       )}
                       
                       {companyData.website && (
-                        <div className="flex items-center space-x-2">
-                          <Eye className="w-4 h-4 text-muted-foreground" />
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <Eye className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <Link 
                             href={companyData.website} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
+                            className="text-blue-600 hover:underline truncate"
                           >
                             Site oficial
                           </Link>
@@ -565,18 +520,18 @@ export default async function TickerPage({ params }: PageProps) {
                       )}
                       
                       {(companyData.city || companyData.state) && (
-                        <div className="flex items-center space-x-2">
-                          <Building2 className="w-4 h-4 text-muted-foreground" />
-                          <span>
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">
                             {[companyData.city, companyData.state].filter(Boolean).join(', ')}
                           </span>
                         </div>
                       )}
 
                       {companyData.fullTimeEmployees && (
-                        <div className="flex items-center space-x-2">
-                          <User className="w-4 h-4 text-muted-foreground" />
-                          <span>{companyData.fullTimeEmployees.toLocaleString()} funcionários</span>
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{companyData.fullTimeEmployees.toLocaleString()} funcionários</span>
                         </div>
                       )}
                     </div>

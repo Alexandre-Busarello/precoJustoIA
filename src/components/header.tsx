@@ -33,7 +33,7 @@ export default function Header() {
                 width={287}
                 height={70}
                 style={{ height: '70px', width: 'auto' }}
-                className="w-auto"
+                className="w-auto h-12 sm:h-16 md:h-[70px] max-w-[200px] sm:max-w-[250px] md:max-w-none"
               />
             </Link>
           </div>

@@ -81,6 +81,7 @@ interface CompanyAnalysisResponse {
     magicFormula: StrategyAnalysis;
     fcd: StrategyAnalysis;
     gordon: StrategyAnalysis;
+    fundamentalist: StrategyAnalysis;
   };
 }
 
@@ -1107,6 +1108,97 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   </CollapsibleContent>
                 </Collapsible>
               </Card>
+
+              {/* Fundamentalist 3+1 Analysis */}
+              <Card className={
+                isPremium && strategies.fundamentalist?.score
+                  ? strategies.fundamentalist.score >= 80  
+                    ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
+                    : strategies.fundamentalist.score >= 60 
+                    ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
+                    : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
+                  : ""
+              }>
+                <Collapsible>
+                  <CollapsibleTrigger className="w-full p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <BarChart3 className={`w-5 h-5 ${
+                          isPremium && strategies.fundamentalist?.score
+                            ? strategies.fundamentalist.score >= 80  
+                              ? "text-green-700 dark:text-green-400" 
+                              : strategies.fundamentalist.score >= 60 
+                              ? "text-yellow-700 dark:text-yellow-400" 
+                              : "text-red-700 dark:text-red-400"
+                            : ""
+                        }`} />
+                        <span className={`text-lg font-semibold ${
+                          isPremium && strategies.fundamentalist?.score
+                            ? strategies.fundamentalist.score >= 80  
+                              ? "text-green-900 dark:text-green-100" 
+                              : strategies.fundamentalist.score >= 60 
+                              ? "text-yellow-900 dark:text-yellow-100" 
+                              : "text-red-900 dark:text-red-100"
+                            : ""
+                        }`}>Fundamentalista 3+1</span>
+                        <Badge variant={strategies.fundamentalist?.isEligible ? "default" : "secondary"}>
+                          {strategies.fundamentalist?.score?.toFixed(0) || 0}/100
+                        </Badge>
+                      </div>
+                      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground mb-1">ROE</p>
+                          <p className="text-2xl font-bold text-blue-600">
+                            {formatPercent(latestFinancials.roe)}
+                          </p>
+                        </div>
+                        
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground mb-1">P/L</p>
+                          <p className="text-2xl font-bold text-green-600">
+                            {latestFinancials.pl ? parseFloat(latestFinancials.pl.toString()).toFixed(1) : 'N/A'}
+                          </p>
+                        </div>
+                        
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground mb-1">Payout</p>
+                          <p className="text-2xl font-bold text-purple-600">
+                            {formatPercent(latestFinancials.payout)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-muted p-4 rounded-lg mb-4">
+                        <MarkdownRenderer content={strategies.fundamentalist?.reasoning || ''} />
+                      </div>
+
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Análise Adaptativa:</h4>
+                        {strategies.fundamentalist?.criteria?.map((criterion, index) => (
+                          <div key={index} className="flex items-center justify-between py-2 px-3 bg-background rounded">
+                            <div className="flex items-center space-x-2">
+                              {criterion.value ? (
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-500" />
+                              )}
+                              <span className="text-sm">{criterion.label}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {criterion.description}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Collapsible>
+              </Card>
             </div>
           )}
         </TabsContent>
@@ -1372,6 +1464,33 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                         : "secondary"
                     }>
                       {isPremium ? `${strategies.magicFormula?.score?.toFixed(0) || 0}%` : 'Premium'}
+                    </Badge>
+                  </div>
+
+                  {/* Fundamentalist 3+1 Status */}
+                  <div className={`flex items-center justify-between p-3 rounded-lg ${
+                    isPremium && strategies.fundamentalist?.score 
+                      ? strategies.fundamentalist.score >= 80
+                        ? "bg-green-100 dark:bg-green-950/30" 
+                        : strategies.fundamentalist.score >= 60 
+                        ? "bg-yellow-100 dark:bg-yellow-950/30" 
+                        : "bg-red-100 dark:bg-red-950/30"
+                      : "bg-muted/50"
+                  }`}>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium">Fundamentalista 3+1</span>
+                      {isPremium && strategies.fundamentalist?.score && strategies.fundamentalist.score < 70 && (
+                        <span className="text-xs text-red-600 font-medium">Reprovada</span>
+                      )}
+                    </div>
+                    <Badge variant={
+                      isPremium && strategies.fundamentalist?.score && strategies.fundamentalist.score >= 80 
+                        ? "default" 
+                        : isPremium && strategies.fundamentalist?.score && strategies.fundamentalist.score < 70
+                        ? "destructive"
+                        : "secondary"
+                    }>
+                      {isPremium ? `${strategies.fundamentalist?.score?.toFixed(0) || 0}/100` : 'Premium'}
                     </Badge>
                   </div>
                 </div>

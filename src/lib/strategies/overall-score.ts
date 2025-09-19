@@ -945,14 +945,16 @@ export function calculateOverallScore(strategies: {
   magicFormula: StrategyAnalysis | null;
   fcd: StrategyAnalysis | null;
   gordon: StrategyAnalysis | null;
+  fundamentalist: StrategyAnalysis | null;
 }, financialData: FinancialData, currentPrice: number, statementsData?: FinancialStatementsData): OverallScore {
   const weights = {
-    graham: 0.10,        // 10% - Base fundamentalista
-    dividendYield: 0.10, // 10% - Sustentabilidade de dividendos
-    lowPE: 0.2,          // 20% - Value investing
-    magicFormula: 0.15,  // 15% - Qualidade operacional
-    fcd: 0.2,            // 20% - Valor intrínseco
+    graham: 0.08,        // 8% - Base fundamentalista
+    dividendYield: 0.08, // 8% - Sustentabilidade de dividendos
+    lowPE: 0.15,         // 15% - Value investing
+    magicFormula: 0.12,  // 12% - Qualidade operacional
+    fcd: 0.15,           // 15% - Valor intrínseco
     gordon: 0.05,        // 5% - Método dos dividendos
+    fundamentalist: 0.17, // 17% - Análise fundamentalista simplificada
     statements: 0.20     // 20% - Análise das demonstrações financeiras
   };
 
@@ -1091,6 +1093,22 @@ export function calculateOverallScore(strategies: {
       }
     }
     totalWeight += gordonWeight;
+  }
+
+  // Fundamentalist Analysis (não tem fairValue, sempre considera)
+  if (strategies.fundamentalist) {
+    const fundamentalistWeight = weights.fundamentalist;
+    const fundamentalistContribution = strategies.fundamentalist.score * fundamentalistWeight;
+    totalScore += fundamentalistContribution;
+    totalWeight += fundamentalistWeight;
+
+    if (strategies.fundamentalist.isEligible && strategies.fundamentalist.score >= 80) {
+      strengths.push('Excelente análise fundamentalista simplificada');
+    } else if (strategies.fundamentalist.score >= 70) {
+      strengths.push('Boa análise fundamentalista');
+    } else if (strategies.fundamentalist.score < 60) {
+      weaknesses.push('Fundamentos fracos na análise 3+1');
+    }
   }
 
   // Análise das Demonstrações Financeiras

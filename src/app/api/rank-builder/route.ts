@@ -10,16 +10,17 @@ import {
   MagicFormulaParams,
   FCDParams,
   GordonParams,
+  FundamentalistParams,
   AIParams,
   RankBuilderResult,
   CompanyData,
   toNumber
 } from '@/lib/strategies';
 
-type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | AIParams;
+type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams;
 
 interface RankBuilderRequest {
-  model: 'graham' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'fcd' | 'gordon' | 'ai';
+  model: 'graham' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'fcd' | 'gordon' | 'fundamentalist' | 'ai';
   params: ModelParams;
 }
 
@@ -78,6 +79,8 @@ function generateRational(model: string, params: ModelParams): string {
       return StrategyFactory.generateRational('fcd', params as FCDParams);
     case 'gordon':
       return StrategyFactory.generateRational('gordon', params as GordonParams);
+    case 'fundamentalist':
+      return StrategyFactory.generateRational('fundamentalist', params as FundamentalistParams);
     case 'ai':
       return StrategyFactory.generateRational('ai', params as AIParams);
     default:
@@ -102,9 +105,9 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     // Verificar se é modelo Premium e se usuário tem acesso
-    if (model === 'fcd' || model === 'gordon' || model === 'ai') {
+    if (model === 'fcd' || model === 'gordon' || model === 'fundamentalist' || model === 'ai') {
       if (!session?.user?.id) {
-        const modelName = model === 'fcd' ? 'FCD' : model === 'gordon' ? 'Fórmula de Gordon' : 'Análise com IA';
+        const modelName = model === 'fcd' ? 'FCD' : model === 'gordon' ? 'Fórmula de Gordon' : model === 'fundamentalist' ? 'Fundamentalista 3+1' : 'Análise com IA';
         return NextResponse.json(
           { error: `Modelo ${modelName} exclusivo para usuários logados. Faça login para acessar.` },
           { status: 401 }
@@ -126,7 +129,7 @@ export async function POST(request: NextRequest) {
                        (!user.premiumExpiresAt || user.premiumExpiresAt > new Date());
 
       if (!isPremium) {
-        const modelName = model === 'fcd' ? 'FCD' : model === 'gordon' ? 'Fórmula de Gordon' : 'Análise com IA';
+        const modelName = model === 'fcd' ? 'FCD' : model === 'gordon' ? 'Fórmula de Gordon' : model === 'fundamentalist' ? 'Fundamentalista 3+1' : 'Análise com IA';
         return NextResponse.json(
           { error: `Modelo ${modelName} exclusivo para usuários Premium. Faça upgrade para acessar análises avançadas.` },
           { status: 403 }
@@ -157,6 +160,9 @@ export async function POST(request: NextRequest) {
         break;
       case 'gordon':
         results = StrategyFactory.runGordonRanking(companies, params as GordonParams);
+        break;
+      case 'fundamentalist':
+        results = StrategyFactory.runFundamentalistRanking(companies, params as FundamentalistParams);
         break;
       case 'ai':
         results = await StrategyFactory.runAIRanking(companies, params as AIParams);

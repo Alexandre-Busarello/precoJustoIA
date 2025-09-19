@@ -8,6 +8,7 @@ import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { CompanyLogo } from "@/components/company-logo"
 import { 
@@ -47,6 +48,12 @@ interface RankingParams {
   minMarginOfSafety?: number;
   // Parâmetros Gordon
   dividendGrowthRate?: number;
+  // Parâmetros Fundamentalista 3+1
+  minROIC?: number;
+  maxDebtToEbitda?: number;
+  maxPayout?: number;
+  minPayout?: number;
+  companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
   // Parâmetros AI
   riskTolerance?: string;
   timeHorizon?: string;
@@ -130,6 +137,14 @@ const models = [
     name: "Fórmula de Gordon", 
     description: "Método dos dividendos para empresas com distribuições consistentes",
     icon: <DollarSign className="w-4 h-4" />,
+    free: false,
+    badge: "Premium"
+  },
+  { 
+    id: "fundamentalist", 
+    name: "Fundamentalista 3+1", 
+    description: "Análise simplificada com 3 indicadores essenciais + bônus dividendos",
+    icon: <BarChart3 className="w-4 h-4" />,
     free: false,
     badge: "Premium"
   },
@@ -218,39 +233,66 @@ export function QuickRanker() {
     // Definir parâmetros padrão para cada modelo
     switch (model) {
       case "graham":
-        setParams({ marginOfSafety: 0.20 }) // 20%
+        setParams({ 
+          marginOfSafety: 0.20,     // 20%
+          companySize: 'all'        // Todas as empresas
+        })
         break
       case "dividendYield":
-        setParams({ minYield: 0.04 }) // 4%
+        setParams({ 
+          minYield: 0.04,           // 4%
+          companySize: 'all'        // Todas as empresas
+        })
         break
       case "lowPE":
-        setParams({ maxPE: 12, minROE: 0.12 }) // P/L <= 12, ROE >= 12%
+        setParams({ 
+          maxPE: 12, 
+          minROE: 0.12,             // P/L <= 12, ROE >= 12%
+          companySize: 'all'        // Todas as empresas
+        })
         break
       case "magicFormula":
-        setParams({ limit: 10 })
+        setParams({ 
+          limit: 10,                // 10 resultados
+          companySize: 'all'        // Todas as empresas
+        })
         break
       case "fcd":
         setParams({ 
           growthRate: 0.025,        // 2.5% crescimento perpétuo
           discountRate: 0.10,       // 10% WACC
           yearsProjection: 5,       // 5 anos de projeção
-          minMarginOfSafety: 0.15,  // 20% margem de segurança
-          limit: 10                 // 10 resultados
+          minMarginOfSafety: 0.15,  // 15% margem de segurança
+          limit: 10,                // 10 resultados
+          companySize: 'all'        // Todas as empresas
         })
         break
       case "gordon":
         setParams({ 
           discountRate: 0.12,       // 12% taxa de desconto
           dividendGrowthRate: 0.05, // 5% crescimento dos dividendos
-          limit: 10                 // 10 resultados
+          limit: 10,                // 10 resultados
+          companySize: 'all'        // Todas as empresas
         })
         break
+        case "fundamentalist":
+          setParams({
+            minROE: 0.15,             // 15% ROE mínimo
+            minROIC: 0.15,            // 15% ROIC mínimo
+            maxDebtToEbitda: 3.0,     // 3x máximo dívida/EBITDA
+            minPayout: 0.40,          // 40% payout mínimo
+            maxPayout: 0.80,          // 80% payout máximo
+            companySize: 'all',       // Todas as empresas
+            limit: 10                 // 10 resultados
+          })
+          break
       case "ai":
         setParams({ 
           riskTolerance: "Moderado",           // Tolerância ao risco
           timeHorizon: "Longo Prazo",          // Horizonte de investimento
           focus: "Crescimento e Valor",        // Foco da análise
-          limit: 10                            // 10 resultados
+          limit: 10,                           // 10 resultados
+          companySize: 'all'                   // Todas as empresas
         })
         break
       default:
@@ -611,6 +653,60 @@ export function QuickRanker() {
 **Ideal Para**: Investidores focados em renda passiva com crescimento sustentável dos dividendos.
 
 **Resultado**: Empresas com dividendos atrativos e sustentáveis, ordenadas por potencial de valorização + qualidade dos pagamentos.`;
+
+      case 'fundamentalist':
+        const minROEFund = ((params.minROE || 0.15) * 100).toFixed(0);
+        const minROICFund = ((params.minROIC || 0.15) * 100).toFixed(0);
+        const maxDebtFund = (params.maxDebtToEbitda || 3.0).toFixed(1);
+        const minPayoutFund = ((params.minPayout || 0.40) * 100).toFixed(0);
+        const maxPayoutFund = ((params.maxPayout || 0.80) * 100).toFixed(0);
+        
+        return `**ESTRATÉGIA FUNDAMENTALISTA 3+1 - PREMIUM**
+
+**Filosofia**: Análise fundamentalista simplificada usando apenas 3 indicadores essenciais para tomar decisões de investimento rápidas e precisas.
+
+**Metodologia Adaptativa**:
+• **Empresas SEM dívida relevante**: ROE + P/L vs Crescimento + Endividamento
+• **Empresas COM dívida relevante**: ROIC + EV/EBITDA + Endividamento  
+• **Bancos/Seguradoras**: ROE + P/L (endividamento não aplicável)
+• **Bônus Dividendos**: Payout + Dividend Yield para renda passiva
+
+**Parâmetros Aplicados**:
+• **ROE Mínimo**: ${minROEFund}% (empresas sem dívida)
+• **ROIC Mínimo**: ${minROICFund}% (empresas com dívida)
+• **Dívida Líquida/EBITDA**: Máximo ${maxDebtFund}x
+• **Payout Ideal**: ${minPayoutFund}% - ${maxPayoutFund}% (análise de dividendos)
+
+**Passo 1 - Qualidade da Empresa**:
+• Avalia se a empresa gera bom retorno sobre capital
+• ROE ≥ ${minROEFund}% para empresas sem dívida relevante
+• ROIC ≥ ${minROICFund}% para empresas com dívida relevante
+• Apenas ROE para bancos e seguradoras
+
+**Passo 2 - Atratividade do Preço**:
+• P/L vs Crescimento dos Lucros (empresas sem dívida)
+• EV/EBITDA (empresas com dívida)
+• P/L absoluto (bancos e seguradoras)
+
+**Passo 3 - Nível de Endividamento**:
+• Dívida Líquida/EBITDA ≤ ${maxDebtFund}x (empresas normais)
+• Não aplicável para bancos/seguradoras
+
+**Passo 4 (Bônus) - Análise de Dividendos**:
+• Payout entre ${minPayoutFund}%-${maxPayoutFund}% + DY ≥ 4%
+• Identifica boas pagadoras de dividendos
+• Foco em sustentabilidade das distribuições
+
+**Diferencial Premium**:
+• Metodologia que se adapta automaticamente ao perfil da empresa
+• Análise específica para bancos/seguradoras
+• Simplifica decisões usando apenas indicadores essenciais
+• Combina análise de valor, qualidade e renda passiva
+• Baseado em metodologia consagrada de análise fundamentalista
+
+**Ideal Para**: Investidores que buscam análise rápida e fundamentada, sem complexidade excessiva.
+
+**Resultado**: Empresas de qualidade com preços atrativos e endividamento controlado, ranqueadas por score fundamentalista.`;
 
       case 'ai':
         const riskTolerance = params.riskTolerance || 'Moderado';
@@ -986,7 +1082,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         <div>
                           <h4 className="font-semibold text-sm">Desbloqueie todos os modelos</h4>
                           <p className="text-xs text-muted-foreground">
-                            Acesse Dividend Yield, Value Investing, Fórmula Mágica, Fórmula de Gordon, Fluxo de Caixa Descontado e Análise Preditiva com IA
+                            Acesse Dividend Yield, Value Investing, Fórmula Mágica, Fórmula de Gordon, Fluxo de Caixa Descontado, Fundamentalista 3+1 e Análise Preditiva com IA
                           </p>
                         </div>
                       </div>
@@ -1012,6 +1108,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                 
                 {selectedModel === "graham" && (
                   <div className="space-y-4">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Margem de Segurança Mínima</Label>
@@ -1040,6 +1158,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
                 {selectedModel === "dividendYield" && (
                   <div className="space-y-4">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Dividend Yield Mínimo</Label>
@@ -1068,6 +1208,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
                 {selectedModel === "lowPE" && (
                   <div className="space-y-4">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -1118,6 +1280,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
                 {selectedModel === "magicFormula" && (
                   <div className="space-y-4">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Número de Resultados</Label>
@@ -1146,6 +1330,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
                 {selectedModel === "fcd" && (
                   <div className="space-y-6">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
                     {/* Primeira linha - Taxa de Crescimento e Taxa de Desconto */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-3">
@@ -1277,6 +1483,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
                 {selectedModel === "gordon" && (
                   <div className="space-y-6">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
                     {/* Primeira linha - Taxa de Desconto e Taxa de Crescimento */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-3">
@@ -1355,9 +1583,206 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                   </div>
                 )}
 
+                {/* Configuração Fundamentalista 3+1 */}
+        {selectedModel === "fundamentalist" && (
+          <div className="space-y-6">
+            {/* Filtro de Tamanho */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Filtre empresas por valor de mercado para focar em segmentos específicos
+              </p>
+            </div>
+
+            {/* Primeira linha - ROE e ROIC */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">ROE Mínimo (empresas sem dívida)</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.minROE || 0.15) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.minROE ? params.minROE * 100 : 15]}
+                          onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
+                          max={25}
+                          min={5}
+                          step={1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>5%</span>
+                          <span>25%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Retorno sobre patrimônio líquido mínimo para empresas sem dívida relevante
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">ROIC Mínimo (empresas com dívida)</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.minROIC || 0.15) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.minROIC ? params.minROIC * 100 : 15]}
+                          onValueChange={(value) => setParams({ ...params, minROIC: value[0] / 100 })}
+                          max={25}
+                          min={5}
+                          step={1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>5%</span>
+                          <span>25%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Retorno sobre capital investido mínimo para empresas com dívida relevante
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Segunda linha - Endividamento e Payout */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Dívida Líquida/EBITDA Máximo</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {(params.maxDebtToEbitda || 3.0).toFixed(1)}x
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.maxDebtToEbitda ? params.maxDebtToEbitda * 10 : 30]}
+                          onValueChange={(value) => setParams({ ...params, maxDebtToEbitda: value[0] / 10 })}
+                          max={50}
+                          min={10}
+                          step={1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>1.0x</span>
+                          <span>5.0x</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Nível máximo de endividamento aceitável (anos para pagar dívida com EBITDA)
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Payout Mínimo (Dividendos)</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.minPayout || 0.40) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.minPayout ? params.minPayout * 100 : 40]}
+                          onValueChange={(value) => setParams({ ...params, minPayout: value[0] / 100 })}
+                          max={80}
+                          min={20}
+                          step={5}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>20%</span>
+                          <span>80%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Percentual mínimo do lucro distribuído como dividendos (análise bônus)
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Terceira linha - Número de Resultados */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Número de Resultados</Label>
+                        <Badge variant="outline" className="font-mono">
+                          {params.limit || 10} empresas
+                        </Badge>
+                      </div>
+                      <Slider
+                        value={[params.limit || 10]}
+                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
+                        max={20}
+                        min={5}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Top 5</span>
+                        <span>Top 20</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Estratégia 3+1: análise simplificada com indicadores essenciais adaptados ao perfil da empresa
+                      </p>
+                    </div>
+
+                    {/* Explicação da Metodologia */}
+                    <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/20 dark:to-green-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-start space-x-3">
+                        <BarChart3 className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-blue-900 dark:text-blue-100">
+                            📊 Metodologia Fundamentalista 3+1
+                          </h4>
+                          <p className="text-sm text-blue-800 dark:text-blue-200">
+                            Esta estratégia <strong>adapta automaticamente</strong> a análise baseada no perfil da empresa:
+                          </p>
+                          <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                            <p>• <strong>Sem dívida</strong>: ROE + P/L vs Crescimento + Endividamento</p>
+                            <p>• <strong>Com dívida</strong>: ROIC + EV/EBITDA + Endividamento</p>
+                            <p>• <strong>Bancos/Seguradoras</strong>: ROE + P/L (endividamento não aplicável)</p>
+                            <p>• <strong>Bônus</strong>: Análise de dividendos (Payout + DY)</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Configuração AI */}
                 {selectedModel === "ai" && (
                   <div className="space-y-6">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
                     {/* Primeira linha - Tolerância ao Risco e Horizonte */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-3">
@@ -1605,7 +2030,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
                 <p>🧠 <strong>IA Gemini</strong> com 2 chamadas otimizadas (seleção + análise batch)</p>
-                <p>📊 <strong>6 estratégias</strong> executadas nas {(params.limit || 10) + 10} empresas selecionadas</p>
+                <p>📊 <strong>7 estratégias</strong> executadas nas {(params.limit || 10) + 10} empresas selecionadas</p>
                 <p>🌐 <strong>Dados em tempo real</strong> da internet integrados na análise</p>
                 <p>⚡ <strong>Processamento batch</strong> para máxima eficiência e precisão</p>
               </div>

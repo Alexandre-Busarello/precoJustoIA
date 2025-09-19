@@ -127,29 +127,41 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
     <div className="space-y-6">
       {/* Header com informações da empresa */}
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 sm:p-6">
           <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
             <div className="min-w-0 flex-1">
-              <CardTitle className="text-xl sm:text-2xl truncate">{company.name}</CardTitle>
+              <CardTitle 
+                className="text-lg sm:text-xl lg:text-2xl break-words leading-tight"
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  wordBreak: 'break-word',
+                  hyphens: 'auto'
+                }}
+              >
+                {company.name}
+              </CardTitle>
               <div className="flex flex-wrap items-center gap-2 mt-2">
-                <Badge variant="secondary">{company.ticker}</Badge>
+                <Badge variant="secondary" className="text-xs">{company.ticker}</Badge>
                 {company.sector && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-xs truncate max-w-[120px] sm:max-w-none">
                     {company.sector}
                   </Badge>
                 )}
                 {company.industry && (
-                  <Badge variant="outline" className="text-xs hidden sm:inline-flex">
+                  <Badge variant="outline" className="text-xs hidden sm:inline-flex truncate max-w-[150px]">
                     {company.industry}
                   </Badge>
                 )}
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs whitespace-nowrap">
                   📊 Dados Anuais
                 </Badge>
               </div>
             </div>
             {hasFinancialFallbacks && (
-              <Badge variant="secondary" className="bg-blue-50 text-blue-700 flex-shrink-0">
+              <Badge variant="secondary" className="bg-blue-50 text-blue-700 flex-shrink-0 w-fit">
                 <Building2 className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Setor Financeiro</span>
                 <span className="sm:hidden">Financeiro</span>
@@ -162,30 +174,35 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
       {/* Tabs para diferentes visões */}
       <Tabs defaultValue="overview" className="w-full">
         {/* TabsList responsiva - scrollável no mobile */}
-        <div className="relative">
+        <div className="relative mb-4">
           <div 
-            className="overflow-x-auto"
+            className="overflow-x-auto pb-2"
             style={{
               scrollbarWidth: 'none', /* Firefox */
               msOverflowStyle: 'none', /* IE and Edge */
             }}
           >
-            <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground min-w-full sm:min-w-0">
-              <TabsTrigger value="overview" className="whitespace-nowrap px-3 py-1.5 text-sm">
+            <style jsx>{`
+              div::-webkit-scrollbar {
+                display: none;
+              }
+            `}</style>
+            <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-max min-w-full sm:min-w-0">
+              <TabsTrigger value="overview" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
                 <span className="hidden sm:inline">Visão Geral</span>
                 <span className="sm:hidden">Visão</span>
               </TabsTrigger>
-              <TabsTrigger value="income" className="whitespace-nowrap px-3 py-1.5 text-sm">
+              <TabsTrigger value="income" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
                 DRE
               </TabsTrigger>
-              <TabsTrigger value="balance" className="whitespace-nowrap px-3 py-1.5 text-sm">
+              <TabsTrigger value="balance" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
                 Balanço
               </TabsTrigger>
-              <TabsTrigger value="cashflow" className="whitespace-nowrap px-3 py-1.5 text-sm">
+              <TabsTrigger value="cashflow" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
                 <span className="hidden sm:inline">Fluxo de Caixa</span>
                 <span className="sm:hidden">Fluxo</span>
               </TabsTrigger>
-              <TabsTrigger value="valuation" className="whitespace-nowrap px-3 py-1.5 text-sm">
+              <TabsTrigger value="valuation" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
                 Valuation
               </TabsTrigger>
             </TabsList>
@@ -194,16 +211,16 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
         {/* Visão Geral */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Indicadores Principais */}
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 p-4">
                 <CardTitle className="text-sm font-medium flex items-center">
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Receita & Lucro
+                  <DollarSign className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Receita & Lucro</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
                   label="Receita Total"
                   value={toNumber(latestFinancial?.receitaTotal)}
@@ -220,13 +237,13 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
             </Card>
 
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 p-4">
                 <CardTitle className="text-sm font-medium flex items-center">
-                  <Percent className="w-4 h-4 mr-2" />
-                  Margens
+                  <Percent className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Margens</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
                   label="Margem Líquida"
                   value={toNumber(latestFinancial?.margemLiquida)}
@@ -246,13 +263,13 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
             </Card>
 
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 p-4">
                 <CardTitle className="text-sm font-medium flex items-center">
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  Rentabilidade
+                  <TrendingUp className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Rentabilidade</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
                   label="ROE"
                   value={toNumber(latestFinancial?.roe)}
@@ -272,13 +289,13 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
             </Card>
 
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 p-4">
                 <CardTitle className="text-sm font-medium flex items-center">
-                  <Target className="w-4 h-4 mr-2" />
-                  Valuation
+                  <Target className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Valuation</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
                   label="P/L"
                   value={toNumber(latestStats?.forwardPE)}
@@ -308,24 +325,24 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
           {/* Dados Históricos Anuais */}
           <Card>
-            <CardHeader>
-              <CardTitle>Evolução Anual (Últimos 5 Anos)</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">Evolução Anual (Últimos 5 Anos)</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Dados anuais históricos para análise de tendências
               </p>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <div className="min-w-[600px]">
-                  <table className="w-full text-sm">
+            <CardContent className="p-4 sm:p-6">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <div className="min-w-[600px] px-4 sm:px-0">
+                  <table className="w-full text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
-                        <th className="text-right py-2 px-2 min-w-[90px]">Receita</th>
-                        <th className="text-right py-2 px-2 min-w-[100px]">Lucro Líquido</th>
-                        <th className="text-right py-2 px-2 min-w-[90px]">Margem Líquida</th>
-                        <th className="text-right py-2 px-2 min-w-[70px]">ROE</th>
-                        <th className="text-right py-2 px-2 min-w-[70px]">P/L</th>
+                        <th className="text-left py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[100px]">Ano</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[90px]">Receita</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[90px] sm:min-w-[100px]">Lucro Líq.</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[90px]">Margem</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[60px] sm:min-w-[70px]">ROE</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[60px] sm:min-w-[70px]">P/L</th>
                       </tr>
                     </thead>
                   <tbody>
@@ -344,26 +361,26 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                       
                       return (
                         <tr key={index} className="border-b">
-                          <td className="py-2 px-2">
+                          <td className="py-2 px-1 sm:px-2">
                             {new Date(item.endDate as string).getFullYear()}
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {item.totalRevenue ? formatCurrency(toNumber(item.totalRevenue), true) : 
                              formatCurrency(toNumber(item.operatingIncome), true)}
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {formatCurrency(toNumber(item.netIncome), true)}
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {item.netIncome && item.operatingIncome && toNumber(item.operatingIncome) && toNumber(item.operatingIncome)! > 0
                               ? formatPercent(toNumber(item.netIncome)! / toNumber(item.operatingIncome)!)
                               : formatPercent(correspondingFinancial?.margemLiquida)
                             }
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {formatPercent(correspondingFinancial?.roe)}
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {formatNumber(toNumber(correspondingStats?.forwardPE) ?? toNumber(correspondingFinancial?.pl))}
                           </td>
                         </tr>
@@ -380,14 +397,14 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         {/* DRE */}
         <TabsContent value="income" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Demonstração do Resultado do Exercício (Anual)</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">Demonstração do Resultado do Exercício (Anual)</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Último ano: {latestIncome ? new Date(latestIncome.endDate as string).getFullYear() : 'N/A'}
               </p>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <CardContent className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div className="space-y-4">
                   <h4 className="font-semibold text-sm text-muted-foreground">RECEITAS</h4>
                   <IndicatorWithFallback
@@ -433,35 +450,35 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
               </div>
 
               {/* Histórico DRE */}
-              <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Anual (Últimos 5 Anos)</h4>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[600px]">
-                    <table className="w-full text-sm">
+              <div className="mt-6 sm:mt-8">
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual (Últimos 5 Anos)</h4>
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="min-w-[600px] px-4 sm:px-0">
+                    <table className="w-full text-xs sm:text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
-                          <th className="text-right py-2 px-2 min-w-[100px]">Receita Total</th>
-                          <th className="text-right py-2 px-2 min-w-[100px]">Lucro Bruto</th>
-                          <th className="text-right py-2 px-2 min-w-[80px]">EBIT</th>
-                          <th className="text-right py-2 px-2 min-w-[100px]">Lucro Líquido</th>
+                          <th className="text-left py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[100px]">Ano</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[90px] sm:min-w-[100px]">Receita</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[90px] sm:min-w-[100px]">L. Bruto</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[70px] sm:min-w-[80px]">EBIT</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[90px] sm:min-w-[100px]">L. Líquido</th>
                         </tr>
                       </thead>
                     <tbody>
                       {incomeStatements.slice(0, 5).map((item, index) => (
                         <tr key={index} className="border-b">
-                          <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
-                          <td className="text-right py-2 px-2">
+                          <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {item.totalRevenue ? formatCurrency(toNumber(item.totalRevenue), true) : 
                              formatCurrency(toNumber(item.operatingIncome), true)}
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {formatCurrency(toNumber(item.grossProfit), true)}
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {formatCurrency(toNumber(item.ebit), true)}
                           </td>
-                          <td className="text-right py-2 px-2">
+                          <td className="text-right py-2 px-1 sm:px-2">
                             {formatCurrency(toNumber(item.netIncome), true)}
                           </td>
                         </tr>
@@ -478,14 +495,14 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         {/* Balanço */}
         <TabsContent value="balance" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Balanço Patrimonial (Anual)</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">Balanço Patrimonial (Anual)</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Último ano: {latestBalance ? new Date(latestBalance.endDate as string).getFullYear() : 'N/A'}
               </p>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <CardContent className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div className="space-y-4">
                   <h4 className="font-semibold text-sm text-muted-foreground">ATIVO</h4>
                   <IndicatorWithFallback
@@ -535,34 +552,34 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
               </div>
 
               {/* Histórico Balanço */}
-              <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Anual - Balanço (Últimos 5 Anos)</h4>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[650px]">
-                    <table className="w-full text-sm">
+              <div className="mt-6 sm:mt-8">
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Balanço (Últimos 5 Anos)</h4>
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="min-w-[650px] px-4 sm:px-0">
+                    <table className="w-full text-xs sm:text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
-                          <th className="text-right py-2 px-2 min-w-[110px]">Ativo Total</th>
-                          <th className="text-right py-2 px-2 min-w-[110px]">Passivo Total</th>
-                          <th className="text-right py-2 px-2 min-w-[120px]">Patrimônio Líquido</th>
-                          <th className="text-right py-2 px-2 min-w-[80px]">Caixa</th>
+                          <th className="text-left py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[100px]">Ano</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[90px] sm:min-w-[110px]">Ativo</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[90px] sm:min-w-[110px]">Passivo</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[100px] sm:min-w-[120px]">Patrimônio</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[70px] sm:min-w-[80px]">Caixa</th>
                         </tr>
                       </thead>
                       <tbody>
                         {balanceSheets.slice(0, 5).map((item, index) => (
                           <tr key={index} className="border-b">
-                            <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
-                            <td className="text-right py-2 px-2">
+                            <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.totalAssets), true)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.totalLiab), true)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.totalStockholderEquity), true)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.cash), true)}
                             </td>
                           </tr>
@@ -579,14 +596,14 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         {/* Fluxo de Caixa */}
         <TabsContent value="cashflow" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Demonstração do Fluxo de Caixa (Anual)</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">Demonstração do Fluxo de Caixa (Anual)</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Último ano: {latestCashflow ? new Date(latestCashflow.endDate as string).getFullYear() : 'N/A'}
               </p>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <CardContent className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div className="space-y-4">
                   <h4 className="font-semibold text-sm text-muted-foreground">OPERACIONAL</h4>
                   <IndicatorWithFallback
@@ -626,34 +643,34 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
               </div>
 
               {/* Histórico Fluxo de Caixa */}
-              <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Anual - Fluxo de Caixa (Últimos 5 Anos)</h4>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[700px]">
-                    <table className="w-full text-sm">
+              <div className="mt-6 sm:mt-8">
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Fluxo de Caixa (Últimos 5 Anos)</h4>
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="min-w-[700px] px-4 sm:px-0">
+                    <table className="w-full text-xs sm:text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
-                          <th className="text-right py-2 px-2 min-w-[120px]">FC Operacional</th>
-                          <th className="text-right py-2 px-2 min-w-[120px]">FC Investimento</th>
-                          <th className="text-right py-2 px-2 min-w-[130px]">FC Financiamento</th>
-                          <th className="text-right py-2 px-2 min-w-[110px]">Variação Caixa</th>
+                          <th className="text-left py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[100px]">Ano</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[100px] sm:min-w-[120px]">FC Oper.</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[100px] sm:min-w-[120px]">FC Invest.</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[110px] sm:min-w-[130px]">FC Financ.</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[90px] sm:min-w-[110px]">Var. Caixa</th>
                         </tr>
                       </thead>
                       <tbody>
                         {cashflowStatements.slice(0, 5).map((item, index) => (
                           <tr key={index} className="border-b">
-                            <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
-                            <td className="text-right py-2 px-2">
+                            <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.operatingCashFlow), true)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.investmentCashFlow), true)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.financingCashFlow), true)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.increaseOrDecreaseInCash), true)}
                             </td>
                           </tr>
@@ -670,14 +687,14 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
         {/* Valuation */}
         <TabsContent value="valuation" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Indicadores de Valuation (Dados Anuais)</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">Indicadores de Valuation (Dados Anuais)</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Baseado nos dados anuais mais recentes disponíveis
               </p>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <CardContent className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 <div className="space-y-4">
                   <h4 className="font-semibold text-sm text-muted-foreground">MÚLTIPLOS</h4>
                 <IndicatorWithFallback
@@ -748,26 +765,26 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
               </div>
 
               {/* Histórico Valuation */}
-              <div className="mt-8">
-                <h4 className="font-semibold mb-4">Histórico Anual - Valuation (Últimos 5 Anos)</h4>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[750px]">
-                    <table className="w-full text-sm">
+              <div className="mt-6 sm:mt-8">
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Valuation (Últimos 5 Anos)</h4>
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="min-w-[750px] px-4 sm:px-0">
+                    <table className="w-full text-xs sm:text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 px-2 min-w-[100px]">Ano</th>
-                          <th className="text-right py-2 px-2 min-w-[70px]">P/L</th>
-                          <th className="text-right py-2 px-2 min-w-[70px]">P/VP</th>
-                          <th className="text-right py-2 px-2 min-w-[100px]">Dividend Yield</th>
-                          <th className="text-right py-2 px-2 min-w-[100px]">Market Cap</th>
-                          <th className="text-right py-2 px-2 min-w-[120px]">Enterprise Value</th>
+                          <th className="text-left py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[100px]">Ano</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[60px] sm:min-w-[70px]">P/L</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[60px] sm:min-w-[70px]">P/VP</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[100px]">DY</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[100px]">Market Cap</th>
+                          <th className="text-right py-2 px-1 sm:px-2 min-w-[100px] sm:min-w-[120px]">EV</th>
                         </tr>
                       </thead>
                       <tbody>
                         {keyStatistics.slice(0, 5).map((item, index) => (
                           <tr key={index} className="border-b">
-                            <td className="py-2 px-2">{new Date(item.endDate as string).getFullYear()}</td>
-                            <td className="text-right py-2 px-2">
+                            <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {(() => {
                                 const forwardPE = toNumber(item.forwardPE)
                                 if (forwardPE !== null) {
@@ -779,16 +796,16 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                                 return formatNumber(toNumber(fallbackFinancial?.pl))
                               })()}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatNumber(toNumber(item.priceToBook))}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatPercent(toNumber(item.dividendYield) ? toNumber(item.dividendYield)! / 100 : null)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.marketCap), true)}
                             </td>
-                            <td className="text-right py-2 px-2">
+                            <td className="text-right py-2 px-1 sm:px-2">
                               {formatCurrency(toNumber(item.enterpriseValue), true)}
                             </td>
                           </tr>

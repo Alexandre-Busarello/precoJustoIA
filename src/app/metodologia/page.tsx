@@ -19,8 +19,8 @@ import {
 import Link from "next/link"
 
 export const metadata: Metadata = {
-  title: "Metodologia - Preço Justo AI | Modelos de Valuation e Análise Fundamentalista Detalhada",
-  description: "Conheça em detalhes nossa metodologia de análise fundamentalista: Fórmula de Graham, Dividend Yield, Fórmula Mágica de Greenblatt, FCD e mais. Base científica e acadêmica.",
+  title: "Metodologia - Preço Justo AI | 8 Modelos de Valuation e Análise Fundamentalista Detalhada",
+  description: "Conheça em detalhes nossa metodologia de análise fundamentalista: Fórmula de Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, FCD e mais. Base científica e acadêmica.",
   keywords: "metodologia análise fundamentalista, fórmula graham detalhada, dividend yield metodologia, fórmula mágica greenblatt, FCD fluxo caixa descontado, valuation ações",
 }
 
@@ -518,6 +518,84 @@ export default function MetodologiaPage() {
                     <p className="text-sm text-muted-foreground">
                       <strong>Premissa Fundamental:</strong> A taxa de desconto deve ser maior 
                       que a taxa de crescimento para o modelo ser válido.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Fundamentalista 3+1 */}
+            <Card id="fundamentalista" className="border-0 shadow-lg">
+              <CardContent className="p-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                  <div>
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-16 h-16 bg-teal-600 rounded-lg flex items-center justify-center">
+                        <Target className="w-8 h-8 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-bold">Fundamentalista 3+1</h3>
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-300 mt-2">Premium</Badge>
+                      </div>
+                    </div>
+                    
+                    <p className="text-muted-foreground mb-6 leading-relaxed">
+                      Estratégia simplificada que usa apenas 3 indicadores essenciais para análise 
+                      fundamentalista, adaptando-se automaticamente ao perfil da empresa (com/sem dívida, 
+                      setor especial) + análise bônus de dividendos.
+                    </p>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="w-5 h-5 text-teal-600" />
+                        <span>Metodologia adaptativa por perfil</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="w-5 h-5 text-teal-600" />
+                        <span>Análise específica para bancos/seguradoras</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="w-5 h-5 text-teal-600" />
+                        <span>Decisões rápidas e fundamentadas</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="w-5 h-5 text-teal-600" />
+                        <span>Bônus: análise de dividendos</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-teal-50 dark:bg-teal-950/20 p-8 rounded-lg">
+                    <h4 className="text-lg font-bold mb-4 text-teal-900 dark:text-teal-100">Metodologia Adaptativa</h4>
+                    <div className="space-y-4">
+                      <div className="bg-white dark:bg-background p-4 rounded border-2 border-teal-200 dark:border-teal-800">
+                        <p className="font-semibold text-teal-800 dark:text-teal-200 mb-2">
+                          <strong>Empresas SEM Dívida:</strong>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          ROE + P/L vs Crescimento + Endividamento
+                        </p>
+                      </div>
+                      <div className="bg-white dark:bg-background p-4 rounded border-2 border-teal-200 dark:border-teal-800">
+                        <p className="font-semibold text-teal-800 dark:text-teal-200 mb-2">
+                          <strong>Empresas COM Dívida:</strong>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          ROIC + EV/EBITDA + Endividamento
+                        </p>
+                      </div>
+                      <div className="bg-white dark:bg-background p-4 rounded border-2 border-teal-200 dark:border-teal-800">
+                        <p className="font-semibold text-teal-800 dark:text-teal-200 mb-2">
+                          <strong>Bancos/Seguradoras:</strong>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          ROE + P/L (endividamento não aplicável)
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-4">
+                      <strong>Passo Bônus:</strong> Análise de dividendos com Payout (40-80%) 
+                      e Dividend Yield (≥4%) para identificar boas pagadoras.
                     </p>
                   </div>
                 </div>

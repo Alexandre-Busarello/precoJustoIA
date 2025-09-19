@@ -1,9 +1,9 @@
 import { GoogleGenAI } from '@google/genai';
 import { CompanyData, RankBuilderResult, AIParams, StrategyAnalysis } from './types';
 import { StrategyFactory } from './strategy-factory';
-import { toNumber } from './base-strategy';
+import { AbstractStrategy, toNumber } from './base-strategy';
 
-export class AIStrategy {
+export class AIStrategy extends AbstractStrategy<AIParams> {
   name = 'Análise Preditiva com IA';
 
   // Método principal para análise individual (não suportado)
@@ -60,8 +60,17 @@ export class AIStrategy {
     const targetCount = (params.limit || 10) + 10;
     console.log(`🔍 [AI-STRATEGY] Preparando dados de ${companies.length} empresas para seleção IA`);
     
-    // Preparar dados resumidos de todas as empresas
-    const companiesData = companies.map(company => ({
+    // Aplicar filtros antes da seleção IA
+    let filteredCompanies = this.filterCompaniesBySize(companies, params.companySize || 'all');
+    console.log(`📊 [AI-STRATEGY] Após filtro de tamanho (${params.companySize || 'all'}): ${filteredCompanies.length} empresas`);
+    
+    // Filtrar empresas sem lucro
+    const beforeProfitabilityFilter = filteredCompanies.length;
+    filteredCompanies = this.filterProfitableCompanies(filteredCompanies);
+    console.log(`💰 [AI-STRATEGY] Após filtro de lucratividade: ${filteredCompanies.length} empresas (removidas ${beforeProfitabilityFilter - filteredCompanies.length} sem lucro)`);
+    
+    // Preparar dados resumidos das empresas filtradas
+    const companiesData = filteredCompanies.map(company => ({
       ticker: company.ticker,
       name: company.name,
       sector: company.sector || 'Não informado',
@@ -115,7 +124,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
         console.log(`📋 [AI-STRATEGY] Tickers selecionados: ${selectedTickers.join(', ')}`);
         
         // Verificar duplicatas
-        if (this.checkForDuplicateCompanies(selectedTickers, companies)) {
+        if (this.checkForDuplicateCompanies(selectedTickers, filteredCompanies)) {
           const errorMsg = `NÃO selecione múltiplos tickers da mesma empresa. Escolha APENAS UM ticker por empresa, preferencialmente o de maior Market Cap.`;
           previousErrors.push(errorMsg);
           console.warn(`⚠️ [AI-STRATEGY] ${errorMsg}`);
@@ -130,8 +139,8 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
           continue;
         }
         
-        // Verificar se todos os tickers existem na base
-        const invalidTickers = selectedTickers.filter(ticker => !companies.find(c => c.ticker === ticker));
+        // Verificar se todos os tickers existem na base filtrada
+        const invalidTickers = selectedTickers.filter(ticker => !filteredCompanies.find(c => c.ticker === ticker));
         if (invalidTickers.length > 0) {
           const errorMsg = `Tickers inválidos encontrados: ${invalidTickers.join(', ')}. Use APENAS tickers da lista fornecida.`;
           previousErrors.push(errorMsg);
@@ -165,7 +174,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
     }
     
     // Filtrar empresas selecionadas
-    const selectedCompanies = companies.filter(company => 
+    const selectedCompanies = filteredCompanies.filter(company => 
       selectedTickers.includes(company.ticker)
     );
     
@@ -175,7 +184,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
 
   // NOVA ETAPA 2: Executar estratégias para empresas selecionadas
   private async executeAllStrategies(companies: CompanyData[]): Promise<Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>> {
-    console.log(`⚙️ [AI-STRATEGY] Executando 6 estratégias para ${companies.length} empresas`);
+    console.log(`⚙️ [AI-STRATEGY] Executando 7 estratégias para ${companies.length} empresas`);
     
     const results = [];
     
@@ -183,7 +192,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
       console.log(`📊 [AI-STRATEGY] Processando ${company.ticker}...`);
       
       try {
-        // Executar todas as 6 estratégias tradicionais
+        // Executar todas as 7 estratégias tradicionais
         const strategies = {
           graham: StrategyFactory.runGrahamAnalysis(company, { marginOfSafety: 0.20 }),
           dividendYield: StrategyFactory.runDividendYieldAnalysis(company, { minYield: 0.04 }),
@@ -198,6 +207,13 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
           gordon: StrategyFactory.runGordonAnalysis(company, {
             discountRate: 0.12,
             dividendGrowthRate: 0.05
+          }),
+          fundamentalist: StrategyFactory.runFundamentalistAnalysis(company, {
+            minROE: 0.15,
+            minROIC: 0.15,
+            maxDebtToEbitda: 3.0,
+            minPayout: 0.40,
+            maxPayout: 0.80
           })
         };
         
@@ -214,7 +230,8 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
             lowPE: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
             magicFormula: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
             fcd: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
-            gordon: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] }
+            gordon: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
+            fundamentalist: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] }
           }
         });
       }
@@ -373,8 +390,11 @@ Selecionar as ${targetCount} melhores empresas da B3 baseado nos critérios do i
 - **Tolerância ao Risco**: ${params.riskTolerance || 'Moderado'}
 - **Horizonte**: ${params.timeHorizon || 'Longo Prazo'}  
 - **Foco**: ${params.focus || 'Crescimento e Valor'}
+- **Filtro de Tamanho**: ${this.getCompanySizeDescription(params.companySize || 'all')}
 
 ## CRITÉRIOS DE QUALIDADE MÍNIMA
+**FILTROS PRÉ-APLICADOS**: Apenas empresas LUCRATIVAS (ROE > 0 e Margem Líquida > 0). Para bancos/seguradoras: apenas ROE > 0.
+
 - **Conservador**: ROE ≥ 12%, P/L ≤ 20, DY ≥ 3%, dívida controlada
 - **Moderado**: ROE ≥ 8%, P/L ≤ 25, liquidez adequada, crescimento consistente
 - **Agressivo**: Crescimento ≥ 15%, inovação, potencial disruptivo, P/L flexível
@@ -420,13 +440,14 @@ Retorne APENAS uma lista JSON com os tickers selecionados:
       
       return `**${company.ticker} (${company.name})**
 Setor: ${company.sector} | Preço: R$ ${company.currentPrice.toFixed(2)}
-Estratégias Elegíveis: ${eligibleStrategies}/6
+Estratégias Elegíveis: ${eligibleStrategies}/7
 - Graham: ${strategies.graham.isEligible ? '✅' : '❌'} (Score: ${strategies.graham.score}) - ${strategies.graham.reasoning}
 - Dividend Yield: ${strategies.dividendYield.isEligible ? '✅' : '❌'} (Score: ${strategies.dividendYield.score}) - ${strategies.dividendYield.reasoning}
 - Low P/E: ${strategies.lowPE.isEligible ? '✅' : '❌'} (Score: ${strategies.lowPE.score}) - ${strategies.lowPE.reasoning}
 - Fórmula Mágica: ${strategies.magicFormula.isEligible ? '✅' : '❌'} (Score: ${strategies.magicFormula.score}) - ${strategies.magicFormula.reasoning}
 - FCD: ${strategies.fcd.isEligible ? '✅' : '❌'} (Score: ${strategies.fcd.score}) - ${strategies.fcd.reasoning}
-- Gordon: ${strategies.gordon.isEligible ? '✅' : '❌'} (Score: ${strategies.gordon.score}) - ${strategies.gordon.reasoning}`;
+- Gordon: ${strategies.gordon.isEligible ? '✅' : '❌'} (Score: ${strategies.gordon.score}) - ${strategies.gordon.reasoning}
+- Fundamentalista 3+1: ${strategies.fundamentalist.isEligible ? '✅' : '❌'} (Score: ${strategies.fundamentalist.score}) - ${strategies.fundamentalist.reasoning}`;
     }).join('\n\n');
 
     return `# ANÁLISE PREDITIVA BATCH - INTELIGÊNCIA ARTIFICIAL
@@ -438,6 +459,8 @@ Estratégias Elegíveis: ${eligibleStrategies}/6
 
 ## INSTRUÇÕES CRÍTICAS
 **IDIOMA**: Responda SEMPRE em PORTUGUÊS BRASILEIRO. Todas as análises, reasoning e textos devem estar em português.
+
+**EMPRESAS PRÉ-FILTRADAS**: Todas as empresas abaixo já foram filtradas por lucratividade (ROE > 0 e Margem Líquida > 0, exceto bancos/seguradoras que precisam apenas ROE > 0).
 
 Analise TODAS as empresas abaixo simultaneamente e crie um ranking preditivo considerando:
 
@@ -782,7 +805,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 ## Metodologia Aplicada
 
 - **Seleção Inteligente com IA**: Primeira chamada LLM seleciona empresas baseada no perfil do investidor
-- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Gordon
+- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD, Gordon e Fundamentalista 3+1
 - **Pesquisa em Tempo Real**: IA busca notícias e dados atualizados na internet
 - **Processamento Batch**: Segunda chamada LLM analisa todas as empresas simultaneamente
 - **Síntese Inteligente**: IA analisa consistência e convergência entre estratégias
@@ -796,8 +819,10 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 
 ## Diferencial Premium
 
+- **Filtro de Qualidade**: Remove automaticamente empresas sem lucro (ROE ≤ 0 ou Margem Líquida ≤ 0)
+- **Exceções Setoriais**: Bancos e seguradoras avaliados apenas por ROE (margem pode não se aplicar)
 - Seleção inteligente baseada no perfil específico do investidor
-- Análise de 6 estratégias simultaneamente para cada empresa selecionada
+- Análise de 7 estratégias simultaneamente para cada empresa selecionada
 - Inteligência Artificial com acesso a dados da internet em tempo real
 - Processamento batch otimizado (mais rápido e eficiente)
 - Pesquisa automática de notícias e fatos relevantes recentes
@@ -815,5 +840,61 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 
   validateCompanyData(): boolean {
     return true; // IA não precisa de validação específica
+  }
+
+  // Obter descrição do filtro de tamanho
+  private getCompanySizeDescription(sizeFilter: string): string {
+    const descriptions = {
+      'all': 'Todas as empresas',
+      'small_caps': 'Small Caps (< R$ 2 bi)',
+      'mid_caps': 'Empresas Médias (R$ 2-10 bi)',
+      'blue_chips': 'Blue Chips (> R$ 10 bi)'
+    };
+    return descriptions[sizeFilter as keyof typeof descriptions] || 'Todas as empresas';
+  }
+
+  // Verificar se é banco, seguradora ou empresa financeira
+  private isBankOrInsurance(sector: string): boolean {
+    if (!sector) return false;
+    
+    const financialSectors = [
+      'bancos',
+      'seguradoras', 
+      'previdência',
+      'serviços financeiros',
+      'intermediários financeiros',
+      'financeiro',
+      'seguro',
+      'previdencia'
+    ];
+    
+    const sectorLower = sector.toLowerCase();
+    return financialSectors.some(finSector => 
+      sectorLower.includes(finSector)
+    );
+  }
+
+  // Filtrar empresas sem lucro (ROE negativo ou margem líquida negativa)
+  private filterProfitableCompanies(companies: CompanyData[]): CompanyData[] {
+    return companies.filter(company => {
+      const roe = toNumber(company.financials.roe);
+      const margemLiquida = toNumber(company.financials.margemLiquida);
+      const sector = company.sector || '';
+      
+      // Para bancos e seguradoras, apenas verificar ROE (margem pode não se aplicar)
+      if (this.isBankOrInsurance(sector)) {
+        // Para bancos/seguradoras: aceitar se ROE > 0 ou se ROE não está disponível
+        return roe === null || roe > 0;
+      }
+      
+      // Para empresas normais: verificar ROE E margem líquida
+      const hasPositiveROE = roe === null || roe > 0;
+      const hasPositiveMargin = margemLiquida === null || margemLiquida > 0;
+      
+      // Aceitar empresa se:
+      // 1. ROE positivo OU não disponível E
+      // 2. Margem líquida positiva OU não disponível
+      return hasPositiveROE && hasPositiveMargin;
+    });
   }
 }

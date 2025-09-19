@@ -37,7 +37,7 @@ import { blogPosts } from "@/lib/blog-data"
 
 export const metadata: Metadata = {
   title: "Preço Justo AI - Análise Fundamentalista de Ações com Inteligência Artificial | Investimentos B3",
-  description: "Descubra ações subvalorizadas na B3 com análise fundamentalista automatizada. Modelos de Graham, Dividend Yield, Fórmula Mágica e IA. Rankings inteligentes, comparador de ações e análise completa. Comece grátis!",
+  description: "Descubra ações subvalorizadas na B3 com análise fundamentalista automatizada. Modelos de Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1 e IA. Rankings inteligentes, comparador de ações e análise completa. Comece grátis!",
   keywords: "análise fundamentalista, ações B3, bovespa, investimentos, valuation, Graham, dividend yield, fórmula mágica, IA, inteligência artificial, ranking ações, comparador ações, análise de ações, preço justo, investir em ações",
   openGraph: {
     title: "Preço Justo AI - Análise Fundamentalista com IA para Ações da B3",
@@ -104,7 +104,7 @@ export default async function Home() {
           
           <p className="text-2xl text-muted-foreground mb-12 max-w-4xl mx-auto leading-relaxed">
             <strong>Análise fundamentalista automatizada com IA</strong> para descobrir ações subvalorizadas. 
-            Use modelos consagrados como Graham, Dividend Yield e Fórmula Mágica em mais de <strong>350 empresas da B3</strong>.
+            Use modelos consagrados como Graham, Dividend Yield, Fórmula Mágica e Fundamentalista 3+1 em mais de <strong>350 empresas da B3</strong>.
           </p>
 
           {/* Social Proof */}
@@ -115,7 +115,7 @@ export default async function Home() {
             </div>
             <div className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
-              <span>7 modelos de valuation</span>
+              <span>8 modelos de valuation</span>
             </div>
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
@@ -256,7 +256,7 @@ export default async function Home() {
                   </div>
                   <div>
                     <h4 className="font-semibold text-green-900 dark:text-green-100">Análise em segundos</h4>
-                    <p className="text-sm text-green-700 dark:text-green-200">Rankings automáticos com 7 modelos de valuation em tempo real</p>
+                    <p className="text-sm text-green-700 dark:text-green-200">Rankings automáticos com 8 modelos de valuation em tempo real</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
@@ -288,7 +288,7 @@ export default async function Home() {
         <div className="container mx-auto px-4">
           <div className="text-center mb-20">
             <h2 className="text-4xl sm:text-5xl font-bold mb-6">
-              <span className="text-blue-600">7 modelos de valuation</span>{" "}
+              <span className="text-blue-600">8 modelos de valuation</span>{" "}
               em uma única plataforma
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
@@ -382,6 +382,31 @@ export default async function Home() {
               </Card>
             </Link>
 
+            {/* Fundamentalista 3+1 */}
+            <Link href="/metodologia#fundamentalista" className="block">
+              <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group relative overflow-hidden cursor-pointer">
+                <div className="absolute top-4 right-4">
+                  <Badge className="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+                    Premium
+                  </Badge>
+                </div>
+                <CardContent className="p-8">
+                  <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <BarChart3 className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-3 group-hover:text-teal-600 transition-colors">Fundamentalista 3+1</h3>
+                  <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                    Análise simplificada com apenas 3 indicadores essenciais que se adaptam ao perfil da empresa 
+                    (com/sem dívida, setor especial) + bônus dividendos.
+                  </p>
+                  <div className="text-sm text-teal-600 font-medium group-hover:text-teal-700 flex items-center gap-1">
+                    Ver metodologia completa
+                    <ArrowRight className="w-3 h-3" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
             {/* DCF */}
             <Link href="/metodologia#fcd" className="block">
               <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group relative overflow-hidden cursor-pointer">
@@ -446,7 +471,7 @@ export default async function Home() {
                   </div>
                   <h3 className="text-xl font-bold mb-3 group-hover:bg-gradient-to-r group-hover:from-violet-600 group-hover:to-pink-600 group-hover:bg-clip-text group-hover:text-transparent transition-all">Análise Preditiva com IA</h3>
                   <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
-                    <strong>Inteligência Artificial</strong> analisa TODOS os 6 modelos simultaneamente, 
+                    <strong>Inteligência Artificial</strong> analisa TODOS os 7 modelos simultaneamente, 
                     busca notícias na internet e cria ranking preditivo personalizado.
                   </p>
                   <div className="text-sm bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent font-bold group-hover:from-violet-700 group-hover:to-pink-700 flex items-center gap-1">
@@ -591,7 +616,7 @@ export default async function Home() {
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>7 modelos de valuation</strong></span>
+                    <span><strong>8 modelos de valuation</strong></span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -1021,8 +1046,8 @@ export default async function Home() {
                   Como funciona a análise fundamentalista?
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Nossa plataforma aplica automaticamente os principais modelos de valuation 
-                  (Graham, Dividend Yield, Fórmula Mágica, etc.) em todas as empresas da B3, 
+                  Nossa plataforma aplica automaticamente os 8 principais modelos de valuation 
+                  (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, 
                   calculando um preço justo baseado nos fundamentos financeiros.
                 </p>
               </CardContent>
@@ -1631,7 +1656,7 @@ export default async function Home() {
                 "price": "29.90",
                 "priceCurrency": "BRL",
                 "billingIncrement": "P1M",
-                "description": "Acesso completo a 7 modelos de valuation e análise com IA"
+                "description": "Acesso completo a 8 modelos de valuation e análise com IA"
               },
               {
                 "@type": "Offer",
@@ -1644,7 +1669,7 @@ export default async function Home() {
             ],
             "featureList": [
               "Análise fundamentalista automatizada",
-              "7 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, DCF, Gordon, etc.)",
+              "8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, DCF, Gordon, etc.)",
               "Análise preditiva com Inteligência Artificial",
               "Mais de 350 empresas da B3 analisadas",
               "Filtros anti-armadilha",

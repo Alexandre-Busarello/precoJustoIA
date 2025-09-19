@@ -36,7 +36,7 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
   abstract readonly name: string;
   
   abstract runAnalysis(companyData: CompanyData, params: T): StrategyAnalysis;
-  abstract runRanking(companies: CompanyData[], params: T): RankBuilderResult[];
+  abstract runRanking(companies: CompanyData[], params: T): RankBuilderResult[] | Promise<RankBuilderResult[]>;
   abstract generateRational(params: T): string;
   abstract validateCompanyData(companyData: CompanyData, params: T): boolean;
   
@@ -97,6 +97,30 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     return enterpriseValue / sharesOutstanding;
   }
   
+  // Filtrar empresas por tamanho (Market Cap)
+  protected filterCompaniesBySize(companies: CompanyData[], sizeFilter: string): CompanyData[] {
+    if (sizeFilter === 'all') return companies;
+    
+    return companies.filter(company => {
+      const marketCap = toNumber(company.financials.marketCap);
+      if (!marketCap) return false;
+      
+      // Valores em bilhões de reais
+      const marketCapBillions = marketCap / 1_000_000_000;
+      
+      switch (sizeFilter) {
+        case 'small_caps':
+          return marketCapBillions < 2; // Menos de R$ 2 bilhões
+        case 'mid_caps':
+          return marketCapBillions >= 2 && marketCapBillions < 10; // R$ 2-10 bilhões
+        case 'blue_chips':
+          return marketCapBillions >= 10; // Mais de R$ 10 bilhões
+        default:
+          return true;
+      }
+    });
+  }
+
   // Converter StrategyAnalysis para RankBuilderResult
   protected convertToRankingResult(
     companyData: CompanyData, 
@@ -107,6 +131,7 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
       name: companyData.name,
       sector: companyData.sector,
       currentPrice: companyData.currentPrice,
+      logoUrl: companyData.logoUrl, // Incluir logo por padrão
       fairValue: analysis.fairValue,
       upside: analysis.upside,
       marginOfSafety: analysis.fairValue && companyData.currentPrice > 0 

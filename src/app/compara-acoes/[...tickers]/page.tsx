@@ -464,7 +464,7 @@ async function executeStrategiesForCompany(company: Record<string, unknown>, cur
   }
 }
 
-// Componente para indicador com blur premium
+// Componente para indicador com blur premium e ranking
 function ComparisonIndicatorCard({ 
   title, 
   values, 
@@ -472,7 +472,8 @@ function ComparisonIndicatorCard({
   icon: Icon, 
   description,
   isPremium = false,
-  userIsPremium = false
+  userIsPremium = false,
+  higherIsBetter = true
 }: {
   title: string
   values: (string | number)[]
@@ -481,30 +482,153 @@ function ComparisonIndicatorCard({
   description?: string
   isPremium?: boolean
   userIsPremium?: boolean
+  higherIsBetter?: boolean
 }) {
   const shouldBlur = isPremium && !userIsPremium
+  
+
+  // Converter valores para números para ranking
+  const numericValues = values.map(v => {
+    if (v === 'N/A' || v === null || v === undefined) return null
+    if (typeof v === 'number') return v
+    if (typeof v === 'string') {
+      // Remover símbolos de moeda e porcentagem para conversão
+      const cleanValue = v.replace(/[R$%\s]/g, '').replace(',', '.')
+      const parsed = parseFloat(cleanValue)
+      return isNaN(parsed) ? null : parsed
+    }
+    return null
+  })
+
+  // Criar array com dados para ordenação
+  const dataForRanking = tickers.map((ticker, index) => ({
+    ticker,
+    value: values[index],
+    numericValue: numericValues[index],
+    originalIndex: index
+  }))
+
+  // Apenas ordenar e rankear para usuários premium
+  let sortedData = dataForRanking
+  
+  if (userIsPremium) {
+    // Filtrar apenas valores válidos para ranking
+    const validData = dataForRanking.filter(item => item.numericValue !== null)
+    
+    // Ordenar baseado em higherIsBetter
+    validData.sort((a, b) => {
+      if (higherIsBetter) {
+        return b.numericValue! - a.numericValue!
+      } else {
+        return a.numericValue! - b.numericValue!
+      }
+    })
+
+    // Adicionar dados inválidos no final
+    const invalidData = dataForRanking.filter(item => item.numericValue === null)
+    sortedData = [...validData, ...invalidData]
+  }
+
+  // Função para obter medalha e estilo baseado na posição
+  const getRankInfo = (position: number, hasValidValue: boolean) => {
+    if (!hasValidValue || !userIsPremium) return null
+    
+    switch (position) {
+      case 0: // Primeiro lugar
+        return {
+          medal: Trophy,
+          bgColor: 'bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20',
+          borderColor: 'border-yellow-300 dark:border-yellow-600',
+          textColor: 'text-yellow-800 dark:text-yellow-200',
+          medalColor: 'text-yellow-600',
+          rank: '1º',
+          label: 'Ouro'
+        }
+      case 1: // Segundo lugar
+        return {
+          medal: Medal,
+          bgColor: 'bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/20 dark:to-slate-800/20',
+          borderColor: 'border-slate-300 dark:border-slate-600',
+          textColor: 'text-slate-800 dark:text-slate-200',
+          medalColor: 'text-slate-600',
+          rank: '2º',
+          label: 'Prata'
+        }
+      case 2: // Terceiro lugar
+        return {
+          medal: Medal,
+          bgColor: 'bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20',
+          borderColor: 'border-orange-300 dark:border-orange-600',
+          textColor: 'text-orange-800 dark:text-orange-200',
+          medalColor: 'text-orange-600',
+          rank: '3º',
+          label: 'Bronze'
+        }
+      default:
+        return null
+    }
+  }
 
   return (
     <Card className="relative">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 p-4 sm:p-6">
         <div className="flex items-center space-x-2">
-          <Icon className="w-5 h-5 text-muted-foreground" />
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
+          <CardTitle className="text-sm font-medium truncate">{title}</CardTitle>
           {isPremium && (
-            <Crown className="w-4 h-4 text-yellow-500" />
+            <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
+          )}
+          {!userIsPremium && !isPremium && (
+            <div className="flex items-center space-x-1">
+              <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">Ranking Premium</span>
+            </div>
           )}
         </div>
         {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-xs text-muted-foreground truncate">{description}</p>
+        )}
+        {!userIsPremium && !isPremium && (
+          <p className="text-xs text-blue-600 mt-1">
+            💎 Upgrade para ver ranking e medalhas
+          </p>
         )}
       </CardHeader>
-      <CardContent className={`space-y-3 ${shouldBlur ? 'blur-sm' : ''}`}>
-        {tickers.map((ticker, index) => (
-          <div key={ticker} className="flex justify-between items-center">
-            <span className="text-sm font-medium">{ticker}</span>
-            <span className="text-sm">{values[index] || 'N/A'}</span>
-          </div>
-        ))}
+      <CardContent className={`space-y-3 p-4 sm:p-6 pt-0 ${shouldBlur ? 'blur-sm' : ''}`}>
+        {sortedData.map((item, position) => {
+          const rankInfo = getRankInfo(position, item.numericValue !== null)
+          const Medal = rankInfo?.medal
+          
+          return (
+            <div 
+              key={item.ticker} 
+              className={`flex justify-between items-center min-w-0 p-2 rounded-lg transition-all duration-200 ${
+                rankInfo ? `${rankInfo.bgColor} ${rankInfo.borderColor} border` : ''
+              }`}
+            >
+              <div className="flex items-center space-x-2 min-w-0">
+                {rankInfo && Medal && (
+                  <div className="flex items-center space-x-1 flex-shrink-0">
+                    <Medal className={`w-4 h-4 ${rankInfo.medalColor}`} />
+                    <span className={`text-xs font-bold ${rankInfo.textColor}`}>
+                      {rankInfo.rank}
+                    </span>
+                  </div>
+                )}
+                <span className={`text-sm font-medium truncate ${
+                  rankInfo ? `${rankInfo.textColor} font-semibold` : ''
+                }`}>
+                  {item.ticker}
+                </span>
+              </div>
+              <span className={`text-sm flex-shrink-0 ${
+                rankInfo ? `${rankInfo.textColor} font-semibold` : ''
+              }`}>
+                {item.value || 'N/A'}
+              </span>
+            </div>
+          )
+        })}
       </CardContent>
       {shouldBlur && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">
@@ -705,32 +829,32 @@ export default async function CompareStocksPage({ params }: PageProps) {
   return (
     <div className="container mx-auto py-8 px-4">
       {/* Header da Comparação */}
-      <div className="mb-8">
+      <div className="mb-6 sm:mb-8">
         <div className="flex items-center space-x-2 mb-4">
-          <BarChart3 className="w-6 h-6" />
-          <h1 className="text-3xl font-bold">Comparação de Ações</h1>
+          <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Comparação de Ações</h1>
         </div>
         
         <div className="flex flex-wrap items-center gap-2 mb-4">
           {tickers.map((ticker, index) => (
             <div key={ticker} className="flex items-center">
-              <Badge variant="outline" className="text-lg px-3 py-1">
+              <Badge variant="outline" className="text-sm sm:text-base lg:text-lg px-2 sm:px-3 py-1">
                 {ticker}
               </Badge>
               {index < tickers.length - 1 && (
-                <ArrowRight className="w-4 h-4 mx-2 text-muted-foreground" />
+                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 mx-1 sm:mx-2 text-muted-foreground flex-shrink-0" />
               )}
             </div>
           ))}
         </div>
 
-        <p className="text-muted-foreground">
+        <p className="text-sm sm:text-base text-muted-foreground">
           Análise comparativa detalhada entre {tickers.length} ações da B3
         </p>
       </div>
 
       {/* Cards das Empresas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {orderedCompanies.map((company, companyIndex) => {
             const latestFinancials = company.financialData[0]
             const latestQuote = company.dailyQuotes[0]
@@ -806,31 +930,45 @@ export default async function CompareStocksPage({ params }: PageProps) {
                   </Badge>
                 </div>
               )}
-              <CardContent className="p-6">
-                <div className="flex items-start space-x-4 mb-4">
-                  <CompanyLogo
-                    logoUrl={company.logoUrl}
-                    companyName={company.name}
-                    ticker={company.ticker}
-                    size={60}
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <h3 className="text-xl font-bold">{company.ticker}</h3>
-                      <Badge variant="secondary" className="text-xs">
-                        {company.sector || 'N/A'}
-                      </Badge>
-                      {isBestCompany && (
-                        <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white text-xs shadow-md border-0 animate-pulse">
-                          <Crown className="w-3 h-3 mr-1" />
-                          Destaque
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 mb-4">
+                  <div className="flex-shrink-0 self-center sm:self-start">
+                    <CompanyLogo
+                      logoUrl={company.logoUrl}
+                      companyName={company.name}
+                      ticker={company.ticker}
+                      size={60}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 mb-2">
+                      <h3 className="text-lg sm:text-xl font-bold truncate">{company.ticker}</h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="text-xs w-fit">
+                          {company.sector || 'N/A'}
                         </Badge>
-                      )}
+                        {isBestCompany && (
+                          <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white text-xs shadow-md border-0 animate-pulse w-fit">
+                            <Crown className="w-3 h-3 mr-1" />
+                            <span className="hidden sm:inline">Destaque</span>
+                            <span className="sm:hidden">Top</span>
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">
+                    <p 
+                      className="text-sm text-muted-foreground mb-2 leading-tight"
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        wordBreak: 'break-word'
+                      }}
+                    >
                       {company.name}
                     </p>
-                    <p className="text-lg font-bold text-green-600">
+                    <p className="text-base sm:text-lg font-bold text-green-600">
                       {formatCurrency(currentPrice)}
                     </p>
                   </div>
@@ -838,25 +976,25 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 
                 <div className="space-y-2 text-sm">
                   {company.industry && (
-                    <div className="flex items-center space-x-2">
-                      <PieChart className="w-4 h-4 text-muted-foreground" />
-                      <span>{company.industry}</span>
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <PieChart className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">{company.industry}</span>
                     </div>
                   )}
                   
                   {(company.city || company.state) && (
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="w-4 h-4 text-muted-foreground" />
-                      <span>
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">
                         {[company.city, company.state].filter(Boolean).join(', ')}
                       </span>
                     </div>
                   )}
 
                   {company.fullTimeEmployees && (
-                    <div className="flex items-center space-x-2">
-                      <User className="w-4 h-4 text-muted-foreground" />
-                      <span>{company.fullTimeEmployees.toLocaleString()} funcionários</span>
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">{company.fullTimeEmployees.toLocaleString()} funcionários</span>
                     </div>
                   )}
                 </div>
@@ -879,12 +1017,12 @@ export default async function CompareStocksPage({ params }: PageProps) {
       <div className="space-y-8">
         {/* Indicadores Básicos */}
         <div>
-          <h2 className="text-2xl font-bold mb-6 flex items-center">
-            <Target className="w-6 h-6 mr-2" />
-            Indicadores Fundamentalistas
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center">
+            <Target className="w-5 h-5 sm:w-6 sm:h-6 mr-2 flex-shrink-0" />
+            <span className="truncate">Indicadores Fundamentalistas</span>
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <ComparisonIndicatorCard
               title="P/L (Preço/Lucro)"
               values={orderedCompanies.map(c => {
@@ -894,6 +1032,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={DollarSign}
               description="Quanto o mercado paga por cada R$ 1 de lucro"
+              higherIsBetter={false}
+              userIsPremium={userIsPremium}
             />
 
             <ComparisonIndicatorCard
@@ -905,6 +1045,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={Building2}
               description="Relação entre preço da ação e valor patrimonial"
+              higherIsBetter={false}
+              userIsPremium={userIsPremium}
             />
 
             <ComparisonIndicatorCard
@@ -916,6 +1058,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={TrendingUp}
               description="Capacidade de gerar lucro com o patrimônio"
+              higherIsBetter={true}
+              userIsPremium={userIsPremium}
             />
 
             <ComparisonIndicatorCard
@@ -927,6 +1071,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={Percent}
               description="Rendimento anual em dividendos"
+              higherIsBetter={true}
+              userIsPremium={userIsPremium}
             />
 
             <ComparisonIndicatorCard
@@ -940,6 +1086,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Percentual de lucro sobre a receita"
               isPremium={true}
               userIsPremium={userIsPremium}
+              higherIsBetter={true}
             />
 
             <ComparisonIndicatorCard
@@ -953,18 +1100,19 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Eficiência no uso do capital investido"
               isPremium={true}
               userIsPremium={userIsPremium}
+              higherIsBetter={true}
             />
           </div>
         </div>
 
         {/* Indicadores de Tamanho */}
         <div>
-          <h2 className="text-2xl font-bold mb-6 flex items-center">
-            <BarChart3 className="w-6 h-6 mr-2" />
-            Tamanho e Escala
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center">
+            <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 mr-2 flex-shrink-0" />
+            <span className="truncate">Tamanho e Escala</span>
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <ComparisonIndicatorCard
               title="Valor de Mercado"
               values={orderedCompanies.map(c => {
@@ -974,6 +1122,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={DollarSign}
               description="Valor total da empresa no mercado"
+              higherIsBetter={true}
+              userIsPremium={userIsPremium}
             />
 
             <ComparisonIndicatorCard
@@ -985,6 +1135,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={TrendingUp}
               description="Faturamento anual da empresa"
+              higherIsBetter={true}
+              userIsPremium={userIsPremium}
             />
 
             <ComparisonIndicatorCard
@@ -998,19 +1150,20 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Lucro após todos os custos e impostos"
               isPremium={true}
               userIsPremium={userIsPremium}
+              higherIsBetter={true}
             />
           </div>
         </div>
 
         {/* Indicadores de Endividamento - Premium */}
         <div>
-          <h2 className="text-2xl font-bold mb-6 flex items-center">
-            <TrendingDown className="w-6 h-6 mr-2" />
-            Endividamento e Solidez
-            <Crown className="w-5 h-5 ml-2 text-yellow-500" />
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center">
+            <TrendingDown className="w-5 h-5 sm:w-6 sm:h-6 mr-2 flex-shrink-0" />
+            <span className="truncate">Endividamento e Solidez</span>
+            <Crown className="w-4 h-4 sm:w-5 sm:h-5 ml-2 text-yellow-500 flex-shrink-0" />
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <ComparisonIndicatorCard
               title="Dívida Líquida/EBITDA"
               values={orderedCompanies.map(c => {
@@ -1022,6 +1175,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Capacidade de pagamento da dívida"
               isPremium={true}
               userIsPremium={userIsPremium}
+              higherIsBetter={false}
             />
 
             <ComparisonIndicatorCard
@@ -1035,6 +1189,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Endividamento em relação ao patrimônio"
               isPremium={true}
               userIsPremium={userIsPremium}
+              higherIsBetter={false}
             />
 
             <ComparisonIndicatorCard
@@ -1048,6 +1203,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Capacidade de honrar compromissos de curto prazo"
               isPremium={true}
               userIsPremium={userIsPremium}
+              higherIsBetter={true}
             />
           </div>
         </div>
@@ -1092,15 +1248,16 @@ export default async function CompareStocksPage({ params }: PageProps) {
       </div>
 
       {/* Links para análises individuais */}
-      <div className="mt-12">
-        <Separator className="mb-6" />
-        <h3 className="text-lg font-semibold mb-4">Análises Individuais Detalhadas</h3>
-        <div className="flex flex-wrap gap-3">
+      <div className="mt-8 sm:mt-12">
+        <Separator className="mb-4 sm:mb-6" />
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Análises Individuais Detalhadas</h3>
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           {orderedCompanies.map((company) => (
-            <Button key={company.ticker} asChild variant="outline">
+            <Button key={company.ticker} asChild variant="outline" size="sm" className="text-xs sm:text-sm">
               <Link href={`/acao/${company.ticker}`}>
-                <LineChart className="w-4 h-4 mr-2" />
-                Análise Completa {company.ticker}
+                <LineChart className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Análise Completa </span>
+                {company.ticker}
               </Link>
             </Button>
           ))}

@@ -4,6 +4,7 @@ import { DividendYieldStrategy } from './dividend-yield-strategy';
 import { LowPEStrategy } from './lowpe-strategy';
 import { MagicFormulaStrategy } from './magic-formula-strategy';
 import { GordonStrategy } from './gordon-strategy';
+import { FundamentalistStrategy } from './fundamentalist-strategy';
 import { AIStrategy } from './ai-strategy';
 import { 
   StrategyParams, 
@@ -18,8 +19,9 @@ import {
   GordonParams,
   AIParams
 } from './types';
+import { FundamentalistParams } from './fundamentalist-strategy';
 
-type StrategyType = 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'ai';
+type StrategyType = 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'fundamentalist' | 'ai';
 
 export class StrategyFactory {
   static createStrategy(type: StrategyType) {
@@ -36,6 +38,8 @@ export class StrategyFactory {
         return new MagicFormulaStrategy();
       case 'gordon':
         return new GordonStrategy();
+      case 'fundamentalist':
+        return new FundamentalistStrategy();
       case 'ai':
         return new AIStrategy();
       default:
@@ -49,7 +53,7 @@ export class StrategyFactory {
     params: StrategyParams
   ): StrategyAnalysis {
     const strategy = this.createStrategy(type);
-    return strategy.runAnalysis(companyData, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams);
+    return strategy.runAnalysis(companyData, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams);
   }
 
   static runRanking(
@@ -58,7 +62,7 @@ export class StrategyFactory {
     params: StrategyParams
   ): RankBuilderResult[] | Promise<RankBuilderResult[]> {
     const strategy = this.createStrategy(type);
-    return strategy.runRanking(companies, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams);
+    return strategy.runRanking(companies, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams);
   }
 
 
@@ -87,6 +91,10 @@ export class StrategyFactory {
     return this.runAnalysis('gordon', companyData, params);
   }
 
+  static runFundamentalistAnalysis(companyData: CompanyData, params: FundamentalistParams): StrategyAnalysis {
+    return this.runAnalysis('fundamentalist', companyData, params);
+  }
+
   static runGrahamRanking(companies: CompanyData[], params: GrahamParams): RankBuilderResult[] {
     return this.runRanking('graham', companies, params) as RankBuilderResult[];
   }
@@ -111,12 +119,16 @@ export class StrategyFactory {
     return this.runRanking('gordon', companies, params) as RankBuilderResult[];
   }
 
+  static runFundamentalistRanking(companies: CompanyData[], params: FundamentalistParams): RankBuilderResult[] {
+    return this.runRanking('fundamentalist', companies, params) as RankBuilderResult[];
+  }
+
   static async runAIRanking(companies: CompanyData[], params: AIParams): Promise<RankBuilderResult[]> {
     const strategy = new AIStrategy();
     return await strategy.runRanking(companies, params);
   }
 
-  static generateRational(type: StrategyType, params: GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | AIParams): string {
+  static generateRational(type: StrategyType, params: GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams): string {
     const strategy = this.createStrategy(type);
     return strategy.generateRational(params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & AIParams);
   }

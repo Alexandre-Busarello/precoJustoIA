@@ -6,14 +6,10 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
 
   validateCompanyData(companyData: CompanyData): boolean {
     const { financials } = companyData;
+    // Dar benefício da dúvida - só requer dados essenciais para cálculo do valor justo
     return !!(
       financials.lpa && toNumber(financials.lpa)! > 0 &&
-      financials.vpa && toNumber(financials.vpa)! > 0 &&
-      financials.roe && toNumber(financials.roe)! >= 0.10 &&
-      financials.liquidezCorrente && toNumber(financials.liquidezCorrente)! >= 1.0 &&
-      financials.margemLiquida && toNumber(financials.margemLiquida)! > 0 &&
-      (!financials.dividaLiquidaPl || toNumber(financials.dividaLiquidaPl)! <= 1.5) &&
-      (!financials.crescimentoLucros || toNumber(financials.crescimentoLucros)! >= -0.15)
+      financials.vpa && toNumber(financials.vpa)! > 0
     );
   }
 
@@ -36,16 +32,16 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       { label: 'Upside ≥ 10', value: !!(upside && upside >= 10), description: `Upside: ${formatPercent(upside! / 100)}` },
       { label: 'LPA positivo', value: !!(lpa && lpa > 0), description: `LPA: ${formatCurrency(lpa)}` },
       { label: 'VPA positivo', value: !!(vpa && vpa > 0), description: `VPA: ${formatCurrency(vpa)}` },
-      { label: 'ROE ≥ 10%', value: !!(roe && roe >= 0.10), description: `ROE: ${formatPercent(roe)}` },
-      { label: 'Liquidez Corrente ≥ 1.0', value: !!(liquidezCorrente && liquidezCorrente >= 1.0), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
-      { label: 'Margem Líquida positiva', value: margemLiquida ? !!(margemLiquida > 0) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
-      { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
-      { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15, description: `Crescimento: ${formatPercent(crescimentoLucros)}` },
-      { label: 'Market Cap ≥ R$ 2B', value: !!(marketCap && marketCap >= 2000000000), description: `Market Cap: ${formatCurrency(marketCap)}` }
+      { label: 'ROE ≥ 10%', value: !roe || roe >= 0.10, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Liquidez Corrente ≥ 1.0', value: !liquidezCorrente || liquidezCorrente >= 1.0, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Margem Líquida positiva', value: !margemLiquida || margemLiquida > 0, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15, description: `Crescimento: ${formatPercent(crescimentoLucros) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Market Cap ≥ R$ 2B', value: !marketCap || marketCap >= 2000000000, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
-    const hasMinimumCriteria = passedCriteria >= 5;
+    const hasMinimumCriteria = passedCriteria >= 3; // Reduzido para dar benefício da dúvida
     const hasValidFairValue = !!fairValue;
     const hasValidUpside = !!upside;
     const hasMinimumUpside = !!(upside && upside >= 10);

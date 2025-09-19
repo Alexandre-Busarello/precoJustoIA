@@ -6,16 +6,10 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
 
   validateCompanyData(companyData: CompanyData): boolean {
     const { financials } = companyData;
+    // Dar benefício da dúvida - só requer dados essenciais para FCD
     return !!(
       financials.ebitda && toNumber(financials.ebitda)! > 0 &&
-      financials.fluxoCaixaOperacional && toNumber(financials.fluxoCaixaOperacional)! > 0 &&
-      financials.sharesOutstanding && toNumber(financials.sharesOutstanding)! > 0 &&
-      financials.marketCap && toNumber(financials.marketCap)! >= 2000000000 &&
-      financials.roe && toNumber(financials.roe)! >= 0.12 &&
-      financials.margemEbitda && toNumber(financials.margemEbitda)! >= 0.15 &&
-      (!financials.crescimentoReceitas || toNumber(financials.crescimentoReceitas)! >= -0.10) &&
-      financials.liquidezCorrente && toNumber(financials.liquidezCorrente)! >= 1.2 &&
-      financials.fluxoCaixaLivre !== null
+      financials.sharesOutstanding && toNumber(financials.sharesOutstanding)! > 0
     );
   }
 
@@ -47,16 +41,16 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const criteria = [
       { label: `Upside >= ${(minMarginOfSafety * 100)}`, value: !!(!!upside && upside >= (minMarginOfSafety * 100)), description: `Upside: ${formatPercent(upside! / 100)}` },
       { label: 'EBITDA > 0', value: !!(ebitda && ebitda > 0), description: `EBITDA: ${formatCurrency(ebitda)}` },
-      { label: 'FCO > 0', value: !!(fluxoCaixaOperacional && fluxoCaixaOperacional > 0), description: `FCO: ${formatCurrency(fluxoCaixaOperacional)}` },
-      { label: 'ROE ≥ 12%', value: !!(roe && roe >= 0.12), description: `ROE: ${formatPercent(roe)}` },
-      { label: 'Margem EBITDA ≥ 15%', value: margemEbitda ? !!(margemEbitda >= 0.15) : true, description: `Margem EBITDA: ${formatPercent(margemEbitda)}` },
-      { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas)}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !!(liquidezCorrente && liquidezCorrente >= 1.2), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
-      { label: 'Market Cap ≥ R$ 2B', value: !!(marketCap && marketCap >= 2000000000), description: `Market Cap: ${formatCurrency(marketCap)}` }
+      { label: 'FCO > 0', value: !fluxoCaixaOperacional || fluxoCaixaOperacional > 0, description: `FCO: ${formatCurrency(fluxoCaixaOperacional) || 'N/A - Benefício da dúvida'}` },
+      { label: 'ROE ≥ 12%', value: !roe || roe >= 0.12, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Margem EBITDA ≥ 15%', value: !margemEbitda || margemEbitda >= 0.15, description: `Margem EBITDA: ${formatPercent(margemEbitda) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Market Cap ≥ R$ 2B', value: !marketCap || marketCap >= 2000000000, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 5 && !!fairValue && !!upside && upside >= (minMarginOfSafety * 100);
+    const isEligible = passedCriteria >= 2 && !!fairValue && !!upside && upside >= (minMarginOfSafety * 100); // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
     
     // Calcular quality score como no backend

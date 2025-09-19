@@ -7,15 +7,10 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
   validateCompanyData(companyData: CompanyData, params: MagicFormulaParams): boolean {
     const { financials } = companyData;
     const { minROIC = 0, minEY = 0 } = params;
+    // Dar benefício da dúvida - só requer dados essenciais para Magic Formula
     return !!(
       financials.roic && toNumber(financials.roic)! >= minROIC &&
-      financials.earningsYield && toNumber(financials.earningsYield)! >= minEY &&
-      financials.roe && toNumber(financials.roe)! >= 0.15 &&
-      (!financials.crescimentoReceitas || toNumber(financials.crescimentoReceitas)! >= -0.05) &&
-      financials.margemLiquida && toNumber(financials.margemLiquida)! >= 0.05 &&
-      financials.liquidezCorrente && toNumber(financials.liquidezCorrente)! >= 1.2 &&
-      (!financials.dividaLiquidaPl || toNumber(financials.dividaLiquidaPl)! <= 1.5) &&
-      financials.marketCap && toNumber(financials.marketCap)! >= 1000000000
+      financials.earningsYield && toNumber(financials.earningsYield)! >= minEY
     );
   }
 
@@ -35,16 +30,16 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     const criteria = [
       { label: `ROIC ≥ ${(minROIC * 100).toFixed(0)}%`, value: !!(roic && roic >= minROIC), description: `ROIC: ${formatPercent(roic)}` },
       { label: `Earnings Yield ≥ ${(minEY * 100).toFixed(0)}%`, value: !!(earningsYield && earningsYield >= minEY), description: `EY: ${formatPercent(earningsYield)}` },
-      { label: 'ROE ≥ 15%', value: !!(roe && roe >= 0.15), description: `ROE: ${formatPercent(roe)}` },
-      { label: 'Crescimento Receitas ≥ -5%', value: !crescimentoReceitas || crescimentoReceitas >= -0.05, description: `Crescimento: ${formatPercent(crescimentoReceitas)}` },
-      { label: 'Margem Líquida ≥ 5%', value: margemLiquida ? (margemLiquida >= 0.05) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !!(liquidezCorrente && liquidezCorrente >= 1.2), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
-      { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
-      { label: 'Market Cap ≥ R$ 1B', value: !!(marketCap && marketCap >= 1000000000), description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A'}` }
+      { label: 'ROE ≥ 15%', value: !roe || roe >= 0.15, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Crescimento Receitas ≥ -5%', value: !crescimentoReceitas || crescimentoReceitas >= -0.05, description: `Crescimento: ${formatPercent(crescimentoReceitas) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Margem Líquida ≥ 5%', value: !margemLiquida || margemLiquida >= 0.05, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Market Cap ≥ R$ 1B', value: !marketCap || marketCap >= 1000000000, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A - Benefício da dúvida'}` }
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 6 && !!roic && !!earningsYield && roic >= minROIC && earningsYield >= minEY;
+    const isEligible = passedCriteria >= 2 && !!roic && !!earningsYield && roic >= minROIC && earningsYield >= minEY; // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular magic formula score como no backend

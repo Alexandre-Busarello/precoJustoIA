@@ -7,10 +7,9 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
   validateCompanyData(companyData: CompanyData, params: GordonParams): boolean {
     const { financials, currentPrice } = companyData;
     
-    // Critérios essenciais que devem existir
+    // Dar benefício da dúvida - só requer dados essenciais
     const hasEssentialData = !!(
       financials.dy && toNumber(financials.dy)! > 0 &&
-      financials.roe && toNumber(financials.roe)! > 0 &&
       currentPrice > 0
     );
     
@@ -59,16 +58,16 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     const criteria = [
       { label: 'Upside ≥ 15%', value: !!(upside && upside >= 15), description: `Upside: ${upside ? formatPercent(upside / 100) : 'N/A'}` },
       { label: 'Dividend Yield ≥ 4%', value: !!(dy && dy >= 0.04), description: `DY: ${formatPercent(dy)}` },
-      { label: 'DY 12m ≥ 3%', value: !dividendYield12m || dividendYield12m >= 0.03, description: `DY 12m: ${dividendYield12m ? formatPercent(dividendYield12m) : 'N/A'}` },
-      { label: 'Payout ≤ 80%', value: !payout || payout <= 0.80, description: `Payout: ${payout ? formatPercent(payout) : 'N/A'}` },
-      { label: 'ROE ≥ 12%', value: !!(roe && roe >= 0.12), description: `ROE: ${formatPercent(roe)}` },
-      { label: 'Crescimento Lucros ≥ -20%', value: !crescimentoLucros || crescimentoLucros >= -0.20, description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A'}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
-      { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` }
+      { label: 'DY 12m ≥ 3%', value: !dividendYield12m || dividendYield12m >= 0.03, description: `DY 12m: ${dividendYield12m ? formatPercent(dividendYield12m) : 'N/A - Benefício da dúvida'}` },
+      { label: 'Payout ≤ 80%', value: !payout || payout <= 0.80, description: `Payout: ${payout ? formatPercent(payout) : 'N/A - Benefício da dúvida'}` },
+      { label: 'ROE ≥ 12%', value: !roe || roe >= 0.12, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Crescimento Lucros ≥ -20%', value: !crescimentoLucros || crescimentoLucros >= -0.20, description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A - Benefício da dúvida'}` },
+      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` }
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
-    const hasMinimumCriteria = passedCriteria >= 5;
+    const hasMinimumCriteria = passedCriteria >= 2; // Reduzido para dar benefício da dúvida
     const hasValidFairValue = !!fairValue;
     const hasValidUpside = !!upside;
     const hasMinimumUpside = !!(upside && upside >= 15);

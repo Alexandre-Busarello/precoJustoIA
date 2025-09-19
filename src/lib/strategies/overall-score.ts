@@ -59,17 +59,16 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   const sectorContext = getSectorContext(company?.sector || null, company?.industry || null);
   const sizeContext = getSizeContext(company?.marketCap || null);
   
-  // Verificar se temos dados suficientes - expandir para 8-12 trimestres
+  // Verificar se temos dados suficientes - dar benefício da dúvida
   const minQuarters = 8;
   const hasInsufficientData = incomeStatements.length < 4 || balanceSheets.length < 4 || cashflowStatements.length < 4;
   const hasLimitedHistory = incomeStatements.length < minQuarters;
   
+  // Não penalizar por dados insuficientes - dar benefício da dúvida
   if (hasInsufficientData) {
-    score -= 15;
-    redFlags.push('Dados históricos insuficientes para análise completa');
+    contextualFactors.push('Dados históricos limitados - análise baseada em informações disponíveis');
   } else if (hasLimitedHistory) {
-    score -= 5;
-    contextualFactors.push('Histórico limitado - análise baseada em dados parciais');
+    contextualFactors.push('Histórico parcial - análise baseada em dados disponíveis');
   }
 
   // === ANÁLISE HISTÓRICA EXPANDIDA (8-12 TRIMESTRES) ===
@@ -176,51 +175,76 @@ function assessCompanyStrength(data: FinancialStatementsData): StatementsAnalysi
     cashflow: cashflowStatements[0]
   };
 
-  // 1. Posição de caixa (25 pontos)
-  const cash = toNumber(latest.balance.cash) || 0;
-  const totalAssets = toNumber(latest.balance.totalAssets) || 1;
-  const cashRatio = cash / totalAssets;
+  // 1. Posição de caixa (25 pontos) - só avaliar se temos dados
+  const cash = toNumber(latest.balance.cash);
+  const totalAssets = toNumber(latest.balance.totalAssets);
   
-  if (cashRatio > 0.15) strengthScore += 25;
-  else if (cashRatio > 0.08) strengthScore += 15;
-  else if (cashRatio > 0.03) strengthScore += 8;
+  if (cash !== null && totalAssets !== null && totalAssets > 0) {
+    const cashRatio = cash / totalAssets;
+    if (cashRatio > 0.15) strengthScore += 25;
+    else if (cashRatio > 0.08) strengthScore += 15;
+    else if (cashRatio > 0.03) strengthScore += 8;
+  } else {
+    // Dar benefício da dúvida - assumir posição média
+    strengthScore += 12; // Valor intermediário
+  }
 
-  // 2. Liquidez corrente (20 pontos)
-  const currentAssets = toNumber(latest.balance.totalCurrentAssets) || 0;
-  const currentLiabilities = toNumber(latest.balance.totalCurrentLiabilities) || 1;
-  const currentRatio = currentAssets / currentLiabilities;
+  // 2. Liquidez corrente (20 pontos) - só avaliar se temos dados
+  const currentAssets = toNumber(latest.balance.totalCurrentAssets);
+  const currentLiabilities = toNumber(latest.balance.totalCurrentLiabilities);
   
-  if (currentRatio > 2.0) strengthScore += 20;
-  else if (currentRatio > 1.5) strengthScore += 15;
-  else if (currentRatio > 1.2) strengthScore += 10;
-  else if (currentRatio > 1.0) strengthScore += 5;
+  if (currentAssets !== null && currentLiabilities !== null && currentLiabilities > 0) {
+    const currentRatio = currentAssets / currentLiabilities;
+    if (currentRatio > 2.0) strengthScore += 20;
+    else if (currentRatio > 1.5) strengthScore += 15;
+    else if (currentRatio > 1.2) strengthScore += 10;
+    else if (currentRatio > 1.0) strengthScore += 5;
+  } else {
+    // Dar benefício da dúvida - assumir liquidez adequada
+    strengthScore += 10; // Valor intermediário
+  }
 
-  // 3. Rentabilidade (25 pontos)
-  const netIncome = toNumber(latest.income.netIncome) || 0;
-  const revenue = toNumber(latest.income.totalRevenue) || toNumber(latest.income.operatingIncome) || 1;
-  const netMargin = netIncome / revenue;
+  // 3. Rentabilidade (25 pontos) - só avaliar se temos dados
+  const netIncome = toNumber(latest.income.netIncome);
+  const revenue = toNumber(latest.income.totalRevenue) || toNumber(latest.income.operatingIncome);
   
-  if (netMargin > 0.15) strengthScore += 25;
-  else if (netMargin > 0.08) strengthScore += 18;
-  else if (netMargin > 0.03) strengthScore += 10;
-  else if (netMargin > 0) strengthScore += 5;
+  if (netIncome !== null && revenue !== null && revenue > 0) {
+    const netMargin = netIncome / revenue;
+    if (netMargin > 0.15) strengthScore += 25;
+    else if (netMargin > 0.08) strengthScore += 18;
+    else if (netMargin > 0.03) strengthScore += 10;
+    else if (netMargin > 0) strengthScore += 5;
+  } else {
+    // Dar benefício da dúvida - assumir rentabilidade média
+    strengthScore += 12; // Valor intermediário
+  }
 
-  // 4. Endividamento (15 pontos)
-  const totalLiab = toNumber(latest.balance.totalLiab) || 0;
-  const equity = toNumber(latest.balance.totalStockholderEquity) || 1;
-  const debtRatio = totalLiab / (totalLiab + equity);
+  // 4. Endividamento (15 pontos) - só avaliar se temos dados
+  const totalLiab = toNumber(latest.balance.totalLiab);
+  const equity = toNumber(latest.balance.totalStockholderEquity);
   
-  if (debtRatio < 0.3) strengthScore += 15;
-  else if (debtRatio < 0.5) strengthScore += 10;
-  else if (debtRatio < 0.7) strengthScore += 5;
+  if (totalLiab !== null && equity !== null && (totalLiab + equity) > 0) {
+    const debtRatio = totalLiab / (totalLiab + equity);
+    if (debtRatio < 0.3) strengthScore += 15;
+    else if (debtRatio < 0.5) strengthScore += 10;
+    else if (debtRatio < 0.7) strengthScore += 5;
+  } else {
+    // Dar benefício da dúvida - assumir endividamento controlado
+    strengthScore += 10; // Valor intermediário
+  }
 
-  // 5. Fluxo de caixa operacional (15 pontos)
-  const opCashFlow = toNumber(latest.cashflow.operatingCashFlow) || 0;
-  if (opCashFlow > 0) {   
-    const cashFlowMargin = opCashFlow / revenue;
-    if (cashFlowMargin > 0.12) strengthScore += 15;
-    else if (cashFlowMargin > 0.06) strengthScore += 10;
-    else if (cashFlowMargin > 0.02) strengthScore += 5;
+  // 5. Fluxo de caixa operacional (15 pontos) - só avaliar se temos dados
+  const opCashFlow = toNumber(latest.cashflow.operatingCashFlow);
+  if (opCashFlow !== null && revenue !== null && revenue > 0) {
+    if (opCashFlow > 0) {   
+      const cashFlowMargin = opCashFlow / revenue;
+      if (cashFlowMargin > 0.12) strengthScore += 15;
+      else if (cashFlowMargin > 0.06) strengthScore += 10;
+      else if (cashFlowMargin > 0.02) strengthScore += 5;
+    }
+  } else {
+    // Dar benefício da dúvida - assumir fluxo de caixa adequado
+    strengthScore += 7; // Valor intermediário
   }
 
   // Classificar força da empresa
@@ -390,12 +414,12 @@ function analyzeHistoricalTrends(
   } else if (yoyAnalysis.validComparisons >= 2) {
     // Para empresas com dados limitados, ser mais conservador
     if (yoyAnalysis.revenueDeclineRatio > 0.8) {
-      result.scoreAdjustment -= 8;
-      result.redFlags.push('Tendência de declínio de receita (dados limitados)');
+      // Não penalizar por dados limitados - dar benefício da dúvida
+      result.contextualFactors?.push('Possível tendência de declínio de receita - dados limitados');
     }
     if (yoyAnalysis.profitDeclineRatio > 0.8) {
-      result.scoreAdjustment -= 6;
-      result.redFlags.push('Tendência de declínio de lucro (dados limitados)');
+      // Não penalizar por dados limitados - dar benefício da dúvida
+      result.contextualFactors?.push('Possível tendência de declínio de lucro - dados limitados');
     }
   }
 
@@ -524,47 +548,50 @@ function analyzeCashPosition(
     const latest = balanceSheets[0];
   const latestCashflow = cashflowStatements[0];
   
-  const cash = toNumber(latest.cash) || 0;
-  const totalAssets = toNumber(latest.totalAssets) || 1;
-  const currentAssets = toNumber(latest.totalCurrentAssets) || 0;
-  const currentLiabilities = toNumber(latest.totalCurrentLiabilities) || 1;
-  const opCashFlow = toNumber(latestCashflow.operatingCashFlow) || 0;
+  const cash = toNumber(latest.cash);
+  const totalAssets = toNumber(latest.totalAssets);
+  const currentAssets = toNumber(latest.totalCurrentAssets);
+  const currentLiabilities = toNumber(latest.totalCurrentLiabilities);
+  const opCashFlow = toNumber(latestCashflow.operatingCashFlow);
 
-  const cashRatio = cash / totalAssets;
-      const currentRatio = currentAssets / currentLiabilities;
-
+  // Só calcular se temos dados válidos - dar benefício da dúvida se não temos
+  const cashRatio = (cash !== null && totalAssets !== null && totalAssets > 0) ? cash / totalAssets : null;
+  const currentRatio = (currentAssets !== null && currentLiabilities !== null && currentLiabilities > 0) ? currentAssets / currentLiabilities : null;
   // Análise contextual baseada na força da empresa
   if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
     // Empresas fortes podem suportar quedas temporárias de fluxo de caixa
-    if (opCashFlow < 0) {
-      if (cashRatio > 0.1) {
+    if (opCashFlow !== null && opCashFlow < 0) {
+      if (cashRatio !== null && cashRatio > 0.1) {
         result.scoreAdjustment -= 5; // Penalidade menor
         result.contextualFactors?.push('Empresa robusta com reservas para superar dificuldades temporárias');
-      } else {
+      } else if (cashRatio !== null) {
         result.scoreAdjustment -= 10;
         result.redFlags.push('Queima de caixa em empresa sólida - monitorar de perto');
       }
     }
     
-    if (currentRatio > 1.5) {
+    if (currentRatio !== null && currentRatio > 1.5) {
       result.scoreAdjustment += 5;
       result.positiveSignals.push('Liquidez robusta em empresa sólida');
     }
   } else {
-    // Empresas fracas precisam de mais caixa
-    if (opCashFlow < 0) {
+    // Empresas fracas precisam de mais caixa - mas só penalizar se temos dados
+    if (opCashFlow !== null && opCashFlow < 0) {
       result.scoreAdjustment -= 20;
       result.redFlags.push('Queima de caixa em empresa frágil - risco elevado');
     }
     
-    if (currentRatio < 1.2) {
+    // Só penalizar liquidez baixa se realmente temos os dados
+    if (currentRatio !== null && currentRatio < 1.2) {
       result.scoreAdjustment -= 15;
       result.redFlags.push('Liquidez baixa em empresa frágil');
+    } else if (currentRatio === null) {
+      result.contextualFactors?.push('Dados de liquidez não disponíveis - benefício da dúvida aplicado');
     }
   }
 
-  // Contexto setorial
-  if (sectorContext.cashIntensive) {
+  // Contexto setorial - só avaliar se temos dados
+  if (sectorContext.cashIntensive && cashRatio !== null) {
     if (cashRatio > 0.15) {
       result.positiveSignals.push('Posição de caixa adequada para setor intensivo em capital');
     } else if (cashRatio < 0.05) {
@@ -606,7 +633,7 @@ function analyzeRevenueQuality(
       const previousRevenue = toNumber(previous.totalRevenue) || toNumber(previous.operatingIncome) || 1;
       revenueChange = (currentRevenue - previousRevenue) / previousRevenue;
       
-      result.contextualFactors?.push('Comparação sequencial - dados YoY insuficientes');
+      result.contextualFactors?.push('Comparação sequencial - dados YoY limitados, usando informações disponíveis');
     }
   }
 
@@ -742,11 +769,15 @@ function analyzeDebtContext(
 
   if (balanceSheets.length < 2) return result;
 
-  // Calcular índice de endividamento atual
+  // Calcular índice de endividamento atual - só se temos dados válidos
   const latest = balanceSheets[0];
-  const currentTotalLiab = toNumber(latest.totalLiab) || 0;
-  const currentEquity = toNumber(latest.totalStockholderEquity) || 1;
-  const currentDebtRatio = currentTotalLiab / (currentTotalLiab + currentEquity);
+  const currentTotalLiab = toNumber(latest.totalLiab);
+  const currentEquity = toNumber(latest.totalStockholderEquity);
+  
+  // Só calcular se temos dados válidos
+  const currentDebtRatio = (currentTotalLiab !== null && currentEquity !== null && (currentTotalLiab + currentEquity) > 0) 
+    ? currentTotalLiab / (currentTotalLiab + currentEquity) 
+    : null;
   
   // Usar comparação YoY para endividamento
   const liabComparison = getYoYComparison(balanceSheets, 0, 'totalLiab');
@@ -779,34 +810,42 @@ function analyzeDebtContext(
     criticalDebtThreshold = 0.85;
   }
 
-  // Avaliar endividamento no contexto
-  if (currentDebtRatio > criticalDebtThreshold) {
-    if (companyStrength === 'VERY_STRONG') {
-      result.scoreAdjustment -= 15; // Penalidade menor para empresas muito fortes
-    } else {
-      result.scoreAdjustment -= 25;
-      result.redFlags.push('Endividamento excessivo');
+  // Avaliar endividamento no contexto - só se temos dados válidos
+  if (currentDebtRatio !== null) {
+    if (currentDebtRatio > criticalDebtThreshold) {
+      if (companyStrength === 'VERY_STRONG') {
+        result.scoreAdjustment -= 15; // Penalidade menor para empresas muito fortes
+      } else {
+        result.scoreAdjustment -= 25;
+        result.redFlags.push('Endividamento excessivo');
+      }
+    } else if (currentDebtRatio > highDebtThreshold) {
+      if (companyStrength === 'WEAK') {
+        result.scoreAdjustment -= 15;
+        result.redFlags.push('Alto endividamento em empresa frágil');
+      } else {
+        result.scoreAdjustment -= 8;
+      }
+    } else if (currentDebtRatio < 0.3) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push('Endividamento controlado');
     }
-  } else if (currentDebtRatio > highDebtThreshold) {
-    if (companyStrength === 'WEAK') {
-      result.scoreAdjustment -= 15;
-      result.redFlags.push('Alto endividamento em empresa frágil');
-    } else {
-      result.scoreAdjustment -= 8;
-    }
-  } else if (currentDebtRatio < 0.3) {
-    result.scoreAdjustment += 5;
-    result.positiveSignals.push('Endividamento controlado');
+  } else {
+    // Se não temos dados de endividamento, dar benefício da dúvida
+    result.contextualFactors?.push('Dados de endividamento não disponíveis - benefício da dúvida aplicado');
+    result.positiveSignals.push('Endividamento assumido como controlado (dados não disponíveis)');
   }
 
-  // Avaliar crescimento do endividamento
-  const debtGrowth = currentDebtRatio - previousDebtRatio;
-  if (debtGrowth > 0.15) {
-    if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
-      result.scoreAdjustment -= 8;
-    } else {
-      result.scoreAdjustment -= 15;
-      result.redFlags.push('Crescimento acelerado do endividamento');
+  // Avaliar crescimento do endividamento - só se temos dados válidos
+  if (currentDebtRatio !== null && previousDebtRatio !== null) {
+    const debtGrowth = currentDebtRatio - previousDebtRatio;
+    if (debtGrowth > 0.15) {
+      if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
+        result.scoreAdjustment -= 8;
+      } else {
+        result.scoreAdjustment -= 15;
+        result.redFlags.push('Crescimento acelerado do endividamento');
+      }
     }
   }
 
@@ -1099,23 +1138,35 @@ export function calculateOverallScore(strategies: {
   // Calcular score final normalizado
   const finalScore = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
 
-  // Adicionar análises de indicadores básicos
+  // Adicionar análises de indicadores básicos - dar benefício da dúvida quando dados faltam
   const roe = toNumber(financialData.roe);
   const liquidezCorrente = toNumber(financialData.liquidezCorrente);
   const dividaLiquidaPl = toNumber(financialData.dividaLiquidaPl);
   const margemLiquida = toNumber(financialData.margemLiquida);
 
-  if (roe && roe >= 0.15) strengths.push('Alto ROE');
-  if (roe && roe < 0.05) weaknesses.push('ROE muito baixo');
+  // Só adicionar pontos positivos ou negativos se o dado existir
+  if (roe !== null) {
+    if (roe >= 0.15) strengths.push('Alto ROE');
+    else if (roe < 0.05) weaknesses.push('ROE muito baixo');
+  }
 
-  if (liquidezCorrente && liquidezCorrente >= 1.5) strengths.push('Boa liquidez');
-  if (liquidezCorrente && liquidezCorrente < 1.0) weaknesses.push('Liquidez baixa');
+  if (liquidezCorrente !== null) {
+    if (liquidezCorrente >= 1.5) strengths.push('Boa liquidez');
+    else if (liquidezCorrente < 1.0) weaknesses.push('Liquidez baixa');
+  }
 
-  if (!dividaLiquidaPl || dividaLiquidaPl <= 0.5) strengths.push('Endividamento controlado');
-  if (dividaLiquidaPl && dividaLiquidaPl > 2.0) weaknesses.push('Alto endividamento');
+  if (dividaLiquidaPl !== null) {
+    if (dividaLiquidaPl <= 0.5) strengths.push('Endividamento controlado');
+    else if (dividaLiquidaPl > 2.0) weaknesses.push('Alto endividamento');
+  } else {
+    // Se não tem dado de dívida, assumir que é controlado (benefício da dúvida)
+    strengths.push('Endividamento controlado (dado não disponível)');
+  }
 
-  if (margemLiquida && margemLiquida >= 0.10) strengths.push('Boa margem de lucro');
-  if (margemLiquida && margemLiquida < 0.02) weaknesses.push('Margem de lucro baixa');
+  if (margemLiquida !== null) {
+    if (margemLiquida >= 0.10) strengths.push('Boa margem de lucro');
+    else if (margemLiquida < 0.02) weaknesses.push('Margem de lucro baixa');
+  }
 
   // Determinar grade e classificação
   let grade: OverallScore['grade'];

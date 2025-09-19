@@ -7,15 +7,9 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
   validateCompanyData(companyData: CompanyData, params: LowPEParams): boolean {
     const { financials } = companyData;
     const { maxPE, minROE = 0 } = params;
+    // Dar benefício da dúvida - só requer P/L válido
     return !!(
-      financials.pl && toNumber(financials.pl)! > 3 && toNumber(financials.pl)! <= maxPE &&
-      financials.roe && toNumber(financials.roe)! >= minROE &&
-      (!financials.crescimentoReceitas || toNumber(financials.crescimentoReceitas)! >= -0.10) &&
-      financials.margemLiquida && toNumber(financials.margemLiquida)! >= 0.03 &&
-      financials.liquidezCorrente && toNumber(financials.liquidezCorrente)! >= 1.0 &&
-      financials.roa && toNumber(financials.roa)! >= 0.05 &&
-      (!financials.dividaLiquidaPl || toNumber(financials.dividaLiquidaPl)! <= 2.0) &&
-      financials.marketCap && toNumber(financials.marketCap)! >= 500000000
+      financials.pl && toNumber(financials.pl)! > 3 && toNumber(financials.pl)! <= maxPE
     );
   }
 
@@ -35,17 +29,17 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
 
     const criteria = [
       { label: `P/L entre 3-${maxPE}`, value: !!(pl && pl > 3 && pl <= maxPE), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
-      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%`, value: !!(roe && roe >= minROE), description: `ROE: ${formatPercent(roe)}` },
-      { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas)}` },
-      { label: 'Margem Líquida ≥ 3%', value: margemLiquida ? (margemLiquida >= 0.03) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
-      { label: 'Liquidez Corrente ≥ 1.0', value: !!(liquidezCorrente && liquidezCorrente >= 1.0), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
-      { label: 'ROA ≥ 5%', value: !!(roa && roa >= 0.05), description: `ROA: ${formatPercent(roa)}` },
-      { label: 'Dív. Líq./PL ≤ 200%', value: !dividaLiquidaPl || dividaLiquidaPl <= 2.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
-      { label: 'Market Cap ≥ R$ 500M', value: !!(marketCap && marketCap >= 500000000), description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A'}` }
+      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Margem Líquida ≥ 3%', value: !margemLiquida || margemLiquida >= 0.03, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Liquidez Corrente ≥ 1.0', value: !liquidezCorrente || liquidezCorrente >= 1.0, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: 'ROA ≥ 5%', value: !roa || roa >= 0.05, description: `ROA: ${formatPercent(roa) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Dív. Líq./PL ≤ 200%', value: !dividaLiquidaPl || dividaLiquidaPl <= 2.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Market Cap ≥ R$ 500M', value: !marketCap || marketCap >= 500000000, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A - Benefício da dúvida'}` }
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 6 && !!pl && pl > 3 && pl <= maxPE;
+    const isEligible = passedCriteria >= 1 && !!pl && pl > 3 && pl <= maxPE; // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular value score como no backend

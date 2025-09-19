@@ -7,14 +7,9 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
   validateCompanyData(companyData: CompanyData, params: DividendYieldParams): boolean {
     const { financials } = companyData;
     const { minYield } = params;
+    // Dar benefício da dúvida - só requer dividend yield mínimo
     return !!(
-      financials.dy && toNumber(financials.dy)! >= minYield &&
-      financials.roe && toNumber(financials.roe)! >= 0.10 &&
-      financials.liquidezCorrente && toNumber(financials.liquidezCorrente)! >= 1.2 &&
-      (!financials.dividaLiquidaPl || toNumber(financials.dividaLiquidaPl)! <= 1.0) &&
-      financials.pl && toNumber(financials.pl)! >= 5 && toNumber(financials.pl)! <= 25 &&
-      financials.margemLiquida && toNumber(financials.margemLiquida)! >= 0.05 &&
-      financials.marketCap && toNumber(financials.marketCap)! >= 1000000000
+      financials.dy && toNumber(financials.dy)! >= minYield
     );
   }
 
@@ -33,16 +28,16 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
 
     const criteria = [
       { label: `Dividend Yield ≥ ${(minYield * 100).toFixed(0)}%`, value: !!(dy && dy >= minYield), description: `DY: ${formatPercent(dy)}` },
-      { label: 'ROE ≥ 10%', value: !!(roe && roe >= 0.10), description: `ROE: ${formatPercent(roe)}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !!(liquidezCorrente && liquidezCorrente >= 1.2), description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A'}` },
-      { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A'}` },
-      { label: 'P/L entre 4-25', value: !!(pl && pl >= 4 && pl <= 25), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
-      { label: 'Margem Líquida ≥ 5%', value: margemLiquida ? (margemLiquida >= 0.05) : true, description: `Margem: ${formatPercent(margemLiquida)}` },
-      { label: 'Market Cap ≥ R$ 1B', value: !!(marketCap && marketCap >= 1000000000), description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000000).toFixed(1)}B` : 'N/A'}` }
+      { label: 'ROE ≥ 10%', value: !roe || roe >= 0.10, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: 'P/L entre 4-25', value: !pl || (pl >= 4 && pl <= 25), description: `P/L: ${pl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Margem Líquida ≥ 5%', value: !margemLiquida || margemLiquida >= 0.05, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Market Cap ≥ R$ 1B', value: !marketCap || marketCap >= 1000000000, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000000).toFixed(1)}B` : 'N/A - Benefício da dúvida'}` }
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 5 && !!dy && dy >= minYield;
+    const isEligible = passedCriteria >= 1 && !!dy && dy >= minYield; // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular sustainability score como no backend

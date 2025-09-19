@@ -92,6 +92,9 @@ model Company {
   keyStatistics     KeyStatistics[]
   valueAddedStatements ValueAddedStatement[]
 
+  @@index([sector])
+  @@index([industry])
+  @@index([sector, industry])
   @@map("companies")
 }
 
@@ -171,6 +174,8 @@ model FinancialData {
   company                    Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, year])
+  @@index([companyId, year])
+  @@index([year])
   @@map("financial_data")
 }
 
@@ -182,6 +187,8 @@ model DailyQuote {
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, date])
+  @@index([companyId, date])
+  @@index([date])
   @@map("daily_quotes")
 }
 
@@ -329,6 +336,8 @@ model BalanceSheet {
   company                                               Company       @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
+  @@index([companyId, period, endDate])
+  @@index([endDate])
   @@map("balance_sheets")
 }
 
@@ -406,6 +415,8 @@ model IncomeStatement {
   company                                               Company       @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
+  @@index([companyId, period, endDate])
+  @@index([endDate])
   @@map("income_statements")
 }
 
@@ -440,6 +451,8 @@ model CashflowStatement {
   company                     Company       @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
+  @@index([companyId, period, endDate])
+  @@index([endDate])
   @@map("cashflow_statements")
 }
 

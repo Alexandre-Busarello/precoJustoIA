@@ -57,102 +57,97 @@ function getTickerPrefix(ticker: string): string {
   return ticker.replace(/\d+$/, '') // Remove números no final
 }
 
-// Função para buscar concorrentes do mesmo setor com priorização de subsetor
+// Cache para concorrentes (válido por 30 minutos)
+const competitorsCache = new Map<string, { competitors: { ticker: string; name: string; sector: string | null }[]; timestamp: number }>()
+const COMPETITORS_CACHE_DURATION = 30 * 60 * 1000 // 30 minutos
+
+// Função para buscar concorrentes do mesmo setor com priorização de subsetor (otimizada)
 async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, limit: number = 5) {
   if (!sector) return []
   
   try {
+    // Verificar cache primeiro
+    const cacheKey = `${currentTicker}-${sector}-${industry}-${limit}`
+    const cached = competitorsCache.get(cacheKey)
+    if (cached && Date.now() - cached.timestamp < COMPETITORS_CACHE_DURATION) {
+      console.log('📋 Usando concorrentes do cache para', currentTicker)
+      return cached.competitors
+    }
+
     const currentPrefix = getTickerPrefix(currentTicker)
-    let competitors: { ticker: string; name: string; sector: string | null }[] = []
+    const currentYear = new Date().getFullYear()
     
-    // Primeiro: buscar empresas do mesmo industry (subsetor específico)
+    // Query otimizada: buscar todas as empresas do setor/industry de uma vez
+    const allCompetitors = await prisma.company.findMany({
+      where: {
+        OR: [
+          { industry: industry || undefined },
+          { sector: sector }
+        ],
+        ticker: { not: currentTicker },
+        // Otimização: usar índice composto para filtrar empresas com dados recentes
+        financialData: {
+          some: {
+            year: { gte: currentYear - 1 }
+          }
+        }
+      },
+      select: {
+        ticker: true,
+        name: true,
+        sector: true,
+        industry: true
+      },
+      orderBy: [
+        { industry: industry ? 'asc' : 'desc' }, // Priorizar industry se especificado
+        { ticker: 'asc' }
+      ],
+      take: limit * 3 // Buscar mais para ter opções após filtrar prefixos
+    })
+
+    // Filtrar empresas com mesmo prefixo e priorizar por industry
+    const seenPrefixes = new Set([currentPrefix])
+    const competitors: { ticker: string; name: string; sector: string | null }[] = []
+    
+    // Primeiro: empresas do mesmo industry
     if (industry) {
-      const industryCompetitors = await prisma.company.findMany({
-        where: {
-          industry: industry,
-          ticker: {
-            not: currentTicker // Excluir a empresa atual
-          },
-          // Apenas empresas com dados financeiros recentes
-          financialData: {
-            some: {
-              year: {
-                gte: new Date().getFullYear() - 1 // Último ano
-              }
-            }
+      for (const company of allCompetitors) {
+        if (company.industry === industry && competitors.length < limit) {
+          const companyPrefix = getTickerPrefix(company.ticker)
+          if (!seenPrefixes.has(companyPrefix)) {
+            seenPrefixes.add(companyPrefix)
+            competitors.push({
+              ticker: company.ticker,
+              name: company.name,
+              sector: company.sector
+            })
           }
-        },
-        select: {
-          ticker: true,
-          name: true,
-          sector: true
-        },
-        orderBy: {
-          ticker: 'asc'
         }
-      })
-      
-      // Filtrar empresas com mesmo prefixo (tanto da empresa atual quanto entre concorrentes)
-      const seenPrefixes = new Set([currentPrefix]) // Começar com o prefixo da empresa atual
-      const filteredIndustryCompetitors = industryCompetitors.filter(company => {
-        const companyPrefix = getTickerPrefix(company.ticker)
-        if (seenPrefixes.has(companyPrefix)) {
-          return false // Já temos uma empresa com este prefixo
-        }
-        seenPrefixes.add(companyPrefix)
-        return true
-      })
-      
-      competitors = filteredIndustryCompetitors.slice(0, limit)
-      console.log(`Encontradas ${industryCompetitors.length} empresas no subsetor "${industry}", ${filteredIndustryCompetitors.length} após filtrar prefixos, ${competitors.length} selecionadas`)
+      }
     }
     
-    // Se não conseguiu completar o limite, buscar no setor geral
+    // Depois: empresas do mesmo setor (se ainda precisar)
     if (competitors.length < limit) {
-      const remainingLimit = limit - competitors.length
-      const existingTickers = competitors.map(c => c.ticker)
-      
-      const sectorCompetitors = await prisma.company.findMany({
-        where: {
-          sector: sector,
-          ticker: {
-            not: currentTicker,
-            notIn: existingTickers // Excluir empresas já encontradas
-          },
-          // Apenas empresas com dados financeiros recentes
-          financialData: {
-            some: {
-              year: {
-                gte: new Date().getFullYear() - 1 // Último ano
-              }
-            }
+      for (const company of allCompetitors) {
+        if (company.sector === sector && competitors.length < limit) {
+          const companyPrefix = getTickerPrefix(company.ticker)
+          if (!seenPrefixes.has(companyPrefix)) {
+            seenPrefixes.add(companyPrefix)
+            competitors.push({
+              ticker: company.ticker,
+              name: company.name,
+              sector: company.sector
+            })
           }
-        },
-        select: {
-          ticker: true,
-          name: true,
-          sector: true
-        },
-        orderBy: {
-          ticker: 'asc'
         }
-      })
-      
-      // Filtrar empresas com mesmo prefixo (continuando com os prefixos já vistos)
-      const existingPrefixes = new Set([currentPrefix, ...competitors.map(c => getTickerPrefix(c.ticker))])
-      const filteredSectorCompetitors = sectorCompetitors.filter(company => {
-        const companyPrefix = getTickerPrefix(company.ticker)
-        if (existingPrefixes.has(companyPrefix)) {
-          return false // Já temos uma empresa com este prefixo
-        }
-        existingPrefixes.add(companyPrefix)
-        return true
-      })
-      
-      const additionalCompetitors = filteredSectorCompetitors.slice(0, remainingLimit)
-      competitors = [...competitors, ...additionalCompetitors]
-      console.log(`Adicionadas ${additionalCompetitors.length} empresas do setor geral "${sector}" (${sectorCompetitors.length} encontradas, ${filteredSectorCompetitors.length} após filtrar). Total: ${competitors.length}`)
+      }
     }
+
+    // Armazenar no cache
+    competitorsCache.set(cacheKey, {
+      competitors,
+      timestamp: Date.now()
+    })
     
     return competitors
   } catch (error) {

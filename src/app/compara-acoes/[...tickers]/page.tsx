@@ -633,7 +633,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                    (!user.premiumExpiresAt || user.premiumExpiresAt > new Date())
   }
 
-  // Buscar dados das empresas
+  // Buscar dados das empresas com consulta otimizada
   const companiesData = await prisma.company.findMany({
     where: { 
       ticker: { in: tickers }

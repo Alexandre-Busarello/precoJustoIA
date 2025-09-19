@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { CompanyLogo } from "@/components/company-logo"
 import { 
@@ -30,7 +31,9 @@ import {
   Sparkles,
   Search,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 import Link from "next/link"
 
@@ -161,6 +164,7 @@ export function QuickRanker() {
   const [cachedInfo, setCachedInfo] = useState<{resultCount: number, createdAt: string} | null>(null)
   const [showAIModal, setShowAIModal] = useState(false) // Modal de processamento IA
   const [aiProcessingStep, setAiProcessingStep] = useState(0) // Etapa atual do processamento
+  const [isResultsExpanded, setIsResultsExpanded] = useState(false) // Estado do collapsible dos resultados
   const resultsRef = useRef<HTMLDivElement>(null)
 
   // Verificar se há parâmetros E resultados para mostrar do histórico
@@ -229,6 +233,7 @@ export function QuickRanker() {
     setSelectedModel(model)
     setResults(null)
     setError(null)
+    setIsResultsExpanded(false)
     
     // Definir parâmetros padrão para cada modelo
     switch (model) {
@@ -394,6 +399,7 @@ export function QuickRanker() {
 
       const data: RankingResponse = await response.json()
       setResults(data)
+      setIsResultsExpanded(true) // Expandir automaticamente quando novos resultados são gerados
     } catch (err) {
       console.error("Erro ao gerar ranking:", err)
       setError("Erro ao gerar ranking. Tente novamente.")
@@ -409,6 +415,7 @@ export function QuickRanker() {
     setIsViewingCached(false)
     setCachedInfo(null)
     setResults(null)
+    setIsResultsExpanded(false)
   }
 
   const formatCurrency = (value: number | null) => {
@@ -780,42 +787,67 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
       {/* Results - prioridade quando cached */}
       {results && (
         <div ref={resultsRef} className="space-y-6">
-          {/* Results Header */}
-          <Card className="border-0 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-blue-500 rounded-xl flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-white" />
+          <Collapsible open={isResultsExpanded} onOpenChange={setIsResultsExpanded}>
+            {/* Results Header - Collapsible Trigger */}
+            <CollapsibleTrigger asChild>
+              <Card className="border-0 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 cursor-pointer hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-green-500 to-blue-500 rounded-xl flex items-center justify-center shrink-0">
+                        <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-lg sm:text-xl font-bold">
+                          {isViewingCached ? "Ranking Salvo" : "Ranking Concluído"}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          {results.count} empresas encontradas que atendem aos critérios
+                        </p>
+                        {!isResultsExpanded && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Target className="w-3 h-3 text-blue-600" />
+                            <span className="text-xs text-blue-600 font-medium">
+                              Clique para ver detalhes da estratégia
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                      <Badge variant="secondary" className="text-xs sm:text-sm px-2 sm:px-3 py-1">
+                        {results.results.length} resultados
+                      </Badge>
+                      {isResultsExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold">
-                      {isViewingCached ? "Ranking Salvo" : "Ranking Concluído"}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {results.count} empresas encontradas que atendem aos critérios
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="secondary" className="text-sm px-3 py-1">
-                  {results.results.length} resultados
-                </Badge>
-              </div>
+                </CardContent>
+              </Card>
+            </CollapsibleTrigger>
 
-              {/* Strategy Explanation */}
-              <div className="bg-white/60 dark:bg-background/60 backdrop-blur-sm rounded-lg p-4 border">
-                <div className="flex items-center gap-2 mb-3">
-                  <Target className="w-4 h-4 text-blue-600" />
-                  <h4 className="font-semibold text-sm">Estratégia Aplicada</h4>
-                </div>
-                <MarkdownRenderer content={results.rational} />
-              </div>
-            </CardContent>
-          </Card>
+            {/* Collapsible Content - Apenas Estratégia */}
+            <CollapsibleContent>
+              <Card className="border-0 bg-white/60 dark:bg-background/60 backdrop-blur-sm">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-4 h-4 text-blue-600" />
+                    <h4 className="font-semibold text-sm">Estratégia Aplicada</h4>
+                  </div>
+                  <MarkdownRenderer content={results.rational} />
+                </CardContent>
+              </Card>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Results List - Sempre Visível */}
 
           {/* Results List */}
           {results.results.length > 0 ? (
-            <div className="grid gap-4">
+            <div className="grid gap-3 sm:gap-4">
               {results.results.map((result, index) => (
                 <Link 
                   key={result.ticker} 
@@ -823,26 +855,31 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                   className="block group"
                 >
                   <Card className="border-0 shadow-md hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02] bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-start gap-4">
-                          <div className="relative">
+                    <CardContent className="p-3 sm:p-6">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+                        <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                          <div className="relative shrink-0">
                             <CompanyLogo 
                               logoUrl={result.logoUrl}
                               companyName={result.name}
                               ticker={result.ticker}
-                              size={48}
+                              size={40}
                             />
                             {/* Badge com número do ranking */}
-                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-blue-500 to-violet-500 rounded-full flex items-center justify-center text-white font-bold text-xs border-2 border-white dark:border-background">
+                            <div className="absolute -top-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-gradient-to-br from-blue-500 to-violet-500 rounded-full flex items-center justify-center text-white font-bold text-xs border-2 border-white dark:border-background">
                               {index + 1}
                             </div>
                           </div>
-                          <div>
-                            <h3 className="text-xl font-bold mb-1">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-lg sm:text-xl font-bold mb-1 truncate">
                               {result.ticker}
                             </h3>
-                            <p className="text-muted-foreground mb-2 font-medium">
+                            <p className="text-muted-foreground mb-2 font-medium text-sm sm:text-base overflow-hidden" 
+                               style={{
+                                 display: '-webkit-box',
+                                 WebkitLineClamp: 2,
+                                 WebkitBoxOrient: 'vertical'
+                               }}>
                               {result.name}
                             </p>
                             {result.sector && (
@@ -853,16 +890,16 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           </div>
                         </div>
                         
-                        <div className="text-right">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-2xl font-bold">
+                        <div className="text-right sm:text-right shrink-0">
+                          <div className="flex items-center justify-end gap-2 mb-2">
+                            <span className="text-xl sm:text-2xl font-bold">
                               {formatCurrency(result.currentPrice)}
                             </span>
                           </div>
                           {result.upside !== null && (
                             <div className="flex items-center justify-end gap-1">
-                              <TrendingUp className="w-4 h-4 text-green-600" />
-                              <span className="text-sm font-medium text-green-600">
+                              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
+                              <span className="text-xs sm:text-sm font-medium text-green-600">
                                 +{formatPercentage(result.upside)} potencial
                               </span>
                             </div>
@@ -872,16 +909,16 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       
                       {/* Key Metrics */}
                       {result.key_metrics && (
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-lg">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-3 sm:mb-4 p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-lg">
                           {Object.entries(result.key_metrics)
                             .filter(([, value]) => value !== null && value !== undefined)
                             .slice(0, 4)
                             .map(([key, value]) => (
                               <div key={key} className="text-center">
-                                <p className="text-xs text-muted-foreground mb-1">
+                                <p className="text-xs text-muted-foreground mb-1 truncate">
                                   {translateMetricName(key)}
                                 </p>
-                                <p className="font-semibold text-sm">
+                                <p className="font-semibold text-xs sm:text-sm">
                                   {formatMetricValue(key, value as number)}
                                 </p>
                               </div>
@@ -890,12 +927,12 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       )}
                       
                       {/* Individual Rational */}
-                      <div className="border-t pt-4">
+                      <div className="border-t pt-3 sm:pt-4">
                         <div className="flex items-center gap-2 mb-2">
                           <Target className="w-3 h-3 text-blue-600" />
                           <h5 className="font-semibold text-xs text-blue-600">Análise Individual</h5>
                         </div>
-                        <MarkdownRenderer content={result.rational} className="text-xs" />
+                        <MarkdownRenderer content={result.rational} className="text-xs leading-relaxed" />
                       </div>
                     </CardContent>
                   </Card>
@@ -974,14 +1011,14 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
        {/* Controls Card - só mostrar quando não estiver visualizando cache */}
       {!isViewingCached && (
         <Card className="border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 dark:from-background dark:to-background/80">
-        <CardContent className="p-8">
+        <CardContent className="p-4 sm:p-6 lg:p-8">
           <div className="space-y-8">
             {/* Model Selection */}
             <div className="space-y-4">
               <Label className="text-base font-semibold">Escolha sua estratégia</Label>
               
               {/* Available Models Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {availableModels.map((model) => (
                   <button
                     key={model.id}
@@ -1040,7 +1077,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
               {/* Locked Models for Non-Premium Users */}
               {!isPremium && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-60">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 opacity-60">
                   {models.filter(model => !model.free).map((model) => (
                     <div
                       key={model.id}
@@ -1075,19 +1112,19 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
               {/* Upgrade CTA */}
               {!isPremium && models.some(model => !model.free) && (
                 <Card className="border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Crown className="w-5 h-5 text-violet-600" />
-                        <div>
-                          <h4 className="font-semibold text-sm">Desbloqueie todos os modelos</h4>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                      <div className="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                        <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-violet-600 shrink-0 mt-0.5 sm:mt-0" />
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-semibold text-xs sm:text-sm">Desbloqueie todos os modelos</h4>
                           <p className="text-xs text-muted-foreground">
                             Acesse Dividend Yield, Value Investing, Fórmula Mágica, Fórmula de Gordon, Fluxo de Caixa Descontado, Fundamentalista 3+1 e Análise Preditiva com IA
                           </p>
                         </div>
                       </div>
-                      <Button size="sm" className="bg-gradient-to-r from-violet-600 to-pink-600" asChild>
-                        <Link href={isLoggedIn ? "/upgrade" : "/register"} className="flex items-center gap-1">
+                      <Button size="sm" className="bg-gradient-to-r from-violet-600 to-pink-600 shrink-0 w-full sm:w-auto" asChild>
+                        <Link href={isLoggedIn ? "/upgrade" : "/register"} className="flex items-center justify-center gap-1">
                           <span>{isLoggedIn ? "Upgrade" : "Registrar"}</span>
                           <ArrowRight className="w-3 h-3" />
                         </Link>
@@ -1100,7 +1137,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
             {/* Parameters Section - só mostrar quando não estiver visualizando cache */}
             {selectedModel && !isViewingCached && (
-              <div className="space-y-6 p-6 bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-xl border">
+              <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-xl border">
                 <div className="flex items-center gap-2">
                   <Target className="w-5 h-5 text-blue-600" />
                   <h4 className="font-semibold text-lg">Configure os parâmetros</h4>
@@ -1230,7 +1267,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium">P/L Máximo</Label>
@@ -1353,7 +1390,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     </div>
 
                     {/* Primeira linha - Taxa de Crescimento e Taxa de Desconto */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium">Taxa de Crescimento Perpétuo</Label>
@@ -1404,7 +1441,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     </div>
 
                     {/* Segunda linha - Anos de Projeção e Margem de Segurança */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium">Anos de Projeção</Label>
@@ -1506,7 +1543,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     </div>
 
                     {/* Primeira linha - Taxa de Desconto e Taxa de Crescimento */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium">Taxa de Desconto</Label>
@@ -1609,7 +1646,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
             </div>
 
             {/* Primeira linha - ROE e ROIC */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium">ROE Mínimo (empresas sem dívida)</Label>
@@ -1660,7 +1697,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     </div>
 
                     {/* Segunda linha - Endividamento e Payout */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium">Dívida Líquida/EBITDA Máximo</Label>
@@ -1784,7 +1821,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     </div>
 
                     {/* Primeira linha - Tolerância ao Risco e Horizonte */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-3">
                         <Label className="text-sm font-medium">Tolerância ao Risco</Label>
                         <select 
@@ -1914,11 +1951,11 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
       {/* Modal de Processamento IA */}
       <Dialog open={showAIModal} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-                <Brain className="w-4 h-4 text-white" />
+        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto" showCloseButton={false}>
+          <DialogHeader className="pb-2">
+            <DialogTitle className="flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
+                <Brain className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
               </div>
               <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
                 Análise Preditiva com IA
@@ -1926,16 +1963,16 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-6 py-4">
+          <div className="space-y-4 sm:space-y-6 py-2 sm:py-4">
             {/* Aviso de Tempo */}
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-3 sm:p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="flex items-start gap-2 sm:gap-3">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+                  <h4 className="font-medium text-amber-900 dark:text-amber-100 mb-1 text-sm">
                     ⏱️ Processamento Avançado
                   </h4>
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <p className="text-xs sm:text-sm text-amber-800 dark:text-amber-200">
                     A análise preditiva com IA pode demorar <strong>alguns minutos</strong> para ser concluída. 
                     Estamos executando múltiplas estratégias e buscando dados atualizados na internet.
                   </p>
@@ -1944,7 +1981,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
             </div>
 
             {/* Progresso das Etapas */}
-            <div className="space-y-4">
+            <div className="space-y-2 sm:space-y-4">
               {aiProcessingSteps.map((step, index) => {
                 const isActive = index === aiProcessingStep
                 const isCompleted = index < aiProcessingStep
@@ -1952,7 +1989,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                 return (
                   <div
                     key={step.id}
-                    className={`flex items-start gap-4 p-3 rounded-lg transition-all duration-500 ${
+                    className={`flex items-start gap-2 sm:gap-4 p-2 sm:p-3 rounded-lg transition-all duration-500 ${
                       isActive 
                         ? "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 border border-blue-200 dark:border-blue-700"
                         : isCompleted
@@ -1960,18 +1997,20 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         : "bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700"
                     }`}
                   >
-                    <div className={`p-2 rounded-lg flex-shrink-0 transition-all duration-300 ${
+                    <div className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 transition-all duration-300 ${
                       isActive
                         ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white animate-pulse"
                         : isCompleted
                         ? "bg-green-500 text-white"
                         : "bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-400"
                     }`}>
-                      {isCompleted ? <CheckCircle className="w-5 h-5" /> : step.icon}
+                      {isCompleted ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" /> : 
+                        <div className="w-4 h-4 sm:w-5 sm:h-5">{step.icon}</div>
+                      }
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <h4 className={`font-medium text-sm mb-1 ${
+                      <h4 className={`font-medium text-xs sm:text-sm mb-1 ${
                         isActive 
                           ? "text-blue-900 dark:text-blue-100"
                           : isCompleted
@@ -1980,7 +2019,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       }`}>
                         {step.title}
                         {isActive && (
-                          <Loader2 className="w-4 h-4 inline ml-2 animate-spin" />
+                          <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 inline ml-2 animate-spin" />
                         )}
                       </h4>
                       <p className={`text-xs leading-tight ${
@@ -1997,10 +2036,10 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     {/* Status Icon */}
                     <div className="flex-shrink-0">
                       {isCompleted && (
-                        <CheckCircle className="w-5 h-5 text-green-500" />
+                        <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
                       )}
                       {isActive && (
-                        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                       )}
                     </div>
                   </div>
@@ -2029,10 +2068,10 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
             {/* Informações Adicionais */}
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                <p>🧠 <strong>IA Gemini</strong> com 2 chamadas otimizadas (seleção + análise batch)</p>
-                <p>📊 <strong>7 estratégias</strong> executadas nas {(params.limit || 10) + 10} empresas selecionadas</p>
-                <p>🌐 <strong>Dados em tempo real</strong> da internet integrados na análise</p>
-                <p>⚡ <strong>Processamento batch</strong> para máxima eficiência e precisão</p>
+                <p>🧠 <strong>IA Gemini</strong> com 2 chamadas otimizadas</p>
+                <p>📊 <strong>7 estratégias</strong> nas {(params.limit || 10) + 10} empresas</p>
+                <p>🌐 <strong>Dados em tempo real</strong> da internet</p>
+                <p>⚡ <strong>Processamento batch</strong> otimizado</p>
               </div>
             </div>
           </div>

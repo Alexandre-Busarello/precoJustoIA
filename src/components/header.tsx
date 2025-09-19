@@ -19,27 +19,49 @@ export default function Header() {
   return (
     <>
       <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          {/* Logo and Mobile Menu */}
-          <div className="flex items-center gap-3">
-            <MobileMenuButton 
-              isOpen={mobileMenuOpen} 
-              setIsOpen={setMobileMenuOpen}
-            />
-            <Link href="/" className="hover:opacity-80 transition-opacity">
-              <Image 
-                src="/logo-preco-justo.png" 
-                alt="Preço Justo AI" 
-                width={287}
-                height={70}
-                style={{ height: '70px', width: 'auto' }}
-                className="w-auto h-12 sm:h-16 md:h-[70px] max-w-[200px] sm:max-w-[250px] md:max-w-none"
+        <div className="container mx-auto px-4 py-4 relative">
+          {/* Mobile Layout */}
+          <div className="lg:hidden flex items-center">
+            {/* Mobile Menu Button - Absolute Left */}
+            <div className="absolute left-4 top-1/2 -translate-y-1/2">
+              <MobileMenuButton 
+                isOpen={mobileMenuOpen} 
+                setIsOpen={setMobileMenuOpen}
               />
-            </Link>
+            </div>
+            
+            {/* Logo - Centered */}
+            <div className="w-full flex justify-center">
+              <Link href="/" className="hover:opacity-80 transition-opacity">
+                <Image 
+                  src="/logo-preco-justo.png" 
+                  alt="Preço Justo AI" 
+                  width={553}
+                  height={135}
+                  style={{ width: 'auto' }}
+                  className="h-12 sm:h-16 w-auto max-w-[200px] sm:max-w-[250px]"
+                />
+              </Link>
+            </div>
           </div>
 
+          {/* Desktop Layout */}
+          <div className="hidden lg:flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link href="/" className="hover:opacity-80 transition-opacity">
+                <Image 
+                  src="/logo-preco-justo.png" 
+                  alt="Preço Justo AI" 
+                  width={553}
+                  height={135}
+                  style={{ width: 'auto' }}
+                  className="h-[70px] w-auto"
+                />
+              </Link>
+            </div>
+
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center space-x-6">
+          <nav className="flex items-center space-x-6">
           {status === "loading" ? (
             <div className="animate-pulse flex items-center space-x-2">
               <div className="w-4 h-4 bg-gray-300 rounded-full"></div>
@@ -139,6 +161,7 @@ export default function Header() {
             </div>
           )}
           </nav>
+          </div>
         </div>
       </header>
 

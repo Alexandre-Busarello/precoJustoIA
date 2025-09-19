@@ -121,6 +121,8 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
         return 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg border-0'
       case 'gordon':
         return 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg border-0'
+      case 'fundamentalist':
+        return 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg border-0'
       case 'graham':
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
       case 'dividendYield':
@@ -239,47 +241,47 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
           {currentItems.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border hover:shadow-sm transition-shadow"
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border hover:shadow-sm transition-shadow gap-3 sm:gap-0"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-violet-500 rounded-lg flex items-center justify-center">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-violet-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <BarChart3 className="w-5 h-5 text-white" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge className={getModelBadgeColor(item.model)}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
+                    <Badge className={`${getModelBadgeColor(item.model)} text-xs sm:text-sm flex-shrink-0`}>
                       {item.modelName}
                     </Badge>
-                    <span className="text-sm font-medium">
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">
                       {item.resultCount} empresas
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground line-clamp-2 sm:line-clamp-1">
                     {item.description}
                   </p>
                   <div className="flex items-center gap-1 mt-1">
-                    <Calendar className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
+                    <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate">
                       {formatDate(item.createdAt)}
                     </span>
                   </div>
                 </div>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-end gap-2 flex-shrink-0">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => handleReprocess(item)}
                   disabled={reprocessing === item.id}
-                  className="flex items-center gap-1"
+                  className="flex items-center gap-1 h-8 px-3"
                 >
                   {reprocessing === item.id ? (
                     <RefreshCw className="w-3 h-3 animate-spin" />
                   ) : (
                     <Eye className="w-3 h-3" />
                   )}
-                  <span className="text-xs">Ver</span>
+                  <span className="text-xs hidden sm:inline">Ver</span>
                 </Button>
               </div>
             </div>
@@ -288,8 +290,8 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
 
         {/* Paginação */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-            <div className="text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row items-center justify-between mt-4 pt-4 border-t border-border gap-3 sm:gap-0">
+            <div className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
               Página {currentPage} de {totalPages} ({history.length} rankings)
             </div>
             <div className="flex items-center gap-2">
@@ -298,19 +300,19 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
                 size="sm"
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 h-8 px-3"
               >
                 <ChevronLeft className="w-3 h-3" />
-                Anterior
+                <span className="hidden sm:inline">Anterior</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 h-8 px-3"
               >
-                Próxima
+                <span className="hidden sm:inline">Próxima</span>
                 <ChevronRight className="w-3 h-3" />
               </Button>
             </div>

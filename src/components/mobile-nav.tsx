@@ -104,10 +104,10 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
               <Image 
                 src="/logo-preco-justo.png" 
                 alt="Preço Justo AI" 
-                width={147}
-                height={36}
-                style={{ height: '36px', width: 'auto' }}
-                className="w-auto"
+                width={553}
+                height={135}
+                style={{ width: 'auto' }}
+                className="h-9 w-auto"
               />
             </Link>
             <Button 

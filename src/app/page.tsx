@@ -375,7 +375,7 @@ export default async function Home() {
           </div>
 
           {/* Other Models Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6 xl:gap-8 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8 mb-12">
             {/* Graham */}
             <Link href="/metodologia#graham" className="block">
               <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group relative overflow-hidden cursor-pointer">
@@ -528,7 +528,7 @@ export default async function Home() {
           </div>
 
           {/* Additional Features */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6 xl:gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8">
             <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
               <CardContent className="p-6 text-center">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition-transform">

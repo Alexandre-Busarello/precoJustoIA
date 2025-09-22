@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +17,10 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Obter callbackUrl da URL ou usar dashboard como padrão
+  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,7 +63,8 @@ export default function RegisterPage() {
         if (result?.error) {
           setError("Erro ao fazer login após registro")
         } else {
-          router.push("/")
+          // Redirecionar para callbackUrl após registro bem-sucedido
+          router.push(callbackUrl)
         }
       } else {
         const data = await response.json()
@@ -74,7 +79,7 @@ export default function RegisterPage() {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
-    await signIn("google", { callbackUrl: "/" })
+    await signIn("google", { callbackUrl })
   }
 
   return (
@@ -168,7 +173,10 @@ export default function RegisterPage() {
         <CardFooter>
           <p className="text-center text-sm text-muted-foreground w-full">
             Já tem uma conta?{" "}
-            <Link href="/login" className="underline underline-offset-4 hover:text-primary">
+            <Link 
+              href={`/login${callbackUrl !== '/dashboard' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''}`}
+              className="underline underline-offset-4 hover:text-primary"
+            >
               Faça login
             </Link>
           </p>

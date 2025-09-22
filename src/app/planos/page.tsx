@@ -197,7 +197,7 @@ export default function PlanosPage() {
                 </div>
 
                 <Button className="w-full bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white font-bold py-3" asChild>
-                  <Link href="/register">
+                  <Link href="/checkout?plan=monthly">
                     Começar Premium
                   </Link>
                 </Button>
@@ -256,7 +256,7 @@ export default function PlanosPage() {
                 </div>
 
                 <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-3" asChild>
-                  <Link href="/register">
+                  <Link href="/checkout?plan=annual">
                     Economizar 12%
                   </Link>
                 </Button>

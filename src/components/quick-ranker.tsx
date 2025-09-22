@@ -1159,7 +1159,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         </div>
                       </div>
                       <Button size="sm" className="bg-gradient-to-r from-violet-600 to-pink-600 shrink-0 w-full sm:w-auto" asChild>
-                        <Link href={isLoggedIn ? "/upgrade" : "/register"} className="flex items-center justify-center gap-1">
+                        <Link href={isLoggedIn ? "/checkout" : "/register"} className="flex items-center justify-center gap-1">
                           <span>{isLoggedIn ? "Upgrade" : "Registrar"}</span>
                           <ArrowRight className="w-3 h-3" />
                         </Link>

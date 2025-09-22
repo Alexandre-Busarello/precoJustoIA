@@ -181,7 +181,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                   Desbloqueie todos os modelos de valuation e análises com IA
                 </p>
                 <Button asChild size="sm" className="w-full bg-gradient-to-r from-violet-600 to-pink-600">
-                  <Link href="/upgrade" className="flex items-center justify-center gap-2">
+                  <Link href="/checkout" className="flex items-center justify-center gap-2">
                     <CreditCard className="w-4 h-4" />
                     Fazer Upgrade
                   </Link>

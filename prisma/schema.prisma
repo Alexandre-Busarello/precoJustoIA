@@ -43,6 +43,19 @@ model User {
   password         String?
   subscriptionTier SubscriptionTier @default(FREE)
   premiumExpiresAt DateTime?
+  
+  // Histórico Premium
+  wasPremiumBefore Boolean          @default(false) @map("was_premium_before")
+  firstPremiumAt   DateTime?        @map("first_premium_at")
+  lastPremiumAt    DateTime?        @map("last_premium_at")
+  premiumCount     Int              @default(0) @map("premium_count") // Quantas vezes foi Premium
+  
+  // Stripe Integration
+  stripeCustomerId    String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?  @unique @map("stripe_subscription_id")
+  stripePriceId       String?   @map("stripe_price_id")
+  stripeCurrentPeriodEnd DateTime? @map("stripe_current_period_end")
+  
   accounts         Account[]
   sessions         Session[]
   portfolios       Portfolio[]

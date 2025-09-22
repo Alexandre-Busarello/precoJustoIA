@@ -32,8 +32,8 @@ export function AuthModal({ isOpen, onClose, type, strategy }: AuthModalProps) {
 
   const handleUpgrade = async () => {
     setIsLoading(true)
-    // Redirect para página de upgrade
-    window.location.href = '/upgrade?redirect=' + encodeURIComponent(window.location.pathname)
+    // Redirect para página de checkout
+    window.location.href = '/checkout?redirect=' + encodeURIComponent(window.location.pathname)
   }
 
   if (type === 'register') {

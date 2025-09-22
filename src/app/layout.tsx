@@ -4,6 +4,8 @@ import "./globals.css";
 import AuthProvider from "@/providers/session-provider";
 import Header from "@/components/header";
 import { StructuredData } from "@/components/structured-data";
+import { SessionRefreshProvider } from "@/components/session-refresh-provider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -91,12 +93,15 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          <div className="min-h-screen bg-background">
-            <Header />
-            <main>
-              {children}
-            </main>
-          </div>
+          <SessionRefreshProvider>
+            <div className="min-h-screen bg-background">
+              <Header />
+              <main>
+                {children}
+              </main>
+            </div>
+            <Toaster position="top-right" />
+          </SessionRefreshProvider>
         </AuthProvider>
       </body>
     </html>

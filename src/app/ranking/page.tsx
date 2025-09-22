@@ -131,7 +131,7 @@ export default function RankingPage() {
                     </div>
                   </div>
                   <Button asChild size="sm" className="bg-gradient-to-r from-violet-600 to-pink-600 shrink-0 w-full sm:w-auto">
-                    <Link href="/upgrade" className="flex items-center justify-center gap-2">
+                    <Link href="/checkout" className="flex items-center justify-center gap-2">
                       <span className="hidden xs:inline">Fazer Upgrade</span>
                       <span className="xs:hidden">Upgrade</span>
                       <Shield className="w-4 h-4" />

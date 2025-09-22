@@ -226,7 +226,7 @@ export default function Dashboard() {
                 {!isPremium && (
                   <div className="space-y-3">
                     <Button className="w-full bg-gradient-to-r from-violet-600 to-pink-600" asChild>
-                      <Link href="/upgrade" className="flex items-center gap-2">
+                      <Link href="/checkout" className="flex items-center gap-2">
                         <Shield className="w-4 h-4" />
                         Fazer Upgrade
                         <ArrowRight className="w-4 h-4" />

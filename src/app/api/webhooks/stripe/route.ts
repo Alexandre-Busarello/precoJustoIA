@@ -7,13 +7,20 @@ import Stripe from 'stripe'
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
 export async function POST(request: NextRequest) {
+  console.log('🔗 Stripe webhook POST request received')
+  console.log('📍 Request URL:', request.url)
+  console.log('🔑 Webhook secret configured:', !!webhookSecret)
+  
   try {
     const body = await request.text()
     const headersList = await headers()
     const signature = headersList.get('stripe-signature')
 
+    console.log('📦 Body length:', body.length)
+    console.log('🔐 Signature present:', !!signature)
+
     if (!signature) {
-      console.error('Stripe signature header missing')
+      console.error('❌ Stripe signature header missing')
       return NextResponse.json(
         { error: 'Stripe signature header missing' },
         { status: 400 }

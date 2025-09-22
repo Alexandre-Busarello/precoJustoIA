@@ -44,7 +44,11 @@ export async function syncUserSubscription(userId: string): Promise<Subscription
     
     const isActive = subscription.status === 'active'
     const tier: SubscriptionTier = isActive ? 'PREMIUM' : 'FREE'
-    const expiresAt = new Date((subscription as any).current_period_end * 1000)
+    
+    const currentPeriodEnd = (subscription as any).current_period_end
+    const expiresAt = currentPeriodEnd 
+      ? new Date(currentPeriodEnd * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
 
     // Atualizar dados no banco se necessário
     if (user.subscriptionTier !== tier || 

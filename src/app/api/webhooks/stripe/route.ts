@@ -111,6 +111,11 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
     
     // Atualizar usuário no banco de dados
+    const currentPeriodEnd = (subscription as any).current_period_end
+    const periodEndDate = currentPeriodEnd 
+      ? new Date(currentPeriodEnd * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
+
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -118,8 +123,8 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
         stripeCustomerId: session.customer as string,
         stripeSubscriptionId: subscription.id,
         stripePriceId: subscription.items.data[0].price.id,
-        stripeCurrentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-        premiumExpiresAt: new Date((subscription as any).current_period_end * 1000),
+        stripeCurrentPeriodEnd: periodEndDate,
+        premiumExpiresAt: periodEndDate,
         wasPremiumBefore: true,
         firstPremiumAt: new Date(),
         lastPremiumAt: new Date(),
@@ -155,6 +160,17 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
   }
 
   try {
+    const currentPeriodEnd = (subscription as any).current_period_end
+    console.log('🗓️ Raw current_period_end:', currentPeriodEnd)
+    
+    // Verificar se current_period_end existe e é válido
+    const periodEndDate = currentPeriodEnd 
+      ? new Date(currentPeriodEnd * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias a partir de agora como fallback
+    
+    console.log('📅 Converted period end date:', periodEndDate)
+    console.log('✅ Date is valid:', !isNaN(periodEndDate.getTime()))
+
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -162,8 +178,8 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
         stripeCustomerId: subscription.customer as string,
         stripeSubscriptionId: subscription.id,
         stripePriceId: subscription.items.data[0].price.id,
-        stripeCurrentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-        premiumExpiresAt: new Date((subscription as any).current_period_end * 1000),
+        stripeCurrentPeriodEnd: periodEndDate,
+        premiumExpiresAt: periodEndDate,
         wasPremiumBefore: true,
         firstPremiumAt: new Date(),
         lastPremiumAt: new Date(),
@@ -214,20 +230,25 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       return
     }
 
-    // Determinar o status da assinatura
-    const isActive = subscription.status === 'active'
-    const subscriptionTier = isActive ? 'PREMIUM' : 'FREE'
+  // Determinar o status da assinatura
+  const isActive = subscription.status === 'active'
+  const subscriptionTier = isActive ? 'PREMIUM' : 'FREE'
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        subscriptionTier,
-        stripePriceId: subscription.items.data[0].price.id,
-        stripeCurrentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-        premiumExpiresAt: isActive ? new Date((subscription as any).current_period_end * 1000) : null,
-        lastPremiumAt: isActive ? new Date() : user.lastPremiumAt,
-      },
-    })
+  const currentPeriodEnd = (subscription as any).current_period_end
+  const periodEndDate = currentPeriodEnd 
+    ? new Date(currentPeriodEnd * 1000)
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      subscriptionTier,
+      stripePriceId: subscription.items.data[0].price.id,
+      stripeCurrentPeriodEnd: periodEndDate,
+      premiumExpiresAt: isActive ? periodEndDate : null,
+      lastPremiumAt: isActive ? new Date() : user.lastPremiumAt,
+    },
+  })
 
     console.log(`Subscription updated for user ${user.id}, status: ${subscription.status}`)
   } catch (error) {
@@ -286,16 +307,21 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
       return
     }
 
-    // Atualizar data de expiração
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        subscriptionTier: 'PREMIUM',
-        stripeCurrentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-        premiumExpiresAt: new Date((subscription as any).current_period_end * 1000),
-        lastPremiumAt: new Date(),
-      },
-    })
+  // Atualizar data de expiração
+  const currentPeriodEnd = (subscription as any).current_period_end
+  const periodEndDate = currentPeriodEnd 
+    ? new Date(currentPeriodEnd * 1000)
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      subscriptionTier: 'PREMIUM',
+      stripeCurrentPeriodEnd: periodEndDate,
+      premiumExpiresAt: periodEndDate,
+      lastPremiumAt: new Date(),
+    },
+  })
 
     console.log(`Payment succeeded for user ${user.id}`)
   } catch (error) {

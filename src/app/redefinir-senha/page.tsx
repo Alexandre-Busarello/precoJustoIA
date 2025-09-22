@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowLeft, Lock, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const [token, setToken] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -23,7 +23,7 @@ export default function ResetPasswordPage() {
   const [maskedEmail, setMaskedEmail] = useState('')
   const [error, setError] = useState('')
   
-  const router = useRouter()
+  // const router = useRouter() // Removido pois não está sendo usado
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -331,5 +331,22 @@ export default function ResetPasswordPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-4" />
+            <p className="text-muted-foreground">Carregando...</p>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }

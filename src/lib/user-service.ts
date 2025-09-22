@@ -16,11 +16,10 @@ export interface UserData {
   id: string
   email: string
   name?: string | null
-  subscriptionTier: 'FREE' | 'PREMIUM' | 'VIP'
+  subscriptionTier: 'FREE' | 'PREMIUM'
   premiumExpiresAt?: Date | null
   isAdmin: boolean
   isPremium: boolean
-  isVip: boolean
 }
 
 /**
@@ -68,12 +67,10 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
     return null
   }
 
-  // Calcular status Premium/VIP
+  // Calcular status Premium
   const now = new Date()
   const isPremium = user.subscriptionTier === 'PREMIUM' && 
                    (!user.premiumExpiresAt || user.premiumExpiresAt > now)
-  const isVip = user.subscriptionTier === 'VIP' && 
-               (!user.premiumExpiresAt || user.premiumExpiresAt > now)
 
   return {
     id: user.id,
@@ -82,8 +79,7 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
     subscriptionTier: user.subscriptionTier,
     premiumExpiresAt: user.premiumExpiresAt,
     isAdmin: user.isAdmin,
-    isPremium,
-    isVip
+    isPremium
   }
 }
 
@@ -210,8 +206,6 @@ export async function getUserById(userId: string): Promise<UserData | null> {
     const now = new Date()
     const isPremium = user.subscriptionTier === 'PREMIUM' && 
                      (!user.premiumExpiresAt || user.premiumExpiresAt > now)
-    const isVip = user.subscriptionTier === 'VIP' && 
-                 (!user.premiumExpiresAt || user.premiumExpiresAt > now)
 
     return {
       id: user.id,
@@ -220,8 +214,7 @@ export async function getUserById(userId: string): Promise<UserData | null> {
       subscriptionTier: user.subscriptionTier,
       premiumExpiresAt: user.premiumExpiresAt,
       isAdmin: user.isAdmin,
-      isPremium,
-      isVip
+      isPremium
     }
   } catch (error) {
     console.error('Erro ao buscar usuário por ID:', error)

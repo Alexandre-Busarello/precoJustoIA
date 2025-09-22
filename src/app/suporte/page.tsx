@@ -50,10 +50,24 @@ export default async function SupportPage() {
               <h1 className="text-3xl font-bold text-gray-900 mb-4">
                 Central de Suporte Premium
               </h1>
-              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-6">
                 Suporte personalizado e prioritário para usuários Premium. 
                 Tire dúvidas, reporte problemas e receba ajuda especializada da nossa equipe.
               </p>
+              
+              {/* Informações sobre tempo de resposta */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-2xl mx-auto">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Clock className="h-5 w-5 text-blue-600" />
+                  <h3 className="font-semibold text-blue-900">Tempo de Resposta</h3>
+                </div>
+                <p className="text-blue-800 text-sm">
+                  <strong>Resposta em até 5 dias úteis</strong> • Em média respondemos em até 2 dias úteis
+                </p>
+                <p className="text-blue-700 text-xs mt-1">
+                  Tickets com mais de 48h sem resposta são priorizados automaticamente
+                </p>
+              </div>
             </div>
 
             <SupportCenter />
@@ -179,8 +193,8 @@ export default async function SupportPage() {
                 ))}
               </div>
               <blockquote className="text-lg text-gray-700 mb-4 italic">
-                "O suporte Premium do Preço Justo AI é excepcional. Consegui resolver rapidamente problemas técnicos 
-                e esclarecer dúvidas sobre como usar melhor a plataforma. A equipe é muito atenciosa e eficiente!"
+                &ldquo;O suporte Premium do Preço Justo AI é excepcional. Consegui resolver rapidamente problemas técnicos 
+                e esclarecer dúvidas sobre como usar melhor a plataforma. A equipe é muito atenciosa e eficiente!&rdquo;
               </blockquote>
               <cite className="text-sm text-gray-500">— Investidor Premium verificado</cite>
             </div>

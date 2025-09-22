@@ -32,6 +32,8 @@ interface AdminTicket {
   createdAt: string
   updatedAt: string
   closedAt?: string
+  isUrgentByTime?: boolean
+  hoursSinceLastAdminResponse?: number
   user: {
     name: string
     email: string
@@ -422,7 +424,9 @@ export default function AdminTicketDashboard() {
                     return (
                       <Card 
                         key={ticket.id} 
-                        className="cursor-pointer hover:shadow-md transition-shadow"
+                        className={`cursor-pointer hover:shadow-md transition-shadow ${
+                          ticket.isUrgentByTime ? 'border-2 border-red-500 bg-red-50' : ''
+                        }`}
                         onClick={() => handleTicketClick(ticket)}
                       >
                         <CardContent className="pt-6">
@@ -430,6 +434,12 @@ export default function AdminTicketDashboard() {
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
                                 <h3 className="font-semibold text-gray-900">{ticket.title}</h3>
+                                {ticket.isUrgentByTime && (
+                                  <Badge className="bg-red-600 hover:bg-red-700 text-white animate-pulse">
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    URGENTE - {Math.floor(ticket.hoursSinceLastAdminResponse || 0)}h sem resposta
+                                  </Badge>
+                                )}
                                 <Badge 
                                   variant="secondary" 
                                   className={`${statusConfig[ticket.status].color} text-white`}

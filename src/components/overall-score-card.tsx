@@ -186,7 +186,7 @@ function PremiumPrompt({ reason }: { reason: string }) {
           </p>
           <div className="flex flex-col gap-2">
             <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
-              <Link href="/premium">
+              <Link href="/checkout">
                 <Crown className="w-4 h-4 mr-2" />
                 Assinar Premium
               </Link>

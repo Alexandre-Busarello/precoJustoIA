@@ -39,15 +39,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('Stripe webhook event received:', event.type)
+    console.log('🎯 Stripe webhook event received:', event.type)
+    console.log('📦 Event ID:', event.id)
 
     // Processar diferentes tipos de eventos
     switch (event.type) {
       case 'checkout.session.completed':
+        console.log('🛒 Processing checkout.session.completed')
         await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
         break
 
       case 'customer.subscription.created':
+        console.log('🔔 Processing customer.subscription.created')
         await handleSubscriptionCreated(event.data.object as Stripe.Subscription)
         break
 
@@ -133,12 +136,21 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 }
 
 async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
-  console.log('Subscription created:', subscription.id)
+  console.log('🎯 Subscription created:', subscription.id)
+  console.log('👤 Customer ID:', subscription.customer)
+  console.log('📋 Metadata:', JSON.stringify(subscription.metadata, null, 2))
+  console.log('💰 Status:', subscription.status)
+  console.log('📅 Current period end:', subscription.current_period_end)
 
   const userId = subscription.metadata?.userId
+  const userEmail = subscription.metadata?.userEmail
+
+  console.log('🔍 Extracted userId:', userId)
+  console.log('📧 Extracted userEmail:', userEmail)
 
   if (!userId) {
-    console.error('User ID not found in subscription metadata')
+    console.error('❌ User ID not found in subscription metadata')
+    console.error('📋 Available metadata keys:', Object.keys(subscription.metadata || {}))
     return
   }
 
@@ -161,9 +173,17 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
       },
     })
 
-    console.log(`Subscription created for user ${userId}`)
+    console.log(`✅ Subscription created successfully for user ${userId}`)
+    console.log(`🎉 User ${userEmail} is now PREMIUM!`)
   } catch (error) {
-    console.error('Error handling subscription created:', error)
+    console.error('❌ Error handling subscription created:', error)
+    console.error('🔍 Error details:', {
+      userId,
+      userEmail,
+      subscriptionId: subscription.id,
+      customerId: subscription.customer,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
   }
 }
 

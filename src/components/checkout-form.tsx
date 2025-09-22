@@ -113,7 +113,7 @@ export function CheckoutForm({ priceId, planName, price, planType }: CheckoutFor
                   Como funciona o pagamento via PIX:
                 </h4>
                 <ol className="text-sm text-green-800 dark:text-green-200 space-y-1">
-                  <li>1. Clique em "Finalizar Pagamento"</li>
+                  <li>1. Clique em Finalizar Pagamento</li>
                   <li>2. Você será redirecionado para o MercadoPago</li>
                   <li>3. Escaneie o QR Code ou copie o código PIX</li>
                   <li>4. Confirme o pagamento no seu banco</li>

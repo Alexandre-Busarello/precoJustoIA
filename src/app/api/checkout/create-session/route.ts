@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/user-service'
 import { createCheckoutSession } from '@/lib/stripe'
-import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar se o usuário está autenticado
-    const session = await getServerSession(authOptions)
+    // Verificar usuário atual - ÚNICA FONTE DA VERDADE
+    const user = await getCurrentUser()
     
-    if (!session?.user?.email) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Usuário não autenticado' },
         { status: 401 }
@@ -36,20 +34,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Buscar dados do usuário no banco
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Usuário não encontrado' },
-        { status: 404 }
-      )
-    }
-
     // Verificar se o usuário já tem uma assinatura ativa
-    if (user.subscriptionTier === 'PREMIUM' && user.premiumExpiresAt && user.premiumExpiresAt > new Date()) {
+    if (user.isPremium) {
       return NextResponse.json(
         { error: 'Usuário já possui uma assinatura ativa' },
         { status: 400 }

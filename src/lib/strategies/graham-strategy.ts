@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber, formatCurrency, formatPercent } from './base-strategy';
+import { AbstractStrategy, toNumber, formatCurrency, formatPercent, validateEarningsGrowth } from './base-strategy';
 import { GrahamParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 
 export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
@@ -22,7 +22,8 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const liquidezCorrente = toNumber(financials.liquidezCorrente);
     const margemLiquida = toNumber(financials.margemLiquida);
     const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
-    const crescimentoLucros = toNumber(financials.crescimentoLucros);
+    const crescimentoLucrosRaw = toNumber(financials.crescimentoLucros);
+    const crescimentoLucros = validateEarningsGrowth(crescimentoLucrosRaw);
     const marketCap = toNumber(financials.marketCap);
     
     const fairValue = this.calculateGrahamFairValue(lpa, vpa);
@@ -36,7 +37,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       { label: 'Liquidez Corrente ≥ 1.0', value: !liquidezCorrente || liquidezCorrente >= 1.0, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
       { label: 'Margem Líquida positiva', value: !margemLiquida || margemLiquida > 0, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
       { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15, description: `Crescimento: ${formatPercent(crescimentoLucros) || 'N/A - Benefício da dúvida'}` },
+      { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15, description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : crescimentoLucrosRaw ? 'Dado não confiável - Benefício da dúvida' : 'N/A - Benefício da dúvida'}` },
       { label: 'Market Cap ≥ R$ 2B', value: !marketCap || marketCap >= 2000000000, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
     ];
 
@@ -49,13 +50,25 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const isEligible = hasMinimumCriteria && hasValidFairValue && hasValidUpside && hasMinimumUpside;
     const score = (passedCriteria / criteria.length) * 100;
     
-    // Calcular quality score como no backend
-    let qualityScore = (
-      Math.min(roe || 0, 0.25) * 40 +
-      Math.min(liquidezCorrente || 0, 2.5) * 20 +
-      Math.min(margemLiquida || 0, 0.15) * 100 +
-      Math.max(0, (crescimentoLucros || 0) + 0.15) * 50
-    );
+    // Calcular quality score com foco na margem de segurança (conceito central do Graham)
+    let qualityScore = 0;
+    
+    // 1. Margem de Segurança (60% do score) - Peso principal
+    if (upside && upside > 0) {
+      // Normalizar upside: 10% = 20 pontos, 50%+ = 60 pontos (máximo)
+      const marginScore = Math.min(upside / 50 * 60, 60);
+      qualityScore += marginScore;
+    }
+    
+    // 2. Indicadores Fundamentais (40% do score) - Peso secundário
+    const fundamentalsScore = (
+      Math.min(roe || 0, 0.25) * 60 +        // ROE: até 15 pontos
+      Math.min(liquidezCorrente || 0, 2.5) * 6 +     // Liquidez: até 15 pontos  
+      Math.min(margemLiquida || 0, 0.15) * 67 +      // Margem: até 10 pontos
+      Math.min(Math.max(0, (crescimentoLucros || 0) + 0.15), 0.50) * 0  // Crescimento: removido (Graham não focava nisso)
+    ) * 0.4; // 40% do peso total
+    
+    qualityScore += fundamentalsScore;
 
     if (qualityScore > 100) qualityScore = 100;
 
@@ -117,7 +130,8 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       const roe = toNumber(financials.roe) || 0;
       const liquidezCorrente = toNumber(financials.liquidezCorrente) || 0;
       const margemLiquida = toNumber(financials.margemLiquida) || 0;
-      const crescimentoLucros = toNumber(financials.crescimentoLucros) || 0;
+      const crescimentoLucrosRaw = toNumber(financials.crescimentoLucros) || 0;
+      const crescimentoLucros = validateEarningsGrowth(crescimentoLucrosRaw) || 0;
       const marketCap = toNumber(financials.marketCap);
 
       // Fórmula de Graham: Preço Justo = √(22.5 × LPA × VPA)
@@ -128,13 +142,26 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       if (marginOfSafetyActual >= marginOfSafety && (marketCap && marketCap >= 2000000000)) {
         const upside = ((fairValue / currentPrice) - 1) * 100;
 
-        // Score de qualidade para Graham (peso na solidez da empresa)
-        let qualityScore = (
-          Math.min(roe, 0.25) * 40 +        // ROE (peso alto)
-          Math.min(liquidezCorrente, 2.5) * 20 +         // Liquidez
-          Math.min(margemLiquida, 0.15) * 100 +          // Margem líquida
-          Math.max(0, crescimentoLucros + 0.15) * 50   // Crescimento (penaliza declínio)
-        );
+        // Score de qualidade com foco na margem de segurança (conceito central do Graham)
+        let qualityScore = 0;
+        
+        // 1. Margem de Segurança (60% do score) - Peso principal
+        const marginOfSafetyPercent = marginOfSafetyActual * 100;
+        if (marginOfSafetyPercent > 0) {
+          // Normalizar margem: 10% = 20 pontos, 50%+ = 60 pontos (máximo)
+          const marginScore = Math.min(marginOfSafetyPercent / 50 * 60, 60);
+          qualityScore += marginScore;
+        }
+        
+        // 2. Indicadores Fundamentais (40% do score) - Peso secundário
+        const fundamentalsScore = (
+          Math.min(roe, 0.25) * 60 +        // ROE: até 15 pontos
+          Math.min(liquidezCorrente, 2.5) * 6 +     // Liquidez: até 15 pontos
+          Math.min(margemLiquida, 0.15) * 67 +      // Margem: até 10 pontos
+          Math.min(Math.max(0, crescimentoLucros + 0.15), 0.50) * 0   // Crescimento: removido (Graham não focava nisso)
+        ) * 0.4; // 40% do peso total
+        
+        qualityScore += fundamentalsScore;
 
         if (qualityScore > 100) qualityScore = 100;
 
@@ -147,7 +174,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
           fairValue: Number(fairValue.toFixed(2)),
           upside: Number(upside.toFixed(2)),
           marginOfSafety: Number((marginOfSafetyActual * 100).toFixed(2)),
-          rational: `Aprovada no Graham Quality Model com ${Number((marginOfSafetyActual * 100).toFixed(1))}% de margem de segurança. Empresa sólida: ROE ${Number((roe * 100)).toFixed(1)}%, LC ${Number(liquidezCorrente).toFixed(2)}, Margem Líquida ${Number((margemLiquida * 100)).toFixed(1)}%. Score de qualidade: ${Number(qualityScore.toFixed(1))}/100.`,
+          rational: `Aprovada no Graham Quality Model com ${Number((marginOfSafetyActual * 100).toFixed(1))}% de margem de segurança (peso 60% do score). Fundamentos sólidos: ROE ${Number((roe * 100)).toFixed(1)}%, LC ${Number(liquidezCorrente).toFixed(2)}, Margem Líquida ${Number((margemLiquida * 100)).toFixed(1)}%. Score de qualidade: ${Number(qualityScore.toFixed(1))}/100.`,
           key_metrics: {
             lpa: lpa,
             vpa: vpa,
@@ -184,7 +211,11 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
 - Crescimento Lucros ≥ -15% (não em declínio severo)
 - Dívida Líquida/PL ≤ 150% (endividamento controlado)
 
-**Ordenação**: Por Score de Qualidade (combina solidez financeira + margem de segurança).
+**Score de Qualidade**:
+- 60% Margem de Segurança (conceito central do Graham)
+- 40% Indicadores Fundamentais (ROE, Liquidez, Margem Líquida)
+
+**Ordenação**: Por Score de Qualidade priorizando maior margem de segurança.
 
 **Objetivo**: Encontrar empresas subvalorizadas MAS financeiramente saudáveis, evitando "value traps".`;
   }

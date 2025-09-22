@@ -552,6 +552,7 @@ export default async function TickerPage({ params }: PageProps) {
                 ticker={ticker}
                 currentPrice={currentPrice}
                 latestFinancials={serializedFinancials}
+                userIsPremium={userIsPremium}
               />
             )}
 

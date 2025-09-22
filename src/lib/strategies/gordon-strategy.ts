@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
+import { AbstractStrategy, toNumber, formatPercent, validateEarningsGrowth } from './base-strategy';
 import { GordonParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 
 // Parâmetros setoriais baseados em dados de mercado e estudos de WACC
@@ -141,7 +141,8 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     const ultimoDividendo = toNumber(financials.ultimoDividendo);
     const payout = toNumber(financials.payout);
     const roe = toNumber(financials.roe);
-    const crescimentoLucros = toNumber(financials.crescimentoLucros);
+    const crescimentoLucrosRaw = toNumber(financials.crescimentoLucros);
+    const crescimentoLucros = validateEarningsGrowth(crescimentoLucrosRaw);
     const liquidezCorrente = toNumber(financials.liquidezCorrente);
     const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
     
@@ -155,10 +156,6 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       dividendEstimated = dy * currentPrice;
     }
 
-    console.log('dividendEstimated', dividendEstimated);
-    console.log('adjustedDiscountRate', adjustedDiscountRate);
-    console.log('adjustedGrowthRate', adjustedGrowthRate);
-    console.log('sector', companyData.sector);
     
     const fairValue = this.calculateGordonFairValue(
       dividendEstimated, 

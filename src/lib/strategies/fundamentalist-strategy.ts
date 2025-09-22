@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber } from './base-strategy';
+import { AbstractStrategy, toNumber, validateCAGR5Years } from './base-strategy';
 import { StrategyAnalysis, StrategyParams, CompanyData, RankBuilderResult, CompanyFinancialData } from './types';
 
 export interface FundamentalistParams extends StrategyParams {
@@ -29,7 +29,8 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
     const pl = toNumber(financialData.pl);
     const evEbitda = toNumber(financialData.evEbitda);
     const dividaLiquidaEbitda = toNumber(financialData.dividaLiquidaEbitda);
-    const cagrLucros5a = toNumber(financialData.cagrLucros5a);
+    const cagrLucros5aRaw = toNumber(financialData.cagrLucros5a);
+    const cagrLucros5a = validateCAGR5Years(cagrLucros5aRaw);
     const payout = toNumber(financialData.payout);
     const dy = toNumber(financialData.dy);
     const setor = companyData.sector || '';
@@ -189,16 +190,17 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
               warnings.push(`P/L ${pl.toFixed(1)}x maior que CAGR 5a ${cagrPercent.toFixed(1)}% - caro conforme regra 2.1`);
             }
           } else {
-            // Se não tem CAGR 5a, avaliar P/L absoluto
+            // Se não tem CAGR 5a ou foi considerado não confiável, avaliar P/L absoluto
+            const cagrStatus = cagrLucros5aRaw !== null ? 'CAGR 5a não confiável' : 'CAGR 5a não disponível';
             if (pl <= 10) {
               priceScore = 25;
-              reasons.push(`P/L atrativo de ${pl.toFixed(1)}x (CAGR 5a não disponível)`);
+              reasons.push(`P/L atrativo de ${pl.toFixed(1)}x (${cagrStatus})`);
             } else if (pl <= 15) {
               priceScore = 15;
-              reasons.push(`P/L moderado de ${pl.toFixed(1)}x (CAGR 5a não disponível)`);
+              reasons.push(`P/L moderado de ${pl.toFixed(1)}x (${cagrStatus})`);
             } else {
               priceScore = 5;
-              warnings.push(`P/L alto de ${pl.toFixed(1)}x (CAGR 5a não disponível)`);
+              warnings.push(`P/L alto de ${pl.toFixed(1)}x (${cagrStatus})`);
             }
           }
         } else {

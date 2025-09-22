@@ -31,6 +31,77 @@ export function formatPercent(value: unknown): string {
   return `${(numValue * 100).toFixed(2)}%`;
 }
 
+/**
+ * Valida e normaliza o crescimento de lucros para evitar distorções
+ * Trata casos especiais como recuperação de prejuízo e valores extremos
+ */
+export function validateEarningsGrowth(crescimentoLucros: number | null): number | null {
+  if (crescimentoLucros === null || crescimentoLucros === undefined) {
+    return null;
+  }
+
+  // Converter para número se necessário
+  const growth = typeof crescimentoLucros === 'number' ? crescimentoLucros : parseFloat(String(crescimentoLucros));
+  
+  if (isNaN(growth)) {
+    return null;
+  }
+
+  // Casos especiais que devem ser tratados como "dados não confiáveis"
+  if (Math.abs(growth) > 2.0) { // Crescimento > 200% ou < -200%
+    console.warn(`⚠️ Crescimento de lucros extremo detectado: ${(growth * 100).toFixed(1)}%. Considerando como não confiável.`);
+    return null; // Tratar como dado não disponível
+  }
+
+  // Limitar crescimento a faixas razoáveis para análise fundamentalista
+  // Focamos em empresas estáveis, não em crescimentos explosivos
+  if (growth > 1.0) { // Limitar crescimento máximo a 100%
+    return 1.0;
+  }
+  
+  if (growth < -0.8) { // Limitar declínio máximo a -80%
+    return -0.8;
+  }
+
+  return growth;
+}
+
+/**
+ * Valida e normaliza o CAGR de lucros de 5 anos para evitar distorções
+ * CAGR deve ser mais conservador que crescimento anual por ser uma média de longo prazo
+ */
+export function validateCAGR5Years(cagrLucros5a: number | null): number | null {
+  if (cagrLucros5a === null || cagrLucros5a === undefined) {
+    return null;
+  }
+
+  // Converter para número se necessário
+  const cagr = typeof cagrLucros5a === 'number' ? cagrLucros5a : parseFloat(String(cagrLucros5a));
+  
+  if (isNaN(cagr)) {
+    return null;
+  }
+
+  // CAGR extremos são ainda mais suspeitos que crescimento anual
+  // Pois representam média de 5 anos, não deveria ter valores tão extremos
+  if (Math.abs(cagr) > 1.0) { // CAGR > 100% ou < -100% é muito suspeito
+    console.warn(`⚠️ CAGR 5 anos extremo detectado: ${(cagr * 100).toFixed(1)}%. Considerando como não confiável.`);
+    return null; // Tratar como dado não disponível
+  }
+
+  // Limitar CAGR a faixas ainda mais conservadoras
+  // CAGR sustentável raramente excede 50% por 5 anos consecutivos
+  if (cagr > 0.5) { // Limitar CAGR máximo a 50%
+    return 0.5;
+  }
+  
+  if (cagr < -0.5) { // Limitar declínio máximo a -50%
+    return -0.5;
+  }
+
+  return cagr;
+}
+
 // Classe base abstrata para todas as estratégias
 export abstract class AbstractStrategy<T extends StrategyParams> implements BaseStrategy<T> {
   abstract readonly name: string;

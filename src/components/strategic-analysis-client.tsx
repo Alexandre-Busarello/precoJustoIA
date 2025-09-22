@@ -90,6 +90,7 @@ interface Props {
   ticker: string;
   currentPrice: number;
   latestFinancials: Record<string, unknown>;
+  userIsPremium?: boolean; // Status Premium do servidor (fonte da verdade)
 }
 
 // Função para formatar valores como moeda
@@ -373,14 +374,25 @@ function StatementsAnalysisContent({ analysis }: { analysis: StatementsAnalysis 
   );
 }
 
-export default function StrategicAnalysisClient({ ticker, currentPrice, latestFinancials }: Props) {
+export default function StrategicAnalysisClient({ ticker, currentPrice, latestFinancials, userIsPremium: serverIsPremium }: Props) {
   const { data: session } = useSession();
   const [analysisData, setAnalysisData] = useState<CompanyAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const isLoggedIn = !!session?.user;
-  const { isPremium } = usePremiumStatus(); // ÚNICA FONTE DA VERDADE
+  const { isPremium: clientIsPremium } = usePremiumStatus();
+  
+  // Usar status Premium do servidor como fonte da verdade, fallback para cliente
+  const isPremium = serverIsPremium !== undefined ? serverIsPremium : clientIsPremium;
+  
+  // Debug temporário
+  console.log('🔍 Premium Status Debug:', {
+    serverIsPremium,
+    clientIsPremium,
+    finalIsPremium: isPremium,
+    ticker
+  });
 
   // Buscar análises estratégicas
   useEffect(() => {

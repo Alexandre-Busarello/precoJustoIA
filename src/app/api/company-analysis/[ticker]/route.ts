@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, safeQuery } from '@/lib/prisma-wrapper';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/user-service';
 import { StrategyAnalysis, toNumber } from '@/lib/strategies';
 import { OverallScore } from '@/lib/strategies/overall-score';
 import { executeCompanyAnalysis, CompanyAnalysisData } from '@/lib/company-analysis-service';
@@ -36,26 +35,10 @@ export async function GET(
     const resolvedParams = await params;
     const ticker = resolvedParams.ticker.toUpperCase();
     
-    // Verificar sessão do usuário
-    const session = await getServerSession(authOptions);
-    const isLoggedIn = !!session?.user;
-    
-    // Verificar se é Premium para estratégias avançadas
-    let isPremium = false;
-    if (isLoggedIn) {
-      const user = await safeQuery('user-subscription-check', () =>
-        prisma.user.findUnique({
-          where: { id: session.user.id },
-          select: { 
-            subscriptionTier: true, 
-            premiumExpiresAt: true 
-          }
-        })
-      );
-      
-      isPremium = user?.subscriptionTier === 'PREMIUM' && 
-                 (!user.premiumExpiresAt || user.premiumExpiresAt > new Date());
-    }
+    // Verificar usuário atual - ÚNICA FONTE DA VERDADE
+    const user = await getCurrentUser();
+    const isLoggedIn = !!user;
+    const isPremium = user?.isPremium || false;
 
     // Buscar dados da empresa
     const companyData = await safeQuery(`company-data-${ticker}`, () =>

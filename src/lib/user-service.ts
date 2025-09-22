@@ -20,6 +20,7 @@ export interface UserData {
   premiumExpiresAt?: Date | null
   isAdmin: boolean
   isPremium: boolean
+  stripeCustomerId?: string | null
 }
 
 /**
@@ -37,14 +38,15 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
   if (session.user.id) {
     user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        subscriptionTier: true,
-        premiumExpiresAt: true,
-        isAdmin: true
-      }
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          subscriptionTier: true,
+          premiumExpiresAt: true,
+          isAdmin: true,
+          stripeCustomerId: true
+        }
     })
   }
 
@@ -52,14 +54,15 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
   if (!user && session.user.email) {
     user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        subscriptionTier: true,
-        premiumExpiresAt: true,
-        isAdmin: true
-      }
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          subscriptionTier: true,
+          premiumExpiresAt: true,
+          isAdmin: true,
+          stripeCustomerId: true
+        }
     })
   }
 
@@ -79,7 +82,8 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
     subscriptionTier: user.subscriptionTier,
     premiumExpiresAt: user.premiumExpiresAt,
     isAdmin: user.isAdmin,
-    isPremium
+    isPremium,
+    stripeCustomerId: user.stripeCustomerId
   }
 }
 
@@ -189,14 +193,15 @@ export async function getUserById(userId: string): Promise<UserData | null> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        subscriptionTier: true,
-        premiumExpiresAt: true,
-        isAdmin: true
-      }
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          subscriptionTier: true,
+          premiumExpiresAt: true,
+          isAdmin: true,
+          stripeCustomerId: true
+        }
     })
 
     if (!user) {

@@ -6,6 +6,7 @@ import Header from "@/components/header";
 import { StructuredData } from "@/components/structured-data";
 import { SessionRefreshProvider } from "@/components/session-refresh-provider";
 import { Toaster } from "sonner";
+import AdminLink from "@/components/admin-link";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -99,6 +100,7 @@ export default function RootLayout({
               <main>
                 {children}
               </main>
+              <AdminLink />
             </div>
             <Toaster position="top-right" />
           </SessionRefreshProvider>

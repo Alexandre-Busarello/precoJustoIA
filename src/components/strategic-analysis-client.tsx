@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
 import Link from 'next/link';
 
@@ -379,7 +380,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
   const [error, setError] = useState<string | null>(null);
 
   const isLoggedIn = !!session?.user;
-  const isPremium = session?.user?.subscriptionTier === 'PREMIUM';
+  const { isPremium } = usePremiumStatus(); // ÚNICA FONTE DA VERDADE
 
   // Buscar análises estratégicas
   useEffect(() => {

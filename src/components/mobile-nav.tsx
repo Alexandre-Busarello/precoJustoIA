@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname } from "next/navigation"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -19,7 +20,8 @@ import {
   User,
   Settings,
   CreditCard,
-  GitCompare
+  GitCompare,
+  Headphones
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -30,7 +32,7 @@ interface MobileNavProps {
 export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
-  const isPremium = session?.user?.subscriptionTier === 'PREMIUM'
+  const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
 
   // Close menu on route change
   useEffect(() => {
@@ -74,6 +76,13 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       href: "/comparador", 
       icon: <GitCompare className="w-5 h-5" />,
       show: true
+    },
+    {
+      title: "Suporte",
+      href: "/suporte", 
+      icon: <Headphones className="w-5 h-5" />,
+      show: !!session,
+      isPremiumFeature: !isPremium
     }
   ]
 
@@ -165,7 +174,12 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                     }`}
                   >
                     {item.icon}
-                    <span className="font-medium">{item.title}</span>
+                    <span className="font-medium flex-1">{item.title}</span>
+                    {item.isPremiumFeature && (
+                      <Badge variant="default" className="text-xs bg-gradient-to-r from-blue-500 to-purple-600">
+                        Premium
+                      </Badge>
+                    )}
                   </Link>
                 ))}
             </nav>
@@ -178,7 +192,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                   <h3 className="font-semibold text-sm">Upgrade Premium</h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Desbloqueie todos os modelos de valuation e análises com IA
+                  Desbloqueie todos os modelos de valuation, análises com IA e Central de Suporte Premium
                 </p>
                 <Button asChild size="sm" className="w-full bg-gradient-to-r from-violet-600 to-pink-600">
                   <Link href="/checkout" className="flex items-center justify-center gap-2">

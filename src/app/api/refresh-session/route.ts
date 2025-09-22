@@ -1,46 +1,51 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/user-service';
 
 export async function POST() {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) {
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
       );
     }
 
-    // Buscar dados atualizados do usuário no banco
-    const updatedUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        subscriptionTier: true,
-        premiumExpiresAt: true
-      }
-    });
+    console.log('🔍 Session user ID from NextAuth:', session.user.id)
+    console.log('📧 Session user email:', session.user.email)
 
-    if (!updatedUser) {
+    // Usar o serviço centralizado para resolver o usuário correto
+    const user = await getCurrentUser();
+
+    if (!user) {
+      console.log('❌ Usuário não encontrado no banco de dados')
       return NextResponse.json(
         { error: 'Usuário não encontrado' },
         { status: 404 }
       );
     }
 
+    console.log('✅ Usuário encontrado no banco:', {
+      id: user.id,
+      email: user.email,
+      subscriptionTier: user.subscriptionTier,
+      isPremium: user.isPremium
+    })
+
     return NextResponse.json({
       message: 'Sessão atualizada com sucesso',
       user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        name: updatedUser.name,
-        subscriptionTier: updatedUser.subscriptionTier,
-        premiumExpiresAt: updatedUser.premiumExpiresAt?.toISOString()
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        subscriptionTier: user.subscriptionTier,
+        premiumExpiresAt: user.premiumExpiresAt?.toISOString(),
+        isPremium: user.isPremium,
+        isVip: user.isVip,
+        isAdmin: user.isAdmin
       }
     });
 

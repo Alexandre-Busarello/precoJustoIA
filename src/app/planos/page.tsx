@@ -15,7 +15,8 @@ import {
   Star,
   Rocket,
   HelpCircle,
-  Mail
+  Mail,
+  Headphones
 } from "lucide-react"
 import Link from "next/link"
 import { Metadata } from "next"
@@ -192,7 +193,7 @@ export default function PlanosPage() {
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Suporte prioritário</span>
+                    <span>Central de Suporte Premium</span>
                   </div>
                 </div>
 
@@ -251,7 +252,7 @@ export default function PlanosPage() {
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Suporte VIP</span>
+                    <span>Central de Suporte Premium</span>
                   </div>
                 </div>
 
@@ -368,10 +369,20 @@ export default function PlanosPage() {
                     <td className="p-6 text-center text-sm">5+ anos</td>
                   </tr>
                   <tr>
-                    <td className="p-6 font-medium">Suporte</td>
+                    <td className="p-6 font-medium">Central de Suporte</td>
                     <td className="p-6 text-center text-sm">Padrão</td>
-                    <td className="p-6 text-center text-sm">Prioritário</td>
-                    <td className="p-6 text-center text-sm">VIP</td>
+                    <td className="p-6 text-center text-sm">
+                      <div className="flex items-center justify-center gap-1">
+                        <Headphones className="w-4 h-4 text-blue-600" />
+                        <span>Premium</span>
+                      </div>
+                    </td>
+                    <td className="p-6 text-center text-sm">
+                      <div className="flex items-center justify-center gap-1">
+                        <Headphones className="w-4 h-4 text-green-600" />
+                        <span>Premium</span>
+                      </div>
+                    </td>
                   </tr>
                   <tr className="bg-gray-25 dark:bg-gray-950/50">
                     <td className="p-6 font-medium">Acesso antecipado</td>

@@ -3,17 +3,18 @@
 import { useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname } from "next/navigation"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
-import { LayoutDashboard, BarChart3, Shield, Zap, GitCompare } from "lucide-react"
+import { LayoutDashboard, BarChart3, Shield, Zap, GitCompare, Headphones } from "lucide-react"
 
 export default function Header() {
   const { data: session, status } = useSession()
   const pathname = usePathname()
-  const isPremium = session?.user?.subscriptionTier === 'PREMIUM'
+  const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
@@ -102,6 +103,23 @@ export default function Header() {
                   <Link href="/comparador" className="flex items-center gap-2">
                     <GitCompare className="w-4 h-4" />
                     Comparador
+                  </Link>
+                </Button>
+
+                {/* Suporte - Conversão para Premium */}
+                <Button 
+                  variant={pathname === "/suporte" ? "default" : "ghost"} 
+                  size="sm" 
+                  asChild
+                >
+                  <Link href="/suporte" className="flex items-center gap-2">
+                    <Headphones className="w-4 h-4" />
+                    Suporte
+                    {!isPremium && (
+                      <Badge variant="default" className="ml-1 text-xs bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
+                        Premium
+                      </Badge>
+                    )}
                   </Link>
                 </Button>
               </div>

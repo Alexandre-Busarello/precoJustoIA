@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useSession } from "next-auth/react"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
@@ -221,7 +222,7 @@ export function QuickRanker() {
   }, [results, isViewingCached])
   
   const isLoggedIn = !!session
-  const isPremium = session?.user?.subscriptionTier === 'PREMIUM'
+  const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
   
   // Filtrar e ordenar modelos baseado no status do usuário
   const availableModels = models.filter(model => {

@@ -3,6 +3,7 @@ import { Metadata } from 'next'
 import React from 'react'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
 import { analyzeFinancialStatements } from '@/lib/strategies/overall-score'
@@ -737,17 +738,10 @@ export default async function CompareStocksPage({ params }: PageProps) {
   const session = await getServerSession(authOptions)
   let userIsPremium = false
 
+  // Verificar se é Premium - ÚNICA FONTE DA VERDADE
   if (session?.user?.id) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { 
-        subscriptionTier: true, 
-        premiumExpiresAt: true 
-      }
-    })
-
-    userIsPremium = user?.subscriptionTier === 'PREMIUM' && 
-                   (!user.premiumExpiresAt || user.premiumExpiresAt > new Date())
+    const user = await getCurrentUser()
+    userIsPremium = user?.isPremium || false
   }
 
   // Buscar dados das empresas com consulta otimizada

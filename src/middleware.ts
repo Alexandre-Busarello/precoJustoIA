@@ -1,8 +1,23 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { getToken } from 'next-auth/jwt'
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
+  
+  // Proteger rotas administrativas
+  if (pathname.startsWith('/admin')) {
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    
+    if (!token) {
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('callbackUrl', pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+    
+    // Verificar se o usuário é admin (será verificado novamente no servidor)
+    // Por segurança, a verificação real de admin é feita nas páginas/APIs
+  }
   
   // Redirecionar /upgrade para /checkout
   if (pathname === '/upgrade') {
@@ -27,6 +42,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/admin/:path*',
     '/upgrade',
     '/upgrade/:path*',
     '/webhooks/stripe'

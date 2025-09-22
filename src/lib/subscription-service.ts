@@ -52,8 +52,7 @@ export async function syncUserSubscription(userId: string): Promise<Subscription
 
     // Atualizar dados no banco se necessário
     if (user.subscriptionTier !== tier || 
-        user.premiumExpiresAt?.getTime() !== expiresAt.getTime()) {
-      
+        user.premiumExpiresAt?.getTime() !== expiresAt.getTime()) {      
       await prisma.user.update({
         where: { id: userId },
         data: {

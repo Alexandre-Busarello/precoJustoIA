@@ -58,17 +58,18 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user, trigger }) {
-      // Se é um novo login, usar dados do user
+      // Se é um novo login, usar dados do user e armazenar o ID real
       if (user) {
+        token.userId = user.id // Armazenar o ID real do usuário
         token.subscriptionTier = user.subscriptionTier || "FREE"
         token.premiumExpiresAt = user.premiumExpiresAt?.toISOString()
       }
       
       // Se é uma atualização da sessão, buscar dados atualizados do banco
-      if (trigger === "update" && token.sub) {
+      if (trigger === "update" && token.userId) {
         try {
           const updatedUser = await prisma.user.findUnique({
-            where: { id: token.sub },
+            where: { id: token.userId as string },
             select: {
               subscriptionTier: true,
               premiumExpiresAt: true,
@@ -88,7 +89,8 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token) {
-        session.user.id = token.sub!
+        // Usar o ID real do usuário armazenado no token, não o token.sub
+        session.user.id = (token.userId as string) || token.sub!
         session.user.subscriptionTier = token.subscriptionTier as string
         session.user.premiumExpiresAt = token.premiumExpiresAt as string
       }

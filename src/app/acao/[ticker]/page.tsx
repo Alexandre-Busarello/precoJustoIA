@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
 import StrategicAnalysisClient from '@/components/strategic-analysis-client'
@@ -332,17 +333,10 @@ export default async function TickerPage({ params }: PageProps) {
   const session = await getServerSession(authOptions)
   let userIsPremium = false
 
+  // Verificar se é Premium - ÚNICA FONTE DA VERDADE
   if (session?.user?.id) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { 
-        subscriptionTier: true, 
-        premiumExpiresAt: true 
-      }
-    })
-
-    userIsPremium = user?.subscriptionTier === 'PREMIUM' && 
-                   (!user.premiumExpiresAt || user.premiumExpiresAt > new Date())
+    const user = await getCurrentUser()
+    userIsPremium = user?.isPremium || false
   }
 
   // Buscar dados da empresa

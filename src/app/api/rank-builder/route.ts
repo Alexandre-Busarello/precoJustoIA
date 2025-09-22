@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, safeQuery, safeTransaction } from '@/lib/prisma-wrapper';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/user-service';
 import {
   StrategyFactory,
   GrahamParams,
@@ -114,21 +115,10 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Buscar dados do usuário para verificar se é Premium
-      const user = await safeQuery('user-premium-check', () =>
-        prisma.user.findUnique({
-          where: { id: session.user.id },
-          select: { 
-            subscriptionTier: true, 
-            premiumExpiresAt: true 
-          }
-        })
-      );
+      // Buscar dados do usuário para verificar se é Premium - ÚNICA FONTE DA VERDADE
+      const user = await getCurrentUser();
 
-      const isPremium = user?.subscriptionTier === 'PREMIUM' && 
-                       (!user.premiumExpiresAt || user.premiumExpiresAt > new Date());
-
-      if (!isPremium) {
+      if (!user?.isPremium) {
         const modelName = model === 'fcd' ? 'FCD' : model === 'gordon' ? 'Fórmula de Gordon' : model === 'fundamentalist' ? 'Fundamentalista 3+1' : 'Análise com IA';
         return NextResponse.json(
           { error: `Modelo ${modelName} exclusivo para usuários Premium. Faça upgrade para acessar análises avançadas.` },

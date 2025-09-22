@@ -43,6 +43,7 @@ model User {
   password         String?
   subscriptionTier SubscriptionTier @default(FREE)
   premiumExpiresAt DateTime?
+  isAdmin          Boolean          @default(false) @map("is_admin")
   
   // Histórico Premium
   wasPremiumBefore Boolean          @default(false) @map("was_premium_before")
@@ -60,6 +61,9 @@ model User {
   sessions         Session[]
   portfolios       Portfolio[]
   rankingHistory   RankingHistory[]
+  supportTickets   SupportTicket[]
+  ticketMessages   TicketMessage[]
+  assignedTickets  SupportTicket[] @relation("AssignedTickets")
 
   @@map("users")
 }
@@ -529,4 +533,71 @@ model ValueAddedStatement {
 
   @@unique([companyId, endDate, period])
   @@map("value_added_statements")
+}
+
+// Sistema de Tickets de Suporte
+model SupportTicket {
+  id          String        @id @default(cuid())
+  userId      String        @map("user_id")
+  title       String
+  description String
+  status      TicketStatus  @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  category    TicketCategory @default(GENERAL)
+  assignedTo  String?       @map("assigned_to") // ID do admin responsável
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  closedAt    DateTime?     @map("closed_at")
+  
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignee    User?         @relation("AssignedTickets", fields: [assignedTo], references: [id])
+  messages    TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([assignedTo])
+  @@index([createdAt])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String   @map("ticket_id")
+  userId    String   @map("user_id")
+  message   String
+  isInternal Boolean @default(false) @map("is_internal") // Mensagens internas apenas para admins
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("ticket_messages")
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_USER
+  WAITING_ADMIN
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  GENERAL
+  TECHNICAL
+  BILLING
+  FEATURE_REQUEST
+  BUG_REPORT
+  ACCOUNT
 }

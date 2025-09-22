@@ -43,49 +43,61 @@ export async function POST(request: NextRequest) {
     console.log('📦 Event ID:', event.id)
 
     // Processar diferentes tipos de eventos
+    let success = false
+    
     switch (event.type) {
       case 'checkout.session.completed':
         console.log('🛒 Processing checkout.session.completed')
-        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
+        success = await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
         break
 
       case 'customer.subscription.created':
         console.log('🔔 Processing customer.subscription.created')
-        await handleSubscriptionCreated(event.data.object as Stripe.Subscription)
+        success = await handleSubscriptionCreated(event.data.object as Stripe.Subscription)
         break
 
       case 'setup_intent.succeeded':
-        await handleSetupIntentSucceeded(event.data.object as Stripe.SetupIntent)
+        success = await handleSetupIntentSucceeded(event.data.object as Stripe.SetupIntent)
         break
 
       case 'customer.subscription.updated':
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
+        success = await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
         break
 
       case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
+        success = await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
         break
 
       case 'invoice.payment_succeeded':
-        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice)
+        success = await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice)
         break
 
       case 'invoice.payment_failed':
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice)
+        success = await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice)
         break
 
       case 'payment_intent.succeeded':
-        await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent)
+        success = await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent)
         break
 
       case 'payment_intent.payment_failed':
-        await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent)
+        success = await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent)
         break
 
       default:
         console.log(`Unhandled event type: ${event.type}`)
+        success = true // Eventos não tratados são considerados "sucesso" para não bloquear
     }
 
+    if (!success) {
+      console.error('❌ Webhook processing failed, returning 500 to trigger retry')
+      return NextResponse.json(
+        { error: 'Webhook processing failed' },
+        { status: 500 }
+      )
+    }
+
+    console.log('✅ Webhook processed successfully')
     return NextResponse.json({ received: true })
   } catch (error) {
     console.error('Webhook error:', error)
@@ -96,14 +108,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<boolean> {
   console.log('Checkout session completed:', session.id)
 
   const userId = session.client_reference_id || session.metadata?.userId
 
   if (!userId) {
-    console.error('User ID not found in checkout session')
-    return
+    console.error('❌ User ID not found in checkout session')
+    return false
   }
 
   try {
@@ -134,13 +146,15 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       },
     })
 
-    console.log(`User ${userId} upgraded to PREMIUM`)
+    console.log(`✅ User ${userId} upgraded to PREMIUM`)
+    return true
   } catch (error) {
-    console.error('Error handling checkout session completed:', error)
+    console.error('❌ Error handling checkout session completed:', error)
+    return false
   }
 }
 
-async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
+async function handleSubscriptionCreated(subscription: Stripe.Subscription): Promise<boolean> {
   console.log('🎯 Subscription created:', subscription.id)
   console.log('👤 Customer ID:', subscription.customer)
   console.log('📋 Metadata:', JSON.stringify(subscription.metadata, null, 2))
@@ -156,7 +170,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
   if (!userId) {
     console.error('❌ User ID not found in subscription metadata')
     console.error('📋 Available metadata keys:', Object.keys(subscription.metadata || {}))
-    return
+    return false
   }
 
   try {
@@ -191,6 +205,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
 
     console.log(`✅ Subscription created successfully for user ${userId}`)
     console.log(`🎉 User ${userEmail} is now PREMIUM!`)
+    return true
   } catch (error) {
     console.error('❌ Error handling subscription created:', error)
     console.error('🔍 Error details:', {
@@ -200,10 +215,11 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
       customerId: subscription.customer,
       error: error instanceof Error ? error.message : 'Unknown error'
     })
+    return false
   }
 }
 
-async function handleSetupIntentSucceeded(setupIntent: Stripe.SetupIntent) {
+async function handleSetupIntentSucceeded(setupIntent: Stripe.SetupIntent): Promise<boolean> {
   console.log('Setup Intent succeeded:', setupIntent.id)
 
   // O Setup Intent por si só não ativa o Premium
@@ -215,9 +231,11 @@ async function handleSetupIntentSucceeded(setupIntent: Stripe.SetupIntent) {
   if (userId) {
     console.log(`Setup Intent succeeded for user ${userId}`)
   }
+  
+  return true // Setup Intent sempre é considerado sucesso
 }
 
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<boolean> {
   console.log('Subscription updated:', subscription.id)
 
   try {
@@ -226,8 +244,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     })
 
     if (!user) {
-      console.error('User not found for subscription:', subscription.id)
-      return
+      console.error('❌ User not found for subscription:', subscription.id)
+      return false
     }
 
   // Determinar o status da assinatura
@@ -250,13 +268,15 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     },
   })
 
-    console.log(`Subscription updated for user ${user.id}, status: ${subscription.status}`)
+    console.log(`✅ Subscription updated for user ${user.id}, status: ${subscription.status}`)
+    return true
   } catch (error) {
-    console.error('Error handling subscription updated:', error)
+    console.error('❌ Error handling subscription updated:', error)
+    return false
   }
 }
 
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<boolean> {
   console.log('Subscription deleted:', subscription.id)
 
   try {
@@ -266,7 +286,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 
     if (!user) {
       console.error('User not found for subscription:', subscription.id)
-      return
+      return false
     }
 
     await prisma.user.update({
@@ -280,20 +300,22 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
       },
     })
 
-    console.log(`Subscription deleted for user ${user.id}`)
+    console.log(`✅ Subscription deleted for user ${user.id}`)
+    return true
   } catch (error) {
-    console.error('Error handling subscription deleted:', error)
+    console.error('❌ Error handling subscription deleted:', error)
+    return false
   }
 }
 
-async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<boolean> {
   console.log('Invoice payment succeeded:', invoice.id)
 
   // Verificar se há subscription associada
   const subscriptionId = (invoice as any).subscription
 
   if (!subscriptionId) {
-    return
+    return true // Sem subscription associada, consideramos sucesso
   }
 
   try {
@@ -304,7 +326,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
 
     if (!user) {
       console.error('User not found for subscription:', subscription.id)
-      return
+      return false
     }
 
   // Atualizar data de expiração
@@ -323,20 +345,22 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     },
   })
 
-    console.log(`Payment succeeded for user ${user.id}`)
+    console.log(`✅ Payment succeeded for user ${user.id}`)
+    return true
   } catch (error) {
-    console.error('Error handling invoice payment succeeded:', error)
+    console.error('❌ Error handling invoice payment succeeded:', error)
+    return false
   }
 }
 
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<boolean> {
   console.log('Invoice payment failed:', invoice.id)
 
   // Verificar se há subscription associada
   const subscriptionId = (invoice as any).subscription
 
   if (!subscriptionId) {
-    return
+    return true // Sem subscription associada, consideramos sucesso
   }
 
   try {
@@ -346,35 +370,37 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     })
 
     if (!user) {
-      console.error('User not found for subscription:', subscription.id)
-      return
+      console.error('❌ User not found for subscription:', subscription.id)
+      return false
     }
 
     // Se o pagamento falhou, podemos manter o usuário como PREMIUM até o final do período
     // ou downgrade imediatamente dependendo da política
-    console.log(`Payment failed for user ${user.id}, subscription: ${subscription.id}`)
+    console.log(`⚠️ Payment failed for user ${user.id}, subscription: ${subscription.id}`)
     
     // Por enquanto, vamos manter o usuário como PREMIUM até o final do período
     // Em uma implementação real, você pode querer implementar uma lógica mais sofisticada
+    return true
   } catch (error) {
-    console.error('Error handling invoice payment failed:', error)
+    console.error('❌ Error handling invoice payment failed:', error)
+    return false
   }
 }
 
-async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent): Promise<boolean> {
   console.log('Payment Intent succeeded:', paymentIntent.id)
 
   const userId = paymentIntent.metadata?.userId
   const planType = paymentIntent.metadata?.planType
 
   if (!userId) {
-    console.error('User ID not found in payment intent metadata')
-    return
+    console.error('❌ User ID not found in payment intent metadata')
+    return false
   }
 
   if (!planType || !['monthly', 'annual'].includes(planType)) {
-    console.error('Invalid plan type in payment intent metadata:', planType)
-    return
+    console.error('❌ Invalid plan type in payment intent metadata:', planType)
+    return false
   }
 
   try {
@@ -403,24 +429,27 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       },
     })
 
-    console.log(`User ${userId} upgraded to PREMIUM via Payment Intent (${planType})`)
+    console.log(`✅ User ${userId} upgraded to PREMIUM via Payment Intent (${planType})`)
+    return true
   } catch (error) {
-    console.error('Error handling payment intent succeeded:', error)
+    console.error('❌ Error handling payment intent succeeded:', error)
+    return false
   }
 }
 
-async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
+async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<boolean> {
   console.log('Payment Intent failed:', paymentIntent.id)
 
   const userId = paymentIntent.metadata?.userId
 
   if (!userId) {
-    console.error('User ID not found in payment intent metadata')
-    return
+    console.error('❌ User ID not found in payment intent metadata')
+    return false
   }
 
-  console.log(`Payment failed for user ${userId}, payment intent: ${paymentIntent.id}`)
+  console.log(`⚠️ Payment failed for user ${userId}, payment intent: ${paymentIntent.id}`)
   
   // Por enquanto, apenas logamos o erro
   // Em uma implementação real, você pode querer notificar o usuário ou tomar outras ações
+  return true // Consideramos sucesso pois processamos o evento de falha
 }

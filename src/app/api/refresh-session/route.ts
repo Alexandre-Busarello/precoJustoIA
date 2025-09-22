@@ -44,7 +44,6 @@ export async function POST() {
         subscriptionTier: user.subscriptionTier,
         premiumExpiresAt: user.premiumExpiresAt?.toISOString(),
         isPremium: user.isPremium,
-        isVip: user.isVip,
         isAdmin: user.isAdmin
       }
     });

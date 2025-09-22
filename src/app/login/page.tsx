@@ -73,7 +73,15 @@ function LoginForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Senha</Label>
+                <Link 
+                  href="/esqueci-senha" 
+                  className="text-sm text-blue-600 hover:text-blue-500 hover:underline"
+                >
+                  Esqueceu sua senha?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"

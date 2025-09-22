@@ -140,7 +140,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
   console.log('👤 Customer ID:', subscription.customer)
   console.log('📋 Metadata:', JSON.stringify(subscription.metadata, null, 2))
   console.log('💰 Status:', subscription.status)
-  console.log('📅 Current period end:', subscription.current_period_end)
+  console.log('📅 Current period end:', (subscription as any).current_period_end)
 
   const userId = subscription.metadata?.userId
   const userEmail = subscription.metadata?.userEmail

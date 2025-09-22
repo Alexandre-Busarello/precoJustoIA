@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -128,5 +128,13 @@ export default function LoginPage() {
         </CardFooter>
       </Card>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }

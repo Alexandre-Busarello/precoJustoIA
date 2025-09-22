@@ -125,10 +125,10 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                       selectedPlan === key 
                         ? 'ring-2 ring-blue-500 shadow-lg' 
                         : 'hover:shadow-md'
-                    } ${plan.popular ? 'border-blue-500' : ''}`}
+                    } ${(plan as any).popular ? 'border-blue-500' : ''}`}
                     onClick={() => setSelectedPlan(key as PlanType)}
                   >
-                    {plan.popular && (
+                    {(plan as any).popular && (
                       <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                         <Badge className="bg-blue-500 text-white px-4 py-1">
                           <Star className="w-3 h-3 mr-1" />

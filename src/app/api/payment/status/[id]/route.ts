@@ -3,10 +3,10 @@ import { getPaymentStatus } from '@/lib/mercadopago'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const paymentId = params.id
+    const { id: paymentId } = await params
 
     if (!paymentId) {
       return NextResponse.json(

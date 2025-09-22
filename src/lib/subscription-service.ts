@@ -44,7 +44,7 @@ export async function syncUserSubscription(userId: string): Promise<Subscription
     
     const isActive = subscription.status === 'active'
     const tier: SubscriptionTier = isActive ? 'PREMIUM' : 'FREE'
-    const expiresAt = new Date(subscription.current_period_end * 1000)
+    const expiresAt = new Date((subscription as any).current_period_end * 1000)
 
     // Atualizar dados no banco se necessário
     if (user.subscriptionTier !== tier || 

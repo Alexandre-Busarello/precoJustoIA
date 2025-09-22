@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 
-export default function RegisterPage() {
+function RegisterForm() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -183,5 +183,13 @@ export default function RegisterPage() {
         </CardFooter>
       </Card>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <RegisterForm />
+    </Suspense>
   )
 }

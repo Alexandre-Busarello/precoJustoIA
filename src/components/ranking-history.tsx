@@ -81,25 +81,14 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
     }
   }
 
-  const handleReprocess = (historyItem: HistoryItem) => {
+  const handleViewRanking = (historyItem: HistoryItem) => {
     try {
       setReprocessing(historyItem.id)
       
-      // Salvar parâmetros E resultados no sessionStorage para uso na página de ranking
-      const rankingData = {
-        model: historyItem.model,
-        params: historyItem.params,
-        cachedResults: historyItem.results, // Incluir resultados em cache
-        resultCount: historyItem.resultCount,
-        createdAt: historyItem.createdAt
-      }
-      
-      sessionStorage.setItem('prefillRanking', JSON.stringify(rankingData))
-      
-      // Redirecionar para a página de ranking
-      window.location.href = '/ranking'
+      // Navegar diretamente para a página de ranking com o ID
+      window.location.href = `/ranking?id=${historyItem.id}`
     } catch (error) {
-      console.error('Erro ao preparar reprocessamento:', error)
+      console.error('Erro ao navegar para ranking:', error)
     } finally {
       setReprocessing(null)
     }
@@ -272,7 +261,7 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleReprocess(item)}
+                  onClick={() => handleViewRanking(item)}
                   disabled={reprocessing === item.id}
                   className="flex items-center gap-1 h-8 px-3"
                 >

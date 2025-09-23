@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requirePremiumUser, getCurrentUser } from '@/lib/user-service'
+import { requirePremiumUser } from '@/lib/user-service'
 import { inferTicketPriority, explainPriorityReason } from '@/lib/ticket-priority-inference'
 import { z } from 'zod'
 

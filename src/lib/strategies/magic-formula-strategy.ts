@@ -125,9 +125,12 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     }
 
     // Ordenar por Magic Score
-    return results
+    const sortedResults = results
       .sort((a, b) => (b.key_metrics?.magicScore || 0) - (a.key_metrics?.magicScore || 0))
       .slice(0, 50);
+
+    // Aplicar priorização técnica se habilitada
+    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: MagicFormulaParams): string {
@@ -152,9 +155,9 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
 - Dívida Líquida/PL ≤ 150% (estrutura de capital equilibrada)
 - Market Cap ≥ R$ 1B (empresas de médio/grande porte)
 
-**Ordenação**: Por Magic Score - combina ROIC alto + Earnings Yield alto + indicadores complementares.
+**Ordenação**: Por Magic Score - combina ROIC alto + Earnings Yield alto + indicadores complementares${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
 
-**Objetivo**: Empresas que são simultaneamente ótimos negócios (alto ROIC) vendidas a preços atrativos (alto EY).
+**Objetivo**: Empresas que são simultaneamente ótimos negócios (alto ROIC) vendidas a preços atrativos (alto EY)${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.
 
 **Diferencial**: Equilibra crescimento e valor, evitando extremos que podem ser perigosos.`;
   }

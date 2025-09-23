@@ -6,7 +6,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
 
   validateCompanyData(companyData: CompanyData, params: LowPEParams): boolean {
     const { financials } = companyData;
-    const { maxPE, minROE = 0 } = params;
+    const { maxPE } = params;
     // Dar benefício da dúvida - só requer P/L válido
     return !!(
       financials.pl && toNumber(financials.pl)! > 3 && toNumber(financials.pl)! <= maxPE
@@ -126,9 +126,12 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     }
 
     // Ordenar por Value Score
-    return results
+    const sortedResults = results
       .sort((a, b) => (b.key_metrics?.valueScore || 0) - (a.key_metrics?.valueScore || 0))
       .slice(0, 50);
+
+    // Aplicar priorização técnica se habilitada
+    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: LowPEParams): string {
@@ -151,8 +154,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
 - Dívida Líquida/PL ≤ 200% (endividamento não excessivo)
 - Market Cap ≥ R$ 500M (liquidez e estabilidade mínimas)
 
-**Ordenação**: Por Value Score (combina preço atrativo + indicadores de qualidade).
+**Ordenação**: Por Value Score (combina preço atrativo + indicadores de qualidade)${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
 
-**Objetivo**: Empresas baratas que são REALMENTE bons negócios, não problemas disfarçados.`;
+**Objetivo**: Empresas baratas que são REALMENTE bons negócios, não problemas disfarçados${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
   }
 }

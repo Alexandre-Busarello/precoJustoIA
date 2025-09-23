@@ -105,7 +105,7 @@ export default function TicketDetailsDialog({ open, onOpenChange, ticket, onTick
     } finally {
       setLoading(false)
     }
-  }, [ticket?.id]) // Removido toast das dependências
+  }, [ticket?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open && ticket) {
@@ -159,39 +159,39 @@ export default function TicketDetailsDialog({ open, onOpenChange, ticket, onTick
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[95vw] max-w-[800px] max-h-[90vh] h-[90vh] sm:h-auto flex flex-col p-4 sm:p-6">
         <DialogHeader className="flex-shrink-0">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <DialogTitle className="text-xl">{ticket.title}</DialogTitle>
-              <DialogDescription className="mt-2">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-lg sm:text-xl pr-2 line-clamp-2">{ticket.title}</DialogTitle>
+              <DialogDescription className="mt-1 sm:mt-2 text-sm">
                 Ticket #{ticket.id.slice(-8)} • {categoryConfig[ticket.category]}
               </DialogDescription>
             </div>
-            <div className="flex flex-col gap-2 ml-4">
+            <div className="flex flex-row sm:flex-col gap-2 sm:ml-4 flex-shrink-0">
               <Badge 
                 variant="secondary" 
-                className={`${statusConfig[ticket.status].color} text-white`}
+                className={`${statusConfig[ticket.status].color} text-white text-xs`}
               >
                 <StatusIcon className="h-3 w-3 mr-1" />
                 {statusConfig[ticket.status].label}
               </Badge>
               <Badge 
                 variant="outline"
-                className={`${priorityConfig[ticket.priority].color} text-white border-0`}
+                className={`${priorityConfig[ticket.priority].color} text-white border-0 text-xs`}
               >
                 {priorityConfig[ticket.priority].label}
               </Badge>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-sm text-gray-600 mt-4">
-            <span>Criado em {new Date(ticket.createdAt).toLocaleString('pt-BR')}</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 mt-3 sm:mt-4">
+            <span>Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
             {ticket.assignee && (
-              <span>Atribuído a: {ticket.assignee.name}</span>
+              <span className="hidden sm:inline">Atribuído a: {ticket.assignee.name}</span>
             )}
             {ticket.closedAt && (
-              <span>Fechado em {new Date(ticket.closedAt).toLocaleString('pt-BR')}</span>
+              <span>Fechado: {new Date(ticket.closedAt).toLocaleDateString('pt-BR')}</span>
             )}
           </div>
         </DialogHeader>
@@ -200,7 +200,7 @@ export default function TicketDetailsDialog({ open, onOpenChange, ticket, onTick
 
         {/* Mensagens */}
         <div className="flex-1 min-h-0">
-          <ScrollArea className="h-[400px] pr-4">
+          <ScrollArea className="h-[300px] sm:h-[400px] pr-2 sm:pr-4">
             <div className="space-y-4">
               {loading ? (
                 <div className="flex items-center justify-center py-8">
@@ -213,30 +213,32 @@ export default function TicketDetailsDialog({ open, onOpenChange, ticket, onTick
               ) : (
                 messages.map((message) => (
                   <Card key={message.id} className={message.user.isAdmin ? 'bg-blue-50 border-blue-200' : ''}>
-                    <CardContent className="pt-4">
-                      <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-full ${message.user.isAdmin ? 'bg-blue-600' : 'bg-gray-600'}`}>
+                    <CardContent className="pt-3 sm:pt-4 pb-3 sm:pb-4">
+                      <div className="flex items-start gap-2 sm:gap-3">
+                        <div className={`p-1.5 sm:p-2 rounded-full flex-shrink-0 ${message.user.isAdmin ? 'bg-blue-600' : 'bg-gray-600'}`}>
                           {message.user.isAdmin ? (
-                            <UserCheck className="h-4 w-4 text-white" />
+                            <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                           ) : (
-                            <User className="h-4 w-4 text-white" />
+                            <User className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                           )}
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-medium text-gray-900">
-                              {message.user.isAdmin ? 'Suporte' : message.user.name || 'Você'}
-                            </span>
-                            {message.user.isAdmin && (
-                              <Badge variant="secondary" className="text-xs">
-                                Equipe
-                              </Badge>
-                            )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900 text-sm sm:text-base">
+                                {message.user.isAdmin ? 'Suporte' : message.user.name || 'Você'}
+                              </span>
+                              {message.user.isAdmin && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Equipe
+                                </Badge>
+                              )}
+                            </div>
                             <span className="text-xs text-gray-500">
-                              {new Date(message.createdAt).toLocaleString('pt-BR')}
+                              {new Date(message.createdAt).toLocaleDateString('pt-BR')} {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                          <div className="text-gray-700 whitespace-pre-wrap">
+                          <div className="text-gray-700 whitespace-pre-wrap text-sm sm:text-base break-words">
                             {message.message}
                           </div>
                         </div>
@@ -252,23 +254,25 @@ export default function TicketDetailsDialog({ open, onOpenChange, ticket, onTick
         {/* Campo de resposta */}
         {canReply && (
           <>
-            <Separator className="my-4" />
+            <Separator className="my-3 sm:my-4" />
             <div className="flex-shrink-0 space-y-3">
               <Textarea
                 placeholder="Digite sua resposta..."
                 value={newMessage}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMessage(e.target.value)}
-                rows={3}
+                rows={2}
                 maxLength={2000}
+                className="text-sm sm:text-base resize-none"
               />
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <span className="text-xs text-gray-500">
                   {newMessage.length}/2000 caracteres
                 </span>
                 <Button 
                   onClick={handleSendMessage}
                   disabled={!newMessage.trim() || sendingMessage}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 w-full sm:w-auto"
+                  size="sm"
                 >
                   <Send className="h-4 w-4" />
                   {sendingMessage ? 'Enviando...' : 'Enviar'}
@@ -279,8 +283,8 @@ export default function TicketDetailsDialog({ open, onOpenChange, ticket, onTick
         )}
 
         {!canReply && (
-          <div className="flex-shrink-0 bg-gray-50 p-4 rounded-lg text-center">
-            <p className="text-gray-600">
+          <div className="flex-shrink-0 bg-gray-50 p-3 sm:p-4 rounded-lg text-center">
+            <p className="text-gray-600 text-sm sm:text-base">
               Este ticket está {ticket.status === 'CLOSED' ? 'fechado' : 'resolvido'} e não aceita mais respostas.
             </p>
           </div>

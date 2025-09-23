@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Building2 } from 'lucide-react'
 
 interface CompanyLogoProps {
@@ -13,7 +14,6 @@ interface CompanyLogoProps {
 export function CompanyLogo({ 
   logoUrl, 
   companyName, 
-  ticker, 
   size = 80 
 }: CompanyLogoProps) {
   const [hasError, setHasError] = useState(false)
@@ -35,10 +35,12 @@ export function CompanyLogo({
       className="bg-white rounded-xl flex items-center justify-center overflow-hidden border"
       style={{ width: size, height: size }}
     >
-      <img
+      <Image
         src={logoUrl}
         alt={`Logo ${companyName}`}
-        className="w-full h-full object-contain"
+        width={size}
+        height={size}
+        className="object-contain"
         onError={() => setHasError(true)}
         onLoad={() => setHasError(false)}
       />

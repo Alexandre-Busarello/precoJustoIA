@@ -427,7 +427,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
       <div className="mb-8">
         <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
           <Zap className="w-6 h-6" />
-          <span>Análises de Investimento</span>
+          <span>Análises Fundamentalista</span>
         </h2>
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
@@ -444,7 +444,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
       <div className="mb-8">
         <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
           <Zap className="w-6 h-6" />
-          <span>Análises de Investimento</span>
+          <span>Análises Fundamentalista</span>
         </h2>
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
@@ -467,7 +467,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
     <div className="mb-8">
       <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
         <Zap className="w-6 h-6" />
-        <span>Análises de Investimento</span>
+        <span>Análises Fundamentalista</span>
       </h2>
 
       <Tabs defaultValue="fair-value" className="w-full">

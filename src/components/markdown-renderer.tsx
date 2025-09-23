@@ -254,6 +254,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
 
           // Imagens responsivas
           img: ({ src, alt, ...props }) => (
+            // eslint-disable-next-line @next/next/no-img-element
             <img 
               src={src}
               alt={alt}

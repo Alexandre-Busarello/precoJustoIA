@@ -201,9 +201,12 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     }
 
     // Ordenar por qualidade (empresas sólidas primeiro)
-    return results
+    const sortedResults = results
       .sort((a, b) => (b.key_metrics?.qualityScore || 0) - (a.key_metrics?.qualityScore || 0))
       .slice(0, 50);
+
+    // Aplicar priorização técnica se habilitada
+    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: GrahamParams): string {
@@ -225,8 +228,8 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
 - 60% Margem de Segurança (conceito central do Graham)
 - 40% Indicadores Fundamentais (ROE, Liquidez, Margem Líquida)
 
-**Ordenação**: Por Score de Qualidade priorizando maior margem de segurança.
+**Ordenação**: Por Score de Qualidade priorizando maior margem de segurança${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
 
-**Objetivo**: Encontrar empresas subvalorizadas MAS financeiramente saudáveis, evitando "value traps".`;
+**Objetivo**: Encontrar empresas subvalorizadas MAS financeiramente saudáveis, evitando "value traps"${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
   }
 }

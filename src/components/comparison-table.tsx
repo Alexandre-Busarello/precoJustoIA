@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,6 +42,11 @@ interface CompanyData {
     dividaLiquidaEbitda?: number | null
     dividaLiquidaPatrimonio?: number | null
     liquidezCorrente?: number | null
+    // Indicadores de Crescimento
+    cagrLucros5a?: number | null
+    cagrReceitas5a?: number | null
+    crescimentoLucros?: number | null
+    crescimentoReceitas?: number | null
   } | null
   strategies?: {
     graham?: { score: number; isEligible: boolean; fairValue?: number | null } | null
@@ -66,15 +70,7 @@ interface ComparisonTableProps {
   userIsPremium: boolean
 }
 
-// Definir quais indicadores são premium
-const premiumIndicators = [
-  'margemLiquida',
-  'roic', 
-  'lucroLiquido',
-  'dividaLiquidaEbitda',
-  'dividaLiquidaPatrimonio',
-  'liquidezCorrente'
-]
+// Indicadores premium são definidos inline nos objetos de indicadores
 
 // Configuração dos indicadores
 const indicators = [
@@ -148,6 +144,40 @@ const indicators = [
     description: 'Dívida Líquida sobre EBITDA',
     format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
     getBestType: () => 'lowest' as const,
+    isPremium: true
+  },
+  
+  // Indicadores de Crescimento (Premium)
+  {
+    key: 'cagrLucros5a',
+    label: 'CAGR Lucros 5a',
+    description: 'Taxa de Crescimento Anual Composta dos Lucros (5 anos)',
+    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true
+  },
+  {
+    key: 'cagrReceitas5a',
+    label: 'CAGR Receitas 5a',
+    description: 'Taxa de Crescimento Anual Composta das Receitas (5 anos)',
+    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true
+  },
+  {
+    key: 'crescimentoLucros',
+    label: 'Crescimento Lucros',
+    description: 'Variação Anual dos Lucros',
+    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
+    getBestType: () => 'highest' as const,
+    isPremium: true
+  },
+  {
+    key: 'crescimentoReceitas',
+    label: 'Crescimento Receitas',
+    description: 'Variação Anual das Receitas',
+    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
+    getBestType: () => 'highest' as const,
     isPremium: true
   },
   
@@ -229,8 +259,6 @@ const indicators = [
 ]
 
 export function ComparisonTable({ companies, userIsPremium }: ComparisonTableProps) {
-  const [sortBy, setSortBy] = useState<string | null>(null)
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   // Função para determinar o melhor valor e empates
   const getBestValueInfo = (values: (number | null)[], type: 'highest' | 'lowest' | 'neutral') => {
@@ -258,32 +286,9 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
     return { bestIndex, tiedIndices }
   }
 
-  // Função para determinar o melhor valor (compatibilidade)
-  const getBestValueIndex = (values: (number | null)[], type: 'highest' | 'lowest' | 'neutral') => {
-    return getBestValueInfo(values, type).bestIndex
-  }
+  // Função removida - não utilizada
 
-  // Função para renderizar célula com indicador de melhor valor
-  const renderCell = (value: number | null, companyIndex: number, bestIndex: number, isPremium: boolean) => {
-    const shouldBlur = isPremium && !userIsPremium
-    const isBest = bestIndex === companyIndex && bestIndex !== -1
-    
-    return (
-      <TableCell key={companyIndex} className={`text-center relative ${shouldBlur ? 'blur-sm' : ''}`}>
-        <div className="flex items-center justify-center space-x-1">
-          <span className={isBest ? 'font-bold text-green-600' : ''}>
-            {indicators.find(i => i.key === 'pl')?.format(value) || 'N/A'}
-          </span>
-          {isBest && <TrendingUp className="w-4 h-4 text-green-600" />}
-        </div>
-        {shouldBlur && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Lock className="w-4 h-4 text-muted-foreground" />
-          </div>
-        )}
-      </TableCell>
-    )
-  }
+  // Função removida - não utilizada
 
   return (
     <Card>
@@ -459,7 +464,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                   Desbloqueie Análises Avançadas
                 </h4>
                 <p className="text-xs sm:text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                  Acesse indicadores premium como Margem Líquida, ROIC, análise de endividamento e muito mais.
+                  Acesse indicadores premium como Margem Líquida, ROIC, indicadores de crescimento, análise de endividamento e muito mais.
                 </p>
               </div>
               <Button asChild size="sm" className="bg-yellow-600 hover:bg-yellow-700 w-full sm:w-auto">

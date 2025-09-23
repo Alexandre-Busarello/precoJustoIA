@@ -22,7 +22,7 @@ interface CardPaymentProps {
   onError: (error: string) => void
 }
 
-function CardPaymentForm({ priceId, planName, price, onSuccess, onError }: CardPaymentProps) {
+function CardPaymentForm({ priceId, planName, price, onError }: CardPaymentProps) {
   const stripe = useStripe()
   const elements = useElements()
   const [loading, setLoading] = useState(false)

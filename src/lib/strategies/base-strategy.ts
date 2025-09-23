@@ -3,7 +3,8 @@ import {
   StrategyParams, 
   CompanyData, 
   StrategyAnalysis, 
-  RankBuilderResult 
+  RankBuilderResult,
+  TechnicalAnalysisData
 } from './types';
 
 // Funções utilitárias
@@ -176,5 +177,151 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
       rational: analysis.reasoning,
       key_metrics: analysis.key_metrics
     };
+  }
+
+  // Calcular score de análise técnica para priorização (sobrevenda = oportunidade)
+  protected calculateTechnicalScore(technicalData?: TechnicalAnalysisData): number {
+    if (!technicalData) return 0;
+
+    let score = 0;
+
+    // RSI: Priorizar sobrevenda como oportunidade de entrada
+    if (technicalData.rsi !== undefined) {
+      if (technicalData.rsi <= 25) {
+        score += 5; // Sobrevenda extrema - excelente oportunidade
+      } else if (technicalData.rsi <= 30) {
+        score += 4; // Forte sobrevenda - boa oportunidade
+      } else if (technicalData.rsi <= 40) {
+        score += 2; // Sobrevenda moderada - oportunidade razoável
+      } else if (technicalData.rsi <= 50) {
+        score += 1; // Neutro baixo - leve oportunidade
+      } else if (technicalData.rsi >= 75) {
+        score -= 3; // Sobrecompra forte - evitar
+      } else if (technicalData.rsi >= 70) {
+        score -= 1; // Sobrecompra moderada - cautela
+      }
+    }
+
+    // Oscilador Estocástico: Confirmar sinais de sobrevenda
+    if (technicalData.stochasticK !== undefined && technicalData.stochasticD !== undefined) {
+      const avgStochastic = (technicalData.stochasticK + technicalData.stochasticD) / 2;
+      if (avgStochastic <= 15) {
+        score += 4; // Sobrevenda extrema
+      } else if (avgStochastic <= 20) {
+        score += 3; // Forte sobrevenda
+      } else if (avgStochastic <= 30) {
+        score += 2; // Sobrevenda moderada
+      } else if (avgStochastic >= 85) {
+        score -= 3; // Sobrecompra forte
+      } else if (avgStochastic >= 80) {
+        score -= 1; // Sobrecompra moderada
+      }
+    }
+
+    // Sinal geral: Peso maior para confirmação
+    if (technicalData.overallSignal === 'SOBREVENDA') {
+      score += 3; // Confirmação de oportunidade
+    } else if (technicalData.overallSignal === 'SOBRECOMPRA') {
+      score -= 2; // Confirmação de cautela
+    }
+
+    return score;
+  }
+
+  /**
+   * Aplicar priorização técnica no ranking (complementar à análise fundamentalista)
+   * 
+   * ESTRATÉGIA:
+   * 1. Preserva a ordem fundamentalista como critério principal
+   * 2. Agrupa ativos em faixas de qualidade similar (~20% cada)
+   * 3. Dentro de cada grupo, prioriza oportunidades técnicas (sobrevenda)
+   * 4. Mantém a qualidade fundamentalista como base, usando técnica para timing
+   */
+  protected applyTechnicalPrioritization(
+    results: RankBuilderResult[], 
+    companies: CompanyData[], 
+    useTechnicalAnalysis: boolean = false
+  ): RankBuilderResult[] {
+    if (!useTechnicalAnalysis) return results;
+
+    // Criar mapa de dados técnicos por ticker
+    const technicalMap = new Map<string, TechnicalAnalysisData>();
+    companies.forEach(company => {
+      if (company.technicalAnalysis) {
+        technicalMap.set(company.ticker, company.technicalAnalysis);
+      }
+    });
+
+    // Adicionar score técnico aos resultados (preservando ordem fundamentalista)
+    const resultsWithTechnicalScore = results.map((result, originalIndex) => {
+      const technicalData = technicalMap.get(result.ticker);
+      const technicalScore = this.calculateTechnicalScore(technicalData);
+      
+      return {
+        ...result,
+        technicalScore,
+        originalIndex, // Preservar posição original baseada na análise fundamentalista
+        // Adicionar informação técnica ao rational se disponível
+        rational: technicalData ? 
+          `${result.rational}\n\n📊 **Análise Técnica**: ${this.getTechnicalSummary(technicalData)}` : 
+          result.rational
+      };
+    });
+
+    // Agrupar por faixas de qualidade fundamentalista e ordenar tecnicamente dentro de cada grupo
+    const groupSize = Math.max(3, Math.floor(results.length / 5)); // Grupos de ~20% ou mínimo 3
+    const reorderedResults: typeof resultsWithTechnicalScore = [];
+
+    for (let i = 0; i < resultsWithTechnicalScore.length; i += groupSize) {
+      const group = resultsWithTechnicalScore.slice(i, i + groupSize);
+      
+      // Dentro de cada grupo, priorizar por análise técnica (sobrevenda = melhor oportunidade)
+      const sortedGroup = group.sort((a, b) => {
+        // Primeiro critério: score técnico (maior = melhor oportunidade de entrada)
+        if (b.technicalScore !== a.technicalScore) {
+          return b.technicalScore - a.technicalScore;
+        }
+        // Segundo critério: manter ordem fundamentalista original
+        return a.originalIndex - b.originalIndex;
+      });
+      
+      reorderedResults.push(...sortedGroup);
+    }
+
+    return reorderedResults.map(({ ...result }) => result);
+  }
+
+  // Gerar resumo da análise técnica
+  private getTechnicalSummary(technicalData: TechnicalAnalysisData): string {
+    const parts: string[] = [];
+
+    if (technicalData.rsi !== undefined) {
+      let rsiStatus = '';
+      if (technicalData.rsi <= 30) rsiStatus = 'forte sobrevenda';
+      else if (technicalData.rsi <= 40) rsiStatus = 'sobrevenda';
+      else if (technicalData.rsi >= 70) rsiStatus = 'sobrecompra';
+      else rsiStatus = 'neutro';
+      
+      parts.push(`RSI ${technicalData.rsi.toFixed(1)} (${rsiStatus})`);
+    }
+
+    if (technicalData.stochasticK !== undefined && technicalData.stochasticD !== undefined) {
+      const avgStochastic = (technicalData.stochasticK + technicalData.stochasticD) / 2;
+      let stochStatus = '';
+      if (avgStochastic <= 20) stochStatus = 'forte sobrevenda';
+      else if (avgStochastic <= 30) stochStatus = 'sobrevenda';
+      else if (avgStochastic >= 80) stochStatus = 'sobrecompra';
+      else stochStatus = 'neutro';
+      
+      parts.push(`Estocástico ${avgStochastic.toFixed(1)} (${stochStatus})`);
+    }
+
+    if (technicalData.overallSignal) {
+      const signalText = technicalData.overallSignal === 'SOBREVENDA' ? 'Oportunidade de entrada' :
+                        technicalData.overallSignal === 'SOBRECOMPRA' ? 'Possível saída' : 'Neutro';
+      parts.push(`Sinal: ${signalText}`);
+    }
+
+    return parts.length > 0 ? parts.join(', ') : 'Dados técnicos não disponíveis';
   }
 }

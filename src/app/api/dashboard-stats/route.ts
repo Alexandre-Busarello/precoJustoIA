@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma, safeQuery } from '@/lib/prisma-wrapper';
+import { getCurrentUser } from '@/lib/user-service';
 
 // Função helper removida pois não é usada
 
@@ -16,6 +17,16 @@ export async function GET() {
       );
     }
 
+    // Usar o serviço centralizado para obter o usuário válido
+    const currentUser = await getCurrentUser();
+    
+    if (!currentUser?.id) {
+      return NextResponse.json(
+        { error: 'Usuário não encontrado' },
+        { status: 404 }
+      );
+    }
+
     // Data de hoje (início e fim do dia)
     const today = new Date();
     const startOfToday = new Date(today.setHours(0, 0, 0, 0));
@@ -26,7 +37,7 @@ export async function GET() {
     const rankingsToday = await safeQuery('rankings-today', () => 
       prisma.rankingHistory.count({
         where: {
-          userId: session.user.id,
+          userId: currentUser.id,
           createdAt: {
             gte: startOfToday,
             lte: endOfToday
@@ -39,7 +50,7 @@ export async function GET() {
     const totalRankings = await safeQuery('total-rankings', () =>
       prisma.rankingHistory.count({
         where: {
-          userId: session.user.id
+          userId: currentUser.id
         }
       })
     );

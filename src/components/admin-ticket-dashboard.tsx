@@ -228,14 +228,14 @@ export default function AdminTicketDashboard() {
   return (
     <div className="space-y-6">
       {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <AlertCircle className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Abertos</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Abertos</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">
                   {(stats.byStatus.OPEN || 0) + (stats.byStatus.IN_PROGRESS || 0) + 
                    (stats.byStatus.WAITING_USER || 0) + (stats.byStatus.WAITING_ADMIN || 0)}
                 </p>
@@ -245,36 +245,36 @@ export default function AdminTicketDashboard() {
         </Card>
         
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <Users className="h-8 w-8 text-orange-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Não Atribuídos</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.unassigned}</p>
+              <Users className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Não Atrib.</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.unassigned}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <TrendingUp className="h-8 w-8 text-red-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Urgentes</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.byPriority.URGENT || 0}</p>
+              <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-red-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Urgentes</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.byPriority.URGENT || 0}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Resolvidos</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Resolvidos</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">
                   {(stats.byStatus.RESOLVED || 0) + (stats.byStatus.CLOSED || 0)}
                 </p>
               </div>
@@ -286,13 +286,13 @@ export default function AdminTicketDashboard() {
       {/* Filtros */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+            <Filter className="h-4 w-4 sm:h-5 sm:w-5" />
             Filtros
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Buscar</label>
               <div className="relative">
@@ -399,11 +399,11 @@ export default function AdminTicketDashboard() {
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="all">Todos</TabsTrigger>
-              <TabsTrigger value="open">Abertos</TabsTrigger>
-              <TabsTrigger value="unassigned">Não Atribuídos</TabsTrigger>
-              <TabsTrigger value="urgent">Urgentes</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+              <TabsTrigger value="all" className="text-xs sm:text-sm">Todos</TabsTrigger>
+              <TabsTrigger value="open" className="text-xs sm:text-sm">Abertos</TabsTrigger>
+              <TabsTrigger value="unassigned" className="text-xs sm:text-sm">Não Atrib.</TabsTrigger>
+              <TabsTrigger value="urgent" className="text-xs sm:text-sm">Urgentes</TabsTrigger>
             </TabsList>
             
             <TabsContent value={activeTab} className="mt-6">
@@ -429,62 +429,75 @@ export default function AdminTicketDashboard() {
                         }`}
                         onClick={() => handleTicketClick(ticket)}
                       >
-                        <CardContent className="pt-6">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <h3 className="font-semibold text-gray-900">{ticket.title}</h3>
+                        <CardContent className="pt-4 sm:pt-6">
+                          <div className="space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate pr-2">{ticket.title}</h3>
                                 {ticket.isUrgentByTime && (
-                                  <Badge className="bg-red-600 hover:bg-red-700 text-white animate-pulse">
+                                  <Badge className="bg-red-600 hover:bg-red-700 text-white animate-pulse text-xs mt-2">
                                     <AlertCircle className="h-3 w-3 mr-1" />
-                                    URGENTE - {Math.floor(ticket.hoursSinceLastAdminResponse || 0)}h sem resposta
+                                    <span className="hidden sm:inline">URGENTE - {Math.floor(ticket.hoursSinceLastAdminResponse || 0)}h sem resposta</span>
+                                    <span className="sm:hidden">URGENTE - {Math.floor(ticket.hoursSinceLastAdminResponse || 0)}h</span>
                                   </Badge>
                                 )}
+                              </div>
+                              <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
                                 <Badge 
                                   variant="secondary" 
-                                  className={`${statusConfig[ticket.status].color} text-white`}
+                                  className={`${statusConfig[ticket.status].color} text-white text-xs`}
                                 >
                                   <StatusIcon className="h-3 w-3 mr-1" />
                                   {statusConfig[ticket.status].label}
                                 </Badge>
                                 <Badge 
                                   variant="outline"
-                                  className={`${priorityConfig[ticket.priority].color} text-white border-0`}
+                                  className={`${priorityConfig[ticket.priority].color} text-white border-0 text-xs`}
                                 >
                                   {priorityConfig[ticket.priority].label}
                                 </Badge>
-                                <Badge variant="outline">
+                                <Badge variant="outline" className="text-xs">
                                   {ticket.user.subscriptionTier}
                                 </Badge>
                               </div>
-                              
-                              <p className="text-gray-600 text-sm mb-2 line-clamp-2">
-                                {ticket.description}
-                              </p>
-                              
-                              <div className="flex items-center gap-4 text-xs text-gray-500">
+                            </div>
+                            
+                            <p className="text-gray-600 text-sm line-clamp-2">
+                              {ticket.description}
+                            </p>
+                            
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500">
                                 <span>#{ticket.id.slice(-8)}</span>
-                                <span>{categoryConfig[ticket.category]}</span>
-                                <span>Por: {ticket.user.name || ticket.user.email}</span>
-                                <span>Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                <span className="hidden sm:inline">{categoryConfig[ticket.category]}</span>
+                                <span className="sm:hidden">{categoryConfig[ticket.category].split(' ')[0]}</span>
+                                <span className="hidden sm:inline">Por: {ticket.user.name || ticket.user.email}</span>
+                                <span className="sm:hidden">Por: {(ticket.user.name || ticket.user.email).split(' ')[0]}</span>
+                                <span className="hidden sm:inline">Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                <span className="sm:hidden">{new Date(ticket.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                                 {lastMessage && (
                                   <span className="flex items-center gap-1">
                                     {lastMessage.user.isAdmin ? <UserCheck className="h-3 w-3" /> : <User className="h-3 w-3" />}
-                                    Última: {lastMessage.user.isAdmin ? 'Admin' : 'Usuário'}
+                                    <span className="hidden sm:inline">Última: {lastMessage.user.isAdmin ? 'Admin' : 'Usuário'}</span>
+                                    <span className="sm:hidden">{lastMessage.user.isAdmin ? 'Admin' : 'User'}</span>
                                   </span>
                                 )}
                               </div>
-                            </div>
-                            
-                            <div className="text-right text-xs text-gray-500">
-                              {ticket.assignee ? (
-                                <p className="font-medium text-blue-600">
-                                  Atribuído: {ticket.assignee.name}
-                                </p>
-                              ) : (
-                                <p className="text-orange-600">Não atribuído</p>
-                              )}
-                              <p>{ticket._count.messages} mensagem{ticket._count.messages !== 1 ? 's' : ''}</p>
+                              
+                              <div className="flex items-center justify-between sm:justify-end gap-4 text-xs text-gray-500">
+                                {ticket.assignee ? (
+                                  <span className="font-medium text-blue-600">
+                                    <span className="hidden sm:inline">Atribuído: {ticket.assignee.name}</span>
+                                    <span className="sm:hidden">Atrib: {ticket.assignee.name.split(' ')[0]}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-orange-600">
+                                    <span className="hidden sm:inline">Não atribuído</span>
+                                    <span className="sm:hidden">Não atrib.</span>
+                                  </span>
+                                )}
+                                <span>{ticket._count.messages} msg{ticket._count.messages !== 1 ? 's' : ''}</span>
+                              </div>
                             </div>
                           </div>
                         </CardContent>

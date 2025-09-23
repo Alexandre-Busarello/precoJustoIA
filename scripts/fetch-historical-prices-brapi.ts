@@ -183,15 +183,40 @@ class HistoricalPriceFetcher {
             return null;
           }
 
+          // Validar se todos os campos obrigatórios estão presentes
+          if (!record.open || !record.high || !record.low || !record.close) {
+            console.log(`⚠️  Dados incompletos para ${ticker} em ${dateStr}, pulando...`);
+            return null;
+          }
+
+          // Função para validar e ajustar precisão decimal (máximo 6 dígitos antes da vírgula, 4 após)
+          const validateDecimal = (value: number, fieldName: string): number => {
+            if (!value || isNaN(value) || !isFinite(value)) {
+              console.log(`⚠️  Valor inválido para ${fieldName} em ${ticker} (${dateStr}): ${value}`);
+              return 0;
+            }
+            
+            // Verificar se excede a precisão Decimal(10,4) - máximo 999999.9999
+            if (Math.abs(value) >= 1000000) {
+              console.log(`⚠️  Valor muito grande para ${fieldName} em ${ticker} (${dateStr}): ${value}, limitando...`);
+              return Math.sign(value) * 999999.9999;
+            }
+            
+            // Arredondar para 4 casas decimais
+            return Math.round(value * 10000) / 10000;
+          };
+
+          const adjustedClose = record.adjustedClose || record.close;
+
           return {
             companyId: company.id,
             date,
-            open: record.open,
-            high: record.high,
-            low: record.low,
-            close: record.close,
-            volume: BigInt(record.volume),
-            adjustedClose: record.adjustedClose,
+            open: validateDecimal(record.open, 'open'),
+            high: validateDecimal(record.high, 'high'),
+            low: validateDecimal(record.low, 'low'),
+            close: validateDecimal(record.close, 'close'),
+            volume: record.volume ? BigInt(record.volume) : BigInt(0),
+            adjustedClose: validateDecimal(adjustedClose, 'adjustedClose'),
             interval
           };
         })
@@ -209,13 +234,44 @@ class HistoricalPriceFetcher {
       for (let i = 0; i < historicalRecords.length; i += batchSize) {
         const batch = historicalRecords.slice(i, i + batchSize);
         
-        await backgroundPrisma.historicalPrice.createMany({
-          data: batch,
-          skipDuplicates: true
-        });
+        try {
+          await backgroundPrisma.historicalPrice.createMany({
+            data: batch,
+            skipDuplicates: true
+          });
 
-        insertedCount += batch.length;
-        console.log(`  📊 Inseridos ${insertedCount}/${historicalRecords.length} registros`);
+          insertedCount += batch.length;
+          console.log(`  📊 Inseridos ${insertedCount}/${historicalRecords.length} registros`);
+        } catch (batchError: any) {
+          console.error(`❌ Erro ao inserir lote para ${ticker}:`, batchError.message);
+          
+          // Tentar inserir um por vez para identificar o registro problemático
+          for (const record of batch) {
+            try {
+              await backgroundPrisma.historicalPrice.create({
+                data: record
+              });
+              insertedCount++;
+            } catch (recordError: any) {
+              console.error(`❌ Erro no registro ${record.date.toISOString().split('T')[0]} para ${ticker}:`, recordError.message);
+              
+              // Verificar se é erro de overflow numérico
+              if (recordError.message.includes('numeric field overflow')) {
+                console.error(`   🔢 OVERFLOW DETECTADO - Valores que excedem Decimal(10,4):`);
+                console.error(`      Open: ${record.open} (máx: 999999.9999)`);
+                console.error(`      High: ${record.high} (máx: 999999.9999)`);
+                console.error(`      Low: ${record.low} (máx: 999999.9999)`);
+                console.error(`      Close: ${record.close} (máx: 999999.9999)`);
+                console.error(`      AdjustedClose: ${record.adjustedClose} (máx: 999999.9999)`);
+                console.error(`      Volume: ${record.volume}`);
+              }
+              
+              console.error(`   Dados completos:`, JSON.stringify(record, (key, value) =>
+                typeof value === 'bigint' ? value.toString() : value
+              ));
+            }
+          }
+        }
       }
 
       console.log(`✅ ${insertedCount} novos registros históricos salvos para ${ticker}`);

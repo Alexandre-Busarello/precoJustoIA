@@ -106,7 +106,6 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       const { financials, currentPrice } = company;
       const ebitda = toNumber(financials.ebitda)!;
       const fluxoCaixaLivre = toNumber(financials.fluxoCaixaLivre);
-      const fluxoCaixaOperacional = toNumber(financials.fluxoCaixaOperacional)!;
       const sharesOutstanding = toNumber(financials.sharesOutstanding)!;
       const marketCap = toNumber(financials.marketCap)!;
       const roe = toNumber(financials.roe) || 0;
@@ -206,9 +205,12 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     }
 
     // Ordenar por Upside Potencial (maior margem de segurança primeiro)
-    return results
+    const sortedResults = results
       .sort((a, b) => (b.upside || 0) - (a.upside || 0))
       .slice(0, limit);
+
+    // Aplicar priorização técnica se habilitada
+    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: FCDParams): string {
@@ -244,8 +246,8 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
 - Cálculo sofisticado de valor intrínseco baseado em DCF
 - Considera valor temporal do dinheiro e risco específico
 - Projeta cenários futuros realistas de geração de caixa
-- Identifica empresas subvalorizadas com base em fundamentos sólidos
+- Identifica empresas subvalorizadas com base em fundamentos sólidos${params.useTechnicalAnalysis ? '\n- Prioriza ativos em sobrevenda para melhor timing de entrada' : ''}
 
-**Resultado**: Preço justo calculado por metodologia robusta utilizada por analistas profissionais.`;
+**Resultado**: Preço justo calculado por metodologia robusta utilizada por analistas profissionais${params.useTechnicalAnalysis ? ', com priorização técnica para otimizar pontos de entrada' : ''}.`;
   }
 }

@@ -66,7 +66,7 @@ const categoryConfig = {
 }
 
 export default function SupportCenter() {
-  const { data: session } = useSession()
+  const { } = useSession()
   const [tickets, setTickets] = useState<SupportTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -153,38 +153,38 @@ export default function SupportCenter() {
   return (
     <div className="space-y-6">
       {/* Header com botão de criar ticket */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Meus Tickets</h2>
-          <p className="text-gray-600">Gerencie suas solicitações de suporte</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Meus Tickets</h2>
+          <p className="text-gray-600 text-sm sm:text-base">Gerencie suas solicitações de suporte</p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)} className="flex items-center gap-2">
+        <Button onClick={() => setCreateDialogOpen(true)} className="flex items-center gap-2 w-full sm:w-auto">
           <Plus className="h-4 w-4" />
-          Novo Ticket
+          <span className="sm:inline">Novo Ticket</span>
         </Button>
       </div>
 
       {/* Estatísticas rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <Ticket className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total</p>
-                <p className="text-2xl font-bold text-gray-900">{tickets.length}</p>
+              <Ticket className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Total</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{tickets.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <AlertCircle className="h-8 w-8 text-orange-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Abertos</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Abertos</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">
                   {tickets.filter(t => ['OPEN', 'IN_PROGRESS', 'WAITING_USER', 'WAITING_ADMIN'].includes(t.status)).length}
                 </p>
               </div>
@@ -193,12 +193,12 @@ export default function SupportCenter() {
         </Card>
         
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <MessageSquare className="h-8 w-8 text-purple-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Aguardando Você</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <MessageSquare className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Aguardando</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">
                   {tickets.filter(t => t.status === 'WAITING_USER').length}
                 </p>
               </div>
@@ -207,12 +207,12 @@ export default function SupportCenter() {
         </Card>
         
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Resolvidos</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
+              <div className="ml-2 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Resolvidos</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">
                   {tickets.filter(t => ['RESOLVED', 'CLOSED'].includes(t.status)).length}
                 </p>
               </div>
@@ -231,11 +231,11 @@ export default function SupportCenter() {
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="all">Todos</TabsTrigger>
-              <TabsTrigger value="open">Abertos</TabsTrigger>
-              <TabsTrigger value="WAITING_USER">Aguardando</TabsTrigger>
-              <TabsTrigger value="closed">Fechados</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+              <TabsTrigger value="all" className="text-xs sm:text-sm">Todos</TabsTrigger>
+              <TabsTrigger value="open" className="text-xs sm:text-sm">Abertos</TabsTrigger>
+              <TabsTrigger value="WAITING_USER" className="text-xs sm:text-sm">Aguardando</TabsTrigger>
+              <TabsTrigger value="closed" className="text-xs sm:text-sm">Fechados</TabsTrigger>
             </TabsList>
             
             <TabsContent value={activeTab} className="mt-6">
@@ -267,47 +267,58 @@ export default function SupportCenter() {
                         className="cursor-pointer hover:shadow-md transition-shadow"
                         onClick={() => handleTicketClick(ticket)}
                       >
-                        <CardContent className="pt-6">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <h3 className="font-semibold text-gray-900">{ticket.title}</h3>
+                        <CardContent className="pt-4 sm:pt-6">
+                          <div className="space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate pr-2">{ticket.title}</h3>
+                              </div>
+                              <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
                                 <Badge 
                                   variant="secondary" 
-                                  className={`${statusConfig[ticket.status].color} text-white`}
+                                  className={`${statusConfig[ticket.status].color} text-white text-xs`}
                                 >
                                   <StatusIcon className="h-3 w-3 mr-1" />
                                   {statusConfig[ticket.status].label}
                                 </Badge>
                                 <Badge 
                                   variant="outline"
-                                  className={`${priorityConfig[ticket.priority].color} text-white border-0`}
+                                  className={`${priorityConfig[ticket.priority].color} text-white border-0 text-xs`}
                                 >
                                   {priorityConfig[ticket.priority].label}
                                 </Badge>
                               </div>
-                              
-                              <p className="text-gray-600 text-sm mb-2 line-clamp-2">
-                                {ticket.description}
-                              </p>
-                              
-                              <div className="flex items-center gap-4 text-xs text-gray-500">
+                            </div>
+                            
+                            <p className="text-gray-600 text-sm line-clamp-2">
+                              {ticket.description}
+                            </p>
+                            
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500">
                                 <span>#{ticket.id.slice(-8)}</span>
-                                <span>{categoryConfig[ticket.category]}</span>
-                                <span>Criado em {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                <span className="hidden sm:inline">{categoryConfig[ticket.category]}</span>
+                                <span className="sm:hidden">{categoryConfig[ticket.category].split(' ')[0]}</span>
+                                <span className="hidden sm:inline">Criado em {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                <span className="sm:hidden">{new Date(ticket.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                                 {lastMessage && (
-                                  <span>
+                                  <span className="hidden sm:inline">
                                     Última resposta: {lastMessage.user.isAdmin ? 'Suporte' : 'Você'}
                                   </span>
                                 )}
                               </div>
-                            </div>
-                            
-                            <div className="text-right text-xs text-gray-500">
-                              {ticket.assignee && (
-                                <p>Atribuído a: {ticket.assignee.name}</p>
-                              )}
-                              <p>{ticket.messages.length} mensagem{ticket.messages.length !== 1 ? 's' : ''}</p>
+                              
+                              <div className="flex items-center justify-between sm:justify-end gap-4 text-xs text-gray-500">
+                                {ticket.assignee && (
+                                  <span className="hidden sm:inline">Atribuído a: {ticket.assignee.name}</span>
+                                )}
+                                <span>{ticket.messages.length} msg{ticket.messages.length !== 1 ? 's' : ''}</span>
+                                {lastMessage && (
+                                  <span className="sm:hidden">
+                                    {lastMessage.user.isAdmin ? 'Suporte' : 'Você'}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </CardContent>

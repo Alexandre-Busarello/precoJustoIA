@@ -101,18 +101,18 @@ export default function CreateTicketDialog({ open, onOpenChange, onTicketCreated
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="w-[95vw] max-w-[600px] max-h-[90vh] p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle>Criar Novo Ticket</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-lg sm:text-xl">Criar Novo Ticket</DialogTitle>
+          <DialogDescription className="text-sm sm:text-base">
             Descreva seu problema ou solicitação. Nossa equipe responderá o mais breve possível.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Categoria</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="category" className="text-sm sm:text-base">Categoria</Label>
               <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma categoria" />
@@ -132,7 +132,7 @@ export default function CreateTicketDialog({ open, onOpenChange, onTicketCreated
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="title">Título *</Label>
+            <Label htmlFor="title" className="text-sm sm:text-base">Título *</Label>
             <Input
               id="title"
               placeholder="Resumo do seu problema ou solicitação"
@@ -140,6 +140,7 @@ export default function CreateTicketDialog({ open, onOpenChange, onTicketCreated
               onChange={(e) => handleInputChange('title', e.target.value)}
               maxLength={200}
               required
+              className="text-sm sm:text-base"
             />
             <p className="text-xs text-gray-500">
               {formData.title.length}/200 caracteres
@@ -147,24 +148,25 @@ export default function CreateTicketDialog({ open, onOpenChange, onTicketCreated
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Descrição *</Label>
+            <Label htmlFor="description" className="text-sm sm:text-base">Descrição *</Label>
             <Textarea
               id="description"
               placeholder="Descreva detalhadamente seu problema, incluindo passos para reproduzir (se aplicável), mensagens de erro, ou qualquer informação relevante..."
               value={formData.description}
               onChange={(e) => handleInputChange('description', e.target.value)}
               maxLength={2000}
-              rows={6}
+              rows={4}
               required
+              className="text-sm sm:text-base resize-none"
             />
             <p className="text-xs text-gray-500">
               {formData.description.length}/2000 caracteres
             </p>
           </div>
 
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h4 className="font-medium text-blue-900 mb-2">Dicas para um suporte mais eficiente:</h4>
-            <ul className="text-sm text-blue-800 space-y-1">
+          <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+            <h4 className="font-medium text-blue-900 mb-2 text-sm sm:text-base">Dicas para um suporte mais eficiente:</h4>
+            <ul className="text-xs sm:text-sm text-blue-800 space-y-1">
               <li>• Seja específico sobre o problema</li>
               <li>• Inclua passos para reproduzir o erro</li>
               <li>• Mencione qual navegador/dispositivo está usando</li>
@@ -172,11 +174,11 @@ export default function CreateTicketDialog({ open, onOpenChange, onTicketCreated
             </ul>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
               {loading ? 'Criando...' : 'Criar Ticket'}
             </Button>
           </DialogFooter>

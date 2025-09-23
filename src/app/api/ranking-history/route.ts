@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/user-service';
 
 // Função helper simplificada para retry
 async function withRetry<T>(
@@ -38,11 +39,22 @@ export async function GET() {
       );
     }
 
+    // Usar o serviço centralizado para obter o usuário válido
+    const currentUser = await getCurrentUser();
+    
+    if (!currentUser?.id) {
+      console.log('❌ /ranking-history: Usuário não encontrado pelo serviço centralizado')
+      return NextResponse.json(
+        { error: 'Usuário não encontrado' },
+        { status: 404 }
+      );
+    }
+
     // Buscar histórico do usuário ordenado por data mais recente com retry
     const history = await withRetry(() =>
       prisma.rankingHistory.findMany({
         where: {
-          userId: session.user.id
+          userId: currentUser.id
         },
         orderBy: {
           createdAt: 'desc'
@@ -73,7 +85,7 @@ export async function GET() {
 
     // Debug apenas quando necessário
     if (process.env.NODE_ENV === 'development') {
-      console.log('📊 /ranking-history: Retornando', formattedHistory.length, 'itens para', session.user.email)
+      console.log('📊 /ranking-history: Retornando', formattedHistory.length, 'itens para', currentUser.email)
     }
 
     return NextResponse.json({

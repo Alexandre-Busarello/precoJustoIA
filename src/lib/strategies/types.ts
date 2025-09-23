@@ -3,6 +3,7 @@ export interface StrategyParams {
   // Parâmetros comuns a todas as estratégias
   limit?: number;
   companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
+  useTechnicalAnalysis?: boolean; // Priorizar ativos em sobrevenda (padrão: false)
 }
 
 export interface GrahamParams extends StrategyParams {
@@ -96,6 +97,14 @@ export interface CompanyFinancialData {
   [key: string]: unknown;
 }
 
+// Dados de análise técnica
+export interface TechnicalAnalysisData {
+  rsi?: number; // Valor atual do RSI (0-100)
+  stochasticK?: number; // Valor atual do %K (0-100)
+  stochasticD?: number; // Valor atual do %D (0-100)
+  overallSignal?: 'SOBRECOMPRA' | 'SOBREVENDA' | 'NEUTRO'; // Sinal geral
+}
+
 // Dados básicos da empresa
 export interface CompanyData {
   ticker: string;
@@ -104,6 +113,7 @@ export interface CompanyData {
   currentPrice: number;
   logoUrl?: string | null;
   financials: CompanyFinancialData;
+  technicalAnalysis?: TechnicalAnalysisData; // Dados de análise técnica opcionais
 }
 
 // Resultado de análise individual

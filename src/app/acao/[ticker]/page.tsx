@@ -11,6 +11,7 @@ import AIAnalysis from '@/components/ai-analysis'
 import FinancialIndicators from '@/components/financial-indicators'
 import CompanySearch from '@/components/company-search'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
+import TechnicalAnalysisSection from '@/components/technical-analysis-section'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import Link from 'next/link'
 
@@ -555,6 +556,12 @@ export default async function TickerPage({ params }: PageProps) {
                 userIsPremium={userIsPremium}
               />
             )}
+
+            {/* Análise Técnica - Logo após as análises fundamentalistas */}
+            <TechnicalAnalysisSection 
+              ticker={ticker} 
+              userIsPremium={userIsPremium}
+            />
 
             {/* Indicadores Financeiros com Gráficos */}
             <FinancialIndicators 

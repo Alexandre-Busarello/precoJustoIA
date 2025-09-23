@@ -138,9 +138,12 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
     }
 
     // Ordenar por Score de Sustentabilidade
-    return results
+    const sortedResults = results
       .sort((a, b) => (b.key_metrics?.sustainabilityScore || 0) - (a.key_metrics?.sustainabilityScore || 0))
       .slice(0, 50);
+
+    // Aplicar priorização técnica se habilitada
+    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: DividendYieldParams): string {
@@ -161,8 +164,8 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
 - Dívida Líquida/PL ≤ 100% (não comprometida por dívidas)
 - Market Cap ≥ R$ 1B (tamanho e liquidez adequados)
 
-**Ordenação**: Por Score de Sustentabilidade (combina DY + saúde financeira).
+**Ordenação**: Por Score de Sustentabilidade (combina DY + saúde financeira)${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
 
-**Objetivo**: Renda passiva de qualidade, não armadilhas disfarçadas.`;
+**Objetivo**: Renda passiva de qualidade, não armadilhas disfarçadas${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
   }
 }

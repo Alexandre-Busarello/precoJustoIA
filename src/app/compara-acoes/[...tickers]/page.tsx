@@ -100,16 +100,22 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
   // Definir pesos para cada indicador (total = 100%)
   // NOTA: Estratégias individuais foram removidas pois já estão incluídas no overallScore
   const weights = {
-    // Indicadores Básicos (30%)
-    pl: 0.1,           // 10% - Valuation fundamental
-    pvp: 0.05,          // 5% - Valor patrimonial
-    roe: 0.1,          // 10% - Rentabilidade principal
+    // Indicadores Básicos (25%)
+    pl: 0.08,           // 8% - Valuation fundamental
+    pvp: 0.04,          // 4% - Valor patrimonial
+    roe: 0.08,          // 8% - Rentabilidade principal
     dy: 0.05,           // 5% - Dividendos
     
-    // Indicadores Avançados (20%)
-    margemLiquida: 0.08, // 8% - Eficiência operacional
+    // Indicadores Avançados (18%)
+    margemLiquida: 0.06, // 6% - Eficiência operacional
     roic: 0.08,         // 8% - Retorno sobre capital
     dividaLiquidaEbitda: 0.04, // 4% - Endividamento
+    
+    // Indicadores de Crescimento (7%) - Influência leve conforme solicitado
+    cagrLucros5a: 0.02,     // 2% - Crescimento histórico de lucros
+    cagrReceitas5a: 0.02,   // 2% - Crescimento histórico de receitas
+    crescimentoLucros: 0.015, // 1.5% - Crescimento recente de lucros
+    crescimentoReceitas: 0.015, // 1.5% - Crescimento recente de receitas
     
     // Score Geral (50%) - Peso principal pois inclui análise completa
     overallScore: 0.50,  // 50% - Análise consolidada (inclui Graham, DY, LowPE, Magic Formula, FCD, Gordon + Demonstrações)
@@ -333,6 +339,12 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     const allROIC = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.roic as PrismaDecimal))
     const allDividaEbitda = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.dividaLiquidaEbitda as PrismaDecimal))
     
+    // Arrays para indicadores de crescimento
+    const allCAGRLucros5a = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.cagrLucros5a as PrismaDecimal))
+    const allCAGRReceitas5a = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.cagrReceitas5a as PrismaDecimal))
+    const allCrescimentoLucros = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.crescimentoLucros as PrismaDecimal))
+    const allCrescimentoReceitas = companiesWithStrategies.map(c => toNumber((c.company.financialData as Record<string, unknown>[])?.[0]?.crescimentoReceitas as PrismaDecimal))
+    
     // Calcular scores dos indicadores básicos
     if (companyFinancialData) {
       totalScore += scoreIndicator(allPL, toNumber(companyFinancialData.pl as PrismaDecimal), weights.pl, false, 'pl') // Menor P/L é melhor
@@ -343,7 +355,13 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
       totalScore += scoreIndicator(allROIC, toNumber(companyFinancialData.roic as PrismaDecimal), weights.roic, true, 'roic')
       totalScore += scoreIndicator(allDividaEbitda, toNumber(companyFinancialData.dividaLiquidaEbitda as PrismaDecimal), weights.dividaLiquidaEbitda, false, 'dividaLiquidaEbitda')
       
-      totalWeight += weights.pl + weights.pvp + weights.roe + weights.dy + weights.margemLiquida + weights.roic + weights.dividaLiquidaEbitda
+      // Indicadores de crescimento (influência leve)
+      totalScore += scoreIndicator(allCAGRLucros5a, toNumber(companyFinancialData.cagrLucros5a as PrismaDecimal), weights.cagrLucros5a, true, 'cagrLucros5a')
+      totalScore += scoreIndicator(allCAGRReceitas5a, toNumber(companyFinancialData.cagrReceitas5a as PrismaDecimal), weights.cagrReceitas5a, true, 'cagrReceitas5a')
+      totalScore += scoreIndicator(allCrescimentoLucros, toNumber(companyFinancialData.crescimentoLucros as PrismaDecimal), weights.crescimentoLucros, true, 'crescimentoLucros')
+      totalScore += scoreIndicator(allCrescimentoReceitas, toNumber(companyFinancialData.crescimentoReceitas as PrismaDecimal), weights.crescimentoReceitas, true, 'crescimentoReceitas')
+      
+      totalWeight += weights.pl + weights.pvp + weights.roe + weights.dy + weights.margemLiquida + weights.roic + weights.dividaLiquidaEbitda + weights.cagrLucros5a + weights.cagrReceitas5a + weights.crescimentoLucros + weights.crescimentoReceitas
     }
     
     // Score geral (usando dados já carregados)
@@ -1151,6 +1169,73 @@ export default async function CompareStocksPage({ params }: PageProps) {
           </div>
         </div>
 
+        {/* Indicadores de Crescimento - Premium */}
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center">
+            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 mr-2 flex-shrink-0" />
+            <span className="truncate">Indicadores de Crescimento</span>
+            <Crown className="w-4 h-4 sm:w-5 sm:h-5 ml-2 text-yellow-500 flex-shrink-0" />
+          </h2>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <ComparisonIndicatorCard
+              title="CAGR Lucros 5a"
+              values={orderedCompanies.map(c => {
+                const cagrLucros = toNumber(c.financialData[0]?.cagrLucros5a)
+                return cagrLucros ? formatPercent(cagrLucros) : 'N/A'
+              })}
+              tickers={orderedCompanies.map(c => c.ticker)}
+              icon={TrendingUp}
+              description="Taxa de crescimento anual composta dos lucros (5 anos)"
+              isPremium={true}
+              userIsPremium={userIsPremium}
+              higherIsBetter={true}
+            />
+
+            <ComparisonIndicatorCard
+              title="CAGR Receitas 5a"
+              values={orderedCompanies.map(c => {
+                const cagrReceitas = toNumber(c.financialData[0]?.cagrReceitas5a)
+                return cagrReceitas ? formatPercent(cagrReceitas) : 'N/A'
+              })}
+              tickers={orderedCompanies.map(c => c.ticker)}
+              icon={BarChart3}
+              description="Taxa de crescimento anual composta das receitas (5 anos)"
+              isPremium={true}
+              userIsPremium={userIsPremium}
+              higherIsBetter={true}
+            />
+
+            <ComparisonIndicatorCard
+              title="Crescimento Lucros"
+              values={orderedCompanies.map(c => {
+                const crescLucros = toNumber(c.financialData[0]?.crescimentoLucros)
+                return crescLucros ? formatPercent(crescLucros) : 'N/A'
+              })}
+              tickers={orderedCompanies.map(c => c.ticker)}
+              icon={Activity}
+              description="Variação anual dos lucros"
+              isPremium={true}
+              userIsPremium={userIsPremium}
+              higherIsBetter={true}
+            />
+
+            <ComparisonIndicatorCard
+              title="Crescimento Receitas"
+              values={orderedCompanies.map(c => {
+                const crescReceitas = toNumber(c.financialData[0]?.crescimentoReceitas)
+                return crescReceitas ? formatPercent(crescReceitas) : 'N/A'
+              })}
+              tickers={orderedCompanies.map(c => c.ticker)}
+              icon={LineChart}
+              description="Variação anual das receitas"
+              isPremium={true}
+              userIsPremium={userIsPremium}
+              higherIsBetter={true}
+            />
+          </div>
+        </div>
+
         {/* Indicadores de Endividamento - Premium */}
         <div>
           <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center">
@@ -1234,6 +1319,11 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 dividaLiquidaEbitda: toNumber(company.financialData[0].dividaLiquidaEbitda),
                 dividaLiquidaPatrimonio: toNumber(company.financialData[0].dividaLiquidaPl),
                 liquidezCorrente: toNumber(company.financialData[0].liquidezCorrente),
+                // Indicadores de Crescimento
+                cagrLucros5a: toNumber(company.financialData[0].cagrLucros5a),
+                cagrReceitas5a: toNumber(company.financialData[0].cagrReceitas5a),
+                crescimentoLucros: toNumber(company.financialData[0].crescimentoLucros),
+                crescimentoReceitas: toNumber(company.financialData[0].crescimentoReceitas),
               } : null,
               strategies,
               overallScore

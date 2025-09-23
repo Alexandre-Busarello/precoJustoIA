@@ -35,7 +35,8 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Flame
+  Flame,
+  Share2
 } from "lucide-react"
 import Link from "next/link"
 
@@ -65,6 +66,8 @@ interface RankingParams {
   riskTolerance?: string;
   timeHorizon?: string;
   focus?: string;
+  // Parâmetro de Análise Técnica (comum a todas as estratégias)
+  useTechnicalAnalysis?: boolean;
 }
 
 interface RankingResult {
@@ -160,7 +163,11 @@ const models = [
   },
 ]
 
-export function QuickRanker() {
+interface QuickRankerProps {
+  rankingId?: string | null;
+}
+
+export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
   const { data: session } = useSession()
   const [selectedModel, setSelectedModel] = useState<string>("")
   const [params, setParams] = useState<RankingParams>({})
@@ -174,39 +181,81 @@ export function QuickRanker() {
   const [isResultsExpanded, setIsResultsExpanded] = useState(false) // Estado do collapsible dos resultados
   const resultsRef = useRef<HTMLDivElement>(null)
 
-  // Verificar se há parâmetros E resultados para mostrar do histórico
+  // Carregar ranking específico por ID ou verificar sessionStorage
   useEffect(() => {
-    const prefillData = sessionStorage.getItem('prefillRanking')
-    if (prefillData) {
-      try {
-        const { model, params: prefillParams, cachedResults, resultCount, createdAt } = JSON.parse(prefillData)
-        setSelectedModel(model)
-        setParams(prefillParams)
-        
-        // Se há resultados cached, mostrar eles com prioridade
-        if (cachedResults && cachedResults.length > 0) {
-          // Construir o objeto RankingResponse a partir dos dados cached
-          const cachedResponse: RankingResponse = {
-            model,
-            params: prefillParams,
-            rational: generateRational(model, prefillParams), // Gerar rational correto
-            results: cachedResults,
-            count: resultCount
+    const loadRankingData = async () => {
+      // Prioridade 1: Carregar ranking específico por ID
+      if (rankingId) {
+        try {
+          const response = await fetch(`/api/ranking/${rankingId}`)
+          if (response.ok) {
+            const data = await response.json()
+            const ranking = data.ranking
+            
+            setSelectedModel(ranking.model)
+            setParams(ranking.params)
+            
+            // Se há resultados cached, mostrar eles
+            if (ranking.results && ranking.results.length > 0) {
+              const cachedResponse: RankingResponse = {
+                model: ranking.model,
+                params: ranking.params,
+                rational: generateRational(ranking.model, ranking.params),
+                results: ranking.results,
+                count: ranking.resultCount
+              }
+              
+              setResults(cachedResponse)
+              setIsViewingCached(true)
+              setCachedInfo({ 
+                resultCount: ranking.resultCount, 
+                createdAt: ranking.createdAt 
+              })
+            }
+            return
+          } else {
+            console.error('Erro ao carregar ranking:', response.status)
+          }
+        } catch (error) {
+          console.error('Erro ao carregar ranking por ID:', error)
+        }
+      }
+
+      // Prioridade 2: Verificar sessionStorage (comportamento anterior)
+      const prefillData = sessionStorage.getItem('prefillRanking')
+      if (prefillData) {
+        try {
+          const { model, params: prefillParams, cachedResults, resultCount, createdAt } = JSON.parse(prefillData)
+          setSelectedModel(model)
+          setParams(prefillParams)
+          
+          // Se há resultados cached, mostrar eles com prioridade
+          if (cachedResults && cachedResults.length > 0) {
+            // Construir o objeto RankingResponse a partir dos dados cached
+            const cachedResponse: RankingResponse = {
+              model,
+              params: prefillParams,
+              rational: generateRational(model, prefillParams), // Gerar rational correto
+              results: cachedResults,
+              count: resultCount
+            }
+            
+            setResults(cachedResponse)
+            setIsViewingCached(true)
+            setCachedInfo({ resultCount, createdAt })
           }
           
-          setResults(cachedResponse)
-          setIsViewingCached(true)
-          setCachedInfo({ resultCount, createdAt })
+          // Limpar sessionStorage após usar
+          sessionStorage.removeItem('prefillRanking')
+        } catch (error) {
+          console.error('Erro ao carregar dados de prefill:', error)
+          sessionStorage.removeItem('prefillRanking')
         }
-        
-        // Limpar sessionStorage após usar
-        sessionStorage.removeItem('prefillRanking')
-      } catch (error) {
-        console.error('Erro ao carregar dados de prefill:', error)
-        sessionStorage.removeItem('prefillRanking')
       }
     }
-  }, [])
+
+    loadRankingData()
+  }, [rankingId])
 
   // Scroll automático para os resultados quando forem carregados
   useEffect(() => {
@@ -265,26 +314,30 @@ export function QuickRanker() {
       case "graham":
         setParams({ 
           marginOfSafety: 0.20,     // 20%
-          companySize: 'all'        // Todas as empresas
+          companySize: 'all',       // Todas as empresas
+          useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
       case "dividendYield":
         setParams({ 
           minYield: 0.04,           // 4%
-          companySize: 'all'        // Todas as empresas
+          companySize: 'all',       // Todas as empresas
+          useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
       case "lowPE":
         setParams({ 
           maxPE: 12, 
           minROE: 0.12,             // P/L <= 12, ROE >= 12%
-          companySize: 'all'        // Todas as empresas
+          companySize: 'all',       // Todas as empresas
+          useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
       case "magicFormula":
         setParams({ 
           limit: 10,                // 10 resultados
-          companySize: 'all'        // Todas as empresas
+          companySize: 'all',       // Todas as empresas
+          useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
       case "fcd":
@@ -294,7 +347,8 @@ export function QuickRanker() {
           yearsProjection: 5,       // 5 anos de projeção
           minMarginOfSafety: 0.15,  // 15% margem de segurança
           limit: 10,                // 10 resultados
-          companySize: 'all'        // Todas as empresas
+          companySize: 'all',       // Todas as empresas
+          useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
       case "gordon":
@@ -304,7 +358,8 @@ export function QuickRanker() {
           useSectoralAdjustment: true, // Ativar ajuste setorial
           sectoralWaccAdjustment: 0,   // Sem ajuste manual adicional
           limit: 10,                // 10 resultados
-          companySize: 'all'        // Todas as empresas
+          companySize: 'all',       // Todas as empresas
+          useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
         case "fundamentalist":
@@ -315,7 +370,8 @@ export function QuickRanker() {
             minPayout: 0.40,          // 40% payout mínimo
             maxPayout: 0.80,          // 80% payout máximo
             companySize: 'all',       // Todas as empresas
-            limit: 10                 // 10 resultados
+            limit: 10,                // 10 resultados
+            useTechnicalAnalysis: true // Análise técnica ativada por padrão
           })
           break
       case "ai":
@@ -324,7 +380,8 @@ export function QuickRanker() {
           timeHorizon: "Longo Prazo",          // Horizonte de investimento
           focus: "Crescimento e Valor",        // Foco da análise
           limit: 10,                           // 10 resultados
-          companySize: 'all'                   // Todas as empresas
+          companySize: 'all',                  // Todas as empresas
+          useTechnicalAnalysis: true           // Análise técnica ativada por padrão
         })
         break
       default:
@@ -445,6 +502,27 @@ export function QuickRanker() {
     setIsResultsExpanded(false)
   }
 
+  // Função para copiar link do ranking
+  const handleShareRanking = async () => {
+    if (!results) return
+    
+    try {
+      // Se estamos visualizando um ranking cached, usar o ID do ranking
+      if (isViewingCached && rankingId) {
+        const shareUrl = `${window.location.origin}/ranking?id=${rankingId}`
+        await navigator.clipboard.writeText(shareUrl)
+        // Aqui você pode adicionar uma notificação de sucesso
+        console.log('Link copiado:', shareUrl)
+      } else {
+        // Para rankings recém-gerados, primeiro precisamos encontrar o ID
+        // Isso pode ser implementado salvando o ID quando o ranking é criado
+        console.log('Funcionalidade de compartilhamento para rankings novos em desenvolvimento')
+      }
+    } catch (error) {
+      console.error('Erro ao copiar link:', error)
+    }
+  }
+
   const formatCurrency = (value: number | null) => {
     if (value === null) return "N/A"
     return new Intl.NumberFormat("pt-BR", {
@@ -538,6 +616,35 @@ export function QuickRanker() {
     return translations[key] || key.replace(/([A-Z])/g, ' $1').trim();
   }
 
+  // Componente helper para controle de análise técnica
+  const TechnicalAnalysisControl = () => (
+    <div className="space-y-3 border border-blue-200 p-4 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          📊 Priorização por Análise Técnica
+        </Label>
+        <Badge variant={params.useTechnicalAnalysis !== false ? "default" : "outline"} className="text-xs">
+          {params.useTechnicalAnalysis !== false ? "Ativada" : "Desativada"}
+        </Badge>
+      </div>
+      <div className="flex items-center space-x-2">
+        <input
+          type="checkbox"
+          id={`technicalAnalysis-${selectedModel}`}
+          checked={params.useTechnicalAnalysis !== false}
+          onChange={(e) => setParams({ ...params, useTechnicalAnalysis: e.target.checked })}
+          className="rounded border-gray-300 w-4 h-4"
+        />
+        <label htmlFor={`technicalAnalysis-${selectedModel}`} className="text-sm text-muted-foreground cursor-pointer">
+          Priorizar ativos em sobrevenda (RSI e Estocástico)
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Quando ativado, ativos em sobrevenda aparecem primeiro no ranking para melhor timing de entrada
+      </p>
+    </div>
+  );
+
   // Função para gerar rational baseado no modelo e parâmetros (similar ao backend)
   const generateRational = (model: string, params: RankingParams): string => {
     switch (model) {
@@ -555,9 +662,9 @@ export function QuickRanker() {
 • Crescimento Lucros ≥ -15% (não em declínio severo)
 • Dívida Líquida/PL ≤ 150% (endividamento controlado)
 
-**Ordenação**: Por Score de Qualidade (combina solidez financeira + margem de segurança).
+**Ordenação**: Por Score de Qualidade (combina solidez financeira + margem de segurança)${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
 
-**Objetivo**: Encontrar empresas subvalorizadas MAS financeiramente saudáveis, evitando "value traps".`;
+**Objetivo**: Encontrar empresas subvalorizadas MAS financeiramente saudáveis, evitando "value traps"${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
 
       case 'dividendYield':
         return `**MODELO ANTI-DIVIDEND TRAP**
@@ -576,9 +683,9 @@ export function QuickRanker() {
 • Dívida Líquida/PL ≤ 100% (não comprometida por dívidas)
 • Market Cap ≥ R$ 1B (tamanho e liquidez adequados)
 
-**Ordenação**: Por Score de Sustentabilidade (combina DY + saúde financeira).
+**Ordenação**: Por Score de Sustentabilidade (combina DY + saúde financeira)${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
 
-**Objetivo**: Renda passiva de qualidade, não armadilhas disfarçadas.`;
+**Objetivo**: Renda passiva de qualidade, não armadilhas disfarçadas${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
 
       case 'lowPE':
         return `**MODELO VALUE INVESTING**
@@ -858,6 +965,22 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                      {/* Botão de compartilhar - apenas para rankings salvos */}
+                      {isViewingCached && rankingId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleShareRanking()
+                          }}
+                          className="flex items-center gap-1 h-8 px-2"
+                          title="Copiar link do ranking"
+                        >
+                          <Share2 className="w-3 h-3" />
+                          <span className="hidden sm:inline text-xs">Compartilhar</span>
+                        </Button>
+                      )}
                       <Badge variant="secondary" className="text-xs sm:text-sm px-2 sm:px-3 py-1">
                         {results.results.length} resultados
                       </Badge>
@@ -1203,6 +1326,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </p>
                     </div>
 
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Margem de Segurança Mínima</Label>
@@ -1253,6 +1379,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </p>
                     </div>
 
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Dividend Yield Mínimo</Label>
@@ -1302,6 +1431,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         Filtre empresas por valor de mercado para focar em segmentos específicos
                       </p>
                     </div>
+
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-3">
@@ -1375,6 +1507,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </p>
                     </div>
 
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Número de Resultados</Label>
@@ -1424,6 +1559,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         Filtre empresas por valor de mercado para focar em segmentos específicos
                       </p>
                     </div>
+
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
 
                     {/* Primeira linha - Taxa de Crescimento e Taxa de Desconto */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -1577,6 +1715,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         Filtre empresas por valor de mercado para focar em segmentos específicos
                       </p>
                     </div>
+
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
 
                     {/* Primeira linha - Taxa de Desconto e Taxa de Crescimento */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -1734,6 +1875,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                 Filtre empresas por valor de mercado para focar em segmentos específicos
               </p>
             </div>
+
+            {/* Análise Técnica */}
+            <TechnicalAnalysisControl />
 
             {/* Primeira linha - ROE e ROIC */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -1909,6 +2053,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         Filtre empresas por valor de mercado para focar em segmentos específicos
                       </p>
                     </div>
+
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
 
                     {/* Primeira linha - Tolerância ao Risco e Horizonte */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">

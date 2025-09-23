@@ -1,5 +1,5 @@
 import { AbstractStrategy, toNumber, validateCAGR5Years } from './base-strategy';
-import { StrategyAnalysis, StrategyParams, CompanyData, RankBuilderResult, CompanyFinancialData } from './types';
+import { StrategyAnalysis, StrategyParams, CompanyData, RankBuilderResult } from './types';
 
 export interface FundamentalistParams extends StrategyParams {
   minROE?: number;
@@ -436,7 +436,7 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
     const filteredCompanies = this.filterCompaniesBySize(companies, params.companySize || 'all');
     
     for (const company of filteredCompanies) {
-      if (!this.validateCompanyData(company, params)) continue;
+      if (!this.validateCompanyData(company)) continue;
       
       const analysis = this.runAnalysis(company, params);
       if (analysis.isEligible) {
@@ -453,7 +453,10 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
     
     // Aplicar limite se especificado
     const limit = params.limit || 10;
-    return results.slice(0, limit);
+    const limitedResults = results.slice(0, limit);
+
+    // Aplicar priorização técnica se habilitada
+    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: FundamentalistParams): string {
@@ -488,10 +491,10 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
 • **Dívida Líquida/EBITDA**: Máximo ${maxDebt}x
 • **Payout Ideal**: ${minPayout}% - ${maxPayout}% (análise de dividendos)
 
-**Resultado**: Empresas de qualidade com preços atrativos e endividamento controlado, ranqueadas por score fundamentalista.`;
+**Resultado**: Empresas de qualidade com preços atrativos e endividamento controlado, ranqueadas por score fundamentalista${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
   }
 
-  validateCompanyData(companyData: CompanyData, params: FundamentalistParams): boolean {
+  validateCompanyData(companyData: CompanyData): boolean {
     const financialData = companyData.financials;
     
     // Verificações básicas

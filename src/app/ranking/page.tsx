@@ -1,6 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import { QuickRanker } from "@/components/quick-ranker"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,9 +15,12 @@ import {
   Zap
 } from "lucide-react"
 import Link from "next/link"
+import { Suspense } from "react"
 
-export default function RankingPage() {
+function RankingContent() {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
+  const rankingId = searchParams.get('id')
   const isLoggedIn = !!session
   const isPremium = session?.user?.subscriptionTier === 'PREMIUM'
 
@@ -144,7 +148,7 @@ export default function RankingPage() {
         )}
 
         {/* QuickRanker Component */}
-        <QuickRanker />
+        <QuickRanker rankingId={rankingId} />
 
         {/* Tips Section */}
         <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -204,5 +208,13 @@ export default function RankingPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function RankingPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <RankingContent />
+    </Suspense>
   )
 }

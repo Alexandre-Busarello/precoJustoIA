@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { getCurrentUser } from '@/lib/user-service'
 
 /**
  * Verifica se o usuário é administrador
@@ -31,7 +32,14 @@ export async function requireAdminAccess(): Promise<NextResponse | null> {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
 
-    const userIsAdmin = await isAdmin(session.user.id)
+    // Usar o serviço centralizado para obter o usuário válido
+    const currentUser = await getCurrentUser()
+    
+    if (!currentUser?.id) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
+    }
+
+    const userIsAdmin = await isAdmin(currentUser.id)
     
     if (!userIsAdmin) {
       return NextResponse.json({ 
@@ -57,7 +65,14 @@ export async function getCurrentUserAdminStatus(): Promise<boolean> {
       return false
     }
 
-    return await isAdmin(session.user.id)
+    // Usar o serviço centralizado para obter o usuário válido
+    const currentUser = await getCurrentUser()
+    
+    if (!currentUser?.id) {
+      return false
+    }
+
+    return await isAdmin(currentUser.id)
   } catch (error) {
     console.error('Erro ao verificar status de admin do usuário atual:', error)
     return false

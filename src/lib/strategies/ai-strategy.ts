@@ -44,15 +44,29 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     const finalResults = await this.analyzeBatchWithAI(companiesWithStrategies, params);
     console.log(`🎯 [AI-STRATEGY] Análise concluída: ${finalResults.length} resultados finais`);
     
-    // Ordenar e limitar resultados finais
-    const sortedResults = finalResults
-      .sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0))
-      .slice(0, params.limit || 10);
+    // Ordenar por score da IA primeiro
+    const sortedByAI = finalResults
+      .sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
     
-    console.log(`🏆 [AI-STRATEGY] Ranking final: ${sortedResults.length} empresas`);
-    console.log(`📋 [AI-STRATEGY] Top 3: ${sortedResults.slice(0, 3).map(r => `${r.ticker} (${r.key_metrics?.compositeScore})`).join(', ')}`);
+    // ETAPA 4: Aplicar priorização técnica (complementar à análise da IA)
+    console.log(`📊 [AI-STRATEGY] ETAPA 4: Aplicando priorização técnica (useTechnicalAnalysis: ${params.useTechnicalAnalysis || false})`);
+    const technicallyPrioritized = this.applyTechnicalPrioritization(
+      sortedByAI, 
+      selectedCompanies, 
+      params.useTechnicalAnalysis || false
+    );
     
-    return sortedResults;
+    // Limitar resultados finais
+    const finalSortedResults = technicallyPrioritized.slice(0, params.limit || 10);
+    
+    console.log(`🏆 [AI-STRATEGY] Ranking final: ${finalSortedResults.length} empresas`);
+    console.log(`📋 [AI-STRATEGY] Top 3: ${finalSortedResults.slice(0, 3).map(r => `${r.ticker} (${r.key_metrics?.compositeScore})`).join(', ')}`);
+    
+    if (params.useTechnicalAnalysis) {
+      console.log(`📊 [AI-STRATEGY] Análise técnica aplicada para otimizar timing de entrada`);
+    }
+    
+    return finalSortedResults;
   }
 
   // NOVA ETAPA 1: Seleção inteligente com LLM
@@ -804,6 +818,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 - **Processamento Batch**: Segunda chamada LLM analisa todas as empresas simultaneamente
 - **Síntese Inteligente**: IA analisa consistência e convergência entre estratégias
 - **Avaliação Preditiva**: Considera contexto macroeconômico e tendências setoriais
+- **Priorização Técnica**: Análise técnica complementar para otimizar timing de entrada (RSI, Estocástico)
 
 ## Parâmetros de Análise
 
@@ -824,6 +839,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 - Avaliação de riscos e oportunidades específicas por empresa
 - Nível de confiança da análise baseado em múltiplas fontes
 - Consideração de fatores macroeconômicos e setoriais atualizados
+- **Análise Técnica Complementar**: Priorização por sobrevenda para otimizar timing de entrada
 
 > **IMPORTANTE**: Esta análise utiliza Inteligência Artificial e pode gerar resultados ligeiramente diferentes em novas execuções devido à natureza adaptativa do modelo.
 

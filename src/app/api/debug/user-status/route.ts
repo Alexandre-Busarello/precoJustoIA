@@ -14,9 +14,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
 
-    // Buscar dados do usuário no banco
+    // Usar o serviço centralizado para obter o usuário válido
+    const currentUser = await getCurrentUser()
+    
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
+    }
+
+    // Buscar dados completos do usuário no banco
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: currentUser.id },
       select: {
         id: true,
         email: true,
@@ -31,7 +38,7 @@ export async function GET() {
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Dados do usuário não encontrados' }, { status: 404 })
     }
 
     // Verificar status da assinatura
@@ -39,9 +46,8 @@ export async function GET() {
     let premiumAccess = false
     
     try {
-      subscriptionStatus = await syncUserSubscription(session.user.id)
-      const user = await getCurrentUser()
-      premiumAccess = user?.isPremium || false
+      subscriptionStatus = await syncUserSubscription(currentUser.id)
+      premiumAccess = currentUser.isPremium || false
     } catch (error) {
       console.error('Erro ao verificar assinatura:', error)
     }

@@ -573,7 +573,6 @@ export async function getMultipleCompaniesData(
 // Buscar dados históricos para gráficos
 export async function getHistoricalDataForCharts(
   ticker: string,
-  period: ReportPeriod = 'YEARLY',
   yearsBack: number = 10
 ) {
   try {
@@ -637,7 +636,7 @@ export async function getHistoricalDataForCharts(
 }
 
 // Função para calcular métricas derivadas
-export function calculateDerivedMetrics(data: Record<string, unknown>) {
+export function calculateDerivedMetrics() {
   const metrics: Record<string, unknown> = {}
 
   // Simplificado para evitar erros de tipo - implementação futura

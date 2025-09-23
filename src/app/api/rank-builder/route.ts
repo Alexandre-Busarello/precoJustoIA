@@ -17,6 +17,7 @@ import {
   CompanyData,
   toNumber
 } from '@/lib/strategies';
+import { TechnicalIndicators, type PriceData } from '@/lib/technical-indicators';
 
 type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams;
 
@@ -37,6 +38,23 @@ async function getCompaniesData(): Promise<CompanyData[]> {
         dailyQuotes: {
           orderBy: { date: 'desc' },
           take: 1, // Cotação mais recente
+        },
+        historicalPrices: {
+          where: {
+            interval: '1mo',
+            date: {
+              gte: new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000) // Últimos 2 anos
+            }
+          },
+          orderBy: { date: 'asc' },
+          select: {
+            date: true,
+            open: true,
+            high: true,
+            low: true,
+            close: true,
+            volume: true
+          }
         }
       },
       where: {
@@ -54,15 +72,62 @@ async function getCompaniesData(): Promise<CompanyData[]> {
     })
   );
 
-  // Converter para o formato CompanyData
-  return companies.map(company => ({
-    ticker: company.ticker,
-    name: company.name,
-    sector: company.sector,
-    currentPrice: toNumber(company.dailyQuotes[0]?.price) || 0,
-    logoUrl: company.logoUrl,
-    financials: company.financialData[0] || {}
-  }));
+  // Debug: verificar quantas empresas têm dados históricos
+  const companiesWithHistoricalData = companies.filter(c => c.historicalPrices && c.historicalPrices.length >= 20);
+  console.log(`📈 Empresas com dados históricos suficientes: ${companiesWithHistoricalData.length}/${companies.length}`);
+
+  // Converter para o formato CompanyData e calcular indicadores técnicos
+  return companies.map(company => {
+    let technicalAnalysis = undefined;
+
+    // Calcular indicadores técnicos se houver dados históricos suficientes
+    if (company.historicalPrices && company.historicalPrices.length >= 20) {
+      // Filtrar dados válidos (sem valores zero)
+      const validHistoricalData = company.historicalPrices.filter(data =>
+        Number(data.high) > 0 &&
+        Number(data.low) > 0 &&
+        Number(data.close) > 0 &&
+        Number(data.open) > 0
+      );
+
+      if (validHistoricalData.length >= 20) {
+        const priceData: PriceData[] = validHistoricalData.map(data => ({
+          date: data.date,
+          open: Number(data.open),
+          high: Number(data.high),
+          low: Number(data.low),
+          close: Number(data.close),
+          volume: Number(data.volume)
+        }));
+
+        try {
+          const technicalResult = TechnicalIndicators.calculateTechnicalAnalysis(priceData);
+          
+          // Verificar se os dados técnicos são válidos
+          if (technicalResult.currentRSI && technicalResult.currentStochastic) {
+            technicalAnalysis = {
+              rsi: technicalResult.currentRSI.rsi,
+              stochasticK: technicalResult.currentStochastic.k,
+              stochasticD: technicalResult.currentStochastic.d,
+              overallSignal: technicalResult.overallSignal
+            };
+          }
+        } catch (error) {
+          console.warn(`Erro ao calcular indicadores técnicos para ${company.ticker}:`, error);
+        }
+      }
+    }
+
+    return {
+      ticker: company.ticker,
+      name: company.name,
+      sector: company.sector,
+      currentPrice: toNumber(company.dailyQuotes[0]?.price) || 0,
+      logoUrl: company.logoUrl,
+      financials: company.financialData[0] || {},
+      technicalAnalysis
+    };
+  });
 }
 
 // Função para gerar o racional de cada modelo usando StrategyFactory
@@ -130,6 +195,10 @@ export async function POST(request: NextRequest) {
     // Buscar dados de todas as empresas
     const companies = await getCompaniesData();
     
+    // Debug: verificar quantas empresas têm dados técnicos
+    const companiesWithTechnical = companies.filter(c => c.technicalAnalysis);
+    console.log(`📊 Empresas carregadas: ${companies.length}, com dados técnicos: ${companiesWithTechnical.length}`);
+    
     let results: RankBuilderResult[] = [];
 
     switch (model) {
@@ -170,17 +239,24 @@ export async function POST(request: NextRequest) {
     // Salvar no histórico se o usuário estiver logado (COM transação pois é INSERT)
     if (session?.user?.id) {
       try {
-        await safeTransaction('save-ranking-history', () =>
-          prisma.rankingHistory.create({
-            data: {
-              userId: session.user.id,
-              model,
-              params: JSON.parse(JSON.stringify(params)), // Conversão para Json type
-              results: JSON.parse(JSON.stringify(results)), // Cache dos resultados como Json
-              resultCount: results.length,
-            }
-          })
-        );
+        // Usar o serviço centralizado para obter o usuário válido
+        const currentUser = await getCurrentUser();
+        
+        if (currentUser?.id) {
+          await safeTransaction('save-ranking-history', () =>
+            prisma.rankingHistory.create({
+              data: {
+                userId: currentUser.id,
+                model,
+                params: JSON.parse(JSON.stringify(params)), // Conversão para Json type
+                results: JSON.parse(JSON.stringify(results)), // Cache dos resultados como Json
+                resultCount: results.length,
+              }
+            })
+          );
+        } else {
+          console.warn('Usuário não encontrado pelo serviço centralizado');
+        }
       } catch (historyError) {
         // Não falhar a request se não conseguir salvar no histórico
         console.error('Erro ao salvar histórico:', historyError);

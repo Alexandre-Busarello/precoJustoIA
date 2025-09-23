@@ -146,7 +146,7 @@ export default function AdminTicketDetailsDialog({
     } finally {
       setLoading(false)
     }
-  }, [ticket?.id]) // Removido toast das dependências
+  }, [ticket?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open && ticket) {
@@ -265,52 +265,58 @@ export default function AdminTicketDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[95vw] max-w-[900px] max-h-[95vh] h-[95vh] sm:h-auto flex flex-col p-3 sm:p-6">
         <DialogHeader className="flex-shrink-0">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <DialogTitle className="text-xl">{ticket.title}</DialogTitle>
-              <DialogDescription className="mt-2">
-                Ticket #{ticket.id.slice(-8)} • {categoryConfig[ticket.category]} • 
-                Por: {ticket.user.name || ticket.user.email} ({ticket.user.subscriptionTier})
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-lg sm:text-xl pr-2 line-clamp-2">{ticket.title}</DialogTitle>
+              <DialogDescription className="mt-1 sm:mt-2 text-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                  <span>Ticket #{ticket.id.slice(-8)}</span>
+                  <span className="hidden sm:inline">•</span>
+                  <span>{categoryConfig[ticket.category]}</span>
+                  <span className="hidden sm:inline">•</span>
+                  <span>Por: {ticket.user.name || ticket.user.email}</span>
+                  <span className="hidden sm:inline">({ticket.user.subscriptionTier})</span>
+                </div>
               </DialogDescription>
             </div>
-            <div className="flex flex-col gap-2 ml-4">
+            <div className="flex flex-row sm:flex-col gap-2 sm:ml-4 flex-shrink-0">
               <Badge 
                 variant="secondary" 
-                className={`${statusConfig[ticket.status].color} text-white`}
+                className={`${statusConfig[ticket.status].color} text-white text-xs`}
               >
                 <StatusIcon className="h-3 w-3 mr-1" />
                 {statusConfig[ticket.status].label}
               </Badge>
               <Badge 
                 variant="outline"
-                className={`${priorityConfig[ticket.priority].color} text-white border-0`}
+                className={`${priorityConfig[ticket.priority].color} text-white border-0 text-xs`}
               >
                 {priorityConfig[ticket.priority].label}
               </Badge>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-sm text-gray-600 mt-4">
-            <span>Criado em {new Date(ticket.createdAt).toLocaleString('pt-BR')}</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 mt-3 sm:mt-4">
+            <span>Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
             {ticket.assignee && (
-              <span>Atribuído a: {ticket.assignee.name}</span>
+              <span className="hidden sm:inline">Atribuído a: {ticket.assignee.name}</span>
             )}
             {ticket.closedAt && (
-              <span>Fechado em {new Date(ticket.closedAt).toLocaleString('pt-BR')}</span>
+              <span>Fechado: {new Date(ticket.closedAt).toLocaleDateString('pt-BR')}</span>
             )}
           </div>
         </DialogHeader>
 
-        <Separator className="my-4" />
+        <Separator className="my-3 sm:my-4" />
 
-        <div className="flex gap-6 flex-1 min-h-0">
+        <div className="flex flex-col lg:flex-row gap-3 lg:gap-6 flex-1 min-h-0 overflow-hidden">
           {/* Coluna principal - Mensagens */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <h3 className="font-semibold mb-4">Conversa</h3>
+          <div className="flex-1 flex flex-col min-h-0 lg:min-w-0">
+            <h3 className="font-semibold mb-3 sm:mb-4 text-base sm:text-lg">Conversa</h3>
             
-            <ScrollArea className="flex-1 pr-4">
+            <ScrollArea className="h-[250px] sm:h-[300px] lg:flex-1 pr-2 sm:pr-4">
               <div className="space-y-4">
                 {loading ? (
                   <div className="flex items-center justify-center py-8">
@@ -326,40 +332,42 @@ export default function AdminTicketDetailsDialog({
                       key={message.id} 
                       className={`${message.user.isAdmin ? 'bg-blue-50 border-blue-200' : ''} ${message.isInternal ? 'bg-yellow-50 border-yellow-200' : ''}`}
                     >
-                      <CardContent className="pt-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-full ${
+                      <CardContent className="pt-3 sm:pt-4 pb-3 sm:pb-4">
+                        <div className="flex items-start gap-2 sm:gap-3">
+                          <div className={`p-1.5 sm:p-2 rounded-full flex-shrink-0 ${
                             message.isInternal ? 'bg-yellow-600' :
                             message.user.isAdmin ? 'bg-blue-600' : 'bg-gray-600'
                           }`}>
                             {message.isInternal ? (
-                              <Shield className="h-4 w-4 text-white" />
+                              <Shield className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                             ) : message.user.isAdmin ? (
-                              <UserCheck className="h-4 w-4 text-white" />
+                              <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                             ) : (
-                              <User className="h-4 w-4 text-white" />
+                              <User className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                             )}
                           </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="font-medium text-gray-900">
-                                {message.user.isAdmin ? 'Admin' : message.user.name || 'Usuário'}
-                              </span>
-                              {message.user.isAdmin && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Equipe
-                                </Badge>
-                              )}
-                              {message.isInternal && (
-                                <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800">
-                                  Interno
-                                </Badge>
-                              )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">
+                                  {message.user.isAdmin ? 'Admin' : message.user.name || 'Usuário'}
+                                </span>
+                                {message.user.isAdmin && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Equipe
+                                  </Badge>
+                                )}
+                                {message.isInternal && (
+                                  <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800">
+                                    Interno
+                                  </Badge>
+                                )}
+                              </div>
                               <span className="text-xs text-gray-500">
-                                {new Date(message.createdAt).toLocaleString('pt-BR')}
+                                {new Date(message.createdAt).toLocaleDateString('pt-BR')} {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
-                            <div className="text-gray-700 whitespace-pre-wrap">
+                            <div className="text-gray-700 whitespace-pre-wrap text-sm sm:text-base break-words">
                               {message.message}
                             </div>
                           </div>
@@ -373,23 +381,24 @@ export default function AdminTicketDetailsDialog({
 
             {/* Campo de resposta */}
             {canReply && (
-              <div className="mt-4 space-y-3 border-t pt-4">
+              <div className="mt-3 sm:mt-4 space-y-3 border-t pt-3 sm:pt-4">
                 <Textarea
                   placeholder="Digite sua resposta..."
                   value={newMessage}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMessage(e.target.value)}
-                  rows={3}
+                  rows={2}
                   maxLength={2000}
+                  className="text-sm sm:text-base resize-none"
                 />
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                     <div className="flex items-center space-x-2">
                       <Checkbox 
                         id="internal" 
                         checked={isInternal}
                         onCheckedChange={(checked: boolean) => setIsInternal(checked)}
                       />
-                      <Label htmlFor="internal" className="text-sm">
+                      <Label htmlFor="internal" className="text-xs sm:text-sm">
                         Mensagem interna (apenas admins)
                       </Label>
                     </div>
@@ -400,7 +409,8 @@ export default function AdminTicketDetailsDialog({
                   <Button 
                     onClick={handleSendMessage}
                     disabled={!newMessage.trim() || sendingMessage}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 w-full sm:w-auto"
+                    size="sm"
                   >
                     <Send className="h-4 w-4" />
                     {sendingMessage ? 'Enviando...' : 'Enviar'}
@@ -411,17 +421,17 @@ export default function AdminTicketDetailsDialog({
           </div>
 
           {/* Sidebar - Controles de Admin */}
-          <div className="w-80 space-y-4">
+          <div className="w-full lg:w-80 lg:flex-shrink-0 space-y-3 lg:space-y-4">
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Settings className="h-5 w-5" />
-                  <h3 className="font-semibold">Gerenciar Ticket</h3>
+              <CardContent className="pt-3 sm:pt-6 pb-3 sm:pb-6">
+                <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                  <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <h3 className="font-semibold text-base sm:text-lg">Gerenciar Ticket</h3>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <div className="space-y-2">
-                    <Label>Status</Label>
+                    <Label className="text-sm sm:text-base">Status</Label>
                     <Select value={editingStatus} onValueChange={(value: typeof editingStatus) => setEditingStatus(value)}>
                       <SelectTrigger>
                         <SelectValue />
@@ -435,7 +445,7 @@ export default function AdminTicketDetailsDialog({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Prioridade</Label>
+                    <Label className="text-sm sm:text-base">Prioridade</Label>
                     <Select value={editingPriority} onValueChange={(value: typeof editingPriority) => setEditingPriority(value)}>
                       <SelectTrigger>
                         <SelectValue />
@@ -449,7 +459,7 @@ export default function AdminTicketDetailsDialog({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Atribuir a</Label>
+                    <Label className="text-sm sm:text-base">Atribuir a</Label>
                     <Select value={editingAssignee} onValueChange={setEditingAssignee}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecionar admin" />
@@ -478,18 +488,18 @@ export default function AdminTicketDetailsDialog({
 
             {/* Informações do usuário */}
             <Card>
-              <CardContent className="pt-6">
-                <h3 className="font-semibold mb-4">Informações do Usuário</h3>
-                <div className="space-y-2 text-sm">
+              <CardContent className="pt-3 sm:pt-6 pb-3 sm:pb-6">
+                <h3 className="font-semibold mb-3 sm:mb-4 text-base sm:text-lg">Informações do Usuário</h3>
+                <div className="space-y-2 text-xs sm:text-sm">
                   <div>
                     <span className="font-medium">Nome:</span> {ticket.user.name || 'N/A'}
                   </div>
-                  <div>
+                  <div className="break-all">
                     <span className="font-medium">Email:</span> {ticket.user.email}
                   </div>
                   <div>
                     <span className="font-medium">Plano:</span> 
-                    <Badge variant="outline" className="ml-2">
+                    <Badge variant="outline" className="ml-2 text-xs">
                       {ticket.user.subscriptionTier}
                     </Badge>
                   </div>

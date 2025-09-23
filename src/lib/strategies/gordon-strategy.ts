@@ -322,7 +322,10 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       });
     }
     
-    return results.sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
+    const sortedResults = results.sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
+
+    // Aplicar priorização técnica se habilitada
+    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: GordonParams): string {
@@ -366,8 +369,8 @@ Utilizando parâmetros fixos sem ajuste setorial.
 - Alertas para upsides excessivos (>100%)
 - Verificação de consistência com mercado
 
-**Ideal Para**: Investidores focados em renda passiva com crescimento, que valorizam análise fundamentalista calibrada por setor.
+**Ideal Para**: Investidores focados em renda passiva com crescimento, que valorizam análise fundamentalista calibrada por setor${params.useTechnicalAnalysis ? ' e timing de entrada baseado em análise técnica' : ''}.
 
-**Objetivo**: Encontrar empresas que combinam dividendos atrativos com crescimento sustentável, usando parâmetros realistas baseados em dados de mercado.`;
+**Objetivo**: Encontrar empresas que combinam dividendos atrativos com crescimento sustentável, usando parâmetros realistas baseados em dados de mercado${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
   }
 }

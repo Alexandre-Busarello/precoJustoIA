@@ -55,10 +55,12 @@ A análise DEVE conter todas as seções na ordem correta:
 - ✅ Texto fluido e coerente
 
 ### 4. PROBLEMAS QUE REPROVAM A ANÁLISE
-- ❌ **IDIOMA INCORRETO:** Análise em inglês ou outro idioma que não seja português brasileiro
+- ❌ **IDIOMA INCORRETO:** Qualquer texto em inglês ou outro idioma que não seja português brasileiro
+- ❌ **PENSAMENTO EXPOSTO:** Frases como "I need to", "Let me", "Based on my analysis", "As an AI"
+- ❌ **TEXTO TÉCNICO EM INGLÊS:** Termos como "thinking", "analysis", "step", "conclusion" no meio do texto
 - ❌ Estrutura incompleta ou fora de ordem
 - ❌ Seções vazias ou com conteúdo genérico
-- ❌ Exposição do processo de pensamento da IA
+- ❌ Exposição do processo de raciocínio interno da IA
 - ❌ Linguagem muito técnica sem explicação
 - ❌ Conclusões sem fundamentação
 - ❌ Ausência do aviso legal
@@ -92,7 +94,97 @@ Analise a análise fornecida e responda APENAS com um JSON no seguinte formato:
 
 **APROVAÇÃO:** Score >= 80 = approved: true | Score < 80 = approved: false
 
+**ATENÇÃO ESPECIAL:**
+- Se encontrar QUALQUER texto em inglês, reprove imediatamente (score = 0)
+- Se encontrar exposição do "pensamento" da IA, reprove imediatamente (score = 0)
+- Se a análise não estiver 100% em português brasileiro, reprove imediatamente
+
 Seja rigoroso mas justo na avaliação. O objetivo é garantir qualidade profissional para o usuário final.`;
+}
+
+// Função interna para revisar análise (pode ser chamada diretamente)
+export async function reviewAnalysisInternal(params: {
+  analysis: string
+  ticker: string
+  name: string
+}) {
+  const { analysis, ticker, name } = params
+
+  // Validar dados obrigatórios
+  if (!analysis || !ticker || !name) {
+    throw new Error('Dados obrigatórios ausentes: analysis, ticker, name')
+  }
+
+  // Construir prompt de revisão
+  const prompt = buildReviewPrompt(analysis, ticker, name)
+
+  // Configurar Gemini AI
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY!,
+  })
+
+  const model = 'gemini-2.5-flash-lite'
+  const contents = [
+    {
+      role: 'user',
+      parts: [
+        {
+          text: prompt,
+        },
+      ],
+    },
+  ]
+
+  // Fazer chamada para Gemini API
+  const response = await ai.models.generateContentStream({
+    model,
+    contents,
+  })
+
+  // Coletar resposta completa
+  let fullResponse = ''
+  for await (const chunk of response) {
+    if (chunk.text) {
+      fullResponse += chunk.text
+    }
+  }
+
+  if (!fullResponse.trim()) {
+    throw new Error('Resposta vazia da API Gemini')
+  }
+
+  // Tentar extrair JSON da resposta
+  let reviewResult
+  try {
+    // Procurar por JSON na resposta
+    const jsonMatch = fullResponse.match(/```json\s*([\s\S]*?)\s*```/)
+    if (jsonMatch) {
+      reviewResult = JSON.parse(jsonMatch[1])
+    } else {
+      // Tentar parsear a resposta inteira como JSON
+      reviewResult = JSON.parse(fullResponse)
+    }
+  } catch (parseError) {
+    console.error('Erro ao parsear resposta da revisão:', parseError)
+    console.log('Resposta completa:', fullResponse)
+    
+    // Fallback: assumir que foi aprovado se não conseguir parsear
+    reviewResult = {
+      approved: true,
+      reason: 'Erro ao parsear resposta da revisão, assumindo aprovação',
+      missing_sections: [],
+      quality_issues: []
+    }
+  }
+
+  return {
+    success: true,
+    approved: reviewResult.approved || false,
+    reason: reviewResult.reason || 'Sem motivo especificado',
+    missing_sections: reviewResult.missing_sections || [],
+    quality_issues: reviewResult.quality_issues || [],
+    fullResponse
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -102,82 +194,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { analysis, ticker, name } = body;
 
-    // Validar dados obrigatórios
-    if (!analysis || !ticker || !name) {
-      return NextResponse.json(
-        { error: 'Dados obrigatórios ausentes: analysis, ticker, name' },
-        { status: 400 }
-      );
-    }
-
-    // Construir prompt de revisão
-    const prompt = buildReviewPrompt(analysis, ticker, name);
-
-    // Configurar Gemini AI
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY!,
+    // Usar função interna
+    const result = await reviewAnalysisInternal({
+      analysis,
+      ticker,
+      name
     });
 
-    const model = 'gemini-2.5-flash-lite';
-    const contents = [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: prompt,
-          },
-        ],
-      },
-    ];
-
-    // Fazer chamada para Gemini API
-    const response = await ai.models.generateContentStream({
-      model,
-      contents,
-    });
-
-    // Coletar resposta completa
-    let fullResponse = '';
-    for await (const chunk of response) {
-      if (chunk.text) {
-        fullResponse += chunk.text;
-      }
-    }
-
-    if (!fullResponse.trim()) {
-      throw new Error('Resposta vazia da API Gemini');
-    }
-
-    // Tentar extrair JSON da resposta
-    let reviewResult;
-    try {
-      // Procurar por JSON na resposta
-      const jsonMatch = fullResponse.match(/```json\s*([\s\S]*?)\s*```/) || 
-                       fullResponse.match(/\{[\s\S]*\}/);
-      
-      if (jsonMatch) {
-        const jsonString = jsonMatch[1] || jsonMatch[0];
-        reviewResult = JSON.parse(jsonString);
-      } else {
-        throw new Error('JSON não encontrado na resposta');
-      }
-    } catch (parseError) {
-      console.error('Erro ao parsear resposta da revisão:', parseError);
-      // Fallback: aprovar se não conseguir parsear (evitar loop infinito)
-      reviewResult = {
-        approved: true,
-        score: 75,
-        issues: ['Erro na revisão automática'],
-        suggestions: [],
-        summary: 'Revisão automática falhou, análise aprovada por fallback'
-      };
-    }
-
-    return NextResponse.json({
-      success: true,
-      ...reviewResult,
-      rawResponse: fullResponse // Para debug se necessário
-    });
+    return NextResponse.json(result);
 
   } catch (error) {
     console.error('Erro na revisão da análise:', error);

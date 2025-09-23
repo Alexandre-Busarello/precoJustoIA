@@ -64,6 +64,7 @@ model User {
   supportTickets   SupportTicket[]
   ticketMessages   TicketMessage[]
   assignedTickets  SupportTicket[] @relation("AssignedTickets")
+  aiReportFeedbacks AIReportFeedback[]
 
   @@map("users")
 }
@@ -124,6 +125,7 @@ model Company {
   valueAddedStatements ValueAddedStatement[]
   priceOscillations PriceOscillations[]
   quarterlyFinancials QuarterlyFinancials[]
+  aiReports       AIReport[]
 
   @@index([sector])
   @@index([industry])
@@ -695,4 +697,59 @@ model QuarterlyFinancials {
   @@unique([companyId, extractionDate])
   @@index([companyId, extractionDate])
   @@map("quarterly_financials")
+}
+
+// Relatórios de IA por empresa
+model AIReport {
+  id                String             @id @default(cuid())
+  companyId         Int                @map("company_id")
+  content           String             // Conteúdo markdown do relatório
+  strategicAnalyses Json?              // Análises estratégicas aplicadas
+  metadata          Json?              // Metadados adicionais (preço na época, etc)
+  version           Int                @default(1) // Versão do relatório
+  isActive          Boolean            @default(true) @map("is_active") // Se é o relatório ativo
+  status            ReportStatus       @default(COMPLETED) // Status do relatório
+  likeCount         Int                @default(0) @map("like_count")
+  dislikeCount      Int                @default(0) @map("dislike_count")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  feedbacks         AIReportFeedback[]
+
+  @@index([companyId, isActive])
+  @@index([companyId, createdAt])
+  @@index([companyId, status])
+  @@index([createdAt])
+  @@map("ai_reports")
+}
+
+// Feedback dos usuários sobre relatórios de IA
+model AIReportFeedback {
+  id        String     @id @default(cuid())
+  reportId  String     @map("report_id")
+  userId    String     @map("user_id")
+  type      FeedbackType // LIKE, DISLIKE
+  comment   String?    // Comentário opcional
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  
+  report    AIReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, userId]) // Um usuário só pode dar um feedback por relatório
+  @@index([reportId])
+  @@index([userId])
+  @@map("ai_report_feedbacks")
+}
+
+enum FeedbackType {
+  LIKE
+  DISLIKE
+}
+
+enum ReportStatus {
+  GENERATING  // Relatório sendo gerado
+  COMPLETED   // Relatório finalizado
+  FAILED      // Falha na geração
 }

@@ -267,8 +267,11 @@ ${statementsAnalysis.redFlags && statementsAnalysis.redFlags.length > 0 ? statem
 
   return `# Análise Fundamentalista Completa e Padronizada
 
-## **IMPORTANTE: RESPONDA SEMPRE EM PORTUGUÊS BRASILEIRO**
-Toda a análise deve ser escrita exclusivamente em português brasileiro, incluindo títulos, subtítulos, conteúdo e conclusões.
+## **INSTRUÇÕES CRÍTICAS - LEIA ATENTAMENTE:**
+1. **IDIOMA OBRIGATÓRIO:** Toda a resposta deve ser escrita EXCLUSIVAMENTE em português brasileiro
+2. **FORMATO DIRETO:** Forneça apenas a análise final, sem expor seu processo de raciocínio interno
+3. **SEM PENSAMENTOS:** Não inclua frases como "let me think", "I need to analyze", ou qualquer texto em inglês
+4. **RESPOSTA LIMPA:** Vá direto ao ponto com a análise fundamentalista em português
 
 ### **1. PERSONA**
 Incorpore a persona de um **Analista de Investimentos Sênior, CNPI, com especialização no mercado de capitais brasileiro**. Sua comunicação deve ser:
@@ -389,6 +392,111 @@ Data da Análise: ${new Date().toLocaleDateString()}
 **AVISO LEGAL:** Esta análise foi gerada por uma inteligência artificial e tem caráter puramente educacional. As informações aqui contidas não constituem recomendação de compra ou venda de ativos financeiros. Realize sua própria pesquisa e/ou consulte um profissional de investimentos certificado antes de tomar qualquer decisão.`;
 }
 
+// Função interna para gerar análise (pode ser chamada diretamente)
+export async function generateAnalysisInternal(params: {
+  ticker: string
+  name: string
+  sector: string | null
+  currentPrice: number
+  financials: any
+  includeStatements?: boolean
+}) {
+  const { ticker, name, sector, currentPrice, financials, includeStatements = false } = params
+
+  // Validar dados obrigatórios
+  if (!ticker || !name || !currentPrice || !financials) {
+    throw new Error('Dados obrigatórios ausentes: ticker, name, currentPrice, financials')
+  }
+
+  // Criar objeto CompanyData para análises estratégicas
+  const companyData: CompanyData = {
+    ticker,
+    name,
+    sector: sector || null,
+    currentPrice: Number(currentPrice),
+    financials
+  }
+
+  // Executar análises estratégicas
+  const strategicAnalyses = runStrategicAnalyses(companyData)
+
+  // Buscar análise de demonstrativos se solicitado
+  let statementsAnalysis = null
+  if (includeStatements) {
+    statementsAnalysis = await getStatementsAnalysis(ticker)
+    console.log('statementsAnalysis', statementsAnalysis)
+  }
+
+  // Construir prompt para o Gemini
+  const prompt = buildAnalysisPrompt({
+    ticker,
+    name,
+    sector,
+    currentPrice: Number(currentPrice),
+    financials,
+    strategicAnalyses,
+    statementsAnalysis
+  })
+
+  // Configurar Gemini AI
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY!,
+  })
+
+  // Configurar ferramentas (busca na web)
+  const tools = [
+    { urlContext: {}, googleSearch: {} },
+  ]
+
+  const config = {
+    tools,
+  }
+
+  const model = 'gemini-2.5-flash-lite'
+  const contents = [
+    {
+      role: 'user',
+      parts: [
+        {
+          text: prompt,
+        },
+      ],
+    },
+  ]
+
+  // Fazer chamada para Gemini API
+  const response = await ai.models.generateContentStream({
+    model,
+    config,
+    contents,
+  })
+
+  // Coletar resposta completa
+  let fullResponse = ''
+  for await (const chunk of response) {
+    if (chunk.text) {
+      fullResponse += chunk.text
+    }
+  }
+
+  if (!fullResponse.trim()) {
+    throw new Error('Resposta vazia da API Gemini')
+  }
+
+  return {
+    success: true,
+    analysis: fullResponse,
+    strategicAnalyses,
+    metadata: {
+      ticker,
+      name,
+      sector,
+      currentPrice,
+      timestamp: new Date().toISOString()
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     validateGeminiConfig();
@@ -396,104 +504,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { ticker, name, sector, currentPrice, financials, includeStatements = false } = body;
 
-    // Validar dados obrigatórios
-    if (!ticker || !name || !currentPrice || !financials) {
-      return NextResponse.json(
-        { error: 'Dados obrigatórios ausentes: ticker, name, currentPrice, financials' },
-        { status: 400 }
-      );
-    }
-
-    // Criar objeto CompanyData para análises estratégicas
-    const companyData: CompanyData = {
-      ticker,
-      name,
-      sector: sector || null,
-      currentPrice: Number(currentPrice),
-      financials
-    };
-
-    // Executar análises estratégicas
-    const strategicAnalyses = runStrategicAnalyses(companyData);
-
-    // Buscar análise de demonstrativos se solicitado
-    let statementsAnalysis = null;
-    if (includeStatements) {
-      statementsAnalysis = await getStatementsAnalysis(ticker);
-      console.log('statementsAnalysis', statementsAnalysis);
-    }
-
-    // Construir prompt para o Gemini
-    const prompt = buildAnalysisPrompt({
+    // Usar função interna
+    const result = await generateAnalysisInternal({
       ticker,
       name,
       sector,
-      currentPrice: Number(currentPrice),
+      currentPrice,
       financials,
-      strategicAnalyses,
-      statementsAnalysis
+      includeStatements
     });
 
-    // Configurar Gemini AI
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY!,
-    });
-
-    // Configurar ferramentas (busca na web)
-    const tools = [
-      { urlContext: {}, googleSearch: {} },
-    ];
-
-    const config = {
-      thinkingConfig: {
-        thinkingBudget: 8192,
-      },
-      tools,
-    };
-
-    const model = 'gemini-2.5-flash-lite';
-    const contents = [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: prompt,
-          },
-        ],
-      },
-    ];
-
-    // Fazer chamada para Gemini API
-    const response = await ai.models.generateContentStream({
-      model,
-      config,
-      contents,
-    });
-
-    // Coletar resposta completa
-    let fullResponse = '';
-    for await (const chunk of response) {
-      if (chunk.text) {
-        fullResponse += chunk.text;
-      }
-    }
-
-    if (!fullResponse.trim()) {
-      throw new Error('Resposta vazia da API Gemini');
-    }
-
-    return NextResponse.json({
-      success: true,
-      analysis: fullResponse,
-      strategicAnalyses,
-      metadata: {
-        ticker,
-        name,
-        sector,
-        currentPrice,
-        timestamp: new Date().toISOString()
-      }
-    });
+    return NextResponse.json(result);
 
   } catch (error) {
     console.error('Erro na análise com IA:', error);

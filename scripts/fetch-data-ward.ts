@@ -2805,7 +2805,32 @@ async function processCompanyTTMOnly(
     if (brapiTTMData) {
       console.log(`🔄 Processando dados TTM para ${ticker}...`);
       
-      // Processar estatística TTM atual (sempre atualizar)
+      // 1. ATUALIZAR COTAÇÃO ATUAL (regularMarketPrice)
+      if (brapiTTMData.regularMarketPrice) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        await prisma.dailyQuote.upsert({
+          where: {
+            companyId_date: {
+              companyId: company.id,
+              date: today
+            }
+          },
+          update: {
+            price: brapiTTMData.regularMarketPrice
+          },
+          create: {
+            companyId: company.id,
+            date: today,
+            price: brapiTTMData.regularMarketPrice
+          }
+        });
+
+        console.log(`  💰 Cotação TTM atualizada: ${ticker} - R$ ${brapiTTMData.regularMarketPrice}`);
+      }
+      
+      // 2. Processar estatística TTM atual (sempre atualizar)
       if (brapiTTMData.defaultKeyStatistics) {
         // Criar um objeto BrapiProResponse mínimo para usar a função existente
         const mockBrapiData = {
@@ -2813,14 +2838,14 @@ async function processCompanyTTMOnly(
           shortName: ticker,
           longName: ticker,
           currency: 'BRL',
-          regularMarketPrice: 0,
+          regularMarketPrice: brapiTTMData.regularMarketPrice || 0,
           defaultKeyStatistics: brapiTTMData.defaultKeyStatistics
         };
         await processKeyStatistics(company.id, ticker, mockBrapiData);
         console.log(`  📋 Estatística TTM processada`);
       }
       
-      // Processar dados TTM do financialData
+      // 3. Processar dados TTM do financialData
       if (brapiTTMData.financialData) {
         await processFinancialDataTTM(company.id, ticker, brapiTTMData.financialData);
       }

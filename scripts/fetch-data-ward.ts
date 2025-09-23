@@ -2779,6 +2779,73 @@ async function processSpecificTickersNew(
   }
 }
 
+// Função para processar apenas dados TTM de uma empresa
+async function processCompanyTTMOnly(
+  ticker: string,
+  tickerManager: TickerProcessingManager
+): Promise<void> {
+  try {
+    console.log(`📊 Processando apenas TTM para ${ticker}...`);
+    
+    // Garantir que a empresa existe
+    const company = await createOrUpdateCompany(ticker);
+
+    if (!company) {
+      console.log(`❌ Não foi possível criar/encontrar empresa ${ticker}. Pulando...`);
+      await tickerManager.updateProgress(ticker, { 
+        status: 'SKIPPED',
+        error: 'Empresa não encontrada/criada'
+      });
+      return;
+    }
+
+    // Buscar apenas dados TTM da Brapi PRO
+    const brapiTTMData = await fetchBrapiTTMData(ticker);
+    
+    if (brapiTTMData) {
+      console.log(`🔄 Processando dados TTM para ${ticker}...`);
+      
+      // Processar estatística TTM atual (sempre atualizar)
+      if (brapiTTMData.defaultKeyStatistics) {
+        // Criar um objeto BrapiProResponse mínimo para usar a função existente
+        const mockBrapiData = {
+          symbol: ticker,
+          shortName: ticker,
+          longName: ticker,
+          currency: 'BRL',
+          regularMarketPrice: 0,
+          defaultKeyStatistics: brapiTTMData.defaultKeyStatistics
+        };
+        await processKeyStatistics(company.id, ticker, mockBrapiData);
+        console.log(`  📋 Estatística TTM processada`);
+      }
+      
+      // Processar dados TTM do financialData
+      if (brapiTTMData.financialData) {
+        await processFinancialDataTTM(company.id, ticker, brapiTTMData.financialData);
+      }
+      
+      console.log(`✅ Dados TTM processados para ${ticker}`);
+      
+      // Atualizar progresso - manter dados históricos existentes, apenas marcar TTM como atualizado
+      await tickerManager.updateProgress(ticker, {
+        hasBasicData: true,
+        hasTTMData: true,
+        hasBrapiProData: true
+      });
+    } else {
+      console.log(`⚠️  Nenhum dado TTM encontrado para ${ticker}`);
+      await tickerManager.updateProgress(ticker, { 
+        error: 'Dados TTM não encontrados'
+      });
+    }
+    
+  } catch (error: any) {
+    console.error(`❌ Erro ao processar TTM para ${ticker}:`, error.message);
+    throw error;
+  }
+}
+
 // Função para processar empresa com rastreamento de progresso
 async function processCompanyWithTracking(
   ticker: string, 
@@ -2888,12 +2955,22 @@ async function processWithTickerManagement(
           
           // Determinar tipo de processamento baseado nas necessidades
           const shouldProcessHistorical = tickerInfo.needsHistoricalData || forceFullUpdate;
+          const needsTTMOnly = !tickerInfo.needsHistoricalData && tickerInfo.needsTTMUpdate && !forceFullUpdate;
           
-          // Processar com timeout
-          await executeWithTimeout(
-            () => processCompanyWithTracking(tickerInfo.ticker, enableBrapiComplement, shouldProcessHistorical, tickerManager),
-            120000 // 2 minutos timeout por ticker          
-          );
+          // Se precisa apenas de TTM, usar processamento otimizado
+          if (needsTTMOnly) {
+            console.log(`📊 ${tickerInfo.ticker} precisa apenas de atualização TTM`);
+            await executeWithTimeout(
+              () => processCompanyTTMOnly(tickerInfo.ticker, tickerManager),
+              60000 // 1 minuto timeout para TTM apenas
+            );
+          } else {
+            // Processar completo com timeout
+            await executeWithTimeout(
+              () => processCompanyWithTracking(tickerInfo.ticker, enableBrapiComplement, shouldProcessHistorical, tickerManager),
+              120000 // 2 minutos timeout por ticker          
+            );
+          }
           
           const tickerTime = Date.now() - tickerStartTime;
           console.log(`✅ ${tickerInfo.ticker} processado em ${Math.round(tickerTime / 1000)}s`);
@@ -2969,6 +3046,7 @@ export {
   processDataSequentially,
   discoverAndInitializeTickers,
   processSpecificTickersNew,
+  processCompanyTTMOnly,
   processCompanyWithTracking,
   processWithTickerManagement
 };

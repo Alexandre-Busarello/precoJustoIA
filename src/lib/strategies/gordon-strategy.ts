@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber, formatPercent, validateEarningsGrowth } from './base-strategy';
+import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
 import { GordonParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 
 // Parâmetros setoriais baseados em dados de mercado e estudos de WACC
@@ -141,8 +141,8 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     const ultimoDividendo = toNumber(financials.ultimoDividendo);
     const payout = toNumber(financials.payout);
     const roe = toNumber(financials.roe);
-    const crescimentoLucrosRaw = toNumber(financials.crescimentoLucros);
-    const crescimentoLucros = validateEarningsGrowth(crescimentoLucrosRaw);
+    const crescimentoLucros = toNumber(financials.crescimentoLucros);
+    const cagrLucros5a = toNumber(financials.cagrLucros5a);
     const liquidezCorrente = toNumber(financials.liquidezCorrente);
     const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
     
@@ -170,7 +170,7 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       { label: 'DY 12m ≥ 3%', value: !dividendYield12m || dividendYield12m >= 0.03, description: `DY 12m: ${dividendYield12m ? formatPercent(dividendYield12m) : 'N/A - Benefício da dúvida'}` },
       { label: 'Payout ≤ 80%', value: !payout || payout <= 0.80, description: `Payout: ${payout ? formatPercent(payout) : 'N/A - Benefício da dúvida'}` },
       { label: 'ROE ≥ 12%', value: !roe || roe >= 0.12, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Crescimento Lucros ≥ -20%', value: !crescimentoLucros || crescimentoLucros >= -0.20, description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A - Benefício da dúvida'}` },
+      { label: 'Crescimento Lucros ≥ -20%', value: !crescimentoLucros || crescimentoLucros >= -0.20 || !!(cagrLucros5a && cagrLucros5a > 0), description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A - Benefício da dúvida'}${cagrLucros5a && cagrLucros5a > 0 ? ` (CAGR 5a: ${formatPercent(cagrLucros5a)})` : ''}` },
       { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
       { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` }
     ];
@@ -269,14 +269,25 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       const dy = toNumber(company.financials.dy);
       const roe = toNumber(company.financials.roe);
       const payout = toNumber(company.financials.payout);
+      const crescimentoLucros = toNumber(company.financials.crescimentoLucros);
+      const cagrLucros5a = toNumber(company.financials.cagrLucros5a);
       
-      // Score composto: 40% upside + 30% dividend yield + 20% ROE + 10% payout sustentável
+      // Score composto: 35% upside + 25% dividend yield + 20% ROE + 10% payout + 10% crescimento (se CAGR > 0)
+      const shouldConsiderGrowth = cagrLucros5a && cagrLucros5a > 0;
       const upsideScore = analysis.upside ? Math.min(analysis.upside / 50, 1) : 0; // Max 50% upside = score 1
       const dyScore = dy ? Math.min(dy / 0.12, 1) : 0; // Max 12% DY = score 1
       const roeScore = roe ? Math.min(roe / 0.25, 1) : 0; // Max 25% ROE = score 1
       const payoutScore = payout ? (1 - Math.min(payout / 0.8, 1)) : 0; // Menor payout = melhor score
+      const growthScore = shouldConsiderGrowth && crescimentoLucros ? 
+        Math.min(Math.max(0, crescimentoLucros + 0.20), 0.30) / 0.30 : 0; // Crescimento normalizado se CAGR > 0
       
-      const compositeScore = (
+      const compositeScore = shouldConsiderGrowth ? (
+        upsideScore * 0.35 + 
+        dyScore * 0.25 + 
+        roeScore * 0.20 + 
+        payoutScore * 0.10 +
+        growthScore * 0.10
+      ) * 100 : (
         upsideScore * 0.4 + 
         dyScore * 0.3 + 
         roeScore * 0.2 + 
@@ -299,7 +310,7 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
         fairValue: analysis.fairValue!,
         upside: analysis.upside!,
         marginOfSafety: analysis.upside! > 0 ? analysis.upside! : null,
-        rational: `Fórmula de Gordon${sectorInfo}: Preço justo R$ ${analysis.fairValue!.toFixed(2)} baseado em dividendos.${ratesInfo} DY: ${formatPercent(dy)}, ROE: ${formatPercent(roe)}, Payout: ${formatPercent(payout)}.`,
+        rational: `Fórmula de Gordon${sectorInfo}: Preço justo R$ ${analysis.fairValue!.toFixed(2)} baseado em dividendos.${ratesInfo} DY: ${formatPercent(dy)}, ROE: ${formatPercent(roe)}, Payout: ${formatPercent(payout)}${shouldConsiderGrowth ? `, CAGR 5a: ${formatPercent(cagrLucros5a)}` : ''}.`,
         key_metrics: {
           dy: dy || 0,
           roe: roe || 0,

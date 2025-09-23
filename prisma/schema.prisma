@@ -121,6 +121,8 @@ model Company {
   cashflowStatements CashflowStatement[]
   keyStatistics     KeyStatistics[]
   valueAddedStatements ValueAddedStatement[]
+  priceOscillations PriceOscillations[]
+  quarterlyFinancials QuarterlyFinancials[]
 
   @@index([sector])
   @@index([industry])
@@ -165,6 +167,7 @@ model FinancialData {
   margemLiquida              Decimal?  @map("margem_liquida") @db.Decimal(15, 6)
   giroAtivos                 Decimal?  @map("giro_ativos") @db.Decimal(15, 6)
   cagrLucros5a               Decimal?  @map("cagr_lucros_5a") @db.Decimal(15, 6)
+  cagrReceitas5a             Decimal?  @map("cagr_receitas_5a") @db.Decimal(15, 6)
   crescimentoLucros          Decimal?  @map("crescimento_lucros") @db.Decimal(15, 6)
   crescimentoReceitas        Decimal?  @map("crescimento_receitas") @db.Decimal(15, 6)
   dividendYield12m           Decimal?  @map("dividend_yield_12m") @db.Decimal(15, 6)
@@ -613,4 +616,61 @@ enum TicketCategory {
   FEATURE_REQUEST
   BUG_REPORT
   ACCOUNT
+}
+
+// Oscilações de Preço (dados do Fundamentus)
+model PriceOscillations {
+  id                    Int       @id @default(autoincrement())
+  companyId             Int       @map("company_id")
+  extractionDate        DateTime  @map("extraction_date") @db.Date
+  
+  // Variações de preço
+  variationDay          Decimal?  @map("variation_day") @db.Decimal(15, 6)
+  variationMonth        Decimal?  @map("variation_month") @db.Decimal(15, 6)
+  variation30Days       Decimal?  @map("variation_30_days") @db.Decimal(15, 6)
+  variation12Months     Decimal?  @map("variation_12_months") @db.Decimal(15, 6)
+  
+  // Variações anuais (últimos 6 anos)
+  variation2025         Decimal?  @map("variation_2025") @db.Decimal(15, 6)
+  variation2024         Decimal?  @map("variation_2024") @db.Decimal(15, 6)
+  variation2023         Decimal?  @map("variation_2023") @db.Decimal(15, 6)
+  variation2022         Decimal?  @map("variation_2022") @db.Decimal(15, 6)
+  variation2021         Decimal?  @map("variation_2021") @db.Decimal(15, 6)
+  variation2020         Decimal?  @map("variation_2020") @db.Decimal(15, 6)
+  
+  // Informações adicionais
+  min52Weeks            Decimal?  @map("min_52_weeks") @db.Decimal(10, 4)
+  max52Weeks            Decimal?  @map("max_52_weeks") @db.Decimal(10, 4)
+  tradedVolumePerDay    Decimal?  @map("traded_volume_per_day") @db.Decimal(20, 2)
+  
+  updatedAt             DateTime? @updatedAt
+  company               Company   @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, extractionDate])
+  @@index([companyId, extractionDate])
+  @@map("price_oscillations")
+}
+
+// Dados Trimestrais do Fundamentus
+model QuarterlyFinancials {
+  id                    Int       @id @default(autoincrement())
+  companyId             Int       @map("company_id")
+  extractionDate        DateTime  @map("extraction_date") @db.Date
+  
+  // Dados dos últimos 3 meses
+  quarterlyRevenue      Decimal?  @map("quarterly_revenue") @db.Decimal(20, 2)
+  quarterlyEbit         Decimal?  @map("quarterly_ebit") @db.Decimal(20, 2)
+  quarterlyNetIncome    Decimal?  @map("quarterly_net_income") @db.Decimal(20, 2)
+  
+  // Dados dos últimos 12 meses (para comparação)
+  twelveMonthsRevenue   Decimal?  @map("twelve_months_revenue") @db.Decimal(20, 2)
+  twelveMonthsEbit      Decimal?  @map("twelve_months_ebit") @db.Decimal(20, 2)
+  twelveMonthsNetIncome Decimal?  @map("twelve_months_net_income") @db.Decimal(20, 2)
+  
+  updatedAt             DateTime? @updatedAt
+  company               Company   @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, extractionDate])
+  @@index([companyId, extractionDate])
+  @@map("quarterly_financials")
 }

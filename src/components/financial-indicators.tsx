@@ -141,6 +141,34 @@ const indicatorInfo: Record<string, {
     goodRange: 'Abaixo de 60% (ideal < 50%)',
     interpretation: 'Valores altos indicam maior dependência de financiamento externo e risco financeiro.',
     unit: '%'
+  },
+  'CAGR Lucros 5a': {
+    name: 'CAGR Lucros 5 Anos',
+    description: 'Taxa de crescimento anual composta dos lucros nos últimos 5 anos.',
+    goodRange: 'Acima de 10% (ideal > 15%)',
+    interpretation: 'Indica crescimento consistente dos lucros. Valores positivos mostram expansão sustentável.',
+    unit: '%'
+  },
+  'CAGR Receitas 5a': {
+    name: 'CAGR Receitas 5 Anos',
+    description: 'Taxa de crescimento anual composta das receitas nos últimos 5 anos.',
+    goodRange: 'Acima de 8% (ideal > 12%)',
+    interpretation: 'Mostra expansão do negócio. Crescimento consistente indica competitividade no mercado.',
+    unit: '%'
+  },
+  'Crescimento Lucros': {
+    name: 'Crescimento de Lucros',
+    description: 'Variação percentual dos lucros em relação ao ano anterior.',
+    goodRange: 'Acima de 5% (ideal > 10%)',
+    interpretation: 'Crescimento positivo indica melhoria na rentabilidade. Valores negativos podem ser temporários.',
+    unit: '%'
+  },
+  'Crescimento Receitas': {
+    name: 'Crescimento de Receitas',
+    description: 'Variação percentual das receitas em relação ao ano anterior.',
+    goodRange: 'Acima de 5% (ideal > 10%)',
+    interpretation: 'Indica expansão dos negócios. Crescimento sustentado é sinal de competitividade.',
+    unit: '%'
   }
 };
 
@@ -746,6 +774,7 @@ export default function FinancialIndicators({ ticker, latestFinancials, comprehe
     'Var. 52 Semanas': 'variacao_52_semanas',
     'Retorno YTD': 'retorno_ano_atual',
     'CAGR Lucros 5a': 'cagr_lucros_5a',
+    'CAGR Receitas 5a': 'cagr_receitas_5a',
     'Crescimento Lucros': 'crescimento_lucros',
     'Crescimento Receitas': 'crescimento_receitas',
     'DY 12 Meses': 'dividend_yield_12m',
@@ -926,6 +955,56 @@ export default function FinancialIndicators({ ticker, latestFinancials, comprehe
               icon={PieChart}
               description="Alavancagem da Empresa"
               type={getIndicatorType(toNumber(latestFinancials.passivoAtivos), undefined, 0.6)}
+              onChartClick={handleChartClick}
+              onInfoClick={handleInfoClick}
+            />
+          </div>
+        </div>
+
+        {/* Indicadores de Crescimento */}
+        <div>
+          <h3 className="text-lg font-semibold mb-4 flex items-center space-x-2">
+            <TrendingUp className="w-5 h-5" />
+            <span>Indicadores de Crescimento</span>
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <IndicatorCard
+              title="CAGR Lucros 5a"
+              value={formatPercent(latestFinancials.cagrLucros5a)}
+              icon={TrendingUp}
+              description="Taxa Composta de Crescimento (5 anos)"
+              type={getIndicatorType(toNumber(latestFinancials.cagrLucros5a), 0.10)}
+              onChartClick={handleChartClick}
+              onInfoClick={handleInfoClick}
+            />
+            
+            <IndicatorCard
+              title="CAGR Receitas 5a"
+              value={formatPercent(latestFinancials.cagrReceitas5a)}
+              icon={BarChart3}
+              description="Taxa Composta de Crescimento (5 anos)"
+              type={getIndicatorType(toNumber(latestFinancials.cagrReceitas5a), 0.08)}
+              onChartClick={handleChartClick}
+              onInfoClick={handleInfoClick}
+            />
+            
+            <IndicatorCard
+              title="Crescimento Lucros"
+              value={formatPercent(latestFinancials.crescimentoLucros)}
+              icon={Activity}
+              description="Variação Anual de Lucros"
+              type={getIndicatorType(toNumber(latestFinancials.crescimentoLucros), 0.05)}
+              onChartClick={handleChartClick}
+              onInfoClick={handleInfoClick}
+            />
+            
+            <IndicatorCard
+              title="Crescimento Receitas"
+              value={formatPercent(latestFinancials.crescimentoReceitas)}
+              icon={LineChart}
+              description="Variação Anual de Receitas"
+              type={getIndicatorType(toNumber(latestFinancials.crescimentoReceitas), 0.05)}
               onChartClick={handleChartClick}
               onInfoClick={handleInfoClick}
             />

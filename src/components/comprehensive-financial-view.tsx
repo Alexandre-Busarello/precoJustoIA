@@ -108,6 +108,62 @@ function IndicatorWithFallback({
   )
 }
 
+// Função para calcular score de crescimento para ranking (ouro, prata, bronze)
+function calculateGrowthScore(financialData: Record<string, unknown>): {
+  score: number;
+  rank: 'gold' | 'silver' | 'bronze' | 'none';
+  details: string[];
+} {
+  const cagrLucros = toNumber(financialData.cagrLucros5a) || 0;
+  const cagrReceitas = toNumber(financialData.cagrReceitas5a) || 0;
+  const crescLucros = toNumber(financialData.crescimentoLucros) || 0;
+  const crescReceitas = toNumber(financialData.crescimentoReceitas) || 0;
+
+  // Pesos para cada métrica (total = 100%)
+  const weights = {
+    cagrLucros: 0.35,    // 35% - CAGR de lucros é o mais importante
+    cagrReceitas: 0.25,  // 25% - CAGR de receitas
+    crescLucros: 0.25,   // 25% - Crescimento anual de lucros
+    crescReceitas: 0.15  // 15% - Crescimento anual de receitas
+  };
+
+  // Normalizar valores para score (0-100)
+  const normalizeGrowth = (value: number, max: number = 0.30) => {
+    return Math.max(0, Math.min(100, (value + 0.10) / (max + 0.10) * 100));
+  };
+
+  const scores = {
+    cagrLucros: normalizeGrowth(cagrLucros),
+    cagrReceitas: normalizeGrowth(cagrReceitas),
+    crescLucros: normalizeGrowth(crescLucros),
+    crescReceitas: normalizeGrowth(crescReceitas)
+  };
+
+  // Calcular score ponderado
+  const totalScore = 
+    scores.cagrLucros * weights.cagrLucros +
+    scores.cagrReceitas * weights.cagrReceitas +
+    scores.crescLucros * weights.crescLucros +
+    scores.crescReceitas * weights.crescReceitas;
+
+  // Determinar ranking
+  let rank: 'gold' | 'silver' | 'bronze' | 'none';
+  if (totalScore >= 80) rank = 'gold';
+  else if (totalScore >= 60) rank = 'silver';
+  else if (totalScore >= 40) rank = 'bronze';
+  else rank = 'none';
+
+  // Detalhes do score
+  const details = [
+    `CAGR Lucros: ${(cagrLucros * 100).toFixed(1)}% (${scores.cagrLucros.toFixed(0)} pts)`,
+    `CAGR Receitas: ${(cagrReceitas * 100).toFixed(1)}% (${scores.cagrReceitas.toFixed(0)} pts)`,
+    `Crescimento Lucros: ${(crescLucros * 100).toFixed(1)}% (${scores.crescLucros.toFixed(0)} pts)`,
+    `Crescimento Receitas: ${(crescReceitas * 100).toFixed(1)}% (${scores.crescReceitas.toFixed(0)} pts)`
+  ];
+
+  return { score: totalScore, rank, details };
+}
+
 // Componente principal
 export default function ComprehensiveFinancialView({ data }: ComprehensiveFinancialViewProps) {
   
@@ -122,6 +178,9 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
   // Verificar se tem fallbacks aplicados
   const hasFinancialFallbacks = latestFinancial?._hasFinancialFallbacks || false
+
+  // Calcular score de crescimento
+  const growthScore = calculateGrowthScore(latestFinancial || {})
 
   return (
     <div className="space-y-6">
@@ -323,6 +382,67 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
             </Card>
           </div>
 
+          {/* Segunda linha com indicadores de crescimento */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-3 p-4">
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
+                  <div className="flex items-center">
+                    <TrendingUp className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Crescimento (5 anos)</span>
+                  </div>
+                  {growthScore.rank !== 'none' && (
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${
+                        growthScore.rank === 'gold' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                        growthScore.rank === 'silver' ? 'bg-gray-50 text-gray-700 border-gray-200' :
+                        'bg-orange-50 text-orange-700 border-orange-200'
+                      }`}
+                      title={`Score: ${growthScore.score.toFixed(0)}/100\n${growthScore.details.join('\n')}`}
+                    >
+                      {growthScore.rank === 'gold' ? '🥇' : growthScore.rank === 'silver' ? '🥈' : '🥉'}
+                      {growthScore.score.toFixed(0)}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4 pt-0">
+                <IndicatorWithFallback
+                  label="CAGR Lucros"
+                  value={toNumber(latestFinancial?.cagrLucros5a)}
+                  formatter={formatPercent}
+                />
+                <IndicatorWithFallback
+                  label="CAGR Receitas"
+                  value={toNumber(latestFinancial?.cagrReceitas5a)}
+                  formatter={formatPercent}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3 p-4">
+                <CardTitle className="text-sm font-medium flex items-center">
+                  <TrendingUp className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Crescimento (Anual)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4 pt-0">
+                <IndicatorWithFallback
+                  label="Crescimento Lucros"
+                  value={toNumber(latestFinancial?.crescimentoLucros)}
+                  formatter={formatPercent}
+                />
+                <IndicatorWithFallback
+                  label="Crescimento Receitas"
+                  value={toNumber(latestFinancial?.crescimentoReceitas)}
+                  formatter={formatPercent}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Dados Históricos Anuais */}
           <Card>
             <CardHeader className="p-4 sm:p-6">
@@ -333,7 +453,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <div className="overflow-x-auto -mx-4 sm:mx-0">
-                <div className="min-w-[600px] px-4 sm:px-0">
+                <div className="min-w-[900px] px-4 sm:px-0">
                   <table className="w-full text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b">
@@ -343,6 +463,10 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         <th className="text-right py-2 px-1 sm:px-2 min-w-[80px] sm:min-w-[90px]">Margem</th>
                         <th className="text-right py-2 px-1 sm:px-2 min-w-[60px] sm:min-w-[70px]">ROE</th>
                         <th className="text-right py-2 px-1 sm:px-2 min-w-[60px] sm:min-w-[70px]">P/L</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[70px] sm:min-w-[80px]">CAGR-L</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[70px] sm:min-w-[80px]">CAGR-R</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[70px] sm:min-w-[80px]">Cresc-L</th>
+                        <th className="text-right py-2 px-1 sm:px-2 min-w-[70px] sm:min-w-[80px]">Cresc-R</th>
                       </tr>
                     </thead>
                   <tbody>
@@ -382,6 +506,18 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                           </td>
                           <td className="text-right py-2 px-1 sm:px-2">
                             {formatNumber(toNumber(correspondingStats?.forwardPE) ?? toNumber(correspondingFinancial?.pl))}
+                          </td>
+                          <td className="text-right py-2 px-1 sm:px-2">
+                            {formatPercent(correspondingFinancial?.cagrLucros5a)}
+                          </td>
+                          <td className="text-right py-2 px-1 sm:px-2">
+                            {formatPercent(correspondingFinancial?.cagrReceitas5a)}
+                          </td>
+                          <td className="text-right py-2 px-1 sm:px-2">
+                            {formatPercent(correspondingFinancial?.crescimentoLucros)}
+                          </td>
+                          <td className="text-right py-2 px-1 sm:px-2">
+                            {formatPercent(correspondingFinancial?.crescimentoReceitas)}
                           </td>
                         </tr>
                       )

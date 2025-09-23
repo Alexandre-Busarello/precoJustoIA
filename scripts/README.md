@@ -4,6 +4,29 @@ Este diretório contém scripts para extrair e processar dados financeiros de di
 
 ## Scripts Disponíveis
 
+### 📊 Fetch Data Fundamentus
+**Arquivo**: `fetch-data-fundamentus.ts`  
+**Executor**: `run-fetch-fundamentus.js`  
+**Descrição**: Extrai dados fundamentalistas do site Fundamentus via API local
+
+```bash
+# Testar API do Fundamentus
+node scripts/test-fundamentus-api.js
+
+# Processar tickers específicos
+node scripts/run-fetch-fundamentus.js WEGE3 PETR4 VALE3
+
+# Processar amostra de tickers do banco
+node scripts/run-fetch-fundamentus.js
+```
+
+**Características**:
+- ✅ Dados mais confiáveis que Brapi para mercado brasileiro
+- ✅ Merge inteligente: `fundamentus+ward+brapi`
+- ✅ Nova tabela `price_oscillations` para variações de preço
+- ✅ Processamento paralelo (3 empresas simultâneas)
+- ✅ API local (mais rápida e estável)
+
 ### 1. `fetch-data.ts` - Dados da Brapi API
 Script original que busca dados da Brapi API (dados atuais/recentes).
 

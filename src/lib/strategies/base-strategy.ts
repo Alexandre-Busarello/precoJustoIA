@@ -32,41 +32,6 @@ export function formatPercent(value: unknown): string {
 }
 
 /**
- * Valida e normaliza o crescimento de lucros para evitar distorções
- * Trata casos especiais como recuperação de prejuízo e valores extremos
- */
-export function validateEarningsGrowth(crescimentoLucros: number | null): number | null {
-  if (crescimentoLucros === null || crescimentoLucros === undefined) {
-    return null;
-  }
-
-  // Converter para número se necessário
-  const growth = typeof crescimentoLucros === 'number' ? crescimentoLucros : parseFloat(String(crescimentoLucros));
-  
-  if (isNaN(growth)) {
-    return null;
-  }
-
-  // Casos especiais que devem ser tratados como "dados não confiáveis"
-  if (Math.abs(growth) > 2.0) { // Crescimento > 200% ou < -200%
-    console.warn(`⚠️ Crescimento de lucros extremo detectado: ${(growth * 100).toFixed(1)}%. Considerando como não confiável.`);
-    return null; // Tratar como dado não disponível
-  }
-
-  // Limitar crescimento a faixas razoáveis para análise fundamentalista
-  // Focamos em empresas estáveis, não em crescimentos explosivos
-  if (growth > 1.0) { // Limitar crescimento máximo a 100%
-    return 1.0;
-  }
-  
-  if (growth < -0.8) { // Limitar declínio máximo a -80%
-    return -0.8;
-  }
-
-  return growth;
-}
-
-/**
  * Valida e normaliza o CAGR de lucros de 5 anos para evitar distorções
  * CAGR deve ser mais conservador que crescimento anual por ser uma média de longo prazo
  */

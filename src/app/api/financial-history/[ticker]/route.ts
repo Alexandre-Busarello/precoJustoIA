@@ -70,6 +70,7 @@ export async function GET(
       
       // Crescimento
       'cagr_lucros_5a': 'cagrLucros5a',
+      'cagr_receitas_5a': 'cagrReceitas5a',
       'crescimento_lucros': 'crescimentoLucros',
       'crescimento_receitas': 'crescimentoReceitas',
       
@@ -114,8 +115,8 @@ export async function GET(
     // Indicadores que são percentuais (precisam ser multiplicados por 100)
     const percentualIndicators = [
       'dy', 'roe', 'roic', 'roa', 'margem_bruta', 'margem_ebitda', 'margem_liquida',
-      'crescimento_lucros', 'crescimento_receitas', 'dividend_yield_12m', 'payout',
-      'variacao_52_semanas', 'retorno_ano_atual'
+      'cagr_lucros_5a', 'cagr_receitas_5a', 'crescimento_lucros', 'crescimento_receitas', 
+      'dividend_yield_12m', 'payout', 'variacao_52_semanas', 'retorno_ano_atual'
     ];
 
     const isPercentual = percentualIndicators.includes(indicator);
@@ -253,6 +254,16 @@ function getIndicatorInfo(indicator: string) {
     },
     
     // Crescimento
+    'cagr_lucros_5a': {
+      name: 'CAGR Lucros 5 Anos',
+      unit: '%',
+      description: 'Taxa de crescimento anual composta dos lucros nos últimos 5 anos'
+    },
+    'cagr_receitas_5a': {
+      name: 'CAGR Receitas 5 Anos',
+      unit: '%',
+      description: 'Taxa de crescimento anual composta das receitas nos últimos 5 anos'
+    },
     'crescimento_lucros': {
       name: 'Crescimento dos Lucros',
       unit: '%',

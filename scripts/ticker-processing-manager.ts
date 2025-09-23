@@ -307,18 +307,24 @@ export class TickerProcessingManager {
       maxErrorCount?: number;
     } = {}
   ): Promise<TickerProcessingInfo[]> {
+    // Buscar tickers que precisam de processamento
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
     const where: any = {
       processType: this.processType,
-      status: {
-        in: ['PENDING', 'PARTIAL']
-      }
+      status: { not: 'SKIPPED' }
     };
 
     // Filtros opcionais
     if (options.excludeErrors) {
       where.status = {
-        in: ['PENDING', 'PARTIAL'],
+        in: ['PENDING', 'PARTIAL', 'COMPLETED'],
         not: 'ERROR'
+      };
+    } else {
+      where.status = {
+        in: ['PENDING', 'PARTIAL', 'COMPLETED', 'ERROR']
       };
     }
 
@@ -334,13 +340,64 @@ export class TickerProcessingManager {
       };
     }
 
-    if (options.historicalOnly) {
-      where.hasHistoricalData = false;
+    // Construir condições OR para diferentes tipos de necessidades
+    const orConditions: any[] = [];
+    
+    // Sempre incluir PENDING e PARTIAL
+    orConditions.push(
+      { status: 'PENDING' },
+      { status: 'PARTIAL' }
+    );
+    
+    // Incluir ERROR se não excluído
+    if (!options.excludeErrors) {
+      orConditions.push({ status: 'ERROR' });
     }
 
-    if (options.ttmOnly) {
-      where.hasTTMData = false;
+    if (options.historicalOnly) {
+      orConditions.push({
+        status: 'COMPLETED',
+        hasHistoricalData: false
+      });
+    } else if (options.ttmOnly) {
+      orConditions.push(
+        {
+          status: 'COMPLETED',
+          hasTTMData: false
+        },
+        {
+          status: 'COMPLETED',
+          hasTTMData: true,
+          lastProcessedAt: { lt: oneDayAgo }
+        }
+      );
+    } else {
+      // Modo padrão: incluir tickers COMPLETED que precisam de alguma atualização
+      orConditions.push(
+        // Sem dados históricos
+        {
+          status: 'COMPLETED',
+          hasHistoricalData: false
+        },
+        // Sem dados TTM ou TTM antigo
+        {
+          status: 'COMPLETED',
+          hasTTMData: false
+        },
+        {
+          status: 'COMPLETED',
+          hasTTMData: true,
+          lastProcessedAt: { lt: oneDayAgo }
+        },
+        // Sem dados Brapi Pro
+        {
+          status: 'COMPLETED',
+          hasBrapiProData: false
+        }
+      );
     }
+
+    where.OR = orConditions;
 
     const tickers = await backgroundPrisma.tickerProcessingStatus.findMany({
       where,
@@ -433,11 +490,21 @@ export class TickerProcessingManager {
       }
     });
 
+    // Contar tickers que precisam de TTM (sem dados OU com dados antigos > 1 dia)
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
     const needsTTM = await backgroundPrisma.tickerProcessingStatus.count({
       where: {
         processType: this.processType,
-        hasTTMData: false,
-        status: { not: 'SKIPPED' }
+        status: { not: 'SKIPPED' },
+        OR: [
+          { hasTTMData: false }, // Sem dados TTM
+          { 
+            hasTTMData: true,
+            lastProcessedAt: { lt: oneDayAgo } // Com dados mas antigos
+          }
+        ]
       }
     });
 
@@ -544,7 +611,7 @@ export class TickerProcessingManager {
       priority: ticker.priority,
       needsProcessing: ticker.status === 'PENDING' || ticker.status === 'PARTIAL' || (ticker.status === 'ERROR' && ticker.errorCount < 3),
       needsHistoricalData: !ticker.hasHistoricalData,
-      needsTTMUpdate: !ticker.hasTTMData || daysSinceLastProcess > 1, // TTM deve ser atualizado diariamente
+      needsTTMUpdate: !ticker.hasTTMData || daysSinceLastProcess >= 1, // TTM deve ser atualizado diariamente
       needsBrapiProData: !ticker.hasBrapiProData
     };
   }

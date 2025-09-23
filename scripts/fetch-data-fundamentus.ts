@@ -150,7 +150,7 @@ async function fetchFundamentusData(ticker: string): Promise<FundamentusResponse
     console.log(`🔍 Buscando dados do Fundamentus para ${ticker}...`);
     
     const response = await axios.get(
-      `http://localhost:8000/stock/${ticker}`,
+      `https://py-fundamentus.vercel.app/stock/${ticker}`,
       {
         headers: {
           'User-Agent': 'analisador-acoes/1.0.0',

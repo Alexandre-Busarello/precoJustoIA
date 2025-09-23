@@ -11,8 +11,8 @@
  */
 
 import axios from 'axios';
-import { backgroundPrisma } from './prisma-background';
-import { TickerProcessingManager } from './ticker-processing-manager';
+import { backgroundPrisma } from './prisma-background.js';
+import { TickerProcessingManager } from './ticker-processing-manager.js';
 
 // Configurações da BRAPI
 const BRAPI_TOKEN = process.env.BRAPI_TOKEN;
@@ -54,6 +54,11 @@ class HistoricalPriceFetcher {
 
   constructor() {
     this.tickerManager = new TickerProcessingManager('historical_price_fetch');
+    
+    // Verificar se o Prisma está disponível
+    if (!backgroundPrisma) {
+      throw new Error('backgroundPrisma não está disponível. Verifique a configuração do banco de dados.');
+    }
   }
 
   /**
@@ -121,6 +126,11 @@ class HistoricalPriceFetcher {
     interval: string = '1mo'
   ): Promise<void> {
     try {
+      // Verificar se o Prisma está inicializado
+      if (!backgroundPrisma) {
+        throw new Error('backgroundPrisma não está inicializado');
+      }
+
       // Buscar ou criar empresa
       let company = await backgroundPrisma.company.findUnique({
         where: { ticker }
@@ -153,6 +163,9 @@ class HistoricalPriceFetcher {
         select: {
           date: true
         }
+      }).catch(error => {
+        console.error(`❌ Erro ao buscar dados existentes para ${ticker}:`, error.message);
+        return [];
       });
 
       const existingDateSet = new Set(

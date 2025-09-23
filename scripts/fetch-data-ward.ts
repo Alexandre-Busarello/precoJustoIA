@@ -4,8 +4,15 @@ import { GoogleGenAI } from '@google/genai';
 import { backgroundPrisma, backgroundPrismaManager } from './prisma-background';
 import { TickerProcessingManager } from './ticker-processing-manager';
 import { ConcurrencyManager, executeWithRetry, executeWithTimeout } from './concurrency-manager';
-// Importar apenas o que precisamos do fetch-data.ts
-// import { DataFetcher } from './fetch-data';
+// Importar funções do Fundamentus para integração TTM
+import { 
+  fetchFundamentusData, 
+  convertFundamentusToFinancialData,
+  calculateAndUpdateAllGrowthMetrics,
+  mergeFundamentusWithExistingData,
+  processPriceOscillations,
+  processQuarterlyFinancials
+} from './fetch-data-fundamentus';
 
 // Função para traduzir texto usando Gemini AI
 async function translateToPortuguese(text: string, fieldType: 'description' | 'sector' | 'industry' = 'description'): Promise<string> {
@@ -789,6 +796,7 @@ interface FinancialDataComplete {
   margemLiquida?: number | null;
   giroAtivos?: number | null;
   cagrLucros5a?: number | null;
+  cagrReceitas5a?: number | null;
   crescimentoLucros?: number | null;
   crescimentoReceitas?: number | null;
   dividendYield12m?: number | null;
@@ -826,103 +834,122 @@ interface FinancialDataComplete {
   dataSource?: string;
 }
 
-// Função para mesclar dados da Ward com dados da Brapi (complementar)
-function mergeWardWithBrapiData(wardData: any, brapiData: any, year: number): FinancialDataComplete {
-  // Priorizar dados da Ward, usar Brapi apenas para complementar campos faltantes
+// Função para mesclar dados com prioridade: Fundamentus > Ward > Brapi
+function mergeFinancialDataWithPriority(
+  fundamentusData: any | null, 
+  wardData: any | null, 
+  brapiData: any | null, 
+  year: number
+): FinancialDataComplete {
+  // Prioridade: Fundamentus > Ward > Brapi
   // Seguir exatamente o schema do Prisma para garantir compatibilidade
+  
+  // Determinar fonte de dados para metadados
+  const sources = [];
+  if (fundamentusData) sources.push('fundamentus');
+  if (wardData) sources.push('ward');
+  if (brapiData) sources.push('brapi');
+  const dataSource = sources.join('+');
+  
   return {
     year: year,
     
     // === INDICADORES DE VALUATION ===
-    pl: wardData.pl || brapiData.pl || null,
-    forwardPE: brapiData.forwardPE || null, // Só na Brapi
-    earningsYield: wardData.earningsYield || brapiData.earningsYield || null,
-    pvp: wardData.pvp || brapiData.pvp || null,
-    dy: wardData.dy || brapiData.dy || null,
-    evEbitda: wardData.evEbitda || brapiData.evEbitda || null,
-    evEbit: wardData.evEbit || brapiData.evEbit || null,
-    evRevenue: brapiData.evRevenue || null, // Só na Brapi
-    psr: brapiData.psr || null, // Só na Brapi
-    pAtivos: brapiData.pAtivos || null, // Só na Brapi
-    pCapGiro: brapiData.pCapGiro || null, // Só na Brapi
-    pEbit: wardData.pEbit || brapiData.pEbit || null,
-    lpa: wardData.lpa || brapiData.lpa || null,
-    trailingEps: brapiData.trailingEps || null, // Só na Brapi
-    vpa: wardData.vpa || brapiData.vpa || null,
+    pl: fundamentusData?.pl || wardData?.pl || brapiData?.pl || null,
+    forwardPE: brapiData?.forwardPE || null, // Só na Brapi
+    earningsYield: fundamentusData?.earningsYield || wardData?.earningsYield || brapiData?.earningsYield || null,
+    pvp: fundamentusData?.pvp || wardData?.pvp || brapiData?.pvp || null,
+    dy: fundamentusData?.dy || wardData?.dy || brapiData?.dy || null,
+    evEbitda: fundamentusData?.evEbitda || wardData?.evEbitda || brapiData?.evEbitda || null,
+    evEbit: fundamentusData?.evEbit || wardData?.evEbit || brapiData?.evEbit || null,
+    evRevenue: brapiData?.evRevenue || null, // Só na Brapi
+    psr: fundamentusData?.psr || brapiData?.psr || null,
+    pAtivos: fundamentusData?.pAtivos || brapiData?.pAtivos || null,
+    pCapGiro: fundamentusData?.pCapGiro || brapiData?.pCapGiro || null,
+    pEbit: fundamentusData?.pEbit || wardData?.pEbit || brapiData?.pEbit || null,
+    lpa: fundamentusData?.lpa || wardData?.lpa || brapiData?.lpa || null,
+    trailingEps: brapiData?.trailingEps || null, // Só na Brapi
+    vpa: fundamentusData?.vpa || wardData?.vpa || brapiData?.vpa || null,
     
     // === DADOS DE MERCADO E AÇÕES ===
-    marketCap: brapiData.marketCap || wardData.marketCap || null, // Priorizar Ward
-    enterpriseValue: brapiData.enterpriseValue || null, // Só na Brapi
-    sharesOutstanding: wardData.sharesOutstanding || brapiData.sharesOutstanding || null, // Priorizar Ward
-    totalAssets: brapiData.totalAssets || null, // Só na Brapi
+    marketCap: wardData?.marketCap || brapiData?.marketCap || null, // Ward tem cálculo mais preciso
+    enterpriseValue: brapiData?.enterpriseValue || null, // Só na Brapi
+    sharesOutstanding: wardData?.sharesOutstanding || brapiData?.sharesOutstanding || null,
+    totalAssets: fundamentusData?.ativoTotal || brapiData?.totalAssets || null,
     
     // === INDICADORES DE ENDIVIDAMENTO E LIQUIDEZ ===
-    dividaLiquidaPl: brapiData.dividaLiquidaPl || null, // Só na Brapi
-    dividaLiquidaEbitda: wardData.dividaLiquidaEbitda || brapiData.dividaLiquidaEbitda || null,
-    liquidezCorrente: wardData.liquidezCorrente || brapiData.liquidezCorrente || null,
-    liquidezRapida: brapiData.liquidezRapida || null, // Só na Brapi
-    passivoAtivos: brapiData.passivoAtivos || null, // Só na Brapi
-    debtToEquity: brapiData.debtToEquity || null, // Só na Brapi
+    dividaLiquidaPl: fundamentusData?.dividaLiquidaPl || brapiData?.dividaLiquidaPl || null,
+    dividaLiquidaEbitda: fundamentusData?.dividaLiquidaEbitda || wardData?.dividaLiquidaEbitda || brapiData?.dividaLiquidaEbitda || null,
+    liquidezCorrente: fundamentusData?.liquidezCorrente || wardData?.liquidezCorrente || brapiData?.liquidezCorrente || null,
+    liquidezRapida: brapiData?.liquidezRapida || null, // Só na Brapi
+    passivoAtivos: brapiData?.passivoAtivos || null, // Só na Brapi
+    debtToEquity: brapiData?.debtToEquity || null, // Só na Brapi
     
     // === INDICADORES DE RENTABILIDADE ===
-    roe: wardData.roe || brapiData.roe || null,
-    roic: wardData.roic || brapiData.roic || null,
-    roa: wardData.roa || brapiData.roa || null,
-    margemBruta: brapiData.margemBruta || null, // Só na Brapi
-    margemEbitda: wardData.margemEbitda || brapiData.margemEbitda || null,
-    margemLiquida: wardData.margemLiquida || brapiData.margemLiquida || null,
-    giroAtivos: brapiData.giroAtivos || null, // Só na Brapi
+    roe: fundamentusData?.roe || wardData?.roe || brapiData?.roe || null,
+    roic: fundamentusData?.roic || wardData?.roic || brapiData?.roic || null,
+    roa: wardData?.roa || brapiData?.roa || null,
+    margemBruta: fundamentusData?.margemBruta || brapiData?.margemBruta || null,
+    margemEbitda: fundamentusData?.margemEbitda || wardData?.margemEbitda || brapiData?.margemEbitda || null,
+    margemLiquida: fundamentusData?.margemLiquida || wardData?.margemLiquida || brapiData?.margemLiquida || null,
+    giroAtivos: fundamentusData?.giroAtivos || brapiData?.giroAtivos || null,
     
-    // === INDICADORES DE CRESCIMENTO ===
-    cagrLucros5a: wardData.cagrLucros5a || brapiData.cagrLucros5a || null,
-    crescimentoLucros: brapiData.crescimentoLucros || null, // Só na Brapi
-    crescimentoReceitas: wardData.crescimentoReceitas || brapiData.crescimentoReceitas || null,
+    // === INDICADORES DE CRESCIMENTO (PRIORIDADE MÁXIMA FUNDAMENTUS - CALCULADOS) ===
+    cagrLucros5a: fundamentusData?.cagrLucros5a || wardData?.cagrLucros5a || brapiData?.cagrLucros5a || null,
+    cagrReceitas5a: fundamentusData?.cagrReceitas5a || null, // Só no Fundamentus (calculado)
+    crescimentoLucros: fundamentusData?.crescimentoLucros || brapiData?.crescimentoLucros || null,
+    crescimentoReceitas: fundamentusData?.crescimentoReceitas || wardData?.crescimentoReceitas || brapiData?.crescimentoReceitas || null,
     
     // === DADOS DE DIVIDENDOS ===
-    dividendYield12m: wardData.dividendYield12m || brapiData.dividendYield12m || null,
-    ultimoDividendo: brapiData.ultimoDividendo || null, // Só na Brapi
-    dataUltimoDividendo: brapiData.dataUltimoDividendo || null, // Só na Brapi
-    payout: wardData.payout || null, // Só na Ward
+    dividendYield12m: fundamentusData?.dividendYield12m || wardData?.dividendYield12m || brapiData?.dividendYield12m || null,
+    ultimoDividendo: brapiData?.ultimoDividendo || null, // Só na Brapi
+    dataUltimoDividendo: brapiData?.dataUltimoDividendo || null, // Só na Brapi
+    payout: wardData?.payout || null, // Só na Ward
     
     // === PERFORMANCE E VARIAÇÕES ===
-    variacao52Semanas: brapiData.variacao52Semanas || null, // Só na Brapi
-    retornoAnoAtual: brapiData.retornoAnoAtual || null, // Só na Brapi
+    variacao52Semanas: brapiData?.variacao52Semanas || null, // Só na Brapi
+    retornoAnoAtual: brapiData?.retornoAnoAtual || null, // Só na Brapi
     
     // === DADOS FINANCEIROS OPERACIONAIS ===
-    ebitda: wardData.ebitda || brapiData.ebitda || null,
-    receitaTotal: wardData.receitaTotal || brapiData.receitaTotal || null,
-    lucroLiquido: wardData.lucroLiquido || brapiData.lucroLiquido || null,
-    fluxoCaixaOperacional: brapiData.fluxoCaixaOperacional || null, // Só na Brapi
-    fluxoCaixaInvestimento: brapiData.fluxoCaixaInvestimento || null, // Só na Brapi
-    fluxoCaixaFinanciamento: brapiData.fluxoCaixaFinanciamento || null, // Só na Brapi
-    fluxoCaixaLivre: brapiData.fluxoCaixaLivre || null, // Só na Brapi
-    totalCaixa: wardData.totalCaixa || brapiData.totalCaixa || null,
-    totalDivida: wardData.totalDivida || brapiData.totalDivida || null,
-    receitaPorAcao: brapiData.receitaPorAcao || null, // Só na Brapi
-    caixaPorAcao: brapiData.caixaPorAcao || null, // Só na Brapi
+    ebitda: fundamentusData?.ebitda || wardData?.ebitda || brapiData?.ebitda || null,
+    receitaTotal: fundamentusData?.receitaTotal || wardData?.receitaTotal || brapiData?.receitaTotal || null,
+    lucroLiquido: fundamentusData?.lucroLiquido || wardData?.lucroLiquido || brapiData?.lucroLiquido || null,
+    fluxoCaixaOperacional: brapiData?.fluxoCaixaOperacional || null, // Só na Brapi
+    fluxoCaixaInvestimento: brapiData?.fluxoCaixaInvestimento || null, // Só na Brapi
+    fluxoCaixaFinanciamento: brapiData?.fluxoCaixaFinanciamento || null, // Só na Brapi
+    fluxoCaixaLivre: brapiData?.fluxoCaixaLivre || null, // Só na Brapi
+    totalCaixa: fundamentusData?.caixa || wardData?.totalCaixa || brapiData?.totalCaixa || null,
+    totalDivida: fundamentusData?.totalDivida || wardData?.totalDivida || brapiData?.totalDivida || null,
+    receitaPorAcao: brapiData?.receitaPorAcao || null, // Só na Brapi
+    caixaPorAcao: brapiData?.caixaPorAcao || null, // Só na Brapi
     
     // === DADOS DO BALANÇO PATRIMONIAL ===
-    ativoCirculante: brapiData.ativoCirculante || null, // Só na Brapi
-    ativoTotal: brapiData.ativoTotal || null, // Só na Brapi
-    passivoCirculante: brapiData.passivoCirculante || null, // Só na Brapi
-    passivoTotal: brapiData.passivoTotal || null, // Só na Brapi
-    patrimonioLiquido: brapiData.patrimonioLiquido || null, // Só na Brapi
-    caixa: brapiData.caixa || null, // Só na Brapi
-    estoques: brapiData.estoques || null, // Só na Brapi
-    contasReceber: brapiData.contasReceber || null, // Só na Brapi
-    imobilizado: brapiData.imobilizado || null, // Só na Brapi
-    intangivel: brapiData.intangivel || null, // Só na Brapi
-    dividaCirculante: brapiData.dividaCirculante || null, // Só na Brapi
-    dividaLongoPrazo: brapiData.dividaLongoPrazo || null, // Só na Brapi
+    ativoCirculante: fundamentusData?.ativoCirculante || brapiData?.ativoCirculante || null,
+    ativoTotal: fundamentusData?.ativoTotal || brapiData?.ativoTotal || null,
+    passivoCirculante: brapiData?.passivoCirculante || null, // Só na Brapi
+    passivoTotal: brapiData?.passivoTotal || null, // Só na Brapi
+    patrimonioLiquido: fundamentusData?.patrimonioLiquido || brapiData?.patrimonioLiquido || null,
+    caixa: fundamentusData?.caixa || brapiData?.caixa || null,
+    estoques: brapiData?.estoques || null, // Só na Brapi
+    contasReceber: brapiData?.contasReceber || null, // Só na Brapi
+    imobilizado: brapiData?.imobilizado || null, // Só na Brapi
+    intangivel: brapiData?.intangivel || null, // Só na Brapi
+    dividaCirculante: brapiData?.dividaCirculante || null, // Só na Brapi
+    dividaLongoPrazo: brapiData?.dividaLongoPrazo || null, // Só na Brapi
     
     // === DADOS DE DIVIDENDOS DETALHADOS ===
-    dividendoMaisRecente: brapiData.dividendoMaisRecente || null, // Só na Brapi
-    dataDividendoMaisRecente: brapiData.dataDividendoMaisRecente || null, // Só na Brapi
-    historicoUltimosDividendos: brapiData.historicoUltimosDividendos || null, // Só na Brapi
+    dividendoMaisRecente: brapiData?.dividendoMaisRecente || null, // Só na Brapi
+    dataDividendoMaisRecente: brapiData?.dataDividendoMaisRecente || null, // Só na Brapi
+    historicoUltimosDividendos: brapiData?.historicoUltimosDividendos || null, // Só na Brapi
     
     // === METADADOS ===
-    dataSource: 'ward+brapi' // Indicar que é híbrido
+    dataSource: dataSource
   };
+}
+
+// Função para mesclar dados da Ward com dados da Brapi (complementar) - MANTIDA PARA COMPATIBILIDADE
+function mergeWardWithBrapiData(wardData: any, brapiData: any, year: number): FinancialDataComplete {
+  return mergeFinancialDataWithPriority(null, wardData, brapiData, year);
 }
 
 // Função para converter dados da Ward para o formato do banco
@@ -1912,6 +1939,148 @@ async function processValueAddedStatements(
   }
 }
 
+// Função para atualizar dados históricos de preço recentes (últimos 2 meses)
+async function updateRecentHistoricalPrices(companyId: number, ticker: string): Promise<void> {
+  try {
+    console.log(`  📈 Atualizando dados históricos recentes para ${ticker}...`);
+    
+    if (!BRAPI_TOKEN) {
+      console.log(`  ⚠️  BRAPI_TOKEN não configurado, pulando dados históricos`);
+      return;
+    }
+
+    // Buscar dados históricos dos últimos 3 meses (para garantir que temos pelo menos 2 meses completos)
+    const headers = {
+      'Authorization': `Bearer ${BRAPI_TOKEN}`,
+      'User-Agent': 'analisador-acoes/1.0.0'
+    };
+
+    const response = await axios.get(
+      `https://brapi.dev/api/quote/${ticker}`,
+      {
+        headers,
+        params: {
+          range: '3mo', // 3 meses
+          interval: '1mo' // Dados mensais
+        },
+        timeout: 15000
+      }
+    );
+
+    if (response.status === 200 && response.data.results && response.data.results.length > 0) {
+      const data = response.data.results[0];
+      
+      if (!data.historicalDataPrice || data.historicalDataPrice.length === 0) {
+        console.log(`  ⚠️  Nenhum dado histórico encontrado para ${ticker}`);
+        return;
+      }
+
+      console.log(`  📊 Processando ${data.historicalDataPrice.length} registros históricos recentes...`);
+
+      // Verificar dados existentes para evitar duplicatas
+      const twoMonthsAgo = new Date();
+      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+      twoMonthsAgo.setDate(1); // Primeiro dia do mês
+
+      const existingDates = await prisma.historicalPrice.findMany({
+        where: {
+          companyId,
+          interval: '1mo',
+          date: { gte: twoMonthsAgo }
+        },
+        select: { date: true }
+      });
+
+      const existingDateSet = new Set(
+        existingDates.map(d => d.date.toISOString().split('T')[0])
+      );
+
+      // Preparar dados para inserção/atualização
+      const historicalRecords = data.historicalDataPrice
+        .map((record: any) => {
+          const date = new Date(record.date * 1000); // Converter timestamp Unix para Date
+          const dateStr = date.toISOString().split('T')[0];
+
+          return {
+            companyId,
+            date,
+            dateStr,
+            open: record.open,
+            high: record.high,
+            low: record.low,
+            close: record.close,
+            volume: BigInt(record.volume),
+            adjustedClose: record.adjustedClose,
+            interval: '1mo'
+          };
+        })
+        .filter((record: any) => {
+          // Filtrar apenas os últimos 2 meses
+          return record.date >= twoMonthsAgo;
+        });
+
+      if (historicalRecords.length === 0) {
+        console.log(`  ⏭️  Nenhum dado histórico recente para processar`);
+        return;
+      }
+
+      // Usar upsert para cada registro (atualizar se existe, criar se não existe)
+      let updatedCount = 0;
+      let createdCount = 0;
+
+      for (const record of historicalRecords) {
+        try {
+          const result = await prisma.historicalPrice.upsert({
+            where: {
+              companyId_date_interval: {
+                companyId: record.companyId,
+                date: record.date,
+                interval: record.interval
+              }
+            },
+            update: {
+              open: record.open,
+              high: record.high,
+              low: record.low,
+              close: record.close,
+              volume: record.volume,
+              adjustedClose: record.adjustedClose
+            },
+            create: {
+              companyId: record.companyId,
+              date: record.date,
+              open: record.open,
+              high: record.high,
+              low: record.low,
+              close: record.close,
+              volume: record.volume,
+              adjustedClose: record.adjustedClose,
+              interval: record.interval
+            }
+          });
+
+          if (existingDateSet.has(record.dateStr)) {
+            updatedCount++;
+          } else {
+            createdCount++;
+          }
+        } catch (error: any) {
+          console.error(`  ❌ Erro ao processar registro histórico de ${record.dateStr}:`, error.message);
+        }
+      }
+
+      console.log(`  ✅ Dados históricos atualizados: ${createdCount} novos, ${updatedCount} atualizados`);
+
+    } else {
+      console.log(`  ⚠️  Nenhum dado histórico encontrado na BRAPI para ${ticker}`);
+    }
+
+  } catch (error: any) {
+    console.error(`  ❌ Erro ao atualizar dados históricos para ${ticker}:`, error.message);
+    // Não falhar o processamento TTM por causa dos dados históricos
+  }
+}
+
 // Função para processar dados TTM do financialData
 async function processFinancialDataTTM(companyId: number, ticker: string, financialData: BrapiFinancialData): Promise<void> {
   try {
@@ -2303,12 +2472,38 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
         const wardFinancialData = await convertWardDataToFinancialData(wardStock, company.id);
         const currentYear = new Date().getFullYear();
         
-        // Se for o ano atual E temos dados da Brapi, mesclar
+        // Se for o ano atual, buscar dados do Fundamentus e mesclar com prioridade
         let finalFinancialData;
-        if (wardFinancialData.year === currentYear && brapiData) {
-          finalFinancialData = mergeWardWithBrapiData(wardFinancialData, brapiData, wardFinancialData.year);
-          complementedYears++;
-          console.log(`  🔄 ${wardFinancialData.year}: Dados mesclados Ward + Brapi`);
+        if (wardFinancialData.year === currentYear) {
+          // Buscar dados do Fundamentus para o ano atual
+          let fundamentusCurrentYearData = null;
+          try {
+            const fundamentusData = await fetchFundamentusData(ticker);
+            if (fundamentusData) {
+              fundamentusCurrentYearData = convertFundamentusToFinancialData(fundamentusData);
+              console.log(`  📊 Dados do Fundamentus obtidos para ${ticker} (${currentYear})`);
+            }
+          } catch (error: any) {
+            console.log(`  ⚠️  Erro ao buscar dados do Fundamentus para ${ticker}:`, error.message);
+          }
+          
+          // Mesclar com prioridade: Fundamentus > Ward > Brapi
+          if (fundamentusCurrentYearData || brapiData) {
+            finalFinancialData = mergeFinancialDataWithPriority(
+              fundamentusCurrentYearData,
+              wardFinancialData,
+              brapiData,
+              wardFinancialData.year
+            );
+            complementedYears++;
+            const sources = [];
+            if (fundamentusCurrentYearData) sources.push('Fundamentus');
+            if (wardFinancialData) sources.push('Ward');
+            if (brapiData) sources.push('Brapi');
+            console.log(`  🔄 ${wardFinancialData.year}: Dados mesclados ${sources.join(' + ')}`);
+          } else {
+            finalFinancialData = wardFinancialData as FinancialDataComplete;
+          }
         } else {
           finalFinancialData = wardFinancialData as FinancialDataComplete;
         }
@@ -2779,7 +2974,7 @@ async function processSpecificTickersNew(
   }
 }
 
-// Função para processar apenas dados TTM de uma empresa
+// Função para processar apenas dados TTM de uma empresa (com prioridade Fundamentus > Ward > Brapi)
 async function processCompanyTTMOnly(
   ticker: string,
   tickerManager: TickerProcessingManager
@@ -2799,13 +2994,67 @@ async function processCompanyTTMOnly(
       return;
     }
 
-    // Buscar apenas dados TTM da Brapi PRO
-    const brapiTTMData = await fetchBrapiTTMData(ticker);
+    const currentYear = new Date().getFullYear();
+    let fundamentusFinancialData = null;
+    let wardCurrentYearData = null;
+    let brapiTTMData = null;
+
+    // 1. BUSCAR DADOS DO FUNDAMENTUS (PRIORIDADE MÁXIMA)
+    console.log(`🔄 Buscando dados TTM do Fundamentus para ${ticker}...`);
+    try {
+      const fundamentusData = await fetchFundamentusData(ticker);
+      if (fundamentusData) {
+        console.log(`✅ Dados do Fundamentus obtidos para ${ticker}`);
+        
+        // Processar oscilações de preço e dados trimestrais
+        await processPriceOscillations(company.id, ticker, fundamentusData);
+        await processQuarterlyFinancials(company.id, ticker, fundamentusData);
+        
+        // Converter dados do Fundamentus
+        fundamentusFinancialData = convertFundamentusToFinancialData(fundamentusData);
+        
+        // Recalcular métricas de crescimento para todos os anos
+        await calculateAndUpdateAllGrowthMetrics(company.id);
+        
+        console.log(`  📊 Dados do Fundamentus processados para ${ticker}`);
+      } else {
+        console.log(`  ⚠️  Dados do Fundamentus não disponíveis para ${ticker}`);
+      }
+    } catch (error: any) {
+      console.log(`  ⚠️  Erro ao buscar dados do Fundamentus para ${ticker}:`, error.message);
+    }
+
+    // 2. BUSCAR DADOS DA WARD (SEGUNDA PRIORIDADE)
+    console.log(`🔄 Buscando dados TTM da Ward para ${ticker}...`);
+    try {
+      const wardData = await fetchWardData(ticker);
+      if (wardData && wardData.historicalStocks) {
+        // Buscar dados do ano atual na Ward
+        const currentYearStock = wardData.historicalStocks.find(stock => 
+          parseInt(stock.ano) === currentYear
+        );
+        
+        if (currentYearStock) {
+          wardCurrentYearData = await convertWardDataToFinancialData(currentYearStock, company.id);
+          console.log(`  ✅ Dados da Ward obtidos para ${ticker} (${currentYear})`);
+        } else {
+          console.log(`  ⚠️  Dados da Ward não disponíveis para o ano atual (${currentYear})`);
+        }
+      } else {
+        console.log(`  ⚠️  Dados da Ward não disponíveis para ${ticker}`);
+      }
+    } catch (error: any) {
+      console.log(`  ⚠️  Erro ao buscar dados da Ward para ${ticker}:`, error.message);
+    }
+
+    // 3. BUSCAR DADOS DA BRAPI PRO (TERCEIRA PRIORIDADE)
+    console.log(`🔄 Buscando dados TTM da Brapi PRO para ${ticker}...`);
+    brapiTTMData = await fetchBrapiTTMData(ticker);
     
     if (brapiTTMData) {
-      console.log(`🔄 Processando dados TTM para ${ticker}...`);
+      console.log(`  ✅ Dados TTM da Brapi PRO obtidos para ${ticker}`);
       
-      // 1. ATUALIZAR COTAÇÃO ATUAL (regularMarketPrice)
+      // 3.1. ATUALIZAR COTAÇÃO ATUAL (regularMarketPrice)
       if (brapiTTMData.regularMarketPrice) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -2830,9 +3079,11 @@ async function processCompanyTTMOnly(
         console.log(`  💰 Cotação TTM atualizada: ${ticker} - R$ ${brapiTTMData.regularMarketPrice}`);
       }
       
-      // 2. Processar estatística TTM atual (sempre atualizar)
+      // 3.2. ATUALIZAR DADOS HISTÓRICOS DE PREÇO (últimos 2 meses)
+      await updateRecentHistoricalPrices(company.id, ticker);
+      
+      // 3.3. Processar estatística TTM atual (sempre atualizar)
       if (brapiTTMData.defaultKeyStatistics) {
-        // Criar um objeto BrapiProResponse mínimo para usar a função existente
         const mockBrapiData = {
           symbol: ticker,
           shortName: ticker,
@@ -2845,23 +3096,123 @@ async function processCompanyTTMOnly(
         console.log(`  📋 Estatística TTM processada`);
       }
       
-      // 3. Processar dados TTM do financialData
+      // 3.4. Processar dados TTM do financialData
       if (brapiTTMData.financialData) {
         await processFinancialDataTTM(company.id, ticker, brapiTTMData.financialData);
       }
+    } else {
+      console.log(`  ⚠️  Dados TTM da Brapi PRO não disponíveis para ${ticker}`);
+    }
+
+    // 4. MESCLAR DADOS COM PRIORIDADE: FUNDAMENTUS > WARD > BRAPI
+    if (fundamentusFinancialData || wardCurrentYearData || brapiTTMData) {
+      console.log(`🔄 Mesclando dados TTM com prioridade para ${ticker}...`);
       
-      console.log(`✅ Dados TTM processados para ${ticker}`);
+      // Buscar dados existentes para o ano atual
+      const existingFinancialData = await prisma.financialData.findUnique({
+        where: {
+          companyId_year: {
+            companyId: company.id,
+            year: currentYear
+          }
+        }
+      });
       
-      // Atualizar progresso - manter dados históricos existentes, apenas marcar TTM como atualizado
+      // Preparar dados da Brapi no formato correto
+      let brapiFormattedData = null;
+      if (brapiTTMData?.financialData) {
+        brapiFormattedData = {
+          // Mapear campos da Brapi para o formato esperado
+          forwardPE: brapiTTMData.financialData.currentPrice && brapiTTMData.financialData.earningsGrowth ? 
+            brapiTTMData.financialData.currentPrice / (brapiTTMData.financialData.earningsGrowth * brapiTTMData.financialData.currentPrice) : null,
+          liquidezCorrente: brapiTTMData.financialData.currentRatio,
+          liquidezRapida: brapiTTMData.financialData.quickRatio,
+          debtToEquity: brapiTTMData.financialData.debtToEquity,
+          roe: brapiTTMData.financialData.returnOnEquity,
+          roa: brapiTTMData.financialData.returnOnAssets,
+          margemBruta: brapiTTMData.financialData.grossMargins,
+          margemEbitda: brapiTTMData.financialData.ebitdaMargins,
+          margemLiquida: brapiTTMData.financialData.profitMargins,
+          crescimentoLucros: brapiTTMData.financialData.earningsGrowth,
+          crescimentoReceitas: brapiTTMData.financialData.revenueGrowth,
+          ebitda: brapiTTMData.financialData.ebitda,
+          receitaTotal: brapiTTMData.financialData.totalRevenue,
+          lucroLiquido: brapiTTMData.financialData.grossProfits,
+          fluxoCaixaOperacional: brapiTTMData.financialData.operatingCashflow,
+          fluxoCaixaLivre: brapiTTMData.financialData.freeCashflow,
+          totalCaixa: brapiTTMData.financialData.totalCash,
+          totalDivida: brapiTTMData.financialData.totalDebt,
+          receitaPorAcao: brapiTTMData.financialData.revenuePerShare,
+          caixaPorAcao: brapiTTMData.financialData.totalCashPerShare
+        };
+      }
+      
+      // Mesclar dados com prioridade
+      let finalFinancialData;
+      if (existingFinancialData) {
+        // Se já existe, usar função de mesclagem do Fundamentus se temos dados do Fundamentus
+        if (fundamentusFinancialData) {
+          finalFinancialData = mergeFundamentusWithExistingData(fundamentusFinancialData, existingFinancialData);
+          console.log(`  🔄 Dados mesclados: Fundamentus + existentes`);
+        } else {
+          // Senão, usar nova função de prioridade
+          finalFinancialData = mergeFinancialDataWithPriority(
+            fundamentusFinancialData,
+            wardCurrentYearData,
+            brapiFormattedData,
+            currentYear
+          );
+          console.log(`  🔄 Dados mesclados: Ward + Brapi + existentes`);
+        }
+      } else {
+        // Criar novo registro
+        finalFinancialData = mergeFinancialDataWithPriority(
+          fundamentusFinancialData,
+          wardCurrentYearData,
+          brapiFormattedData,
+          currentYear
+        );
+        console.log(`  🆕 Novos dados TTM criados`);
+      }
+      
+      // Upsert dos dados financeiros
+      await prisma.financialData.upsert({
+        where: {
+          companyId_year: {
+            companyId: company.id,
+            year: currentYear
+          }
+        },
+        update: finalFinancialData,
+        create: {
+          companyId: company.id,
+          year: currentYear,
+          ...finalFinancialData
+        }
+      });
+      
+      // Log dos principais indicadores atualizados
+      const indicators = [];
+      if (finalFinancialData.pl) indicators.push(`P/L=${finalFinancialData.pl}`);
+      if (finalFinancialData.roe) indicators.push(`ROE=${(finalFinancialData.roe * 100).toFixed(2)}%`);
+      if (finalFinancialData.dy) indicators.push(`DY=${(finalFinancialData.dy * 100).toFixed(2)}%`);
+      if (finalFinancialData.cagrLucros5a) indicators.push(`CAGR-L=${(finalFinancialData.cagrLucros5a * 100).toFixed(1)}%`);
+      if (finalFinancialData.cagrReceitas5a) indicators.push(`CAGR-R=${(finalFinancialData.cagrReceitas5a * 100).toFixed(1)}%`);
+      
+      console.log(`  📊 TTM atualizado: ${indicators.join(', ')}`);
+      console.log(`✅ Dados TTM processados para ${ticker} (fonte: ${finalFinancialData.dataSource})`);
+      
+      // Atualizar progresso
       await tickerManager.updateProgress(ticker, {
         hasBasicData: true,
         hasTTMData: true,
-        hasBrapiProData: true
+        hasBrapiProData: !!brapiTTMData,
+        hasHistoricalData: true // Manter como true se já tinha
       });
     } else {
-      console.log(`⚠️  Nenhum dado TTM encontrado para ${ticker}`);
+      console.log(`⚠️  Nenhuma fonte de dados TTM disponível para ${ticker}`);
       await tickerManager.updateProgress(ticker, { 
-        error: 'Dados TTM não encontrados'
+        error: 'Nenhuma fonte de dados TTM disponível'
       });
     }
     
@@ -3065,6 +3416,7 @@ export {
   processKeyStatistics,
   processValueAddedStatements,
   processFinancialDataTTM,
+  updateRecentHistoricalPrices,
   checkExistingHistoricalData,
   getExistingDataDates,
   filterMissingData,
@@ -3073,5 +3425,7 @@ export {
   processSpecificTickersNew,
   processCompanyTTMOnly,
   processCompanyWithTracking,
-  processWithTickerManagement
+  processWithTickerManagement,
+  mergeFinancialDataWithPriority,
+  mergeWardWithBrapiData
 };

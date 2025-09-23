@@ -67,6 +67,10 @@ function getCompanySize(marketCap: number | null): 'small_caps' | 'mid_caps' | '
 const competitorsCache = new Map<string, { competitors: { ticker: string; name: string; sector: string | null }[]; timestamp: number }>()
 const COMPETITORS_CACHE_DURATION = 30 * 60 * 1000 // 30 minutos
 
+// Cache para metadata (válido por 15 minutos)
+const metadataCache = new Map<string, { metadata: any; timestamp: number }>()
+const METADATA_CACHE_DURATION = 15 * 60 * 1000 // 15 minutos
+
 // Função para buscar concorrentes do mesmo setor com priorização de subsetor (otimizada)
 async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, currentMarketCap: number | null = null, limit: number = 5) {
   if (!sector) return []
@@ -232,15 +236,41 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const tickerParam = resolvedParams.ticker // Manter ticker original da URL
   const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
   
+  // Verificar cache primeiro
+  const cached = metadataCache.get(ticker)
+  if (cached && Date.now() - cached.timestamp < METADATA_CACHE_DURATION) {
+    return cached.metadata
+  }
+  
   try {
     const company = await prisma.company.findUnique({
       where: { ticker },
-      include: {
+      select: {
+        name: true,
+        sector: true,
+        description: true,
+        logoUrl: true,
+        website: true,
+        city: true,
+        state: true,
+        fullTimeEmployees: true,
+        industry: true,
+        address: true,
         financialData: {
+          select: {
+            pl: true,
+            roe: true,
+            marketCap: true,
+            receitaTotal: true,
+            updatedAt: true
+          },
           orderBy: { year: 'desc' },
           take: 1
         },
         dailyQuotes: {
+          select: {
+            price: true
+          },
           orderBy: { date: 'desc' },
           take: 1
         }
@@ -257,7 +287,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const latestFinancials = company.financialData[0]
     const currentPrice = toNumber(company.dailyQuotes[0]?.price) || 0
     
-    const title = `${ticker} - ${company.name} | Análise de Ação Completa - Preço Justo AI`
+    const title = `${ticker} - ${company.name} | Análise Completa - Preço Justo AI`
     
     // Incluir descrição da empresa no SEO quando disponível
     const baseDescription = `Análise fundamentalista completa da ação ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
@@ -268,7 +298,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     
     const description = `${baseDescription}${companyInfo} Análise com IA, indicadores financeiros e estratégias de investimento.`
 
-    return {
+    const metadata = {
       title,
       description,
       keywords: `${ticker}, ${company.name}, análise fundamentalista, ação ${ticker}, ações, B3, bovespa, investimentos, ${company.sector}, análise de ações, valuation, indicadores financeiros`,
@@ -303,7 +333,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           index: true,
           follow: true,
           'max-video-preview': -1,
-          'max-image-preview': 'large',
+          'max-image-preview': 'large' as const,
           'max-snippet': -1,
         },
       },
@@ -314,6 +344,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         'article:publisher': 'Preço Justo AI',
       }
     }
+
+    // Armazenar no cache
+    metadataCache.set(ticker, {
+      metadata,
+      timestamp: Date.now()
+    })
+
+    return metadata
   } catch {
     return {
       title: `${ticker} - Análise de Ação | Preço Justo AI`,
@@ -340,36 +378,37 @@ export default async function TickerPage({ params }: PageProps) {
     userIsPremium = user?.isPremium || false
   }
 
-  // Buscar dados da empresa
-  const companyData = await prisma.company.findUnique({
-    where: { ticker },
-    include: {
-      financialData: {
-        orderBy: { year: 'desc' },
-        take: 1
-      },
-      dailyQuotes: {
-        orderBy: { date: 'desc' },
-        take: 1
+  // Buscar dados da empresa e dados financeiros completos em paralelo
+  const [companyData, comprehensiveData] = await Promise.all([
+    prisma.company.findUnique({
+      where: { ticker },
+      include: {
+        financialData: {
+          orderBy: { year: 'desc' },
+          take: 1
+        },
+        dailyQuotes: {
+          orderBy: { date: 'desc' },
+          take: 1
+        }
       }
-    }
-  })
+    }),
+    getComprehensiveFinancialData(ticker, 'YEARLY', 5)
+  ])
 
   if (!companyData) {
     notFound()
   }
 
-  // Buscar dados financeiros completos (anuais)
-  const comprehensiveData = await getComprehensiveFinancialData(ticker, 'YEARLY', 5)
-
   const latestFinancials = companyData.financialData[0]
   const latestQuote = companyData.dailyQuotes[0]
   const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
 
-  // Buscar concorrentes do mesmo setor/subsetor (5 concorrentes + empresa atual = 6 total)
-  // Passar o marketCap da empresa atual para filtro por tamanho
+  // Buscar concorrentes apenas se houver setor definido (otimização)
   const currentMarketCap = toNumber(latestFinancials?.marketCap)
-  const competitors = await getSectorCompetitors(ticker, companyData.sector, companyData.industry, currentMarketCap, 5)
+  const competitors = companyData.sector 
+    ? await getSectorCompetitors(ticker, companyData.sector, companyData.industry, currentMarketCap, 5)
+    : []
   
   // Criar URL do comparador inteligente
   const smartComparatorUrl = competitors.length > 0 
@@ -625,7 +664,7 @@ export default async function TickerPage({ params }: PageProps) {
               "name": companyData.name,
               "alternateName": ticker,
               "description": companyData.description || `Análise fundamentalista completa de ${companyData.name} (${ticker}) com indicadores financeiros, valuation e estratégias de investimento. Descubra se a ação está subvalorizada.`,
-              "url": `https://preço-justo.ai/acao/${ticker}`,
+              "url": `https://precojusto.ai/acao/${ticker.toLowerCase()}`,
               "logo": companyData.logoUrl || undefined,
               "sameAs": companyData.website ? [companyData.website] : undefined,
               "address": companyData.address ? {

@@ -378,7 +378,7 @@ export default function AIAnalysis({
                   </p>
                 </div>
                 <Button asChild size="lg" className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-white">
-                  <Link href="/dashboard">
+                  <Link href="/checkout">
                     <Crown className="w-5 h-5 mr-2" />
                     Fazer Upgrade Premium
                   </Link>
@@ -562,7 +562,7 @@ export default function AIAnalysis({
                       histórico de relatórios e podem dar feedback.
                     </p>
                     <Button asChild className="bg-purple-600 hover:bg-purple-700">
-                      <Link href="/dashboard">
+                      <Link href="/checkout">
                         <Crown className="w-4 h-4 mr-2" />
                         Fazer Upgrade Premium
                       </Link>

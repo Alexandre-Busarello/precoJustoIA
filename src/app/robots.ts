@@ -20,7 +20,18 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        disallow: '/', // Desabilita indexação durante fase alfa
+        allow: '/',
+        disallow: [
+          '/api/',
+          '/dashboard/',
+          '/login/',
+          '/register/',
+          '/_next/',
+          '/admin/',
+          '/private/',
+          '*.json',
+          '/test-markdown/',
+        ],
       },
       {
         userAgent: 'GPTBot',

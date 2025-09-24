@@ -1,11 +1,18 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 interface StructuredDataProps {
   type: 'website' | 'organization' | 'article' | 'product'
   data?: Record<string, any>
 }
 
 export function StructuredData({ type, data = {} }: StructuredDataProps) {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   const getStructuredData = () => {
     const baseData = {
       '@context': 'https://schema.org',
@@ -128,6 +135,11 @@ export function StructuredData({ type, data = {} }: StructuredDataProps) {
       default:
         return baseData
     }
+  }
+
+  // Só renderizar no cliente para evitar problemas de hidratação
+  if (!isClient) {
+    return null;
   }
 
   return (

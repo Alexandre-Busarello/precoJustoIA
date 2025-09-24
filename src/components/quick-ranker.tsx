@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { CompanyLogo } from "@/components/company-logo"
+import { AddToBacktestButton } from "@/components/add-to-backtest-button"
 import { 
   Loader2, 
   TrendingUp, 
@@ -1015,13 +1016,11 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
           {results.results.length > 0 ? (
             <div className="grid gap-3 sm:gap-4">
               {results.results.map((result, index) => (
-                <Link 
+                <Card 
                   key={result.ticker} 
-                  href={`/acao/${result.ticker}`}
-                  className="block group"
+                  className="border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80"
                 >
-                  <Card className="border-0 shadow-md hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02] bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80">
-                    <CardContent className="p-3 sm:p-6">
+                  <CardContent className="p-3 sm:p-6">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
                         <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
                           <div className="relative shrink-0">
@@ -1093,16 +1092,37 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       )}
                       
                       {/* Individual Rational */}
-                      <div className="border-t pt-3 sm:pt-4">
+                      <div className="border-t pt-3 sm:pt-4 mb-4">
                         <div className="flex items-center gap-2 mb-2">
                           <Target className="w-3 h-3 text-blue-600" />
                           <h5 className="font-semibold text-xs text-blue-600">Análise Individual</h5>
                         </div>
                         <MarkdownRenderer content={result.rational} className="text-xs leading-relaxed" />
                       </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-wrap gap-2 pt-3 border-t">
+                        <Button asChild variant="default" size="sm" className="flex-1">
+                          <Link href={`/acao/${result.ticker}`}>
+                            <Building2 className="w-4 h-4 mr-2" />
+                            Ver Análise
+                          </Link>
+                        </Button>
+                        
+                        <AddToBacktestButton
+                          asset={{
+                            ticker: result.ticker,
+                            companyName: result.name,
+                            sector: result.sector || undefined,
+                            currentPrice: result.currentPrice
+                          }}
+                          variant="outline"
+                          size="sm"
+                          showLabel={false}
+                        />
+                      </div>
                     </CardContent>
                   </Card>
-                </Link>
               ))}
             </div>
           ) : (

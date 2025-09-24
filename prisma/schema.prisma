@@ -65,6 +65,7 @@ model User {
   ticketMessages   TicketMessage[]
   assignedTickets  SupportTicket[] @relation("AssignedTickets")
   aiReportFeedbacks AIReportFeedback[]
+  backtestConfigs  BacktestConfig[]
 
   @@map("users")
 }
@@ -752,4 +753,112 @@ enum ReportStatus {
   GENERATING  // Relatório sendo gerado
   COMPLETED   // Relatório finalizado
   FAILED      // Falha na geração
+}
+
+// ===== MODELOS DE BACKTESTING =====
+
+// Configurações de backtesting salvos pelo usuário
+model BacktestConfig {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  name              String   // Nome da simulação
+  description       String?  // Descrição opcional
+  
+  // Parâmetros da simulação
+  startDate         DateTime @map("start_date") @db.Date
+  endDate           DateTime @map("end_date") @db.Date
+  initialCapital    Decimal  @map("initial_capital") @db.Decimal(15, 2)     // Capital inicial
+  monthlyContribution Decimal @map("monthly_contribution") @db.Decimal(12, 2)
+  rebalanceFrequency String  @default("monthly") // monthly, quarterly, yearly
+  
+  // Metadados
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets            BacktestAsset[]
+  results           BacktestResult[]
+  transactions      BacktestTransaction[]
+  
+  @@map("backtest_configs")
+}
+
+// Ativos da carteira com alocação percentual
+model BacktestAsset {
+  id              String   @id @default(cuid())
+  backtestId      String   @map("backtest_id")
+  ticker          String
+  targetAllocation Decimal @map("target_allocation") @db.Decimal(5, 4) // Ex: 0.2500 = 25%
+  averageDividendYield Decimal? @map("average_dividend_yield") @db.Decimal(5, 4) // DY médio dos últimos 5 anos (ex: 0.0850 = 8.50%)
+  
+  backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
+  
+  @@unique([backtestId, ticker])
+  @@map("backtest_assets")
+}
+
+// Resultados da simulação
+model BacktestResult {
+  id              String   @id @default(cuid())
+  backtestId      String   @map("backtest_id")
+  
+  // Métricas gerais
+  totalReturn     Decimal  @map("total_return") @db.Decimal(10, 4)     // Retorno total %
+  annualizedReturn Decimal @map("annualized_return") @db.Decimal(10, 4) // Retorno anualizado %
+  volatility      Decimal  @db.Decimal(10, 4)                          // Volatilidade anualizada %
+  sharpeRatio     Decimal? @map("sharpe_ratio") @db.Decimal(10, 4)     // Sharpe Ratio
+  maxDrawdown     Decimal  @map("max_drawdown") @db.Decimal(10, 4)     // Drawdown máximo %
+  
+  // Estatísticas de consistência
+  positiveMonths  Int      @map("positive_months")
+  negativeMonths  Int      @map("negative_months")
+  totalMonths     Int      @map("total_months")
+  
+  // Valores finais
+  totalInvested   Decimal  @map("total_invested") @db.Decimal(15, 2)   // Total aportado
+  finalValue      Decimal  @map("final_value") @db.Decimal(15, 2)      // Valor final da carteira
+  totalDividendsReceived Decimal? @map("total_dividends_received") @db.Decimal(15, 2) // Total de dividendos recebidos
+  
+  // Dados detalhados (JSON)
+  monthlyReturns  Json     @map("monthly_returns")    // Array de retornos mensais
+  assetPerformance Json    @map("asset_performance")  // Performance por ativo
+  portfolioEvolution Json  @map("portfolio_evolution") // Evolução mês a mês
+  
+  // Metadados
+  calculatedAt    DateTime @default(now()) @map("calculated_at")
+  
+  backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
+  
+  @@unique([backtestId]) // Um resultado por configuração
+  @@map("backtest_results")
+}
+
+// Histórico detalhado de transações mensais
+model BacktestTransaction {
+  id              String   @id @default(cuid())
+  backtestId      String   @map("backtest_id")
+  
+  // Dados da transação
+  month           Int                                    // Mês da simulação (0, 1, 2...)
+  date            DateTime @db.Date                      // Data da transação
+  ticker          String                                 // Ativo transacionado (ou 'CASH' para reserva)
+  transactionType String   @default("CONTRIBUTION")     // Tipo: CONTRIBUTION, REBALANCE_BUY, REBALANCE_SELL, CASH_RESERVE
+  contribution    Decimal  @db.Decimal(12, 2)          // Valor aportado (pode ser negativo em rebalanceamentos)
+  price           Decimal  @db.Decimal(10, 4)          // Preço de compra/venda
+  sharesAdded     Decimal  @db.Decimal(15, 6)          // Quantidade de ações adicionadas (pode ser negativo)
+  totalShares     Decimal  @db.Decimal(15, 6)          // Total de ações após a transação
+  totalInvested   Decimal  @db.Decimal(15, 2)          // Total investido no ativo até esta data
+  cashReserved    Decimal? @db.Decimal(12, 2)          // Valor em caixa por não conseguir comprar ação inteira
+  
+  // Contexto do mês
+  totalContribution Decimal @map("total_contribution") @db.Decimal(12, 2) // Aporte total do mês
+  portfolioValue    Decimal @map("portfolio_value") @db.Decimal(15, 2)    // Valor da carteira após rebalanceamento
+  cashBalance       Decimal @map("cash_balance") @db.Decimal(12, 2) @default(0) // Saldo em caixa no final do mês
+  
+  // Relacionamento
+  backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
+  
+  @@index([backtestId, month]) // Índice para consultas por backtest e mês
+  @@map("backtest_transactions")
 }

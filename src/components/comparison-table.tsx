@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import { 
   Table, 
   TableBody, 
@@ -488,6 +489,27 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                   {company.ticker}
                 </Link>
               </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Botões de Backtest */}
+        <div className="mt-4 pt-3 border-t">
+          <h4 className="font-semibold mb-3 text-sm sm:text-base">Adicionar ao Backtest</h4>
+          <div className="flex flex-wrap gap-2">
+            {companies.map((company) => (
+              <AddToBacktestButton
+                key={`backtest-${company.ticker}`}
+                asset={{
+                  ticker: company.ticker,
+                  companyName: company.name,
+                  sector: company.sector || undefined,
+                  currentPrice: company.currentPrice
+                }}
+                variant="outline"
+                size="sm"
+                showLabel={true}
+              />
             ))}
           </div>
         </div>

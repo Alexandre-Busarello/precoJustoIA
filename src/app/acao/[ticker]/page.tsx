@@ -12,6 +12,7 @@ import FinancialIndicators from '@/components/financial-indicators'
 import CompanySearch from '@/components/company-search'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisSection from '@/components/technical-analysis-section'
+import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import Link from 'next/link'
 
@@ -521,17 +522,29 @@ export default async function TickerPage({ params }: PageProps) {
                       </div>
                     )}
 
-                    {/* Botão de Ação */}
-                    {smartComparatorUrl && (
-                      <div className="mb-4">
+                    {/* Botões de Ação */}
+                    <div className="mb-4 flex flex-wrap gap-2">
+                      {smartComparatorUrl && (
                         <Button asChild>
                           <Link href={smartComparatorUrl}>
                             <GitCompare className="w-4 h-4 mr-2" />
                             Comparador Inteligente
                           </Link>
                         </Button>
-                      </div>
-                    )}
+                      )}
+                      
+                      <AddToBacktestButton
+                        asset={{
+                          ticker: companyData.ticker,
+                          companyName: companyData.name,
+                          sector: companyData.sector || undefined,
+                          currentPrice: companyData.dailyQuotes?.[0]?.price ? Number(companyData.dailyQuotes[0].price) : undefined
+                        }}
+                        variant="outline"
+                        size="default"
+                        showLabel={true}
+                      />
+                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
                       {companyData.industry && (

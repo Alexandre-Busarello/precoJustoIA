@@ -973,9 +973,6 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 <li key={index}>• {issue}</li>
               ))}
             </ul>
-            <ul>
-              Para meses com dados faltantes, é utilizado o período ótimo (onde temos todos os dados) para o backtest.
-            </ul>
           </CardContent>
         </Card>
       )}

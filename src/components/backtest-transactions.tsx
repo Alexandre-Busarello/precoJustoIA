@@ -12,7 +12,7 @@ interface BacktestTransaction {
   month: number
   date: string
   ticker: string
-  transactionType: 'CONTRIBUTION' | 'REBALANCE_BUY' | 'REBALANCE_SELL' | 'CASH_RESERVE' | 'CASH_CREDIT' | 'CASH_DEBIT' | 'DIVIDEND_PAYMENT'
+  transactionType: 'CONTRIBUTION' | 'REBALANCE_BUY' | 'REBALANCE_SELL' | 'CASH_RESERVE' | 'CASH_CREDIT' | 'CASH_DEBIT' | 'DIVIDEND_PAYMENT' | 'DIVIDEND_REINVESTMENT'
   contribution: number
   price: number
   sharesAdded: number
@@ -104,6 +104,8 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
       return { label: 'Venda (Rebal.)', color: 'bg-orange-100 text-orange-800', icon: '🔄' }
     case 'DIVIDEND_PAYMENT':
       return { label: 'Dividendos', color: 'bg-emerald-100 text-emerald-800', icon: '💎' }
+    case 'DIVIDEND_REINVESTMENT':
+      return { label: 'Reinvest. Dividendo', color: 'bg-purple-100 text-purple-800', icon: '💎' }
     case 'CASH_CREDIT':
       return { label: 'Crédito Caixa', color: 'bg-green-100 text-green-800', icon: '🏦💰' }
     case 'CASH_DEBIT':
@@ -224,12 +226,12 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                               <span className="text-red-600">{formatCurrency(Math.abs(transaction.contribution))}</span>
                             ) : '-'
                           ) : (
-                            // Dividendos são créditos, não débitos
-                            transaction.transactionType === 'DIVIDEND_PAYMENT' ? '-' : (
-                              transaction.contribution > 0 ? (
-                                <span className="text-red-600">{formatCurrency(transaction.contribution)}</span>
-                              ) : '-'
-                            )
+            // Dividendos pagos não são débitos, mas reinvestidos são compras (débitos)
+            transaction.transactionType === 'DIVIDEND_PAYMENT' ? '-' : (
+              transaction.contribution > 0 ? (
+                <span className="text-red-600">{formatCurrency(transaction.contribution)}</span>
+              ) : '-'
+            )
                           )}
                         </td>
                         {/* Crédito (entrada no caixa) */}
@@ -239,14 +241,14 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                               <span className="text-green-600">{formatCurrency(transaction.contribution)}</span>
                             ) : '-'
                           ) : (
-                            // Dividendos são créditos no caixa
-                            transaction.transactionType === 'DIVIDEND_PAYMENT' ? (
-                              <span className="text-green-600">{formatCurrency(transaction.contribution)}</span>
-                            ) : (
-                              transaction.contribution < 0 ? (
-                                <span className="text-green-600">{formatCurrency(Math.abs(transaction.contribution))}</span>
-                              ) : '-'
-                            )
+            // Dividendos pagos são créditos no caixa, reinvestidos são débitos (compras)
+            transaction.transactionType === 'DIVIDEND_PAYMENT' ? (
+              <span className="text-green-600">{formatCurrency(transaction.contribution)}</span>
+            ) : transaction.transactionType === 'DIVIDEND_REINVESTMENT' ? '-' : (
+              transaction.contribution < 0 ? (
+                <span className="text-green-600">{formatCurrency(Math.abs(transaction.contribution))}</span>
+              ) : '-'
+            )
                           )}
                         </td>
                         <td className="text-right p-3 font-mono">

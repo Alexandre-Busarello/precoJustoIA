@@ -44,6 +44,7 @@ interface BacktestResult {
   negativeMonths: number;
   totalInvested: number;
   finalValue: number;
+  finalCashReserve?: number; // Saldo de caixa final
   totalDividendsReceived?: number; // Total de dividendos recebidos
   monthlyReturns: Array<{
     date: string;
@@ -57,6 +58,7 @@ interface BacktestResult {
     finalValue: number;
     totalReturn: number;
     contribution: number;
+    reinvestment: number;
   }>;
   portfolioEvolution: Array<{
     date: string;
@@ -137,7 +139,10 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
 
   // Calcular métricas derivadas
-  const totalGain = result.finalValue - result.totalInvested;
+  // Ganho Total = Ganho de Capital + Dividendos Recebidos
+  const capitalGain = result.finalValue - result.totalInvested;
+  const totalDividends = result.totalDividendsReceived || 0;
+  const totalGain = capitalGain + totalDividends;
   const gainPercentage = result.totalInvested > 0 ? (totalGain / result.totalInvested) * 100 : 0;
   const totalMonths = (result.positiveMonths || 0) + (result.negativeMonths || 0);
   const consistencyRate = totalMonths > 0 ? ((result.positiveMonths || 0) / totalMonths) * 100 : 0;
@@ -204,9 +209,10 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       // O total investido vem da contribuição do ativo
       const totalInvested = asset.contribution || 0;
       
-      // Calcular preço médio: Total Investido ÷ Quantidade Final
-      // Isso representa o custo médio por ação/cota
-      const averagePrice = finalQuantity > 0 ? totalInvested / finalQuantity : 0;
+      // Usar preço médio real do backend (incluindo rebalanceamentos) se disponível
+      // Caso contrário, calcular baseado no total investido (apenas aportes)
+      const averagePrice = (asset as any).averagePrice || 
+        (finalQuantity > 0 ? totalInvested / finalQuantity : 0);
       
       custodyInfo[asset.ticker] = {
         quantity: finalQuantity,
@@ -348,6 +354,12 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                   <span>Valor Final:</span>
                   <span className="font-semibold">{formatCurrency(result.finalValue)}</span>
                 </div>
+                {result.finalCashReserve !== undefined && (
+                  <div className="flex justify-between">
+                    <span>Saldo em Caixa:</span>
+                    <span className="font-semibold text-blue-600">{formatCurrency(result.finalCashReserve || 0)}</span>
+                  </div>
+                )}
                 {result.totalDividendsReceived && result.totalDividendsReceived > 0 && (
                   <div className="flex justify-between">
                     <span>Dividendos Recebidos:</span>
@@ -356,11 +368,28 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 )}
                 <Separator />
                 <div className="flex justify-between text-lg">
-                  <span>Ganho/Perda:</span>
+                  <span>Ganho/Perda Total:</span>
                   <span className={`font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(totalGain)} ({gainPercentage.toFixed(2)}%)
                   </span>
                 </div>
+                {/* Decomposição do Ganho Total */}
+                {result.totalDividendsReceived && result.totalDividendsReceived > 0 && (
+                  <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400 pl-4">
+                    <div className="flex justify-between">
+                      <span>• Ganho de Capital:</span>
+                      <span className={`font-medium ${capitalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(capitalGain)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• Dividendos:</span>
+                      <span className="font-medium text-green-600">
+                        {formatCurrency(totalDividends)}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {result.totalDividendsReceived && result.totalDividendsReceived > 0 && (
                   <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                     <span>Yield sobre Investimento:</span>
@@ -509,8 +538,9 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                         <tbody>
                           {paginatedData.map((month, index) => {
                             const actualIndex = startIndex + index;
-                            const previousValue = actualIndex > 0 ? result.monthlyReturns[actualIndex - 1]?.portfolioValue : month.portfolioValue - month.contribution;
-                            const variation = previousValue ? ((month.portfolioValue - previousValue) / previousValue) * 100 : 0;
+                            // CORREÇÃO: Para dados ordenados por data decrescente, o mês anterior é o próximo no array
+                            const previousMonth = actualIndex < sortedMonthlyReturns.length - 1 ? sortedMonthlyReturns[actualIndex + 1] : null;
+                            const variation = previousMonth ? ((month.portfolioValue - previousMonth.portfolioValue) / previousMonth.portfolioValue) * 100 : 0;
                             
                             return (
                               <tr key={actualIndex} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -642,14 +672,18 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                           </Badge>
                         </div>
                         
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                           <div>
                             <p className="text-gray-600 dark:text-gray-400">Valor Final</p>
                             <p className="font-semibold">{formatCurrency(asset.finalValue || 0)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600 dark:text-gray-400">Contribuição Total</p>
-                            <p className="font-semibold">{formatCurrency(asset.contribution || 0)}</p>
+                            <p className="text-gray-600 dark:text-gray-400">Aportes (+ Dividendos Reinvestidos)</p>
+                            <p className="font-semibold text-blue-600">{formatCurrency(asset.contribution || 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600 dark:text-gray-400">Sobras Utilizadas</p>
+                            <p className="font-semibold text-green-600">{formatCurrency(asset.reinvestment || 0)}</p>
                           </div>
                           <div>
                             <p className="text-gray-600 dark:text-gray-400">Qtd. em Custódia</p>

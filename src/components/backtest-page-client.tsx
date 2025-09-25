@@ -46,6 +46,8 @@ interface BacktestResult {
   negativeMonths: number;
   totalInvested: number;
   finalValue: number;
+  finalCashReserve?: number; // Saldo de caixa final
+  totalDividendsReceived?: number; // Total de dividendos recebidos
   monthlyReturns: Array<{
     date: string;
     return: number;
@@ -58,6 +60,7 @@ interface BacktestResult {
     finalValue: number;
     totalReturn: number;
     contribution: number;
+    reinvestment: number;
   }>;
   portfolioEvolution: Array<{
     date: string;
@@ -211,6 +214,9 @@ export function BacktestPageClient() {
       }
 
       const data = await response.json();
+      console.log('🔍 BacktestPageClient - Resultado recebido:', data.result);
+      console.log('🔍 BacktestPageClient - finalCashReserve:', data.result.finalCashReserve);
+      console.log('🔍 BacktestPageClient - totalDividendsReceived:', data.result.totalDividendsReceived);
       setCurrentResult(data.result);
       
       // Extrair transações do monthlyHistory se disponível

@@ -48,14 +48,19 @@ export class BacktestService {
    * Executa simulação básica de backtesting
    * Para funcionalidades avançadas, use AdaptiveBacktestService.runAdaptiveBacktest()
    */
-  async runBacktest(params: import('./adaptive-backtest-service').BacktestParams): Promise<import('./adaptive-backtest-service').AdaptiveBacktestResult> {
+  async runBacktest(params: import('./adaptive-backtest-service').BacktestParams): Promise<import('./adaptive-backtest-service').BacktestResult> {
     // Esta implementação básica redireciona para o serviço adaptativo
     const adaptiveService = await this.getAdaptiveService();
     
-    // Executar backtesting adaptativo e retornar o resultado completo
-    // IMPORTANTE: Retornar o AdaptiveBacktestResult completo para preservar o monthlyHistory
+    // Executar backtesting adaptativo completo
     const adaptiveResult = await adaptiveService.runAdaptiveBacktest(params);
     
+    // Obter preços históricos para calcular métricas
+    const tickers = params.assets.map(asset => asset.ticker);
+    const pricesData = await this.getHistoricalPrices(tickers, params.startDate, params.endDate);
+    
+    // O AdaptiveBacktestResult já contém todas as métricas necessárias, incluindo finalCashReserve
+    // Não precisamos recalcular as métricas
     return adaptiveResult;
   }
   

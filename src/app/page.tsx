@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { QuickRanker } from "@/components/quick-ranker"
+import { Footer } from "@/components/footer"
 import { 
   Shield, 
   Zap, 
@@ -115,7 +116,7 @@ export default async function Home() {
             </div>
             <div className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
-              <span>8 modelos de valuation</span>
+              <span>8 modelos + Backtest</span>
             </div>
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
@@ -152,7 +153,7 @@ export default async function Home() {
       </section>
 
       {/* User Dashboard - Only if logged in */}
-      {session && (
+      {/* {session && (
         <section className="py-12 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10">
           <div className="container mx-auto px-4">
             <Card className="bg-white/70 dark:bg-background/70 backdrop-blur-sm border-0 shadow-xl">
@@ -195,7 +196,7 @@ export default async function Home() {
             </Card>
           </div>
         </section>
-      )}
+      )} */}
 
       {/* Problem/Solution Section */}
       <section className="py-20 bg-white dark:bg-background">
@@ -288,11 +289,11 @@ export default async function Home() {
         <div className="container mx-auto px-4">
           <div className="text-center mb-20">
             <h2 className="text-4xl sm:text-5xl font-bold mb-6">
-              <span className="text-blue-600">8 modelos de valuation</span>{" "}
+              <span className="text-blue-600">8 modelos + Backtest</span>{" "}
               em uma única plataforma
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Desde <strong>Benjamin Graham</strong> até <strong>Inteligência Artificial</strong>. 
+              Desde <strong>Benjamin Graham</strong> até <strong>Inteligência Artificial</strong> e <strong>Backtesting de Carteiras</strong>. 
               Todos os métodos que os grandes investidores usam, agora automatizados para você.
             </p>
             <div className="mt-8">
@@ -527,6 +528,106 @@ export default async function Home() {
             </Link>
           </div>
 
+          {/* Backtest Feature - Destacado */}
+          <div className="mb-8">
+            <Link href="/backtest" className="block">
+              <Card className="border-2 border-emerald-200 dark:border-emerald-800 shadow-xl hover:shadow-2xl transition-all duration-500 group relative overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-emerald-950/20 dark:via-background dark:to-teal-950/20 cursor-pointer hover:scale-[1.01] hover:border-emerald-300 dark:hover:border-emerald-700">
+                {/* Animated Background Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/5 via-teal-600/5 to-green-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                {/* Floating Badge */}
+                <div className="absolute top-4 right-4 xl:top-6 xl:right-6 z-10">
+                  <Badge className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm px-3 py-1 xl:px-4 xl:py-2 shadow-lg animate-pulse">
+                    🚀 Novo!
+                  </Badge>
+                </div>
+                
+                {/* Decorative Elements */}
+                <div className="absolute top-0 left-0 w-24 h-24 xl:w-32 xl:h-32 bg-gradient-to-br from-emerald-200/20 to-transparent rounded-full -translate-x-12 -translate-y-12 xl:-translate-x-16 xl:-translate-y-16"></div>
+                <div className="absolute bottom-0 right-0 w-20 h-20 xl:w-24 xl:h-24 bg-gradient-to-tl from-teal-200/20 to-transparent rounded-full translate-x-10 translate-y-10 xl:translate-x-12 xl:translate-y-12"></div>
+                
+                <CardContent className="p-6 xl:p-8 2xl:p-10 relative z-10">
+                  <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 gap-6 xl:gap-8 items-center">
+                    <div className="lg:col-span-1 flex justify-center lg:justify-start">
+                      <div className="relative">
+                        <div className="w-20 h-20 xl:w-24 xl:h-24 2xl:w-28 2xl:h-28 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl xl:rounded-3xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-xl group-hover:shadow-2xl">
+                          <TrendingUp className="w-10 h-10 xl:w-12 xl:h-12 2xl:w-14 2xl:h-14 text-white" />
+                        </div>
+                        {/* Glow Effect */}
+                        <div className="absolute inset-0 w-20 h-20 xl:w-24 xl:h-24 2xl:w-28 2xl:h-28 bg-gradient-to-br from-emerald-400 to-teal-400 rounded-2xl xl:rounded-3xl opacity-0 group-hover:opacity-30 blur-xl transition-all duration-500 -z-10"></div>
+                      </div>
+                    </div>
+                    <div className="lg:col-span-3 xl:col-span-4 text-center lg:text-left">
+                      <h3 className="text-2xl xl:text-3xl 2xl:text-4xl font-bold mb-3 xl:mb-4 transition-all duration-300">
+                        <span className="inline-block mr-2 xl:mr-3 text-3xl xl:text-4xl 2xl:text-5xl group-hover:animate-bounce">📊</span>
+                        <span className="text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors duration-300">
+                          Backtesting de Carteiras
+                        </span>
+                      </h3>
+                      <p className="text-muted-foreground mb-4 xl:mb-6 text-base xl:text-lg leading-relaxed group-hover:text-foreground/80 transition-colors duration-300">
+                        <strong className="text-emerald-600">Simule o desempenho histórico</strong> de carteiras personalizadas com aportes mensais, 
+                        rebalanceamento automático e métricas avançadas de risco. 
+                        <span className="text-emerald-600 font-bold bg-emerald-100 dark:bg-emerald-900/30 px-2 py-1 rounded-md">
+                          Funcionalidade Premium exclusiva!
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap gap-2 xl:gap-3 justify-center lg:justify-start mb-4 xl:mb-6">
+                        <Badge variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors text-xs xl:text-sm">
+                          <Activity className="w-3 h-3 mr-1" />
+                          Sharpe Ratio
+                        </Badge>
+                        <Badge variant="outline" className="border-teal-200 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors text-xs xl:text-sm">
+                          <BarChart3 className="w-3 h-3 mr-1" />
+                          Drawdown Máximo
+                        </Badge>
+                        <Badge variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors text-xs xl:text-sm">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          Aportes Mensais
+                        </Badge>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
+                        <div className="inline-flex items-center gap-2 text-base xl:text-lg font-bold text-emerald-600 group-hover:text-emerald-700 dark:text-emerald-400 dark:group-hover:text-emerald-300 transition-colors duration-300">
+                          Testar carteira agora
+                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
+                        </div>
+                        <Link href="/backtesting-carteiras" className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 underline transition-colors">
+                          Saiba mais sobre Backtesting →
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+
+          {/* Backtest Preview Image */}
+          <div className="mb-8">
+            <Card className="border-0 shadow-2xl overflow-hidden bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
+              <CardContent className="p-0">
+                <div className="relative">
+                  <Image
+                    src="/image-backtest.png"
+                    alt="Interface do Backtesting de Carteiras - Simulação de desempenho histórico com métricas avançadas"
+                    width={1200}
+                    height={800}
+                    className="w-full h-auto rounded-lg"
+                    priority
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent rounded-lg"></div>
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-lg p-4">
+                      <h4 className="font-bold text-lg mb-2">🚀 Interface Completa de Backtesting</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Visualize métricas avançadas, evolução da carteira, performance por ativo e análise de risco em uma interface intuitiva e profissional.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Additional Features */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8">
             <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
@@ -668,6 +769,10 @@ export default async function Home() {
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>🚀 Backtesting de Carteiras</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                     <span>Comparador completo</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
@@ -797,7 +902,36 @@ export default async function Home() {
 
           <div className="max-w-6xl mx-auto">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {/* Q4 2025 */}
+              {/* Concluído */}
+              {/* <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/20 dark:to-emerald-900/20 hover:shadow-xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-emerald-900 dark:text-emerald-100">✅ Concluído</h3>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300">Dez 2025</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                      <span><strong>Backtest de Carteiras</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                      <span>Aportes Mensais</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                      <span>Métricas Avançadas</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card> */}
+
+              {/* Q1 2026 */}
               <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/20 dark:to-blue-900/20 hover:shadow-xl transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-3 mb-4">
@@ -805,13 +939,12 @@ export default async function Home() {
                       <Calendar className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-blue-900 dark:text-blue-100">Q4 2025</h3>
-                      <p className="text-xs text-blue-700 dark:text-blue-300">Out - Dez</p>
+                      <h3 className="font-bold text-blue-900 dark:text-blue-100">Q1 2026</h3>
+                      <p className="text-xs text-blue-700 dark:text-blue-300">Jan - Mar</p>
                     </div>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-sm">
-                      {/* <CheckCircle className="w-4 h-4 text-green-600" /> */}
                       <Clock className="w-4 h-4 text-blue-600" />
                       <span>Inclusão de FIIs</span>
                     </div>
@@ -821,13 +954,13 @@ export default async function Home() {
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-blue-600" />
-                      <span>Alertas por email, telegram e whatsapp</span>
+                      <span>Alertas por email/telegram</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Q1 2026 */}
+              {/* Q2 2025 */}
               <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/20 dark:to-green-900/20 hover:shadow-xl transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-3 mb-4">
@@ -835,8 +968,8 @@ export default async function Home() {
                       <Calendar className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-green-900 dark:text-green-100">Q1 2026</h3>
-                      <p className="text-xs text-green-700 dark:text-green-300">Jan - Mar</p>
+                      <h3 className="font-bold text-green-900 dark:text-green-100">Q2 2026</h3>
+                      <p className="text-xs text-green-700 dark:text-green-300">Abr - Jun</p>
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -846,17 +979,17 @@ export default async function Home() {
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-green-600" />
-                      <span>Backtest de Carteiras</span>
+                      <span>Carteiras Recomendadas IA</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-green-600" />
-                      <span>Carteiras Recomendadas IA</span>
+                      <span>Marketplace de Carteiras</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Q2 2026 */}
+              {/* Q3 2026 */}
               <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/20 dark:to-purple-900/20 hover:shadow-xl transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-3 mb-4">
@@ -864,8 +997,8 @@ export default async function Home() {
                       <Calendar className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-purple-900 dark:text-purple-100">Q2 2026</h3>
-                      <p className="text-xs text-purple-700 dark:text-purple-300">Abr - Jun</p>
+                      <h3 className="font-bold text-purple-900 dark:text-purple-100">Q3 2026</h3>
+                      <p className="text-xs text-purple-700 dark:text-purple-300">Jul - Set</p>
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -875,17 +1008,17 @@ export default async function Home() {
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-purple-600" />
-                      <span>Marketplace de Carteiras</span>
+                      <span>App Mobile</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-purple-600" />
-                      <span>App Mobile</span>
+                      <span>Análise Setorial IA</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Q3-Q4 2026 */}
+              {/* Q4 2026+ */}
               <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/20 dark:to-orange-900/20 hover:shadow-xl transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-3 mb-4">
@@ -893,8 +1026,8 @@ export default async function Home() {
                       <Calendar className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-orange-900 dark:text-orange-100">Q3-Q4 2026</h3>
-                      <p className="text-xs text-orange-700 dark:text-orange-300">Jul - Dez</p>
+                      <h3 className="font-bold text-orange-900 dark:text-orange-100">Q4 2026+</h3>
+                      <p className="text-xs text-orange-700 dark:text-orange-300">Out - Dez</p>
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -904,11 +1037,11 @@ export default async function Home() {
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-orange-600" />
-                      <span>Análise Setorial IA</span>
+                      <span>API para Desenvolvedores</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-orange-600" />
-                      <span>API para Desenvolvedores</span>
+                      <span>Expansão Internacional</span>
                     </div>
                   </div>
                 </CardContent>
@@ -1473,206 +1606,7 @@ export default async function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-16">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
-            {/* Logo e Descrição */}
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Brain className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-2xl font-bold">Preço Justo AI</h3>
-              </div>
-              <p className="text-gray-300 mb-6 max-w-md leading-relaxed">
-                A plataforma mais completa de análise fundamentalista de ações da B3. 
-                Encontre oportunidades de investimento com inteligência artificial e 
-                modelos de valuation consagrados.
-              </p>
-              <div className="flex items-center gap-4">
-                <Badge variant="outline" className="text-green-400 border-green-400">
-                  <CheckCircle className="w-3 h-3 mr-1" />
-                  +300 empresas
-                </Badge>
-                <Badge variant="outline" className="text-blue-400 border-blue-400">
-                  <Brain className="w-3 h-3 mr-1" />
-                  IA Integrada
-                </Badge>
-              </div>
-            </div>
-
-            {/* Produto */}
-            <div>
-              <h4 className="text-lg font-bold mb-4">Produto</h4>
-              <ul className="space-y-3 text-gray-300">
-                <li>
-                  <Link href="/ranking" className="hover:text-blue-400 transition-colors">
-                    Rankings de Ações
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/comparador" className="hover:text-blue-400 transition-colors">
-                    Comparador de Ações
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/dashboard" className="hover:text-blue-400 transition-colors">
-                    Dashboard Premium
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#" className="hover:text-blue-400 transition-colors">
-                    Análise com IA
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Recursos */}
-            <div>
-              <h4 className="text-lg font-bold mb-4">Recursos</h4>
-              <ul className="space-y-3 text-gray-300">
-                <li>
-                  <Link href="/metodologia" className="hover:text-blue-400 transition-colors">
-                    Modelos de Valuation
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/blog" className="hover:text-blue-400 transition-colors">
-                    Análise Fundamentalista
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/metodologia#dividend-yield" className="hover:text-blue-400 transition-colors">
-                    Dividend Yield
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/metodologia#formula-magica" className="hover:text-blue-400 transition-colors">
-                    Fórmula Mágica
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            {/* Empresa */}
-            <div>
-              <h4 className="text-lg font-bold mb-4">Empresa</h4>
-              <ul className="space-y-3 text-gray-300">
-                <li>
-                  <Link href="/sobre" className="hover:text-blue-400 transition-colors">
-                    Sobre Nós
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/fundador" className="hover:text-blue-400 transition-colors">
-                    Fundador & CEO
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/como-funciona" className="hover:text-blue-400 transition-colors">
-                    Como Funciona
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/metodologia" className="hover:text-blue-400 transition-colors">
-                    Metodologia
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/blog" className="hover:text-blue-400 transition-colors">
-                    Blog
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Suporte */}
-            <div>
-              <h4 className="text-lg font-bold mb-4">Suporte</h4>
-              <ul className="space-y-3 text-gray-300">
-                <li>
-                  <Link href="/contato#faq" className="hover:text-blue-400 transition-colors">
-                    Central de Ajuda
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/contato" className="hover:text-blue-400 transition-colors">
-                    Contato
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#" className="hover:text-blue-400 transition-colors">
-                    Status da Plataforma
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Legal */}
-            <div>
-              <h4 className="text-lg font-bold mb-4">Legal</h4>
-              <ul className="space-y-3 text-gray-300">
-                <li>
-                  <Link href="#" className="hover:text-blue-400 transition-colors">
-                    Termos de Uso
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#" className="hover:text-blue-400 transition-colors">
-                    Política de Privacidade
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#" className="hover:text-blue-400 transition-colors">
-                    Disclaimer
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#" className="hover:text-blue-400 transition-colors">
-                    LGPD
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Disclaimer Importante */}
-          <div className="border-t border-gray-700 pt-8 mb-8">
-            <div className="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-6">
-              <div className="flex items-start gap-3">
-                <Target className="w-6 h-6 text-yellow-400 mt-1 flex-shrink-0" />
-                <div>
-                  <h5 className="font-bold text-yellow-400 mb-2">⚠️ Aviso Importante</h5>
-                  <p className="text-sm text-gray-300 leading-relaxed">
-                    <strong>Esta plataforma é uma ferramenta de apoio à decisão de investimento.</strong> 
-                    Não oferecemos consultoria financeira ou recomendações de compra/venda. 
-                    Todos os investimentos envolvem riscos e a rentabilidade passada não garante 
-                    resultados futuros. Sempre consulte um profissional qualificado e faça sua 
-                    própria análise antes de investir.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Copyright */}
-          <div className="border-t border-gray-700 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-gray-400 text-sm">
-              © 2025 Preço Justo AI. Todos os direitos reservados.
-            </div>
-            <div className="flex items-center gap-6 text-sm text-gray-400">
-              <span>Dados fornecidos pela BRAPI</span>
-              <span>•</span>
-              <span>Powered by Google Gemini AI</span>
-              <span>•</span>
-              <span>Feito com ❤️ no Brasil</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
 
       {/* Structured Data for SEO */}
       <script

@@ -21,7 +21,9 @@ import {
   Settings,
   CreditCard,
   GitCompare,
-  Headphones
+  Headphones,
+  TrendingUp,
+  Wrench
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -64,19 +66,36 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
       show: !!session
-    },
+    }
+  ]
+
+  const toolsItems = [
     {
       title: "Rankings",
       href: "/ranking", 
       icon: <BarChart3 className="w-5 h-5" />,
-      show: true
+      show: true,
+      description: "Análise fundamentalista"
     },
     {
       title: "Comparador",
       href: "/comparador", 
       icon: <GitCompare className="w-5 h-5" />,
-      show: true
+      show: true,
+      description: "Compare ações"
     },
+    {
+      title: "Backtesting",
+      href: "/backtest", 
+      icon: <TrendingUp className="w-5 h-5" />,
+      show: true,
+      description: "Simule carteiras",
+      isPremiumFeature: !isPremium,
+      isNew: true
+    }
+  ]
+
+  const supportItems = [
     {
       title: "Suporte",
       href: "/suporte", 
@@ -159,29 +178,108 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
           )}
 
           {/* Navigation Items */}
-          <div className="flex-1 p-4">
-            <nav className="space-y-2">
-              {menuItems
-                .filter(item => item.show)
-                .map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                      pathname === item.href
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    {item.icon}
-                    <span className="font-medium flex-1">{item.title}</span>
-                    {item.isPremiumFeature && (
-                      <Badge variant="default" className="text-xs bg-gradient-to-r from-blue-500 to-purple-600">
-                        Premium
-                      </Badge>
-                    )}
-                  </Link>
-                ))}
+          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+            <div className="p-4 pb-20">
+              <nav className="space-y-4">
+              {/* Menu Principal */}
+              <div className="space-y-2">
+                {menuItems
+                  .filter(item => item.show)
+                  .map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                        pathname === item.href
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      {item.icon}
+                      <span className="font-medium flex-1">{item.title}</span>
+                    </Link>
+                  ))}
+              </div>
+
+              {/* Seção Ferramentas */}
+              <div>
+                <div className="flex items-center gap-2 px-3 py-2 mb-2">
+                  <Wrench className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Ferramentas
+                  </h3>
+                </div>
+                <div className="space-y-1">
+                  {toolsItems
+                    .filter(item => item.show)
+                    .map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                          pathname === item.href
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <div className={`p-1.5 rounded-md ${
+                          item.href === '/backtest' 
+                            ? 'bg-gradient-to-br from-emerald-500 to-teal-500' 
+                            : 'bg-gradient-to-br from-blue-500 to-purple-500'
+                        }`}>
+                          <div className="text-white text-sm">
+                            {item.icon}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{item.title}</span>
+                            {item.isPremiumFeature && (
+                              <Badge variant="default" className="text-xs bg-gradient-to-r from-emerald-500 to-teal-500">
+                                Premium
+                              </Badge>
+                            )}
+                            {item.isNew && (
+                              <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                                🚀 Novo
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        </div>
+                      </Link>
+                    ))}
+                </div>
+              </div>
+
+              {/* Seção Suporte */}
+              {session && (
+                <div>
+                  <div className="space-y-1">
+                    {supportItems
+                      .filter(item => item.show)
+                      .map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                            pathname === item.href
+                              ? 'bg-primary text-primary-foreground'
+                              : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                          }`}
+                        >
+                          {item.icon}
+                          <span className="font-medium flex-1">{item.title}</span>
+                          {item.isPremiumFeature && (
+                            <Badge variant="default" className="text-xs bg-gradient-to-r from-blue-500 to-purple-600">
+                              Premium
+                            </Badge>
+                          )}
+                        </Link>
+                      ))}
+                  </div>
+                </div>
+              )}
             </nav>
 
             {/* Upgrade CTA for Free Users */}
@@ -225,6 +323,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                 </div>
               </div>
             )}
+            </div>
           </div>
 
           {/* Footer Actions */}

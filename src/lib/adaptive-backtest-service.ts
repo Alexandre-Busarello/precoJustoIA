@@ -35,6 +35,11 @@ export interface BacktestResult {
     finalValue: number;
     totalReturn: number;
     contribution: number;
+    reinvestment: number;
+    rebalanceAmount: number;
+    averagePrice?: number;
+    totalShares?: number;
+    totalDividends?: number;
   }>;
   portfolioEvolution: Array<{
     date: string;
@@ -526,7 +531,7 @@ export class AdaptiveBacktestService {
         assetsAvailability
       );
       
-      let monthlyContribution = params.monthlyContribution;
+      const monthlyContribution = params.monthlyContribution;
       
       if (availableAssets.length === 0) {
         // Se nenhum ativo tem dados, pular este mês
@@ -1097,7 +1102,7 @@ export class AdaptiveBacktestService {
           const purchaseValue = actualSharesToBuy * target.price;
           
           // DÉBITO: Subtrair compra do caixa (será ajustado depois com valores reais)
-          let actualTotalSpent = 0;
+          const actualTotalSpent = 0;
           
           const newTotalShares = currentShares + actualSharesToBuy;
           
@@ -1129,13 +1134,13 @@ export class AdaptiveBacktestService {
           
           // CORREÇÃO: Calcular quanto PODE gastar de cada fonte baseado no valor REAL (prioridade: capital próprio > dividendos > vendas > sobras)
           const actualPurchaseValueForSplit = actualPurchaseValue; // Usar valor real, não planejado
-          let plannedContributionPart = Math.min(remainingContributionCash, actualPurchaseValueForSplit);
-          let remainingAfterContribution = actualPurchaseValueForSplit - plannedContributionPart;
-          let plannedDividendPart = Math.min(remainingDividendCash, remainingAfterContribution);
-          let remainingAfterDividend = remainingAfterContribution - plannedDividendPart;
-          let plannedRebalancePart = Math.min(remainingRebalanceCash, remainingAfterDividend);
-          let remainingAfterRebalance = remainingAfterDividend - plannedRebalancePart;
-          let plannedPreviousCashPart = Math.min(remainingPreviousCash, remainingAfterRebalance);
+          const plannedContributionPart = Math.min(remainingContributionCash, actualPurchaseValueForSplit);
+          const remainingAfterContribution = actualPurchaseValueForSplit - plannedContributionPart;
+          const plannedDividendPart = Math.min(remainingDividendCash, remainingAfterContribution);
+          const remainingAfterDividend = remainingAfterContribution - plannedDividendPart;
+          const plannedRebalancePart = Math.min(remainingRebalanceCash, remainingAfterDividend);
+          const remainingAfterRebalance = remainingAfterDividend - plannedRebalancePart;
+          const plannedPreviousCashPart = Math.min(remainingPreviousCash, remainingAfterRebalance);
           
           // CORREÇÃO: Usar valores diretos sem proporções para evitar erros de arredondamento
           contributionPart = plannedContributionPart;
@@ -1536,12 +1541,12 @@ export class AdaptiveBacktestService {
     const portfolioValues = evolution.map(snapshot => snapshot.value);
     
     const initialValue = evolution[0].value;
-    let finalValue = evolution[evolution.length - 1].value;
+    const finalValue = evolution[evolution.length - 1].value;
     
     // CORREÇÃO: Total Investido = Apenas CAPITAL PRÓPRIO (CONTRIBUTION) - SEM dividendos reinvestidos
     let totalInvested = 0; // Começar do zero
     let finalCashReserve = 0; // Declarar aqui para estar disponível no escopo do retorno
-    let debugTotals = {
+    const debugTotals = {
       cashCredit: 0,
       contribution: 0,
       previousCashUse: 0,
@@ -1855,6 +1860,7 @@ export class AdaptiveBacktestService {
     totalReturn: number;
     contribution: number;
     reinvestment: number;
+    rebalanceAmount: number;
     averagePrice?: number;
     totalShares: number;
     totalDividends: number;
@@ -1863,11 +1869,13 @@ export class AdaptiveBacktestService {
     const assetData = new Map<string, {
       allocation: number;
       contribution: number;        // Soma de CONTRIBUTION (dinheiro do bolso)
-      reinvestment: number;        // Soma de PREVIOUS_CASH_USE (sobras de caixa utilizadas)
-      totalInvestment: number;     // Soma de CONTRIBUTION + REBALANCE_BUY (para preço médio)
+      reinvestment: number;        // Soma de PREVIOUS_CASH_USE + DIVIDEND_REINVESTMENT (sobras de caixa utilizadas)
+      rebalanceAmount: number;     // Soma de REBALANCE_BUY - REBALANCE_SELL (lucro realizado reinvestido)
+      totalPurchases: number;      // Soma apenas das COMPRAS (para preço médio correto)
       totalShares: number;         // Soma de sharesAdded
       totalDividends: number;      // Soma de DIVIDEND_PAYMENT
       finalShares: number;         // Shares finais
+      totalSharesPurchased: number; // Total de ações compradas (para preço médio)
     }>();
     
     // Inicializar com os ativos da configuração
@@ -1876,10 +1884,12 @@ export class AdaptiveBacktestService {
         allocation: asset.allocation,
         contribution: 0,
         reinvestment: 0,
-        totalInvestment: 0,
+        rebalanceAmount: 0,
+        totalPurchases: 0,
         totalShares: 0,
         totalDividends: 0,
-        finalShares: 0
+        finalShares: 0,
+        totalSharesPurchased: 0
       });
     });
     
@@ -1897,33 +1907,40 @@ export class AdaptiveBacktestService {
         switch (transaction.transactionType) {
           case 'CONTRIBUTION':
             data.contribution += transaction.contribution;
-            data.totalInvestment += transaction.contribution;
+            data.totalPurchases += transaction.contribution;
             data.totalShares += transaction.sharesAdded;
+            data.totalSharesPurchased += transaction.sharesAdded;
             break;
             
           case 'DIVIDEND_REINVESTMENT':
             // Dividendos reinvestidos contam como "reinvestimento"
             data.reinvestment += transaction.contribution;
-            data.totalInvestment += transaction.contribution;
+            data.totalPurchases += transaction.contribution;
             data.totalShares += transaction.sharesAdded;
+            data.totalSharesPurchased += transaction.sharesAdded;
             break;
             
           case 'REBALANCE_BUY':
-            data.totalInvestment += transaction.contribution;
+            // Compras de rebalanceamento contam como "rebalanceAmount" (lucro realizado reinvestido)
+            data.rebalanceAmount += transaction.contribution;
+            data.totalPurchases += transaction.contribution;
             data.totalShares += transaction.sharesAdded;
+            data.totalSharesPurchased += transaction.sharesAdded;
             break;
             
           case 'PREVIOUS_CASH_USE':
             // Uso de sobras de caixa acumuladas de meses anteriores
             data.reinvestment += transaction.contribution;
-            data.totalInvestment += transaction.contribution;
+            data.totalPurchases += transaction.contribution;
             data.totalShares += transaction.sharesAdded;
+            data.totalSharesPurchased += transaction.sharesAdded;
             break;
             
           case 'REBALANCE_SELL':
-            // Vendas reduzem o investimento total e shares
-            data.totalInvestment += transaction.contribution; // contribution já é negativo
+            // Vendas: registrar o valor líquido mas NÃO afetar o preço médio das ações restantes
+            data.rebalanceAmount += transaction.contribution; // contribution já é negativo
             data.totalShares += transaction.sharesAdded; // sharesAdded já é negativo
+            // NÃO subtrair de totalPurchases - o preço médio das ações restantes não muda
             break;
             
           case 'DIVIDEND_PAYMENT':
@@ -1943,6 +1960,7 @@ export class AdaptiveBacktestService {
       totalReturn: number;
       contribution: number;
       reinvestment: number;
+      rebalanceAmount: number;
       averagePrice?: number;
       totalShares: number;
       totalDividends: number;
@@ -1960,24 +1978,38 @@ export class AdaptiveBacktestService {
         }
       }
       
-      // Calcular preço médio correto: (Aportes + Dividendos Reinvestidos + Sobras Utilizadas) ÷ Quantidade em Custódia
-      // Usar contribution + reinvestment (que já inclui dividendos reinvestidos e sobras utilizadas)
-      const totalInvestedForAveragePrice = data.contribution + data.reinvestment;
-      const averagePrice = data.totalShares > 0 ? totalInvestedForAveragePrice / data.totalShares : undefined;
+      // Calcular preço médio correto: Usar apenas o custo das COMPRAS ÷ Quantidade em Custódia
+      // Isso evita distorção quando há vendas significativas por rebalanceamento
+      const averagePrice = data.finalShares > 0 ? data.totalPurchases / data.totalSharesPurchased : undefined;
       
-      // Calcular retorno baseado no total investido (aportes + sobras utilizadas)
-      const totalInvestedForReturn = data.contribution + data.reinvestment;
-      const totalReturn = totalInvestedForReturn > 0 ? (finalValue - totalInvestedForReturn) / totalInvestedForReturn : 0;
+      // PERSPECTIVA DO INVESTIDOR: Usar sempre aportes diretos como base para o percentual
+      // Isso é mais intuitivo: "investi X do bolso, hoje vale Y, ganho Z%"
+      const totalNetInvestment = data.contribution + data.reinvestment + data.rebalanceAmount;
+      
+      let totalReturn = 0;
+      if (data.contribution > 0) {
+        // Usar aportes diretos como base (dinheiro que saiu do bolso)
+        totalReturn = (finalValue - data.contribution) / data.contribution;
+        console.log(`📈 Usando perspectiva do investidor: (${finalValue.toFixed(2)} - ${data.contribution.toFixed(2)}) / ${data.contribution.toFixed(2)} = ${(totalReturn * 100).toFixed(2)}%`);
+      } else {
+        // Fallback para casos sem aportes diretos
+        totalReturn = totalNetInvestment > 0 ? (finalValue - totalNetInvestment) / totalNetInvestment : 0;
+        console.log(`📈 Fallback (sem aportes diretos): usando investimento líquido`);
+      }
       
       console.log(`📊 ${ticker} (BASEADO EM TRANSAÇÕES):`);
       console.log(`   💰 Contribuição (dinheiro do bolso): R$ ${data.contribution.toFixed(2)}`);
       console.log(`   🔄 Sobras utilizadas + Div. reinvestidos: R$ ${data.reinvestment.toFixed(2)}`);
-      console.log(`   📊 Total para preço médio: R$ ${totalInvestedForAveragePrice.toFixed(2)}`);
-      console.log(`   🔄 Investimento total (c/ rebal.): R$ ${data.totalInvestment.toFixed(2)}`);
+      console.log(`   ⚖️ Rebalanceamento líquido: R$ ${data.rebalanceAmount.toFixed(2)}`);
+      console.log(`   🛒 Total gasto em compras: R$ ${data.totalPurchases.toFixed(2)}`);
+      console.log(`   💰 Investimento líquido: R$ ${totalNetInvestment.toFixed(2)}`);
+      console.log(`   📊 Ações compradas: ${data.totalSharesPurchased.toFixed(2)}`);
       console.log(`   📈 Shares finais: ${data.finalShares}`);
       console.log(`   💎 Dividendos: R$ ${data.totalDividends.toFixed(2)}`);
       console.log(`   💲 Preço médio: R$ ${averagePrice?.toFixed(2) || 'N/A'}`);
       console.log(`   🎯 Valor final: R$ ${finalValue.toFixed(2)}`);
+      
+      console.log(`   📈 Retorno final: ${(totalReturn * 100).toFixed(2)}% (baseado em aportes diretos)`);
       
       results.push({
         ticker,
@@ -1986,6 +2018,7 @@ export class AdaptiveBacktestService {
         totalReturn,
         contribution: data.contribution,
         reinvestment: data.reinvestment,
+        rebalanceAmount: data.rebalanceAmount,
         averagePrice,
         totalShares: data.finalShares,
         totalDividends: data.totalDividends

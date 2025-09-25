@@ -6,6 +6,7 @@ import { QuickRanker } from "@/components/quick-ranker"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Footer } from "@/components/footer"
 import { 
   ArrowLeft, 
   BarChart3, 
@@ -207,6 +208,9 @@ function RankingContent() {
           </Card>
         </div>
       </div>
+
+      {/* Footer */}
+      <Footer />
     </div>
   )
 }

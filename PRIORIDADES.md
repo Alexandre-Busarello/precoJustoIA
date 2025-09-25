@@ -2,9 +2,9 @@
 <!-- 2. Criar Central de SUPORTE dentro da APP (controle de ticked) por interface e Chat IA; -->
 <!-- Resolve Historcio não carregando no backtest -->
 
-Ativos adicionados via rank, pagina da empresa ou comparação para backtest deve ser selecionado uma config ja existente ou criar uma nova
-Mobile precisa funcionar corretamente no Backtest
+Usuario Gratuito pode fazer backtest apenas com PETR4 e VALE3. A simulação não é salva no banco e fica disponivel apenas na interface, saiu da tela não volta mais
 Inclusão Backtest em chamada na Dashboard e navegação
+
 3. Reset de senha, integração com logins sociais. Criar paginas de obrigações legais como politicas de privacidade e termos de uso;
 4.  Revisar Footer;
 5. Mais conteúdos no BLOG;

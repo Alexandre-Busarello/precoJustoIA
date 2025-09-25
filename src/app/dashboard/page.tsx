@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { RankingHistory } from "@/components/ranking-history"
 import CompanySearch from "@/components/company-search"
+import { Footer } from "@/components/footer"
 import { 
   BarChart3, 
   TrendingUp, 
@@ -250,6 +251,43 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
+            {/* Backtest de Carteiras - NOVO! */}
+            <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10 border-2 border-emerald-200 dark:border-emerald-800 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+              {/* Badge "NOVO" */}
+              <div className="absolute top-2 right-2 z-10">
+                <Badge className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs px-2 py-1 shadow-lg animate-pulse">
+                  🚀 NOVO!
+                </Badge>
+              </div>
+              
+              {/* Efeito de brilho */}
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/5 via-teal-600/5 to-green-600/5 opacity-0 hover:opacity-100 transition-opacity duration-500"></div>
+              
+              <CardContent className="p-4 relative z-10">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg shadow-lg">
+                    <TrendingUp className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-emerald-800 dark:text-emerald-200">Backtesting</h3>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                      Simule carteiras históricas
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                  <strong>Teste o desempenho histórico</strong> de carteiras com aportes mensais, 
+                  rebalanceamento automático e métricas avançadas como Sharpe Ratio e drawdown.
+                </p>
+                <Button asChild size="sm" className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all">
+                  <Link href="/backtest" className="flex items-center justify-center gap-2">
+                    <TrendingUp className="w-4 h-4" />
+                    Testar Agora
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
             {/* Comparador de Ações */}
             <Card className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/10 dark:to-purple-900/10 border border-blue-200 dark:border-blue-800 hover:shadow-lg transition-shadow">
               <CardContent className="p-4">
@@ -319,6 +357,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <Footer />
     </div>
   )
 }

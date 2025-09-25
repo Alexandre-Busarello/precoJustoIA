@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { CompanyLogo } from "@/components/company-logo"
 import { AddToBacktestButton } from "@/components/add-to-backtest-button"
+import { BatchBacktestSelector } from "@/components/batch-backtest-selector"
 import { 
   Loader2, 
   TrendingUp, 
@@ -180,6 +181,7 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
   const [showAIModal, setShowAIModal] = useState(false) // Modal de processamento IA
   const [aiProcessingStep, setAiProcessingStep] = useState(0) // Etapa atual do processamento
   const [isResultsExpanded, setIsResultsExpanded] = useState(false) // Estado do collapsible dos resultados
+  const [showBatchBacktestModal, setShowBatchBacktestModal] = useState(false) // Modal de backtest em lote
   const resultsRef = useRef<HTMLDivElement>(null)
 
   // Carregar ranking específico por ID ou verificar sessionStorage
@@ -522,6 +524,12 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
     } catch (error) {
       console.error('Erro ao copiar link:', error)
     }
+  }
+
+  // Callback quando configuração de backtest em lote é selecionada
+  const handleBatchBacktestConfigSelected = () => {
+    setShowBatchBacktestModal(false);
+    // Usuário permanece na página atual
   }
 
   const formatCurrency = (value: number | null) => {
@@ -966,6 +974,22 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                      {/* Botão de backtest em lote */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setShowBatchBacktestModal(true)
+                        }}
+                        className="flex items-center gap-1 h-8 px-2 bg-gradient-to-r from-green-50 to-blue-50 hover:from-green-100 hover:to-blue-100 dark:from-green-950/20 dark:to-blue-950/20 border border-green-200 dark:border-green-800"
+                        title="Criar backtest com múltiplas empresas"
+                      >
+                        <BarChart3 className="w-3 h-3 text-green-600" />
+                        <span className="hidden sm:inline text-xs text-green-700 font-medium">Backtest Lote</span>
+                        <span className="sm:hidden text-xs text-green-700 font-medium">Lote</span>
+                      </Button>
+                      
                       {/* Botão de compartilhar - apenas para rankings salvos */}
                       {isViewingCached && rankingId && (
                         <Button
@@ -2334,6 +2358,16 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Backtest em Lote */}
+      {results && (
+        <BatchBacktestSelector
+          isOpen={showBatchBacktestModal}
+          onClose={() => setShowBatchBacktestModal(false)}
+          rankingResults={results.results}
+          onConfigSelected={handleBatchBacktestConfigSelected}
+        />
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { getCurrentUser } from '@/lib/user-service';
 import { redirect } from 'next/navigation';
 import { BacktestPageClient } from '@/components/backtest-page-client';
+import { Footer } from '@/components/footer';
 
 export const metadata: Metadata = {
   title: 'Backtesting de Carteira | Preço Justo',
@@ -60,6 +61,9 @@ export default async function BacktestPage() {
       <div className="container mx-auto px-4 py-8">
         <BacktestPageClient />
       </div>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }

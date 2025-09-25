@@ -224,7 +224,7 @@ export function BacktestConfigHistory({ configId, configName, onShowResult }: Ba
             Histórico de Resultados
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            {results.length} resultado(s) para "{configName}"
+            {results.length} resultado(s) para {configName}
           </p>
         </div>
         <Button onClick={loadResults} variant="outline" size="sm">

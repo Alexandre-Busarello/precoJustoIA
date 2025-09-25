@@ -63,6 +63,10 @@ interface BacktestResult {
     totalReturn: number;
     contribution: number;
     reinvestment: number;
+    rebalanceAmount?: number;
+    averagePrice?: number;
+    totalShares?: number;
+    totalDividends?: number;
   }>;
   portfolioEvolution: Array<{
     date: string;

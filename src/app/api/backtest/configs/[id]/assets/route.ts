@@ -8,7 +8,7 @@ import { calculateAverageDividendYield } from '@/lib/dividend-yield-calculator';
 // POST /api/backtest/configs/[id]/assets - Adicionar ativo à configuração
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -38,7 +38,7 @@ export async function POST(
       }, { status: 403 });
     }
 
-    const configId = params.id;
+    const { id: configId } = await params;
     const body = await request.json();
 
     // Validar dados de entrada
@@ -167,7 +167,7 @@ export async function POST(
 // DELETE /api/backtest/configs/[id]/assets - Remover ativo da configuração
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -197,7 +197,7 @@ export async function DELETE(
       }, { status: 403 });
     }
 
-    const configId = params.id;
+    const { id: configId } = await params;
     const { searchParams } = new URL(request.url);
     const ticker = searchParams.get('ticker');
 

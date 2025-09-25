@@ -57,6 +57,7 @@ interface BacktestResult {
     totalReturn: number;
     contribution: number;
     reinvestment: number;
+    rebalanceAmount?: number;
     averagePrice?: number;
     totalShares?: number;
     totalDividends?: number;
@@ -208,12 +209,12 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       const finalQuantity = lastMonth?.holdings?.[asset.ticker] || 0;
       
       // Usar preço médio do backend (já calculado corretamente)
-      // Preço Médio = (Aportes + Dividendos Reinvestidos + Sobras Utilizadas) / Quantidade em Custódia
-      const averagePrice = asset.averagePrice || 
-        (finalQuantity > 0 ? (asset.contribution + asset.reinvestment) / finalQuantity : 0);
+      // O preço médio agora considera apenas o custo das compras, não as vendas
+      const averagePrice = asset.averagePrice || 0;
       
-      // O total investido para exibição inclui aportes + sobras utilizadas (sem dividendos reinvestidos)
-      const totalInvested = asset.contribution + asset.reinvestment;
+      // PERSPECTIVA DO INVESTIDOR: Mostrar apenas aportes diretos (dinheiro que saiu do bolso)
+      // Isso faz mais sentido para investidores: "investi X, tenho Y hoje"
+      const totalInvested = asset.contribution || 0;
       
       custodyInfo[asset.ticker] = {
         quantity: finalQuantity,
@@ -227,8 +228,84 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
   const assetCustodyInfo = calculateAssetCustodyInfo();
 
+  // Verificar se houve ajuste de período comparando com o primeiro mês dos resultados
+  const originalStartDate = config?.startDate;
+  const originalEndDate = config?.endDate;
+  
+  // Pegar o primeiro e último mês dos resultados (dados ordenados cronologicamente)
+  const firstMonthResult = result.monthlyReturns && result.monthlyReturns.length > 0 
+    ? result.monthlyReturns.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
+    : null;
+  const lastMonthResult = result.monthlyReturns && result.monthlyReturns.length > 0 
+    ? result.monthlyReturns.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[result.monthlyReturns.length - 1]
+    : null;
+
+  // Verificar se as datas foram ajustadas
+  const effectiveStartDate = firstMonthResult ? new Date(firstMonthResult.date) : null;
+  const effectiveEndDate = lastMonthResult ? new Date(lastMonthResult.date) : null;
+  
+  const startDateAdjusted = originalStartDate && effectiveStartDate && 
+    (originalStartDate.getFullYear() !== effectiveStartDate.getFullYear() || 
+     originalStartDate.getMonth() !== effectiveStartDate.getMonth());
+  
+  const endDateAdjusted = originalEndDate && effectiveEndDate && 
+    (originalEndDate.getFullYear() !== effectiveEndDate.getFullYear() || 
+     originalEndDate.getMonth() !== effectiveEndDate.getMonth());
+  
+  const periodAdjusted = startDateAdjusted || endDateAdjusted;
+
   return (
     <div className="space-y-6">
+      {/* Alerta de Período Ajustado */}
+      {periodAdjusted && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-amber-800 dark:text-amber-200 mb-2">
+                  📅 Período Ajustado Automaticamente
+                </h3>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mb-3">
+                  O período do backtesting foi ajustado para o período ótimo onde todos os ativos possuem dados históricos disponíveis.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="font-medium text-amber-800 dark:text-amber-200">Período Solicitado:</span>
+                    <br />
+                    <span className="text-amber-700 dark:text-amber-300">
+                      {originalStartDate?.toLocaleDateString('pt-BR')} - {originalEndDate?.toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-amber-800 dark:text-amber-200">Período Efetivo:</span>
+                    <br />
+                    <span className="text-amber-700 dark:text-amber-300">
+                      {effectiveStartDate?.toLocaleDateString('pt-BR')} - {effectiveEndDate?.toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                </div>
+                {result.dataQualityIssues && result.dataQualityIssues.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-700">
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mb-1">
+                      Limitações de dados identificadas:
+                    </p>
+                    <ul className="text-xs text-amber-600 dark:text-amber-400 space-y-1">
+                      {result.dataQualityIssues.map((issue, index) => (
+                        <li key={index} className="flex items-start gap-1">
+                          <span className="text-amber-500 mt-0.5">•</span>
+                          <span>{issue}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header com Resumo */}
       <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20">
         <CardHeader>
@@ -237,10 +314,20 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
               <CardTitle className="text-2xl flex items-center gap-2">
                 <BarChart3 className="w-6 h-6 text-blue-600" />
                 Resultados do Backtesting
+                {periodAdjusted && (
+                  <Badge variant="outline" className="ml-2 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+                    Período Ajustado
+                  </Badge>
+                )}
               </CardTitle>
               {config && (
                 <p className="text-gray-600 dark:text-gray-300 mt-1">
                   {config.name} • {config.assets?.length || 0} ativos • {result.monthlyReturns?.length + 1 || 0} meses
+                  {periodAdjusted && (
+                    <span className="text-amber-600 dark:text-amber-400 ml-2">
+                      • Período: {effectiveStartDate?.toLocaleDateString('pt-BR')} - {effectiveEndDate?.toLocaleDateString('pt-BR')}
+                    </span>
+                  )}
                 </p>
               )}
             </div>
@@ -702,18 +789,24 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                           </Badge>
                         </div>
                         
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                           <div>
                             <p className="text-gray-600 dark:text-gray-400">Valor Final</p>
                             <p className="font-semibold">{formatCurrency(asset.finalValue || 0)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600 dark:text-gray-400">Aportes</p>
+                            <p className="text-gray-600 dark:text-gray-400">Aportes Diretos</p>
                             <p className="font-semibold text-blue-600">{formatCurrency(asset.contribution || 0)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600 dark:text-gray-400">Dividendos Reinvestidos + Sobras</p>
+                            <p className="text-gray-600 dark:text-gray-400">Dividendos + Sobras Aportados</p>
                             <p className="font-semibold text-green-600">{formatCurrency(asset.reinvestment || 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600 dark:text-gray-400">Rebalanceamento</p>
+                            <p className={`font-semibold ${(asset.rebalanceAmount || 0) >= 0 ? 'text-purple-600' : 'text-orange-600'}`}>
+                              {formatCurrency(asset.rebalanceAmount || 0)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-gray-600 dark:text-gray-400">Qtd. em Custódia</p>
@@ -741,12 +834,24 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                               })} cotas × {formatCurrency(custodyInfo.averagePrice)} (preço médio)
                             </p>
                             <p>
-                              <strong>Capital Investido:</strong> {formatCurrency(custodyInfo.totalInvested)} • 
+                              <strong>Investido (do bolso):</strong> {formatCurrency(custodyInfo.totalInvested)} • 
                               <strong> Valor Atual:</strong> {formatCurrency(asset.finalValue || 0)} • 
                               <strong> Ganho:</strong> <span className={(asset.finalValue || 0) >= custodyInfo.totalInvested ? 'text-green-600' : 'text-red-600'}>
                                 {formatCurrency((asset.finalValue || 0) - custodyInfo.totalInvested)}
                               </span>
                             </p>
+                            {(asset.rebalanceAmount || 0) !== 0 && (
+                              <div className="text-xs text-gray-400 space-y-1">
+                                <p>
+                                  <strong>Origem dos recursos:</strong> {formatCurrency(asset.contribution || 0)} (aportes diretos) + {formatCurrency(asset.reinvestment || 0)} (dividendos/sobras) + {formatCurrency(asset.rebalanceAmount || 0)} (rebalanceamento = lucro realizado)
+                                </p>
+                                {(asset.rebalanceAmount || 0) < 0 && (
+                                  <p className="text-blue-500">
+                                    <strong>💡 Explicação:</strong> Rebalanceamento negativo = vendas que devolveram dinheiro ao seu bolso. O ganho mostrado considera apenas o que você investiu diretamente.
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -867,6 +972,9 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
               {result.dataQualityIssues.map((issue, index) => (
                 <li key={index}>• {issue}</li>
               ))}
+            </ul>
+            <ul>
+              Para meses com dados faltantes, é utilizado o período ótimo (onde temos todos os dados) para o backtest.
             </ul>
           </CardContent>
         </Card>

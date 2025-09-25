@@ -9,7 +9,8 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
-import { LayoutDashboard, BarChart3, Shield, Zap, GitCompare, Headphones } from "lucide-react"
+import { ToolsDropdown } from "@/components/tools-dropdown"
+import { LayoutDashboard, Shield, Zap, Headphones } from "lucide-react"
 
 export default function Header() {
   const { data: session, status } = useSession()
@@ -84,27 +85,8 @@ export default function Header() {
                   </Link>
                 </Button>
                 
-                <Button 
-                  variant={pathname === "/ranking" ? "default" : "ghost"} 
-                  size="sm" 
-                  asChild
-                >
-                  <Link href="/ranking" className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4" />
-                    Rankings
-                  </Link>
-                </Button>
-
-                <Button 
-                  variant={pathname === "/comparador" ? "default" : "ghost"} 
-                  size="sm" 
-                  asChild
-                >
-                  <Link href="/comparador" className="flex items-center gap-2">
-                    <GitCompare className="w-4 h-4" />
-                    Comparador
-                  </Link>
-                </Button>
+                {/* Dropdown de Ferramentas */}
+                <ToolsDropdown isPremium={isPremium} />
 
                 {/* Suporte - Conversão para Premium */}
                 <Button 
@@ -159,12 +141,8 @@ export default function Header() {
             <div className="flex items-center space-x-4">
               {/* Public Links */}
               <div className="flex items-center space-x-1">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/ranking" className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4" />
-                    Análise Gratuita
-                  </Link>
-                </Button>
+                {/* Dropdown de Ferramentas para usuários não logados */}
+                <ToolsDropdown isPremium={false} />
               </div>
               
               {/* Auth Buttons */}

@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Search,
-  Loader2
+  Loader2,
+  Info
 } from 'lucide-react';
 
 // Interfaces
@@ -454,9 +455,21 @@ export function BacktestConfigForm({
             <Calendar className="w-5 h-5" />
             Período da Simulação
           </CardTitle>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Selecione o mês e ano. A simulação sempre considera o primeiro dia do mês para os preços mensais.
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Selecione o mês e ano. A simulação sempre considera o primeiro dia do mês para os preços mensais.
+            </p>
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-amber-700 dark:text-amber-300">
+                <p className="font-medium mb-1">⚠️ Ajuste Automático de Período</p>
+                <p>
+                  O período pode ser ajustado automaticamente para o período ótimo onde todos os ativos selecionados 
+                  possuem dados históricos disponíveis. Ativos mais recentes (ex: IPOs de 2021) podem limitar o período de análise.
+                </p>
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -36,6 +36,8 @@ interface BacktestHistoryItem {
     positiveMonths: number;
     negativeMonths: number;
     totalInvested: number;
+    finalCashReserve: number;
+    totalDividendsReceived: number;
     finalValue: number;
     monthlyReturns: any[];
     assetPerformance: any[];
@@ -178,6 +180,9 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
       rebalanceFrequency: item.rebalanceFrequency as 'monthly' | 'quarterly' | 'yearly'
     };
 
+    // IMPORTANTE: Preservar o ID da configuração
+    (configData as any).id = item.id;
+
     // Usar os dados completos que agora vêm do banco
     const completeResult = {
       totalReturn: result.totalReturn,
@@ -189,6 +194,8 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
       negativeMonths: result.negativeMonths,
       totalInvested: result.totalInvested,
       finalValue: result.finalValue,
+      finalCashReserve: (result as any).finalCashReserve || 0,
+      totalDividendsReceived: (result as any).totalDividendsReceived || 0,
       monthlyReturns: result.monthlyReturns || [],
       assetPerformance: result.assetPerformance || [],
       portfolioEvolution: result.portfolioEvolution || [],
@@ -205,6 +212,7 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
 
     onShowDetails(completeResult, configData, item.transactions || []);
   };
+
 
   // Formatação
   const formatCurrency = (value: number) => {
@@ -435,6 +443,7 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
                     </>
                   )}
                 </Button>
+                
                 
                 {item.results && item.results.length > 0 && (
                   <Button

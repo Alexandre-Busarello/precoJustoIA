@@ -139,25 +139,9 @@ export class AdaptiveBacktestService {
    * Salva o resultado de um backtest no banco de dados
    */
   async saveBacktestResult(configId: string, result: BacktestResult | AdaptiveBacktestResult): Promise<void> {
-    await prisma.backtestResult.upsert({
-      where: { backtestId: configId },
-      update: {
-        totalReturn: result.totalReturn,
-        annualizedReturn: result.annualizedReturn,
-        volatility: result.volatility,
-        sharpeRatio: result.sharpeRatio,
-        maxDrawdown: result.maxDrawdown,
-        positiveMonths: result.positiveMonths,
-        negativeMonths: result.negativeMonths,
-        totalMonths: result.monthlyReturns.length,
-        totalInvested: result.totalInvested,
-        finalValue: result.finalValue,
-        totalDividendsReceived: 'totalDividendsReceived' in result ? result.totalDividendsReceived : 0,
-        monthlyReturns: result.monthlyReturns as any,
-        assetPerformance: result.assetPerformance as any,
-        portfolioEvolution: result.portfolioEvolution as any
-      },
-      create: {
+    // Criar novo resultado sempre (permitir múltiplos resultados por configuração)
+    await prisma.backtestResult.create({
+      data: {
         backtestId: configId,
         totalReturn: result.totalReturn,
         annualizedReturn: result.annualizedReturn,
@@ -169,12 +153,13 @@ export class AdaptiveBacktestService {
         totalMonths: result.monthlyReturns.length,
         totalInvested: result.totalInvested,
         finalValue: result.finalValue,
-        totalDividendsReceived: 'totalDividendsReceived' in result ? result.totalDividendsReceived : 0,
+        finalCashReserve: 'finalCashReserve' in result ? Number(result.finalCashReserve) : 0,
+        totalDividendsReceived: 'totalDividendsReceived' in result ? Number(result.totalDividendsReceived) : 0,
         monthlyReturns: result.monthlyReturns as any,
         assetPerformance: result.assetPerformance as any,
         portfolioEvolution: result.portfolioEvolution as any
       }
-    } as any);
+    });
     
     // Salvar transações mensais se disponíveis (apenas para AdaptiveBacktestResult)
     console.log('🔍 Debug - Verificando monthlyHistory:', {
@@ -415,33 +400,35 @@ export class AdaptiveBacktestService {
   }
   
   /**
-   * Mapeamento da sazonalidade de dividendos no Brasil
-   * Baseado na média histórica de pagamentos por mês
-   * IMPORTANTE: Fatores são normalizados para somar 100% ao ano
+   * Mapeamento SIMPLIFICADO da sazonalidade de dividendos no Brasil
+   * APENAS 3 MESES DE PAGAMENTO para maior clareza e previsibilidade
+   * Baseado nos meses historicamente com maior volume de pagamentos
    */
   private readonly DIVIDEND_SEASONALITY = {
-    1: 0.04,  // Janeiro - 4%
-    2: 0.02,  // Fevereiro - 2% (menor)
-    3: 0.15,  // Março - 15% (3º maior)
-    4: 0.06,  // Abril - 6%
-    5: 0.08,  // Maio - 8%
-    6: 0.12,  // Junho - 12% (4º maior)
-    7: 0.10,  // Julho - 10%
-    8: 0.20,  // Agosto - 20% (maior)
-    9: 0.03,  // Setembro - 3%
-    10: 0.18, // Outubro - 18% (2º maior)
-    11: 0.02, // Novembro - 2%
-    12: 0.07  // Dezembro - 7%
+    1: 0,      // Janeiro - sem pagamento
+    2: 0,      // Fevereiro - sem pagamento
+    3: 0.333,  // Março - 33.33% do yield anual
+    4: 0,      // Abril - sem pagamento
+    5: 0,      // Maio - sem pagamento
+    6: 0,      // Junho - sem pagamento
+    7: 0,      // Julho - sem pagamento
+    8: 0.333,  // Agosto - 33.33% do yield anual
+    9: 0,      // Setembro - sem pagamento
+    10: 0.334, // Outubro - 33.34% do yield anual (arredondamento para somar 100%)
+    11: 0,     // Novembro - sem pagamento
+    12: 0      // Dezembro - sem pagamento
   };
 
   /**
    * Soma total dos fatores sazonais (para normalização)
-   * Soma: 0.04+0.02+0.15+0.06+0.08+0.12+0.10+0.20+0.03+0.18+0.02+0.07 = 1.07
+   * SIMPLIFICADO: 0.333 + 0.333 + 0.334 = 1.000 (exatos 100%)
+   * Dividendos pagos apenas em Março, Agosto e Outubro
    */
-  private readonly TOTAL_SEASONALITY_SUM = 1.07;
+  private readonly TOTAL_SEASONALITY_SUM = 1.0;
 
   /**
-   * Calcula dividendos baseado na sazonalidade brasileira
+   * Calcula dividendos SIMPLIFICADOS - pagos apenas em 3 meses
+   * Março, Agosto e Outubro (33.33% do yield anual em cada mês)
    */
   private calculateMonthlyDividends(
     currentHoldings: Map<string, number>,
@@ -456,9 +443,8 @@ export class AdaptiveBacktestService {
     const currentMonth = currentDate.getMonth() + 1;
     const seasonalityFactor = this.DIVIDEND_SEASONALITY[currentMonth as keyof typeof this.DIVIDEND_SEASONALITY] || 0;
 
-    // CORREÇÃO: Permitir dividendos em todos os meses com fator > 0
-    // A sazonalidade já está normalizada, então todos os meses devem contribuir
-    if (seasonalityFactor <= 0) { // Apenas excluir se não há fator definido
+    // SIMPLIFICADO: Dividendos pagos apenas em Março (3), Agosto (8) e Outubro (10)
+    if (seasonalityFactor <= 0) {
       return { dividendTransactions, totalDividends };
     }
 
@@ -472,13 +458,12 @@ export class AdaptiveBacktestService {
         const currentPrice = this.getPriceForDateAdaptive(prices, currentDate);
         
         if (currentPrice && currentPrice > 0) {
-          // Calcular dividendo baseado na sazonalidade NORMALIZADA
-          // O dividend yield anual é distribuído proporcionalmente aos meses de pagamento
+          // Calcular dividendo SIMPLIFICADO - 33.33% do yield anual em cada um dos 3 meses
+          // O dividend yield anual é dividido igualmente entre Março, Agosto e Outubro
           const annualDividendPerShare = currentPrice * averageDY;
           
-          // CORREÇÃO CRÍTICA: Normalizar a sazonalidade para que a soma anual seja 100%
-          const normalizedSeasonalityFactor = seasonalityFactor / this.TOTAL_SEASONALITY_SUM;
-          const seasonalDividendPerShare = annualDividendPerShare * normalizedSeasonalityFactor;
+          // SIMPLIFICADO: Não precisa normalizar, fatores já somam exatamente 1.0
+          const seasonalDividendPerShare = annualDividendPerShare * seasonalityFactor;
           const totalDividendAmount = shares * seasonalDividendPerShare;
 
           if (totalDividendAmount > 0.01) { // Mínimo de R$ 0,01 para registrar
@@ -1075,19 +1060,21 @@ export class AdaptiveBacktestService {
     const hasRebalancingSales = totalSalesValue > 0;
     console.log(`🔄 Rebalanceamento com vendas: ${hasRebalancingSales ? 'SIM' : 'NÃO'} (vendas: R$ ${totalSalesValue.toFixed(2)})`);
     
-    // CORREÇÃO: Rastrear separadamente o dinheiro por origem
-    let remainingContributionCash = monthlyContribution + (monthIndex === 0 ? portfolioValue : 0) + monthlyDividends; // Dinheiro novo (aportes + dividendos)
+    // CORREÇÃO: Rastrear separadamente o dinheiro por origem (4 fontes distintas)
+    let remainingContributionCash = monthlyContribution + (monthIndex === 0 ? portfolioValue : 0); // Apenas capital próprio
+    let remainingDividendCash = monthlyDividends; // Dividendos recebidos (separado!)
     let remainingRebalanceCash = totalSalesValue; // Dinheiro de vendas
     let remainingPreviousCash = cashBalance; // Sobras de meses anteriores
     
       console.log(`💰 Caixa separado:`);
-      console.log(`   💰 Aportes+Dividendos: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`   💰 Capital Próprio: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`   💎 Dividendos: R$ ${remainingDividendCash.toFixed(2)}`);
       console.log(`   🔄 Vendas: R$ ${remainingRebalanceCash.toFixed(2)}`);
       console.log(`   💰 Sobras anteriores: R$ ${remainingPreviousCash.toFixed(2)}`);
       console.log(`   💰 Total disponível: R$ ${currentCash.toFixed(2)}`);
       
       // Verificar se a soma está correta
-      const expectedTotal = remainingContributionCash + remainingRebalanceCash + remainingPreviousCash;
+      const expectedTotal = remainingContributionCash + remainingDividendCash + remainingRebalanceCash + remainingPreviousCash;
       if (Math.abs(expectedTotal - currentCash) > 0.01) {
         console.log(`   ⚠️ ERRO: Soma não confere! ${expectedTotal.toFixed(2)} ≠ ${currentCash.toFixed(2)}`);
       }
@@ -1134,50 +1121,61 @@ export class AdaptiveBacktestService {
           const currentTotalInvested = totalInvestedByAsset.get(ticker) || 0;
           totalInvestedByAsset.set(ticker, currentTotalInvested + actualPurchaseValue);
           
-          // LÓGICA CORRIGIDA: Separar por origem do dinheiro (3 fontes: aportes, vendas, sobras anteriores)
+          // LÓGICA CORRIGIDA: Separar por origem do dinheiro (4 fontes: capital próprio, dividendos, vendas, sobras anteriores)
           let contributionPart = 0;
+          let dividendPart = 0;
           let rebalancePart = 0;
           let previousCashPart = 0;
           
-          // CORREÇÃO: Calcular quanto PODE gastar de cada fonte baseado no valor REAL (prioridade: aportes > vendas > sobras)
+          // CORREÇÃO: Calcular quanto PODE gastar de cada fonte baseado no valor REAL (prioridade: capital próprio > dividendos > vendas > sobras)
           const actualPurchaseValueForSplit = actualPurchaseValue; // Usar valor real, não planejado
           let plannedContributionPart = Math.min(remainingContributionCash, actualPurchaseValueForSplit);
           let remainingAfterContribution = actualPurchaseValueForSplit - plannedContributionPart;
-          let plannedRebalancePart = Math.min(remainingRebalanceCash, remainingAfterContribution);
-          let remainingAfterRebalance = remainingAfterContribution - plannedRebalancePart;
+          let plannedDividendPart = Math.min(remainingDividendCash, remainingAfterContribution);
+          let remainingAfterDividend = remainingAfterContribution - plannedDividendPart;
+          let plannedRebalancePart = Math.min(remainingRebalanceCash, remainingAfterDividend);
+          let remainingAfterRebalance = remainingAfterDividend - plannedRebalancePart;
           let plannedPreviousCashPart = Math.min(remainingPreviousCash, remainingAfterRebalance);
           
           // CORREÇÃO: Usar valores diretos sem proporções para evitar erros de arredondamento
           contributionPart = plannedContributionPart;
+          dividendPart = plannedDividendPart;
           rebalancePart = plannedRebalancePart;
           previousCashPart = plannedPreviousCashPart;
           
           // Verificação de segurança: garantir que não gastamos mais do que temos
-          const totalAllocated = contributionPart + rebalancePart + previousCashPart;
+          const totalAllocated = contributionPart + dividendPart + rebalancePart + previousCashPart;
           if (Math.abs(totalAllocated - actualPurchaseValue) > 0.01) {
             console.log(`⚠️ AJUSTE DE ARREDONDAMENTO: ${ticker} - Diferença de R$ ${(totalAllocated - actualPurchaseValue).toFixed(2)}`);
             // Ajustar a maior parte para compensar diferenças de arredondamento
-            if (contributionPart >= rebalancePart && contributionPart >= previousCashPart) {
-              contributionPart = actualPurchaseValue - rebalancePart - previousCashPart;
+            if (contributionPart >= dividendPart && contributionPart >= rebalancePart && contributionPart >= previousCashPart) {
+              contributionPart = actualPurchaseValue - dividendPart - rebalancePart - previousCashPart;
+            } else if (dividendPart >= rebalancePart && dividendPart >= previousCashPart) {
+              dividendPart = actualPurchaseValue - contributionPart - rebalancePart - previousCashPart;
             } else if (rebalancePart >= previousCashPart) {
-              rebalancePart = actualPurchaseValue - contributionPart - previousCashPart;
+              rebalancePart = actualPurchaseValue - contributionPart - dividendPart - previousCashPart;
             } else {
-              previousCashPart = actualPurchaseValue - contributionPart - rebalancePart;
+              previousCashPart = actualPurchaseValue - contributionPart - dividendPart - rebalancePart;
             }
           }
           
           // DÉBITO CORRETO: Debitar apenas o que foi efetivamente gasto de cada fonte
           remainingContributionCash -= contributionPart;
+          remainingDividendCash -= dividendPart;
           remainingRebalanceCash -= rebalancePart;
           remainingPreviousCash -= previousCashPart;
           
           // DEBUG: Mostrar a diferença
           const contributionLeftover = plannedContributionPart - contributionPart;
+          const dividendLeftover = plannedDividendPart - dividendPart;
           const rebalanceLeftover = plannedRebalancePart - rebalancePart;
           const previousCashLeftover = plannedPreviousCashPart - previousCashPart;
           
           if (contributionLeftover > 0.01) {
-            console.log(`   💰 Sobra de aportes: R$ ${contributionLeftover.toFixed(2)}`);
+            console.log(`   💰 Sobra de capital próprio: R$ ${contributionLeftover.toFixed(2)}`);
+          }
+          if (dividendLeftover > 0.01) {
+            console.log(`   💎 Sobra de dividendos: R$ ${dividendLeftover.toFixed(2)}`);
           }
           if (rebalanceLeftover > 0.01) {
             console.log(`   🔄 Sobra de vendas: R$ ${rebalanceLeftover.toFixed(2)}`);
@@ -1209,9 +1207,30 @@ export class AdaptiveBacktestService {
             console.log(`💰 APORTE (DÉBITO): ${ticker} - ${contributionShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${contributionPart.toFixed(2)}`);
           }
           
+          if (dividendPart > 0) {
+            const dividendShares = Math.round((dividendPart / actualPurchaseValue) * actualSharesToBuy);
+            runningTotalShares += dividendShares;
+            
+            transactions.push({
+              month: monthIndex,
+              date: new Date(date),
+              ticker: ticker,
+              transactionType: 'DIVIDEND_REINVESTMENT',
+              contribution: dividendPart,
+              price: target.price,
+              sharesAdded: dividendShares,
+              totalShares: runningTotalShares,
+              totalInvested: totalInvestedByAsset.get(ticker) || 0,
+              cashReserved: sharesToBuy > actualSharesToBuy ? (sharesToBuy - actualSharesToBuy) * target.price : undefined
+            });
+            
+            console.log(`💎 DIVIDENDO REINVESTIDO (DÉBITO): ${ticker} - ${dividendShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${dividendPart.toFixed(2)}`);
+          }
+          
           if (rebalancePart > 0) {
             const contributionShares = contributionPart > 0 ? Math.round((contributionPart / actualPurchaseValue) * actualSharesToBuy) : 0;
-            const rebalanceShares = actualSharesToBuy - contributionShares;
+            const dividendShares = dividendPart > 0 ? Math.round((dividendPart / actualPurchaseValue) * actualSharesToBuy) : 0;
+            const rebalanceShares = actualSharesToBuy - contributionShares - dividendShares;
             runningTotalShares += rebalanceShares;
             
             transactions.push({
@@ -1233,8 +1252,9 @@ export class AdaptiveBacktestService {
           // CORREÇÃO: Criar transação para uso do caixa anterior APENAS se realmente comprou ações
           if (previousCashPart > 0) {
             const contributionShares = contributionPart > 0 ? Math.round((contributionPart / actualPurchaseValue) * actualSharesToBuy) : 0;
-            const rebalanceShares = rebalancePart > 0 ? actualSharesToBuy - contributionShares : 0;
-            const previousCashShares = actualSharesToBuy - contributionShares - rebalanceShares;
+            const dividendShares = dividendPart > 0 ? Math.round((dividendPart / actualPurchaseValue) * actualSharesToBuy) : 0;
+            const rebalanceShares = rebalancePart > 0 ? actualSharesToBuy - contributionShares - dividendShares : 0;
+            const previousCashShares = actualSharesToBuy - contributionShares - dividendShares - rebalanceShares;
             
             // CORREÇÃO CRÍTICA: Só criar transação se realmente comprou ações com o caixa anterior
             if (previousCashShares > 0) {
@@ -1276,7 +1296,7 @@ export class AdaptiveBacktestService {
       // FASE 5: Saldo final e resumo contábil
       // CORREÇÃO CRÍTICA: As sobras de arredondamento JÁ ESTÃO no currentCash!
       // Porque só debitamos o valor efetivamente gasto, as sobras ficam automaticamente no caixa
-      const totalLeftoverInPotsForCash = remainingContributionCash + remainingRebalanceCash + remainingPreviousCash;
+      const totalLeftoverInPotsForCash = remainingContributionCash + remainingDividendCash + remainingRebalanceCash + remainingPreviousCash;
       
       // CORREÇÃO CRÍTICA: As sobras dos potes JÁ ESTÃO no currentCash
       // Não devemos somar novamente, isso causa dupla contagem
@@ -1285,7 +1305,8 @@ export class AdaptiveBacktestService {
       console.log(`\n🏦 RESUMO CONTÁBIL DO MÊS:`);
       console.log(`   💰 Caixa após compras: R$ ${currentCash.toFixed(2)}`);
       console.log(`   💰 Sobras nos potes: R$ ${totalLeftoverInPotsForCash.toFixed(2)}`);
-      console.log(`      💰 Aportes+Dividendos: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`      💰 Capital Próprio: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`      💎 Dividendos: R$ ${remainingDividendCash.toFixed(2)}`);
       console.log(`      🔄 Vendas: R$ ${remainingRebalanceCash.toFixed(2)}`);
       console.log(`      💰 Caixa anterior: R$ ${remainingPreviousCash.toFixed(2)}`);
       console.log(`   💰 Sobras de arredondamento: R$ ${totalRoundingLeftovers.toFixed(2)} (JÁ incluídas no caixa após compras)`);
@@ -1307,23 +1328,26 @@ export class AdaptiveBacktestService {
       console.log(`   💰 Saldo final: R$ ${finalCashBalance.toFixed(2)}`);
       console.log(`   ✅ Verificação: R$ ${cashBalance.toFixed(2)} + R$ ${totalCredits.toFixed(2)} - R$ ${totalPurchases.toFixed(2)} = R$ ${finalCashBalance.toFixed(2)} (sobras já incluídas)`);
       
-      // Validar se a separação de caixa foi correta
-      const totalContributionSource = monthlyContribution + (monthIndex === 0 ? portfolioValue : 0) + monthlyDividends;
+      // Validar se a separação de caixa foi correta (4 fontes separadas)
+      const totalContributionSource = monthlyContribution + (monthIndex === 0 ? portfolioValue : 0);
+      const totalDividendSource = monthlyDividends;
       const totalUsedFromContribution = totalContributionSource - remainingContributionCash;
+      const totalUsedFromDividends = totalDividendSource - remainingDividendCash;
       const totalUsedFromRebalance = totalSalesValue - remainingRebalanceCash;
       const totalUsedFromPrevious = cashBalance - remainingPreviousCash;
       
-      console.log(`\n🔍 VALIDAÇÃO DA SEPARAÇÃO (3 FONTES):`);
-      console.log(`   💰 Usado de aportes+dividendos: R$ ${totalUsedFromContribution.toFixed(2)} de R$ ${totalContributionSource.toFixed(2)}`);
+      console.log(`\n🔍 VALIDAÇÃO DA SEPARAÇÃO (4 FONTES):`);
+      console.log(`   💰 Usado de capital próprio: R$ ${totalUsedFromContribution.toFixed(2)} de R$ ${totalContributionSource.toFixed(2)}`);
+      console.log(`   💎 Usado de dividendos: R$ ${totalUsedFromDividends.toFixed(2)} de R$ ${totalDividendSource.toFixed(2)}`);
       console.log(`   🔄 Usado de vendas: R$ ${totalUsedFromRebalance.toFixed(2)} de R$ ${totalSalesValue.toFixed(2)}`);
       console.log(`   💰 Usado de caixa anterior: R$ ${totalUsedFromPrevious.toFixed(2)} de R$ ${cashBalance.toFixed(2)}`);
-      console.log(`   💰 Sobrou de aportes+dividendos: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`   💰 Sobrou de capital próprio: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`   💎 Sobrou de dividendos: R$ ${remainingDividendCash.toFixed(2)}`);
       console.log(`   🔄 Sobrou de vendas: R$ ${remainingRebalanceCash.toFixed(2)}`);
       console.log(`   💰 Sobrou de caixa anterior: R$ ${remainingPreviousCash.toFixed(2)}`);
       console.log(`   💰 Total de sobras nos potes: R$ ${totalLeftoverInPotsForCash.toFixed(2)} (JÁ incluídas no caixa)`);
       console.log(`   💰 Sobras de arredondamento: R$ ${totalRoundingLeftovers.toFixed(2)} (automáticas no caixa)`);
-      console.log(`   💎 Dividendos do mês: R$ ${monthlyDividends.toFixed(2)}`);
-      console.log(`   ✅ CORREÇÃO: Sobras dos potes JÁ estão no currentCash, não somamos novamente!`);
+      console.log(`   ✅ CORREÇÃO: Capital próprio e dividendos agora separados!`);
 
       // Não registrar débito consolidado - cada compra individual já debita do caixa
     
@@ -1514,7 +1538,7 @@ export class AdaptiveBacktestService {
     const initialValue = evolution[0].value;
     let finalValue = evolution[evolution.length - 1].value;
     
-    // CORREÇÃO: Total Investido = Soma das CONTRIBUTION reais (dinheiro efetivamente investido)
+    // CORREÇÃO: Total Investido = Apenas CAPITAL PRÓPRIO (CONTRIBUTION) - SEM dividendos reinvestidos
     let totalInvested = 0; // Começar do zero
     let finalCashReserve = 0; // Declarar aqui para estar disponível no escopo do retorno
     let debugTotals = {
@@ -1539,11 +1563,11 @@ export class AdaptiveBacktestService {
               break;
             case 'CONTRIBUTION':
               debugTotals.contribution += transaction.contribution;
-              totalInvested += transaction.contribution; // CORREÇÃO: Total investido = soma das CONTRIBUTION
+              totalInvested += transaction.contribution; // Capital próprio aportado (sem dividendos)
               break;
             case 'PREVIOUS_CASH_USE':
               debugTotals.previousCashUse += transaction.contribution; // Rastrear separadamente
-              totalInvested += transaction.contribution; // Conta como investimento total
+              // NÃO contar PREVIOUS_CASH_USE como investimento total - pode incluir dividendos reinvestidos
               break;
             case 'DIVIDEND_REINVESTMENT':
               debugTotals.dividendReinvestment += transaction.contribution;
@@ -1936,8 +1960,10 @@ export class AdaptiveBacktestService {
         }
       }
       
-      // Calcular preço médio real (todas as compras ÷ todas as shares compradas)
-      const averagePrice = data.totalShares > 0 ? Math.abs(data.totalInvestment) / data.totalShares : undefined;
+      // Calcular preço médio correto: (Aportes + Dividendos Reinvestidos + Sobras Utilizadas) ÷ Quantidade em Custódia
+      // Usar contribution + reinvestment (que já inclui dividendos reinvestidos e sobras utilizadas)
+      const totalInvestedForAveragePrice = data.contribution + data.reinvestment;
+      const averagePrice = data.totalShares > 0 ? totalInvestedForAveragePrice / data.totalShares : undefined;
       
       // Calcular retorno baseado no total investido (aportes + sobras utilizadas)
       const totalInvestedForReturn = data.contribution + data.reinvestment;
@@ -1945,7 +1971,8 @@ export class AdaptiveBacktestService {
       
       console.log(`📊 ${ticker} (BASEADO EM TRANSAÇÕES):`);
       console.log(`   💰 Contribuição (dinheiro do bolso): R$ ${data.contribution.toFixed(2)}`);
-      console.log(`   🔄 Sobras utilizadas (caixa acumulado): R$ ${data.reinvestment.toFixed(2)}`);
+      console.log(`   🔄 Sobras utilizadas + Div. reinvestidos: R$ ${data.reinvestment.toFixed(2)}`);
+      console.log(`   📊 Total para preço médio: R$ ${totalInvestedForAveragePrice.toFixed(2)}`);
       console.log(`   🔄 Investimento total (c/ rebal.): R$ ${data.totalInvestment.toFixed(2)}`);
       console.log(`   📈 Shares finais: ${data.finalShares}`);
       console.log(`   💎 Dividendos: R$ ${data.totalDividends.toFixed(2)}`);

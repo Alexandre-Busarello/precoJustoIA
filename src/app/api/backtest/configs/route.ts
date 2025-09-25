@@ -5,7 +5,7 @@ import { prisma, safeQuery, safeTransaction } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 
 // GET /api/backtest/configs - Listar configurações do usuário
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -34,17 +34,27 @@ export async function GET() {
       }, { status: 403 });
     }
 
+    // Parâmetros de paginação
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const skip = (page - 1) * limit;
+
     const configs = await safeQuery('get-backtest-configs', () =>
       prisma.backtestConfig.findMany({
         where: { userId: currentUser.id },
         include: { 
           assets: true, 
-          results: true, // Incluir todos os campos dos resultados
+          results: {
+            orderBy: { calculatedAt: 'desc' } // Mais recente primeiro
+          },
           transactions: {
             orderBy: [{ month: 'asc' }, { id: 'asc' }] // Ordenar por month e depois por ID (ordem de criação)
           }
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' }, // Mais recentes primeiro, independente de ter resultados
+        skip,
+        take: limit
       })
     );
 
@@ -62,6 +72,25 @@ export async function GET() {
         hasTransactions: !!configs[0].transactions,
         transactionsCount: configs[0].transactions?.length || 0
       });
+      
+      // Debug específico para resultados
+      if (configs[0].results && configs[0].results.length > 0) {
+        console.log('📈 Primeiro resultado:', {
+          id: configs[0].results[0].id,
+          totalReturn: configs[0].results[0].totalReturn,
+          calculatedAt: configs[0].results[0].calculatedAt
+        });
+      } else {
+        console.log('⚠️ Primeira config não tem resultados, verificando outras...');
+        const configsWithResults = configs.filter(c => c.results && c.results.length > 0);
+        console.log('📊 Configs com resultados:', configsWithResults.length);
+        if (configsWithResults.length > 0) {
+          console.log('📈 Primeira config com resultado:', {
+            name: configsWithResults[0].name,
+            resultsCount: configsWithResults[0].results.length
+          });
+        }
+      }
     }
 
     // Converter Decimals para numbers nos resultados
@@ -83,6 +112,7 @@ export async function GET() {
         maxDrawdown: Number(result.maxDrawdown),
         totalInvested: Number(result.totalInvested),
         finalValue: Number(result.finalValue),
+        finalCashReserve: (result as any).finalCashReserve ? Number((result as any).finalCashReserve) : 0,
         totalDividendsReceived: (result as any).totalDividendsReceived ? Number((result as any).totalDividendsReceived) : 0,
         // Os campos JSON já vêm como objetos/arrays
         monthlyReturns: result.monthlyReturns,
@@ -170,7 +200,8 @@ export async function POST(request: NextRequest) {
           assets: {
             create: body.assets.map((asset: any) => ({
               ticker: asset.ticker.toUpperCase(),
-              targetAllocation: asset.allocation
+              targetAllocation: asset.allocation,
+              averageDividendYield: asset.averageDividendYield || null
             }))
           }
         },

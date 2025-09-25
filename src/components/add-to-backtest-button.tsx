@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { BacktestConfigSelector } from '@/components/backtest-config-selector';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { 
   BarChart3, 
-  Plus, 
   Check, 
   Crown,
-  Loader2
+  Loader2,
+  Settings
 } from 'lucide-react';
 
 // Interface para o ativo
@@ -38,11 +40,12 @@ export function AddToBacktestButton({
 }: AddToBacktestButtonProps) {
   const { data: session } = useSession();
   const router = useRouter();
+  const { isPremium, isLoading: isPremiumLoading } = usePremiumStatus();
   const [isAdded, setIsAdded] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [showConfigSelector, setShowConfigSelector] = useState(false);
 
   // Verificar se já está na lista
-  const checkIfAdded = () => {
+  const checkIfAdded = useCallback(() => {
     try {
       const stored = localStorage.getItem('backtest-preconfigured-assets');
       if (stored) {
@@ -53,64 +56,30 @@ export function AddToBacktestButton({
       console.error('Erro ao verificar localStorage:', error);
     }
     return false;
-  };
+  }, [asset.ticker]);
 
-  // Adicionar/remover ativo
-  const handleToggleAsset = async () => {
+  // Abrir modal de seleção de configuração
+  const handleAddToBacktest = () => {
     // Verificar se usuário está logado
     if (!session?.user?.id) {
       router.push('/login?redirect=/backtest');
       return;
     }
 
-    // Verificar se é Premium (simulação - em produção usar hook real)
-    const isPremium = true; // Substituir por verificação real
+    // Verificar se é Premium
     if (!isPremium) {
-      router.push('/dashboard?upgrade=backtest');
+      router.push('/checkout?product=backtest');
       return;
     }
 
-    setIsLoading(true);
+    setShowConfigSelector(true);
+  };
 
-    try {
-      const stored = localStorage.getItem('backtest-preconfigured-assets');
-      const assets: AssetData[] = stored ? JSON.parse(stored) : [];
-
-      const existingIndex = assets.findIndex(a => a.ticker === asset.ticker);
-
-      if (existingIndex >= 0) {
-        // Remover se já existe
-        assets.splice(existingIndex, 1);
-        setIsAdded(false);
-      } else {
-        // Adicionar se não existe
-        if (assets.length >= 20) {
-          alert('Máximo de 20 ativos por carteira de backtesting');
-          return;
-        }
-        
-        assets.push({
-          ticker: asset.ticker,
-          companyName: asset.companyName,
-          sector: asset.sector,
-          currentPrice: asset.currentPrice
-        });
-        setIsAdded(true);
-      }
-
-      localStorage.setItem('backtest-preconfigured-assets', JSON.stringify(assets));
-
-      // Feedback visual
-      setTimeout(() => {
-        setIsAdded(checkIfAdded());
-      }, 100);
-
-    } catch (error) {
-      console.error('Erro ao gerenciar ativo no backtest:', error);
-      alert('Erro ao adicionar ativo ao backtest');
-    } finally {
-      setIsLoading(false);
-    }
+  // Callback quando configuração é selecionada
+  const handleConfigSelected = () => {
+    setIsAdded(true);
+    setShowConfigSelector(false);
+    // Não navegar automaticamente - usuário permanece na página atual
   };
 
   // Navegar para página de backtest
@@ -121,7 +90,7 @@ export function AddToBacktestButton({
   // Verificar estado inicial
   useEffect(() => {
     setIsAdded(checkIfAdded());
-  }, []);
+  }, [checkIfAdded]);
 
   // Se não há sessão, mostrar botão de login
   if (!session?.user?.id) {
@@ -139,7 +108,20 @@ export function AddToBacktestButton({
   }
 
   // Se não é Premium, mostrar botão de upgrade
-  const isPremium = true; // Substituir por verificação real
+  if (isPremiumLoading) {
+    return (
+      <Button
+        variant={variant}
+        size={size}
+        disabled
+        className={className}
+      >
+        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+        {showLabel && 'Carregando...'}
+      </Button>
+    );
+  }
+
   if (!isPremium) {
     return (
       <Button
@@ -156,34 +138,41 @@ export function AddToBacktestButton({
 
   // Botão principal
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        variant={isAdded ? 'default' : variant}
-        size={size}
-        onClick={handleToggleAsset}
-        disabled={isLoading}
-        className={`${className} ${isAdded ? 'bg-green-600 hover:bg-green-700 border-green-600' : ''}`}
-      >
-        {isLoading ? (
-          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-        ) : isAdded ? (
-          <Check className="w-4 h-4 mr-2" />
-        ) : (
-          <Plus className="w-4 h-4 mr-2" />
-        )}
-        
-        {showLabel && (
-          <span>
-            {isLoading ? 'Processando...' : isAdded ? 'Adicionado' : 'Backtest'}
-          </span>
-        )}
-      </Button>
+    <>
+      <div className="flex items-center gap-2">
+        <Button
+          variant={isAdded ? 'default' : variant}
+          size={size}
+          onClick={handleAddToBacktest}
+          className={`${className} ${isAdded ? 'bg-green-600 hover:bg-green-700 border-green-600' : ''}`}
+        >
+          {isAdded ? (
+            <Check className="w-4 h-4 mr-2" />
+          ) : (
+            <Settings className="w-4 h-4 mr-2" />
+          )}
+          
+          {showLabel && (
+            <span>
+              {isAdded ? 'Adicionado' : 'Backtest'}
+            </span>
+          )}
+        </Button>
 
-      {/* Contador de ativos (se houver) */}
-      {isAdded && (
-        <BacktestCounter onGoToBacktest={handleGoToBacktest} />
-      )}
-    </div>
+        {/* Contador de ativos (se houver) */}
+        {isAdded && (
+          <BacktestCounter onGoToBacktest={handleGoToBacktest} />
+        )}
+      </div>
+
+      {/* Modal de seleção de configuração */}
+      <BacktestConfigSelector
+        isOpen={showConfigSelector}
+        onClose={() => setShowConfigSelector(false)}
+        asset={asset}
+        onConfigSelected={handleConfigSelected}
+      />
+    </>
   );
 }
 

@@ -7,6 +7,8 @@ import { BacktestConfigForm } from '@/components/backtest-config-form';
 import { BacktestResults } from '@/components/backtest-results';
 import { BacktestHistory } from '@/components/backtest-history';
 import { BacktestDataQualityPanel } from '@/components/backtest-data-quality-panel';
+import { BacktestWelcomeScreen } from '@/components/backtest-welcome-screen';
+import { BacktestConfigHistory } from '@/components/backtest-config-history';
 import { Button } from '@/components/ui/button';
 import { 
   TrendingUp, 
@@ -95,6 +97,12 @@ export function BacktestPageClient() {
   const [dataValidation, setDataValidation] = useState<DataValidation | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+
+  // Scroll para o topo quando o componente for montado
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   // Carregar ativos pré-configurados do localStorage
   useEffect(() => {
@@ -124,6 +132,7 @@ export function BacktestPageClient() {
         };
 
         setCurrentConfig(initialConfig);
+        setShowWelcome(false); // Pular tela de boas-vindas se há ativos pré-configurados
         
         // Limpar localStorage após usar
         localStorage.removeItem('backtest-preconfigured-assets');
@@ -141,9 +150,34 @@ export function BacktestPageClient() {
       if (prev && JSON.stringify(prev) === JSON.stringify(config)) {
         return prev;
       }
-      return config;
+      
+      // IMPORTANTE: Preservar o ID da configuração original se existir
+      const updatedConfig = { ...config };
+      if (prev && (prev as any).id) {
+        (updatedConfig as any).id = (prev as any).id;
+        console.log('🔄 handleConfigChange - Preservando ID:', (prev as any).id);
+      }
+      
+      // Verificar se houve mudança real nos dados da configuração
+      const prevWithoutId = prev ? { ...prev } : null;
+      if (prevWithoutId) delete (prevWithoutId as any).id;
+      
+      const configWithoutId = { ...config };
+      delete (configWithoutId as any).id;
+      
+      const hasRealChange = !prev || JSON.stringify(prevWithoutId) !== JSON.stringify(configWithoutId);
+      
+      if (hasRealChange) {
+        console.log('🔄 handleConfigChange - Mudança real detectada, limpando resultado');
+        // Só limpar resultado se houve mudança real na configuração
+        setCurrentResult(null);
+      } else {
+        console.log('🔄 handleConfigChange - Sem mudança real, mantendo resultado');
+      }
+      
+      return updatedConfig;
     });
-    setCurrentResult(null);
+    
     setDataValidation(null);
     setShowValidation(false);
   }, []);
@@ -193,19 +227,28 @@ export function BacktestPageClient() {
         return;
       }
 
+      // Sempre enviar os parâmetros atuais da tela
+      const params = {
+        assets: config.assets,
+        startDate: config.startDate.toISOString(),
+        endDate: config.endDate.toISOString(),
+        initialCapital: config.initialCapital,
+        monthlyContribution: config.monthlyContribution,
+        rebalanceFrequency: config.rebalanceFrequency
+      };
+
+      // Se há configId, enviar junto com os parâmetros para atualizar a config
+      const requestBody = (config as any).id ? {
+        configId: (config as any).id,
+        params: params
+      } : {
+        params: params
+      };
+
       const response = await fetch('/api/backtest/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          params: {
-            assets: config.assets,
-            startDate: config.startDate.toISOString(),
-            endDate: config.endDate.toISOString(),
-            initialCapital: config.initialCapital,
-            monthlyContribution: config.monthlyContribution,
-            rebalanceFrequency: config.rebalanceFrequency
-          }
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -215,9 +258,16 @@ export function BacktestPageClient() {
 
       const data = await response.json();
       console.log('🔍 BacktestPageClient - Resultado recebido:', data.result);
-      console.log('🔍 BacktestPageClient - finalCashReserve:', data.result.finalCashReserve);
-      console.log('🔍 BacktestPageClient - totalDividendsReceived:', data.result.totalDividendsReceived);
+      console.log('🔍 BacktestPageClient - configId usado:', (config as any).id);
+      console.log('🔍 BacktestPageClient - configId retornado:', data.configId);
       setCurrentResult(data.result);
+      
+      // IMPORTANTE: Atualizar o currentConfig com o configId retornado se não tinha antes
+      if (!((config as any).id) && data.configId) {
+        console.log('🔄 Atualizando config com novo ID:', data.configId);
+        const updatedConfig = { ...config, id: data.configId };
+        setCurrentConfig(updatedConfig as BacktestConfig);
+      }
       
       // Extrair transações do monthlyHistory se disponível
       if (data.result.monthlyHistory) {
@@ -267,15 +317,128 @@ export function BacktestPageClient() {
     setCurrentResult(result);
     setCurrentConfig(config);
     setCurrentTransactions(transactions || []);
+    setShowWelcome(false);
     setActiveTab('results');
+  }, []);
+
+  // Handlers para a tela de boas-vindas
+  const handleCreateNew = useCallback(() => {
+    setShowWelcome(false);
+    setCurrentConfig(null);
+    setCurrentResult(null);
+    setCurrentTransactions([]);
+    setActiveTab('configure');
+  }, []);
+
+  const handleSelectExisting = useCallback(async (configPreview: any) => {
+    try {
+      console.log('🔍 handleSelectExisting - Config:', configPreview.name, 'hasResults:', configPreview.hasResults);
+      
+      // Converter preview para formato completo
+      const fullConfig: BacktestConfig = {
+        name: configPreview.name,
+        description: configPreview.description,
+        assets: configPreview.assets.map((asset: any) => ({
+          ticker: asset.ticker,
+          companyName: asset.ticker, // Fallback
+          allocation: asset.targetAllocation,
+          averageDividendYield: asset.averageDividendYield
+        })),
+        startDate: new Date(configPreview.startDate),
+        endDate: new Date(configPreview.endDate),
+        initialCapital: configPreview.initialCapital || 10000,
+        monthlyContribution: configPreview.monthlyContribution,
+        rebalanceFrequency: configPreview.rebalanceFrequency as 'monthly' | 'quarterly' | 'yearly'
+      };
+
+      // Adicionar ID da config para permitir updates em vez de criar nova
+      (fullConfig as any).id = configPreview.id;
+
+      setCurrentConfig(fullConfig);
+      setShowWelcome(false);
+
+      // Se a config tem resultados, mostrar o último resultado e ir para aba de resultados
+      if (configPreview.hasResults && configPreview.results && configPreview.results.length > 0) {
+        console.log('✅ Config tem resultados, carregando último resultado...');
+        // Pegar o primeiro resultado (mais recente, pois está ordenado desc)
+        const latestResult = configPreview.results[0];
+        
+        // Converter para formato esperado pelo componente
+        const formattedResult = {
+          totalReturn: latestResult.totalReturn,
+          annualizedReturn: latestResult.annualizedReturn,
+          volatility: latestResult.volatility,
+          sharpeRatio: latestResult.sharpeRatio,
+          maxDrawdown: latestResult.maxDrawdown,
+          positiveMonths: latestResult.positiveMonths,
+          negativeMonths: latestResult.negativeMonths,
+          totalInvested: latestResult.totalInvested,
+          finalValue: latestResult.finalValue,
+          finalCashReserve: latestResult.finalCashReserve || 0,
+          totalDividendsReceived: latestResult.totalDividendsReceived || 0,
+          monthlyReturns: latestResult.monthlyReturns || [],
+          assetPerformance: latestResult.assetPerformance || [],
+          portfolioEvolution: latestResult.portfolioEvolution || [],
+          // Campos opcionais com valores padrão
+          dataValidation: null,
+          dataQualityIssues: [],
+          effectiveStartDate: new Date(configPreview.startDate),
+          effectiveEndDate: new Date(configPreview.endDate),
+          actualInvestment: latestResult.totalInvested,
+          plannedInvestment: latestResult.totalInvested,
+          missedContributions: 0,
+          missedAmount: 0
+        };
+
+        setCurrentResult(formattedResult);
+        setCurrentTransactions(configPreview.transactions || []);
+        setActiveTab('results');
+        console.log('✅ Resultado carregado, indo para aba Results');
+      } else {
+        console.log('⚠️ Config não tem resultados, indo para aba Configure');
+        // Se não tem resultados, ir para configuração
+        setCurrentResult(null);
+        setCurrentTransactions([]);
+        setActiveTab('configure');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configuração:', error);
+      alert('Erro ao carregar configuração selecionada');
+    }
+  }, []);
+
+  const handleUseAsBase = useCallback((configPreview: any) => {
+    // Converter preview para formato completo (similar ao handleSelectExisting)
+    const fullConfig: BacktestConfig = {
+      name: `${configPreview.name} (Cópia)`,
+      description: configPreview.description,
+      assets: configPreview.assets.map((asset: any) => ({
+        ticker: asset.ticker,
+        companyName: asset.ticker, // Fallback
+        allocation: asset.targetAllocation,
+        averageDividendYield: asset.averageDividendYield
+      })),
+      startDate: new Date(configPreview.startDate),
+      endDate: new Date(configPreview.endDate),
+      initialCapital: configPreview.initialCapital || 10000,
+      monthlyContribution: configPreview.monthlyContribution,
+      rebalanceFrequency: configPreview.rebalanceFrequency as 'monthly' | 'quarterly' | 'yearly'
+    };
+
+    // Não adicionar ID para que seja tratada como nova configuração
+    setCurrentConfig(fullConfig);
+    setCurrentResult(null);
+    setCurrentTransactions([]);
+    setShowWelcome(false);
+    setActiveTab('configure');
   }, []);
 
   // Estabilizar initialConfig para evitar re-renders desnecessários
   const stableInitialConfig = useMemo(() => {
     if (!currentConfig) return null;
     
-    // Criar uma cópia estável do config
-    return {
+    // Criar uma cópia estável do config PRESERVANDO O ID
+    const stableConfig: any = {
       name: currentConfig.name,
       description: currentConfig.description,
       assets: [...currentConfig.assets],
@@ -285,7 +448,25 @@ export function BacktestPageClient() {
       monthlyContribution: currentConfig.monthlyContribution,
       rebalanceFrequency: currentConfig.rebalanceFrequency
     };
+    
+    // Preservar ID se existir
+    if ((currentConfig as any).id) {
+      stableConfig.id = (currentConfig as any).id;
+    }
+    
+    return stableConfig;
   }, [currentConfig]);
+
+  // Mostrar tela de boas-vindas quando showWelcome é true
+  if (showWelcome) {
+    return (
+      <BacktestWelcomeScreen
+        onCreateNew={handleCreateNew}
+        onSelectExisting={handleSelectExisting}
+        onUseAsBase={handleUseAsBase}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -360,20 +541,38 @@ export function BacktestPageClient() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="configure" className="flex items-center gap-2">
-            <Settings className="w-4 h-4" />
-            Configurar
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <TabsList className="grid grid-cols-3 w-full sm:w-auto">
+            <TabsTrigger value="configure" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+              <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Configurar</span>
+              <span className="xs:hidden">Config</span>
+            </TabsTrigger>
+            <TabsTrigger value="results" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" disabled={!currentResult}>
+              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Resultados</span>
+              <span className="xs:hidden">Result</span>
+            </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+            <History className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">
+              {currentConfig && (currentConfig as any).id ? 'Histórico da Config' : 'Histórico Geral'}
+            </span>
+            <span className="sm:hidden">Histórico</span>
           </TabsTrigger>
-          <TabsTrigger value="results" className="flex items-center gap-2" disabled={!currentResult}>
-            <BarChart3 className="w-4 h-4" />
-            Resultados
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-2">
-            <History className="w-4 h-4" />
-            Histórico
-          </TabsTrigger>
-        </TabsList>
+          </TabsList>
+          
+          {/* Botão para voltar à tela inicial */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowWelcome(true)}
+            className="flex items-center gap-2 w-full sm:w-auto"
+          >
+            <TrendingUp className="w-4 h-4" />
+            Nova Simulação
+          </Button>
+        </div>
 
         {/* Configuração */}
         <TabsContent value="configure" className="space-y-6">
@@ -408,10 +607,22 @@ export function BacktestPageClient() {
                   <div className="space-y-2">
                     <h4 className="font-semibold">📋 Como funciona:</h4>
                     <ul className="space-y-1 text-xs text-muted-foreground">
-                      <li>• Simula aportes mensais regulares</li>
-                      <li>• Rebalanceia automaticamente a carteira</li>
+                      <li>• Simula aportes mensais regulares no primeiro dia do mês</li>
+                      <li>• <strong>Rebalanceamento mensal automático</strong> da carteira</li>
                       <li>• Calcula métricas de risco e retorno</li>
                       <li>• Considera dados históricos reais</li>
+                      <li>• <strong>Dividendos:</strong> Simulação com yield médio pago em Mar/Ago/Out</li>
+                    </ul>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold">💎 Simulação de Dividendos:</h4>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      <li>• Yield médio configurado por ativo</li>
+                      <li>• Pagamentos apenas em <strong>Março, Agosto e Outubro</strong></li>
+                      <li>• 33,33% do yield anual em cada mês</li>
+                      <li>• <strong>Reinvestimento automático:</strong> dividendos compram mais ações</li>
+                      <li>• <strong>Para apenas valorização:</strong> configure DY = 0%</li>
                     </ul>
                   </div>
 
@@ -476,7 +687,26 @@ export function BacktestPageClient() {
 
         {/* Histórico */}
         <TabsContent value="history">
-          <BacktestHistory onShowDetails={handleShowDetails} />
+          {(() => {
+            const hasConfigId = currentConfig && (currentConfig as any).id;
+            console.log('🔍 History Tab - currentConfig:', currentConfig?.name);
+            console.log('🔍 History Tab - hasConfigId:', hasConfigId);
+            console.log('🔍 History Tab - configId:', (currentConfig as any)?.id);
+            
+            return hasConfigId ? (
+              // Se há uma configuração específica selecionada, mostrar histórico dela
+              <BacktestConfigHistory
+                configId={(currentConfig as any).id}
+                configName={currentConfig.name}
+                onShowResult={handleShowDetails}
+              />
+            ) : (
+              // Caso contrário, mostrar histórico geral
+              <BacktestHistory 
+                onShowDetails={handleShowDetails}
+              />
+            );
+          })()}
         </TabsContent>
       </Tabs>
     </div>

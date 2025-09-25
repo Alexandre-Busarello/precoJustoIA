@@ -17,8 +17,6 @@ import {
   PieChart,
   AlertTriangle,
   Info,
-  Download,
-  Share2,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -59,6 +57,9 @@ interface BacktestResult {
     totalReturn: number;
     contribution: number;
     reinvestment: number;
+    averagePrice?: number;
+    totalShares?: number;
+    totalDividends?: number;
   }>;
   portfolioEvolution: Array<{
     date: string;
@@ -206,13 +207,13 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       const lastMonth = result.portfolioEvolution[result.portfolioEvolution.length - 1];
       const finalQuantity = lastMonth?.holdings?.[asset.ticker] || 0;
       
-      // O total investido vem da contribuição do ativo
-      const totalInvested = asset.contribution || 0;
+      // Usar preço médio do backend (já calculado corretamente)
+      // Preço Médio = (Aportes + Dividendos Reinvestidos + Sobras Utilizadas) / Quantidade em Custódia
+      const averagePrice = asset.averagePrice || 
+        (finalQuantity > 0 ? (asset.contribution + asset.reinvestment) / finalQuantity : 0);
       
-      // Usar preço médio real do backend (incluindo rebalanceamentos) se disponível
-      // Caso contrário, calcular baseado no total investido (apenas aportes)
-      const averagePrice = (asset as any).averagePrice || 
-        (finalQuantity > 0 ? totalInvested / finalQuantity : 0);
+      // O total investido para exibição inclui aportes + sobras utilizadas (sem dividendos reinvestidos)
+      const totalInvested = asset.contribution + asset.reinvestment;
       
       custodyInfo[asset.ticker] = {
         quantity: finalQuantity,
@@ -239,11 +240,11 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
               </CardTitle>
               {config && (
                 <p className="text-gray-600 dark:text-gray-300 mt-1">
-                  {config.name} • {config.assets?.length || 0} ativos • {result.monthlyReturns?.length || 0} meses
+                  {config.name} • {config.assets?.length || 0} ativos • {result.monthlyReturns?.length + 1 || 0} meses
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
+            {/* <div className="flex gap-2">
               <Button variant="outline" size="sm">
                 <Share2 className="w-4 h-4 mr-2" />
                 Compartilhar
@@ -252,7 +253,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 <Download className="w-4 h-4 mr-2" />
                 Exportar
               </Button>
-            </div>
+            </div> */}
           </div>
         </CardHeader>
         <CardContent>
@@ -320,19 +321,48 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
           value={result.totalDividendsReceived ? formatCurrency(result.totalDividendsReceived) : 'R$ 0,00'}
           icon={<DollarSign />}
           color="green"
-          description="Total de dividendos pagos durante o período"
+          description="Simulação: pagos em Mar/Ago/Out (33,33% cada)"
         />
       </div>
 
       {/* Tabs com Análises Detalhadas */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="evolution">Evolução</TabsTrigger>
-          <TabsTrigger value="assets">Por Ativo</TabsTrigger>
-          <TabsTrigger value="transactions">Transações</TabsTrigger>
-          <TabsTrigger value="risk">Análise de Risco</TabsTrigger>
-        </TabsList>
+        <div className="relative mb-4">
+          <div 
+            className="overflow-x-auto pb-2"
+            style={{
+              scrollbarWidth: 'none', /* Firefox */
+              msOverflowStyle: 'none', /* IE and Edge */
+            }}
+          >
+            <style jsx>{`
+              div::-webkit-scrollbar {
+                display: none;
+              }
+            `}</style>
+            <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-max min-w-full sm:min-w-0">
+              <TabsTrigger value="overview" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
+                <span className="hidden sm:inline">Visão Geral</span>
+                <span className="sm:hidden">Visão</span>
+              </TabsTrigger>
+              <TabsTrigger value="evolution" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
+                Evolução
+              </TabsTrigger>
+              <TabsTrigger value="assets" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
+                <span className="hidden sm:inline">Por Ativo</span>
+                <span className="sm:hidden">Ativos</span>
+              </TabsTrigger>
+              <TabsTrigger value="transactions" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
+                <span className="hidden sm:inline">Transações</span>
+                <span className="sm:hidden">Trans.</span>
+              </TabsTrigger>
+              <TabsTrigger value="risk" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
+                <span className="hidden sm:inline">Análise de Risco</span>
+                <span className="sm:hidden">Risco</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
         {/* Visão Geral */}
         <TabsContent value="overview" className="space-y-4">
@@ -347,7 +377,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between">
-                  <span>Total Investido:</span>
+                  <span>Capital Próprio Investido:</span>
                   <span className="font-semibold">{formatCurrency(result.totalInvested)}</span>
                 </div>
                 <div className="flex justify-between">
@@ -360,7 +390,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                     <span className="font-semibold text-blue-600">{formatCurrency(result.finalCashReserve || 0)}</span>
                   </div>
                 )}
-                {result.totalDividendsReceived && result.totalDividendsReceived > 0 && (
+                {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
                   <div className="flex justify-between">
                     <span>Dividendos Recebidos:</span>
                     <span className="font-semibold text-green-600">{formatCurrency(result.totalDividendsReceived)}</span>
@@ -374,7 +404,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                   </span>
                 </div>
                 {/* Decomposição do Ganho Total */}
-                {result.totalDividendsReceived && result.totalDividendsReceived > 0 && (
+                {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
                   <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400 pl-4">
                     <div className="flex justify-between">
                       <span>• Ganho de Capital:</span>
@@ -390,7 +420,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                     </div>
                   </div>
                 )}
-                {result.totalDividendsReceived && result.totalDividendsReceived > 0 && (
+                {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
                   <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                     <span>Yield sobre Investimento:</span>
                     <span className="font-medium text-green-600">
@@ -678,11 +708,11 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                             <p className="font-semibold">{formatCurrency(asset.finalValue || 0)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600 dark:text-gray-400">Aportes (+ Dividendos Reinvestidos)</p>
+                            <p className="text-gray-600 dark:text-gray-400">Aportes</p>
                             <p className="font-semibold text-blue-600">{formatCurrency(asset.contribution || 0)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600 dark:text-gray-400">Sobras Utilizadas</p>
+                            <p className="text-gray-600 dark:text-gray-400">Dividendos Reinvestidos + Sobras</p>
                             <p className="font-semibold text-green-600">{formatCurrency(asset.reinvestment || 0)}</p>
                           </div>
                           <div>
@@ -711,7 +741,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                               })} cotas × {formatCurrency(custodyInfo.averagePrice)} (preço médio)
                             </p>
                             <p>
-                              <strong>Total Investido:</strong> {formatCurrency(custodyInfo.totalInvested)} • 
+                              <strong>Capital Investido:</strong> {formatCurrency(custodyInfo.totalInvested)} • 
                               <strong> Valor Atual:</strong> {formatCurrency(asset.finalValue || 0)} • 
                               <strong> Ganho:</strong> <span className={(asset.finalValue || 0) >= custodyInfo.totalInvested ? 'text-green-600' : 'text-red-600'}>
                                 {formatCurrency((asset.finalValue || 0) - custodyInfo.totalInvested)}

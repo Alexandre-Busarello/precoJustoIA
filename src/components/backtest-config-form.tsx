@@ -72,6 +72,15 @@ export function BacktestConfigForm({
     rebalanceFrequency: 'monthly'
   });
 
+  // Estados locais para os inputs numéricos (permite digitação natural)
+  const [initialCapitalInput, setInitialCapitalInput] = useState('10.000');
+  const [monthlyContributionInput, setMonthlyContributionInput] = useState('1.000');
+  const [startYearInput, setStartYearInput] = useState('2021');
+  const [endYearInput, setEndYearInput] = useState('2024');
+  
+  // Estados locais para DY de cada ativo (mapa ticker -> valor input)
+  const [dividendYieldInputs, setDividendYieldInputs] = useState<Record<string, string>>({});
+
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<CompanySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -81,6 +90,22 @@ export function BacktestConfigForm({
   const isInitialLoad = useRef(true);
   const configChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Funções para sincronizar inputs com config
+  const syncInputsWithConfig = (newConfig: BacktestConfig) => {
+    setInitialCapitalInput(newConfig.initialCapital.toLocaleString('pt-BR'));
+    setMonthlyContributionInput(newConfig.monthlyContribution.toLocaleString('pt-BR'));
+    setStartYearInput(newConfig.startDate.getFullYear().toString());
+    setEndYearInput(newConfig.endDate.getFullYear().toString());
+    
+    // Sincronizar DY inputs
+    const newDividendYieldInputs: Record<string, string> = {};
+    newConfig.assets.forEach(asset => {
+      newDividendYieldInputs[asset.ticker] = asset.averageDividendYield ? 
+        (asset.averageDividendYield * 100).toFixed(2) : '';
+    });
+    setDividendYieldInputs(newDividendYieldInputs);
+  };
+
   // Carregar configuração inicial apenas uma vez
   useEffect(() => {
     if (initialConfig) {
@@ -89,6 +114,7 @@ export function BacktestConfigForm({
         console.log('🔄 Carregando nova configuração inicial:', initialConfig.name);
         initialConfigRef.current = configString;
         setConfig(initialConfig);
+        syncInputsWithConfig(initialConfig);
         isInitialLoad.current = true; // Reset flag quando carrega nova config
       }
     }
@@ -205,6 +231,13 @@ export function BacktestConfigForm({
     });
 
     setConfig(prev => ({ ...prev, assets: newAssets }));
+    
+    // Inicializar DY input para o novo ativo
+    setDividendYieldInputs(prev => ({
+      ...prev,
+      [company.ticker]: averageDividendYield ? (averageDividendYield * 100).toFixed(2) : ''
+    }));
+    
     setSearchTerm('');
     setSearchResults([]);
   };
@@ -222,6 +255,13 @@ export function BacktestConfigForm({
     }
 
     setConfig(prev => ({ ...prev, assets: newAssets }));
+    
+    // Remover DY input do ativo removido
+    setDividendYieldInputs(prev => {
+      const newInputs = { ...prev };
+      delete newInputs[ticker];
+      return newInputs;
+    });
   };
 
   // Atualizar alocação de um ativo
@@ -337,13 +377,24 @@ export function BacktestConfigForm({
               <Label htmlFor="initialCapital">Capital Inicial (R$)</Label>
               <Input
                 id="initialCapital"
-                type="number"
-                value={config.initialCapital}
-                onChange={(e) => setConfig(prev => ({ 
-                  ...prev, 
-                  initialCapital: Number(e.target.value) 
-                }))}
-                placeholder="10000"
+                type="text"
+                value={initialCapitalInput}
+                onChange={(e) => {
+                  const rawValue = e.target.value;
+                  setInitialCapitalInput(rawValue);
+                  
+                  // Sincronizar com config apenas se for um valor válido
+                  const numericValue = parseInt(rawValue.replace(/\D/g, '')) || 0;
+                  if (numericValue >= 0 && numericValue <= 100000000) {
+                    setConfig(prev => ({ ...prev, initialCapital: numericValue }));
+                  }
+                }}
+                onBlur={() => {
+                  // Formatar quando sair do campo
+                  const numericValue = parseInt(initialCapitalInput.replace(/\D/g, '')) || 0;
+                  setInitialCapitalInput(numericValue.toLocaleString('pt-BR'));
+                }}
+                placeholder="10.000"
                 className={errors.initialCapital ? 'border-red-500' : ''}
               />
               {errors.initialCapital && (
@@ -357,13 +408,24 @@ export function BacktestConfigForm({
               <Label htmlFor="monthlyContribution">Aporte Mensal (R$)</Label>
               <Input
                 id="monthlyContribution"
-                type="number"
-                value={config.monthlyContribution}
-                onChange={(e) => setConfig(prev => ({ 
-                  ...prev, 
-                  monthlyContribution: Number(e.target.value) 
-                }))}
-                placeholder="1000"
+                type="text"
+                value={monthlyContributionInput}
+                onChange={(e) => {
+                  const rawValue = e.target.value;
+                  setMonthlyContributionInput(rawValue);
+                  
+                  // Sincronizar com config apenas se for um valor válido
+                  const numericValue = parseInt(rawValue.replace(/\D/g, '')) || 0;
+                  if (numericValue >= 0 && numericValue <= 1000000) {
+                    setConfig(prev => ({ ...prev, monthlyContribution: numericValue }));
+                  }
+                }}
+                onBlur={() => {
+                  // Formatar quando sair do campo
+                  const numericValue = parseInt(monthlyContributionInput.replace(/\D/g, '')) || 0;
+                  setMonthlyContributionInput(numericValue.toLocaleString('pt-BR'));
+                }}
+                placeholder="1.000"
                 className={errors.monthlyContribution ? 'border-red-500' : ''}
               />
               {errors.monthlyContribution && (
@@ -392,57 +454,108 @@ export function BacktestConfigForm({
             <Calendar className="w-5 h-5" />
             Período da Simulação
           </CardTitle>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Selecione o mês e ano. A simulação sempre considera o primeiro dia do mês para os preços mensais.
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="startDate">Data de Início</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={config.startDate.toISOString().split('T')[0]}
-                onChange={(e) => setConfig(prev => ({ 
-                  ...prev, 
-                  startDate: new Date(e.target.value) 
-                }))}
-                className={errors.dates ? 'border-red-500' : ''}
-              />
+              <div className="flex gap-2">
+                <Select
+                  value={String(config.startDate.getMonth() + 1).padStart(2, '0')}
+                  onValueChange={(month) => {
+                    const newDate = new Date(config.startDate.getFullYear(), parseInt(month) - 1, 1);
+                    setConfig(prev => ({ ...prev, startDate: newDate }));
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Mês" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="01">Janeiro</SelectItem>
+                    <SelectItem value="02">Fevereiro</SelectItem>
+                    <SelectItem value="03">Março</SelectItem>
+                    <SelectItem value="04">Abril</SelectItem>
+                    <SelectItem value="05">Maio</SelectItem>
+                    <SelectItem value="06">Junho</SelectItem>
+                    <SelectItem value="07">Julho</SelectItem>
+                    <SelectItem value="08">Agosto</SelectItem>
+                    <SelectItem value="09">Setembro</SelectItem>
+                    <SelectItem value="10">Outubro</SelectItem>
+                    <SelectItem value="11">Novembro</SelectItem>
+                    <SelectItem value="12">Dezembro</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="text"
+                  placeholder="Ano"
+                  value={startYearInput}
+                  onChange={(e) => {
+                    const rawValue = e.target.value;
+                    setStartYearInput(rawValue);
+                    
+                    // Sincronizar com config apenas se for um ano válido
+                    const year = parseInt(rawValue);
+                    if (!isNaN(year) && year >= 2000 && year <= new Date().getFullYear()) {
+                      const newDate = new Date(year, config.startDate.getMonth(), 1);
+                      setConfig(prev => ({ ...prev, startDate: newDate }));
+                    }
+                  }}
+                  className={`w-24 ${errors.dates ? 'border-red-500' : ''}`}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="endDate">Data de Fim</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={config.endDate.toISOString().split('T')[0]}
-                onChange={(e) => setConfig(prev => ({ 
-                  ...prev, 
-                  endDate: new Date(e.target.value) 
-                }))}
-                className={errors.dates ? 'border-red-500' : ''}
-              />
+              <div className="flex gap-2">
+                <Select
+                  value={String(config.endDate.getMonth() + 1).padStart(2, '0')}
+                  onValueChange={(month) => {
+                    const newDate = new Date(config.endDate.getFullYear(), parseInt(month) - 1, 1);
+                    setConfig(prev => ({ ...prev, endDate: newDate }));
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Mês" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="01">Janeiro</SelectItem>
+                    <SelectItem value="02">Fevereiro</SelectItem>
+                    <SelectItem value="03">Março</SelectItem>
+                    <SelectItem value="04">Abril</SelectItem>
+                    <SelectItem value="05">Maio</SelectItem>
+                    <SelectItem value="06">Junho</SelectItem>
+                    <SelectItem value="07">Julho</SelectItem>
+                    <SelectItem value="08">Agosto</SelectItem>
+                    <SelectItem value="09">Setembro</SelectItem>
+                    <SelectItem value="10">Outubro</SelectItem>
+                    <SelectItem value="11">Novembro</SelectItem>
+                    <SelectItem value="12">Dezembro</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="text"
+                  placeholder="Ano"
+                  value={endYearInput}
+                  onChange={(e) => {
+                    const rawValue = e.target.value;
+                    setEndYearInput(rawValue);
+                    
+                    // Sincronizar com config apenas se for um ano válido
+                    const year = parseInt(rawValue);
+                    if (!isNaN(year) && year >= 2000 && year <= new Date().getFullYear()) {
+                      const newDate = new Date(year, config.endDate.getMonth(), 1);
+                      setConfig(prev => ({ ...prev, endDate: newDate }));
+                    }
+                  }}
+                  className={`w-24 ${errors.dates ? 'border-red-500' : ''}`}
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="rebalanceFrequency">Rebalanceamento</Label>
-              <Select
-                value={config.rebalanceFrequency}
-                onValueChange={(value) => {
-                  if (value === 'monthly' || value === 'quarterly' || value === 'yearly') {
-                    setConfig(prev => ({ ...prev, rebalanceFrequency: value }));
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a frequência" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">Mensal</SelectItem>
-                  <SelectItem value="quarterly">Trimestral</SelectItem>
-                  <SelectItem value="yearly">Anual</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           
           {errors.dates && (
@@ -585,28 +698,50 @@ export function BacktestConfigForm({
                         </div>
                         <div className="flex items-center gap-2">
                           <Input
-                            type="number"
-                            value={asset.averageDividendYield ? 
-                              (asset.averageDividendYield * 100).toFixed(2) : 
-                              ''
-                            }
+                            type="text"
+                            value={dividendYieldInputs[asset.ticker] || ''}
                             onChange={(e) => {
-                              const value = parseFloat(e.target.value);
-                              if (!isNaN(value) && value >= 0 && value <= 50) {
-                                updateDividendYield(asset.ticker, value);
+                              const rawValue = e.target.value;
+                              
+                              // Atualizar estado local (permite digitação livre)
+                              setDividendYieldInputs(prev => ({
+                                ...prev,
+                                [asset.ticker]: rawValue
+                              }));
+                              
+                              // Sincronizar com config se for um valor válido
+                              const value = rawValue.replace(',', '.'); // Converte vírgula para ponto
+                              const numericValue = parseFloat(value) || 0;
+                              if (numericValue >= 0 && numericValue <= 50) {
+                                updateDividendYield(asset.ticker, numericValue);
                               }
                             }}
-                            placeholder="0.00"
-                            min="0"
-                            max="50"
-                            step="0.01"
+                            onBlur={() => {
+                              // Formatar quando sair do campo
+                              const currentValue = dividendYieldInputs[asset.ticker] || '';
+                              const value = currentValue.replace(',', '.');
+                              const numericValue = parseFloat(value) || 0;
+                              const formattedValue = numericValue > 0 ? numericValue.toFixed(2) : '';
+                              
+                              setDividendYieldInputs(prev => ({
+                                ...prev,
+                                [asset.ticker]: formattedValue
+                              }));
+                            }}
+                            placeholder="0,00"
                             className="w-20 text-sm"
                           />
                           <span className="text-sm text-gray-500">%</span>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => updateDividendYield(asset.ticker, 0)}
+                            onClick={() => {
+                              updateDividendYield(asset.ticker, 0);
+                              setDividendYieldInputs(prev => ({
+                                ...prev,
+                                [asset.ticker]: ''
+                              }));
+                            }}
                             className="text-xs text-gray-500 hover:text-gray-700"
                             title="Zerar dividendos"
                           >
@@ -614,8 +749,8 @@ export function BacktestConfigForm({
                           </Button>
                         </div>
                         <p className="text-xs text-gray-500">
-                          Dividend yield médio usado para simular pagamentos mensais. 
-                          Deixe em 0% para não considerar dividendos.
+                          <strong>Simulação de dividendos:</strong> Yield médio anual pago em 3 meses (Mar/Ago/Out) com reinvestimento automático. 
+                          <strong>Configure 0% para analisar apenas valorização.</strong>
                         </p>
                       </div>
                     </div>

@@ -245,8 +245,10 @@ model HistoricalPrice {
   company       Company  @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, date, interval])
-  @@index([companyId, interval, date])
-  @@index([date])
+  @@index([companyId, interval, date]) // Índice existente otimizado
+  @@index([date]) // Índice existente
+  @@index([interval, date]) // Otimização para consultas por intervalo e período
+  @@index([companyId, date]) // Otimização para consultas de ticker específico por período
   @@map("historical_prices")
 }
 
@@ -781,6 +783,8 @@ model BacktestConfig {
   results           BacktestResult[]
   transactions      BacktestTransaction[]
   
+  @@index([userId, createdAt]) // Otimização para listar configs do usuário ordenadas por data
+  @@index([userId, updatedAt]) // Otimização para configs recentemente atualizadas
   @@map("backtest_configs")
 }
 
@@ -795,6 +799,8 @@ model BacktestAsset {
   backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
   
   @@unique([backtestId, ticker])
+  @@index([backtestId]) // Otimização para buscar ativos de um backtest específico
+  @@index([ticker]) // Otimização para buscar backtests que usam um ticker específico
   @@map("backtest_assets")
 }
 
@@ -818,6 +824,7 @@ model BacktestResult {
   // Valores finais
   totalInvested   Decimal  @map("total_invested") @db.Decimal(15, 2)   // Total aportado
   finalValue      Decimal  @map("final_value") @db.Decimal(15, 2)      // Valor final da carteira
+  finalCashReserve Decimal? @map("final_cash_reserve") @db.Decimal(15, 2) // Saldo final em caixa
   totalDividendsReceived Decimal? @map("total_dividends_received") @db.Decimal(15, 2) // Total de dividendos recebidos
   
   // Dados detalhados (JSON)
@@ -830,7 +837,10 @@ model BacktestResult {
   
   backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
   
-  @@unique([backtestId]) // Um resultado por configuração
+  // Removido @@unique([backtestId]) para permitir múltiplos resultados por configuração
+  @@index([calculatedAt]) // Otimização para buscar resultados por data de cálculo
+  @@index([totalReturn]) // Otimização para ordenar por performance
+  @@index([annualizedReturn]) // Otimização para comparar retornos anualizados
   @@map("backtest_results")
 }
 
@@ -859,6 +869,10 @@ model BacktestTransaction {
   // Relacionamento
   backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
   
-  @@index([backtestId, month]) // Índice para consultas por backtest e mês
+  @@index([backtestId, month]) // Índice para consultas por backtest e mês (já existia)
+  @@index([backtestId, ticker, month]) // Otimização para análise de ativo específico por mês
+  @@index([backtestId, transactionType]) // Otimização para filtrar por tipo de transação
+  @@index([backtestId, date]) // Otimização para consultas por data
+  @@index([ticker, transactionType]) // Otimização para análise cross-backtest por ticker
   @@map("backtest_transactions")
 }

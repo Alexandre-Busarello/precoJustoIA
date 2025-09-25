@@ -46,8 +46,64 @@ export async function POST(request: NextRequest) {
     let params: BacktestParams;
     let configId: string | undefined;
 
-    if (body.configId) {
-      // Usar configuração salva
+    if (body.configId && body.params) {
+      // Configuração existente com parâmetros atualizados - atualizar a config primeiro
+      const existingConfig = await safeQuery('get-backtest-config', () =>
+        prisma.backtestConfig.findFirst({
+          where: { id: body.configId, userId: currentUser.id },
+          include: { assets: true }
+        })
+      );
+      
+      if (!existingConfig) {
+        return NextResponse.json(
+          { error: 'Configuração não encontrada' },
+          { status: 404 }
+        );
+      }
+
+      // Usar parâmetros da tela (atualizados)
+      params = {
+        ...body.params,
+        startDate: new Date(body.params.startDate),
+        endDate: new Date(body.params.endDate),
+        initialCapital: Number(body.params.initialCapital)
+      };
+      configId = body.configId;
+
+      // Atualizar configuração no banco com os novos parâmetros
+      console.log('🔄 Atualizando configuração existente com novos parâmetros...');
+      await safeTransaction('update-backtest-config', async () => {
+        // Atualizar dados principais da configuração
+        await prisma.backtestConfig.update({
+          where: { id: body.configId },
+          data: {
+            startDate: params.startDate,
+            endDate: params.endDate,
+            initialCapital: params.initialCapital,
+            monthlyContribution: params.monthlyContribution,
+            rebalanceFrequency: params.rebalanceFrequency
+          }
+        });
+
+        // Remover ativos antigos
+        await prisma.backtestAsset.deleteMany({
+          where: { backtestId: body.configId }
+        });
+
+        // Adicionar novos ativos
+        await prisma.backtestAsset.createMany({
+          data: params.assets.map(asset => ({
+            backtestId: body.configId!,
+            ticker: asset.ticker,
+            targetAllocation: asset.allocation,
+            averageDividendYield: asset.averageDividendYield || null
+          }))
+        });
+      });
+
+    } else if (body.configId) {
+      // Apenas configId - usar configuração salva sem alterações
       const config = await safeQuery('get-backtest-config', () =>
         prisma.backtestConfig.findFirst({
           where: { id: body.configId, userId: currentUser.id },
@@ -65,7 +121,8 @@ export async function POST(request: NextRequest) {
       params = {
         assets: config.assets.map(a => ({
           ticker: a.ticker,
-          allocation: Number(a.targetAllocation)
+          allocation: Number(a.targetAllocation),
+          averageDividendYield: (a as any).averageDividendYield ? Number((a as any).averageDividendYield) : undefined
         })),
         startDate: config.startDate,
         endDate: config.endDate,

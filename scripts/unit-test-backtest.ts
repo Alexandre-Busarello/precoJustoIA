@@ -143,8 +143,8 @@ async function runUnitTest() {
       const petr4Holding = monthData.holdings.find(h => h.ticker === 'PETR4');
       const itsa4Holding = monthData.holdings.find(h => h.ticker === 'ITSA4');
       
-      if (petr4Price === 0 && petr4Holding) petr4Price = petr4Holding.currentPrice || 0;
-      if (itsa4Price === 0 && itsa4Holding) itsa4Price = itsa4Holding.currentPrice || 0;
+      if (petr4Price === 0 && petr4Holding) petr4Price = petr4Holding.price || 0;
+      if (itsa4Price === 0 && itsa4Holding) itsa4Price = itsa4Holding.price || 0;
     }
     
     // Calcular dividendos esperados

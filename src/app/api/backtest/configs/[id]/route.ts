@@ -7,7 +7,7 @@ import { getCurrentUser } from '@/lib/user-service';
 // GET /api/backtest/configs/[id] - Buscar configuração específica
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -37,7 +37,7 @@ export async function GET(
       }, { status: 403 });
     }
 
-    const configId = params.id;
+    const { id: configId } = await params;
 
     // Buscar configuração completa
     const config = await safeQuery('get-backtest-config-full', () =>

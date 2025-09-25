@@ -6,7 +6,7 @@
  */
 
 // Sazonalidade dos dividendos (mesma do serviço)
-const DIVIDEND_SEASONALITY = {
+const TEST_DIVIDEND_SEASONALITY = {
   1: 0.04,  // Janeiro - 4%
   2: 0.02,  // Fevereiro - 2%
   3: 0.15,  // Março - 15%
@@ -44,7 +44,7 @@ function testDividendLogic() {
   const monthlyResults = [];
   
   for (let month = 1; month <= 12; month++) {
-    const seasonalityFactor = DIVIDEND_SEASONALITY[month as keyof typeof DIVIDEND_SEASONALITY] || 0;
+    const seasonalityFactor = TEST_DIVIDEND_SEASONALITY[month as keyof typeof TEST_DIVIDEND_SEASONALITY] || 0;
     
     // Lógica do serviço
     const annualDividendPerShare = currentPrice * averageDY;
@@ -76,8 +76,8 @@ function testDividendLogic() {
   // Verificar normalização
   console.log();
   console.log('🔍 VERIFICAÇÃO DA NORMALIZAÇÃO:');
-  const sumFactors = Object.values(DIVIDEND_SEASONALITY).reduce((sum, factor) => sum + factor, 0);
-  const sumNormalized = Object.values(DIVIDEND_SEASONALITY).reduce((sum, factor) => sum + (factor / TOTAL_SEASONALITY_SUM), 0);
+  const sumFactors = Object.values(TEST_DIVIDEND_SEASONALITY).reduce((sum, factor) => sum + factor, 0);
+  const sumNormalized = Object.values(TEST_DIVIDEND_SEASONALITY).reduce((sum, factor) => sum + (factor / TOTAL_SEASONALITY_SUM), 0);
   
   console.log(`   📊 Soma dos fatores originais: ${sumFactors.toFixed(3)}`);
   console.log(`   📊 TOTAL_SEASONALITY_SUM: ${TOTAL_SEASONALITY_SUM.toFixed(3)}`);

@@ -147,7 +147,7 @@ function calculateAverageDataQuality(assetsAvailability: any[]): string {
     }
   });
   
-  const avgScore = qualityScores.reduce((sum, score) => sum + score, 0) / qualityScores.length;
+  const avgScore = qualityScores.reduce((sum: number, score: number) => sum + score, 0) / qualityScores.length;
   
   if (avgScore >= 3.5) return 'excellent';
   if (avgScore >= 2.5) return 'good';

@@ -386,7 +386,7 @@ export default function ContatoPage() {
                   </div>
                   <h3 className="text-lg font-bold mb-2">Localização</h3>
                   <p className="text-muted-foreground text-sm">
-                    São Paulo, SP<br />
+                    Blumenau, SC<br />
                     Brasil
                   </p>
                 </CardContent>

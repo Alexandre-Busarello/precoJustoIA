@@ -16,9 +16,9 @@ import {
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Comparador de Ações | Análise Comparativa - Preço Justo AI',
-  description: 'Compare múltiplas ações da B3 lado a lado com análise fundamentalista completa. Indicadores financeiros, valuation e métricas de performance em uma única tela.',
-  keywords: 'comparador de ações, análise comparativa, B3, bovespa, indicadores financeiros, valuation, investimentos',
+  title: 'Comparador de Ações B3 | Compare Ações da Bovespa Lado a Lado - Preço Justo AI',
+  description: '📊 Comparador gratuito de ações da B3/Bovespa! Compare até 6 ações lado a lado com análise fundamentalista completa: P/L, ROE, Dividend Yield, margem líquida e +20 indicadores. Descubra qual ação investir na Bovespa!',
+  keywords: 'comparador ações B3, comparar ações bovespa, qual ação investir, comparação ações lado a lado, indicadores financeiros ações, P/L ROE dividend yield, análise comparativa ações, melhores ações bovespa, comparar investimentos B3, ferramenta comparar ações',
   openGraph: {
     title: 'Comparador de Ações | Preço Justo AI',
     description: 'Compare múltiplas ações da B3 com análise fundamentalista completa e indicadores financeiros lado a lado.',

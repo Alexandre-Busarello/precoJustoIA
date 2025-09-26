@@ -3,9 +3,8 @@
 <!-- Resolve Historcio não carregando no backtest -->
 
 Usuario Gratuito pode fazer backtest apenas com PETR4 e VALE3. A simulação não é salva no banco e fica disponivel apenas na interface, saiu da tela não volta mais
-Inclusão Backtest em chamada na Dashboard e navegação
 
-3. Reset de senha, integração com logins sociais. Criar paginas de obrigações legais como politicas de privacidade e termos de uso;
+
 4.  Revisar Footer;
 5. Mais conteúdos no BLOG;
 6. Parceiro estratégico para dandos (além do BRAPI);

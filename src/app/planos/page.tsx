@@ -22,9 +22,9 @@ import Link from "next/link"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Planos e Preços - Preço Justo AI | Análise Fundamentalista Premium",
-  description: "Escolha o plano ideal para sua análise fundamentalista. Plano gratuito com Graham, Premium com 8 modelos + IA por R$ 47/mês. Compare funcionalidades e economize com plano anual.",
-  keywords: "planos preços, análise fundamentalista, premium, graham, dividend yield, fórmula mágica, IA, preço justo, investimentos, B3",
+  title: "Planos e Preços | Análise Fundamentalista Gratuita + Premium R$ 47/mês - Preço Justo AI",
+  description: "💰 Planos de análise fundamentalista: GRATUITO com Fórmula de Graham + PREMIUM R$ 47/mês com 8 modelos (Dividend Yield, Fórmula Mágica, IA). Compare funcionalidades, economize 12% no plano anual. Investir em ações da B3 nunca foi tão acessível!",
+  keywords: "planos análise fundamentalista, preço análise ações, análise fundamentalista gratuita, plano premium investimentos, quanto custa análise ações, assinatura análise fundamentalista, preço justo ações custo, análise bovespa preço, investir ações barato, planos investimentos B3",
   openGraph: {
     title: "Planos e Preços - Preço Justo AI",
     description: "Plano gratuito com Graham + Premium com 8 modelos e IA por R$ 47/mês. Análise fundamentalista completa para ações da B3.",

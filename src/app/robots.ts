@@ -2,25 +2,25 @@ import { MetadataRoute } from 'next'
 
 export default function robots(): MetadataRoute.Robots {
   const baseUrl = 'https://precojusto.ai'
-  
-  // allow: '/',
-  // disallow: [
-  //   '/api/',
-  //   '/dashboard/',
-  //   '/login/',
-  //   '/register/',
-  //   '/_next/',
-  //   '/admin/',
-  //   '/private/',
-  //   '*.json',
-  //   '/test-markdown/',
-  // ],
 
   return {
     rules: [
       {
         userAgent: '*',
-        allow: '/',
+        allow: [
+          '/',
+          '/acao/',
+          '/compara-acoes/',
+          '/ranking',
+          '/comparador',
+          '/metodologia',
+          '/planos',
+          '/blog/',
+          '/sobre',
+          '/contato',
+          '/como-funciona',
+          '/fundador',
+        ],
         disallow: [
           '/api/',
           '/dashboard/',
@@ -31,6 +31,9 @@ export default function robots(): MetadataRoute.Robots {
           '/private/',
           '*.json',
           '/test-markdown/',
+          '/checkout/',
+          '/esqueci-senha/',
+          '/redefinir-senha/',
         ],
       },
       {

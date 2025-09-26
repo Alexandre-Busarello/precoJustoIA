@@ -37,12 +37,12 @@ import { authOptions } from "@/lib/auth"
 import { blogPosts } from "@/lib/blog-data"
 
 export const metadata: Metadata = {
-  title: "Preço Justo AI - Análise Fundamentalista de Ações com Inteligência Artificial | Investimentos B3",
-  description: "Descubra ações subvalorizadas na B3 com análise fundamentalista automatizada. Modelos de Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1 e IA. Rankings inteligentes, comparador de ações e análise completa. Comece grátis!",
-  keywords: "análise fundamentalista, ações B3, bovespa, investimentos, valuation, Graham, dividend yield, fórmula mágica, IA, inteligência artificial, ranking ações, comparador ações, análise de ações, preço justo, investir em ações",
+  title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI - Investimentos Bovespa",
+  description: "🚀 Análise fundamentalista automatizada de ações da B3/Bovespa com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 8 modelos de valuation. Rankings gratuitos, comparador de ações e preço justo. +350 empresas analisadas. Comece grátis!",
+  keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, valuation ações, como investir em ações, melhores ações B3, análise de ações grátis, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações, comparador ações bovespa, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
   openGraph: {
-    title: "Preço Justo AI - Análise Fundamentalista com IA para Ações da B3",
-    description: "Plataforma completa de análise fundamentalista com IA. Encontre ações subvalorizadas usando modelos consagrados de valuation. Mais de 350 empresas da B3 analisadas.",
+    title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI",
+    description: "🚀 Análise fundamentalista automatizada de ações da B3/Bovespa com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 8 modelos de valuation. +350 empresas analisadas. Comece grátis!",
     type: "website",
     url: "https://precojusto.ai",
     siteName: "Preço Justo AI",
@@ -50,8 +50,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Preço Justo AI - Análise Fundamentalista com IA",
-    description: "Encontre as melhores oportunidades de investimento na B3 com análise fundamentalista automatizada e IA.",
+    title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI",
+    description: "🚀 Análise fundamentalista automatizada de ações da B3/Bovespa com IA. Fórmula de Graham, Dividend Yield + 8 modelos. Comece grátis!",
   },
   robots: {
     index: true,
@@ -93,19 +93,19 @@ export default async function Home() {
             </Badge>
           </div>
           
-          <h1 className="text-6xl sm:text-7xl lg:text-8xl font-bold tracking-tight mb-8">
+            <h1 className="text-6xl sm:text-7xl lg:text-8xl font-bold tracking-tight mb-8">
             <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-              Encontre
+              Análise Fundamentalista
             </span>{" "}
-            <span className="text-foreground">as melhores</span>{" "}
+            <span className="text-foreground">de</span>{" "}
             <span className="bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">
-              ações da B3
+              Ações B3 com IA
             </span>
           </h1>
           
           <p className="text-2xl text-muted-foreground mb-12 max-w-4xl mx-auto leading-relaxed">
-            <strong>Análise fundamentalista automatizada com IA</strong> para descobrir ações subvalorizadas. 
-            Use modelos consagrados como Graham, Dividend Yield, Fórmula Mágica e Fundamentalista 3+1 em mais de <strong>350 empresas da B3</strong>.
+            <strong>Descubra as melhores ações da Bovespa</strong> com análise fundamentalista automatizada e IA. 
+            Use modelos consagrados como <strong>Graham, Dividend Yield, Fórmula Mágica</strong> e mais 5 estratégias em <strong>+350 empresas da B3</strong>. Investir em ações nunca foi tão fácil!
           </p>
 
           {/* Social Proof */}

@@ -19,9 +19,9 @@ import {
 import Link from "next/link"
 
 export const metadata: Metadata = {
-  title: "Metodologia - Preço Justo AI | 8 Modelos de Valuation e Análise Fundamentalista Detalhada",
-  description: "Conheça em detalhes nossa metodologia de análise fundamentalista: Fórmula de Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, FCD e mais. Base científica e acadêmica.",
-  keywords: "metodologia análise fundamentalista, fórmula graham detalhada, dividend yield metodologia, fórmula mágica greenblatt, FCD fluxo caixa descontado, valuation ações",
+  title: "Metodologia de Análise Fundamentalista | Fórmula de Graham, Dividend Yield, Fórmula Mágica - Preço Justo AI",
+  description: "📚 Metodologia completa de análise fundamentalista de ações: Fórmula de Graham, Dividend Yield, Fórmula Mágica de Greenblatt, Fundamentalista 3+1, FCD, Gordon + IA. Base científica e acadêmica para investir em ações da B3/Bovespa.",
+  keywords: "metodologia análise fundamentalista, como fazer análise fundamentalista, fórmula benjamin graham, dividend yield como calcular, fórmula mágica joel greenblatt, fluxo caixa descontado FCD, modelo gordon dividendos, valuation ações metodologia, análise fundamentalista passo a passo, como analisar ações bovespa",
 }
 
 export default function MetodologiaPage() {

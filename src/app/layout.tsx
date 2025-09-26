@@ -20,11 +20,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Preço Justo AI - Análise Fundamentalista com IA",
-    template: "%s | Preço Justo AI"
+    default: "Preço Justo AI - Análise Fundamentalista de Ações B3 com IA",
+    template: "%s | Preço Justo AI - Análise Fundamentalista Ações B3"
   },
-  description: "Plataforma completa de análise fundamentalista com IA para ações da B3. Encontre ações subvalorizadas usando modelos consagrados de valuation como Graham, Dividend Yield e Fórmula Mágica.",
-  keywords: "análise fundamentalista, ações B3, bovespa, investimentos, valuation, Graham, dividend yield, fórmula mágica, IA, inteligência artificial, ranking ações, comparador ações",
+  description: "🚀 Plataforma completa de análise fundamentalista com IA para ações da B3/Bovespa. Encontre ações subvalorizadas usando modelos consagrados: Graham, Dividend Yield, Fórmula Mágica + 5 estratégias. Rankings gratuitos, comparador e preço justo de +350 empresas.",
+  keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, como investir em ações, melhores ações B3, valuation ações, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações bovespa, comparador ações B3, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
   authors: [{ name: "Preço Justo AI" }],
   creator: "Preço Justo AI",
   publisher: "Preço Justo AI",
@@ -42,8 +42,8 @@ export const metadata: Metadata = {
     locale: 'pt_BR',
     url: 'https://precojusto.ai',
     siteName: 'Preço Justo AI',
-    title: 'Preço Justo AI - Análise Fundamentalista com IA',
-    description: 'Plataforma completa de análise fundamentalista com IA para ações da B3. Encontre ações subvalorizadas usando modelos consagrados de valuation.',
+    title: 'Preço Justo AI - Análise Fundamentalista de Ações B3 com IA',
+    description: '🚀 Plataforma completa de análise fundamentalista com IA para ações da B3/Bovespa. Encontre ações subvalorizadas usando modelos consagrados: Graham, Dividend Yield, Fórmula Mágica + 5 estratégias.',
     images: [
       {
         url: '/logo-preco-justo.png',

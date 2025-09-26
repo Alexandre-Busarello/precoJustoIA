@@ -174,8 +174,10 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
   const gainPercentage = result.totalInvested > 0 ? (totalGain / result.totalInvested) * 100 : 0;
   const totalMonths = (result.positiveMonths || 0) + (result.negativeMonths || 0);
   const consistencyRate = totalMonths > 0 ? ((result.positiveMonths || 0) / totalMonths) * 100 : 0;
-  const averageMonthlyReturn = result.monthlyReturns && result.monthlyReturns.length > 0 
-    ? result.monthlyReturns.reduce((sum, month) => sum + (month.return || 0), 0) / result.monthlyReturns.length
+  // CORREÇÃO: Calcular retorno médio mensal baseado no retorno anualizado (composição correta)
+  // Fórmula: (1 + retorno_anual)^(1/12) - 1
+  const averageMonthlyReturn = result.annualizedReturn > -1 
+    ? Math.pow(1 + result.annualizedReturn, 1/12) - 1
     : 0;
 
   // Calcular sequências de meses positivos e negativos
@@ -610,7 +612,12 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                   </div>
                 )}
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Retorno Médio Mensal:</span>
+                  <div className="flex flex-col">
+                    <span className="text-sm sm:text-base">Retorno Médio Mensal (Composto):</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Equivalente mensal do retorno anualizado
+                    </span>
+                  </div>
                   <span className={`font-semibold text-sm sm:text-base ${averageMonthlyReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatPercentage(averageMonthlyReturn)}
                   </span>

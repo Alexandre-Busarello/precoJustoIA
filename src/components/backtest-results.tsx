@@ -214,6 +214,129 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
   const { longestPositiveStreak, longestNegativeStreak } = calculateStreaks();
 
+  // Calcular métricas de recuperação após perdas
+  const calculateRecoveryMetrics = () => {
+    if (!result.monthlyReturns || result.monthlyReturns.length === 0) {
+      return {
+        averageRecoveryTime: 0,
+        maxRecoveryTime: 0,
+        recoveryCount: 0,
+        recoverySuccessRate: 0,
+        avgLossBeforeRecovery: 0,
+        recoveryPeriods: [],
+        isCurrentlyInDrawdown: false,
+        currentDrawdownDuration: 0
+      };
+    }
+
+    // Ordenar por data para análise cronológica
+    const sortedReturns = [...result.monthlyReturns].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    const recoveryPeriods: Array<{
+      startMonth: number;
+      endMonth: number;
+      duration: number;
+      maxLoss: number;
+      startValue: number;
+      endValue: number;
+      isComplete: boolean;
+    }> = [];
+
+    let currentPeak = sortedReturns[0]?.portfolioValue || 0;
+    let currentPeakIndex = 0;
+    let inDrawdown = false;
+    let drawdownStartIndex = 0;
+    let maxDrawdownInPeriod = 0;
+    let drawdownStartValue = 0;
+
+    for (let i = 1; i < sortedReturns.length; i++) {
+      const currentValue = sortedReturns[i].portfolioValue;
+      
+      if (currentValue > currentPeak) {
+        // Novo pico - se estávamos em drawdown, registrar recuperação COMPLETA
+        if (inDrawdown) {
+          const recoveryDuration = i - drawdownStartIndex;
+          recoveryPeriods.push({
+            startMonth: drawdownStartIndex,
+            endMonth: i,
+            duration: recoveryDuration,
+            maxLoss: maxDrawdownInPeriod,
+            startValue: drawdownStartValue,
+            endValue: currentValue,
+            isComplete: true // Recuperação completa - superou o pico anterior
+          });
+          inDrawdown = false;
+        }
+        
+        currentPeak = currentValue;
+        currentPeakIndex = i;
+        maxDrawdownInPeriod = 0;
+      } else if (currentValue < currentPeak) {
+        // Valor abaixo do pico
+        if (!inDrawdown) {
+          // Início de um novo drawdown
+          inDrawdown = true;
+          drawdownStartIndex = currentPeakIndex;
+          drawdownStartValue = currentPeak;
+        }
+        
+        const currentDrawdown = (currentPeak - currentValue) / currentPeak;
+        maxDrawdownInPeriod = Math.max(maxDrawdownInPeriod, currentDrawdown);
+      }
+    }
+
+    // Verificar se terminou em drawdown não recuperado
+    const finalValue = sortedReturns[sortedReturns.length - 1]?.portfolioValue || 0;
+    const isCurrentlyInDrawdown = inDrawdown && finalValue < currentPeak;
+    const currentDrawdownDuration = isCurrentlyInDrawdown ? sortedReturns.length - 1 - drawdownStartIndex : 0;
+
+    // CORREÇÃO CRÍTICA: Só considerar recuperações COMPLETAS e significativas
+    // Filtrar apenas recuperações que:
+    // 1. Foram completadas (isComplete = true)
+    // 2. Tiveram perdas > 5%
+    // 3. Efetivamente superaram o pico anterior
+    const significantCompleteRecoveries = recoveryPeriods.filter(period => 
+      period.maxLoss > 0.05 && 
+      period.isComplete && 
+      period.endValue > period.startValue
+    );
+    
+    const averageRecoveryTime = significantCompleteRecoveries.length > 0 
+      ? significantCompleteRecoveries.reduce((sum, period) => sum + period.duration, 0) / significantCompleteRecoveries.length 
+      : 0;
+    
+    const maxRecoveryTime = significantCompleteRecoveries.length > 0 
+      ? Math.max(...significantCompleteRecoveries.map(period => period.duration)) 
+      : 0;
+
+    const avgLossBeforeRecovery = significantCompleteRecoveries.length > 0
+      ? significantCompleteRecoveries.reduce((sum, period) => sum + period.maxLoss, 0) / significantCompleteRecoveries.length
+      : 0;
+
+    // Contar total de drawdowns significativos (incluindo o atual se existir)
+    const allSignificantDrawdowns = recoveryPeriods.filter(period => period.maxLoss > 0.05).length + 
+      (isCurrentlyInDrawdown && maxDrawdownInPeriod > 0.05 ? 1 : 0);
+    
+    const recoverySuccessRate = allSignificantDrawdowns > 0 
+      ? (significantCompleteRecoveries.length / allSignificantDrawdowns) * 100 
+      : 100;
+
+    return {
+      averageRecoveryTime,
+      maxRecoveryTime,
+      recoveryCount: significantCompleteRecoveries.length,
+      recoverySuccessRate,
+      avgLossBeforeRecovery,
+      recoveryPeriods: significantCompleteRecoveries,
+      isCurrentlyInDrawdown,
+      currentDrawdownDuration
+    };
+  };
+
+  const recoveryMetrics = calculateRecoveryMetrics();
+
   // Preparar dados para o gráfico
   const chartData = result.monthlyReturns && result.monthlyReturns.length > 0 
     ? result.monthlyReturns.map((month, index) => ({
@@ -472,7 +595,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       </Card>
 
       {/* Métricas Principais */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
         <MetricCard
           title="Volatilidade"
           value={formatPercentage(result.volatility)}
@@ -500,6 +623,25 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
           icon={<Calendar />}
           color="blue"
           description={`${result.positiveMonths} meses positivos de ${result.positiveMonths + result.negativeMonths}`}
+        />
+        <MetricCard
+          title="Tempo de Recuperação"
+          value={
+            recoveryMetrics.isCurrentlyInDrawdown 
+              ? `${recoveryMetrics.currentDrawdownDuration}+ meses` 
+              : recoveryMetrics.averageRecoveryTime > 0 
+                ? `${recoveryMetrics.averageRecoveryTime.toFixed(1)} meses` 
+                : 'N/A'
+          }
+          icon={recoveryMetrics.isCurrentlyInDrawdown ? <TrendingDown /> : <TrendingUp />}
+          color={recoveryMetrics.isCurrentlyInDrawdown ? "red" : "purple"}
+          description={
+            recoveryMetrics.isCurrentlyInDrawdown 
+              ? `Em drawdown há ${recoveryMetrics.currentDrawdownDuration} meses`
+              : recoveryMetrics.recoveryCount > 0 
+                ? `Média após ${recoveryMetrics.recoveryCount} recuperações completas` 
+                : 'Nenhuma perda significativa'
+          }
         />
         <MetricCard
           title="Dividendos Recebidos"
@@ -1057,7 +1199,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
         {/* Análise de Risco */}
         <TabsContent value="risk">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1095,6 +1237,97 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5" />
+                  Capacidade de Recuperação
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  {recoveryMetrics.isCurrentlyInDrawdown ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Status Atual:</span>
+                        <span className="font-semibold text-red-600">
+                          Em Drawdown
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Duração do Drawdown Atual:</span>
+                        <span className="font-semibold text-red-600">
+                          {recoveryMetrics.currentDrawdownDuration} meses
+                        </span>
+                      </div>
+                      <Separator />
+                    </>
+                  ) : null}
+                  
+                  <div className="flex justify-between">
+                    <span>Recuperações Completas:</span>
+                    <span className="font-semibold text-green-600">
+                      {recoveryMetrics.recoveryCount} vezes
+                    </span>
+                  </div>
+                  
+                  {recoveryMetrics.recoveryCount > 0 && (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Tempo Médio de Recuperação:</span>
+                        <span className="font-semibold text-blue-600">
+                          {recoveryMetrics.averageRecoveryTime.toFixed(1)} meses
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Maior Tempo de Recuperação:</span>
+                        <span className="font-semibold text-orange-600">
+                          {recoveryMetrics.maxRecoveryTime} meses
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Perda Média Antes da Recuperação:</span>
+                        <span className="font-semibold text-red-600">
+                          {formatPercentage(recoveryMetrics.avgLossBeforeRecovery)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  
+                  <Separator />
+                  <div className="flex justify-between">
+                    <span>Taxa de Sucesso de Recuperação:</span>
+                    <span className={`font-semibold ${recoveryMetrics.recoverySuccessRate >= 80 ? 'text-green-600' : recoveryMetrics.recoverySuccessRate >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {recoveryMetrics.recoverySuccessRate.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+                
+                {recoveryMetrics.isCurrentlyInDrawdown ? (
+                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800">
+                    <p className="text-xs text-red-700 dark:text-red-300">
+                      <strong>⚠️ Atenção:</strong> A carteira está atualmente em drawdown há {recoveryMetrics.currentDrawdownDuration} meses e ainda não se recuperou completamente. 
+                      {recoveryMetrics.recoveryCount > 0 && (
+                        <span> Baseado no histórico, recuperações anteriores levaram em média {recoveryMetrics.averageRecoveryTime.toFixed(1)} meses.</span>
+                      )}
+                    </p>
+                  </div>
+                ) : recoveryMetrics.recoveryCount > 0 ? (
+                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      <strong>💡 Interpretação:</strong> Após perdas superiores a 5%, a carteira conseguiu se recuperar completamente em média em {recoveryMetrics.averageRecoveryTime.toFixed(1)} meses.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg">
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                      <strong>🎉 Excelente:</strong> A carteira não teve perdas significativas (&gt;5%) durante o período analisado.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
                   <Info className="w-5 h-5" />
                   Interpretação dos Riscos
                 </CardTitle>
@@ -1122,6 +1355,42 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                   </p>
                 </div>
 
+                {recoveryMetrics.isCurrentlyInDrawdown ? (
+                  <div className="p-3 bg-red-50 dark:bg-red-950/20 rounded-lg">
+                    <h5 className="font-semibold text-red-800 dark:text-red-200 mb-1">
+                      Drawdown Atual: {recoveryMetrics.currentDrawdownDuration} meses
+                    </h5>
+                    <p className="text-red-700 dark:text-red-300">
+                      {recoveryMetrics.currentDrawdownDuration < 6 ? 'Drawdown recente - ainda dentro do esperado' :
+                       recoveryMetrics.currentDrawdownDuration < 12 ? 'Drawdown prolongado - requer paciência' :
+                       recoveryMetrics.currentDrawdownDuration < 24 ? 'Drawdown longo - situação preocupante' :
+                       'Drawdown muito longo - revisão da estratégia recomendada'}
+                    </p>
+                    {recoveryMetrics.recoveryCount > 0 && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        📊 Histórico: Recuperações anteriores levaram em média {recoveryMetrics.averageRecoveryTime.toFixed(1)} meses
+                      </p>
+                    )}
+                  </div>
+                ) : recoveryMetrics.recoveryCount > 0 && (
+                  <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+                    <h5 className="font-semibold text-purple-800 dark:text-purple-200 mb-1">
+                      Recuperação: {recoveryMetrics.averageRecoveryTime.toFixed(1)} meses (média)
+                    </h5>
+                    <p className="text-purple-700 dark:text-purple-300">
+                      {recoveryMetrics.averageRecoveryTime < 3 ? 'Recuperação rápida - boa resiliência' :
+                       recoveryMetrics.averageRecoveryTime < 6 ? 'Recuperação moderada - resiliência adequada' :
+                       recoveryMetrics.averageRecoveryTime < 12 ? 'Recuperação lenta - paciência necessária' :
+                       'Recuperação muito lenta - alta persistência necessária'}
+                    </p>
+                    {recoveryMetrics.maxRecoveryTime > recoveryMetrics.averageRecoveryTime * 2 && (
+                      <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                        ⚠️ Atenção: A pior recuperação levou {recoveryMetrics.maxRecoveryTime} meses
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {result.sharpeRatio && (
                   <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
                     <h5 className="font-semibold text-green-800 dark:text-green-200 mb-1">
@@ -1131,6 +1400,17 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                       {result.sharpeRatio > 1 ? 'Excelente retorno ajustado ao risco' :
                        result.sharpeRatio > 0.5 ? 'Bom retorno ajustado ao risco' :
                        'Retorno baixo em relação ao risco assumido'}
+                    </p>
+                  </div>
+                )}
+
+                {recoveryMetrics.recoveryCount === 0 && (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg">
+                    <h5 className="font-semibold text-emerald-800 dark:text-emerald-200 mb-1">
+                      🎉 Sem Perdas Significativas
+                    </h5>
+                    <p className="text-emerald-700 dark:text-emerald-300">
+                      A carteira não teve perdas superiores a 5% durante o período analisado, demonstrando excelente estabilidade.
                     </p>
                   </div>
                 )}

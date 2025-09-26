@@ -29,7 +29,7 @@ export function SEOStructuredData({
   const defaultImage = `${baseUrl}/logo-preco-justo.png`
 
   const getStructuredData = () => {
-    const baseData = {
+    const baseData: any = {
       "@context": "https://schema.org",
       "@graph": [
         // Organization

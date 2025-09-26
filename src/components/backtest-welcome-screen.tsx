@@ -416,15 +416,15 @@ export function BacktestWelcomeScreen({ onCreateNew, onSelectExisting, onUseAsBa
             <div className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
               <div className="flex items-center justify-center gap-2">
                 <Clock className="w-4 h-4" />
-                <span>Economize tempo</span>
+                <span>Crie uma nova configuração</span>
               </div>
               <div className="flex items-center justify-center gap-2">
                 <CheckCircle className="w-4 h-4" />
-                <span>Configurações testadas</span>
+                <span>Adicione ativos de ações ou rankings</span>
               </div>
               <div className="flex items-center justify-center gap-2">
                 <BarChart3 className="w-4 h-4" />
-                <span>Compare resultados</span>
+                <span>Execute uma simulação</span>
               </div>
             </div>
 

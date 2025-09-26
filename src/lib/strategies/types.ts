@@ -4,10 +4,11 @@ export interface StrategyParams {
   limit?: number;
   companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
   useTechnicalAnalysis?: boolean; // Priorizar ativos em sobrevenda (padrão: false)
+  use7YearAverages?: boolean; // Usar médias de 7 anos dos indicadores quando disponível (padrão: false)
 }
 
 export interface GrahamParams extends StrategyParams {
-  marginOfSafety: number; // Ex: 0.3 para 30%
+  marginOfSafety?: number; // Ex: 0.3 para 30%
 }
 
 export interface DividendYieldParams extends StrategyParams {
@@ -105,6 +106,32 @@ export interface TechnicalAnalysisData {
   overallSignal?: 'SOBRECOMPRA' | 'SOBREVENDA' | 'NEUTRO'; // Sinal geral
 }
 
+// Dados históricos financeiros (da tabela FinancialData)
+export interface HistoricalFinancialData {
+  year: number;
+  roe?: unknown;
+  roic?: unknown;
+  pl?: unknown;
+  pvp?: unknown;
+  dy?: unknown;
+  margemLiquida?: unknown;
+  margemEbitda?: unknown;
+  margemBruta?: unknown;
+  liquidezCorrente?: unknown;
+  liquidezRapida?: unknown;
+  dividaLiquidaPl?: unknown;
+  dividaLiquidaEbitda?: unknown;
+  lpa?: unknown;
+  vpa?: unknown;
+  marketCap?: unknown;
+  earningsYield?: unknown;
+  evEbitda?: unknown;
+  roa?: unknown;
+  passivoAtivos?: unknown;
+  // Outros campos relevantes da FinancialData
+  [key: string]: unknown;
+}
+
 // Dados básicos da empresa
 export interface CompanyData {
   ticker: string;
@@ -113,7 +140,12 @@ export interface CompanyData {
   currentPrice: number;
   logoUrl?: string | null;
   financials: CompanyFinancialData;
+  historicalFinancials?: HistoricalFinancialData[]; // Dados históricos dos últimos 7 anos
   technicalAnalysis?: TechnicalAnalysisData; // Dados de análise técnica opcionais
+  // Demonstrações financeiras para análise de Overall Score
+  incomeStatements?: Record<string, unknown>[];
+  balanceSheets?: Record<string, unknown>[];
+  cashflowStatements?: Record<string, unknown>[];
 }
 
 // Resultado de análise individual

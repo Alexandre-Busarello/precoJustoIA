@@ -87,6 +87,22 @@ function formatLargeNumber(value: number | null): string {
   return formatCurrency(value)
 }
 
+// Função para calcular média histórica de um indicador
+function calculateHistoricalAverage(financialDataArray: Record<string, unknown>[], fieldName: string): number | null {
+  if (!financialDataArray || financialDataArray.length === 0) return null
+  
+  // Pegar até 7 anos de dados históricos (excluindo o primeiro que é atual)
+  const historicalData = financialDataArray.slice(1, 8)
+  const validValues = historicalData
+    .map(data => toNumber(data[fieldName] as PrismaDecimal))
+    .filter(val => val !== null && !isNaN(val as number)) as number[]
+  
+  if (validValues.length === 0) return null
+  
+  const sum = validValues.reduce((acc, val) => acc + val, 0)
+  return sum / validValues.length
+}
+
 // Cache para estratégias calculadas (válido por 10 minutos)
 const strategiesCache = new Map<string, { data: any; timestamp: number }>();
 const STRATEGIES_CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
@@ -455,14 +471,41 @@ async function getStatementsAnalysisForCompany(ticker: string) {
 // Função para executar estratégias e calcular score geral usando serviço centralizado
 async function executeStrategiesForCompany(company: Record<string, unknown>, currentPrice: number, userIsPremium: boolean) {
   try {
+    const financialDataArray = company.financialData as Record<string, unknown>[];
+    
+    // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
+    const historicalFinancials = financialDataArray.slice(1).map(data => ({
+      year: data.year as number,
+      roe: data.roe,
+      roic: data.roic,
+      pl: data.pl,
+      pvp: data.pvp,
+      dy: data.dy,
+      margemLiquida: data.margemLiquida,
+      margemEbitda: data.margemEbitda,
+      margemBruta: data.margemBruta,
+      liquidezCorrente: data.liquidezCorrente,
+      liquidezRapida: data.liquidezRapida,
+      dividaLiquidaPl: data.dividaLiquidaPl,
+      dividaLiquidaEbitda: data.dividaLiquidaEbitda,
+      lpa: data.lpa,
+      vpa: data.vpa,
+      marketCap: data.marketCap,
+      earningsYield: data.earningsYield,
+      evEbitda: data.evEbitda,
+      roa: data.roa,
+      passivoAtivos: data.passivoAtivos
+    }));
+
     const companyForAnalysis = {
       ticker: company.ticker as string,
       name: company.name as string,
       sector: company.sector as string | null,
       industry: company.industry as string | null,
       id: company.id as string,
-      financialData: company.financialData as Record<string, unknown>[],
-      dailyQuotes: company.dailyQuotes as Record<string, unknown>[]
+      financialData: financialDataArray,
+      dailyQuotes: company.dailyQuotes as Record<string, unknown>[],
+      historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined
     };
 
     // Usar o serviço centralizado para análise
@@ -483,7 +526,7 @@ async function executeStrategiesForCompany(company: Record<string, unknown>, cur
   }
 }
 
-// Componente para indicador com blur premium e ranking
+// Componente híbrido para indicador com dados atuais e médias históricas
 function ComparisonIndicatorCard({ 
   title, 
   values, 
@@ -492,7 +535,9 @@ function ComparisonIndicatorCard({
   description,
   isPremium = false,
   userIsPremium = false,
-  higherIsBetter = true
+  higherIsBetter = true,
+  companies,
+  fieldName
 }: {
   title: string
   values: (string | number)[]
@@ -502,11 +547,17 @@ function ComparisonIndicatorCard({
   isPremium?: boolean
   userIsPremium?: boolean
   higherIsBetter?: boolean
+  companies?: any[]
+  fieldName?: string
 }) {
   const shouldBlur = isPremium && !userIsPremium
   
+  // Calcular médias históricas se dados estiverem disponíveis
+  const historicalAverages = companies && fieldName ? 
+    companies.map(company => calculateHistoricalAverage(company.financialData, fieldName)) : 
+    null
 
-  // Converter valores para números para ranking
+  // Converter valores atuais para números para ranking
   const numericValues = values.map(v => {
     if (v === 'N/A' || v === null || v === undefined) return null
     if (typeof v === 'number') return v
@@ -519,11 +570,14 @@ function ComparisonIndicatorCard({
     return null
   })
 
-  // Criar array com dados para ordenação
+  // Criar array com dados para ordenação (usar médias históricas para ranking se disponível)
   const dataForRanking = tickers.map((ticker, index) => ({
     ticker,
-    value: values[index],
-    numericValue: numericValues[index],
+    currentValue: values[index],
+    currentNumeric: numericValues[index],
+    historicalAverage: historicalAverages?.[index] || null,
+    // Usar média histórica para ranking se disponível, senão usar valor atual
+    rankingValue: historicalAverages?.[index] || numericValues[index],
     originalIndex: index
   }))
 
@@ -532,19 +586,19 @@ function ComparisonIndicatorCard({
   
   if (userIsPremium) {
     // Filtrar apenas valores válidos para ranking
-    const validData = dataForRanking.filter(item => item.numericValue !== null)
+    const validData = dataForRanking.filter(item => item.rankingValue !== null)
     
-    // Ordenar baseado em higherIsBetter
+    // Ordenar baseado em higherIsBetter usando rankingValue (média histórica ou atual)
     validData.sort((a, b) => {
       if (higherIsBetter) {
-        return b.numericValue! - a.numericValue!
+        return b.rankingValue! - a.rankingValue!
       } else {
-        return a.numericValue! - b.numericValue!
+        return a.rankingValue! - b.rankingValue!
       }
     })
 
     // Adicionar dados inválidos no final
-    const invalidData = dataForRanking.filter(item => item.numericValue === null)
+    const invalidData = dataForRanking.filter(item => item.rankingValue === null)
     sortedData = [...validData, ...invalidData]
   }
 
@@ -594,6 +648,11 @@ function ComparisonIndicatorCard({
         <div className="flex items-center space-x-2">
           <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
           <CardTitle className="text-sm font-medium truncate">{title}</CardTitle>
+          {historicalAverages && (
+            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+              Ranking por Média 7a
+            </Badge>
+          )}
           {isPremium && (
             <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
           )}
@@ -615,8 +674,17 @@ function ComparisonIndicatorCard({
       </CardHeader>
       <CardContent className={`space-y-3 p-4 sm:p-6 pt-0 ${shouldBlur ? 'blur-sm' : ''}`}>
         {sortedData.map((item, position) => {
-          const rankInfo = getRankInfo(position, item.numericValue !== null)
+          const rankInfo = getRankInfo(position, item.rankingValue !== null)
           const Medal = rankInfo?.medal
+          
+          // Formatar valores para exibição
+          const formatValue = (val: number | null, isPercent: boolean = false) => {
+            if (val === null) return 'N/A'
+            if (isPercent) return `${(val * 100).toFixed(1)}%`
+            return val.toFixed(2)
+          }
+          
+          const isPercentField = !!(fieldName && ['roe', 'roic', 'dy', 'margemLiquida', 'margemEbitda'].includes(fieldName))
           
           return (
             <div 
@@ -640,11 +708,26 @@ function ComparisonIndicatorCard({
                   {item.ticker}
                 </span>
               </div>
-              <span className={`text-sm flex-shrink-0 ${
-                rankInfo ? `${rankInfo.textColor} font-semibold` : ''
-              }`}>
-                {item.value || 'N/A'}
-              </span>
+              
+              {/* Mostrar dados híbridos se disponível */}
+              {historicalAverages && item.historicalAverage !== null ? (
+                <div className={`text-right flex-shrink-0 ${
+                  rankInfo ? `${rankInfo.textColor}` : ''
+                }`}>
+                  <div className="text-sm font-bold">
+                    {item.currentValue}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Média 7a: {formatValue(item.historicalAverage, isPercentField)}
+                  </div>
+                </div>
+              ) : (
+                <span className={`text-sm flex-shrink-0 ${
+                  rankInfo ? `${rankInfo.textColor} font-semibold` : ''
+                }`}>
+                  {item.currentValue || 'N/A'}
+                </span>
+              )}
             </div>
           )
         })}
@@ -762,7 +845,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
     userIsPremium = user?.isPremium || false
   }
 
-  // Buscar dados das empresas com consulta otimizada
+  // Buscar dados das empresas com consulta otimizada (incluindo dados históricos)
   const companiesData = await prisma.company.findMany({
     where: { 
       ticker: { in: tickers }
@@ -780,7 +863,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
       fullTimeEmployees: true,
       financialData: {
         orderBy: { year: 'desc' },
-        take: 1
+        take: 8 // Dados atuais + até 7 anos históricos para médias
       },
       dailyQuotes: {
         orderBy: { date: 'desc' },
@@ -1034,6 +1117,9 @@ export default async function CompareStocksPage({ params }: PageProps) {
           <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center">
             <Target className="w-5 h-5 sm:w-6 sm:h-6 mr-2 flex-shrink-0" />
             <span className="truncate">Indicadores Fundamentalistas</span>
+            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+              Ranking por Médias Históricas
+            </Badge>
           </h2>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -1048,6 +1134,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Quanto o mercado paga por cada R$ 1 de lucro"
               higherIsBetter={false}
               userIsPremium={userIsPremium}
+              companies={orderedCompanies}
+              fieldName="pl"
             />
 
             <ComparisonIndicatorCard
@@ -1061,6 +1149,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Relação entre preço da ação e valor patrimonial"
               higherIsBetter={false}
               userIsPremium={userIsPremium}
+              companies={orderedCompanies}
+              fieldName="pvp"
             />
 
             <ComparisonIndicatorCard
@@ -1074,6 +1164,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Capacidade de gerar lucro com o patrimônio"
               higherIsBetter={true}
               userIsPremium={userIsPremium}
+              companies={orderedCompanies}
+              fieldName="roe"
             />
 
             <ComparisonIndicatorCard
@@ -1087,6 +1179,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Rendimento anual em dividendos"
               higherIsBetter={true}
               userIsPremium={userIsPremium}
+              companies={orderedCompanies}
+              fieldName="dy"
             />
 
             <ComparisonIndicatorCard
@@ -1101,6 +1195,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="margemLiquida"
             />
 
             <ComparisonIndicatorCard
@@ -1115,6 +1211,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="roic"
             />
           </div>
         </div>
@@ -1138,6 +1236,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Valor total da empresa no mercado"
               higherIsBetter={true}
               userIsPremium={userIsPremium}
+              companies={orderedCompanies}
+              fieldName="marketCap"
             />
 
             <ComparisonIndicatorCard
@@ -1151,6 +1251,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               description="Faturamento anual da empresa"
               higherIsBetter={true}
               userIsPremium={userIsPremium}
+              companies={orderedCompanies}
+              fieldName="receitaTotal"
             />
 
             <ComparisonIndicatorCard
@@ -1165,6 +1267,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="lucroLiquido"
             />
           </div>
         </div>
@@ -1190,6 +1294,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="cagrLucros5a"
             />
 
             <ComparisonIndicatorCard
@@ -1204,6 +1310,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="cagrReceitas5a"
             />
 
             <ComparisonIndicatorCard
@@ -1218,6 +1326,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="crescimentoLucros"
             />
 
             <ComparisonIndicatorCard
@@ -1232,6 +1342,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="crescimentoReceitas"
             />
           </div>
         </div>
@@ -1257,6 +1369,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={false}
+              companies={orderedCompanies}
+              fieldName="dividaLiquidaEbitda"
             />
 
             <ComparisonIndicatorCard
@@ -1271,6 +1385,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={false}
+              companies={orderedCompanies}
+              fieldName="dividaLiquidaPl"
             />
 
             <ComparisonIndicatorCard
@@ -1285,6 +1401,8 @@ export default async function CompareStocksPage({ params }: PageProps) {
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
+              companies={orderedCompanies}
+              fieldName="liquidezCorrente"
             />
           </div>
         </div>
@@ -1300,6 +1418,27 @@ export default async function CompareStocksPage({ params }: PageProps) {
             const cacheKey = `strategies-${company.ticker}-${currentPrice}`;
             const cached = strategiesCache.get(cacheKey);
             const { strategies, overallScore } = cached?.data || { strategies: {}, overallScore: null };
+            
+            // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
+            const historicalFinancials = company.financialData.slice(1).map(data => ({
+              year: data.year,
+              pl: data.pl,
+              pvp: data.pvp,
+              roe: data.roe,
+              dy: data.dy,
+              margemLiquida: data.margemLiquida,
+              roic: data.roic,
+              marketCap: data.marketCap,
+              receitaTotal: data.receitaTotal,
+              lucroLiquido: data.lucroLiquido,
+              dividaLiquidaEbitda: data.dividaLiquidaEbitda,
+              dividaLiquidaPl: data.dividaLiquidaPl,
+              liquidezCorrente: data.liquidezCorrente,
+              cagrLucros5a: data.cagrLucros5a,
+              cagrReceitas5a: data.cagrReceitas5a,
+              crescimentoLucros: data.crescimentoLucros,
+              crescimentoReceitas: data.crescimentoReceitas,
+            }))
             
             return {
               ticker: company.ticker,
@@ -1325,6 +1464,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 crescimentoLucros: toNumber(company.financialData[0].crescimentoLucros),
                 crescimentoReceitas: toNumber(company.financialData[0].crescimentoReceitas),
               } : null,
+              historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined,
               strategies,
               overallScore
             }

@@ -379,14 +379,14 @@ export default async function TickerPage({ params }: PageProps) {
     userIsPremium = user?.isPremium || false
   }
 
-  // Buscar dados da empresa e dados financeiros completos em paralelo
+  // Buscar dados da empresa e dados financeiros completos em paralelo (incluindo dados históricos)
   const [companyData, comprehensiveData] = await Promise.all([
     prisma.company.findUnique({
       where: { ticker },
       include: {
         financialData: {
           orderBy: { year: 'desc' },
-          take: 1
+          take: 8 // Dados atuais + até 7 anos históricos para médias
         },
         dailyQuotes: {
           orderBy: { date: 'desc' },

@@ -14,6 +14,28 @@ export interface CompanyAnalysisData {
   sector: string | null;
   currentPrice: number;
   financials: Record<string, unknown>;
+  historicalFinancials?: Array<{
+    year: number;
+    roe?: unknown;
+    roic?: unknown;
+    pl?: unknown;
+    pvp?: unknown;
+    dy?: unknown;
+    margemLiquida?: unknown;
+    margemEbitda?: unknown;
+    margemBruta?: unknown;
+    liquidezCorrente?: unknown;
+    liquidezRapida?: unknown;
+    dividaLiquidaPl?: unknown;
+    dividaLiquidaEbitda?: unknown;
+    lpa?: unknown;
+    vpa?: unknown;
+    marketCap?: unknown;
+    earningsYield?: unknown;
+    evEbitda?: unknown;
+    roa?: unknown;
+    passivoAtivos?: unknown;
+  }>;
 }
 
 // Interface para resultado da análise

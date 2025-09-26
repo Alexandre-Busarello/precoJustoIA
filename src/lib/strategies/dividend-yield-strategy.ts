@@ -14,17 +14,18 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
   }
 
   runAnalysis(companyData: CompanyData, params: DividendYieldParams): StrategyAnalysis {
-    const { financials } = companyData;
+    const { financials, historicalFinancials } = companyData;
     const { minYield } = params;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     
-    const dy = toNumber(financials.dy);
-    const roe = toNumber(financials.roe);
-    const liquidezCorrente = toNumber(financials.liquidezCorrente);
-    const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
-    const pl = toNumber(financials.pl);
-    const margemLiquida = toNumber(financials.margemLiquida);
+    const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
+    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
+    const pl = this.getPL(financials, use7YearAverages, historicalFinancials);
+    const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
-    const roic = toNumber(financials.roic);
+    const roic = this.getROIC(financials, use7YearAverages, historicalFinancials);
 
     const criteria = [
       { label: `Dividend Yield ≥ ${(minYield * 100).toFixed(0)}%`, value: !!(dy && dy >= minYield), description: `DY: ${formatPercent(dy)}` },
@@ -79,6 +80,9 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
     const filteredCompanies = this.filterCompaniesBySize(companies, params.companySize || 'all');
 
     for (const company of filteredCompanies) {
+      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (this.shouldExcludeCompany(company)) continue;
+      
       // Validação customizada para ranking
       const { financials } = company;
       if (!(
@@ -91,15 +95,16 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
         financials.marketCap && toNumber(financials.marketCap)! >= 1000000000
       )) continue;
 
-      const { currentPrice } = company;
-      const dy = toNumber(financials.dy)!;
-      const pl = toNumber(financials.pl);
-      const roe = toNumber(financials.roe) || 0;
-      const liquidezCorrente = toNumber(financials.liquidezCorrente) || 0;
-      const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl) || 0;
-      const margemLiquida = toNumber(financials.margemLiquida) || 0;
+      const { currentPrice, historicalFinancials } = company;
+      const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+      const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials)!;
+      const pl = this.getPL(financials, use7YearAverages, historicalFinancials);
+      const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
+      const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
+      const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials) || 0;
+      const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials) || 0;
       const marketCap = toNumber(financials.marketCap);
-      const roic = toNumber(financials.roic) || 0;
+      const roic = this.getROIC(financials, use7YearAverages, historicalFinancials) || 0;
 
       // Calcular "Score de Qualidade" para evitar dividend traps
       let sustainabilityScore = (
@@ -139,11 +144,16 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
 
     // Ordenar por Score de Sustentabilidade
     const sortedResults = results
-      .sort((a, b) => (b.key_metrics?.sustainabilityScore || 0) - (a.key_metrics?.sustainabilityScore || 0))
-      .slice(0, 50);
+      .sort((a, b) => (b.key_metrics?.sustainabilityScore || 0) - (a.key_metrics?.sustainabilityScore || 0));
+
+    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const uniqueResults = this.removeDuplicateCompanies(sortedResults);
+    
+    // Aplicar limite
+    const limitedResults = uniqueResults.slice(0, 50);
 
     // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: DividendYieldParams): string {

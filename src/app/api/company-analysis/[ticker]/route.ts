@@ -47,7 +47,7 @@ export async function GET(
         include: {
           financialData: {
             orderBy: { year: 'desc' },
-            take: 1
+            take: 8 // Dados atuais + até 7 anos históricos
           },
           dailyQuotes: {
             orderBy: { date: 'desc' },
@@ -77,13 +77,38 @@ export async function GET(
     // Preço atual
     const currentPrice = toNumber(latestQuote?.price) || 0;
 
+    // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
+    const historicalFinancials = companyData.financialData.slice(1).map(data => ({
+      year: data.year,
+      roe: data.roe,
+      roic: data.roic,
+      pl: data.pl,
+      pvp: data.pvp,
+      dy: data.dy,
+      margemLiquida: data.margemLiquida,
+      margemEbitda: data.margemEbitda,
+      margemBruta: data.margemBruta,
+      liquidezCorrente: data.liquidezCorrente,
+      liquidezRapida: data.liquidezRapida,
+      dividaLiquidaPl: data.dividaLiquidaPl,
+      dividaLiquidaEbitda: data.dividaLiquidaEbitda,
+      lpa: data.lpa,
+      vpa: data.vpa,
+      marketCap: data.marketCap,
+      earningsYield: data.earningsYield,
+      evEbitda: data.evEbitda,
+      roa: data.roa,
+      passivoAtivos: data.passivoAtivos
+    }));
+
     // Preparar dados da empresa para análise
     const companyAnalysisData: CompanyAnalysisData = {
       ticker: companyData.ticker,
       name: companyData.name,
       sector: companyData.sector,
       currentPrice,
-      financials: latestFinancials
+      financials: latestFinancials,
+      historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined
     };
 
     // Executar análise completa usando o serviço centralizado

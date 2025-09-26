@@ -14,18 +14,19 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: LowPEParams): StrategyAnalysis {
-    const { financials } = companyData;
+    const { financials, historicalFinancials } = companyData;
     const { maxPE, minROE = 0.15 } = params;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     
-    const pl = toNumber(financials.pl);
-    const roe = toNumber(financials.roe);
+    const pl = this.getPL(financials, use7YearAverages, historicalFinancials);
+    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoReceitas = toNumber(financials.crescimentoReceitas);
-    const margemLiquida = toNumber(financials.margemLiquida);
-    const liquidezCorrente = toNumber(financials.liquidezCorrente);
+    const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
     const roa = toNumber(financials.roa);
-    const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
+    const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
-    const roic = toNumber(financials.roic);
+    const roic = this.getROIC(financials, use7YearAverages, historicalFinancials);
 
     const criteria = [
       { label: `P/L entre 3-${maxPE}`, value: !!(pl && pl > 3 && pl <= maxPE), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
@@ -79,6 +80,9 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
 
     for (const company of companies) {
       if (!this.validateCompanyData(company, params)) continue;
+      
+      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (this.shouldExcludeCompany(company)) continue;
 
       const { financials, currentPrice } = company;
       const pl = toNumber(financials.pl)!;
@@ -127,11 +131,16 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
 
     // Ordenar por Value Score
     const sortedResults = results
-      .sort((a, b) => (b.key_metrics?.valueScore || 0) - (a.key_metrics?.valueScore || 0))
-      .slice(0, 50);
+      .sort((a, b) => (b.key_metrics?.valueScore || 0) - (a.key_metrics?.valueScore || 0));
+
+    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const uniqueResults = this.removeDuplicateCompanies(sortedResults);
+    
+    // Aplicar limite
+    const limitedResults = uniqueResults.slice(0, 50);
 
     // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: LowPEParams): string {

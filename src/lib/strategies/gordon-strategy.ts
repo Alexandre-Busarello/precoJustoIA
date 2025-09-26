@@ -131,20 +131,21 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: GordonParams): StrategyAnalysis {
-    const { financials, currentPrice } = companyData;
+    const { financials, currentPrice, historicalFinancials } = companyData;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     
     // Obter parâmetros ajustados por setor
     const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(companyData, params);
     
-    const dy = toNumber(financials.dy);
+    const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
     const dividendYield12m = toNumber(financials.dividendYield12m);
     const ultimoDividendo = toNumber(financials.ultimoDividendo);
     const payout = toNumber(financials.payout);
-    const roe = toNumber(financials.roe);
+    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoLucros = toNumber(financials.crescimentoLucros);
     const cagrLucros5a = toNumber(financials.cagrLucros5a);
-    const liquidezCorrente = toNumber(financials.liquidezCorrente);
-    const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     
     // Calcular dividendo estimado usando a melhor fonte disponível
     let dividendEstimated = null;
@@ -260,6 +261,9 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company, params)) continue;
       
+      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (this.shouldExcludeCompany(company)) continue;
+      
       const analysis = this.runAnalysis(company, params);
       if (!analysis.isEligible) continue;
       
@@ -324,8 +328,11 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     
     const sortedResults = results.sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
 
+    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const uniqueResults = this.removeDuplicateCompanies(sortedResults);
+
     // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(uniqueResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: GordonParams): string {

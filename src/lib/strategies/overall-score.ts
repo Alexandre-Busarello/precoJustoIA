@@ -100,8 +100,8 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   redFlags.push(...marginAnalysis.redFlags);
   positiveSignals.push(...marginAnalysis.positiveSignals);
 
-  // === ANÁLISE CONTEXTUAL DE ENDIVIDAMENTO ===
-  const debtAnalysis = analyzeDebtContext(balanceSheets, companyStrength, sectorContext);
+  // === ANÁLISE CONTEXTUAL DE ENDIVIDAMENTO E LUCRO ===
+  const debtAnalysis = analyzeDebtContext(balanceSheets, companyStrength, sectorContext, incomeStatements);
   score += debtAnalysis.scoreAdjustment;
   redFlags.push(...debtAnalysis.redFlags);
   positiveSignals.push(...debtAnalysis.positiveSignals);
@@ -423,15 +423,6 @@ function analyzeHistoricalTrends(
     }
   }
 
-  // Análise adicional de volatilidade
-  if (annualAnalysis.revenueVolatility > 0.3) {
-    result.scoreAdjustment -= 3;
-    result.redFlags.push('Alta volatilidade nas receitas');
-  } else if (annualAnalysis.revenueVolatility < 0.1) {
-    result.scoreAdjustment += 3;
-    result.positiveSignals.push('Receitas estáveis e previsíveis');
-  }
-
   return result;
 }
 
@@ -501,15 +492,30 @@ function calculateAnnualTrends(revenues: number[], netIncomes: number[]) {
       }
     }
     
-    // Análise de lucro anual
+    // Análise de lucro anual - CORRIGIDA PARA EVITAR CONTRADIÇÕES
     if (previousYearProfit !== 0 && currentProfit !== 0) {
-      const profitChange = (currentProfit - previousYearProfit) / Math.abs(previousYearProfit);
       validProfitComparisons++;
       
-      if (profitChange > 0.1) { // Crescimento > 10%
-        profitGrowthCount++;
-      } else if (profitChange < -0.1) { // Declínio > 10%
-        profitDeclineCount++;
+      // REGRA 1: Só considerar "crescimento" se AMBOS os lucros forem POSITIVOS
+      if (previousYearProfit > 0 && currentProfit > 0) {
+        const profitChange = (currentProfit - previousYearProfit) / previousYearProfit;
+        if (profitChange > 0.1) { // Crescimento > 10%
+          profitGrowthCount++;
+        } else if (profitChange < -0.1) { // Declínio > 10%
+          profitDeclineCount++;
+        }
+      }
+      // REGRA 2: Se ambos forem negativos, sempre considerar como declínio
+      else if (previousYearProfit < 0 && currentProfit < 0) {
+        profitDeclineCount++; // Prejuízos consistentes = declínio
+      }
+      // REGRA 3: Transição de prejuízo para lucro = crescimento
+      else if (previousYearProfit < 0 && currentProfit > 0) {
+        profitGrowthCount++; // Saiu do prejuízo = crescimento real
+      }
+      // REGRA 4: Transição de lucro para prejuízo = declínio severo
+      else if (previousYearProfit > 0 && currentProfit < 0) {
+        profitDeclineCount++; // Entrou em prejuízo = declínio severo
       }
     }
   }
@@ -759,7 +765,8 @@ function analyzeMarginQuality(
 function analyzeDebtContext(
   balanceSheets: Record<string, unknown>[],
   companyStrength: StatementsAnalysis['companyStrength'],
-  sectorContext: SectorContext
+  sectorContext: SectorContext,
+  incomeStatements?: Record<string, unknown>[]
 ): AnalysisResult {
   const result: AnalysisResult = {
     scoreAdjustment: 0,
@@ -769,6 +776,61 @@ function analyzeDebtContext(
 
   if (balanceSheets.length < 2) return result;
 
+  // ===== ANÁLISE DE LUCRO (OBRIGATÓRIA E MAIOR PESO) =====
+  // Lucro é fundamental - empresa sem lucro consistente não pode ter score alto
+  if (incomeStatements && incomeStatements.length > 0) {
+    // Verificar lucros dos últimos anos
+    const recentProfits = incomeStatements.slice(0, Math.min(3, incomeStatements.length))
+      .map(stmt => toNumber(stmt.netIncome))
+      .filter(profit => profit !== null) as number[];
+    
+    const negativeProfitYears = recentProfits.filter(profit => profit <= 0).length;
+    const totalYears = recentProfits.length;
+    
+    if (totalYears === 0) {
+      // Sem dados de lucro - penalidade severa
+      result.scoreAdjustment -= 40;
+      result.redFlags.push('Dados de lucro não disponíveis - análise comprometida');
+    } else if (negativeProfitYears === totalYears) {
+      // Todos os anos com prejuízo - penalidade máxima
+      result.scoreAdjustment -= 60;
+      result.redFlags.push('Empresa com prejuízos consistentes - inviável para investimento');
+    } else if (negativeProfitYears >= totalYears * 0.67) {
+      // Maioria dos anos com prejuízo - penalidade alta
+      result.scoreAdjustment -= 45;
+      result.redFlags.push('Empresa com prejuízos frequentes - alta instabilidade');
+    } else if (negativeProfitYears > 0) {
+      // Alguns anos com prejuízo - penalidade moderada
+      result.scoreAdjustment -= 25;
+      result.redFlags.push('Empresa com prejuízos ocasionais - risco elevado');
+    } else {
+      // Todos os anos com lucro - bônus
+      result.scoreAdjustment += 10;
+      result.positiveSignals.push('Empresa com lucros consistentes');
+      
+      // Bônus adicional para crescimento do lucro
+      if (recentProfits.length >= 2) {
+        const latestProfit = recentProfits[0];
+        const previousProfit = recentProfits[1];
+        if (latestProfit > previousProfit && previousProfit > 0) {
+          const growthRate = (latestProfit - previousProfit) / previousProfit;
+          if (growthRate > 0.15) {
+            result.scoreAdjustment += 8;
+            result.positiveSignals.push('Crescimento acelerado dos lucros');
+          } else if (growthRate > 0.05) {
+            result.scoreAdjustment += 5;
+            result.positiveSignals.push('Crescimento sólido dos lucros');
+          }
+        }
+      }
+    }
+  } else {
+    // Sem dados de demonstrativo de resultado - penalidade severa
+    result.scoreAdjustment -= 35;
+    result.redFlags.push('Demonstrativo de resultado não disponível - análise comprometida');
+  }
+
+  // ===== ANÁLISE DE ENDIVIDAMENTO (PESO MENOR QUE LUCRO) =====
   // Calcular índice de endividamento atual - só se temos dados válidos
   const latest = balanceSheets[0];
   const currentTotalLiab = toNumber(latest.totalLiab);
@@ -811,39 +873,42 @@ function analyzeDebtContext(
   }
 
   // Avaliar endividamento no contexto - só se temos dados válidos
+  // PESO REDUZIDO: Lucro é mais importante que endividamento
   if (currentDebtRatio !== null) {
     if (currentDebtRatio > criticalDebtThreshold) {
       if (companyStrength === 'VERY_STRONG') {
-        result.scoreAdjustment -= 15; // Penalidade menor para empresas muito fortes
+        result.scoreAdjustment -= 8; // Penalidade menor para empresas muito fortes
       } else {
-        result.scoreAdjustment -= 25;
+        result.scoreAdjustment -= 15; // Reduzido de 25 para 15
         result.redFlags.push('Endividamento excessivo');
       }
     } else if (currentDebtRatio > highDebtThreshold) {
       if (companyStrength === 'WEAK') {
-        result.scoreAdjustment -= 15;
+        result.scoreAdjustment -= 10; // Reduzido de 15 para 10
         result.redFlags.push('Alto endividamento em empresa frágil');
       } else {
-        result.scoreAdjustment -= 8;
+        result.scoreAdjustment -= 5; // Reduzido de 8 para 5
       }
     } else if (currentDebtRatio < 0.3) {
-      result.scoreAdjustment += 5;
+      result.scoreAdjustment += 3; // Reduzido de 5 para 3
       result.positiveSignals.push('Endividamento controlado');
     }
   } else {
     // Se não temos dados de endividamento, dar benefício da dúvida
     result.contextualFactors?.push('Dados de endividamento não disponíveis - benefício da dúvida aplicado');
-    result.positiveSignals.push('Endividamento assumido como controlado (dados não disponíveis)');
+    // REMOVIDO: Não adicionar como ponto forte se não temos dados
+    // Uma empresa com prejuízos não deve ter "endividamento controlado" como ponto forte
   }
 
   // Avaliar crescimento do endividamento - só se temos dados válidos
+  // PESO REDUZIDO: Lucro é mais importante que crescimento da dívida
   if (currentDebtRatio !== null && previousDebtRatio !== null) {
     const debtGrowth = currentDebtRatio - previousDebtRatio;
     if (debtGrowth > 0.15) {
       if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
-        result.scoreAdjustment -= 8;
+        result.scoreAdjustment -= 5; // Reduzido de 8 para 5
       } else {
-        result.scoreAdjustment -= 15;
+        result.scoreAdjustment -= 10; // Reduzido de 15 para 10
         result.redFlags.push('Crescimento acelerado do endividamento');
       }
     }
@@ -915,10 +980,16 @@ function analyzeOperationalResilience(
   // Avaliar eficiência operacional
   const totalAssets = toNumber(latest.balance.totalAssets) || 1;
   const assetTurnover = revenue / totalAssets;
+  const latestProfit = toNumber(latest.income.netIncome) || 0;
   
   if (assetTurnover > 1.0) {
     result.scoreAdjustment += 3;
-    result.positiveSignals.push('Boa eficiência no uso de ativos');
+    // Só considerar ponto forte se a empresa for lucrativa
+    if (latestProfit > 0) {
+      result.positiveSignals.push('Boa eficiência no uso de ativos');
+    } else {
+      result.contextualFactors?.push('Alta rotação de ativos, mas sem conversão em lucro');
+    }
   } else if (assetTurnover < 0.3) {
     result.scoreAdjustment -= 5;
   }
@@ -936,6 +1007,7 @@ function getStrengthMultiplier(companyStrength: StatementsAnalysis['companyStren
     default: return 1.0;
   }
 }
+
 
 // === FUNÇÃO CENTRALIZADA PARA CALCULAR SCORE GERAL ===
 export function calculateOverallScore(strategies: {

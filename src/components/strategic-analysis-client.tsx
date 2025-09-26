@@ -468,6 +468,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
       <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
         <Zap className="w-6 h-6" />
         <span>Análises Fundamentalista</span>
+        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+          Médias 7 anos para indicadores
+        </Badge>
       </h2>
 
       <Tabs defaultValue="fair-value" className="w-full">

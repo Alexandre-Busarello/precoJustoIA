@@ -28,12 +28,15 @@ interface RankBuilderRequest {
 
 // Função para buscar dados de todas as empresas
 async function getCompaniesData(): Promise<CompanyData[]> {
+  const currentYear = new Date().getFullYear();
+  const startYear = currentYear - 4; // Últimos 5 anos para demonstrações
+  
   const companies = await safeQuery('all-companies-data', () =>
     prisma.company.findMany({
       include: {
         financialData: {
           orderBy: { year: 'desc' },
-          take: 1, // Dados mais recentes
+          take: 8, // Dados atuais + até 7 anos históricos
         },
         dailyQuotes: {
           orderBy: { date: 'desc' },
@@ -55,6 +58,31 @@ async function getCompaniesData(): Promise<CompanyData[]> {
             close: true,
             volume: true
           }
+        },
+        // Incluir demonstrações financeiras para cálculo do Overall Score
+        incomeStatements: {
+          where: {
+            period: 'YEARLY',
+            endDate: { gte: new Date(`${startYear}-01-01`) }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 5
+        },
+        balanceSheets: {
+          where: {
+            period: 'YEARLY',
+            endDate: { gte: new Date(`${startYear}-01-01`) }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 5
+        },
+        cashflowStatements: {
+          where: {
+            period: 'YEARLY',
+            endDate: { gte: new Date(`${startYear}-01-01`) }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 5
         }
       },
       where: {
@@ -118,6 +146,30 @@ async function getCompaniesData(): Promise<CompanyData[]> {
       }
     }
 
+    // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
+    const historicalFinancials = company.financialData.slice(1).map(data => ({
+      year: data.year,
+      roe: data.roe,
+      roic: data.roic,
+      pl: data.pl,
+      pvp: data.pvp,
+      dy: data.dy,
+      margemLiquida: data.margemLiquida,
+      margemEbitda: data.margemEbitda,
+      margemBruta: data.margemBruta,
+      liquidezCorrente: data.liquidezCorrente,
+      liquidezRapida: data.liquidezRapida,
+      dividaLiquidaPl: data.dividaLiquidaPl,
+      dividaLiquidaEbitda: data.dividaLiquidaEbitda,
+      lpa: data.lpa,
+      vpa: data.vpa,
+      marketCap: data.marketCap,
+      earningsYield: data.earningsYield,
+      evEbitda: data.evEbitda,
+      roa: data.roa,
+      passivoAtivos: data.passivoAtivos
+    }));
+
     return {
       ticker: company.ticker,
       name: company.name,
@@ -125,7 +177,12 @@ async function getCompaniesData(): Promise<CompanyData[]> {
       currentPrice: toNumber(company.dailyQuotes[0]?.price) || 0,
       logoUrl: company.logoUrl,
       financials: company.financialData[0] || {},
-      technicalAnalysis
+      historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined,
+      technicalAnalysis,
+      // Incluir demonstrações financeiras para cálculo do Overall Score
+      incomeStatements: company.incomeStatements?.length > 0 ? company.incomeStatements : undefined,
+      balanceSheets: company.balanceSheets?.length > 0 ? company.balanceSheets : undefined,
+      cashflowStatements: company.cashflowStatements?.length > 0 ? company.cashflowStatements : undefined
     };
   });
 }

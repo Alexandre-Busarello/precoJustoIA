@@ -15,16 +15,17 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: MagicFormulaParams): StrategyAnalysis {
-    const { financials } = companyData;
+    const { financials, historicalFinancials } = companyData;
     const { minROIC = 0.15, minEY = 0.8 } = params;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     
-    const roic = toNumber(financials.roic);
+    const roic = this.getROIC(financials, use7YearAverages, historicalFinancials);
     const earningsYield = toNumber(financials.earningsYield);
-    const roe = toNumber(financials.roe);
+    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoReceitas = toNumber(financials.crescimentoReceitas);
-    const margemLiquida = toNumber(financials.margemLiquida);
-    const liquidezCorrente = toNumber(financials.liquidezCorrente);
-    const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
+    const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
 
     const criteria = [
@@ -81,6 +82,9 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
 
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company, params)) continue;
+      
+      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (this.shouldExcludeCompany(company)) continue;
 
       const { financials, currentPrice } = company;
       const roic = toNumber(financials.roic)!;
@@ -126,11 +130,16 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
 
     // Ordenar por Magic Score
     const sortedResults = results
-      .sort((a, b) => (b.key_metrics?.magicScore || 0) - (a.key_metrics?.magicScore || 0))
-      .slice(0, 50);
+      .sort((a, b) => (b.key_metrics?.magicScore || 0) - (a.key_metrics?.magicScore || 0));
+
+    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const uniqueResults = this.removeDuplicateCompanies(sortedResults);
+    
+    // Aplicar limite
+    const limitedResults = uniqueResults.slice(0, 50);
 
     // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: MagicFormulaParams): string {

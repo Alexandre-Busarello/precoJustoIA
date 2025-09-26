@@ -68,6 +68,74 @@ export function validateCAGR5Years(cagrLucros5a: number | null): number | null {
   return cagr;
 }
 
+/**
+ * Calcula média histórica de um indicador financeiro usando dados disponíveis
+ * Tenta usar até 7 anos de dados, mas usa o máximo disponível se for menor
+ */
+export function calculateHistoricalAverage(
+  currentValue: unknown,
+  historicalValues?: unknown[]
+): number | null {
+  const current = toNumber(currentValue);
+  
+  // Se não há valor atual, retorna null
+  if (current === null) return null;
+  
+  // Se não há dados históricos ou array vazio, retorna valor atual
+  if (!historicalValues || historicalValues.length === 0) {
+    return current;
+  }
+  
+  // Converter valores históricos para números válidos
+  const validHistoricalValues = historicalValues
+    .map(val => toNumber(val))
+    .filter(val => val !== null && !isNaN(val as number)) as number[];
+  
+  // Se não há valores históricos válidos, retorna valor atual
+  if (validHistoricalValues.length === 0) {
+    return current;
+  }
+  
+  // Combinar valor atual com históricos (máximo 7 anos total)
+  const allValues = [current, ...validHistoricalValues].slice(0, 7);
+  
+  // Calcular média
+  const sum = allValues.reduce((acc, val) => acc + val, 0);
+  return sum / allValues.length;
+}
+
+/**
+ * Extrai valores históricos de um campo específico dos dados históricos
+ */
+export function extractHistoricalValues(
+  historicalData: any[],
+  fieldName: string
+): unknown[] {
+  if (!historicalData || historicalData.length === 0) return [];
+  
+  return historicalData
+    .sort((a, b) => (b.year || 0) - (a.year || 0)) // Ordenar por ano (mais recente primeiro)
+    .slice(0, 7) // Máximo 7 anos
+    .map(data => data[fieldName])
+    .filter(val => val !== null && val !== undefined);
+}
+
+/**
+ * Aplica média histórica de 7 anos a um indicador se habilitado
+ * Fallback para valor atual se médias não estão disponíveis ou desabilitadas
+ */
+export function applyHistoricalAverageIfEnabled(
+  currentValue: unknown,
+  use7YearAverages: boolean = false,
+  historicalValues?: unknown[]
+): number | null {
+  if (!use7YearAverages) {
+    return toNumber(currentValue);
+  }
+  
+  return calculateHistoricalAverage(currentValue, historicalValues);
+}
+
 // Classe base abstrata para todas as estratégias
 export abstract class AbstractStrategy<T extends StrategyParams> implements BaseStrategy<T> {
   abstract readonly name: string;
@@ -81,6 +149,72 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
   protected calculateGrahamFairValue(lpa: number | null, vpa: number | null): number | null {
     if (!lpa || !vpa || lpa <= 0 || vpa <= 0) return null;
     return Math.sqrt(22.5 * lpa * vpa);
+  }
+
+  /**
+   * Obtém valor de indicador aplicando média histórica se habilitado
+   * Evita repetição de código para mesmos indicadores entre estratégias
+   */
+  protected getIndicatorValue(
+    financialData: any,
+    fieldName: string,
+    use7YearAverages: boolean = false,
+    historicalFinancials?: any[]
+  ): number | null {
+    const currentValue = financialData[fieldName];
+    
+    if (!use7YearAverages) {
+      return toNumber(currentValue);
+    }
+    
+    // Extrair valores históricos do campo específico
+    const historicalValues = extractHistoricalValues(historicalFinancials || [], fieldName);
+    
+    return calculateHistoricalAverage(currentValue, historicalValues);
+  }
+
+  /**
+   * Métodos específicos para indicadores mais comuns
+   * Evita repetição e centraliza lógica de médias históricas
+   */
+  protected getROE(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'roe', use7YearAverages, historicalFinancials);
+  }
+
+  protected getROIC(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'roic', use7YearAverages, historicalFinancials);
+  }
+
+  protected getDividendYield(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'dy', use7YearAverages, historicalFinancials);
+  }
+
+  protected getPL(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'pl', use7YearAverages, historicalFinancials);
+  }
+
+  protected getPVP(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'pvp', use7YearAverages, historicalFinancials);
+  }
+
+  protected getMargemLiquida(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'margemLiquida', use7YearAverages, historicalFinancials);
+  }
+
+  protected getMargemEbitda(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'margemEbitda', use7YearAverages, historicalFinancials);
+  }
+
+  protected getLiquidezCorrente(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'liquidezCorrente', use7YearAverages, historicalFinancials);
+  }
+
+  protected getDividaLiquidaPl(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'dividaLiquidaPl', use7YearAverages, historicalFinancials);
+  }
+
+  protected getDividaLiquidaEbitda(financialData: any, use7YearAverages: boolean = false, historicalFinancials?: any[]): number | null {
+    return this.getIndicatorValue(financialData, 'dividaLiquidaEbitda', use7YearAverages, historicalFinancials);
   }
   
   protected calculateFCDFairValue(
@@ -226,6 +360,176 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     }
 
     return score;
+  }
+
+  /**
+   * Verifica se a empresa teve lucros consistentes nos últimos 8 anos disponíveis
+   * Exclui empresas que tiveram mais de 2 anos de prejuízo nos últimos 8 anos
+   * (historicalFinancials contém atual + 7 anos históricos = 8 anos total)
+   */
+  protected hasConsistentProfits(companyData: CompanyData): boolean {
+    const { financials, historicalFinancials } = companyData;
+    
+    // Verificar lucro atual
+    const currentProfit = toNumber(financials.lucroLiquido);
+    
+    // Se não tem dados históricos, usar apenas o lucro atual
+    if (!historicalFinancials || historicalFinancials.length === 0) {
+      // Se não tem lucro atual ou é negativo, excluir
+      return currentProfit !== null && currentProfit > 0;
+    }
+    
+    // Coletar dados de lucro dos últimos anos (incluindo atual)
+    const profitData: { year: number; profit: number | null }[] = [];
+    
+    // Adicionar lucro atual (ano mais recente)
+    const currentYear = new Date().getFullYear();
+    if (currentProfit !== null) {
+      profitData.push({ year: currentYear, profit: currentProfit });
+    }
+    
+    // Adicionar dados históricos (máximo 7 anos históricos)
+    historicalFinancials.forEach(data => {
+      const profit = toNumber(data.lucroLiquido);
+      if (profit !== null && data.year) {
+        profitData.push({ year: data.year, profit });
+      }
+    });
+    
+    // Se não tem dados suficientes (menos de 3 anos), ser mais rigoroso
+    if (profitData.length < 3) {
+      // Todos os anos disponíveis devem ter lucro
+      return profitData.every(data => data.profit !== null && data.profit > 0);
+    }
+    
+    // Contar anos com prejuízo
+    const lossYears = profitData.filter(data => data.profit !== null && data.profit <= 0).length;
+    const totalYears = profitData.length;
+    
+    // Para 8 anos de dados: máximo 2 anos de prejuízo (25%)
+    // Para menos anos: proporcionalmente mais rigoroso
+    let maxLossYears: number;
+    if (totalYears >= 8) {
+      maxLossYears = 2; // Máximo 2 anos de prejuízo em 8 anos
+    } else if (totalYears >= 5) {
+      maxLossYears = 1; // Máximo 1 ano de prejuízo em 5-7 anos
+    } else {
+      maxLossYears = 0; // Nenhum prejuízo permitido para menos de 5 anos
+    }
+    
+    return lossYears <= maxLossYears;
+  }
+
+  /**
+   * Calcula o Overall Score executando todas as estratégias
+   * INCLUINDO análise das demonstrações financeiras (igual à tela da empresa)
+   */
+  protected calculateOverallScore(companyData: CompanyData): number {
+    const { financials, currentPrice, incomeStatements, balanceSheets, cashflowStatements } = companyData;
+    
+    // Preparar dados financeiros no formato esperado
+    const financialData = {
+      roe: toNumber(financials.roe),
+      liquidezCorrente: toNumber(financials.liquidezCorrente),
+      dividaLiquidaPl: toNumber(financials.dividaLiquidaPl),
+      margemLiquida: toNumber(financials.margemLiquida)
+    };
+    
+    // Preparar dados das demonstrações financeiras se disponíveis
+    const statementsData = (incomeStatements && balanceSheets && cashflowStatements) ? {
+      incomeStatements,
+      balanceSheets,
+      cashflowStatements,
+      company: {
+        ticker: companyData.ticker,
+        name: companyData.name,
+        sector: companyData.sector,
+        marketCap: toNumber(financials.marketCap)
+      }
+    } : undefined;
+    
+    try {
+      // Importar estratégias e factory
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { StrategyFactory } = require('./strategy-factory');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { STRATEGY_CONFIG } = require('./strategy-config');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { calculateOverallScore } = require('./overall-score');
+      
+      // Executar todas as estratégias
+      const strategies = {
+        graham: StrategyFactory.runGrahamAnalysis(companyData, STRATEGY_CONFIG.graham),
+        dividendYield: StrategyFactory.runDividendYieldAnalysis(companyData, STRATEGY_CONFIG.dividendYield),
+        lowPE: StrategyFactory.runLowPEAnalysis(companyData, STRATEGY_CONFIG.lowPE),
+        magicFormula: StrategyFactory.runMagicFormulaAnalysis(companyData, STRATEGY_CONFIG.magicFormula),
+        fcd: StrategyFactory.runFCDAnalysis(companyData, STRATEGY_CONFIG.fcd),
+        gordon: StrategyFactory.runGordonAnalysis(companyData, STRATEGY_CONFIG.gordon),
+        fundamentalist: StrategyFactory.runFundamentalistAnalysis(companyData, STRATEGY_CONFIG.fundamentalist)
+      };
+      
+      // Calcular o score usando a função real COM demonstrações financeiras
+      const result = calculateOverallScore(strategies, financialData, currentPrice, statementsData);
+      return result.score;
+      
+    } catch (error) {
+      // Fallback conservador
+      console.warn(`[${companyData.ticker}] Erro ao calcular Overall Score:`, error);
+      return 30; // Score baixo para excluir por segurança
+    }
+  }
+
+  /**
+   * Verifica se a empresa deve ser excluída do ranking
+   * Critérios de exclusão:
+   * 1. Não teve lucros consistentes nos últimos 8 anos disponíveis
+   * 2. Overall Score inferior a 50 (incluindo demonstrações financeiras)
+   */
+  protected shouldExcludeCompany(companyData: CompanyData): boolean {
+    // Critério 1: Verificar lucros consistentes
+    if (!this.hasConsistentProfits(companyData)) {
+      return true;
+    }
+    
+    // Critério 2: Verificar Overall Score (com demonstrações financeiras)
+    const overallScore = this.calculateOverallScore(companyData);
+    if (overallScore < 50) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Remove tickers duplicados da mesma empresa, mantendo apenas o primeiro
+   * Ex: Se RAPT3 aparece antes de RAPT4, remove RAPT4 do ranking
+   */
+  protected removeDuplicateCompanies(results: RankBuilderResult[]): RankBuilderResult[] {
+    const seenCompanyPrefixes = new Set<string>();
+    const filteredResults: RankBuilderResult[] = [];
+    
+    for (const result of results) {
+      // Extrair prefixo da empresa (remove números e letras finais)
+      const companyPrefix = this.extractCompanyPrefix(result.ticker);
+      
+      // Se ainda não vimos essa empresa, adicionar ao resultado
+      if (!seenCompanyPrefixes.has(companyPrefix)) {
+        seenCompanyPrefixes.add(companyPrefix);
+        filteredResults.push(result);
+      }
+      // Se já vimos, pular (manter apenas o primeiro)
+    }
+    
+    return filteredResults;
+  }
+  
+  /**
+   * Extrai o prefixo da empresa do ticker
+   * Ex: RAPT3 -> RAPT, VALE3 -> VALE, PETR4 -> PETR
+   */
+  private extractCompanyPrefix(ticker: string): string {
+    // Remove números e letras finais (3, 4, 11, F, etc.)
+    return ticker.replace(/[0-9]+[A-Z]*$/, '').toUpperCase();
   }
 
   /**

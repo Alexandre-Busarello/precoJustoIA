@@ -107,7 +107,7 @@ const models = [
   { 
     id: "graham", 
     name: "Fórmula de Graham", 
-    description: "Encontra ações baratas de empresas sólidas com filtros de qualidade",
+    description: "Encontra ações baratas de empresas sólidas usando médias históricas e filtros de qualidade",
     icon: <Target className="w-4 h-4" />,
     free: true,
     badge: "Gratuito"
@@ -115,7 +115,7 @@ const models = [
   { 
     id: "fundamentalist", 
     name: "Fundamentalista 3+1", 
-    description: "Análise simplificada com 3 indicadores essenciais + bônus dividendos",
+    description: "Análise simplificada com 3 indicadores essenciais usando médias históricas + bônus dividendos",
     icon: <BarChart3 className="w-4 h-4" />,
     free: false,
     badge: "HOT",
@@ -133,7 +133,7 @@ const models = [
   { 
     id: "lowPE", 
     name: "Value Investing", 
-    description: "P/L baixo combinado com indicadores de qualidade comprovada",
+    description: "P/L baixo combinado com médias históricas de indicadores de qualidade comprovada",
     icon: <BarChart3 className="w-4 h-4" />,
     free: false,
     badge: "HOT",
@@ -142,7 +142,7 @@ const models = [
   { 
     id: "magicFormula", 
     name: "Fórmula Mágica", 
-    description: "Combina qualidade operacional com preços atrativos (Greenblatt)",
+    description: "Combina médias históricas de qualidade operacional com preços atrativos (Greenblatt)",
     icon: <PieChart className="w-4 h-4" />,
     free: false,
     badge: "Premium"
@@ -150,7 +150,7 @@ const models = [
   { 
     id: "dividendYield", 
     name: "Dividend Yield Anti-Trap", 
-    description: "Renda passiva sustentável com filtros que evitam armadilhas",
+    description: "Renda passiva sustentável usando médias históricas com filtros que evitam armadilhas",
     icon: <DollarSign className="w-4 h-4" />,
     free: false,
     badge: "Premium"
@@ -938,7 +938,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
           </span>
         </h2>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Use modelos de valuation consagrados com filtros anti-armadilha para descobrir ações subvalorizadas
+          Use modelos de valuation consagrados com <strong>médias históricas de 7 anos</strong> e filtros anti-armadilha para descobrir ações subvalorizadas
         </p>
       </div>
       
@@ -1344,6 +1344,23 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                 <div className="flex items-center gap-2">
                   <Target className="w-5 h-5 text-blue-600" />
                   <h4 className="font-semibold text-lg">Configure os parâmetros</h4>
+                </div>
+                
+                {/* Nota sobre médias históricas */}
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-green-900 dark:text-green-100 mb-1">
+                        📊 Análise com Médias Históricas
+                      </p>
+                      <p className="text-xs text-green-800 dark:text-green-200">
+                        Todas as estratégias utilizam <strong>médias históricas de até 7 anos</strong> dos indicadores financeiros, 
+                        proporcionando análises mais estáveis e confiáveis. Se não houver dados suficientes, 
+                        usa-se o máximo de anos disponíveis.
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 
                 {selectedModel === "graham" && (

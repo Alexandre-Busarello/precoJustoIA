@@ -13,15 +13,16 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     );
   }
 
-  runAnalysis(companyData: CompanyData): StrategyAnalysis {
-    const { financials, currentPrice } = companyData;
+  runAnalysis(companyData: CompanyData, params: GrahamParams = {}): StrategyAnalysis {
+    const { financials, currentPrice, historicalFinancials } = companyData;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     
     const lpa = toNumber(financials.lpa);
     const vpa = toNumber(financials.vpa);
-    const roe = toNumber(financials.roe);
-    const liquidezCorrente = toNumber(financials.liquidezCorrente);
-    const margemLiquida = toNumber(financials.margemLiquida);
-    const dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
+    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
+    const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const crescimentoLucros = toNumber(financials.crescimentoLucros);
     const cagrLucros5a = toNumber(financials.cagrLucros5a);
     const marketCap = toNumber(financials.marketCap);
@@ -120,7 +121,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
   }
 
   runRanking(companies: CompanyData[], params: GrahamParams): RankBuilderResult[] {
-    const { marginOfSafety } = params;
+    const marginOfSafety = params.marginOfSafety || 0.20;
     const results: RankBuilderResult[] = [];
 
     // Filtrar empresas por tamanho se especificado
@@ -128,13 +129,17 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
 
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company)) continue;
+      
+      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (this.shouldExcludeCompany(company)) continue;
 
-      const { financials, currentPrice } = company;
+      const { financials, currentPrice, historicalFinancials } = company;
+      const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
       const lpa = toNumber(financials.lpa)!;
       const vpa = toNumber(financials.vpa)!;
-      const roe = toNumber(financials.roe) || 0;
-      const liquidezCorrente = toNumber(financials.liquidezCorrente) || 0;
-      const margemLiquida = toNumber(financials.margemLiquida) || 0;
+      const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
+      const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
+      const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials) || 0;
       const crescimentoLucros = toNumber(financials.crescimentoLucros) || 0;
       const cagrLucros5a = toNumber(financials.cagrLucros5a);
       const marketCap = toNumber(financials.marketCap);
@@ -202,11 +207,16 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
 
     // Ordenar por qualidade (empresas sólidas primeiro)
     const sortedResults = results
-      .sort((a, b) => (b.key_metrics?.qualityScore || 0) - (a.key_metrics?.qualityScore || 0))
-      .slice(0, 50);
+      .sort((a, b) => (b.key_metrics?.qualityScore || 0) - (a.key_metrics?.qualityScore || 0));
+
+    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const uniqueResults = this.removeDuplicateCompanies(sortedResults);
+    
+    // Aplicar limite
+    const limitedResults = uniqueResults.slice(0, 50);
 
     // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: GrahamParams): string {
@@ -214,7 +224,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
 
 **Filosofia**: Baseado na fórmula clássica de Benjamin Graham para encontrar ações baratas de empresas sólidas.
 
-**Estratégia**: Preço Justo = √(22.5 × LPA × VPA), buscando margem de segurança de ${(params.marginOfSafety * 100).toFixed(0)}%.
+**Estratégia**: Preço Justo = √(22.5 × LPA × VPA), buscando margem de segurança de ${((params.marginOfSafety || 0.20) * 100).toFixed(0)}%.
 
 ## Filtros de Qualidade Aplicados
 

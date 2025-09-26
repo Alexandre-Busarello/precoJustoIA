@@ -6,14 +6,16 @@ export const STRATEGY_CONFIG = {
   graham: {
     marginOfSafety: 0.20,       // 20% de margem de segurança
     companySize: 'all',         // Filtro de tamanho: todas as empresas
-    useTechnicalAnalysis: true  // Análise técnica ativada por padrão
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
   },
   
   // Estratégia de Dividend Yield
   dividendYield: {
     minYield: 0.04,             // Mínimo 4% de dividend yield
     companySize: 'all',         // Filtro de tamanho: todas as empresas
-    useTechnicalAnalysis: true  // Análise técnica ativada por padrão
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
   },
   
   // Estratégia Low P/E (Value Investing)
@@ -21,7 +23,8 @@ export const STRATEGY_CONFIG = {
     maxPE: 15,                  // P/L máximo de 15
     minROE: 0.12,               // ROE mínimo de 12%
     companySize: 'all',         // Filtro de tamanho: todas as empresas
-    useTechnicalAnalysis: true  // Análise técnica ativada por padrão
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
   },
   
   // Fórmula Mágica de Joel Greenblatt
@@ -30,7 +33,8 @@ export const STRATEGY_CONFIG = {
     minROIC: 0.15,              // ROIC mínimo de 15%
     minEY: 0.08,                // Earnings Yield mínimo de 8%
     companySize: 'all',         // Filtro de tamanho: todas as empresas
-    useTechnicalAnalysis: true  // Análise técnica ativada por padrão
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
   },
   
   // Fluxo de Caixa Descontado (FCD)
@@ -40,7 +44,8 @@ export const STRATEGY_CONFIG = {
     yearsProjection: 5,         // Projeção de 5 anos
     minMarginOfSafety: 0.15,    // Margem de segurança mínima de 15%
     companySize: 'all',         // Filtro de tamanho: todas as empresas
-    useTechnicalAnalysis: true  // Análise técnica ativada por padrão
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
   },
   
   // Modelo de Gordon (Crescimento de Dividendos) - Calibrado por Setor
@@ -50,7 +55,8 @@ export const STRATEGY_CONFIG = {
     useSectoralAdjustment: true, // Ativar ajuste automático por setor
     sectoralWaccAdjustment: 0,  // Ajuste manual adicional (0% por padrão)
     companySize: 'all',         // Filtro de tamanho: todas as empresas
-    useTechnicalAnalysis: true  // Análise técnica ativada por padrão
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
   },
   
   // Estratégia Fundamentalista 3+1
@@ -61,7 +67,8 @@ export const STRATEGY_CONFIG = {
     minPayout: 0.40,            // Payout mínimo de 40%
     maxPayout: 0.80,            // Payout máximo de 80%
     companySize: 'all',         // Filtro de tamanho: todas as empresas
-    useTechnicalAnalysis: true  // Análise técnica ativada por padrão
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
   }
 } as const;
 

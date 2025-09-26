@@ -14,16 +14,17 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: FCDParams = {}): StrategyAnalysis {
-    const { financials, currentPrice } = companyData;
+    const { financials, currentPrice, historicalFinancials } = companyData;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     
     const ebitda = toNumber(financials.ebitda);
     const fluxoCaixaLivre = toNumber(financials.fluxoCaixaLivre);
     const fluxoCaixaOperacional = toNumber(financials.fluxoCaixaOperacional);
     const sharesOutstanding = toNumber(financials.sharesOutstanding);
-    const roe = toNumber(financials.roe);
-    const margemEbitda = toNumber(financials.margemEbitda);
+    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
+    const margemEbitda = this.getMargemEbitda(financials, use7YearAverages, historicalFinancials);
     const crescimentoReceitas = toNumber(financials.crescimentoReceitas);
-    const liquidezCorrente = toNumber(financials.liquidezCorrente);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
     
     const fairValue = this.calculateFCDFairValue(
@@ -95,23 +96,29 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       discountRate = 0.10,     // 10% WACC (padrão para mercado brasileiro)
       yearsProjection = 5,     // 5 anos de projeção explícita
       minMarginOfSafety = 0.20, // 20% margem de segurança mínima
-      limit = 10 
+      limit = 10,
+      use7YearAverages = true  // Usar médias históricas por padrão
     } = params;
 
     const results: RankBuilderResult[] = [];
 
     for (const company of companies) {
       if (!this.validateCompanyData(company)) continue;
+      
+      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (this.shouldExcludeCompany(company)) continue;
 
-      const { financials, currentPrice } = company;
+      const { financials, currentPrice, historicalFinancials } = company;
       const ebitda = toNumber(financials.ebitda)!;
       const fluxoCaixaLivre = toNumber(financials.fluxoCaixaLivre);
       const sharesOutstanding = toNumber(financials.sharesOutstanding)!;
       const marketCap = toNumber(financials.marketCap)!;
-      const roe = toNumber(financials.roe) || 0;
-      const margemEbitda = toNumber(financials.margemEbitda) || 0;
+      
+      // Usar médias históricas para indicadores de qualidade
+      const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
+      const margemEbitda = this.getMargemEbitda(financials, use7YearAverages, historicalFinancials) || 0;
       const crescimentoReceitas = toNumber(financials.crescimentoReceitas) || 0;
-      const liquidezCorrente = toNumber(financials.liquidezCorrente) || 0;
+      const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
 
       // === CÁLCULO DO FCD ===
       
@@ -206,11 +213,16 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
 
     // Ordenar por Upside Potencial (maior margem de segurança primeiro)
     const sortedResults = results
-      .sort((a, b) => (b.upside || 0) - (a.upside || 0))
-      .slice(0, limit);
+      .sort((a, b) => (b.upside || 0) - (a.upside || 0));
+
+    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const uniqueResults = this.removeDuplicateCompanies(sortedResults);
+    
+    // Aplicar limite
+    const limitedResults = uniqueResults.slice(0, limit);
 
     // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(sortedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: FCDParams): string {

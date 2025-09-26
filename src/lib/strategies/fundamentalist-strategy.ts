@@ -16,23 +16,25 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
 
   runAnalysis(companyData: CompanyData, params: FundamentalistParams = {}): StrategyAnalysis {
     const financialData = companyData.financials;
+    const historicalFinancials = companyData.historicalFinancials;
     // Parâmetros padrão
     const minROE = params.minROE || 0.15; // 15%
     const minROIC = params.minROIC || 0.15; // 15%
     const maxDebtToEbitda = params.maxDebtToEbitda || 3.0; // 3x
     const minPayout = params.minPayout || 0.40; // 40%
     const maxPayout = params.maxPayout || 0.80; // 80%
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
 
     // Converter dados financeiros
-    const roe = toNumber(financialData.roe);
-    const roic = toNumber(financialData.roic);
-    const pl = toNumber(financialData.pl);
+    const roe = this.getROE(financialData, use7YearAverages, historicalFinancials);
+    const roic = this.getROIC(financialData, use7YearAverages, historicalFinancials);
+    const pl = this.getPL(financialData, use7YearAverages, historicalFinancials);
     const evEbitda = toNumber(financialData.evEbitda);
-    const dividaLiquidaEbitda = toNumber(financialData.dividaLiquidaEbitda);
+    const dividaLiquidaEbitda = this.getDividaLiquidaEbitda(financialData, use7YearAverages, historicalFinancials);
     const cagrLucros5aRaw = toNumber(financialData.cagrLucros5a);
     const cagrLucros5a = validateCAGR5Years(cagrLucros5aRaw);
     const payout = toNumber(financialData.payout);
-    const dy = toNumber(financialData.dy);
+    const dy = this.getDividendYield(financialData, use7YearAverages, historicalFinancials);
     const setor = companyData.sector || '';
 
     // Verificar se é banco ou seguradora (exceção especial)
@@ -438,6 +440,9 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company)) continue;
       
+      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (this.shouldExcludeCompany(company)) continue;
+      
       const analysis = this.runAnalysis(company, params);
       if (analysis.isEligible) {
         results.push(this.convertToRankingResult(company, analysis));
@@ -451,9 +456,12 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
       return scoreB - scoreA;
     });
     
+    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const uniqueResults = this.removeDuplicateCompanies(results);
+    
     // Aplicar limite se especificado
     const limit = params.limit || 10;
-    const limitedResults = results.slice(0, limit);
+    const limitedResults = uniqueResults.slice(0, limit);
 
     // Aplicar priorização técnica se habilitada
     return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);

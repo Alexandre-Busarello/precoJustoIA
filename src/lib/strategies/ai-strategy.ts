@@ -29,9 +29,14 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     console.log(`🚀 [AI-STRATEGY] Iniciando análise preditiva com IA para ${companies.length} empresas`);
     console.log(`📊 [AI-STRATEGY] Parâmetros: ${JSON.stringify(params)}`);
     
+    // ETAPA 0: Aplicar exclusões automáticas antes da análise IA
+    console.log(`🚫 [AI-STRATEGY] ETAPA 0: Aplicando exclusões automáticas`);
+    const filteredCompanies = companies.filter(company => !this.shouldExcludeCompany(company));
+    console.log(`✅ [AI-STRATEGY] ${companies.length - filteredCompanies.length} empresas excluídas automaticamente`);
+    
     // ETAPA 1: Seleção inteligente com LLM baseada nos critérios do usuário
     console.log(`🧠 [AI-STRATEGY] ETAPA 1: Seleção inteligente com LLM`);
-    const selectedCompanies = await this.selectCompaniesWithAI(companies, params);
+    const selectedCompanies = await this.selectCompaniesWithAI(filteredCompanies, params);
     console.log(`✅ [AI-STRATEGY] ${selectedCompanies.length} empresas selecionadas pela IA na primeira etapa`);
     
     // ETAPA 2: Executar estratégias tradicionais para empresas selecionadas
@@ -48,10 +53,15 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     const sortedByAI = finalResults
       .sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
     
+    // ETAPA 3.5: Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    console.log(`🔄 [AI-STRATEGY] ETAPA 3.5: Removendo empresas duplicadas`);
+    const uniqueResults = this.removeDuplicateCompanies(sortedByAI);
+    console.log(`✅ [AI-STRATEGY] Empresas únicas: ${uniqueResults.length} (removidas ${sortedByAI.length - uniqueResults.length} duplicatas)`);
+    
     // ETAPA 4: Aplicar priorização técnica (complementar à análise da IA)
     console.log(`📊 [AI-STRATEGY] ETAPA 4: Aplicando priorização técnica (useTechnicalAnalysis: ${params.useTechnicalAnalysis || false})`);
     const technicallyPrioritized = this.applyTechnicalPrioritization(
-      sortedByAI, 
+      uniqueResults, 
       selectedCompanies, 
       params.useTechnicalAnalysis || false
     );
@@ -84,19 +94,20 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     console.log(`💰 [AI-STRATEGY] Após filtro de lucratividade: ${filteredCompanies.length} empresas (removidas ${beforeProfitabilityFilter - filteredCompanies.length} sem lucro)`);
     
     // Preparar dados resumidos das empresas filtradas
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     const companiesData = filteredCompanies.map(company => ({
       ticker: company.ticker,
       name: company.name,
       sector: company.sector || 'Não informado',
       currentPrice: company.currentPrice,
       marketCap: toNumber(company.financials.marketCap) || 0,
-      roe: toNumber(company.financials.roe) || 0,
-      pl: toNumber(company.financials.pl) || 0,
-      dy: toNumber(company.financials.dy) || 0,
-      liquidezCorrente: toNumber(company.financials.liquidezCorrente) || 0,
-      margemLiquida: toNumber(company.financials.margemLiquida) || 0,
+      roe: this.getROE(company.financials, use7YearAverages, company.historicalFinancials) || 0,
+      pl: this.getPL(company.financials, use7YearAverages, company.historicalFinancials) || 0,
+      dy: this.getDividendYield(company.financials, use7YearAverages, company.historicalFinancials) || 0,
+      liquidezCorrente: this.getLiquidezCorrente(company.financials, use7YearAverages, company.historicalFinancials) || 0,
+      margemLiquida: this.getMargemLiquida(company.financials, use7YearAverages, company.historicalFinancials) || 0,
       crescimentoReceitas: toNumber(company.financials.crescimentoReceitas) || 0,
-      dividaLiquidaPl: toNumber(company.financials.dividaLiquidaPl) || 0,
+      dividaLiquidaPl: this.getDividaLiquidaPl(company.financials, use7YearAverages, company.historicalFinancials) || 0,
       // Adicionar dados para identificar liquidez do ticker
       companyBaseName: company.name.replace(/\s+(S\.?A\.?|SA|LTDA|ON|PN|UNT).*$/i, '').trim()
     }));
@@ -887,6 +898,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
   // Filtrar empresas sem lucro (ROE negativo ou margem líquida negativa)
   private filterProfitableCompanies(companies: CompanyData[]): CompanyData[] {
     return companies.filter(company => {
+      // Para filtro de lucratividade, usar valores atuais (não médias históricas)
       const roe = toNumber(company.financials.roe);
       const margemLiquida = toNumber(company.financials.margemLiquida);
       const sector = company.sector || '';

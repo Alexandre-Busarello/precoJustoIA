@@ -49,6 +49,26 @@ interface CompanyData {
     crescimentoLucros?: number | null
     crescimentoReceitas?: number | null
   } | null
+  // Dados históricos para médias
+  historicalFinancials?: Array<{
+    year: number
+    pl?: unknown
+    pvp?: unknown
+    roe?: unknown
+    dy?: unknown
+    margemLiquida?: unknown
+    roic?: unknown
+    marketCap?: unknown
+    receitaTotal?: unknown
+    lucroLiquido?: unknown
+    dividaLiquidaEbitda?: unknown
+    dividaLiquidaPl?: unknown
+    liquidezCorrente?: unknown
+    cagrLucros5a?: unknown
+    cagrReceitas5a?: unknown
+    crescimentoLucros?: unknown
+    crescimentoReceitas?: unknown
+  }>
   strategies?: {
     graham?: { score: number; isEligible: boolean; fairValue?: number | null } | null
     dividendYield?: { score: number; isEligible: boolean } | null
@@ -69,6 +89,29 @@ interface CompanyData {
 interface ComparisonTableProps {
   companies: CompanyData[]
   userIsPremium: boolean
+}
+
+// Função para calcular média histórica de um indicador
+function calculateHistoricalAverage(historicalData: any[], fieldName: string): number | null {
+  if (!historicalData || historicalData.length === 0) return null
+  
+  const validValues = historicalData
+    .map(data => {
+      const value = data[fieldName]
+      if (value === null || value === undefined) return null
+      if (typeof value === 'number') return value
+      if (typeof value === 'string') return parseFloat(value)
+      if (value && typeof value === 'object' && 'toNumber' in value) {
+        return (value as { toNumber: () => number }).toNumber()
+      }
+      return parseFloat(String(value))
+    })
+    .filter(val => val !== null && !isNaN(val as number)) as number[]
+  
+  if (validValues.length === 0) return null
+  
+  const sum = validValues.reduce((acc, val) => acc + val, 0)
+  return sum / validValues.length
 }
 
 // Indicadores premium são definidos inline nos objetos de indicadores
@@ -261,12 +304,28 @@ const indicators = [
 
 export function ComparisonTable({ companies, userIsPremium }: ComparisonTableProps) {
 
-  // Função para determinar o melhor valor e empates
-  const getBestValueInfo = (values: (number | null)[], type: 'highest' | 'lowest' | 'neutral') => {
-    if (type === 'neutral') return { bestIndex: -1, tiedIndices: [] }
+  // Função para determinar o melhor valor e empates (usando médias históricas quando disponível)
+  const getBestValueInfo = (
+    values: (number | null)[], 
+    type: 'highest' | 'lowest' | 'neutral',
+    indicatorKey: string
+  ): { bestIndex: number; tiedIndices: number[]; historicalAverages: (number | null)[] | null } => {
+    if (type === 'neutral') return { bestIndex: -1, tiedIndices: [], historicalAverages: null }
     
-    const validValues = values.map((v, i) => ({ value: v, index: i })).filter(v => v.value !== null)
-    if (validValues.length === 0) return { bestIndex: -1, tiedIndices: [] }
+    // Calcular médias históricas para este indicador
+    const historicalAverages = companies.map(company => {
+      if (!company.historicalFinancials) return null
+      return calculateHistoricalAverage(company.historicalFinancials, indicatorKey)
+    })
+    
+    // Usar médias históricas para ranking se disponível, senão usar valores atuais
+    const rankingValues = values.map((currentValue, index) => {
+      const historicalAvg = historicalAverages[index]
+      return historicalAvg !== null ? historicalAvg : currentValue
+    })
+    
+    const validValues = rankingValues.map((v, i) => ({ value: v, index: i })).filter(v => v.value !== null)
+    if (validValues.length === 0) return { bestIndex: -1, tiedIndices: [], historicalAverages }
     
     // Encontrar o melhor valor
     let bestValue: number
@@ -284,7 +343,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
     // Se há empate (mais de um valor igual ao melhor), não destacar um único campeão
     const bestIndex = tiedIndices.length > 1 ? -1 : tiedIndices[0]
     
-    return { bestIndex, tiedIndices }
+    return { bestIndex, tiedIndices, historicalAverages }
   }
 
   // Função removida - não utilizada
@@ -297,6 +356,9 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
         <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
           <ArrowUpDown className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
           <span className="truncate">Comparação Detalhada</span>
+          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+            Ranking por Médias Históricas
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 sm:p-6">
@@ -351,7 +413,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                   // Indicadores Financeiros
                   return c.financialData ? (c.financialData as Record<string, number | null>)[indicator.key] : null
                 })
-                const { bestIndex, tiedIndices } = getBestValueInfo(values, indicator.getBestType())
+                const { bestIndex, tiedIndices, historicalAverages } = getBestValueInfo(values, indicator.getBestType(), indicator.key)
                 const shouldBlur = indicator.isPremium && !userIsPremium
 
                 return (
@@ -370,13 +432,66 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                     {values.map((value, companyIndex) => {
                       const isBest = bestIndex === companyIndex && bestIndex !== -1
                       const isTied = tiedIndices.includes(companyIndex) && tiedIndices.length > 1
+                      const historicalAvg = historicalAverages?.[companyIndex]
+                      
+                      // Função para formatar valores históricos
+                      const formatHistoricalValue = (val: number | null) => {
+                        if (val === null) return 'N/A'
+                        // Usar a mesma formatação do indicador
+                        return indicator.format(val)
+                      }
                       
                       return (
                         <TableCell key={companyIndex} className={`text-center relative p-2 sm:p-4 ${shouldBlur ? 'blur-sm' : ''}`}>
-                          <div className="flex items-center justify-center space-x-1">
-                            <span className={`text-xs sm:text-sm ${isBest ? 'font-bold text-green-600' : isTied ? 'font-semibold text-blue-600' : ''}`}>
-                              {indicator.format(value)}
-                            </span>
+                          {/* Exibição híbrida se há dados históricos */}
+                          {historicalAvg !== null && !indicator.isStrategy ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-center space-x-1">
+                                <div className={`text-xs sm:text-sm font-medium ${isBest ? 'font-bold text-green-600' : isTied ? 'font-semibold text-blue-600' : ''}`}>
+                                  {indicator.format(value)}
+                                </div>
+                                {isBest && userIsPremium && (
+                                  <div className="flex items-center">
+                                    {indicator.getBestType() === 'highest' && (
+                                      <>
+                                        <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 mr-1" />
+                                        <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500" />
+                                      </>
+                                    )}
+                                    {indicator.getBestType() === 'lowest' && (
+                                      <>
+                                        <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 mr-1" />
+                                        <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500" />
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                                {isBest && !userIsPremium && (
+                                  <div className="flex items-center">
+                                    {indicator.getBestType() === 'highest' && (
+                                      <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
+                                    )}
+                                    {indicator.getBestType() === 'lowest' && (
+                                      <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
+                                    )}
+                                  </div>
+                                )}
+                                {isTied && !isBest && (
+                                  <div className="flex items-center" title="Empate">
+                                    <Minus className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Média 7a: {formatHistoricalValue(historicalAvg || null)}
+                              </div>
+                            </div>
+                          ) : (
+                            /* Exibição normal para estratégias ou quando não há dados históricos */
+                            <div className="flex items-center justify-center space-x-1">
+                              <span className={`text-xs sm:text-sm ${isBest ? 'font-bold text-green-600' : isTied ? 'font-semibold text-blue-600' : ''}`}>
+                                {indicator.format(value)}
+                              </span>
                             {isBest && userIsPremium && (
                               <div className="flex items-center">
                                 {indicator.getBestType() === 'highest' && (
@@ -408,7 +523,8 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                                 <Minus className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
                               </div>
                             )}
-                          </div>
+                            </div>
+                          )}
                           {shouldBlur && (
                             <div className="absolute inset-0 flex items-center justify-center bg-background/80">
                               <Lock className="w-4 h-4 text-muted-foreground" />

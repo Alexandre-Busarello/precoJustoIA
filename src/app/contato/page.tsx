@@ -115,7 +115,7 @@ export default function ContatoPage() {
                   Horário comercial: 9h às 18h.
                 </p>
                 <div className="space-y-2 mb-6">
-                  <p className="font-medium">(11) 99999-9999</p>
+                  <p className="font-medium">(21) 979155962</p>
                   <p className="text-sm text-muted-foreground">Apenas usuários Premium</p>
                 </div>
                 <div className="flex items-center justify-center gap-2 mb-6">
@@ -348,6 +348,7 @@ export default function ContatoPage() {
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   O plano gratuito inclui a Fórmula de Graham. O Premium (R$ 47/mês) adiciona 
                   8 modelos de valuation e análises com inteligência artificial do Google Gemini.
+                  Além de backtesting de carteiras, comparação de ativos e análise de risco.
                 </p>
               </CardContent>
             </Card>

@@ -161,12 +161,12 @@ export function Footer() {
             <h4 className="text-lg font-bold mb-4">Legal</h4>
             <ul className="space-y-3 text-gray-300">
               <li>
-                <Link href="#" className="hover:text-blue-400 transition-colors">
+                <Link href="/termos-de-uso" className="hover:text-blue-400 transition-colors">
                   Termos de Uso
                 </Link>
               </li>
               <li>
-                <Link href="#" className="hover:text-blue-400 transition-colors">
+                <Link href="/lgpd" className="hover:text-blue-400 transition-colors">
                   Política de Privacidade
                 </Link>
               </li>
@@ -176,7 +176,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="#" className="hover:text-blue-400 transition-colors">
+                <Link href="/lgpd" className="hover:text-blue-400 transition-colors">
                   LGPD
                 </Link>
               </li>

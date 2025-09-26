@@ -835,9 +835,26 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                             </p>
                             <p>
                               <strong>Investido (do bolso):</strong> {formatCurrency(custodyInfo.totalInvested)} • 
-                              <strong> Valor Atual:</strong> {formatCurrency(asset.finalValue || 0)} • 
-                              <strong> Ganho:</strong> <span className={(asset.finalValue || 0) >= custodyInfo.totalInvested ? 'text-green-600' : 'text-red-600'}>
-                                {formatCurrency((asset.finalValue || 0) - custodyInfo.totalInvested)}
+                              <strong> Valor Atual:</strong> {formatCurrency(asset.finalValue || 0)}
+                              {(asset.rebalanceAmount || 0) < 0 && (
+                                <span> • <strong>Lucro Realizado:</strong> {formatCurrency(Math.abs(asset.rebalanceAmount || 0))}</span>
+                              )}
+                            </p>
+                            <p>
+                              <strong>Ganho Total:</strong> <span className={(() => {
+                                // CORREÇÃO: Ganho total = valor atual + lucros realizados - investido
+                                const realizedProfits = (asset.rebalanceAmount || 0) < 0 ? Math.abs(asset.rebalanceAmount || 0) : 0;
+                                const totalGain = (asset.finalValue || 0) + realizedProfits - custodyInfo.totalInvested;
+                                return totalGain >= 0 ? 'text-green-600' : 'text-red-600';
+                              })()}>
+                                {(() => {
+                                  const realizedProfits = (asset.rebalanceAmount || 0) < 0 ? Math.abs(asset.rebalanceAmount || 0) : 0;
+                                  const totalGain = (asset.finalValue || 0) + realizedProfits - custodyInfo.totalInvested;
+                                  return formatCurrency(totalGain);
+                                })()}
+                              </span>
+                              <span className="text-xs text-gray-500 ml-2">
+                                ({formatCurrency(asset.finalValue || 0)} atual + {formatCurrency((asset.rebalanceAmount || 0) < 0 ? Math.abs(asset.rebalanceAmount || 0) : 0)} realizado - {formatCurrency(custodyInfo.totalInvested)} investido)
                               </span>
                             </p>
                             {(asset.rebalanceAmount || 0) !== 0 && (
@@ -847,7 +864,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                                 </p>
                                 {(asset.rebalanceAmount || 0) < 0 && (
                                   <p className="text-blue-500">
-                                    <strong>💡 Explicação:</strong> Rebalanceamento negativo = vendas que devolveram dinheiro ao seu bolso. O ganho mostrado considera apenas o que você investiu diretamente.
+                                    <strong>💡 Explicação:</strong> Rebalanceamento negativo = vendas que devolveram R$ {formatCurrency(Math.abs(asset.rebalanceAmount || 0))} ao seu bolso. Este lucro realizado está incluído no ganho total mostrado acima.
                                   </p>
                                 )}
                               </div>

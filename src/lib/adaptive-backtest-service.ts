@@ -1982,19 +1982,56 @@ export class AdaptiveBacktestService {
       // Isso evita distorção quando há vendas significativas por rebalanceamento
       const averagePrice = data.finalShares > 0 ? data.totalPurchases / data.totalSharesPurchased : undefined;
       
-      // PERSPECTIVA DO INVESTIDOR: Usar sempre aportes diretos como base para o percentual
-      // Isso é mais intuitivo: "investi X do bolso, hoje vale Y, ganho Z%"
-      const totalNetInvestment = data.contribution + data.reinvestment + data.rebalanceAmount;
+      // CORREÇÃO: Calcular custo efetivo considerando lucros realizados
+      // 
+      // PROBLEMA ANTERIOR: 
+      // - Ativo que valorizou 50% e vendeu metade por rebalanceamento mostrava retorno baixo
+      // - Ativo que recebeu aportes de rebalanceamento mostrava retorno inflado
+      // 
+      // SOLUÇÃO: Considerar o custo efetivo ajustado por vendas realizadas
+      // 
+      // EXEMPLO:
+      // - Aportei R$ 1.000 em PETR4
+      // - PETR4 valorizou para R$ 1.500 
+      // - Vendi R$ 500 por rebalanceamento (1/3 da posição)
+      // - Restaram R$ 1.000 em PETR4 (2/3 da posição original)
+      // - Custo efetivo das ações restantes = R$ 1.000 * (2/3) = R$ 667
+      // - Retorno correto = (R$ 1.000 - R$ 667) / R$ 667 = 50%
+      // - Lucro realizado = R$ 500 - R$ 333 = R$ 167 (já "pago")
       
+      // Custo base: aportes diretos + reinvestimentos (sobras e dividendos)
+      const baseCost = data.contribution + data.reinvestment;
+      
+      // Custo efetivo ajustado: 
+      // - Se vendeu mais do que comprou no rebalanceamento = custo reduzido (lucro realizado)
+      // - Se comprou mais do que vendeu no rebalanceamento = custo aumentado
+      const netRebalanceCost = data.rebalanceAmount; // Já considera vendas (negativo) e compras (positivo)
+      const effectiveCost = baseCost + Math.max(0, netRebalanceCost); // Só adiciona se houve compra líquida
+      
+      // Para ativos que tiveram vendas líquidas (lucro realizado), ajustar o custo proporcionalmente
+      let adjustedCost = effectiveCost;
+      if (netRebalanceCost < 0) {
+        // Houve venda líquida - reduzir o custo proporcionalmente às ações vendidas
+        const totalSharesEverOwned = data.totalSharesPurchased; // Total de ações já possuídas
+        const currentShares = data.finalShares; // Ações atuais
+        const sharesRatio = totalSharesEverOwned > 0 ? currentShares / totalSharesEverOwned : 1;
+        
+        // Custo ajustado = custo proporcional às ações restantes + lucro realizado já "pago"
+        adjustedCost = (baseCost * sharesRatio) + Math.abs(netRebalanceCost);
+        
+        console.log(`📈 ${ticker} - Ajuste por venda: ${totalSharesEverOwned.toFixed(2)} → ${currentShares.toFixed(2)} ações (${(sharesRatio * 100).toFixed(1)}%)`);
+        console.log(`   💰 Custo base: R$ ${baseCost.toFixed(2)} → Custo ajustado: R$ ${adjustedCost.toFixed(2)}`);
+        console.log(`   💎 Lucro realizado: R$ ${Math.abs(netRebalanceCost).toFixed(2)}`);
+      }
+      
+      // Calcular retorno baseado no custo efetivo ajustado
       let totalReturn = 0;
-      if (data.contribution > 0) {
-        // Usar aportes diretos como base (dinheiro que saiu do bolso)
-        totalReturn = (finalValue - data.contribution) / data.contribution;
-        console.log(`📈 Usando perspectiva do investidor: (${finalValue.toFixed(2)} - ${data.contribution.toFixed(2)}) / ${data.contribution.toFixed(2)} = ${(totalReturn * 100).toFixed(2)}%`);
+      if (adjustedCost > 0) {
+        totalReturn = (finalValue + Math.abs(Math.min(0, netRebalanceCost)) - adjustedCost) / adjustedCost;
+        console.log(`📈 Retorno corrigido: (${finalValue.toFixed(2)} + ${Math.abs(Math.min(0, netRebalanceCost)).toFixed(2)} - ${adjustedCost.toFixed(2)}) / ${adjustedCost.toFixed(2)} = ${(totalReturn * 100).toFixed(2)}%`);
       } else {
-        // Fallback para casos sem aportes diretos
-        totalReturn = totalNetInvestment > 0 ? (finalValue - totalNetInvestment) / totalNetInvestment : 0;
-        console.log(`📈 Fallback (sem aportes diretos): usando investimento líquido`);
+        totalReturn = 0;
+        console.log(`📈 Sem custo base para calcular retorno`);
       }
       
       console.log(`📊 ${ticker} (BASEADO EM TRANSAÇÕES):`);
@@ -2002,14 +2039,15 @@ export class AdaptiveBacktestService {
       console.log(`   🔄 Sobras utilizadas + Div. reinvestidos: R$ ${data.reinvestment.toFixed(2)}`);
       console.log(`   ⚖️ Rebalanceamento líquido: R$ ${data.rebalanceAmount.toFixed(2)}`);
       console.log(`   🛒 Total gasto em compras: R$ ${data.totalPurchases.toFixed(2)}`);
-      console.log(`   💰 Investimento líquido: R$ ${totalNetInvestment.toFixed(2)}`);
+      console.log(`   💰 Custo base: R$ ${baseCost.toFixed(2)}`);
+      console.log(`   💰 Custo efetivo ajustado: R$ ${adjustedCost.toFixed(2)}`);
       console.log(`   📊 Ações compradas: ${data.totalSharesPurchased.toFixed(2)}`);
       console.log(`   📈 Shares finais: ${data.finalShares}`);
       console.log(`   💎 Dividendos: R$ ${data.totalDividends.toFixed(2)}`);
       console.log(`   💲 Preço médio: R$ ${averagePrice?.toFixed(2) || 'N/A'}`);
       console.log(`   🎯 Valor final: R$ ${finalValue.toFixed(2)}`);
       
-      console.log(`   📈 Retorno final: ${(totalReturn * 100).toFixed(2)}% (baseado em aportes diretos)`);
+      console.log(`   📈 Retorno final: ${(totalReturn * 100).toFixed(2)}% (baseado em custo efetivo ajustado)`);
       
       results.push({
         ticker,

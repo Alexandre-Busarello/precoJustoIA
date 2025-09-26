@@ -474,27 +474,28 @@ async function executeStrategiesForCompany(company: Record<string, unknown>, cur
     const financialDataArray = company.financialData as Record<string, unknown>[];
     
     // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
+    // IMPORTANTE: Converter todos os Decimal para number para evitar erros de serialização
     const historicalFinancials = financialDataArray.slice(1).map(data => ({
       year: data.year as number,
-      roe: data.roe,
-      roic: data.roic,
-      pl: data.pl,
-      pvp: data.pvp,
-      dy: data.dy,
-      margemLiquida: data.margemLiquida,
-      margemEbitda: data.margemEbitda,
-      margemBruta: data.margemBruta,
-      liquidezCorrente: data.liquidezCorrente,
-      liquidezRapida: data.liquidezRapida,
-      dividaLiquidaPl: data.dividaLiquidaPl,
-      dividaLiquidaEbitda: data.dividaLiquidaEbitda,
-      lpa: data.lpa,
-      vpa: data.vpa,
-      marketCap: data.marketCap,
-      earningsYield: data.earningsYield,
-      evEbitda: data.evEbitda,
-      roa: data.roa,
-      passivoAtivos: data.passivoAtivos
+      roe: toNumber(data.roe as PrismaDecimal),
+      roic: toNumber(data.roic as PrismaDecimal),
+      pl: toNumber(data.pl as PrismaDecimal),
+      pvp: toNumber(data.pvp as PrismaDecimal),
+      dy: toNumber(data.dy as PrismaDecimal),
+      margemLiquida: toNumber(data.margemLiquida as PrismaDecimal),
+      margemEbitda: toNumber(data.margemEbitda as PrismaDecimal),
+      margemBruta: toNumber(data.margemBruta as PrismaDecimal),
+      liquidezCorrente: toNumber(data.liquidezCorrente as PrismaDecimal),
+      liquidezRapida: toNumber(data.liquidezRapida as PrismaDecimal),
+      dividaLiquidaPl: toNumber(data.dividaLiquidaPl as PrismaDecimal),
+      dividaLiquidaEbitda: toNumber(data.dividaLiquidaEbitda as PrismaDecimal),
+      lpa: toNumber(data.lpa as PrismaDecimal),
+      vpa: toNumber(data.vpa as PrismaDecimal),
+      marketCap: toNumber(data.marketCap as PrismaDecimal),
+      earningsYield: toNumber(data.earningsYield as PrismaDecimal),
+      evEbitda: toNumber(data.evEbitda as PrismaDecimal),
+      roa: toNumber(data.roa as PrismaDecimal),
+      passivoAtivos: toNumber(data.passivoAtivos as PrismaDecimal)
     }));
 
     const companyForAnalysis = {
@@ -1431,24 +1432,25 @@ export default async function CompareStocksPage({ params }: PageProps) {
             const { strategies, overallScore } = cached?.data || { strategies: {}, overallScore: null };
             
             // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
+            // IMPORTANTE: Converter todos os Decimal para number para evitar erros de serialização
             const historicalFinancials = company.financialData.slice(1).map(data => ({
               year: data.year,
-              pl: data.pl,
-              pvp: data.pvp,
-              roe: data.roe,
-              dy: data.dy,
-              margemLiquida: data.margemLiquida,
-              roic: data.roic,
-              marketCap: data.marketCap,
-              receitaTotal: data.receitaTotal,
-              lucroLiquido: data.lucroLiquido,
-              dividaLiquidaEbitda: data.dividaLiquidaEbitda,
-              dividaLiquidaPl: data.dividaLiquidaPl,
-              liquidezCorrente: data.liquidezCorrente,
-              cagrLucros5a: data.cagrLucros5a,
-              cagrReceitas5a: data.cagrReceitas5a,
-              crescimentoLucros: data.crescimentoLucros,
-              crescimentoReceitas: data.crescimentoReceitas,
+              pl: toNumber(data.pl as PrismaDecimal),
+              pvp: toNumber(data.pvp as PrismaDecimal),
+              roe: toNumber(data.roe as PrismaDecimal),
+              dy: toNumber(data.dy as PrismaDecimal),
+              margemLiquida: toNumber(data.margemLiquida as PrismaDecimal),
+              roic: toNumber(data.roic as PrismaDecimal),
+              marketCap: toNumber(data.marketCap as PrismaDecimal),
+              receitaTotal: toNumber(data.receitaTotal as PrismaDecimal),
+              lucroLiquido: toNumber(data.lucroLiquido as PrismaDecimal),
+              dividaLiquidaEbitda: toNumber(data.dividaLiquidaEbitda as PrismaDecimal),
+              dividaLiquidaPl: toNumber(data.dividaLiquidaPl as PrismaDecimal),
+              liquidezCorrente: toNumber(data.liquidezCorrente as PrismaDecimal),
+              cagrLucros5a: toNumber(data.cagrLucros5a as PrismaDecimal),
+              cagrReceitas5a: toNumber(data.cagrReceitas5a as PrismaDecimal),
+              crescimentoLucros: toNumber(data.crescimentoLucros as PrismaDecimal),
+              crescimentoReceitas: toNumber(data.crescimentoReceitas as PrismaDecimal),
             }))
             
             return {

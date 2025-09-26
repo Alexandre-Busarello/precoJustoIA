@@ -16,25 +16,25 @@ export interface CompanyAnalysisData {
   financials: Record<string, unknown>;
   historicalFinancials?: Array<{
     year: number;
-    roe?: unknown;
-    roic?: unknown;
-    pl?: unknown;
-    pvp?: unknown;
-    dy?: unknown;
-    margemLiquida?: unknown;
-    margemEbitda?: unknown;
-    margemBruta?: unknown;
-    liquidezCorrente?: unknown;
-    liquidezRapida?: unknown;
-    dividaLiquidaPl?: unknown;
-    dividaLiquidaEbitda?: unknown;
-    lpa?: unknown;
-    vpa?: unknown;
-    marketCap?: unknown;
-    earningsYield?: unknown;
-    evEbitda?: unknown;
-    roa?: unknown;
-    passivoAtivos?: unknown;
+    roe?: number | null;
+    roic?: number | null;
+    pl?: number | null;
+    pvp?: number | null;
+    dy?: number | null;
+    margemLiquida?: number | null;
+    margemEbitda?: number | null;
+    margemBruta?: number | null;
+    liquidezCorrente?: number | null;
+    liquidezRapida?: number | null;
+    dividaLiquidaPl?: number | null;
+    dividaLiquidaEbitda?: number | null;
+    lpa?: number | null;
+    vpa?: number | null;
+    marketCap?: number | null;
+    earningsYield?: number | null;
+    evEbitda?: number | null;
+    roa?: number | null;
+    passivoAtivos?: number | null;
   }>;
 }
 
@@ -217,6 +217,28 @@ export async function executeMultipleCompanyAnalysis(
     id: string;
     financialData: Record<string, unknown>[];
     dailyQuotes: Record<string, unknown>[];
+    historicalFinancials?: Array<{
+      year: number;
+      roe?: number | null;
+      roic?: number | null;
+      pl?: number | null;
+      pvp?: number | null;
+      dy?: number | null;
+      margemLiquida?: number | null;
+      margemEbitda?: number | null;
+      margemBruta?: number | null;
+      liquidezCorrente?: number | null;
+      liquidezRapida?: number | null;
+      dividaLiquidaPl?: number | null;
+      dividaLiquidaEbitda?: number | null;
+      lpa?: number | null;
+      vpa?: number | null;
+      marketCap?: number | null;
+      earningsYield?: number | null;
+      evEbitda?: number | null;
+      roa?: number | null;
+      passivoAtivos?: number | null;
+    }>;
   }>,
   options: {
     isLoggedIn: boolean;
@@ -228,12 +250,39 @@ export async function executeMultipleCompanyAnalysis(
     companies.map(async (company) => {
       const currentPrice = toNumber(company.dailyQuotes[0]?.price) || toNumber(company.financialData[0]?.lpa) || 0;
       
+      // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
+      // IMPORTANTE: Converter todos os Decimal para number para evitar erros de serialização
+      const historicalFinancials = company.historicalFinancials || 
+        (company.financialData.length > 1 ? company.financialData.slice(1).map(data => ({
+          year: data.year as number,
+          roe: toNumber(data.roe),
+          roic: toNumber(data.roic),
+          pl: toNumber(data.pl),
+          pvp: toNumber(data.pvp),
+          dy: toNumber(data.dy),
+          margemLiquida: toNumber(data.margemLiquida),
+          margemEbitda: toNumber(data.margemEbitda),
+          margemBruta: toNumber(data.margemBruta),
+          liquidezCorrente: toNumber(data.liquidezCorrente),
+          liquidezRapida: toNumber(data.liquidezRapida),
+          dividaLiquidaPl: toNumber(data.dividaLiquidaPl),
+          dividaLiquidaEbitda: toNumber(data.dividaLiquidaEbitda),
+          lpa: toNumber(data.lpa),
+          vpa: toNumber(data.vpa),
+          marketCap: toNumber(data.marketCap),
+          earningsYield: toNumber(data.earningsYield),
+          evEbitda: toNumber(data.evEbitda),
+          roa: toNumber(data.roa),
+          passivoAtivos: toNumber(data.passivoAtivos)
+        })) : undefined);
+      
       const companyData: CompanyAnalysisData = {
         ticker: company.ticker,
         name: company.name,
         sector: company.sector,
         currentPrice,
-        financials: company.financialData[0] || {}
+        financials: company.financialData[0] || {},
+        historicalFinancials: historicalFinancials
       };
 
       return executeCompanyAnalysis(companyData, {

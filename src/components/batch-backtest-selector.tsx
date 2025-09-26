@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,6 +91,7 @@ export function BatchBacktestSelector({
   const [configs, setConfigs] = useState<BacktestConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [currentStep, setCurrentStep] = useState<'select-companies' | 'choose-config'>('select-companies');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [isAddingAssets, setIsAddingAssets] = useState(false);
@@ -107,7 +108,7 @@ export function BatchBacktestSelector({
   });
 
   // Carregar configurações existentes
-  const loadConfigs = async () => {
+  const loadConfigs = useCallback(async () => {
     if (!session?.user?.id) return;
 
     setIsLoading(true);
@@ -124,7 +125,7 @@ export function BatchBacktestSelector({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [session?.user?.id]);
 
   // Criar nova configuração com múltiplos ativos
   const createNewConfigWithAssets = async () => {
@@ -255,11 +256,12 @@ export function BatchBacktestSelector({
     if (isOpen && session?.user?.id) {
       loadConfigs();
     }
-  }, [isOpen, session?.user?.id]);
+  }, [isOpen, session?.user?.id, loadConfigs]);
 
   // Reset form quando fechar
   useEffect(() => {
     if (!isOpen) {
+      setCurrentStep('select-companies');
       setShowCreateForm(false);
       setSelectedConfigId(null);
       setTopCount(5);
@@ -285,95 +287,191 @@ export function BatchBacktestSelector({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            Criar Backtest em Lote
-          </DialogTitle>
-          <DialogDescription>
-            Selecione quantas empresas do ranking deseja incluir no backtest e escolha uma configuração
+      <DialogContent className="max-w-4xl w-full h-full sm:w-[95vw] sm:h-auto sm:max-h-[90vh] overflow-hidden p-4 sm:p-6 sm:rounded-lg rounded-none" showCloseButton={false}>
+        <DialogHeader className="pb-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl flex-1 min-w-0">
+              <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+              <span className="truncate">
+                {currentStep === 'select-companies' ? 'Selecionar Empresas' : 'Escolher Configuração'}
+              </span>
+            </DialogTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="flex-shrink-0 ml-2"
+              title="Fechar"
+            >
+              ✕
+            </Button>
+          </div>
+          <DialogDescription className="text-sm sm:text-base">
+            {currentStep === 'select-companies' 
+              ? 'Escolha quantas empresas do ranking deseja incluir no backtest'
+              : 'Selecione uma configuração existente ou crie uma nova'
+            }
           </DialogDescription>
+          
+          {/* Indicador de passos */}
+          <div className="flex items-center gap-2 mt-3">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
+              currentStep === 'select-companies' 
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+            }`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold ${
+                currentStep === 'select-companies' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-green-500 text-white'
+              }`}>
+                1
+              </span>
+              Empresas
+            </div>
+            <div className={`w-8 h-0.5 ${
+              currentStep === 'choose-config' ? 'bg-green-300' : 'bg-gray-300'
+            }`} />
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
+              currentStep === 'choose-config' 
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+            }`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold ${
+                currentStep === 'choose-config' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-400 text-white'
+              }`}>
+                2
+              </span>
+              Configuração
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex flex-col h-full">
-          {/* Seletor de Top X */}
-          <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-lg border">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-600" />
-                <h4 className="font-semibold">Seleção de Empresas</h4>
-              </div>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Top empresas do ranking</Label>
-                  <Badge variant="outline" className="font-mono">
-                    {topCount} empresas
-                  </Badge>
-                </div>
-                <Slider
-                  value={[topCount]}
-                  onValueChange={(value) => setTopCount(value[0])}
-                  max={Math.min(rankingResults.length, 20)}
-                  min={2}
-                  step={1}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Top 2</span>
-                  <span>Top {Math.min(rankingResults.length, 20)}</span>
+        <div className="flex flex-col h-full min-h-0">
+          {currentStep === 'select-companies' ? (
+            // PASSO 1: Seleção de Empresas
+            <>
+              <div className="space-y-4 flex-shrink-0">
+                <div className="p-4 sm:p-6 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-lg border">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-5 h-5 text-blue-600" />
+                      <h4 className="font-semibold text-base sm:text-lg">Seleção de Empresas</h4>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Top empresas do ranking</Label>
+                        <Badge variant="outline" className="font-mono text-sm">
+                          {topCount} empresas
+                        </Badge>
+                      </div>
+                      <Slider
+                        value={[topCount]}
+                        onValueChange={(value) => setTopCount(value[0])}
+                        max={Math.min(rankingResults.length, 20)}
+                        min={2}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Top 2</span>
+                        <span>Top {Math.min(rankingResults.length, 20)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Preview das empresas selecionadas */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Empresas selecionadas:</Label>
-                <div className="flex flex-wrap gap-2 max-h-20 overflow-y-auto">
+              <div className="flex-1 min-h-0 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Empresas Selecionadas</Label>
+                  <Badge variant="secondary" className="text-sm">
+                    {(100 / topCount).toFixed(1)}% cada
+                  </Badge>
+                </div>
+                
+                <ScrollArea className="h-full max-h-[calc(100vh-450px)] sm:max-h-[250px]">
+                  <div className="grid grid-cols-1 gap-3 pr-3 pb-4">
+                    {selectedAssets.map((asset, index) => (
+                      <div key={asset.ticker} className="flex items-center gap-3 p-3 bg-white dark:bg-background rounded-lg border hover:shadow-sm transition-shadow">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-xs font-bold text-blue-600">
+                            {index + 1}
+                          </div>
+                          <CompanyLogo 
+                            logoUrl={asset.logoUrl}
+                            companyName={asset.name}
+                            ticker={asset.ticker}
+                            size={24}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm">{asset.ticker}</div>
+                          <div className="text-xs text-muted-foreground truncate">{asset.name}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-medium">{(100 / topCount).toFixed(1)}%</div>
+                          <div className="text-xs text-muted-foreground">alocação</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </>
+          ) : (
+            // PASSO 2: Escolha de Configuração
+            <>
+              {/* Resumo das empresas selecionadas */}
+              <div className="mb-4 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-green-900 dark:text-green-100 text-sm">
+                    ✅ {topCount} Empresas Selecionadas
+                  </h4>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentStep('select-companies')}
+                    className="text-xs text-green-700 hover:text-green-900"
+                  >
+                    Alterar
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1">
                   {selectedAssets.map((asset, index) => (
-                    <div key={asset.ticker} className="flex items-center gap-2 bg-white dark:bg-background px-2 py-1 rounded-md border text-xs">
-                      <CompanyLogo 
-                        logoUrl={asset.logoUrl}
-                        companyName={asset.name}
-                        ticker={asset.ticker}
-                        size={16}
-                      />
-                      <span className="font-medium">#{index + 1}</span>
-                      <span>{asset.ticker}</span>
-                      <span className="text-muted-foreground">({(100 / topCount).toFixed(1)}%)</span>
-                    </div>
+                    <Badge key={asset.ticker} variant="outline" className="text-xs bg-white dark:bg-background">
+                      #{index + 1} {asset.ticker}
+                    </Badge>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Cada empresa terá {(100 / topCount).toFixed(1)}% de alocação na carteira
-                </p>
               </div>
-            </div>
-          </div>
 
-          {/* Botões de ação */}
-          <div className="flex flex-col sm:flex-row gap-2 mb-4">
-            <Button
-              variant={!showCreateForm ? "default" : "outline"}
-              onClick={() => setShowCreateForm(false)}
-              className="flex-1"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Configurações Existentes</span>
-              <span className="sm:hidden">Existentes</span>
-            </Button>
-            <Button
-              variant={showCreateForm ? "default" : "outline"}
-              onClick={() => setShowCreateForm(true)}
-              className="flex-1"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Nova Configuração</span>
-              <span className="sm:hidden">Nova</span>
-            </Button>
-          </div>
-
-          <ScrollArea className="flex-1 max-h-[400px]">
+              {/* Botões de ação */}
+              <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <Button
+                  variant={!showCreateForm ? "default" : "outline"}
+                  onClick={() => setShowCreateForm(false)}
+                  className="flex-1"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Configurações Existentes</span>
+                  <span className="sm:hidden">Existentes</span>
+                </Button>
+                <Button
+                  variant={showCreateForm ? "default" : "outline"}
+                  onClick={() => setShowCreateForm(true)}
+                  className="flex-1"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Nova Configuração</span>
+                  <span className="sm:hidden">Nova</span>
+                </Button>
+              </div>
+              <ScrollArea className="flex-1 max-h-[calc(100vh-300px)] sm:max-h-[400px] md:max-h-[500px]">
             {!showCreateForm ? (
               // Lista de configurações existentes
               <div className="space-y-3">
@@ -410,11 +508,11 @@ export function BatchBacktestSelector({
                       }`}
                       onClick={() => setSelectedConfigId(config.id)}
                     >
-                      <CardHeader className="pb-2">
+                      <CardHeader className="pb-2 p-3 sm:p-4">
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
-                            <CardTitle className="text-base truncate">{config.name}</CardTitle>
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500 mt-1">
+                            <CardTitle className="text-sm sm:text-base truncate">{config.name}</CardTitle>
+                            <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs text-gray-500 mt-1">
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-3 h-3" />
                                 <span className="hidden sm:inline">{format(new Date(config.startDate), 'MMM/yy', { locale: ptBR })} - {format(new Date(config.endDate), 'MMM/yy', { locale: ptBR })}</span>
@@ -439,17 +537,19 @@ export function BatchBacktestSelector({
                           )}
                         </div>
                       </CardHeader>
-                      <CardContent className="pt-0 pb-3">
+                      <CardContent className="pt-0 pb-2 sm:pb-3 p-3 sm:p-4">
                         {config.assets.length > 0 && (
                           <div className="flex flex-wrap gap-1">
-                            {config.assets.slice(0, 4).map((asset) => (
-                              <Badge key={asset.ticker} variant="outline" className="text-xs">
-                                {asset.ticker} ({(asset.targetAllocation * 100).toFixed(0)}%)
+                            {config.assets.slice(0, 3).map((asset) => (
+                              <Badge key={asset.ticker} variant="outline" className="text-xs whitespace-nowrap">
+                                <span className="hidden sm:inline">{asset.ticker} ({(asset.targetAllocation * 100).toFixed(0)}%)</span>
+                                <span className="sm:hidden">{asset.ticker}</span>
                               </Badge>
                             ))}
-                            {config.assets.length > 4 && (
+                            {config.assets.length > 3 && (
                               <Badge variant="outline" className="text-xs">
-                                +{config.assets.length - 4}
+                                <span className="hidden sm:inline">+{config.assets.length - 3} mais</span>
+                                <span className="sm:hidden">+{config.assets.length - 3}</span>
                               </Badge>
                             )}
                           </div>
@@ -557,39 +657,57 @@ export function BatchBacktestSelector({
                   </div>
                 </div>
               </div>
-            )}
-          </ScrollArea>
+              )}
+              </ScrollArea>
+            </>
+          )}
 
           {/* Botões de ação */}
-          <Separator className="my-4" />
-          <div className="flex flex-col sm:flex-row justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
+          <Separator className="my-3 sm:my-4 flex-shrink-0" />
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 flex-shrink-0">
+            <Button 
+              variant="outline" 
+              onClick={onClose}
+              className="w-full sm:w-auto"
+            >
               Cancelar
             </Button>
             
-            {!showCreateForm ? (
+            {currentStep === 'select-companies' ? (
+              <Button
+                onClick={() => setCurrentStep('choose-config')}
+                className="w-full sm:w-auto"
+              >
+                <span className="hidden sm:inline">Continuar com {topCount} Empresas</span>
+                <span className="sm:hidden">Continuar</span>
+              </Button>
+            ) : !showCreateForm ? (
               <Button
                 onClick={() => selectedConfigId && addAssetsToConfig(selectedConfigId)}
                 disabled={!selectedConfigId || isAddingAssets}
+                className="w-full sm:w-auto"
               >
                 {isAddingAssets ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Check className="w-4 h-4 mr-2" />
                 )}
-                Adicionar {topCount} Empresas
+                <span className="hidden sm:inline">Adicionar {topCount} Empresas</span>
+                <span className="sm:hidden">Adicionar</span>
               </Button>
             ) : (
               <Button
                 onClick={createNewConfigWithAssets}
                 disabled={!newConfigForm.name.trim() || isCreating}
+                className="w-full sm:w-auto"
               >
                 {isCreating ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Plus className="w-4 h-4 mr-2" />
                 )}
-                Criar com {topCount} Empresas
+                <span className="hidden sm:inline">Criar com {topCount} Empresas</span>
+                <span className="sm:hidden">Criar</span>
               </Button>
             )}
           </div>

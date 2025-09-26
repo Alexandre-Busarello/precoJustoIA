@@ -986,12 +986,12 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         title="Criar backtest com múltiplas empresas"
                       >
                         <BarChart3 className="w-3 h-3 text-green-600" />
-                        <span className="hidden sm:inline text-xs text-green-700 font-medium">Backtest Lote</span>
-                        <span className="sm:hidden text-xs text-green-700 font-medium">Lote</span>
+                        <span className="hidden sm:inline text-xs text-green-700 font-medium">Backtest do Ranking</span>
+                        <span className="sm:hidden text-xs text-green-700 font-medium">Backtest do Ranking</span>
                       </Button>
                       
                       {/* Botão de compartilhar - apenas para rankings salvos */}
-                      {isViewingCached && rankingId && (
+                      {/* {isViewingCached && rankingId && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1005,7 +1005,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <Share2 className="w-3 h-3" />
                           <span className="hidden sm:inline text-xs">Compartilhar</span>
                         </Button>
-                      )}
+                      )} */}
                       <Badge variant="secondary" className="text-xs sm:text-sm px-2 sm:px-3 py-1">
                         {results.results.length} resultados
                       </Badge>

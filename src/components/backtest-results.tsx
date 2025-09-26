@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -141,16 +141,76 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
 
   // Calcular métricas derivadas
-  // Ganho Total = Ganho de Capital + Dividendos Recebidos
+  // CORREÇÃO: Ganho de Capital já inclui dividendos reinvestidos no valor final
   const capitalGain = result.finalValue - result.totalInvested;
   const totalDividends = result.totalDividendsReceived || 0;
-  const totalGain = capitalGain + totalDividends;
+  const totalGain = capitalGain; // NÃO somar dividendos - eles já estão no valor final
+  
+  // Calcular ganho total pela soma dos ativos para comparação/esclarecimento
+  const calculateTotalGainFromAssets = () => {
+    if (!result.assetPerformance || result.assetPerformance.length === 0) {
+      return totalGain; // Fallback para o cálculo principal
+    }
+
+    let totalGainFromAssets = 0;
+    
+    result.assetPerformance.forEach(asset => {
+      // Usar a mesma lógica do cálculo por ativo
+      const directContribution = asset.contribution || 0;
+      const reinvestment = asset.reinvestment || 0;
+      const rebalanceInvestment = (asset.rebalanceAmount || 0) > 0 ? (asset.rebalanceAmount || 0) : 0;
+      const totalInvestedInAsset = directContribution + reinvestment + rebalanceInvestment;
+      
+      const realizedProfits = (asset.rebalanceAmount || 0) < 0 ? Math.abs(asset.rebalanceAmount || 0) : 0;
+      const assetGain = (asset.finalValue || 0) + realizedProfits - totalInvestedInAsset;
+      
+      totalGainFromAssets += assetGain;
+    });
+    
+    return totalGainFromAssets;
+  };
+
+  const totalGainFromAssets = calculateTotalGainFromAssets();
   const gainPercentage = result.totalInvested > 0 ? (totalGain / result.totalInvested) * 100 : 0;
   const totalMonths = (result.positiveMonths || 0) + (result.negativeMonths || 0);
   const consistencyRate = totalMonths > 0 ? ((result.positiveMonths || 0) / totalMonths) * 100 : 0;
   const averageMonthlyReturn = result.monthlyReturns && result.monthlyReturns.length > 0 
     ? result.monthlyReturns.reduce((sum, month) => sum + (month.return || 0), 0) / result.monthlyReturns.length
     : 0;
+
+  // Calcular sequências de meses positivos e negativos
+  const calculateStreaks = () => {
+    if (!result.monthlyReturns || result.monthlyReturns.length === 0) {
+      return { longestPositiveStreak: 0, longestNegativeStreak: 0 };
+    }
+
+    let longestPositiveStreak = 0;
+    let longestNegativeStreak = 0;
+    let currentPositiveStreak = 0;
+    let currentNegativeStreak = 0;
+
+    for (const month of result.monthlyReturns) {
+      const monthReturn = month.return || 0;
+      
+      if (monthReturn > 0) {
+        currentPositiveStreak++;
+        currentNegativeStreak = 0;
+        longestPositiveStreak = Math.max(longestPositiveStreak, currentPositiveStreak);
+      } else if (monthReturn < 0) {
+        currentNegativeStreak++;
+        currentPositiveStreak = 0;
+        longestNegativeStreak = Math.max(longestNegativeStreak, currentNegativeStreak);
+      } else {
+        // Mês neutro (retorno = 0) quebra ambas as sequências
+        currentPositiveStreak = 0;
+        currentNegativeStreak = 0;
+      }
+    }
+
+    return { longestPositiveStreak, longestNegativeStreak };
+  };
+
+  const { longestPositiveStreak, longestNegativeStreak } = calculateStreaks();
 
   // Preparar dados para o gráfico
   const chartData = result.monthlyReturns && result.monthlyReturns.length > 0 
@@ -179,20 +239,44 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
   const goToNextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
+      // Scroll para a área da paginação após mudança de página
+      setTimeout(() => {
+        evolutionTableRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     }
   };
 
   const goToPreviousPage = () => {
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
+      // Scroll para a área da paginação após mudança de página
+      setTimeout(() => {
+        evolutionTableRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     }
   };
 
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
+      // Scroll para a área da paginação após mudança de página
+      setTimeout(() => {
+        evolutionTableRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     }
   };
+
+  // Refs para scroll automático
+  const evolutionTableRef = useRef<HTMLDivElement>(null);
 
   // Calcular informações de custódia por ativo com preço médio ponderado
   const calculateAssetCustodyInfo = () => {
@@ -212,9 +296,12 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       // O preço médio agora considera apenas o custo das compras, não as vendas
       const averagePrice = asset.averagePrice || 0;
       
-      // PERSPECTIVA DO INVESTIDOR: Mostrar apenas aportes diretos (dinheiro que saiu do bolso)
-      // Isso faz mais sentido para investidores: "investi X, tenho Y hoje"
-      const totalInvested = asset.contribution || 0;
+      // PERSPECTIVA DO INVESTIDOR: Calcular total investido considerando TODOS os aportes
+      // Aportes diretos + dividendos/sobras reinvestidos + rebalanceamento positivo
+      const directContribution = asset.contribution || 0;
+      const reinvestment = asset.reinvestment || 0;
+      const rebalanceInvestment = (asset.rebalanceAmount || 0) > 0 ? (asset.rebalanceAmount || 0) : 0;
+      const totalInvested = directContribution + reinvestment + rebalanceInvestment;
       
       custodyInfo[asset.ticker] = {
         quantity: finalQuantity,
@@ -309,63 +396,72 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       {/* Header com Resumo */}
       <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl flex items-center gap-2">
-                <BarChart3 className="w-6 h-6 text-blue-600" />
-                Resultados do Backtesting
-                {periodAdjusted && (
-                  <Badge variant="outline" className="ml-2 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
-                    Período Ajustado
-                  </Badge>
-                )}
-              </CardTitle>
-              {config && (
-                <p className="text-gray-600 dark:text-gray-300 mt-1">
-                  {config.name} • {config.assets?.length || 0} ativos • {result.monthlyReturns?.length + 1 || 0} meses
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-lg sm:text-2xl flex items-center gap-2 flex-wrap">
+                  <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 flex-shrink-0" />
+                  <span className="truncate">Resultados do Backtesting</span>
                   {periodAdjusted && (
-                    <span className="text-amber-600 dark:text-amber-400 ml-2">
-                      • Período: {effectiveStartDate?.toLocaleDateString('pt-BR')} - {effectiveEndDate?.toLocaleDateString('pt-BR')}
-                    </span>
+                    <Badge variant="outline" className="text-xs sm:text-sm text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20 whitespace-nowrap">
+                      <span className="hidden sm:inline">Período Ajustado</span>
+                      <span className="sm:hidden">Ajustado</span>
+                    </Badge>
                   )}
-                </p>
-              )}
+                </CardTitle>
+                {config && (
+                  <div className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-1 text-xs sm:text-sm">
+                      <span className="font-medium">{config.name}</span>
+                      <span>•</span>
+                      <span>{config.assets?.length || 0} ativos</span>
+                      <span>•</span>
+                      <span>{result.monthlyReturns?.length + 1 || 0} meses</span>
+                    </div>
+                    {periodAdjusted && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400">
+                        Período: {effectiveStartDate?.toLocaleDateString('pt-BR')} - {effectiveEndDate?.toLocaleDateString('pt-BR')}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Compartilhar
+                </Button>
+                <Button variant="outline" size="sm">
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div> */}
             </div>
-            {/* <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Share2 className="w-4 h-4 mr-2" />
-                Compartilhar
-              </Button>
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Exportar
-              </Button>
-            </div> */}
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Valor Final</p>
-              <p className="text-2xl font-bold text-green-600">
+          <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Valor Final</p>
+              <p className="text-lg sm:text-2xl font-bold text-green-600 truncate">
                 {formatCurrency(result.finalValue)}
               </p>
             </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Ganho Total</p>
-              <p className={`text-2xl font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Ganho Total</p>
+              <p className={`text-lg sm:text-2xl font-bold truncate ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {formatCurrency(totalGain)}
               </p>
             </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Retorno Total</p>
-              <p className={`text-2xl font-bold ${result.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Retorno Total</p>
+              <p className={`text-lg sm:text-2xl font-bold ${result.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {formatPercentage(result.totalReturn)}
               </p>
             </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Retorno Anual</p>
-              <p className={`text-2xl font-bold ${result.annualizedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Retorno Anual</p>
+              <p className={`text-lg sm:text-2xl font-bold ${result.annualizedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {formatPercentage(result.annualizedReturn)}
               </p>
             </div>
@@ -374,7 +470,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       </Card>
 
       {/* Métricas Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         <MetricCard
           title="Volatilidade"
           value={formatPercentage(result.volatility)}
@@ -463,61 +559,59 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span>Capital Próprio Investido:</span>
-                  <span className="font-semibold">{formatCurrency(result.totalInvested)}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Capital Próprio Investido:</span>
+                  <span className="font-semibold text-sm sm:text-base">{formatCurrency(result.totalInvested)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Valor Final:</span>
-                  <span className="font-semibold">{formatCurrency(result.finalValue)}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Valor Final:</span>
+                  <span className="font-semibold text-sm sm:text-base">{formatCurrency(result.finalValue)}</span>
                 </div>
                 {result.finalCashReserve !== undefined && (
-                  <div className="flex justify-between">
-                    <span>Saldo em Caixa:</span>
-                    <span className="font-semibold text-blue-600">{formatCurrency(result.finalCashReserve || 0)}</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                    <span className="text-sm sm:text-base">Saldo em Caixa:</span>
+                    <span className="font-semibold text-blue-600 text-sm sm:text-base">{formatCurrency(result.finalCashReserve || 0)}</span>
                   </div>
                 )}
                 {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
-                  <div className="flex justify-between">
-                    <span>Dividendos Recebidos:</span>
-                    <span className="font-semibold text-green-600">{formatCurrency(result.totalDividendsReceived)}</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                    <span className="text-sm sm:text-base">Dividendos Recebidos:</span>
+                    <span className="font-semibold text-green-600 text-sm sm:text-base">{formatCurrency(result.totalDividendsReceived)}</span>
                   </div>
                 )}
                 <Separator />
-                <div className="flex justify-between text-lg">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-base sm:text-lg">
                   <span>Ganho/Perda Total:</span>
                   <span className={`font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(totalGain)} ({gainPercentage.toFixed(2)}%)
+                    <span className="block sm:inline">{formatCurrency(totalGain)}</span>
+                    <span className="block sm:inline sm:ml-1">({gainPercentage.toFixed(2)}%)</span>
                   </span>
                 </div>
-                {/* Decomposição do Ganho Total */}
+                {/* Informações sobre Dividendos */}
                 {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
-                  <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400 pl-4">
-                    <div className="flex justify-between">
-                      <span>• Ganho de Capital:</span>
-                      <span className={`font-medium ${capitalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(capitalGain)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Dividendos:</span>
-                      <span className="font-medium text-green-600">
+                  <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400 pl-2 sm:pl-4">
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                      <span>• Dividendos Recebidos e Reinvestidos:</span>
+                      <span className="font-medium text-blue-600">
                         {formatCurrency(totalDividends)}
                       </span>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Os dividendos foram automaticamente reinvestidos e já estão incluídos no ganho de capital acima.
                     </div>
                   </div>
                 )}
                 {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-sm text-gray-600 dark:text-gray-400">
                     <span>Yield sobre Investimento:</span>
                     <span className="font-medium text-green-600">
                       {((result.totalDividendsReceived / result.totalInvested) * 100).toFixed(2)}%
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span>Retorno Médio Mensal:</span>
-                  <span className={`font-semibold ${averageMonthlyReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Retorno Médio Mensal:</span>
+                  <span className={`font-semibold text-sm sm:text-base ${averageMonthlyReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatPercentage(averageMonthlyReturn)}
                   </span>
                 </div>
@@ -533,33 +627,46 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span>Meses Positivos:</span>
-                  <Badge variant="default" className="bg-green-500">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Meses Positivos:</span>
+                  <Badge variant="default" className="bg-green-500 w-fit">
                     {result.positiveMonths}
                   </Badge>
                 </div>
-                <div className="flex justify-between">
-                  <span>Meses Negativos:</span>
-                  <Badge variant="destructive">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Meses Negativos:</span>
+                  <Badge variant="destructive" className="w-fit">
                     {result.negativeMonths}
                   </Badge>
                 </div>
-                <div className="flex justify-between">
-                  <span>Taxa de Acerto:</span>
-                  <span className="font-semibold">{consistencyRate.toFixed(1)}%</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Taxa de Acerto:</span>
+                  <span className="font-semibold text-sm sm:text-base">{consistencyRate.toFixed(1)}%</span>
                 </div>
                 <Separator />
-                <div className="flex justify-between">
-                  <span>Melhor Mês:</span>
-                  <span className="font-semibold text-green-600">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Melhor Mês:</span>
+                  <span className="font-semibold text-green-600 text-sm sm:text-base">
                     {formatPercentage(Math.max(...result.monthlyReturns.map(m => m.return)))}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Pior Mês:</span>
-                  <span className="font-semibold text-red-600">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Pior Mês:</span>
+                  <span className="font-semibold text-red-600 text-sm sm:text-base">
                     {formatPercentage(Math.min(...result.monthlyReturns.map(m => m.return)))}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Maior Sequência Positiva:</span>
+                  <span className="font-semibold text-green-600 text-sm sm:text-base">
+                    {longestPositiveStreak} {longestPositiveStreak === 1 ? 'mês' : 'meses'}
+                  </span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-sm sm:text-base">Maior Sequência Negativa:</span>
+                  <span className="font-semibold text-red-600 text-sm sm:text-base">
+                    {longestNegativeStreak} {longestNegativeStreak === 1 ? 'mês' : 'meses'}
                   </span>
                 </div>
               </CardContent>
@@ -641,7 +748,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
               <CardContent>
                 {paginatedData.length > 0 ? (
                   <>
-                    <div className="overflow-x-auto">
+                    <div ref={evolutionTableRef} className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b">
@@ -688,35 +795,50 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
                     {/* Controles de Paginação */}
                     {totalPages > 1 && (
-                      <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                          Página {currentPage} de {totalPages} • 
-                          Mostrando {startIndex + 1}-{Math.min(endIndex, sortedMonthlyReturns.length)} de {sortedMonthlyReturns.length} meses
+                      <div className="mt-6 pt-4 border-t space-y-3">
+                        <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 text-center sm:text-left">
+                          <span className="block sm:inline">Página {currentPage} de {totalPages}</span>
+                          <span className="hidden sm:inline"> • </span>
+                          <span className="block sm:inline">Mostrando {startIndex + 1}-{Math.min(endIndex, sortedMonthlyReturns.length)} de {sortedMonthlyReturns.length} meses</span>
                         </div>
                         
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          {/* Primeira página */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => goToPage(1)}
+                            disabled={currentPage === 1}
+                            className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                            title="Primeira página"
+                          >
+                            <span className="text-xs sm:text-sm">««</span>
+                            <span className="hidden lg:inline text-xs">Início</span>
+                          </Button>
+                          
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={goToPreviousPage}
                             disabled={currentPage === 1}
+                            className="flex items-center gap-1 h-8 px-2 sm:px-3"
                           >
-                            <ChevronLeft className="w-4 h-4" />
-                            Anterior
+                            <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="hidden sm:inline">Anterior</span>
                           </Button>
                           
                           {/* Números das páginas */}
                           <div className="flex items-center gap-1">
-                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            {Array.from({ length: Math.min(totalPages <= 3 ? totalPages : 3, totalPages) }, (_, i) => {
                               let pageNum;
-                              if (totalPages <= 5) {
+                              if (totalPages <= 3) {
                                 pageNum = i + 1;
-                              } else if (currentPage <= 3) {
+                              } else if (currentPage <= 2) {
                                 pageNum = i + 1;
-                              } else if (currentPage >= totalPages - 2) {
-                                pageNum = totalPages - 4 + i;
+                              } else if (currentPage >= totalPages - 1) {
+                                pageNum = totalPages - 2 + i;
                               } else {
-                                pageNum = currentPage - 2 + i;
+                                pageNum = currentPage - 1 + i;
                               }
                               
                               return (
@@ -725,7 +847,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                                   variant={currentPage === pageNum ? "default" : "outline"}
                                   size="sm"
                                   onClick={() => goToPage(pageNum)}
-                                  className="w-8 h-8 p-0"
+                                  className="w-7 h-7 sm:w-8 sm:h-8 p-0 text-xs sm:text-sm"
                                 >
                                   {pageNum}
                                 </Button>
@@ -738,9 +860,23 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                             size="sm"
                             onClick={goToNextPage}
                             disabled={currentPage === totalPages}
+                            className="flex items-center gap-1 h-8 px-2 sm:px-3"
                           >
-                            Próxima
-                            <ChevronRight className="w-4 h-4" />
+                            <span className="hidden sm:inline">Próxima</span>
+                            <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                          </Button>
+                          
+                          {/* Última página */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => goToPage(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                            title="Última página"
+                          >
+                            <span className="hidden lg:inline text-xs">Fim</span>
+                            <span className="text-xs sm:text-sm">»»</span>
                           </Button>
                         </div>
                       </div>
@@ -765,6 +901,23 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 <PieChart className="w-5 h-5" />
                 Performance por Ativo
               </CardTitle>
+              {/* Esclarecimento sobre diferença metodológica */}
+              {Math.abs(totalGain - totalGainFromAssets) > 0.01 && (
+                <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
+                    <p className="font-medium">📊 Diferença Metodológica</p>
+                    <div className="text-xs space-y-1">
+                      <p>• <strong>Ganho total da carteira:</strong> {formatCurrency(totalGain)} (valor final - capital próprio + dividendos)</p>
+                      <p>• <strong>Soma dos ganhos por ativo:</strong> {formatCurrency(totalGainFromAssets)} (considera reinvestimentos)</p>
+                      <p>• <strong>Diferença:</strong> {formatCurrency(Math.abs(totalGain - totalGainFromAssets))}</p>
+                    </div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      A diferença ocorre porque os ganhos por ativo consideram dividendos reinvestidos como &quot;custo&quot;, 
+                      enquanto o ganho total da carteira reflete o retorno real sobre o capital próprio investido.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -834,7 +987,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                               })} cotas × {formatCurrency(custodyInfo.averagePrice)} (preço médio)
                             </p>
                             <p>
-                              <strong>Investido (do bolso):</strong> {formatCurrency(custodyInfo.totalInvested)} • 
+                              <strong>Total Aportado:</strong> {formatCurrency(custodyInfo.totalInvested)} • 
                               <strong> Valor Atual:</strong> {formatCurrency(asset.finalValue || 0)}
                               {(asset.rebalanceAmount || 0) < 0 && (
                                 <span> • <strong>Lucro Realizado:</strong> {formatCurrency(Math.abs(asset.rebalanceAmount || 0))}</span>
@@ -842,7 +995,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                             </p>
                             <p>
                               <strong>Ganho Total:</strong> <span className={(() => {
-                                // CORREÇÃO: Ganho total = valor atual + lucros realizados - investido
+                                // CORREÇÃO: Ganho total = valor atual + lucros realizados - total aportado (incluindo dividendos e rebalanceamento)
                                 const realizedProfits = (asset.rebalanceAmount || 0) < 0 ? Math.abs(asset.rebalanceAmount || 0) : 0;
                                 const totalGain = (asset.finalValue || 0) + realizedProfits - custodyInfo.totalInvested;
                                 return totalGain >= 0 ? 'text-green-600' : 'text-red-600';
@@ -854,17 +1007,22 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                                 })()}
                               </span>
                               <span className="text-xs text-gray-500 ml-2">
-                                ({formatCurrency(asset.finalValue || 0)} atual + {formatCurrency((asset.rebalanceAmount || 0) < 0 ? Math.abs(asset.rebalanceAmount || 0) : 0)} realizado - {formatCurrency(custodyInfo.totalInvested)} investido)
+                                ({formatCurrency(asset.finalValue || 0)} atual + {formatCurrency((asset.rebalanceAmount || 0) < 0 ? Math.abs(asset.rebalanceAmount || 0) : 0)} realizado - {formatCurrency(custodyInfo.totalInvested)} total aportado)
                               </span>
                             </p>
                             {(asset.rebalanceAmount || 0) !== 0 && (
                               <div className="text-xs text-gray-400 space-y-1">
                                 <p>
-                                  <strong>Origem dos recursos:</strong> {formatCurrency(asset.contribution || 0)} (aportes diretos) + {formatCurrency(asset.reinvestment || 0)} (dividendos/sobras) + {formatCurrency(asset.rebalanceAmount || 0)} (rebalanceamento = lucro realizado)
+                                  <strong>Composição do total aportado:</strong> {formatCurrency(asset.contribution || 0)} (aportes diretos) + {formatCurrency(asset.reinvestment || 0)} (dividendos/sobras) + {formatCurrency(asset.rebalanceAmount || 0)} (rebalanceamento)
                                 </p>
                                 {(asset.rebalanceAmount || 0) < 0 && (
                                   <p className="text-blue-500">
-                                    <strong>💡 Explicação:</strong> Rebalanceamento negativo = vendas que devolveram R$ {formatCurrency(Math.abs(asset.rebalanceAmount || 0))} ao seu bolso. Este lucro realizado está incluído no ganho total mostrado acima.
+                                    <strong>💡 Rebalanceamento negativo:</strong> Vendas que devolveram R$ {formatCurrency(Math.abs(asset.rebalanceAmount || 0))} ao seu bolso (lucro realizado incluído no ganho total).
+                                  </p>
+                                )}
+                                {(asset.rebalanceAmount || 0) > 0 && (
+                                  <p className="text-purple-500">
+                                    <strong>💡 Rebalanceamento positivo:</strong> R$ {formatCurrency(asset.rebalanceAmount || 0)} aportados neste ativo através de rebalanceamento (incluído no total aportado para cálculo do ganho).
                                   </p>
                                 )}
                               </div>
@@ -1017,22 +1175,22 @@ function MetricCard({ title, value, icon, color, description }: MetricCardProps)
 
   return (
     <Card className={colorClasses[color]}>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${color === 'blue' ? 'bg-blue-500' : 
+      <CardContent className="p-3 sm:p-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 flex items-center justify-center ${color === 'blue' ? 'bg-blue-500' : 
                                           color === 'green' ? 'bg-green-500' :
                                           color === 'red' ? 'bg-red-500' :
                                           color === 'orange' ? 'bg-orange-500' :
                                           'bg-purple-500'}`}>
-            <div className="w-5 h-5 text-white">
+            <div className="w-4 h-4 sm:w-5 sm:h-5 text-white flex items-center justify-center">
               {icon}
             </div>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium opacity-80">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs sm:text-sm font-medium opacity-80 truncate">{title}</p>
+            <p className="text-lg sm:text-2xl font-bold truncate">{value}</p>
             {description && (
-              <p className="text-xs opacity-70 mt-1">{description}</p>
+              <p className="text-xs opacity-70 mt-1 line-clamp-2">{description}</p>
             )}
           </div>
         </div>

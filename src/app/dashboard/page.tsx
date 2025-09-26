@@ -169,7 +169,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Stats Row */}
-                <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-border/50">
+                {/* <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-border/50">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-600">
                       {statsLoading ? '-' : stats?.rankingsToday || 0}
@@ -188,7 +188,7 @@ export default function Dashboard() {
                     </div>
                     <div className="text-xs text-muted-foreground">Empresas no banco</div>
                   </div>
-                </div>
+                </div> */}
               </CardContent>
             </Card>
 

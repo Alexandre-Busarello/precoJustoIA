@@ -353,37 +353,36 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
   return (
     <Card>
       <CardHeader className="p-4 sm:p-6">
-        <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
-          <ArrowUpDown className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-          <span className="truncate">Comparação Detalhada</span>
-          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-            Ranking por Médias Históricas
+        <div>
+          <CardTitle className="flex items-center space-x-2 text-base sm:text-lg mb-2">
+            <ArrowUpDown className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+            <span className="truncate">Comparação Detalhada</span>
+          </CardTitle>
+          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 whitespace-nowrap">
+            <span className="hidden sm:inline">Ranking por Médias Históricas</span>
+            <span className="sm:hidden">Médias Históricas</span>
           </Badge>
-        </CardTitle>
+        </div>
       </CardHeader>
       <CardContent className="p-4 sm:p-6">
         <div className="overflow-x-auto -mx-4 sm:mx-0">
-          <div className="min-w-[800px] px-4 sm:px-0">
+          <div className="min-w-[600px] sm:min-w-[800px] px-4 sm:px-0">
             <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-32 sm:w-48 text-xs sm:text-sm">Indicador</TableHead>
+                <TableHead className="w-24 sm:w-32 md:w-48 text-xs sm:text-sm sticky left-0 bg-background z-10">Indicador</TableHead>
                 {companies.map((company) => (
-                  <TableHead key={company.ticker} className="text-center min-w-28 sm:min-w-36">
+                  <TableHead key={company.ticker} className="text-center min-w-20 sm:min-w-28 md:min-w-36">
                     <div className="space-y-1">
                       <div className="font-bold text-xs sm:text-sm">{company.ticker}</div>
                       <Badge 
                         variant="outline" 
-                        className="text-xs block mx-auto"
-                        style={{
-                          maxWidth: '100%',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}
+                        className="text-xs block mx-auto max-w-full"
                         title={company.sector || 'N/A'}
                       >
-                        {company.sector || 'N/A'}
+                        <span className="truncate block max-w-16 sm:max-w-24 md:max-w-full">
+                          {company.sector || 'N/A'}
+                        </span>
                       </Badge>
                     </div>
                   </TableHead>

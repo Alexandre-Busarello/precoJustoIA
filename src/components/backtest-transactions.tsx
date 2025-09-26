@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +33,9 @@ export function BacktestTransactions({ transactions }: BacktestTransactionsProps
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
   const itemsPerPage = 20
+  
+  // Ref para scroll automático
+  const transactionsTableRef = useRef<HTMLDivElement>(null);
 
   // Debug: verificar se as transações estão chegando
   console.log('🔍 BacktestTransactions - Transações recebidas:', transactions?.length || 0);
@@ -123,17 +126,38 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
   const goToNextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1)
+      // Scroll para a área da paginação após mudança de página
+      setTimeout(() => {
+        transactionsTableRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     }
   }
 
   const goToPreviousPage = () => {
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1)
+      // Scroll para a área da paginação após mudança de página
+      setTimeout(() => {
+        transactionsTableRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     }
   }
 
   const goToPage = (page: number) => {
     setCurrentPage(page)
+    // Scroll para a área da paginação após mudança de página
+    setTimeout(() => {
+      transactionsTableRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }, 100);
   }
 
   const handleMonthFilter = (month: number | null) => {
@@ -182,7 +206,7 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
             </div>
 
             {/* Tabela de Transações */}
-            <div className="overflow-x-auto">
+            <div ref={transactionsTableRef} className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
@@ -276,34 +300,49 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
 
             {/* Controles de Paginação */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Página {currentPage} de {totalPages} • 
-                  Mostrando {startIndex + 1}-{Math.min(endIndex, filteredTransactions.length)} de {filteredTransactions.length} transações
+              <div className="mt-6 pt-4 border-t space-y-3">
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 text-center sm:text-left">
+                  <span className="block sm:inline">Página {currentPage} de {totalPages}</span>
+                  <span className="hidden sm:inline"> • </span>
+                  <span className="block sm:inline">Mostrando {startIndex + 1}-{Math.min(endIndex, filteredTransactions.length)} de {filteredTransactions.length} transações</span>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                  {/* Primeira página */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(1)}
+                    disabled={currentPage === 1}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                    title="Primeira página"
+                  >
+                    <span className="text-xs sm:text-sm">««</span>
+                    <span className="hidden lg:inline text-xs">Início</span>
+                  </Button>
+                  
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={goToPreviousPage}
                     disabled={currentPage === 1}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
                   >
-                    <ChevronLeft className="w-4 h-4" />
-                    Anterior
+                    <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">Anterior</span>
                   </Button>
                   
                   <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    {Array.from({ length: Math.min(totalPages <= 3 ? totalPages : 3, totalPages) }, (_, i) => {
                       let pageNum
-                      if (totalPages <= 5) {
+                      if (totalPages <= 3) {
                         pageNum = i + 1
-                      } else if (currentPage <= 3) {
+                      } else if (currentPage <= 2) {
                         pageNum = i + 1
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i
+                      } else if (currentPage >= totalPages - 1) {
+                        pageNum = totalPages - 2 + i
                       } else {
-                        pageNum = currentPage - 2 + i
+                        pageNum = currentPage - 1 + i
                       }
                       
                       return (
@@ -312,7 +351,7 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                           variant={currentPage === pageNum ? "default" : "outline"}
                           size="sm"
                           onClick={() => goToPage(pageNum)}
-                          className="w-8 h-8 p-0"
+                          className="w-7 h-7 sm:w-8 sm:h-8 p-0 text-xs sm:text-sm"
                         >
                           {pageNum}
                         </Button>
@@ -325,9 +364,23 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                     size="sm"
                     onClick={goToNextPage}
                     disabled={currentPage === totalPages}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
                   >
-                    Próxima
-                    <ChevronRight className="w-4 h-4" />
+                    <span className="hidden sm:inline">Próxima</span>
+                    <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                  </Button>
+                  
+                  {/* Última página */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                    title="Última página"
+                  >
+                    <span className="hidden lg:inline text-xs">Fim</span>
+                    <span className="text-xs sm:text-sm">»»</span>
                   </Button>
                 </div>
               </div>

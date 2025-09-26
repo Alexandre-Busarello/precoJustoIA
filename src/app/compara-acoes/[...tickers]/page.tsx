@@ -645,23 +645,31 @@ function ComparisonIndicatorCard({
   return (
     <Card className="relative">
       <CardHeader className="pb-3 p-4 sm:p-6">
-        <div className="flex items-center space-x-2">
-          <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
-          <CardTitle className="text-sm font-medium truncate">{title}</CardTitle>
-          {historicalAverages && (
-            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-              Ranking por Média 7a
-            </Badge>
-          )}
-          {isPremium && (
-            <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
-          )}
-          {!userIsPremium && !isPremium && (
-            <div className="flex items-center space-x-1">
-              <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-xs text-muted-foreground">Ranking Premium</span>
-            </div>
-          )}
+        <div className="flex items-start flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-2">
+          <div className="flex items-center space-x-2 min-w-0 flex-1">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
+            <CardTitle className="text-sm font-medium truncate">{title}</CardTitle>
+            {isPremium && (
+              <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
+            )}
+          </div>
+          <div className="flex items-center space-x-2 flex-wrap gap-1">
+            {historicalAverages && (
+              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 whitespace-nowrap">
+                <span className="hidden sm:inline">Ranking por Média 7a</span>
+                <span className="sm:hidden">Média 7a</span>
+              </Badge>
+            )}
+            {!userIsPremium && !isPremium && (
+              <div className="flex items-center space-x-1">
+                <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  <span className="hidden sm:inline">Ranking Premium</span>
+                  <span className="sm:hidden">Premium</span>
+                </span>
+              </div>
+            )}
+          </div>
         </div>
         {description && (
           <p className="text-xs text-muted-foreground truncate">{description}</p>
@@ -1114,13 +1122,16 @@ export default async function CompareStocksPage({ params }: PageProps) {
       <div className="space-y-8">
         {/* Indicadores Básicos */}
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center">
-            <Target className="w-5 h-5 sm:w-6 sm:h-6 mr-2 flex-shrink-0" />
-            <span className="truncate">Indicadores Fundamentalistas</span>
-            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
-              Ranking por Médias Históricas
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold flex items-center mb-2">
+              <Target className="w-5 h-5 sm:w-6 sm:h-6 mr-2 flex-shrink-0" />
+              <span className="truncate">Indicadores Fundamentalistas</span>
+            </h2>
+            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 whitespace-nowrap">
+              <span className="hidden sm:inline">Ranking por Médias Históricas</span>
+              <span className="sm:hidden">Médias Históricas</span>
             </Badge>
-          </h2>
+          </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <ComparisonIndicatorCard

@@ -39,13 +39,31 @@ export async function POST(request: NextRequest) {
 
     // Buscar o Setup Intent para obter o payment method
     console.log('Retrieving Setup Intent:', setupIntentId)
-    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
-    console.log('Setup Intent status:', setupIntent.status)
+    let setupIntent
+    
+    try {
+      setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
+      console.log('Setup Intent status:', setupIntent.status)
+    } catch (stripeError: any) {
+      console.error('Error retrieving Setup Intent:', stripeError)
+      return NextResponse.json(
+        { 
+          error: 'Setup Intent não encontrado',
+          code: stripeError.code,
+          type: stripeError.type
+        },
+        { status: 400 }
+      )
+    }
     
     if (setupIntent.status !== 'succeeded') {
       console.error('Setup Intent not succeeded:', setupIntent.status)
       return NextResponse.json(
-        { error: 'Setup Intent não foi confirmado' },
+        { 
+          error: 'Setup Intent não foi confirmado',
+          code: 'setup_intent_not_succeeded',
+          status: setupIntent.status
+        },
         { status: 400 }
       )
     }
@@ -185,8 +203,23 @@ export async function POST(request: NextRequest) {
         type: (error as any).type,
         code: (error as any).code,
         param: (error as any).param,
+        decline_code: (error as any).decline_code,
         stack: (error as any).stack,
       })
+    }
+    
+    // Retornar erro estruturado do Stripe se disponível
+    if (error && typeof error === 'object' && (error as any).type) {
+      return NextResponse.json(
+        { 
+          error: (error as any).message || 'Erro no pagamento',
+          code: (error as any).code,
+          type: (error as any).type,
+          decline_code: (error as any).decline_code,
+          param: (error as any).param
+        },
+        { status: 400 }
+      )
     }
     
     return NextResponse.json(

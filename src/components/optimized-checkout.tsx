@@ -377,7 +377,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
 
                       <div className="text-xs text-gray-500 space-y-1">
                         <p>✓ Ativação imediata após pagamento</p>
-                        <p>✓ Suporte 24/7 incluído</p>
+                        <p>✓ Suporte incluído</p>
                         <p>✓ Garantia de 7 dias</p>
                       </div>
                     </CardContent>

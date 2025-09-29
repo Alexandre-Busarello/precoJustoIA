@@ -11,10 +11,11 @@ import {
   Lock, 
   CheckCircle,
   RefreshCw,
-  AlertCircle,
   Shield
 } from 'lucide-react'
 import { usePaymentVerification } from '@/components/session-refresh-provider'
+import { StripeErrorDisplay, PaymentProcessingError } from '@/components/stripe-error-display'
+import { formatStripeError } from '@/lib/stripe-error-handler'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -49,7 +50,24 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
   const [loading, setLoading] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle')
   const [setupData, setSetupData] = useState<any>(null)
+  const [currentError, setCurrentError] = useState<any>(null)
   const { startVerification } = usePaymentVerification()
+
+  const handleRetry = () => {
+    setPaymentStatus('idle')
+    setCurrentError(null)
+    // Manter setupData para não recriar o Setup Intent
+  }
+
+  const handleNewCard = () => {
+    setPaymentStatus('idle')
+    setCurrentError(null)
+    setSetupData(null) // Limpar setupData para forçar novo Setup Intent
+  }
+
+  const handleContactSupport = () => {
+    window.open('/contato', '_blank')
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -67,6 +85,7 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
 
     setLoading(true)
     setPaymentStatus('processing')
+    setCurrentError(null)
 
     try {
       // Etapa 1: Criar Setup Intent
@@ -79,7 +98,7 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
 
         if (!setupResponse.ok) {
           const error = await setupResponse.json()
-          throw new Error(error.error || 'Erro ao criar setup intent')
+          throw { type: 'api_error', message: error.error || 'Erro ao criar setup intent' }
         }
 
         const setupResult = await setupResponse.json()
@@ -100,11 +119,11 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
         )
 
         if (setupError) {
-          throw new Error(setupError.message || 'Erro ao configurar método de pagamento')
+          throw setupError
         }
 
         if (setupIntent?.status !== 'succeeded') {
-          throw new Error('Falha ao configurar método de pagamento')
+          throw { type: 'setup_failed', message: 'Falha ao configurar método de pagamento' }
         }
 
         // Etapa 3: Criar assinatura
@@ -119,7 +138,7 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
 
         if (!subscriptionResponse.ok) {
           const error = await subscriptionResponse.json()
-          throw new Error(error.error || 'Erro ao criar assinatura')
+          throw { type: 'subscription_error', message: error.error || 'Erro ao criar assinatura' }
         }
 
         const subscriptionResult = await subscriptionResponse.json()
@@ -131,7 +150,7 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
           )
 
           if (confirmError) {
-            throw new Error(confirmError.message || 'Erro na confirmação do pagamento')
+            throw confirmError
           }
         }
 
@@ -144,8 +163,12 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
       }
     } catch (error) {
       console.error('Erro no pagamento:', error)
+      setCurrentError(error)
       setPaymentStatus('error')
-      onError(error instanceof Error ? error.message : 'Erro no pagamento')
+      
+      // Manter compatibilidade com callback de erro existente
+      const errorInfo = formatStripeError(error)
+      onError(errorInfo.message)
     } finally {
       setLoading(false)
     }
@@ -167,22 +190,13 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
     )
   }
 
-  if (paymentStatus === 'error') {
+  if (paymentStatus === 'error' && currentError) {
     return (
-      <div className="text-center py-8">
-        <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <AlertCircle className="w-10 h-10 text-red-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-red-600 mb-2">
-          Erro no Pagamento
-        </h3>
-        <p className="text-gray-600 dark:text-gray-300 mb-4">
-          Não foi possível processar o pagamento
-        </p>
-        <Button onClick={() => setPaymentStatus('idle')} variant="outline">
-          Tentar Novamente
-        </Button>
-      </div>
+      <PaymentProcessingError
+        error={currentError}
+        onRetry={handleRetry}
+        onCancel={() => setPaymentStatus('idle')}
+      />
     )
   }
 
@@ -198,6 +212,17 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
           Assinatura recorrente - cancele quando quiser
         </p>
       </div>
+
+      {/* Error Display - Inline */}
+      {paymentStatus === 'idle' && currentError && (
+        <StripeErrorDisplay
+          error={currentError}
+          onRetry={handleRetry}
+          onNewCard={handleNewCard}
+          onContactSupport={handleContactSupport}
+          loading={loading}
+        />
+      )}
 
       {/* Card Input */}
       <Card>
@@ -267,11 +292,11 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
       {/* Terms */}
       <p className="text-xs text-gray-500 text-center">
         Ao finalizar, você concorda com nossos{' '}
-        <a href="/termos" className="text-blue-600 hover:underline">
+        <a href="/termos-de-uso" className="text-blue-600 hover:underline">
           Termos de Uso
         </a>{' '}
         e{' '}
-        <a href="/privacidade" className="text-blue-600 hover:underline">
+        <a href="/lgpd" className="text-blue-600 hover:underline">
           Política de Privacidade
         </a>
       </p>

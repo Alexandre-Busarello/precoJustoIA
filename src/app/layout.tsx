@@ -5,6 +5,7 @@ import AuthProvider from "@/providers/session-provider";
 import Header from "@/components/header";
 import { StructuredData } from "@/components/structured-data";
 import { SessionRefreshProvider } from "@/components/session-refresh-provider";
+import { AlfaProvider } from "@/contexts/alfa-context";
 import { Toaster } from "sonner";
 import AdminLink from "@/components/admin-link";
 
@@ -95,14 +96,16 @@ export default function RootLayout({
       >
         <AuthProvider>
           <SessionRefreshProvider>
-            <div className="min-h-screen bg-background">
-              <Header />
-              <main>
-                {children}
-              </main>
-              <AdminLink />
-            </div>
-            <Toaster position="top-right" />
+            <AlfaProvider>
+              <div className="min-h-screen bg-background">
+                <Header />
+                <main>
+                  {children}
+                </main>
+                <AdminLink />
+              </div>
+              <Toaster position="top-right" />
+            </AlfaProvider>
           </SessionRefreshProvider>
         </AuthProvider>
       </body>

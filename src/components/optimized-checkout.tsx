@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useAlfa } from '@/contexts/alfa-context'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +22,7 @@ import {
 import { OptimizedPixPayment } from './optimized-pix-payment'
 import { OptimizedCardPayment } from './optimized-card-payment'
 
-type PlanType = 'monthly' | 'annual'
+type PlanType = 'monthly' | 'annual' | 'early'
 type PaymentMethod = 'pix' | 'card'
 
 const PLANS = {
@@ -53,6 +54,23 @@ const PLANS = {
       'Consultoria personalizada'
     ],
     popular: true
+  },
+  early: {
+    name: 'Early Adopter',
+    price: 249,
+    originalPrice: 497,
+    discount: 'PREÇO CONGELADO',
+    period: '/ano',
+    description: 'Oferta exclusiva - Preço congelado para sempre',
+    features: [
+      'Tudo do Premium Anual',
+      'Preço congelado para sempre',
+      'Canal exclusivo WhatsApp com CEO',
+      'Acesso antecipado a novos recursos',
+      'Badge especial Early Adopter'
+    ],
+    popular: true,
+    exclusive: true
   }
 }
 
@@ -61,7 +79,8 @@ interface OptimizedCheckoutProps {
 }
 
 export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckoutProps) {
-  const { data: session } = useSession()
+  const { status } = useSession()
+  const { stats: alfaStats, isLoading: isLoadingStats } = useAlfa()
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -73,10 +92,27 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   const [isProcessing, setIsProcessing] = useState(false)
 
   useEffect(() => {
-    if (!session) {
+    if (status === 'unauthenticated') {
       router.push('/login?callbackUrl=/checkout')
     }
-  }, [session, router])
+  }, [status, router])
+
+  // Ajustar plano selecionado baseado na fase ALFA
+  useEffect(() => {
+    if (alfaStats && !isLoadingStats) {
+      if (alfaStats.phase === 'ALFA') {
+        // Na fase ALFA, forçar seleção do Early Adopter se não foi especificado
+        if (!searchParams.get('plan')) {
+          setSelectedPlan('early')
+        }
+      } else {
+        // Fora da fase ALFA, se o plano selecionado for Early Adopter, mudar para monthly
+        if (selectedPlan === 'early') {
+          setSelectedPlan('monthly')
+        }
+      }
+    }
+  }, [alfaStats, isLoadingStats, searchParams, selectedPlan])
 
   const handleMethodSelect = (method: PaymentMethod) => {
     setSelectedMethod(method)
@@ -92,10 +128,17 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
     setIsProcessing(false)
   }
 
-  if (!session) {
+  if (status === 'loading' || isLoadingStats || status === 'unauthenticated') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">
+            {status === 'loading' ? 'Verificando autenticação...' : 
+             status === 'unauthenticated' ? 'Redirecionando para login...' :
+             'Carregando opções de planos...'}
+          </p>
+        </div>
       </div>
     )
   }
@@ -116,9 +159,35 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
         <div className="max-w-4xl mx-auto">
           {!showPayment ? (
             <>
+              {/* Aviso da Fase ALFA */}
+              {alfaStats?.phase === 'ALFA' && (
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-6 text-center">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Star className="w-5 h-5 text-purple-600" />
+                    <span className="font-semibold text-purple-800">Fase Alfa - Oferta Especial</span>
+                  </div>
+                  <p className="text-sm text-purple-700">
+                    Durante a Fase Alfa, apenas o plano <strong>Early Adopter</strong> está disponível com preço congelado para sempre!
+                  </p>
+                </div>
+              )}
+
               {/* Plan Selection */}
-              <div className="grid md:grid-cols-2 gap-6 mb-8">
-                {Object.entries(PLANS).map(([key, plan]) => (
+              <div className={`grid gap-6 mb-8 ${
+                alfaStats?.phase === 'ALFA' 
+                  ? 'grid-cols-1 max-w-md mx-auto' 
+                  : 'md:grid-cols-2'
+              }`}>
+                {Object.entries(PLANS)
+                  .filter(([key]) => {
+                    // Durante a fase ALFA, mostrar apenas o plano Early Adopter
+                    if (alfaStats?.phase === 'ALFA') {
+                      return key === 'early'
+                    }
+                    // Fora da fase ALFA, mostrar todos os planos exceto Early Adopter
+                    return key !== 'early'
+                  })
+                  .map(([key, plan]) => (
                   <Card 
                     key={key}
                     className={`relative cursor-pointer transition-all duration-200 hover:shadow-lg ${

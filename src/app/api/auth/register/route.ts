@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { canUserRegister, markAsEarlyAdopter } from "@/lib/alfa-service"
 
 export async function POST(request: Request) {
   try {
-    const { name, email, password } = await request.json()
+    const { name, email, password, isEarlyAdopter = false } = await request.json()
 
     // Validações básicas
     if (!name || !email || !password) {
@@ -18,6 +19,15 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { message: "A senha deve ter pelo menos 6 caracteres" },
         { status: 400 }
+      )
+    }
+
+    // Verificar se pode registrar (limite da fase Alfa)
+    const canRegister = await canUserRegister(isEarlyAdopter)
+    if (!canRegister) {
+      return NextResponse.json(
+        { message: "Limite de usuários atingido para a fase Alfa. Entre na lista de interesse." },
+        { status: 403 }
       )
     }
 
@@ -42,6 +52,9 @@ export async function POST(request: Request) {
         name,
         email,
         password: hashedPassword,
+        isEarlyAdopter,
+        earlyAdopterDate: isEarlyAdopter ? new Date() : null,
+        lastLoginAt: new Date(),
       }
     })
 

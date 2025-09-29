@@ -194,6 +194,8 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
         stripePriceId: subscription.items.data[0].price.id,
         stripeCurrentPeriodEnd: periodEndDate,
         premiumExpiresAt: periodEndDate,
+        earlyAdopterDate: subscription.items.data[0].price.id ? new Date() : null,
+        isEarlyAdopter: subscription.items.data[0].price.id ? true : false,
         wasPremiumBefore: true,
         firstPremiumAt: new Date(),
         lastPremiumAt: new Date(),
@@ -398,7 +400,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return false
   }
 
-  if (!planType || !['monthly', 'annual'].includes(planType)) {
+  if (!planType || !['early', 'monthly', 'annual'].includes(planType)) {
     console.error('❌ Invalid plan type in payment intent metadata:', planType)
     return false
   }
@@ -410,7 +412,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     
     if (planType === 'monthly') {
       expiresAt.setMonth(expiresAt.getMonth() + 1)
-    } else if (planType === 'annual') {
+    } else if (planType === 'annual' || planType === 'early') {
       expiresAt.setFullYear(expiresAt.getFullYear() + 1)
     }
 

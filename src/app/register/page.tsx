@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { AlfaBanner } from "@/components/alfa-banner"
+import { AlfaWaitlistForm } from "@/components/alfa-waitlist-form"
 
 function RegisterForm() {
   const [name, setName] = useState("")
@@ -16,11 +18,32 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [canRegister, setCanRegister] = useState(true)
+  const [isCheckingLimit, setIsCheckingLimit] = useState(true)
   const router = useRouter()
   const searchParams = useSearchParams()
   
   // Obter callbackUrl da URL ou usar dashboard como padrão
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  const isEarlyAdopter = searchParams.get('earlyAdopter') === 'true'
+
+  useEffect(() => {
+    checkRegistrationLimit()
+  }, [isEarlyAdopter])
+
+  const checkRegistrationLimit = async () => {
+    try {
+      const response = await fetch(`/api/alfa/register-check?earlyAdopter=${isEarlyAdopter}`)
+      if (response.ok) {
+        const data = await response.json()
+        setCanRegister(data.canRegister)
+      }
+    } catch (error) {
+      console.error('Erro ao verificar limite de registro:', error)
+    } finally {
+      setIsCheckingLimit(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,6 +72,7 @@ function RegisterForm() {
           name,
           email,
           password,
+          isEarlyAdopter,
         }),
       })
 
@@ -82,15 +106,55 @@ function RegisterForm() {
     await signIn("google", { callbackUrl })
   }
 
+  if (isCheckingLimit) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Verificando disponibilidade...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!canRegister && !isEarlyAdopter) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="w-full max-w-2xl px-4">
+          <AlfaBanner variant="landing" className="mb-6 rounded-lg" />
+          <AlfaWaitlistForm />
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Já tem uma conta?{" "}
+              <Link 
+                href={`/login${callbackUrl !== '/dashboard' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''}`}
+                className="underline underline-offset-4 hover:text-primary"
+              >
+                Faça login
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">Criar Conta</CardTitle>
-          <CardDescription className="text-center">
-            Crie sua conta para começar
-          </CardDescription>
-        </CardHeader>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="w-full max-w-md px-4">
+        <AlfaBanner variant="landing" className="mb-6 rounded-lg" />
+        <Card className="w-full">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl text-center">
+              {isEarlyAdopter ? 'Cadastro Early Adopter' : 'Criar Conta'}
+            </CardTitle>
+            <CardDescription className="text-center">
+              {isEarlyAdopter 
+                ? 'Complete seu cadastro como Early Adopter e garanta preço congelado para sempre!'
+                : 'Crie sua conta para começar'
+              }
+            </CardDescription>
+          </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -181,7 +245,8 @@ function RegisterForm() {
             </Link>
           </p>
         </CardFooter>
-      </Card>
+        </Card>
+      </div>
     </div>
   )
 }

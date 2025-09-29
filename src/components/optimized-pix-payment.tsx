@@ -18,7 +18,7 @@ import Image from 'next/image'
 import { usePaymentVerification } from '@/components/session-refresh-provider'
 
 interface OptimizedPixPaymentProps {
-  planType: 'monthly' | 'annual'
+  planType: 'monthly' | 'annual' | 'early'
   price: number
   onSuccess: () => void
   onError: (error: string) => void

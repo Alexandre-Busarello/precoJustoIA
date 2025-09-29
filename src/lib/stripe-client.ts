@@ -46,7 +46,7 @@ export const PLANS = {
       'Tudo do Premium Mensal',
       '12% de desconto',
       'Acesso antecipado a novos recursos',
-      'Relatórios mensais personalizados',
+      'Relatórios mensais personalizados por IA',
       'Suporte VIP',
     ],
   },

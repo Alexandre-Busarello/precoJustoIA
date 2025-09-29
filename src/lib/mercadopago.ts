@@ -1,7 +1,12 @@
 import { MercadoPagoConfig, Payment, Preference } from 'mercadopago'
+import crypto from 'crypto'
 
 if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
   throw new Error('MERCADOPAGO_ACCESS_TOKEN is not set')
+}
+
+if (!process.env.MERCADOPAGO_WEBHOOK_SECRET) {
+  throw new Error('MERCADOPAGO_WEBHOOK_SECRET is not set')
 }
 
 // Configurar MercadoPago
@@ -16,6 +21,11 @@ export const preference = new Preference(client)
 // Configurações dos planos
 export const MERCADOPAGO_CONFIG = {
   plans: {
+    early: {
+      amount: 249.00,
+      description: 'Preço Justo AI - Early Adopter Anual',
+      duration: 365, // dias
+    },
     monthly: {
       amount: 47.00,
       description: 'Preço Justo AI - Premium Mensal',
@@ -173,5 +183,77 @@ export async function processWebhookNotification(data: any) {
   } catch (error) {
     console.error('Erro ao processar webhook:', error)
     throw error
+  }
+}
+
+// Função para validar assinatura do webhook MercadoPago
+export function validateWebhookSignature(
+  xSignature: string,
+  xRequestId: string,
+  dataId: string,
+  rawBody: string
+): boolean {
+  try {
+    if (!xSignature || !xRequestId || !dataId) {
+      console.error('❌ Missing required headers for webhook validation')
+      return false
+    }
+
+    // Extrair timestamp e assinatura do cabeçalho x-signature
+    // Formato: ts=1234567890,v1=hash_value
+    const parts = xSignature.split(',')
+    let ts = ''
+    let receivedSignature = ''
+
+    for (const part of parts) {
+      const [key, value] = part.split('=')
+      if (key === 'ts') {
+        ts = value
+      } else if (key === 'v1') {
+        receivedSignature = value
+      }
+    }
+
+    if (!ts || !receivedSignature) {
+      console.error('❌ Invalid x-signature format')
+      return false
+    }
+
+    // Construir string de assinatura conforme documentação do MercadoPago
+    const signatureTemplate = `id:${dataId};request-id:${xRequestId};ts:${ts};`
+    
+    console.log('🔍 Webhook signature validation:', {
+      dataId,
+      xRequestId,
+      ts,
+      signatureTemplate,
+      receivedSignature: receivedSignature.substring(0, 10) + '...'
+    })
+
+    // Calcular assinatura HMAC SHA256
+    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET!
+    const calculatedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(signatureTemplate)
+      .digest('hex')
+
+    // Comparar assinaturas de forma segura (timing-safe)
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(calculatedSignature, 'hex'),
+      Buffer.from(receivedSignature, 'hex')
+    )
+
+    if (!isValid) {
+      console.error('❌ Webhook signature validation failed')
+      console.error('Expected:', calculatedSignature.substring(0, 10) + '...')
+      console.error('Received:', receivedSignature.substring(0, 10) + '...')
+    } else {
+      console.log('✅ Webhook signature validated successfully')
+    }
+
+    return isValid
+  } catch (error) {
+    console.error('❌ Error validating webhook signature:', error)
+    return false
   }
 }

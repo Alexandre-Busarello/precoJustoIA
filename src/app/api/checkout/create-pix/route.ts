@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     const { planType, userEmail, userName } = await request.json()
 
-    if (!planType || !['monthly', 'annual'].includes(planType)) {
+    if (!planType || !['early', 'monthly', 'annual'].includes(planType)) {
       return NextResponse.json(
         { error: 'Tipo de plano inválido' },
         { status: 400 }
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se o usuário já tem uma assinatura ativa
-    if (user.isPremium) {
+    if (user.isPremium && user.subscriptionTier !== 'FREE') {
       return NextResponse.json(
         { error: 'Usuário já possui uma assinatura ativa' },
         { status: 400 }

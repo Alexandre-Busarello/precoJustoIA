@@ -47,7 +47,6 @@ export interface StatementsAnalysis {
 export function analyzeFinancialStatements(data: FinancialStatementsData): StatementsAnalysis {
   const { incomeStatements, balanceSheets, cashflowStatements, company } = data;
   
-  let score = 100;
   const redFlags: string[] = [];
   const positiveSignals: string[] = [];
   const contextualFactors: string[] = [];
@@ -61,10 +60,17 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   const hasInsufficientData = incomeStatements.length < 2 || balanceSheets.length < 2 || cashflowStatements.length < 2;
   const hasLimitedHistory = incomeStatements.length < minYears;
   
+  // Para dados insuficientes, retornar score neutro
   if (hasInsufficientData) {
     contextualFactors.push('Dados históricos limitados - análise baseada em informações disponíveis');
-    // Para dados muito limitados, ser mais conservador mas não penalizar excessivamente
-    score = 75; // Score neutro para dados limitados
+    return {
+      score: 50, // Score neutro para dados limitados
+      redFlags: ['Dados históricos insuficientes para análise completa'],
+      positiveSignals: [],
+      riskLevel: 'MEDIUM' as const,
+      companyStrength: 'MODERATE' as const,
+      contextualFactors
+    };
   } else if (hasLimitedHistory) {
     contextualFactors.push('Histórico parcial - análise baseada em dados disponíveis');
   }
@@ -90,61 +96,84 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   const averageMetrics = calculateAverageMetrics(completedYearsData);
   const benchmarks = getSectorBenchmarks(sectorContext, sizeContext);
   
-  // === 1. ANÁLISE DE RENTABILIDADE (Peso: 25%) ===
-  const profitabilityAnalysis = analyzeProfitabilityMetrics(averageMetrics, benchmarks, sectorContext, completedYearsData);
-  score += profitabilityAnalysis.scoreAdjustment * 0.25;
-  redFlags.push(...profitabilityAnalysis.redFlags);
-  positiveSignals.push(...profitabilityAnalysis.positiveSignals);
+  // === SISTEMA DE PONTUAÇÃO NORMALIZADO ===
+  // Definir pesos normalizados (soma = 1.0)
+  const weights = {
+    profitability: 0.30,    // 30% - Rentabilidade
+    liquidity: 0.20,        // 20% - Liquidez e Solvência  
+    efficiency: 0.20,       // 20% - Eficiência Operacional
+    stability: 0.15,        // 15% - Estabilidade e Consistência
+    cashFlow: 0.10,         // 10% - Fluxo de Caixa
+    growth: 0.05           // 5% - Crescimento Sustentável
+  };
 
-  // === 2. ANÁLISE DE LIQUIDEZ E SOLVÊNCIA (Peso: 20%) ===
-  const liquidityAnalysis = analyzeLiquidityMetrics(averageMetrics, benchmarks, sectorContext);
-  score += liquidityAnalysis.scoreAdjustment * 0.20;
-  redFlags.push(...liquidityAnalysis.redFlags);
-  positiveSignals.push(...liquidityAnalysis.positiveSignals);
+  // Coletar todas as análises
+  const analyses = {
+    profitability: analyzeProfitabilityMetrics(averageMetrics, benchmarks, sectorContext, completedYearsData),
+    liquidity: analyzeLiquidityMetrics(averageMetrics, benchmarks, sectorContext),
+    efficiency: analyzeEfficiencyMetrics(averageMetrics, benchmarks, sectorContext),
+    stability: analyzeStabilityMetrics(completedYearsData, averageMetrics, sectorContext),
+    cashFlow: analyzeCashFlowQuality(averageMetrics, benchmarks, sectorContext),
+    growth: analyzeGrowthQuality(completedYearsData, averageMetrics, sectorContext)
+  };
 
-  // === 3. ANÁLISE DE EFICIÊNCIA OPERACIONAL (Peso: 20%) ===
-  const efficiencyAnalysis = analyzeEfficiencyMetrics(averageMetrics, benchmarks, sectorContext);
-  score += efficiencyAnalysis.scoreAdjustment * 0.20;
-  redFlags.push(...efficiencyAnalysis.redFlags);
-  positiveSignals.push(...efficiencyAnalysis.positiveSignals);
+  // Coletar flags e sinais
+  Object.values(analyses).forEach(analysis => {
+    redFlags.push(...analysis.redFlags);
+    positiveSignals.push(...analysis.positiveSignals);
+  });
 
-  // === 4. ANÁLISE DE ESTABILIDADE E CONSISTÊNCIA (Peso: 20%) ===
-  const stabilityAnalysis = analyzeStabilityMetrics(completedYearsData, averageMetrics, sectorContext);
-  score += stabilityAnalysis.scoreAdjustment * 0.20;
-  redFlags.push(...stabilityAnalysis.redFlags);
-  positiveSignals.push(...stabilityAnalysis.positiveSignals);
+  // === NORMALIZAÇÃO DO SCORE ===
+  // Converter scoreAdjustments para scores de 0-100 e aplicar pesos
+  let weightedScore = 0;
+  
+  Object.entries(analyses).forEach(([key, analysis]) => {
+    // Normalizar scoreAdjustment para uma escala de 0-100
+    // scoreAdjustment varia tipicamente de -60 a +15
+    // Mapear para 0-100: score = 50 + (scoreAdjustment * 0.5)
+    const normalizedScore = Math.max(0, Math.min(100, 50 + (analysis.scoreAdjustment * 0.5)));
+    
+    const weight = weights[key as keyof typeof weights];
+    weightedScore += normalizedScore * weight;
+    
+    console.log(`${key} Analysis:`, {
+      scoreAdjustment: analysis.scoreAdjustment,
+      normalizedScore: normalizedScore.toFixed(1),
+      weight: weight,
+      contribution: (normalizedScore * weight).toFixed(1)
+    });
+  });
 
-  // === 5. ANÁLISE DE FLUXO DE CAIXA (Peso: 10%) ===
-  const cashFlowAnalysis = analyzeCashFlowQuality(averageMetrics, benchmarks, sectorContext);
-  score += cashFlowAnalysis.scoreAdjustment * 0.10;
-  redFlags.push(...cashFlowAnalysis.redFlags);
-  positiveSignals.push(...cashFlowAnalysis.positiveSignals);
+  console.log('Final weighted score:', weightedScore.toFixed(1));
 
-  // === 6. ANÁLISE DE CRESCIMENTO SUSTENTÁVEL (Peso: 15%) ===
-  const growthAnalysis = analyzeGrowthQuality(completedYearsData, averageMetrics, sectorContext);
-  score += growthAnalysis.scoreAdjustment * 0.15;
-  redFlags.push(...growthAnalysis.redFlags);
-  positiveSignals.push(...growthAnalysis.positiveSignals);
+  // === GARANTIR QUE O SCORE ESTÁ ENTRE 0-100 ===
+  const finalScore = Math.max(0, Math.min(100, Math.round(weightedScore)));
 
   // === DETERMINAR FORÇA DA EMPRESA BASEADA NAS MÉDIAS ===
   const companyStrength = assessCompanyStrengthFromAverages(averageMetrics, benchmarks, sectorContext);
+  console.log('Company Strength:', companyStrength);
 
-  // === DETERMINAR NÍVEL DE RISCO ===
+  // === DETERMINAR NÍVEL DE RISCO BASEADO NO SCORE FINAL ===
   let riskLevel: StatementsAnalysis['riskLevel'] = 'LOW';
   const criticalFlags = redFlags.filter(flag => 
     flag.includes('crítico') || flag.includes('grave') || flag.includes('insolvência')
   ).length;
   
-  if (score < 30 || criticalFlags >= 3) {
+  if (finalScore < 30 || criticalFlags >= 3) {
     riskLevel = 'CRITICAL';
-  } else if (score < 50 || criticalFlags >= 2) {
+  } else if (finalScore < 50 || criticalFlags >= 2) {
     riskLevel = 'HIGH';
-  } else if (score < 70 || redFlags.length >= 4) {
+  } else if (finalScore < 70 || redFlags.length >= 4) {
     riskLevel = 'MEDIUM';
   }
 
-  // === AJUSTE FINAL DO SCORE ===
-  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+  console.log('Final analysis result:', {
+    finalScore,
+    riskLevel,
+    companyStrength,
+    redFlagsCount: redFlags.length,
+    positiveSignalsCount: positiveSignals.length
+  });
 
   return {
     score: finalScore,

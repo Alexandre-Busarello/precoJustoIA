@@ -3,12 +3,14 @@
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { RankingHistory } from "@/components/ranking-history"
 import CompanySearch from "@/components/company-search"
 import { Footer } from "@/components/footer"
+import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner"
 import { 
   BarChart3, 
   TrendingUp, 
@@ -30,6 +32,7 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { data: session, status } = useSession()
+  const { isPremium } = usePremiumStatus()
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
@@ -74,7 +77,7 @@ export default function Dashboard() {
     return null
   }
 
-  const isPremium = session.user?.subscriptionTier === 'PREMIUM'
+  // isPremium agora vem do hook usePremiumStatus
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background">
@@ -108,6 +111,9 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Early Adopter Banner - Conversão ALFA */}
+        <EarlyAdopterDashboardBanner className="mb-6" />
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">

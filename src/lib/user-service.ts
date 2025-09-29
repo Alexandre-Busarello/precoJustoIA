@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import type { Session } from 'next-auth'
+import { isAlfaPhase } from '@/lib/alfa-service'
 
 /**
  * ÚNICA FONTE DA VERDADE PARA VERIFICAÇÕES DE USUÁRIO E PREMIUM
@@ -72,8 +73,11 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
 
   // Calcular status Premium
   const now = new Date()
-  const isPremium = user.subscriptionTier === 'PREMIUM' && 
-                   (!user.premiumExpiresAt || user.premiumExpiresAt > now)
+  const hasValidPremium = user.subscriptionTier === 'PREMIUM' && 
+                         (!user.premiumExpiresAt || user.premiumExpiresAt > now)
+  
+  // Durante a fase Alfa, todos os usuários têm acesso Premium
+  const isPremium = isAlfaPhase() || hasValidPremium
 
   return {
     id: user.id,
@@ -143,8 +147,11 @@ export async function isUserPremium(identifier: string): Promise<boolean> {
     }
 
     const now = new Date()
-    return user.subscriptionTier === 'PREMIUM' && 
-           (!user.premiumExpiresAt || user.premiumExpiresAt > now)
+    const hasValidPremium = user.subscriptionTier === 'PREMIUM' && 
+                           (!user.premiumExpiresAt || user.premiumExpiresAt > now)
+    
+    // Durante a fase Alfa, todos os usuários têm acesso Premium
+    return isAlfaPhase() || hasValidPremium
   } catch (error) {
     console.error('Erro ao verificar status Premium:', error)
     return false
@@ -209,8 +216,11 @@ export async function getUserById(userId: string): Promise<UserData | null> {
     }
 
     const now = new Date()
-    const isPremium = user.subscriptionTier === 'PREMIUM' && 
-                     (!user.premiumExpiresAt || user.premiumExpiresAt > now)
+    const hasValidPremium = user.subscriptionTier === 'PREMIUM' && 
+                           (!user.premiumExpiresAt || user.premiumExpiresAt > now)
+    
+    // Durante a fase Alfa, todos os usuários têm acesso Premium
+    const isPremium = isAlfaPhase() || hasValidPremium
 
     return {
       id: user.id,

@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { QuickRanker } from "@/components/quick-ranker"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,10 +21,10 @@ import { Suspense } from "react"
 
 function RankingContent() {
   const { data: session } = useSession()
+  const { isPremium } = usePremiumStatus()
   const searchParams = useSearchParams()
   const rankingId = searchParams.get('id')
   const isLoggedIn = !!session
-  const isPremium = session?.user?.subscriptionTier === 'PREMIUM'
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background">

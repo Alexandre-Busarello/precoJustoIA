@@ -57,6 +57,13 @@ model User {
   stripePriceId       String?   @map("stripe_price_id")
   stripeCurrentPeriodEnd DateTime? @map("stripe_current_period_end")
   
+  // Fase Alfa - Early Adopters
+  isEarlyAdopter      Boolean   @default(false) @map("is_early_adopter")
+  earlyAdopterDate    DateTime? @map("early_adopter_date")
+  lastLoginAt         DateTime? @map("last_login_at")
+  isInactive          Boolean   @default(false) @map("is_inactive")
+  inactivatedAt       DateTime? @map("inactivated_at")
+  
   accounts         Account[]
   sessions         Session[]
   portfolios       Portfolio[]
@@ -875,4 +882,20 @@ model BacktestTransaction {
   @@index([backtestId, date]) // Otimização para consultas por data
   @@index([ticker, transactionType]) // Otimização para análise cross-backtest por ticker
   @@map("backtest_transactions")
+}
+
+// ===== MODELOS PARA FASE ALFA =====
+
+// Lista de interesse para fase Alfa
+model AlfaWaitlist {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  invitedAt DateTime? @map("invited_at")
+  isInvited Boolean  @default(false) @map("is_invited")
+  
+  @@index([createdAt])
+  @@index([isInvited])
+  @@map("alfa_waitlist")
 }

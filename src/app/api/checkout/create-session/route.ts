@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se o usuário já tem uma assinatura ativa
-    if (user.isPremium) {
+    if (user.isPremium && user.subscriptionTier !== 'FREE') {
       return NextResponse.json(
         { error: 'Usuário já possui uma assinatura ativa' },
         { status: 400 }

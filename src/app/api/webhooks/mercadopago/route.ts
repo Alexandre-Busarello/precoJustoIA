@@ -1,14 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { processWebhookNotification } from '@/lib/mercadopago'
+import { processWebhookNotification, validateWebhookSignature } from '@/lib/mercadopago'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   console.log('🔗 MercadoPago webhook POST request received')
   
   try {
-    const body = await request.json()
+    // Obter headers necessários para validação
+    const xSignature = request.headers.get('x-signature')
+    const xRequestId = request.headers.get('x-request-id')
+    const dataId = request.nextUrl.searchParams.get('data.id')
+    
+    console.log('🔍 Webhook headers:', {
+      hasXSignature: !!xSignature,
+      hasXRequestId: !!xRequestId,
+      dataId,
+    })
+
+    // Ler o corpo da requisição
+    const rawBody = await request.text()
+    let body: any
+    
+    try {
+      body = JSON.parse(rawBody)
+    } catch (error) {
+      console.error('❌ Invalid JSON in webhook body')
+      return NextResponse.json(
+        { error: 'Invalid JSON' },
+        { status: 400 }
+      )
+    }
     
     console.log('🎯 MercadoPago webhook received:', body)
+
+    // Validar assinatura do webhook (apenas em produção)
+    if (process.env.NODE_ENV === 'production') {
+      if (!xSignature || !xRequestId || !dataId) {
+        console.error('❌ Missing required headers for webhook validation')
+        return NextResponse.json(
+          { error: 'Missing required headers' },
+          { status: 401 }
+        )
+      }
+
+      const isValidSignature = validateWebhookSignature(
+        xSignature,
+        xRequestId,
+        dataId,
+        rawBody
+      )
+
+      if (!isValidSignature) {
+        console.error('❌ Invalid webhook signature')
+        return NextResponse.json(
+          { error: 'Invalid signature' },
+          { status: 401 }
+        )
+      }
+
+      console.log('✅ Webhook signature validated successfully')
+    } else {
+      console.log('⚠️ Skipping webhook signature validation in development mode')
+    }
 
     // Processar notificação do webhook
     const paymentData = await processWebhookNotification(body)
@@ -69,9 +122,17 @@ async function handlePaymentApproved(paymentData: any): Promise<boolean> {
     }
 
     // Determinar duração baseada no valor do pagamento
-    // R$ 47 = mensal (30 dias), R$ 470 = anual (365 dias)
-    const planDuration = amount >= 400 ? 365 : 30 // anual ou mensal
-    const planType = amount >= 400 ? 'annual' : 'monthly'
+    // R$ 47 = mensal (30 dias), R$ 249 = early adopter (365 dias), R$ 497 = anual (365 dias)
+    let planDuration: number
+    let planType: string
+    
+    if (amount >= 200) {
+      planDuration = 365 // anual ou early adopter
+      planType = amount <= 300 ? 'early' : 'annual' // R$ 249 = early, R$ 497 = annual
+    } else {
+      planDuration = 30 // mensal
+      planType = 'monthly'
+    }
 
     console.log(`📅 Plan type: ${planType}, duration: ${planDuration} days`)
 
@@ -94,19 +155,30 @@ async function handlePaymentApproved(paymentData: any): Promise<boolean> {
     console.log('👤 User found:', currentUser.email)
 
     console.log('💾 Updating user in database...')
+    
+    // Preparar dados de atualização baseados no tipo de plano
+    const updateData: any = {
+      subscriptionTier: 'PREMIUM',
+      premiumExpiresAt: expiresAt,
+      wasPremiumBefore: true,
+      firstPremiumAt: currentUser?.firstPremiumAt || new Date(),
+      lastPremiumAt: new Date(),
+      premiumCount: {
+        increment: 1,
+      },
+    }
+
+    // Se for Early Adopter, marcar campos especiais
+    if (planType === 'early') {
+      updateData.isEarlyAdopter = true
+      updateData.earlyAdopterDate = new Date()
+      console.log('🎉 Marking user as Early Adopter!')
+    }
+
     // Atualizar usuário no banco de dados
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        subscriptionTier: 'PREMIUM',
-        premiumExpiresAt: expiresAt,
-        wasPremiumBefore: true,
-        firstPremiumAt: currentUser?.firstPremiumAt || new Date(),
-        lastPremiumAt: new Date(),
-        premiumCount: {
-          increment: 1,
-        },
-      },
+      data: updateData,
     })
 
     console.log(`✅ User ${userId} (${currentUser.email}) upgraded to PREMIUM via PIX (${planType}) until ${expiresAt}`)

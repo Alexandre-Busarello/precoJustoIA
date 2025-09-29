@@ -19,7 +19,7 @@ import { usePaymentVerification } from '@/components/session-refresh-provider'
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 interface OptimizedCardPaymentProps {
-  planType: 'monthly' | 'annual'
+  planType: 'monthly' | 'annual' | 'early'
   price: number
   onSuccess: () => void
   onError: (error: string) => void

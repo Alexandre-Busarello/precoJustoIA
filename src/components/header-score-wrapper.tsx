@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent } from '@/components/ui/card';
 import CompactScore from '@/components/compact-score';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
 
 // Interface para score geral
 interface OverallScore {
@@ -21,11 +22,11 @@ interface HeaderScoreWrapperProps {
 
 export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) {
   const { data: session } = useSession();
+  const { isPremium } = usePremiumStatus();
   const [overallScore, setOverallScore] = useState<OverallScore | null>(null);
   const [loading, setLoading] = useState(true);
   
   const isLoggedIn = !!session?.user;
-  const isPremium = session?.user?.subscriptionTier === 'PREMIUM';
 
   useEffect(() => {
     async function fetchScore() {

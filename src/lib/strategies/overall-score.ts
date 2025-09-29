@@ -385,7 +385,7 @@ function calculateAverageMetrics(data: {
 // === FUNÇÃO PARA OBTER BENCHMARKS SETORIAIS ===
 function getSectorBenchmarks(sectorContext: SectorContext, sizeContext: SizeContext): SectorBenchmarks {
   // Benchmarks base (conservadores)
-  let benchmarks: SectorBenchmarks = {
+  const benchmarks: SectorBenchmarks = {
     minROE: 0.08, goodROE: 0.15, excellentROE: 0.25,
     minROA: 0.03, goodROA: 0.08,
     minNetMargin: 0.05, goodNetMargin: 0.10,
@@ -533,7 +533,7 @@ function analyzeOperationalVsNetMarginGap(
   const netProfit = netIncome;
   const totalGap = netProfit + operationalLoss; // Quanto precisa "compensar"
   
-  let explanations: string[] = [];
+  const explanations: string[] = [];
   let mainCause = '';
   
   // 1. Analisar receitas financeiras (juros recebidos)

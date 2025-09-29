@@ -38,6 +38,16 @@ export const metadata: Metadata = {
   alternates: {
     canonical: '/',
   },
+  icons: {
+    icon: [
+      {
+        url: '/favicon.ico',
+        sizes: '32x32',
+        type: 'image/x-icon',
+      },
+    ],
+    shortcut: '/favicon.ico',
+  },
   openGraph: {
     type: 'website',
     locale: 'pt_BR',
@@ -87,6 +97,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <StructuredData type="website" />
         <StructuredData type="organization" />
         <StructuredData type="product" />

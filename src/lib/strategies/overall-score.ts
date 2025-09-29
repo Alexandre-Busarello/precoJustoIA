@@ -99,12 +99,13 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   // === SISTEMA DE PONTUAÇÃO NORMALIZADO ===
   // Definir pesos normalizados (soma = 1.0)
   const weights = {
-    profitability: 0.30,    // 30% - Rentabilidade
-    liquidity: 0.20,        // 20% - Liquidez e Solvência  
-    efficiency: 0.20,       // 20% - Eficiência Operacional
+    profitability: 0.25,    // 25% - Rentabilidade
+    liquidity: 0.18,        // 18% - Liquidez e Solvência  
+    efficiency: 0.18,       // 18% - Eficiência Operacional
     stability: 0.15,        // 15% - Estabilidade e Consistência
     cashFlow: 0.10,         // 10% - Fluxo de Caixa
-    growth: 0.05           // 5% - Crescimento Sustentável
+    growth: 0.04,           // 4% - Crescimento Sustentável
+    incomeComposition: 0.10 // 10% - Composição do Resultado (qualidade dos lucros)
   };
 
   // Coletar todas as análises
@@ -114,7 +115,8 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
     efficiency: analyzeEfficiencyMetrics(averageMetrics, benchmarks, sectorContext),
     stability: analyzeStabilityMetrics(completedYearsData, averageMetrics, sectorContext),
     cashFlow: analyzeCashFlowQuality(averageMetrics, benchmarks, sectorContext),
-    growth: analyzeGrowthQuality(completedYearsData, averageMetrics, sectorContext)
+    growth: analyzeGrowthQuality(completedYearsData, averageMetrics, sectorContext),
+    incomeComposition: analyzeIncomeComposition(completedYearsData, sectorContext)
   };
 
   // Coletar flags e sinais
@@ -150,7 +152,20 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   console.log('Final weighted score:', weightedScore.toFixed(1));
 
   // === GARANTIR QUE O SCORE ESTÁ ENTRE 0-100 ===
-  const finalScore = Math.max(0, Math.min(100, Math.round(weightedScore)));
+  let finalScore = Math.max(0, Math.min(100, Math.round(weightedScore)));
+
+  // === PENALIZAÇÕES CRÍTICAS DIRETAS ===
+  // Aplicar penalizações mínimas garantidas para problemas críticos
+  const incomeCompositionAnalysis = analyses.incomeComposition;
+  if (incomeCompositionAnalysis.scoreAdjustment <= -300) {
+    // Dependência excessiva de resultados não operacionais - penalização mínima de 25 pontos
+    finalScore = Math.max(0, finalScore - 25);
+    console.log('Aplicada penalização crítica: -25 pontos por dependência excessiva de resultados não operacionais');
+  } else if (incomeCompositionAnalysis.scoreAdjustment <= -50) {
+    // Qualidade dos lucros questionável - penalização mínima de 15 pontos
+    finalScore = Math.max(0, finalScore - 15);
+    console.log('Aplicada penalização moderada: -15 pontos por qualidade dos lucros questionável');
+  }
 
   // === DETERMINAR FORÇA DA EMPRESA BASEADA NAS MÉDIAS ===
   const companyStrength = assessCompanyStrengthFromAverages(averageMetrics, benchmarks, sectorContext);
@@ -1019,6 +1034,110 @@ function assessCompanyStrength(data: FinancialStatementsData): StatementsAnalysi
   if (strengthScore >= 60) return 'STRONG';
   if (strengthScore >= 40) return 'MODERATE';
   return 'WEAK';
+}
+
+// === ANÁLISE DA COMPOSIÇÃO DO RESULTADO ===
+function analyzeIncomeComposition(
+  data: { income: Record<string, unknown>[]; balance: Record<string, unknown>[]; cashflow: Record<string, unknown>[] },
+  sectorContext: SectorContext
+): AnalysisResult {
+  const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
+
+  // Não aplicar para empresas financeiras
+  if (sectorContext.type === 'FINANCIAL') {
+    return result;
+  }
+
+  // Verificar se temos dados suficientes
+  if (data.income.length < 2) {
+    return result;
+  }
+
+  // Analisar os últimos 3 anos (ou quantos estiverem disponíveis)
+  const yearsToAnalyze = Math.min(3, data.income.length);
+  let problematicYears = 0;
+  let totalYearsAnalyzed = 0;
+
+  for (let i = 0; i < yearsToAnalyze; i++) {
+    const incomeStmt = data.income[i];
+    
+    // Extrair componentes do resultado usando campos do schema
+    const netIncome = toNumber(incomeStmt.netIncome) || 0;
+    const grossProfit = toNumber(incomeStmt.grossProfit) || 0;
+    const totalOperatingExpenses = toNumber(incomeStmt.totalOperatingExpenses) || 0;
+    const ebit = toNumber(incomeStmt.ebit) || 0;
+    const operatingIncomeField = toNumber(incomeStmt.operatingIncome) || 0;
+    
+    // Campos financeiros disponíveis no schema
+    const financialResult = toNumber(incomeStmt.financialResult) || 0; // Resultado financeiro líquido
+    const financialIncome = toNumber(incomeStmt.financialIncome) || 0; // Receitas financeiras
+    const financialExpenses = toNumber(incomeStmt.financialExpenses) || 0; // Despesas financeiras
+    const interestExpense = toNumber(incomeStmt.interestExpense) || 0; // Despesas de juros
+    const totalOtherIncomeExpenseNet = toNumber(incomeStmt.totalOtherIncomeExpenseNet) || 0; // Outras receitas/despesas
+    const otherOperatingIncome = toNumber(incomeStmt.otherOperatingIncome) || 0; // Outras receitas operacionais
+    
+    // Calcular resultado operacional corretamente (mesma lógica do calculateAverageMetrics)
+    // Prioridade: 1) EBIT, 2) Lucro Bruto - Despesas Operacionais, 3) Operating Income como fallback
+    let operatingProfit = ebit;
+    if (!operatingProfit && grossProfit > 0 && totalOperatingExpenses > 0) {
+      operatingProfit = grossProfit - totalOperatingExpenses;
+    } else if (!operatingProfit) {
+      operatingProfit = operatingIncomeField; // Fallback
+    }
+
+    // Calcular resultado não operacional total
+    // Usar financialResult se disponível, senão calcular financialIncome - financialExpenses
+    let netFinancialResult = financialResult;
+    if (!netFinancialResult && (financialIncome > 0 || financialExpenses > 0)) {
+      netFinancialResult = financialIncome - Math.abs(financialExpenses);
+    }
+    
+    // Somar outras receitas não operacionais
+    const nonOperationalResult = netFinancialResult + totalOtherIncomeExpenseNet;
+    
+    // Só analisar se a empresa teve lucro líquido positivo
+    if (netIncome > 0) {
+      totalYearsAnalyzed++;
+      
+      // Verificar se o resultado operacional é negativo ou muito baixo
+      // e o resultado não operacional é significativo
+      if (operatingProfit <= 0) {
+        // Caso 1: Resultado operacional negativo, mas lucro líquido positivo
+        // Verificar se o resultado não operacional "salvou" a empresa
+        if (nonOperationalResult > netIncome * 0.5) {
+          problematicYears++;
+        }
+      } else {
+        // Caso 2: Resultado operacional positivo, mas resultado não operacional
+        // representa mais de 50% do lucro líquido
+        const nonOpPercentage = nonOperationalResult / netIncome;
+        if (nonOpPercentage > 0.5) {
+          problematicYears++;
+        }
+      }
+    }
+  }
+
+  // Se mais da metade dos anos analisados apresentaram o problema
+  if (totalYearsAnalyzed >= 2 && problematicYears >= Math.ceil(totalYearsAnalyzed / 2)) {
+    const yearsText = totalYearsAnalyzed === 1 ? "ano" : "anos";
+    const problematicText = problematicYears === 1 ? "ano" : "anos";
+    
+    // Aplicar penalização significativa no score
+    result.scoreAdjustment -= 200; // Penalização de 400 pontos (alta severidade)
+    result.redFlags.push(`Dependência excessiva de resultados não operacionais: em ${problematicText} dos últimos ${totalYearsAnalyzed} ${yearsText}, a maior parte do lucro veio de receitas financeiras ou outras receitas não operacionais, indicando fraqueza na atividade principal`);
+  } else if (totalYearsAnalyzed >= 2 && problematicYears > 0) {
+    // Penalização menor se apenas alguns anos tiveram o problema
+    const yearsText = totalYearsAnalyzed === 1 ? "ano" : "anos";
+    result.scoreAdjustment -= 60;
+    result.redFlags.push(`Qualidade dos lucros questionável: em ${problematicYears} dos últimos ${totalYearsAnalyzed} ${yearsText}, parte significativa do lucro veio de fontes não operacionais`);
+  } else if (totalYearsAnalyzed >= 2) {
+    // Sinal positivo se a empresa tem lucros consistentemente operacionais
+    result.scoreAdjustment += 25;
+    result.positiveSignals.push(`Qualidade dos lucros sólida: A empresa gera seus lucros principalmente através da atividade operacional, demonstrando sustentabilidade do negócio`);
+  }
+
+  return result;
 }
 
 // Obter contexto setorial

@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         userId: user.id,
         userEmail: user.email,
-        planType: planType,
+        planType: planType === 'early' ? 'annual' : planType,
         priceId: planConfig.priceId,
       },
     })

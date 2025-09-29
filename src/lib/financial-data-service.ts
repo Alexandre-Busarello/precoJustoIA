@@ -240,7 +240,7 @@ export async function getComprehensiveFinancialData(
         financialData: {
           where: { year: { gte: startYear } },
           orderBy: { year: 'desc' },
-          take: 5
+          take: 12
         },
         balanceSheets: {
           where: {

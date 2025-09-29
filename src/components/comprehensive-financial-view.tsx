@@ -108,6 +108,25 @@ function IndicatorWithFallback({
   )
 }
 
+// Função para calcular médias dos últimos 7 anos completos (excluindo ano corrente)
+function calculateAverages(data: Record<string, unknown>[], field: string): number | null {
+  const currentYear = new Date().getFullYear();
+  
+  // Filtrar apenas anos completos (excluindo o ano corrente)
+  const completedYearsData = data.filter(item => {
+    const itemYear = item.year as number;
+    return itemYear && itemYear < currentYear;
+  });
+  
+  // Pegar os últimos 7 anos completos
+  const validValues = completedYearsData.slice(0, 7)
+    .map(item => toNumber(item[field]))
+    .filter(val => val !== null && !isNaN(val as number)) as number[];
+  
+  if (validValues.length === 0) return null;
+  return validValues.reduce((sum, val) => sum + val, 0) / validValues.length;
+}
+
 // Função para calcular score de crescimento para ranking (ouro, prata, bronze)
 function calculateGrowthScore(financialData: Record<string, unknown>): {
   score: number;
@@ -181,6 +200,21 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
   // Calcular score de crescimento
   const growthScore = calculateGrowthScore(latestFinancial || {})
+
+  // Calcular médias dos últimos 7 anos para os indicadores da Visão Geral
+  const averages = {
+    receitaTotal: calculateAverages(financialData, 'receitaTotal'),
+    lucroLiquido: calculateAverages(financialData, 'lucroLiquido'),
+    margemLiquida: calculateAverages(financialData, 'margemLiquida'),
+    margemEbitda: calculateAverages(financialData, 'margemEbitda'),
+    roe: calculateAverages(financialData, 'roe'),
+    roa: calculateAverages(financialData, 'roa'),
+    roic: calculateAverages(financialData, 'roic'),
+    pl: calculateAverages(financialData, 'pl'),
+    pvp: calculateAverages(financialData, 'pvp'),
+    dy: calculateAverages(financialData, 'dy'),
+    evEbitda: calculateAverages(financialData, 'evEbitda')
+  }
 
   return (
     <div className="space-y-6">
@@ -274,21 +308,26 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
             {/* Indicadores Principais */}
             <Card>
               <CardHeader className="pb-3 p-4">
-                <CardTitle className="text-sm font-medium flex items-center">
-                  <DollarSign className="w-4 h-4 mr-2 flex-shrink-0" />
-                  <span className="truncate">Receita & Lucro</span>
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
+                  <div className="flex items-center">
+                    <DollarSign className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Receita & Lucro</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                    Média 7a*
+                  </Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
-                  label="Receita Total"
-                  value={toNumber(latestFinancial?.receitaTotal)}
+                  label="Receita Total (Média)"
+                  value={averages.receitaTotal}
                   fallbackValue={toNumber(latestIncome?.operatingIncome)}
                   formatter={(v) => formatCurrency(toNumber(v), true)}
                 />
                 <IndicatorWithFallback
-                  label="Lucro Líquido"
-                  value={toNumber(latestFinancial?.lucroLiquido)}
+                  label="Lucro Líquido (Média)"
+                  value={averages.lucroLiquido}
                   fallbackValue={toNumber(latestIncome?.netIncome)}
                   formatter={(v) => formatCurrency(toNumber(v), true)}
                 />
@@ -297,15 +336,20 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
             <Card>
               <CardHeader className="pb-3 p-4">
-                <CardTitle className="text-sm font-medium flex items-center">
-                  <Percent className="w-4 h-4 mr-2 flex-shrink-0" />
-                  <span className="truncate">Margens</span>
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Percent className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Margens</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                    Média 7a*
+                  </Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
-                  label="Margem Líquida"
-                  value={toNumber(latestFinancial?.margemLiquida)}
+                  label="Margem Líquida (Média)"
+                  value={averages.margemLiquida}
                   fallbackValue={
                     latestIncome?.netIncome && latestIncome?.operatingIncome && toNumber(latestIncome.operatingIncome) && toNumber(latestIncome.operatingIncome)! > 0
                       ? toNumber(latestIncome.netIncome)! / toNumber(latestIncome.operatingIncome)!
@@ -314,8 +358,8 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                   formatter={formatPercent}
                 />
                 <IndicatorWithFallback
-                  label="Margem EBITDA"
-                  value={toNumber(latestFinancial?.margemEbitda)}
+                  label="Margem EBITDA (Média)"
+                  value={averages.margemEbitda}
                   formatter={formatPercent}
                 />
               </CardContent>
@@ -323,25 +367,30 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
             <Card>
               <CardHeader className="pb-3 p-4">
-                <CardTitle className="text-sm font-medium flex items-center">
-                  <TrendingUp className="w-4 h-4 mr-2 flex-shrink-0" />
-                  <span className="truncate">Rentabilidade</span>
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
+                  <div className="flex items-center">
+                    <TrendingUp className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Rentabilidade</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                    Média 7a*
+                  </Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
-                  label="ROE"
-                  value={toNumber(latestFinancial?.roe)}
+                  label="ROE (Média)"
+                  value={averages.roe}
                   formatter={formatPercent}
                 />
                 <IndicatorWithFallback
-                  label="ROA"
-                  value={toNumber(latestFinancial?.roa)}
+                  label="ROA (Média)"
+                  value={averages.roa}
                   formatter={formatPercent}
                 />
                 <IndicatorWithFallback
-                  label="ROIC"
-                  value={toNumber(latestFinancial?.roic)}
+                  label="ROIC (Média)"
+                  value={averages.roic}
                   formatter={formatPercent}
                 />
               </CardContent>
@@ -349,33 +398,38 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
             <Card>
               <CardHeader className="pb-3 p-4">
-                <CardTitle className="text-sm font-medium flex items-center">
-                  <Target className="w-4 h-4 mr-2 flex-shrink-0" />
-                  <span className="truncate">Valuation</span>
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Target className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Valuation</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                    Média 7a*
+                  </Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 p-4 pt-0">
                 <IndicatorWithFallback
-                  label="P/L"
-                  value={toNumber(latestStats?.forwardPE)}
-                  fallbackValue={toNumber(latestFinancial?.pl)}
+                  label="P/L (Média)"
+                  value={averages.pl}
+                  fallbackValue={toNumber(latestStats?.forwardPE)}
                   formatter={formatNumber}
                 />
                 <IndicatorWithFallback
-                  label="P/VP"
-                  value={toNumber(latestStats?.priceToBook)}
-                  fallbackValue={toNumber(latestFinancial?.pvp)}
+                  label="P/VP (Média)"
+                  value={averages.pvp}
+                  fallbackValue={toNumber(latestStats?.priceToBook)}
                   formatter={formatNumber}
                 />
                 <IndicatorWithFallback
-                  label="Dividend Yield"
-                  value={toNumber(latestStats?.dividendYield) ? toNumber(latestStats?.dividendYield)! / 100 : null}
-                  fallbackValue={toNumber(latestFinancial?.dy)}
+                  label="Dividend Yield (Média)"
+                  value={averages.dy}
+                  fallbackValue={toNumber(latestStats?.dividendYield) ? toNumber(latestStats?.dividendYield)! / 100 : null}
                   formatter={formatPercent}
                 />
                 <IndicatorWithFallback
-                  label="EV/EBITDA"
-                  value={toNumber(latestFinancial?.evEbitda)}
+                  label="EV/EBITDA (Média)"
+                  value={averages.evEbitda}
                   formatter={formatNumber}
                 />
               </CardContent>
@@ -446,7 +500,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
           {/* Dados Históricos Anuais */}
           <Card>
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-lg sm:text-xl">Evolução Anual (Últimos 5 Anos)</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">Evolução Anual (Últimos 7 Anos)</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Dados anuais históricos para análise de tendências
               </p>
@@ -470,19 +524,19 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                       </tr>
                     </thead>
                   <tbody>
-                    {incomeStatements.slice(0, 5).map((item, index) => {
+                    {incomeStatements.slice(0, 7).map((item, index) => {
                       // Encontrar dados anuais correspondentes por ano
                       const itemYear = new Date(item.endDate as string).getFullYear()
                       const correspondingStats = keyStatistics.find(ks => {
                         const statsYear = new Date(ks.endDate as string).getFullYear()
                         return statsYear === itemYear
                       })
-                      
+
                       // Buscar dados financeiros do mesmo ano
                       const correspondingFinancial = financialData.find(fd => {
                         return fd.year === itemYear
                       })
-                      
+
                       return (
                         <tr key={index} className="border-b">
                           <td className="py-2 px-1 sm:px-2">
@@ -524,6 +578,19 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                     })}
                   </tbody>
                 </table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Nota explicativa sobre as médias */}
+          <Card className="bg-blue-50 border-blue-200">
+            <CardContent className="p-4">
+              <div className="flex items-start space-x-2">
+                <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-800">
+                  <strong>* Média 7a:</strong> Médias calculadas com base nos últimos 7 anos completos, excluindo o ano corrente em andamento. 
+                  Isso garante que apenas dados de anos fechados sejam considerados para uma análise mais precisa.
                 </div>
               </div>
             </CardContent>
@@ -587,7 +654,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico DRE */}
               <div className="mt-6 sm:mt-8">
-                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual (Últimos 5 Anos)</h4>
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual (Últimos 7 Anos)</h4>
                 <div className="overflow-x-auto -mx-4 sm:mx-0">
                   <div className="min-w-[600px] px-4 sm:px-0">
                     <table className="w-full text-xs sm:text-sm">
@@ -601,7 +668,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                     <tbody>
-                      {incomeStatements.slice(0, 5).map((item, index) => (
+                      {incomeStatements.slice(0, 7).map((item, index) => (
                         <tr key={index} className="border-b">
                           <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
                           <td className="text-right py-2 px-1 sm:px-2">
@@ -689,7 +756,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico Balanço */}
               <div className="mt-6 sm:mt-8">
-                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Balanço (Últimos 5 Anos)</h4>
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Balanço (Últimos 7 Anos)</h4>
                 <div className="overflow-x-auto -mx-4 sm:mx-0">
                   <div className="min-w-[650px] px-4 sm:px-0">
                     <table className="w-full text-xs sm:text-sm">
@@ -703,7 +770,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                       <tbody>
-                        {balanceSheets.slice(0, 5).map((item, index) => (
+                        {balanceSheets.slice(0, 7).map((item, index) => (
                           <tr key={index} className="border-b">
                             <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
                             <td className="text-right py-2 px-1 sm:px-2">
@@ -780,7 +847,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico Fluxo de Caixa */}
               <div className="mt-6 sm:mt-8">
-                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Fluxo de Caixa (Últimos 5 Anos)</h4>
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Fluxo de Caixa (Últimos 7 Anos)</h4>
                 <div className="overflow-x-auto -mx-4 sm:mx-0">
                   <div className="min-w-[700px] px-4 sm:px-0">
                     <table className="w-full text-xs sm:text-sm">
@@ -794,7 +861,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                       <tbody>
-                        {cashflowStatements.slice(0, 5).map((item, index) => (
+                        {cashflowStatements.slice(0, 7).map((item, index) => (
                           <tr key={index} className="border-b">
                             <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
                             <td className="text-right py-2 px-1 sm:px-2">
@@ -902,7 +969,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
 
               {/* Histórico Valuation */}
               <div className="mt-6 sm:mt-8">
-                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Valuation (Últimos 5 Anos)</h4>
+                <h4 className="font-semibold mb-4 text-sm sm:text-base">Histórico Anual - Valuation (Últimos 7 Anos)</h4>
                 <div className="overflow-x-auto -mx-4 sm:mx-0">
                   <div className="min-w-[750px] px-4 sm:px-0">
                     <table className="w-full text-xs sm:text-sm">
@@ -917,7 +984,7 @@ export default function ComprehensiveFinancialView({ data }: ComprehensiveFinanc
                         </tr>
                       </thead>
                       <tbody>
-                        {keyStatistics.slice(0, 5).map((item, index) => (
+                        {keyStatistics.slice(0, 7).map((item, index) => (
                           <tr key={index} className="border-b">
                             <td className="py-2 px-1 sm:px-2">{new Date(item.endDate as string).getFullYear()}</td>
                             <td className="text-right py-2 px-1 sm:px-2">

@@ -290,7 +290,7 @@ function StatementsAnalysisContent({ analysis }: { analysis: StatementsAnalysis 
             </Badge>
           </div>
           <CardDescription>
-            Análise automatizada da DRE, Balanço Patrimonial e Fluxo de Caixa
+            Análise automatizada da DRE, Balanço Patrimonial e Fluxo de Caixa de todos os anos disponíveis
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -363,7 +363,7 @@ function StatementsAnalysisContent({ analysis }: { analysis: StatementsAnalysis 
               <span className="font-medium text-blue-800">Metodologia</span>
             </div>
             <p className="text-sm text-blue-700 leading-relaxed">
-              Esta análise examina automaticamente os últimos trimestres das demonstrações financeiras, 
+              Esta análise examina automaticamente todos os últimos anos disponíveis das demonstrações financeiras, 
               detectando anomalias em receitas, margens, liquidez, endividamento, fluxo de caixa e tendências. 
               O score combina 20+ indicadores para avaliar a qualidade e consistência dos resultados financeiros.
             </p>
@@ -465,13 +465,18 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
 
   return (
     <div className="mb-8">
-      <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
-        <Zap className="w-6 h-6" />
-        <span>Análises Fundamentalista</span>
-        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-          Médias 7 anos para indicadores
+      <div className="mb-6 space-y-2">
+        <div className="flex items-center space-x-2">
+          <Zap className="w-6 h-6" />
+          <h2 className="text-2xl font-bold">Análises Fundamentalista</h2>
+        </div>
+        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 inline-block">
+          <span className="hidden xl:inline">Médias 7 anos para indicadores</span>
+          <span className="hidden lg:inline xl:hidden">Médias 7 anos</span>
+          <span className="hidden md:inline lg:hidden">Médias 7a</span>
+          <span className="md:hidden">7a</span>
         </Badge>
-      </h2>
+      </div>
 
       <Tabs defaultValue="fair-value" className="w-full">
         <TabsList className="grid w-full grid-cols-4">

@@ -195,7 +195,7 @@ const indicators = [
   {
     key: 'cagrLucros5a',
     label: 'CAGR Lucros 5a',
-    description: 'Taxa de Crescimento Anual Composta dos Lucros (5 anos)',
+    description: 'Crescimento Lucros (5 anos)',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true
@@ -203,7 +203,7 @@ const indicators = [
   {
     key: 'cagrReceitas5a',
     label: 'CAGR Receitas 5a',
-    description: 'Taxa de Crescimento Anual Composta das Receitas (5 anos)',
+    description: 'Crescimento Receitas (5 anos)',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true
@@ -358,9 +358,10 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
             <ArrowUpDown className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
             <span className="truncate">Comparação Detalhada</span>
           </CardTitle>
-          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 whitespace-nowrap">
-            <span className="hidden sm:inline">Ranking por Médias Históricas</span>
-            <span className="sm:hidden">Médias Históricas</span>
+          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 max-w-fit">
+            <span className="hidden md:inline">Ranking por Médias Históricas</span>
+            <span className="hidden sm:inline md:hidden">Ranking Médias 7a</span>
+            <span className="sm:hidden">Médias 7a</span>
           </Badge>
         </div>
       </CardHeader>
@@ -370,7 +371,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
             <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24 sm:w-32 md:w-48 text-xs sm:text-sm sticky left-0 bg-background z-10">Indicador</TableHead>
+                <TableHead className="w-24 sm:w-32 md:w-48 text-xs sm:text-sm sticky left-0 bg-background/95 backdrop-blur-sm z-20 border-r border-border">Indicador</TableHead>
                 {companies.map((company) => (
                   <TableHead key={company.ticker} className="text-center min-w-20 sm:min-w-28 md:min-w-36">
                     <div className="space-y-1">
@@ -417,7 +418,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
 
                 return (
                   <TableRow key={indicator.key}>
-                    <TableCell className="font-medium p-2 sm:p-4">
+                    <TableCell className="font-medium p-2 sm:p-4 sticky left-0 bg-background/95 backdrop-blur-sm z-10 border-r border-border">
                       <div className="flex items-center space-x-2 min-w-0">
                         <span className="text-xs sm:text-sm truncate">{indicator.label}</span>
                         {indicator.isPremium && (
@@ -436,8 +437,32 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                       // Função para formatar valores históricos
                       const formatHistoricalValue = (val: number | null) => {
                         if (val === null) return 'N/A'
-                        // Usar a mesma formatação do indicador
-                        return indicator.format(val)
+                        
+                        // Formatação específica para cada tipo de indicador
+                        switch (indicator.key) {
+                          case 'marketCap':
+                            if (val >= 1_000_000_000) return `R$ ${(val / 1_000_000_000).toFixed(1)}B`
+                            if (val >= 1_000_000) return `R$ ${(val / 1_000_000).toFixed(1)}M`
+                            return `R$ ${(val / 1_000).toFixed(1)}K`
+                          
+                          case 'roe':
+                          case 'margemLiquida':
+                          case 'roic':
+                          case 'cagrLucros5a':
+                          case 'cagrReceitas5a':
+                          case 'crescimentoLucros':
+                          case 'crescimentoReceitas':
+                          case 'dy':
+                            return `${(val * 100).toFixed(1)}%`
+                          
+                          case 'pl':
+                          case 'pvp':
+                          case 'dividaLiquidaEbitda':
+                            return val.toFixed(2)
+                          
+                          default:
+                            return indicator.format(val)
+                        }
                       }
                       
                       return (

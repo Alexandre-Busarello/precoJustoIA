@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
+import { CompanySizeBadge } from '@/components/company-size-badge'
 import StrategicAnalysisClient from '@/components/strategic-analysis-client'
 import HeaderScoreWrapper from '@/components/header-score-wrapper'
 import AIAnalysis from '@/components/ai-analysis'
@@ -81,7 +82,7 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
     const currentCompanySize = getCompanySize(currentMarketCap)
     
     // Verificar cache primeiro (incluir tamanho na chave do cache)
-    const cacheKey = `${currentTicker}-${sector}-${industry}-${currentCompanySize}-${limit}`
+    const cacheKey = `${currentTicker}-${sector}-${industry}-${currentCompanySize}-${limit}-v2`
     const cached = competitorsCache.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < COMPETITORS_CACHE_DURATION) {
       console.log('📋 Usando concorrentes do cache para', currentTicker)
@@ -91,9 +92,8 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
     const currentPrefix = getTickerPrefix(currentTicker)
     const currentYear = new Date().getFullYear()
     
-    // Query otimizada: buscar todas as empresas do setor/industry de uma vez
+    // Sempre incluir dados financeiros para filtrar por tamanho e lucro
     // Para blue chips, incluir dados financiais para filtrar por market cap
-    const includeFinancials = currentCompanySize === 'blue_chips'
     
     const allCompetitors = await prisma.company.findMany({
       where: {
@@ -102,10 +102,14 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
           { sector: sector }
         ],
         ticker: { not: currentTicker },
-        // Otimização: usar índice composto para filtrar empresas com dados recentes
+        // Filtrar empresas com dados financeiros recentes e com lucro positivo
         financialData: {
           some: {
-            year: { gte: currentYear - 1 }
+            year: { gte: currentYear - 1 },
+            // Excluir empresas com prejuízo (lucro líquido negativo ou nulo)
+            lucroLiquido: {
+              gt: 0
+            }
           }
         }
       },
@@ -115,77 +119,133 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
         sector: true,
         industry: true,
         // Incluir dados financiais apenas se for blue chip
-        financialData: includeFinancials ? {
+        financialData: {
           select: {
             marketCap: true,
+            lucroLiquido: true,
             year: true
+          },
+          where: {
+            year: { gte: currentYear - 1 },
+            lucroLiquido: {
+              gt: 0
+            }
           },
           orderBy: { year: 'desc' },
           take: 1
-        } : false
+        }
       },
       orderBy: [
         { industry: industry ? 'asc' : 'desc' }, // Priorizar industry se especificado
         { ticker: 'asc' }
       ],
-      take: limit * 5 // Buscar mais para ter opções após filtrar prefixos e tamanho
+      take: limit * 10 // Buscar mais para ter opções após filtrar prefixos, tamanho e lucro
     })
 
     // Filtrar empresas com mesmo prefixo e priorizar por industry
     const seenPrefixes = new Set([currentPrefix])
     const competitors: { ticker: string; name: string; sector: string | null }[] = []
     
-    // Função auxiliar para verificar se a empresa atende aos critérios de tamanho
-    const isValidCompetitor = (company: any): boolean => {
+    // Função auxiliar para verificar se a empresa atende aos critérios
+    const isValidCompetitor = (company: any, allowDifferentSizes: boolean = false): boolean => {
       const companyPrefix = getTickerPrefix(company.ticker)
       if (seenPrefixes.has(companyPrefix)) return false
       
-      // Se a empresa atual for blue chip, filtrar apenas outras blue chips
-      if (currentCompanySize === 'blue_chips' && includeFinancials) {
-        const competitorMarketCap = company.financialData?.[0]?.marketCap
+      // Verificar se tem dados financeiros válidos
+      const financialData = company.financialData?.[0]
+      if (!financialData) return false
+      
+      // Verificar se tem lucro positivo (já filtrado na query, mas double check)
+      const lucroLiquido = toNumber(financialData.lucroLiquido)
+      if (!lucroLiquido || lucroLiquido <= 0) return false
+      
+      // Filtrar por tamanho de empresa (comparar com empresa atual)
+      if (currentCompanySize && !allowDifferentSizes) {
+        const competitorMarketCap = toNumber(financialData.marketCap)
         if (competitorMarketCap) {
-          const competitorSize = getCompanySize(toNumber(competitorMarketCap))
-          return competitorSize === 'blue_chips'
+          const competitorSize = getCompanySize(competitorMarketCap)
+          // Só incluir empresas do mesmo tamanho
+          if (competitorSize !== currentCompanySize) return false
+        } else {
+          return false // Se não tem market cap, não incluir
         }
-        return false // Se não tem market cap, não incluir
+      } else if (currentCompanySize && allowDifferentSizes) {
+        // No modo fallback, ainda precisamos de market cap válido
+        const competitorMarketCap = toNumber(financialData.marketCap)
+        if (!competitorMarketCap) return false
       }
       
       return true
     }
     
-    // Primeiro: empresas do mesmo industry
-    if (industry) {
-      for (const company of allCompetitors) {
-        if (company.industry === industry && competitors.length < limit) {
-          if (isValidCompetitor(company)) {
-            const companyPrefix = getTickerPrefix(company.ticker)
-            seenPrefixes.add(companyPrefix)
-            competitors.push({
-              ticker: company.ticker,
-              name: company.name,
-              sector: company.sector
-            })
-          }
+    // Função auxiliar para processar empresas com critério específico
+    const processCompanies = (companies: any[], filterFn: (company: any) => boolean, allowDifferentSizes: boolean = false) => {
+      for (const company of companies) {
+        if (competitors.length >= limit) break
+        if (filterFn(company) && isValidCompetitor(company, allowDifferentSizes)) {
+          const companyPrefix = getTickerPrefix(company.ticker)
+          seenPrefixes.add(companyPrefix)
+          competitors.push({
+            ticker: company.ticker,
+            name: company.name,
+            sector: company.sector
+          })
         }
       }
+    }
+
+    // PASSADA 1: Empresas do mesmo tamanho
+    // Primeiro: empresas do mesmo industry e mesmo tamanho
+    if (industry) {
+      processCompanies(
+        allCompetitors,
+        (company) => company.industry === industry,
+        false // Só mesmo tamanho
+      )
     }
     
-    // Depois: empresas do mesmo setor (se ainda precisar)
+    // Depois: empresas do mesmo setor e mesmo tamanho (se ainda precisar)
     if (competitors.length < limit) {
-      for (const company of allCompetitors) {
-        if (company.sector === sector && competitors.length < limit) {
-          if (isValidCompetitor(company)) {
-            const companyPrefix = getTickerPrefix(company.ticker)
-            seenPrefixes.add(companyPrefix)
-            competitors.push({
-              ticker: company.ticker,
-              name: company.name,
-              sector: company.sector
-            })
-          }
-        }
+      processCompanies(
+        allCompetitors,
+        (company) => company.sector === sector,
+        false // Só mesmo tamanho
+      )
+    }
+
+    // PASSADA 2: Fallback para outros tamanhos (se ainda não temos 6 empresas)
+    if (competitors.length < limit) {
+      console.log(`🔄 Fallback: apenas ${competitors.length} empresas do mesmo tamanho encontradas, buscando outros tamanhos...`)
+      
+      // Primeiro: empresas do mesmo industry (qualquer tamanho)
+      if (industry) {
+        processCompanies(
+          allCompetitors,
+          (company) => company.industry === industry,
+          true // Permitir tamanhos diferentes
+        )
+      }
+      
+      // Depois: empresas do mesmo setor (qualquer tamanho)
+      if (competitors.length < limit) {
+        processCompanies(
+          allCompetitors,
+          (company) => company.sector === sector,
+          true // Permitir tamanhos diferentes
+        )
       }
     }
+
+    // Log para debug
+    const sameSize = competitors.filter(comp => {
+      const financialData = allCompetitors.find(c => c.ticker === comp.ticker)?.financialData?.[0]
+      if (!financialData) return false
+      const competitorMarketCap = toNumber(financialData.marketCap)
+      const competitorSize = getCompanySize(competitorMarketCap)
+      return competitorSize === currentCompanySize
+    }).length
+    
+    console.log(`🔍 Empresa ${currentTicker} (${currentCompanySize}): encontrados ${competitors.length} concorrentes válidos (${sameSize} do mesmo tamanho, ${competitors.length - sameSize} de outros tamanhos)`)
 
     // Armazenar no cache
     competitorsCache.set(cacheKey, {
@@ -394,8 +454,9 @@ export default async function TickerPage({ params }: PageProps) {
         }
       }
     }),
-    getComprehensiveFinancialData(ticker, 'YEARLY', 5)
+    getComprehensiveFinancialData(ticker, 'YEARLY', 7)
   ])
+
 
   if (!companyData) {
     notFound()
@@ -479,9 +540,15 @@ export default async function TickerPage({ params }: PageProps) {
                       {/* Ticker e Setor */}
                       <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-3 lg:mb-0">
                         <h1 className="text-2xl sm:text-3xl font-bold truncate">{ticker}</h1>
-                        <Badge variant="secondary" className="text-sm w-fit">
-                          {companyData.sector || 'N/A'}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="text-sm w-fit">
+                            {companyData.sector || 'N/A'}
+                          </Badge>
+                          <CompanySizeBadge 
+                            marketCap={toNumber(latestFinancials?.marketCap)} 
+                            size="md"
+                          />
+                        </div>
                       </div>
                       
                       {/* Preço - Mobile: abaixo do ticker, Desktop: ao lado direito */}
@@ -643,7 +710,7 @@ export default async function TickerPage({ params }: PageProps) {
                     </h3>
                   </div>
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Esta seção apresenta <strong>dados anuais</strong> detalhados dos últimos 5 anos, 
+                    Esta seção apresenta <strong>dados anuais</strong> detalhados dos últimos 7 anos completos, 
                     complementando os indicadores mostrados acima. Ideal para análise de tendências 
                     e performance histórica da empresa.
                   </p>

@@ -133,7 +133,7 @@ function runStrategicAnalyses(companyData: CompanyData) {
 async function getStatementsAnalysis(ticker: string) {
   try {
     const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 5; // Últimos 5 anos
+    const startYear = currentYear - 7; // Últimos 7 anos
 
     // Buscar dados da empresa primeiro
     const company = await prisma.company.findUnique({
@@ -155,7 +155,7 @@ async function getStatementsAnalysis(ticker: string) {
           }
         },
         orderBy: { endDate: 'desc' },
-        take: 5
+        take: 7
       }),
       prisma.balanceSheet.findMany({
         where: {
@@ -167,7 +167,7 @@ async function getStatementsAnalysis(ticker: string) {
           }
         },
         orderBy: { endDate: 'desc' },
-        take: 5
+        take: 7
       }),
       prisma.cashflowStatement.findMany({
         where: {
@@ -179,7 +179,7 @@ async function getStatementsAnalysis(ticker: string) {
           }
         },
         orderBy: { endDate: 'desc' },
-        take: 5
+        take: 7
       })
     ]);
 

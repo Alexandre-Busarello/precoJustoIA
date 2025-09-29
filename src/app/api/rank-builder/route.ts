@@ -66,7 +66,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
             endDate: { gte: new Date(`${startYear}-01-01`) }
           },
           orderBy: { endDate: 'desc' },
-          take: 5
+          take: 7
         },
         balanceSheets: {
           where: {
@@ -74,7 +74,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
             endDate: { gte: new Date(`${startYear}-01-01`) }
           },
           orderBy: { endDate: 'desc' },
-          take: 5
+          take: 7
         },
         cashflowStatements: {
           where: {
@@ -82,7 +82,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
             endDate: { gte: new Date(`${startYear}-01-01`) }
           },
           orderBy: { endDate: 'desc' },
-          take: 5
+          take: 7
         }
       },
       where: {

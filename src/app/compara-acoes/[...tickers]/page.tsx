@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
+import { CompanySizeBadge } from '@/components/company-size-badge'
 import { analyzeFinancialStatements } from '@/lib/strategies/overall-score'
 import { executeMultipleCompanyAnalysis, getStatementsData } from '@/lib/company-analysis-service'
 import Link from 'next/link'
@@ -646,31 +647,35 @@ function ComparisonIndicatorCard({
   return (
     <Card className="relative">
       <CardHeader className="pb-3 p-4 sm:p-6">
-        <div className="flex items-start flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-2">
-          <div className="flex items-center space-x-2 min-w-0 flex-1">
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2 min-w-0">
             <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
-            <CardTitle className="text-sm font-medium truncate">{title}</CardTitle>
+            <CardTitle className="text-sm font-medium truncate flex-1">{title}</CardTitle>
             {isPremium && (
               <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
             )}
           </div>
-          <div className="flex items-center space-x-2 flex-wrap gap-1">
-            {historicalAverages && (
-              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 whitespace-nowrap">
-                <span className="hidden sm:inline">Ranking por Média 7a</span>
-                <span className="sm:hidden">Média 7a</span>
-              </Badge>
-            )}
-            {!userIsPremium && !isPremium && (
-              <div className="flex items-center space-x-1">
-                <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  <span className="hidden sm:inline">Ranking Premium</span>
-                  <span className="sm:hidden">Premium</span>
-                </span>
-              </div>
-            )}
-          </div>
+          {(historicalAverages || (!userIsPremium && !isPremium)) && (
+            <div className="flex items-center justify-start gap-2 flex-wrap">
+              {historicalAverages && (
+                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                  <span className="hidden xl:inline">Ranking por Média 7a</span>
+                  <span className="hidden lg:inline xl:hidden">Ranking 7a</span>
+                  <span className="hidden md:inline lg:hidden">Média 7a</span>
+                  <span className="md:hidden">7a</span>
+                </Badge>
+              )}
+              {!userIsPremium && !isPremium && (
+                <div className="flex items-center space-x-1">
+                  <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-xs text-muted-foreground">
+                    <span className="hidden sm:inline">Ranking Premium</span>
+                    <span className="sm:hidden">Premium</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {description && (
           <p className="text-xs text-muted-foreground truncate">{description}</p>
@@ -687,13 +692,42 @@ function ComparisonIndicatorCard({
           const Medal = rankInfo?.medal
           
           // Formatar valores para exibição
-          const formatValue = (val: number | null, isPercent: boolean = false) => {
+          const formatValue = (val: number | null, fieldName?: string) => {
             if (val === null) return 'N/A'
-            if (isPercent) return `${(val * 100).toFixed(1)}%`
-            return val.toFixed(2)
+            
+            // Formatação específica por tipo de campo
+            switch (fieldName) {
+              case 'marketCap':
+              case 'receitaTotal':
+              case 'lucroLiquido':
+                if (val >= 1_000_000_000) return `R$ ${(val / 1_000_000_000).toFixed(1)}B`
+                if (val >= 1_000_000) return `R$ ${(val / 1_000_000).toFixed(1)}M`
+                return `R$ ${(val / 1_000).toFixed(1)}K`
+              
+              case 'roe':
+              case 'roic':
+              case 'dy':
+              case 'margemLiquida':
+              case 'margemEbitda':
+              case 'cagrLucros5a':
+              case 'cagrReceitas5a':
+              case 'crescimentoLucros':
+              case 'crescimentoReceitas':
+                return `${(val * 100).toFixed(1)}%`
+              
+              case 'pl':
+              case 'pvp':
+              case 'dividaLiquidaEbitda':
+              case 'dividaLiquidaPl':
+              case 'liquidezCorrente':
+                return val.toFixed(2)
+              
+              default:
+                return val.toFixed(2)
+            }
           }
           
-          const isPercentField = !!(fieldName && ['roe', 'roic', 'dy', 'margemLiquida', 'margemEbitda'].includes(fieldName))
+          const isPercentField = !!(fieldName && ['roe', 'roic', 'dy', 'margemLiquida', 'margemEbitda', 'cagrLucros5a', 'cagrReceitas5a', 'crescimentoLucros', 'crescimentoReceitas'].includes(fieldName))
           
           return (
             <div 
@@ -727,7 +761,7 @@ function ComparisonIndicatorCard({
                     {item.currentValue}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Média 7a: {formatValue(item.historicalAverage, isPercentField)}
+                    Média 7a: {formatValue(item.historicalAverage, fieldName)}
                   </div>
                 </div>
               ) : (
@@ -1053,6 +1087,11 @@ export default async function CompareStocksPage({ params }: PageProps) {
                         <Badge variant="secondary" className="text-xs w-fit">
                           {company.sector || 'N/A'}
                         </Badge>
+                        <CompanySizeBadge 
+                          marketCap={toNumber(latestFinancials?.marketCap)} 
+                          size="sm"
+                          className="text-xs"
+                        />
                         {isBestCompany && (
                           <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white text-xs shadow-md border-0 animate-pulse w-fit">
                             <Crown className="w-3 h-3 mr-1" />
@@ -1302,7 +1341,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               })}
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={TrendingUp}
-              description="Taxa de crescimento anual composta dos lucros (5 anos)"
+              description="Crescimento lucros (5 anos)"
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}
@@ -1318,7 +1357,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               })}
               tickers={orderedCompanies.map(c => c.ticker)}
               icon={BarChart3}
-              description="Taxa de crescimento anual composta das receitas (5 anos)"
+              description="Crescimento receitas (5 anos)"
               isPremium={true}
               userIsPremium={userIsPremium}
               higherIsBetter={true}

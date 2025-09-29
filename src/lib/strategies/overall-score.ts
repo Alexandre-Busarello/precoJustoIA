@@ -43,7 +43,7 @@ export interface StatementsAnalysis {
   contextualFactors: string[];
 }
 
-// === ANÁLISE INTELIGENTE E CONTEXTUAL DAS DEMONSTRAÇÕES FINANCEIRAS ===
+// === ANÁLISE INTELIGENTE BASEADA EM MÉDIAS E BENCHMARKS SETORIAIS ===
 export function analyzeFinancialStatements(data: FinancialStatementsData): StatementsAnalysis {
   const { incomeStatements, balanceSheets, cashflowStatements, company } = data;
   
@@ -51,93 +51,817 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   const redFlags: string[] = [];
   const positiveSignals: string[] = [];
   const contextualFactors: string[] = [];
-  
-  // === ANÁLISE DE ROBUSTEZ FINANCEIRA ===
-  const companyStrength = assessCompanyStrength(data);
-  
+
   // === CONTEXTO SETORIAL E TAMANHO ===
   const sectorContext = getSectorContext(company?.sector || null, company?.industry || null);
   const sizeContext = getSizeContext(company?.marketCap || null);
   
-  // Verificar se temos dados suficientes - dar benefício da dúvida
+  // Verificar disponibilidade de dados
   const minYears = 3;
   const hasInsufficientData = incomeStatements.length < 2 || balanceSheets.length < 2 || cashflowStatements.length < 2;
   const hasLimitedHistory = incomeStatements.length < minYears;
   
-  // Não penalizar por dados insuficientes - dar benefício da dúvida
   if (hasInsufficientData) {
     contextualFactors.push('Dados históricos limitados - análise baseada em informações disponíveis');
+    // Para dados muito limitados, ser mais conservador mas não penalizar excessivamente
+    score = 75; // Score neutro para dados limitados
   } else if (hasLimitedHistory) {
     contextualFactors.push('Histórico parcial - análise baseada em dados disponíveis');
   }
 
-  // === ANÁLISE HISTÓRICA EXPANDIDA (3-5 ANOS) ===
-  const maxPeriods = Math.min(5, incomeStatements.length);
-  const historicalAnalysis = analyzeHistoricalTrends(incomeStatements, balanceSheets, cashflowStatements, maxPeriods);
+  // === CALCULAR MÉDIAS DOS ÚLTIMOS 7 ANOS COMPLETOS ===
+  const currentYear = new Date().getFullYear();
+  const completedYearsData = {
+    income: incomeStatements.filter(stmt => {
+      const year = new Date(stmt.endDate as string).getFullYear();
+      return year < currentYear;
+    }).slice(0, 7),
+    balance: balanceSheets.filter(stmt => {
+      const year = new Date(stmt.endDate as string).getFullYear();
+      return year < currentYear;
+    }).slice(0, 7),
+    cashflow: cashflowStatements.filter(stmt => {
+      const year = new Date(stmt.endDate as string).getFullYear();
+      return year < currentYear;
+    }).slice(0, 7)
+  };
+
+  // === ANÁLISE BASEADA EM MÉDIAS E BENCHMARKS ===
+  const averageMetrics = calculateAverageMetrics(completedYearsData);
+  const benchmarks = getSectorBenchmarks(sectorContext, sizeContext);
   
-  // Aplicar resultados da análise histórica
-  score += historicalAnalysis.scoreAdjustment;
-  redFlags.push(...historicalAnalysis.redFlags);
-  positiveSignals.push(...historicalAnalysis.positiveSignals);
+  // === 1. ANÁLISE DE RENTABILIDADE (Peso: 25%) ===
+  const profitabilityAnalysis = analyzeProfitabilityMetrics(averageMetrics, benchmarks, sectorContext, completedYearsData);
+  score += profitabilityAnalysis.scoreAdjustment * 0.25;
+  redFlags.push(...profitabilityAnalysis.redFlags);
+  positiveSignals.push(...profitabilityAnalysis.positiveSignals);
 
-  // === ANÁLISE CONTEXTUAL DE LIQUIDEZ E CAIXA ===
-  const cashAnalysis = analyzeCashPosition(balanceSheets, cashflowStatements, companyStrength, sectorContext);
-  score += cashAnalysis.scoreAdjustment;
-  redFlags.push(...cashAnalysis.redFlags);
-  positiveSignals.push(...cashAnalysis.positiveSignals);
-  contextualFactors.push(...(cashAnalysis.contextualFactors || []));
+  // === 2. ANÁLISE DE LIQUIDEZ E SOLVÊNCIA (Peso: 20%) ===
+  const liquidityAnalysis = analyzeLiquidityMetrics(averageMetrics, benchmarks, sectorContext);
+  score += liquidityAnalysis.scoreAdjustment * 0.20;
+  redFlags.push(...liquidityAnalysis.redFlags);
+  positiveSignals.push(...liquidityAnalysis.positiveSignals);
 
-  // === ANÁLISE CONTEXTUAL DE RECEITAS ===
-  const revenueAnalysis = analyzeRevenueQuality(incomeStatements, companyStrength, sectorContext, sizeContext);
-  score += revenueAnalysis.scoreAdjustment;
-  redFlags.push(...revenueAnalysis.redFlags);
-  positiveSignals.push(...revenueAnalysis.positiveSignals);
-  contextualFactors.push(...(revenueAnalysis.contextualFactors || []));
+  // === 3. ANÁLISE DE EFICIÊNCIA OPERACIONAL (Peso: 20%) ===
+  const efficiencyAnalysis = analyzeEfficiencyMetrics(averageMetrics, benchmarks, sectorContext);
+  score += efficiencyAnalysis.scoreAdjustment * 0.20;
+  redFlags.push(...efficiencyAnalysis.redFlags);
+  positiveSignals.push(...efficiencyAnalysis.positiveSignals);
 
-  // === ANÁLISE CONTEXTUAL DE MARGENS ===
-  const marginAnalysis = analyzeMarginQuality(incomeStatements, companyStrength, sectorContext);
-  score += marginAnalysis.scoreAdjustment;
-  redFlags.push(...marginAnalysis.redFlags);
-  positiveSignals.push(...marginAnalysis.positiveSignals);
+  // === 4. ANÁLISE DE ESTABILIDADE E CONSISTÊNCIA (Peso: 20%) ===
+  const stabilityAnalysis = analyzeStabilityMetrics(completedYearsData, averageMetrics, sectorContext);
+  score += stabilityAnalysis.scoreAdjustment * 0.20;
+  redFlags.push(...stabilityAnalysis.redFlags);
+  positiveSignals.push(...stabilityAnalysis.positiveSignals);
 
-  // === ANÁLISE CONTEXTUAL DE ENDIVIDAMENTO E LUCRO ===
-  const debtAnalysis = analyzeDebtContext(balanceSheets, companyStrength, sectorContext, incomeStatements);
-  score += debtAnalysis.scoreAdjustment;
-  redFlags.push(...debtAnalysis.redFlags);
-  positiveSignals.push(...debtAnalysis.positiveSignals);
+  // === 5. ANÁLISE DE FLUXO DE CAIXA (Peso: 10%) ===
+  const cashFlowAnalysis = analyzeCashFlowQuality(averageMetrics, benchmarks, sectorContext);
+  score += cashFlowAnalysis.scoreAdjustment * 0.10;
+  redFlags.push(...cashFlowAnalysis.redFlags);
+  positiveSignals.push(...cashFlowAnalysis.positiveSignals);
 
-  // === ANÁLISE DE RESILIÊNCIA OPERACIONAL ===
-  const resilienceAnalysis = analyzeOperationalResilience(incomeStatements, balanceSheets, cashflowStatements, companyStrength);
-  score += resilienceAnalysis.scoreAdjustment;
-  redFlags.push(...resilienceAnalysis.redFlags);
-  positiveSignals.push(...resilienceAnalysis.positiveSignals);
-  contextualFactors.push(...(resilienceAnalysis.contextualFactors || []));
+  // === 6. ANÁLISE DE CRESCIMENTO SUSTENTÁVEL (Peso: 15%) ===
+  const growthAnalysis = analyzeGrowthQuality(completedYearsData, averageMetrics, sectorContext);
+  score += growthAnalysis.scoreAdjustment * 0.15;
+  redFlags.push(...growthAnalysis.redFlags);
+  positiveSignals.push(...growthAnalysis.positiveSignals);
 
-  // Determinar nível de risco considerando força da empresa
+  // === DETERMINAR FORÇA DA EMPRESA BASEADA NAS MÉDIAS ===
+  const companyStrength = assessCompanyStrengthFromAverages(averageMetrics, benchmarks, sectorContext);
+
+  // === DETERMINAR NÍVEL DE RISCO ===
   let riskLevel: StatementsAnalysis['riskLevel'] = 'LOW';
-  if (score < 20 || (score < 40 && companyStrength === 'WEAK')) {
+  const criticalFlags = redFlags.filter(flag => 
+    flag.includes('crítico') || flag.includes('grave') || flag.includes('insolvência')
+  ).length;
+  
+  if (score < 30 || criticalFlags >= 3) {
     riskLevel = 'CRITICAL';
-  } else if (score < 40 || (score < 60 && companyStrength === 'WEAK')) {
+  } else if (score < 50 || criticalFlags >= 2) {
     riskLevel = 'HIGH';
-  } else if (score < 60 || (score < 75 && companyStrength === 'MODERATE')) {
+  } else if (score < 70 || redFlags.length >= 4) {
     riskLevel = 'MEDIUM';
   }
 
-  // Ajustar score final baseado na força da empresa
-  const strengthMultiplier = getStrengthMultiplier(companyStrength);
-  const finalScore = Math.max(0, Math.min(100, Math.round(score * strengthMultiplier)));
+  // === AJUSTE FINAL DO SCORE ===
+  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
 
   return {
     score: finalScore,
-    redFlags: redFlags.filter(Boolean).slice(0, 10), // Máximo 10 red flags
-    positiveSignals: positiveSignals.filter(Boolean).slice(0, 8), // Máximo 8 sinais positivos
+    redFlags: redFlags.filter(Boolean).slice(0, 8), // Máximo 8 red flags mais relevantes
+    positiveSignals: positiveSignals.filter(Boolean).slice(0, 6), // Máximo 6 sinais positivos
     riskLevel,
     companyStrength,
-    contextualFactors: contextualFactors.filter(Boolean).slice(0, 5)
+    contextualFactors: contextualFactors.filter(Boolean).slice(0, 3)
   };
 }
 
-// === FUNÇÕES AUXILIARES PARA ANÁLISE CONTEXTUAL ===
+// === INTERFACES E TIPOS PARA NOVA ANÁLISE ===
+
+interface AverageMetrics {
+  // Rentabilidade
+  roe: number;
+  roa: number;
+  netMargin: number;
+  grossMargin: number;
+  operatingMargin: number;
+  
+  // Liquidez
+  currentRatio: number;
+  quickRatio: number;
+  cashRatio: number;
+  workingCapitalRatio: number;
+  
+  // Eficiência
+  assetTurnover: number;
+  receivablesTurnover: number;
+  inventoryTurnover: number;
+  
+  // Endividamento e Cobertura
+  debtToEquity: number;
+  debtToAssets: number;
+  interestCoverage: number;
+  
+  // Crescimento
+  revenueGrowth: number;
+  netIncomeGrowth: number;
+  
+  // Fluxo de Caixa
+  operatingCashFlowMargin: number;
+  freeCashFlowMargin: number;
+  cashConversionRatio: number;
+  
+  // Estabilidade
+  revenueStability: number;
+  marginStability: number;
+  cashFlowStability: number;
+}
+
+interface SectorBenchmarks {
+  // Rentabilidade mínima esperada
+  minROE: number;
+  goodROE: number;
+  excellentROE: number;
+  
+  minROA: number;
+  goodROA: number;
+  
+  minNetMargin: number;
+  goodNetMargin: number;
+  
+  // Liquidez
+  minCurrentRatio: number;
+  goodCurrentRatio: number;
+  
+  // Endividamento máximo aceitável
+  maxDebtToEquity: number;
+  maxDebtToAssets: number;
+  
+  // Crescimento esperado
+  minRevenueGrowth: number;
+  goodRevenueGrowth: number;
+}
+
+// === FUNÇÃO PARA CALCULAR MÉDIAS DOS INDICADORES ===
+function calculateAverageMetrics(data: {
+  income: Record<string, unknown>[];
+  balance: Record<string, unknown>[];
+  cashflow: Record<string, unknown>[];
+}): AverageMetrics {
+  const { income, balance, cashflow } = data;
+  const periods = Math.min(income.length, balance.length, cashflow.length);
+  
+  if (periods === 0) {
+    // Retornar métricas neutras se não houver dados
+    return {
+      roe: 0, roa: 0, netMargin: 0, grossMargin: 0, operatingMargin: 0,
+      currentRatio: 1, quickRatio: 1, cashRatio: 0.1, workingCapitalRatio: 0.2,
+      assetTurnover: 1, receivablesTurnover: 4, inventoryTurnover: 4,
+      debtToEquity: 0.5, debtToAssets: 0.3, interestCoverage: 5,
+      revenueGrowth: 0, netIncomeGrowth: 0,
+      operatingCashFlowMargin: 0.1, freeCashFlowMargin: 0.05, cashConversionRatio: 1,
+      revenueStability: 0.5, marginStability: 0.5, cashFlowStability: 0.5
+    };
+  }
+
+  // Calcular médias dos indicadores
+  const metrics: AverageMetrics = {
+    roe: 0, roa: 0, netMargin: 0, grossMargin: 0, operatingMargin: 0,
+    currentRatio: 0, quickRatio: 0, cashRatio: 0, workingCapitalRatio: 0,
+    assetTurnover: 0, receivablesTurnover: 0, inventoryTurnover: 0,
+    debtToEquity: 0, debtToAssets: 0, interestCoverage: 0,
+    revenueGrowth: 0, netIncomeGrowth: 0,
+    operatingCashFlowMargin: 0, freeCashFlowMargin: 0, cashConversionRatio: 0,
+    revenueStability: 0, marginStability: 0, cashFlowStability: 0
+  };
+
+  let validPeriods = 0;
+  
+  for (let i = 0; i < periods; i++) {
+    const incomeStmt = income[i];
+    const balanceStmt = balance[i];
+    const cashflowStmt = cashflow[i];
+    
+    // Extrair valores básicos
+    const revenue = toNumber(incomeStmt.totalRevenue) || toNumber(incomeStmt.operatingIncome) || 0;
+    const netIncome = toNumber(incomeStmt.netIncome) || 0;
+    const grossProfit = toNumber(incomeStmt.grossProfit) || 0;
+    const operatingIncome = toNumber(incomeStmt.operatingIncome) || 0;
+    
+    const totalAssets = toNumber(balanceStmt.totalAssets) || 1;
+    const totalEquity = toNumber(balanceStmt.totalStockholderEquity) || 1;
+    const currentAssets = toNumber(balanceStmt.totalCurrentAssets) || 0;
+    const currentLiabilities = toNumber(balanceStmt.totalCurrentLiabilities) || 1;
+    const cash = toNumber(balanceStmt.cash) || 0;
+    const totalDebt = toNumber(balanceStmt.totalLiab) || 0;
+    const inventory = toNumber(balanceStmt.inventory) || 0;
+    const receivables = toNumber(balanceStmt.accountsReceivable) || 0;
+    
+    // Dados de fluxo de caixa
+    const operatingCashFlow = toNumber(cashflowStmt.operatingCashFlow) || 0;
+    const capex = toNumber(cashflowStmt.capitalExpenditures) || 0;
+    const freeCashFlow = operatingCashFlow - Math.abs(capex);
+    
+    // Dados de DRE adicionais
+    const interestExpense = toNumber(incomeStmt.interestExpense) || 0;
+    const ebit = toNumber(incomeStmt.ebit) || operatingIncome;
+    
+    if (revenue > 0 && totalAssets > 0 && totalEquity > 0) {
+      // Rentabilidade
+      metrics.roe += (netIncome / totalEquity);
+      metrics.roa += (netIncome / totalAssets);
+      metrics.netMargin += (netIncome / revenue);
+      metrics.grossMargin += (grossProfit / revenue);
+      metrics.operatingMargin += (operatingIncome / revenue);
+      
+      // Liquidez
+      metrics.currentRatio += (currentAssets / currentLiabilities);
+      metrics.quickRatio += ((currentAssets - inventory) / currentLiabilities);
+      metrics.cashRatio += (cash / currentLiabilities);
+      metrics.workingCapitalRatio += ((currentAssets - currentLiabilities) / totalAssets);
+      
+      // Eficiência
+      metrics.assetTurnover += (revenue / totalAssets);
+      
+      // Giro de recebíveis (se temos dados)
+      if (receivables > 0) {
+        metrics.receivablesTurnover += (revenue / receivables);
+      } else {
+        metrics.receivablesTurnover += 6; // Valor neutro (60 dias)
+      }
+      
+      // Giro de estoque (se temos dados e não é empresa de serviços)
+      if (inventory > 0) {
+        const cogs = toNumber(incomeStmt.costOfRevenue) || (revenue - grossProfit);
+        if (cogs > 0) {
+          metrics.inventoryTurnover += (cogs / inventory);
+        } else {
+          metrics.inventoryTurnover += 4; // Valor neutro
+        }
+      } else {
+        metrics.inventoryTurnover += 12; // Empresas de serviço (sem estoque)
+      }
+      
+      // Endividamento e cobertura
+      metrics.debtToEquity += (totalDebt / totalEquity);
+      metrics.debtToAssets += (totalDebt / totalAssets);
+      
+      // Cobertura de juros
+      if (interestExpense > 0 && ebit > 0) {
+        metrics.interestCoverage += (ebit / interestExpense);
+      } else {
+        metrics.interestCoverage += 10; // Valor neutro para empresas sem dívida significativa
+      }
+      
+      // Fluxo de caixa
+      metrics.operatingCashFlowMargin += (operatingCashFlow / revenue);
+      metrics.freeCashFlowMargin += (freeCashFlow / revenue);
+      
+      // Conversão lucro → caixa
+      if (netIncome > 0) {
+        metrics.cashConversionRatio += (operatingCashFlow / netIncome);
+      } else {
+        metrics.cashConversionRatio += 1; // Neutro
+      }
+      
+      validPeriods++;
+    }
+  }
+  
+  // Calcular médias
+  if (validPeriods > 0) {
+    const excludeFromAverage = ['revenueGrowth', 'netIncomeGrowth', 'revenueStability', 'marginStability', 'cashFlowStability'];
+    Object.keys(metrics).forEach(key => {
+      if (!excludeFromAverage.includes(key)) {
+        (metrics as any)[key] = (metrics as any)[key] / validPeriods;
+      }
+    });
+  }
+  
+  // Calcular crescimento e estabilidade
+  if (periods >= 2) {
+    const revenues = income.slice(0, periods).map(stmt => 
+      toNumber(stmt.totalRevenue) || toNumber(stmt.operatingIncome) || 0
+    );
+    const netIncomes = income.slice(0, periods).map(stmt => 
+      toNumber(stmt.netIncome) || 0
+    );
+    
+    metrics.revenueGrowth = calculateCAGR(revenues);
+    metrics.netIncomeGrowth = calculateCAGR(netIncomes);
+    metrics.revenueStability = calculateStability(revenues);
+    metrics.marginStability = calculateStability(
+      income.slice(0, periods).map((stmt, idx) => {
+        const rev = revenues[idx];
+        const net = netIncomes[idx];
+        return rev > 0 ? net / rev : 0;
+      })
+    );
+  }
+  
+  return metrics;
+}
+
+// === FUNÇÃO PARA OBTER BENCHMARKS SETORIAIS ===
+function getSectorBenchmarks(sectorContext: SectorContext, sizeContext: SizeContext): SectorBenchmarks {
+  // Benchmarks base (conservadores)
+  let benchmarks: SectorBenchmarks = {
+    minROE: 0.08, goodROE: 0.15, excellentROE: 0.25,
+    minROA: 0.03, goodROA: 0.08,
+    minNetMargin: 0.05, goodNetMargin: 0.10,
+    minCurrentRatio: 1.0, goodCurrentRatio: 1.5,
+    maxDebtToEquity: 2.0, maxDebtToAssets: 0.6,
+    minRevenueGrowth: 0.03, goodRevenueGrowth: 0.10
+  };
+  
+  // Ajustar por setor
+  if (sectorContext.marginExpectation === 'HIGH') {
+    benchmarks.minNetMargin = 0.10;
+    benchmarks.goodNetMargin = 0.20;
+    benchmarks.minROE = 0.12;
+    benchmarks.goodROE = 0.20;
+  } else if (sectorContext.marginExpectation === 'LOW') {
+    benchmarks.minNetMargin = 0.02;
+    benchmarks.goodNetMargin = 0.05;
+    benchmarks.minROE = 0.05;
+    benchmarks.goodROE = 0.10;
+    benchmarks.maxDebtToEquity = 3.0; // Setores de baixa margem podem ter mais dívida
+  }
+  
+  // Ajustar por tamanho
+  if (sizeContext.category === 'LARGE' || sizeContext.category === 'MEGA') {
+    benchmarks.minRevenueGrowth = 0.02; // Grandes empresas crescem menos
+    benchmarks.goodRevenueGrowth = 0.07;
+  } else if (sizeContext.category === 'SMALL' || sizeContext.category === 'MICRO') {
+    benchmarks.minRevenueGrowth = 0.05; // Pequenas empresas devem crescer mais
+    benchmarks.goodRevenueGrowth = 0.15;
+  }
+  
+  return benchmarks;
+}
+
+// === FUNÇÕES AUXILIARES PARA CÁLCULOS ===
+function calculateCAGR(values: number[]): number {
+  if (values.length < 2) return 0;
+  
+  const validValues = values.filter(v => v > 0);
+  if (validValues.length < 2) return 0;
+  
+  const firstValue = validValues[validValues.length - 1]; // Mais antigo
+  const lastValue = validValues[0]; // Mais recente
+  const years = validValues.length - 1;
+  
+  if (firstValue <= 0 || years <= 0) return 0;
+  
+  return Math.pow(lastValue / firstValue, 1 / years) - 1;
+}
+
+function calculateStability(values: number[]): number {
+  if (values.length < 2) return 0.5;
+  
+  const validValues = values.filter(v => !isNaN(v) && isFinite(v));
+  if (validValues.length < 2) return 0.5;
+  
+  const mean = validValues.reduce((sum, val) => sum + val, 0) / validValues.length;
+  if (mean === 0) return 0.5;
+  
+  const variance = validValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / validValues.length;
+  const coefficientOfVariation = Math.sqrt(variance) / Math.abs(mean);
+  
+  // Converter para score de estabilidade (0 = instável, 1 = muito estável)
+  return Math.max(0, Math.min(1, 1 - coefficientOfVariation));
+}
+
+// === FUNÇÕES DE ANÁLISE ESPECÍFICAS ===
+
+// 1. ANÁLISE DE RENTABILIDADE
+function analyzeProfitabilityMetrics(
+  metrics: AverageMetrics, 
+  benchmarks: SectorBenchmarks, 
+  sectorContext: SectorContext,
+  data?: { income: Record<string, unknown>[]; balance: Record<string, unknown>[]; cashflow: Record<string, unknown>[] }
+): AnalysisResult {
+  const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
+  
+  // ROE Analysis
+  if (metrics.roe >= benchmarks.excellentROE) {
+    result.scoreAdjustment += 15;
+    result.positiveSignals.push(`Rentabilidade excepcional: A empresa gera ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 investidos pelos acionistas (acima de ${(benchmarks.goodROE * 100).toFixed(1)}% esperado). Isso significa que seu dinheiro está rendendo muito bem nesta empresa.`);
+  } else if (metrics.roe >= benchmarks.goodROE) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push(`Boa rentabilidade: A empresa gera ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 dos acionistas. É um retorno sólido para seu investimento.`);
+  } else if (metrics.roe < benchmarks.minROE) {
+    result.scoreAdjustment -= 20;
+    result.redFlags.push(`Rentabilidade baixa: A empresa gera apenas ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 investidos (mínimo esperado: ${(benchmarks.minROE * 100).toFixed(1)}%). Seu dinheiro pode render mais em outras opções de investimento.`);
+  }
+  
+  // ROA Analysis
+  if (metrics.roa >= benchmarks.goodROA) {
+    result.scoreAdjustment += 10;
+    result.positiveSignals.push(`Eficiência dos ativos: A empresa consegue gerar ${(metrics.roa * 100).toFixed(1)}% de lucro para cada R$ 100 em ativos que possui. Isso mostra que ela usa bem seus recursos (equipamentos, imóveis, etc.).`);
+  } else if (metrics.roa < benchmarks.minROA) {
+    result.scoreAdjustment -= 15;
+    result.redFlags.push(`Baixa eficiência dos ativos: A empresa gera apenas ${(metrics.roa * 100).toFixed(1)}% de lucro com seus recursos. Pode estar com ativos ociosos ou mal utilizados.`);
+  }
+  
+  // Net Margin Analysis
+  if (metrics.netMargin >= benchmarks.goodNetMargin) {
+    result.scoreAdjustment += 12;
+    result.positiveSignals.push(`Margem de lucro sólida: De cada R$ 100 em vendas, a empresa consegue manter R$ ${(metrics.netMargin * 100).toFixed(1)} como lucro líquido. Isso indica boa gestão de custos.`);
+  } else if (metrics.netMargin < benchmarks.minNetMargin) {
+    result.scoreAdjustment -= 18;
+    result.redFlags.push(`Margem de lucro baixa: De cada R$ 100 vendidos, sobram apenas R$ ${(metrics.netMargin * 100).toFixed(1)} de lucro (esperado: pelo menos R$ ${(benchmarks.minNetMargin * 100).toFixed(1)}). A empresa pode ter custos altos ou preços baixos.`);
+  }
+  
+  // Detectar e explicar inconsistência entre margem operacional e líquida
+  if (metrics.operatingMargin < 0 && metrics.netMargin > 0.05 && data) {
+    // Vamos analisar os dados reais para identificar a causa específica
+    const explanation = analyzeOperationalVsNetMarginGap(data, metrics);
+    result.positiveSignals.push(explanation);
+  }
+  
+  return result;
+}
+
+// Função para analisar a diferença entre margem operacional e líquida
+function analyzeOperationalVsNetMarginGap(
+  data: { income: Record<string, unknown>[]; balance: Record<string, unknown>[]; cashflow: Record<string, unknown>[] },
+  metrics: AverageMetrics
+): string {
+  if (data.income.length === 0) {
+    return `Resultado atípico: Apesar da operação dar prejuízo, o resultado final é positivo. Não foi possível identificar a causa específica com os dados disponíveis.`;
+  }
+
+  const latestIncome = data.income[0];
+  
+  // Extrair dados da DRE
+  const revenue = toNumber(latestIncome.totalRevenue) || toNumber(latestIncome.operatingIncome) || 0;
+  const operatingIncome = toNumber(latestIncome.operatingIncome) || 0;
+  const netIncome = toNumber(latestIncome.netIncome) || 0;
+  const interestExpense = toNumber(latestIncome.interestExpense) || 0;
+  const interestIncome = toNumber(latestIncome.interestIncome) || 0;
+  const otherIncome = toNumber(latestIncome.otherIncomeExpenseNet) || 0;
+  const incomeBeforeTax = toNumber(latestIncome.incomeBeforeTax) || 0;
+  const taxExpense = toNumber(latestIncome.incomeTaxExpense) || 0;
+  
+  if (revenue <= 0) {
+    return `Resultado atípico: Apesar da operação dar prejuízo, o resultado final é positivo. Não foi possível analisar com os dados de receita disponíveis.`;
+  }
+
+  // Calcular as diferenças
+  const operationalLoss = Math.abs(operatingIncome);
+  const netProfit = netIncome;
+  const totalGap = netProfit + operationalLoss; // Quanto precisa "compensar"
+  
+  let explanations: string[] = [];
+  let mainCause = '';
+  
+  // 1. Analisar receitas financeiras (juros recebidos)
+  if (interestIncome > 0) {
+    const interestImpact = (interestIncome / revenue) * 100;
+    if (interestImpact >= 5) {
+      explanations.push(`receitas de juros significativas (R$ ${interestImpact.toFixed(1)} para cada R$ 100 de vendas)`);
+      if (interestIncome >= totalGap * 0.5) {
+        mainCause = 'receitas financeiras';
+      }
+    }
+  }
+  
+  // 2. Analisar outras receitas não operacionais
+  if (otherIncome > 0) {
+    const otherImpact = (otherIncome / revenue) * 100;
+    if (otherImpact >= 3) {
+      explanations.push(`outras receitas não operacionais (R$ ${otherImpact.toFixed(1)} para cada R$ 100 de vendas)`);
+      if (otherIncome >= totalGap * 0.5) {
+        mainCause = 'receitas extraordinárias';
+      }
+    }
+  }
+  
+  // 3. Analisar baixas despesas financeiras (se a empresa tem pouca dívida)
+  const netFinancialResult = interestIncome - Math.abs(interestExpense);
+  if (netFinancialResult > 0) {
+    const financialImpact = (netFinancialResult / revenue) * 100;
+    if (financialImpact >= 3) {
+      explanations.push(`resultado financeiro líquido positivo (R$ ${financialImpact.toFixed(1)} para cada R$ 100 de vendas)`);
+      if (!mainCause && netFinancialResult >= totalGap * 0.3) {
+        mainCause = 'resultado financeiro positivo';
+      }
+    }
+  }
+  
+  // 4. Analisar benefício fiscal (se os impostos são baixos ou negativos)
+  if (incomeBeforeTax > 0 && taxExpense < incomeBeforeTax * 0.1) {
+    const taxBenefit = incomeBeforeTax * 0.25 - taxExpense; // Assumindo 25% como taxa normal
+    if (taxBenefit > 0) {
+      const taxImpact = (taxBenefit / revenue) * 100;
+      if (taxImpact >= 2) {
+        explanations.push(`baixa carga tributária ou benefícios fiscais`);
+        if (!mainCause && taxBenefit >= totalGap * 0.3) {
+          mainCause = 'benefícios fiscais';
+        }
+      }
+    }
+  }
+  
+  // Montar explicação final
+  if (explanations.length === 0) {
+    return `Resultado atípico: A operação dá prejuízo de R$ ${Math.abs(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos, mas o resultado final é lucro de R$ ${(metrics.netMargin * 100).toFixed(1)}. A causa específica não foi identificada nos dados disponíveis.`;
+  }
+  
+  const causesText = explanations.length === 1 ? explanations[0] : 
+                   explanations.length === 2 ? `${explanations[0]} e ${explanations[1]}` :
+                   `${explanations.slice(0, -1).join(', ')} e ${explanations[explanations.length - 1]}`;
+  
+  if (mainCause) {
+    return `Resultado explicado: Apesar da operação dar prejuízo, o lucro final vem principalmente de ${mainCause}. A empresa compensa as perdas operacionais com ${causesText}.`;
+  } else {
+    return `Resultado misto: A operação dá prejuízo, mas o lucro final é resultado de ${causesText}. Isso torna os resultados menos previsíveis.`;
+  }
+}
+
+// 2. ANÁLISE DE LIQUIDEZ E SOLVÊNCIA
+function analyzeLiquidityMetrics(metrics: AverageMetrics, benchmarks: SectorBenchmarks, sectorContext: SectorContext): AnalysisResult {
+  const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
+  
+  // Current Ratio Analysis
+  if (metrics.currentRatio >= benchmarks.goodCurrentRatio) {
+    result.scoreAdjustment += 10;
+    result.positiveSignals.push(`Boa capacidade de pagamento: A empresa tem R$ ${metrics.currentRatio.toFixed(2)} em ativos de curto prazo para cada R$ 1,00 de dívidas de curto prazo. Consegue pagar suas contas em dia.`);
+  } else if (metrics.currentRatio < benchmarks.minCurrentRatio) {
+    result.scoreAdjustment -= 25;
+    result.redFlags.push(`Dificuldade para pagar contas: A empresa tem apenas R$ ${metrics.currentRatio.toFixed(2)} para cada R$ 1,00 de dívidas de curto prazo (mínimo: R$ ${benchmarks.minCurrentRatio.toFixed(1)}). Pode ter problemas de caixa.`);
+  }
+  
+  // Quick Ratio Analysis
+  if (metrics.quickRatio >= 1.0) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push(`Liquidez imediata boa: Mesmo sem vender estoques, a empresa tem R$ ${metrics.quickRatio.toFixed(2)} disponíveis para cada R$ 1,00 de dívidas urgentes.`);
+  } else if (metrics.quickRatio < 0.5) {
+    result.scoreAdjustment -= 15;
+    result.redFlags.push(`Liquidez imediata baixa: Sem vender estoques, a empresa tem apenas R$ ${metrics.quickRatio.toFixed(2)} para cada R$ 1,00 de dívidas urgentes. Depende muito das vendas para pagar contas.`);
+  }
+  
+  // Working Capital Analysis
+  if (metrics.workingCapitalRatio >= 0.15) {
+    result.scoreAdjustment += 6;
+    result.positiveSignals.push(`Capital de giro saudável: A empresa tem ${(metrics.workingCapitalRatio * 100).toFixed(1)}% dos seus ativos como "dinheiro sobrando" para investir no crescimento do negócio.`);
+  } else if (metrics.workingCapitalRatio < 0) {
+    result.scoreAdjustment -= 12;
+    result.redFlags.push(`Capital de giro negativo: A empresa deve mais no curto prazo do que tem disponível. Isso pode indicar aperto financeiro ou má gestão do caixa.`);
+  }
+  
+  // Debt Analysis
+  if (metrics.debtToEquity > benchmarks.maxDebtToEquity) {
+    result.scoreAdjustment -= 20;
+    result.redFlags.push(`Endividamento muito alto: A empresa deve ${metrics.debtToEquity.toFixed(2)}x mais do que vale seu patrimônio (máximo recomendado: ${benchmarks.maxDebtToEquity.toFixed(1)}x). Isso pode comprometer a saúde financeira e os dividendos.`);
+  } else if (metrics.debtToEquity < benchmarks.maxDebtToEquity * 0.5) {
+    result.scoreAdjustment += 5;
+    result.positiveSignals.push(`Endividamento controlado: A empresa deve apenas ${metrics.debtToEquity.toFixed(2)}x do valor do seu patrimônio. Isso dá segurança e espaço para crescer.`);
+  }
+  
+  // Interest Coverage Analysis
+  if (metrics.interestCoverage >= 8) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push(`Facilidade para pagar juros: A empresa ganha ${metrics.interestCoverage.toFixed(1)}x mais do que precisa para pagar os juros das dívidas. Muito seguro para o investidor.`);
+  } else if (metrics.interestCoverage >= 3) {
+    result.scoreAdjustment += 4;
+    result.positiveSignals.push(`Consegue pagar juros: A empresa ganha ${metrics.interestCoverage.toFixed(1)}x o valor necessário para pagar juros. Situação adequada.`);
+  } else if (metrics.interestCoverage < 2 && metrics.debtToEquity > 1) {
+    result.scoreAdjustment -= 15;
+    result.redFlags.push(`Dificuldade para pagar juros: A empresa ganha apenas ${metrics.interestCoverage.toFixed(1)}x o que precisa para pagar juros. Risco de não conseguir honrar as dívidas.`);
+  }
+  
+  return result;
+}
+
+// 3. ANÁLISE DE EFICIÊNCIA OPERACIONAL
+function analyzeEfficiencyMetrics(metrics: AverageMetrics, benchmarks: SectorBenchmarks, sectorContext: SectorContext): AnalysisResult {
+  const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
+  
+  // Asset Turnover Analysis
+  if (metrics.assetTurnover >= 1.5) {
+    result.scoreAdjustment += 12;
+    result.positiveSignals.push(`Uso eficiente dos recursos: A empresa gera R$ ${metrics.assetTurnover.toFixed(2)} em vendas para cada R$ 1,00 investido em ativos (equipamentos, imóveis, etc.). Isso mostra boa produtividade.`);
+  } else if (metrics.assetTurnover < 0.5) {
+    result.scoreAdjustment -= 10;
+    result.redFlags.push(`Recursos mal aproveitados: A empresa gera apenas R$ ${metrics.assetTurnover.toFixed(2)} em vendas para cada R$ 1,00 em ativos. Pode ter equipamentos parados ou investimentos desnecessários.`);
+  }
+  
+  // Operating Margin Analysis
+  if (metrics.operatingMargin >= 0.15) {
+    result.scoreAdjustment += 10;
+    result.positiveSignals.push(`Operação muito lucrativa: Antes de pagar juros e impostos, a empresa já lucra R$ ${(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos. Mostra eficiência operacional.`);
+  } else if (metrics.operatingMargin < 0) {
+    result.scoreAdjustment -= 15;
+    result.redFlags.push(`Operação com prejuízo: A empresa perde R$ ${Math.abs(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos, antes de considerar receitas financeiras. Os custos operacionais estão muito altos.`);
+  } else if (metrics.operatingMargin < 0.05) {
+    result.scoreAdjustment -= 8;
+    result.redFlags.push(`Operação pouco lucrativa: A empresa lucra apenas R$ ${(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos, antes de juros e impostos. Custos operacionais podem estar altos.`);
+  }
+  
+  // Receivables Turnover Analysis
+  if (metrics.receivablesTurnover >= 8) {
+    result.scoreAdjustment += 6;
+    result.positiveSignals.push(`Cobrança rápida: A empresa recebe o dinheiro das vendas em cerca de ${(365/metrics.receivablesTurnover).toFixed(0)} dias. Isso é bom para o fluxo de caixa.`);
+  } else if (metrics.receivablesTurnover < 4) {
+    result.scoreAdjustment -= 8;
+    result.redFlags.push(`Cobrança lenta: A empresa demora cerca de ${(365/metrics.receivablesTurnover).toFixed(0)} dias para receber das vendas. Isso pode causar problemas de caixa.`);
+  }
+  
+  // Inventory Turnover Analysis (apenas se relevante)
+  if (metrics.inventoryTurnover < 12) { // Se não é empresa de serviços
+    if (metrics.inventoryTurnover >= 6) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push(`Estoque bem gerenciado: A empresa renova seu estoque ${metrics.inventoryTurnover.toFixed(1)} vezes por ano. Produtos não ficam parados.`);
+    } else if (metrics.inventoryTurnover < 2) {
+      result.scoreAdjustment -= 10;
+      result.redFlags.push(`Estoque parado: A empresa demora ${(365/metrics.inventoryTurnover).toFixed(0)} dias para vender seu estoque. Produtos podem estar encalhados ou obsoletos.`);
+    }
+  }
+  
+  return result;
+}
+
+// 4. ANÁLISE DE FLUXO DE CAIXA
+function analyzeCashFlowQuality(metrics: AverageMetrics, benchmarks: SectorBenchmarks, sectorContext: SectorContext): AnalysisResult {
+  const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
+  
+  // Operating Cash Flow Margin Analysis
+  if (metrics.operatingCashFlowMargin >= 0.15) {
+    result.scoreAdjustment += 15;
+    result.positiveSignals.push(`Excelente geração de caixa: A empresa converte ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das vendas em dinheiro real no caixa. Isso é muito bom para pagar dividendos e investir.`);
+  } else if (metrics.operatingCashFlowMargin >= 0.08) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push(`Boa geração de caixa: A empresa transforma ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das vendas em dinheiro no caixa. Situação saudável.`);
+  } else if (metrics.operatingCashFlowMargin < 0) {
+    result.scoreAdjustment -= 20;
+    result.redFlags.push(`Queima de caixa: A empresa está gastando mais dinheiro do que recebe das operações (${(metrics.operatingCashFlowMargin * 100).toFixed(1)}%). Isso pode comprometer dividendos e investimentos.`);
+  }
+  
+  // Free Cash Flow Analysis
+  if (metrics.freeCashFlowMargin >= 0.10) {
+    result.scoreAdjustment += 12;
+    result.positiveSignals.push(`Sobra muito dinheiro: Após pagar todas as contas e investimentos necessários, ainda sobram ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas em caixa livre. Ótimo para dividendos.`);
+  } else if (metrics.freeCashFlowMargin >= 0.05) {
+    result.scoreAdjustment += 6;
+    result.positiveSignals.push(`Sobra dinheiro: Após todos os gastos, ainda restam ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas livres. Bom para remunerar acionistas.`);
+  } else if (metrics.freeCashFlowMargin < -0.05) {
+    result.scoreAdjustment -= 15;
+    result.redFlags.push(`Falta dinheiro: Após pagar contas e investimentos, a empresa fica no vermelho em ${Math.abs(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas. Pode afetar dividendos.`);
+  }
+  
+  // Cash Conversion Quality
+  if (metrics.cashConversionRatio >= 1.2) {
+    result.scoreAdjustment += 10;
+    result.positiveSignals.push(`Lucro vira dinheiro real: Para cada R$ 1,00 de lucro no papel, a empresa gera R$ ${metrics.cashConversionRatio.toFixed(2)} em dinheiro real. Excelente qualidade dos lucros.`);
+  } else if (metrics.cashConversionRatio >= 0.8) {
+    result.scoreAdjustment += 5;
+    result.positiveSignals.push(`Lucro se transforma em caixa: Para cada R$ 1,00 de lucro, a empresa gera R$ ${metrics.cashConversionRatio.toFixed(2)} em caixa. Boa conversão.`);
+  } else if (metrics.cashConversionRatio < 0.5) {
+    result.scoreAdjustment -= 12;
+    result.redFlags.push(`Lucro não vira dinheiro: Para cada R$ 1,00 de lucro no papel, apenas R$ ${metrics.cashConversionRatio.toFixed(2)} viram dinheiro real. Pode ser "lucro de papel" ou problemas de cobrança.`);
+  }
+  
+  return result;
+}
+
+// 5. ANÁLISE DE ESTABILIDADE E CONSISTÊNCIA
+function analyzeStabilityMetrics(
+  data: { income: Record<string, unknown>[]; balance: Record<string, unknown>[]; cashflow: Record<string, unknown>[] },
+  metrics: AverageMetrics,
+  sectorContext: SectorContext
+): AnalysisResult {
+  const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
+  
+  // Revenue Stability
+  if (metrics.revenueStability >= 0.8) {
+    result.scoreAdjustment += 15;
+    result.positiveSignals.push(`Vendas muito previsíveis: As receitas da empresa são muito estáveis ao longo dos anos (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Isso dá segurança para planejar dividendos.`);
+  } else if (metrics.revenueStability >= 0.6) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push(`Vendas relativamente previsíveis: As receitas têm boa consistência ao longo dos anos. Empresa com negócio estável.`);
+  } else if (metrics.revenueStability < 0.3) {
+    result.scoreAdjustment -= 15;
+    result.redFlags.push(`Vendas imprevisíveis: As receitas variam muito de ano para ano (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Dificulta planejamento e pode afetar dividendos.`);
+  }
+  
+  // Margin Stability
+  if (metrics.marginStability >= 0.7) {
+    result.scoreAdjustment += 10;
+    result.positiveSignals.push(`Lucratividade consistente: A empresa mantém margens de lucro estáveis ao longo dos anos. Mostra boa gestão de custos e preços.`);
+  } else if (metrics.marginStability < 0.3) {
+    result.scoreAdjustment -= 12;
+    result.redFlags.push(`Lucratividade instável: As margens de lucro variam muito entre os anos. Pode indicar dificuldade em controlar custos ou pressão competitiva.`);
+  }
+  
+  // Check for consecutive losses
+  const recentNetIncomes = data.income.slice(0, 3).map(stmt => toNumber(stmt.netIncome) || 0);
+  const consecutiveLosses = recentNetIncomes.filter(income => income < 0).length;
+  
+  if (consecutiveLosses >= 2) {
+    result.scoreAdjustment -= 30;
+    result.redFlags.push(`Prejuízos frequentes: A empresa teve prejuízo em ${consecutiveLosses} dos últimos 3 anos. Isso compromete a capacidade de pagar dividendos e pode indicar problemas estruturais.`);
+  }
+  
+  return result;
+}
+
+// 5. ANÁLISE DE CRESCIMENTO SUSTENTÁVEL
+function analyzeGrowthQuality(
+  data: { income: Record<string, unknown>[]; balance: Record<string, unknown>[]; cashflow: Record<string, unknown>[] },
+  metrics: AverageMetrics,
+  sectorContext: SectorContext
+): AnalysisResult {
+  const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
+  
+  // Revenue Growth Analysis
+  if (metrics.revenueGrowth >= 0.15) {
+    result.scoreAdjustment += 15;
+    result.positiveSignals.push(`Crescimento acelerado: As vendas crescem ${(metrics.revenueGrowth * 100).toFixed(1)}% ao ano em média. Empresa em expansão, o que pode valorizar suas ações.`);
+  } else if (metrics.revenueGrowth >= 0.05) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push(`Crescimento sólido: As vendas crescem ${(metrics.revenueGrowth * 100).toFixed(1)}% ao ano. Ritmo saudável de expansão dos negócios.`);
+  } else if (metrics.revenueGrowth < -0.05) {
+    result.scoreAdjustment -= 20;
+    result.redFlags.push(`Vendas em queda: As receitas estão diminuindo ${Math.abs(metrics.revenueGrowth * 100).toFixed(1)}% ao ano. Pode indicar perda de mercado ou problemas no setor.`);
+  }
+  
+  // Net Income Growth Analysis
+  if (metrics.netIncomeGrowth >= 0.10) {
+    result.scoreAdjustment += 12;
+    result.positiveSignals.push(`Lucros crescendo: Os lucros aumentam ${(metrics.netIncomeGrowth * 100).toFixed(1)}% ao ano. Isso pode resultar em mais dividendos e valorização das ações.`);
+  } else if (metrics.netIncomeGrowth < -0.10) {
+    result.scoreAdjustment -= 18;
+    result.redFlags.push(`Lucros em queda: Os lucros estão diminuindo ${Math.abs(metrics.netIncomeGrowth * 100).toFixed(1)}% ao ano. Isso pode comprometer dividendos futuros.`);
+  }
+  
+  // Growth Quality Check (revenue growth vs profit growth)
+  if (metrics.revenueGrowth > 0 && metrics.netIncomeGrowth > metrics.revenueGrowth) {
+    result.scoreAdjustment += 8;
+    result.positiveSignals.push(`Crescimento eficiente: Os lucros crescem mais rápido que as vendas. A empresa está ficando mais eficiente e lucrativa.`);
+  } else if (metrics.revenueGrowth > 0.05 && metrics.netIncomeGrowth < 0) {
+    result.scoreAdjustment -= 10;
+    result.redFlags.push(`Crescimento sem lucro: As vendas crescem mas os lucros caem. A empresa pode estar com problemas de custos ou competição acirrada.`);
+  }
+  
+  return result;
+}
+
+// 6. FUNÇÃO PARA AVALIAR FORÇA DA EMPRESA BASEADA NAS MÉDIAS
+function assessCompanyStrengthFromAverages(
+  metrics: AverageMetrics,
+  benchmarks: SectorBenchmarks,
+  sectorContext: SectorContext
+): StatementsAnalysis['companyStrength'] {
+  let strengthScore = 0;
+  
+  // Rentabilidade (40% do peso)
+  if (metrics.roe >= benchmarks.excellentROE) strengthScore += 40;
+  else if (metrics.roe >= benchmarks.goodROE) strengthScore += 25;
+  else if (metrics.roe >= benchmarks.minROE) strengthScore += 15;
+  
+  // Liquidez (25% do peso)
+  if (metrics.currentRatio >= benchmarks.goodCurrentRatio && metrics.quickRatio >= 1.0) strengthScore += 25;
+  else if (metrics.currentRatio >= benchmarks.minCurrentRatio) strengthScore += 15;
+  else if (metrics.currentRatio < benchmarks.minCurrentRatio) strengthScore -= 10;
+  
+  // Endividamento (20% do peso)
+  if (metrics.debtToEquity <= benchmarks.maxDebtToEquity * 0.5) strengthScore += 20;
+  else if (metrics.debtToEquity <= benchmarks.maxDebtToEquity) strengthScore += 10;
+  else strengthScore -= 15;
+  
+  // Estabilidade (15% do peso)
+  if (metrics.revenueStability >= 0.7 && metrics.marginStability >= 0.6) strengthScore += 15;
+  else if (metrics.revenueStability >= 0.5) strengthScore += 8;
+  
+  if (strengthScore >= 80) return 'VERY_STRONG';
+  if (strengthScore >= 60) return 'STRONG';
+  if (strengthScore >= 40) return 'MODERATE';
+  return 'WEAK';
+}
+
+// === FUNÇÕES AUXILIARES PARA ANÁLISE CONTEXTUAL (MANTIDAS PARA COMPATIBILIDADE) ===
 
 // Tipos para análises contextuais
 interface AnalysisResult {

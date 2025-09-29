@@ -75,7 +75,7 @@ export async function getStatementsData(
           endDate: { gte: new Date(`${startYear}-01-01`) }
         },
         orderBy: { endDate: 'desc' },
-        take: 5 // Últimos 5 anos para análise
+        take: 7 // Últimos 5 anos para análise
       }),
       prisma.balanceSheet.findMany({
         where: {
@@ -84,7 +84,7 @@ export async function getStatementsData(
           endDate: { gte: new Date(`${startYear}-01-01`) }
         },
         orderBy: { endDate: 'desc' },
-        take: 5
+        take: 7
       }),
       prisma.cashflowStatement.findMany({
         where: {
@@ -93,7 +93,7 @@ export async function getStatementsData(
           endDate: { gte: new Date(`${startYear}-01-01`) }
         },
         orderBy: { endDate: 'desc' },
-        take: 5
+        take: 7
       })
     ]);
 

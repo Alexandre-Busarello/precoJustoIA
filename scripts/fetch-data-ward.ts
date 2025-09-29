@@ -1732,6 +1732,79 @@ async function processCashflowStatements(
   }
 }
 
+// Função para processar estatística TTM específica (busca e atualiza o registro mais recente do ano)
+async function processKeyStatisticTTM(
+  companyId: number,
+  ticker: string,
+  keyStatistic: BrapiKeyStatistics,
+  currentYear: number
+): Promise<void> {
+  try {
+    // Buscar o registro mais recente do ano atual para período YEARLY
+    const startOfYear = new Date(`${currentYear}-01-01`);
+    const endOfYear = new Date(`${currentYear}-12-31`);
+    
+    const existingRecord = await prisma.keyStatistics.findFirst({
+      where: {
+        companyId,
+        period: 'YEARLY',
+        endDate: {
+          gte: startOfYear,
+          lte: endOfYear
+        }
+      },
+      orderBy: {
+        endDate: 'desc'
+      }
+    });
+    
+    const updateData = {
+      enterpriseValue: keyStatistic.enterpriseValue || null,
+      forwardPE: keyStatistic.forwardPE || null,
+      profitMargins: keyStatistic.profitMargins || null,
+      sharesOutstanding: keyStatistic.sharesOutstanding || null,
+      bookValue: keyStatistic.bookValue || null,
+      priceToBook: keyStatistic.priceToBook || null,
+      mostRecentQuarter: keyStatistic.mostRecentQuarter ? new Date(keyStatistic.mostRecentQuarter) : null,
+      earningsQuarterlyGrowth: keyStatistic.earningsQuarterlyGrowth || null,
+      earningsAnnualGrowth: keyStatistic.earningsAnnualGrowth || null,
+      trailingEps: keyStatistic.trailingEps || null,
+      enterpriseToRevenue: keyStatistic.enterpriseToRevenue || null,
+      enterpriseToEbitda: keyStatistic.enterpriseToEbitda || null,
+      fiftyTwoWeekChange: keyStatistic["52WeekChange"] || null,
+      ytdReturn: keyStatistic.ytdReturn || null,
+      lastDividendValue: keyStatistic.lastDividendValue || null,
+      lastDividendDate: keyStatistic.lastDividendDate ? new Date(keyStatistic.lastDividendDate) : null,
+      dividendYield: keyStatistic.dividendYield || null,
+      totalAssets: keyStatistic.totalAssets || null
+    };
+    
+    if (existingRecord) {
+      // Atualizar o registro existente mais recente do ano
+      await prisma.keyStatistics.update({
+        where: { id: existingRecord.id },
+        data: updateData
+      });
+      console.log(`    🔄 Estatística TTM atualizada (endDate: ${existingRecord.endDate.toISOString().split('T')[0]})`);
+    } else {
+      // Se não existe nenhum registro do ano atual, criar um novo com data de final do ano
+      const endDate = new Date(`${currentYear}-12-31`);
+      await prisma.keyStatistics.create({
+        data: {
+          companyId,
+          period: 'YEARLY',
+          endDate,
+          ...updateData
+        }
+      });
+      console.log(`    ✨ Nova estatística TTM criada (endDate: ${endDate.toISOString().split('T')[0]})`);
+    }
+    
+  } catch (error: any) {
+    console.error(`❌ Erro ao processar estatística TTM para ${ticker}:`, error.message);
+  }
+}
+
 // Função para processar estatísticas-chave (otimizada)
 async function processKeyStatistics(
   companyId: number, 
@@ -1804,11 +1877,10 @@ async function processKeyStatistics(
   // Processar estatística TTM atual (sempre atualizar)
   if (data.defaultKeyStatistics) {
     const currentYear = new Date().getFullYear();
-    const ttmKeyStatistic = {
-      ...data.defaultKeyStatistics,
-      updatedAt: new Date().toISOString()
-    };
-    await processKeyStatistic(ttmKeyStatistic, 'YEARLY');
+    
+    // Para dados TTM, buscar o registro mais recente do ano atual e atualizar
+    // ao invés de criar um novo registro com data atual
+    await processKeyStatisticTTM(companyId, ticker, data.defaultKeyStatistics, currentYear);
     console.log(`  📋 Estatística TTM processada para ${currentYear}`);
   }
 
@@ -3084,15 +3156,8 @@ async function processCompanyTTMOnly(
       
       // 3.3. Processar estatística TTM atual (sempre atualizar)
       if (brapiTTMData.defaultKeyStatistics) {
-        const mockBrapiData = {
-          symbol: ticker,
-          shortName: ticker,
-          longName: ticker,
-          currency: 'BRL',
-          regularMarketPrice: brapiTTMData.regularMarketPrice || 0,
-          defaultKeyStatistics: brapiTTMData.defaultKeyStatistics
-        };
-        await processKeyStatistics(company.id, ticker, mockBrapiData);
+        const currentYear = new Date().getFullYear();
+        await processKeyStatisticTTM(company.id, ticker, brapiTTMData.defaultKeyStatistics, currentYear);
         console.log(`  📋 Estatística TTM processada`);
       }
       
@@ -3414,6 +3479,7 @@ export {
   processIncomeStatements,
   processCashflowStatements,
   processKeyStatistics,
+  processKeyStatisticTTM,
   processValueAddedStatements,
   processFinancialDataTTM,
   updateRecentHistoricalPrices,

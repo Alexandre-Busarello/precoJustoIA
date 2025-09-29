@@ -32,7 +32,7 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { data: session, status } = useSession()
-  const { isPremium } = usePremiumStatus()
+  const { isPremium, subscriptionTier } = usePremiumStatus()
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
@@ -113,7 +113,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Early Adopter Banner - Conversão ALFA */}
-        <EarlyAdopterDashboardBanner className="mb-6" />
+        {subscriptionTier === 'FREE' && <EarlyAdopterDashboardBanner className="mb-6" />}
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">

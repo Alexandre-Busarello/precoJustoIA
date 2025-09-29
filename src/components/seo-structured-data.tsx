@@ -56,7 +56,7 @@ export function SEOStructuredData({
           "contactPoint": {
             "@type": "ContactPoint",
             "contactType": "customer service",
-            "email": "contato@precojusto.ai"
+            "email": "busamar@gmail.com"
           }
         },
         // Website

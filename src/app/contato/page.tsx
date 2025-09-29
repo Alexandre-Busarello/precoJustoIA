@@ -87,15 +87,15 @@ export default function ContatoPage() {
                   Respondemos em até 24 horas.
                 </p>
                 <div className="space-y-2 mb-6">
-                  <p className="font-medium">contato@precojusto.ai</p>
+                  <p className="font-medium">busamar@gmail.com (temporariamente)</p>
                   <p className="text-sm text-muted-foreground">Geral</p>
                 </div>
                 <div className="space-y-2 mb-6">
-                  <p className="font-medium">suporte@precojusto.ai</p>
+                  <p className="font-medium">busamar@gmail.com (temporariamente)</p>
                   <p className="text-sm text-muted-foreground">Suporte Técnico</p>
                 </div>
                 <Button className="w-full" asChild>
-                  <a href="mailto:contato@precojusto.ai" className="flex items-center justify-center gap-2">
+                  <a href="mailto:busamar@gmail.com" className="flex items-center justify-center gap-2">
                     <Send className="w-4 h-4" />
                     Enviar E-mail
                   </a>
@@ -359,7 +359,7 @@ export default function ContatoPage() {
               Não encontrou a resposta que procurava?
             </p>
             <Button size="lg" variant="outline" asChild>
-              <a href="mailto:contato@precojusto.ai" className="flex items-center gap-3">
+              <a href="mailto:busamar@gmail.com" className="flex items-center gap-3">
                 <Mail className="w-5 h-5" />
                 Entre em Contato Conosco
               </a>

@@ -89,7 +89,7 @@ export default function LGPDPage() {
                   <h4 className="font-semibold mb-2">Preço Justo AI</h4>
                   <p className="text-muted-foreground">
                     <strong>Responsável:</strong> Busamar Tecnologia<br/>
-                    <strong>E-mail para questões de privacidade:</strong> privacidade@precojusto.ai<br/>
+                    <strong>E-mail para questões de privacidade:</strong> busamar@gmail.com (temporariamente)<br/>
                     <strong>Data de vigência:</strong> Esta política está em vigor desde 01 de janeiro de 2025
                   </p>
                 </div>
@@ -431,9 +431,9 @@ export default function LGPDPage() {
                     Para exercer qualquer um dos seus direitos, entre em contato conosco através do e-mail:
                   </p>
                   <Button size="lg" className="bg-blue-600 hover:bg-blue-700" asChild>
-                    <Link href="mailto:privacidade@precojusto.ai" className="flex items-center gap-2">
+                    <Link href="mailto:busamar@gmail.com" className="flex items-center gap-2">
                       <Mail className="w-5 h-5" />
-                      privacidade@precojusto.ai
+                      busamar@gmail.com (temporariamente)
                     </Link>
                   </Button>
                   <p className="text-sm text-muted-foreground mt-4">
@@ -791,7 +791,7 @@ export default function LGPDPage() {
           
           <div className="flex flex-col sm:flex-row gap-6 justify-center">
             <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-4" asChild>
-              <Link href="mailto:privacidade@precojusto.ai" className="flex items-center gap-3">
+              <Link href="mailto:busamar@gmail.com" className="flex items-center gap-3">
                 <Mail className="w-5 h-5" />
                 Falar com Privacidade
                 <ArrowRight className="w-5 h-5" />

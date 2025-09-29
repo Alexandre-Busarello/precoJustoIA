@@ -93,8 +93,8 @@ export default function TermosDeUsoPage() {
                   <p className="text-muted-foreground">
                     <strong>Razão Social:</strong> Busamar Tecnologia<br/>
                     <strong>Plataforma:</strong> precojusto.ai<br/>
-                    <strong>E-mail de contato:</strong> contato@precojusto.ai<br/>
-                    <strong>Suporte:</strong> suporte@precojusto.ai<br/>
+                    <strong>E-mail de contato:</strong> busamar@gmail.com (temporariamente)<br/>
+                    <strong>Suporte:</strong> busamar@gmail.com (temporariamente)<br/>
                     <strong>Data de vigência:</strong> 01 de janeiro de 2025
                   </p>
                 </div>
@@ -801,7 +801,7 @@ export default function TermosDeUsoPage() {
           
           <div className="flex flex-col sm:flex-row gap-6 justify-center">
             <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-4" asChild>
-              <Link href="mailto:suporte@precojusto.ai" className="flex items-center gap-3">
+              <Link href="mailto:busamar@gmail.com" className="flex items-center gap-3">
                 <Mail className="w-5 h-5" />
                 Falar com Suporte
                 <ArrowRight className="w-5 h-5" />
@@ -813,7 +813,7 @@ export default function TermosDeUsoPage() {
           </div>
 
           <div className="mt-8 text-sm opacity-75">
-            <p>E-mail: contato@precojusto.ai | Suporte: suporte@precojusto.ai</p>
+            <p>E-mail: busamar@gmail.com | Suporte: busamar@gmail.com</p>
           </div>
         </div>
       </section>

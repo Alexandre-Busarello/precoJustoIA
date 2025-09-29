@@ -390,7 +390,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
               </p>
               <p class="footer-text">
                 Precisa de ajuda? Entre em contato conosco em 
-                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
+                <a href="mailto:busamar@gmail.com" class="footer-link">busamar@gmail.com</a>
               </p>
               
               <div class="footer-brand">
@@ -416,7 +416,7 @@ IMPORTANTE:
 - Se você não solicitou esta redefinição, ignore este email
 - Sua senha atual permanecerá inalterada até que você complete o processo
 
-Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
+Precisa de ajuda? Entre em contato conosco em busamar@gmail.com
 
 Preço Justo AI - Análise fundamentalista inteligente
 ${baseUrl}

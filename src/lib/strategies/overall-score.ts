@@ -128,10 +128,13 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   let weightedScore = 0;
   
   Object.entries(analyses).forEach(([key, analysis]) => {
-    // Normalizar scoreAdjustment para uma escala de 0-100
-    // scoreAdjustment varia tipicamente de -60 a +15
-    // Mapear para 0-100: score = 50 + (scoreAdjustment * 0.5)
-    const normalizedScore = Math.max(0, Math.min(100, 50 + (analysis.scoreAdjustment * 0.5)));
+    // Nova lógica: Score começa em 100 e é reduzido por penalidades
+    // scoreAdjustment positivo = bônus, scoreAdjustment negativo = penalidade
+    // Score base = 100, ajustado pelo scoreAdjustment
+    let normalizedScore = 100 + analysis.scoreAdjustment;
+    
+    // Garantir que o score fique entre 0 e 100
+    normalizedScore = Math.max(0, Math.min(100, normalizedScore));
     
     const weight = weights[key as keyof typeof weights];
     weightedScore += normalizedScore * weight;
@@ -296,6 +299,7 @@ function calculateAverageMetrics(data: {
     const netIncome = toNumber(incomeStmt.netIncome) || 0;
     const grossProfit = toNumber(incomeStmt.grossProfit) || 0;
     const operatingIncome = toNumber(incomeStmt.operatingIncome) || 0;
+    const totalOperatingExpenses = toNumber(incomeStmt.totalOperatingExpenses) || 0;
     
     const totalAssets = toNumber(balanceStmt.totalAssets) || 1;
     const totalEquity = toNumber(balanceStmt.totalStockholderEquity) || 1;
@@ -313,7 +317,7 @@ function calculateAverageMetrics(data: {
     
     // Dados de DRE adicionais
     const interestExpense = toNumber(incomeStmt.interestExpense) || 0;
-    const ebit = toNumber(incomeStmt.ebit) || operatingIncome;
+    const ebit = toNumber(incomeStmt.ebit) || 0;
     
     if (revenue > 0 && totalAssets > 0 && totalEquity > 0) {
       // Rentabilidade
@@ -321,7 +325,17 @@ function calculateAverageMetrics(data: {
       metrics.roa += (netIncome / totalAssets);
       metrics.netMargin += (netIncome / revenue);
       metrics.grossMargin += (grossProfit / revenue);
-      metrics.operatingMargin += (operatingIncome / revenue);
+      
+      // Calcular margem operacional corretamente
+      // Prioridade: 1) EBIT, 2) Lucro Bruto - Despesas Operacionais, 3) Operating Income como fallback
+      let operatingProfit = ebit;
+      if (!operatingProfit && grossProfit > 0 && totalOperatingExpenses > 0) {
+        operatingProfit = grossProfit - totalOperatingExpenses;
+      } else if (!operatingProfit) {
+        operatingProfit = operatingIncome; // Fallback
+      }
+      
+      metrics.operatingMargin += (operatingProfit / revenue);
       
       // Liquidez
       metrics.currentRatio += (currentAssets / currentLiabilities);

@@ -841,10 +841,10 @@ export default function FinancialIndicators({ ticker, latestFinancials, comprehe
             
             <IndicatorCard
               title="Dividend Yield"
-              value={formatPercent(toNumber(latestFinancials.dy) ?? toNumber(latestAnnualStats?.dividendYield))}
+              value={formatPercent(toNumber(latestFinancials.dy) ?? toNumber(latestAnnualStats?.dividendYield / 100))}
               icon={DollarSign}
               description="Rendimento de Dividendos"
-              type={getIndicatorType(toNumber(latestFinancials.dy) ?? toNumber(latestAnnualStats?.dividendYield), 0.06)}
+              type={getIndicatorType(toNumber(latestFinancials.dy) ?? toNumber(latestAnnualStats?.dividendYield / 100), 0.06)}
               onChartClick={handleChartClick}
               onInfoClick={handleInfoClick}
             />

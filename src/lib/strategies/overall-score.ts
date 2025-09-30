@@ -130,10 +130,6 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
     }).slice(0, 7)
   };
 
-  // === ANÁLISE BASEADA EM MÉDIAS E BENCHMARKS ===
-  const averageMetrics = calculateAverageMetrics(completedYearsData, data.financialDataFallback);
-  const benchmarks = getSectorBenchmarks(sectorContext, sizeContext);
-  
   // === VALIDAÇÃO DE DADOS ===
   const dataValidation = validateFinancialData(
     completedYearsData.income, 
@@ -142,6 +138,10 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
     company?.sector || null,
     company?.industry || null
   );
+  
+  // === ANÁLISE BASEADA EM MÉDIAS E BENCHMARKS ===
+  const averageMetrics = calculateAverageMetrics(completedYearsData, data.financialDataFallback, company?.ticker || undefined, dataValidation);
+  const benchmarks = getSectorBenchmarks(sectorContext, sizeContext);
   console.log('Data validation results:', dataValidation);
   
   // === SISTEMA DE PONTUAÇÃO NORMALIZADO ===
@@ -324,7 +324,9 @@ function calculateAverageMetrics(
     balance: Record<string, unknown>[];
     cashflow: Record<string, unknown>[];
   },
-  fallbackData?: FinancialStatementsData['financialDataFallback']
+  fallbackData?: FinancialStatementsData['financialDataFallback'],
+  ticker?: string,
+  dataValidation?: DataValidation
 ): AverageMetrics {
   const { income, balance, cashflow } = data;
   const periods = Math.min(income.length, balance.length, cashflow.length);
@@ -555,17 +557,50 @@ function calculateAverageMetrics(
         metrics.debtToAssets += Math.min(debtToAssets, 2);
       }
       
-      // Cobertura de juros
-      if (interestExpense > 0 && ebit > 0) {
-        const interestCoverage = ebit / interestExpense;
-        if (interestCoverage <= 1000) { // Cobertura não deve exceder 1000x
-          metrics.interestCoverage += interestCoverage;
+      // Cobertura de juros - tratamento especial para bancos
+      const isLikelyBank = dataValidation?.isBankOrFinancial || 
+        (ticker && ['BBSE3', 'SULA11', 'PSSA3', 'BBAS3', 'ITUB4', 'SANB11', 'BPAC11', 'BRSR6', 'PINE4', 'WIZS3', 'ABCB4', 'BPAN4', 'BBDC3', 'BBDC4'].includes(ticker.toUpperCase()));
+      
+      // Debug para bancos específicos
+      if (ticker && ['BBSE3', 'ITUB4', 'BBAS3'].includes(ticker.toUpperCase())) {
+        console.log(`🏦 DEBUG COBERTURA JUROS ${ticker}:`, {
+          isLikelyBank,
+          netIncome,
+          interestExpense,
+          ebit,
+          period: i
+        });
+      }
+      
+      if (isLikelyBank) {
+        // Para bancos, usar lucro líquido ao invés de EBIT para cobertura de juros
+        if (interestExpense > 0 && netIncome > 0) {
+          const interestCoverage = netIncome / interestExpense;
+          if (interestCoverage <= 100) { // Limite mais baixo para bancos
+            metrics.interestCoverage += Math.max(interestCoverage, 0.1); // Mínimo de 0.1
+          } else {
+            metrics.interestCoverage += 20; // Valor alto para bancos
+          }
+        } else if (netIncome > 0) {
+          // Banco com lucro mas sem despesa de juros significativa
+          metrics.interestCoverage += 15; // Valor bom para bancos
         } else {
-          console.warn(`Interest coverage extremo detectado: ${interestCoverage.toFixed(1)}x - usando valor máximo`);
-          metrics.interestCoverage += 50; // Valor alto mas não extremo
+          // Banco com prejuízo ou sem dados válidos
+          metrics.interestCoverage += 1; // Valor baixo mas não zero
         }
       } else {
-        metrics.interestCoverage += 10; // Valor neutro para empresas sem dívida significativa
+        // Lógica tradicional para empresas não-financeiras
+        if (interestExpense > 0 && ebit > 0) {
+          const interestCoverage = ebit / interestExpense;
+          if (interestCoverage <= 1000) { // Cobertura não deve exceder 1000x
+            metrics.interestCoverage += interestCoverage;
+          } else {
+            console.warn(`Interest coverage extremo detectado: ${interestCoverage.toFixed(1)}x - usando valor máximo`);
+            metrics.interestCoverage += 50; // Valor alto mas não extremo
+          }
+        } else {
+          metrics.interestCoverage += 10; // Valor neutro para empresas sem dívida significativa
+        }
       }
       
       // Fluxo de caixa
@@ -1336,13 +1371,19 @@ function analyzeLiquidityMetrics(
   
   // Interest Coverage Analysis - adaptado para setor financeiro
   if (isFinancialSector) {
-    // Para bancos, a cobertura de juros é menos relevante pois juros são parte do negócio
-    if (metrics.interestCoverage >= 3) {
-      result.scoreAdjustment += 5;
-      result.positiveSignals.push(`Cobertura de juros adequada: A instituição gera ${metrics.interestCoverage.toFixed(1)}x mais receita do que paga em juros. Para bancos, isso indica boa gestão do spread bancário.`);
-    } else if (metrics.interestCoverage < 1.5) {
-      result.scoreAdjustment -= 8;
-      result.redFlags.push(`Cobertura de juros baixa: A instituição gera apenas ${metrics.interestCoverage.toFixed(1)}x o que paga em juros. Pode indicar problemas na gestão do spread ou qualidade dos ativos.`);
+    // Para bancos, a cobertura de juros tem interpretação diferente
+    if (metrics.interestCoverage >= 5) {
+      result.scoreAdjustment += 8;
+      result.positiveSignals.push(`Gestão eficiente do spread bancário: A instituição apresenta cobertura de ${metrics.interestCoverage.toFixed(1)}x, indicando boa capacidade de gerar lucros líquidos em relação aos custos de captação.`);
+    } else if (metrics.interestCoverage >= 2) {
+      result.scoreAdjustment += 3;
+      result.positiveSignals.push(`Cobertura adequada para banco: Relação de ${metrics.interestCoverage.toFixed(1)}x entre lucro e despesas de juros. Para bancos, o foco deve estar na margem líquida e ROE.`);
+    } else if (metrics.interestCoverage < 1 && metrics.interestCoverage > 0.1) {
+      result.scoreAdjustment -= 5; // Penalidade menor
+      result.positiveSignals.push(`Cobertura baixa mas típica de bancos: Relação de ${metrics.interestCoverage.toFixed(1)}x. Para instituições financeiras, analise principalmente a rentabilidade (ROE) e qualidade dos ativos, pois a estrutura de juros é diferente de empresas tradicionais.`);
+    } else if (metrics.interestCoverage <= 0.1) {
+      result.scoreAdjustment -= 3; // Penalidade muito menor
+      result.positiveSignals.push(`Estrutura financeira específica de banco: A análise de cobertura de juros não se aplica da mesma forma a bancos. Foque nos indicadores de rentabilidade (ROE, ROA) e qualidade da carteira de crédito.`);
     }
   } else {
     // Análise tradicional para outros setores

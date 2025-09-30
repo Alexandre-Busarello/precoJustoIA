@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
-import { sendPaymentFailureEmail } from '@/lib/email-service'
+import { sendPaymentFailureEmail, sendWelcomeEmail } from '@/lib/email-service'
 import Stripe from 'stripe'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -239,6 +239,21 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
 
     console.log(`✅ Subscription created and activated for user ${userId}`)
     console.log(`🎉 User ${userEmail} is now PREMIUM!`)
+    
+    // Enviar email de boas-vindas
+    if (userEmail) {
+      try {
+        // Verificar se é Early Adopter baseado no preço
+        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 24900 // R$ 249,00
+        
+        await sendWelcomeEmail(userEmail, undefined, isEarlyAdopter)
+        console.log(`📧 Welcome email sent to ${userEmail}`)
+      } catch (emailError) {
+        console.error('❌ Failed to send welcome email:', emailError)
+        // Não falhar o webhook por causa do email
+      }
+    }
+    
     return true
   } catch (error) {
     console.error('❌ Error handling subscription created:', error)
@@ -380,6 +395,22 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
   })
 
     console.log(`✅ Payment succeeded for user ${user.id}`)
+    
+    // Enviar email de boas-vindas apenas se for a primeira cobrança (não renovação)
+    // Verificamos se o usuário não tinha Premium antes
+    if (!user.wasPremiumBefore && user.email) {
+      try {
+        // Verificar se é Early Adopter baseado no preço
+        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 24900 // R$ 249,00
+        
+        await sendWelcomeEmail(user.email, user.name || undefined, isEarlyAdopter)
+        console.log(`📧 Welcome email sent to ${user.email}`)
+      } catch (emailError) {
+        console.error('❌ Failed to send welcome email:', emailError)
+        // Não falhar o webhook por causa do email
+      }
+    }
+    
     return true
   } catch (error) {
     console.error('❌ Error handling invoice payment succeeded:', error)

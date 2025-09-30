@@ -567,7 +567,9 @@ function ComparisonIndicatorCard({
       // Remover símbolos de moeda e porcentagem para conversão
       const cleanValue = v.replace(/[R$%\s]/g, '').replace(',', '.')
       const parsed = parseFloat(cleanValue)
-      return isNaN(parsed) ? null : parsed
+      // Se o valor original tinha %, converter para decimal (dividir por 100)
+      const isPercentage = v.includes('%')
+      return isNaN(parsed) ? null : (isPercentage ? parsed / 100 : parsed)
     }
     return null
   })
@@ -727,7 +729,6 @@ function ComparisonIndicatorCard({
             }
           }
           
-          const isPercentField = !!(fieldName && ['roe', 'roic', 'dy', 'margemLiquida', 'margemEbitda', 'cagrLucros5a', 'cagrReceitas5a', 'crescimentoLucros', 'crescimentoReceitas'].includes(fieldName))
           
           return (
             <div 

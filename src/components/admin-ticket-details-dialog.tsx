@@ -265,173 +265,54 @@ export default function AdminTicketDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[900px] max-h-[95vh] h-[95vh] sm:h-auto flex flex-col p-3 sm:p-6">
+      <DialogContent className="w-[95vw] max-w-[700px] h-[95vh] flex flex-col p-4 sm:p-6 overflow-hidden">
         <DialogHeader className="flex-shrink-0">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <DialogTitle className="text-lg sm:text-xl pr-2 line-clamp-2">{ticket.title}</DialogTitle>
-              <DialogDescription className="mt-1 sm:mt-2 text-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                  <span>Ticket #{ticket.id.slice(-8)}</span>
-                  <span className="hidden sm:inline">•</span>
-                  <span>{categoryConfig[ticket.category]}</span>
-                  <span className="hidden sm:inline">•</span>
-                  <span>Por: {ticket.user.name || ticket.user.email}</span>
-                  <span className="hidden sm:inline">({ticket.user.subscriptionTier})</span>
-                </div>
-              </DialogDescription>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-lg sm:text-xl pr-2 line-clamp-2">{ticket.title}</DialogTitle>
+                <DialogDescription className="mt-1 sm:mt-2 text-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                    <span>Ticket #{ticket.id.slice(-8)}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span>{categoryConfig[ticket.category]}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span>Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                </DialogDescription>
+              </div>
+              <div className="flex flex-row gap-2 flex-shrink-0">
+                <Badge 
+                  variant="secondary" 
+                  className={`${statusConfig[ticket.status].color} text-white text-xs`}
+                >
+                  <StatusIcon className="h-3 w-3 mr-1" />
+                  {statusConfig[ticket.status].label}
+                </Badge>
+                <Badge 
+                  variant="outline"
+                  className={`${priorityConfig[ticket.priority].color} text-white border-0 text-xs`}
+                >
+                  {priorityConfig[ticket.priority].label}
+                </Badge>
+              </div>
             </div>
-            <div className="flex flex-row sm:flex-col gap-2 sm:ml-4 flex-shrink-0">
-              <Badge 
-                variant="secondary" 
-                className={`${statusConfig[ticket.status].color} text-white text-xs`}
-              >
-                <StatusIcon className="h-3 w-3 mr-1" />
-                {statusConfig[ticket.status].label}
-              </Badge>
-              <Badge 
-                variant="outline"
-                className={`${priorityConfig[ticket.priority].color} text-white border-0 text-xs`}
-              >
-                {priorityConfig[ticket.priority].label}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 mt-3 sm:mt-4">
-            <span>Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
-            {ticket.assignee && (
-              <span className="hidden sm:inline">Atribuído a: {ticket.assignee.name}</span>
-            )}
-            {ticket.closedAt && (
-              <span>Fechado: {new Date(ticket.closedAt).toLocaleDateString('pt-BR')}</span>
-            )}
           </div>
         </DialogHeader>
 
-        <Separator className="my-3 sm:my-4" />
-
-        <div className="flex flex-col lg:flex-row gap-3 lg:gap-6 flex-1 min-h-0 overflow-hidden">
-          {/* Coluna principal - Mensagens */}
-          <div className="flex-1 flex flex-col min-h-0 lg:min-w-0">
-            <h3 className="font-semibold mb-3 sm:mb-4 text-base sm:text-lg">Conversa</h3>
-            
-            <ScrollArea className="h-[250px] sm:h-[300px] lg:flex-1 pr-2 sm:pr-4">
-              <div className="space-y-4">
-                {loading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    Nenhuma mensagem ainda
-                  </div>
-                ) : (
-                  messages.map((message) => (
-                    <Card 
-                      key={message.id} 
-                      className={`${message.user.isAdmin ? 'bg-blue-50 border-blue-200' : ''} ${message.isInternal ? 'bg-yellow-50 border-yellow-200' : ''}`}
-                    >
-                      <CardContent className="pt-3 sm:pt-4 pb-3 sm:pb-4">
-                        <div className="flex items-start gap-2 sm:gap-3">
-                          <div className={`p-1.5 sm:p-2 rounded-full flex-shrink-0 ${
-                            message.isInternal ? 'bg-yellow-600' :
-                            message.user.isAdmin ? 'bg-blue-600' : 'bg-gray-600'
-                          }`}>
-                            {message.isInternal ? (
-                              <Shield className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                            ) : message.user.isAdmin ? (
-                              <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                            ) : (
-                              <User className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-gray-900 text-sm sm:text-base">
-                                  {message.user.isAdmin ? 'Admin' : message.user.name || 'Usuário'}
-                                </span>
-                                {message.user.isAdmin && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    Equipe
-                                  </Badge>
-                                )}
-                                {message.isInternal && (
-                                  <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800">
-                                    Interno
-                                  </Badge>
-                                )}
-                              </div>
-                              <span className="text-xs text-gray-500">
-                                {new Date(message.createdAt).toLocaleDateString('pt-BR')} {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <div className="text-gray-700 whitespace-pre-wrap text-sm sm:text-base break-words">
-                              {message.message}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-
-            {/* Campo de resposta */}
-            {canReply && (
-              <div className="mt-3 sm:mt-4 space-y-3 border-t pt-3 sm:pt-4">
-                <Textarea
-                  placeholder="Digite sua resposta..."
-                  value={newMessage}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMessage(e.target.value)}
-                  rows={2}
-                  maxLength={2000}
-                  className="text-sm sm:text-base resize-none"
-                />
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="internal" 
-                        checked={isInternal}
-                        onCheckedChange={(checked: boolean) => setIsInternal(checked)}
-                      />
-                      <Label htmlFor="internal" className="text-xs sm:text-sm">
-                        Mensagem interna (apenas admins)
-                      </Label>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {newMessage.length}/2000 caracteres
-                    </span>
-                  </div>
-                  <Button 
-                    onClick={handleSendMessage}
-                    disabled={!newMessage.trim() || sendingMessage}
-                    className="flex items-center gap-2 w-full sm:w-auto"
-                    size="sm"
-                  >
-                    <Send className="h-4 w-4" />
-                    {sendingMessage ? 'Enviando...' : 'Enviar'}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Sidebar - Controles de Admin */}
-          <div className="w-full lg:w-80 lg:flex-shrink-0 space-y-3 lg:space-y-4">
+        <div className="flex-1 overflow-y-auto pr-2">
+          <div className="space-y-6 pb-4">
+            {/* 1. Gerenciar Ticket */}
             <Card>
-              <CardContent className="pt-3 sm:pt-6 pb-3 sm:pb-6">
-                <div className="flex items-center gap-2 mb-3 sm:mb-4">
-                  <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <h3 className="font-semibold text-base sm:text-lg">Gerenciar Ticket</h3>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Settings className="h-5 w-5" />
+                  <h3 className="font-semibold text-lg">Gerenciar Ticket</h3>
                 </div>
 
-                <div className="space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-sm sm:text-base">Status</Label>
+                    <Label>Status</Label>
                     <Select value={editingStatus} onValueChange={(value: typeof editingStatus) => setEditingStatus(value)}>
                       <SelectTrigger>
                         <SelectValue />
@@ -445,7 +326,7 @@ export default function AdminTicketDetailsDialog({
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm sm:text-base">Prioridade</Label>
+                    <Label>Prioridade</Label>
                     <Select value={editingPriority} onValueChange={(value: typeof editingPriority) => setEditingPriority(value)}>
                       <SelectTrigger>
                         <SelectValue />
@@ -459,7 +340,7 @@ export default function AdminTicketDetailsDialog({
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm sm:text-base">Atribuir a</Label>
+                    <Label>Atribuir a</Label>
                     <Select value={editingAssignee} onValueChange={setEditingAssignee}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecionar admin" />
@@ -468,42 +349,172 @@ export default function AdminTicketDetailsDialog({
                         <SelectItem value="unassigned">Não atribuído</SelectItem>
                         {admins.map((admin) => (
                           <SelectItem key={admin.id} value={admin.id}>
-                            {admin.name} ({admin._count.assignedTickets} tickets)
+                            {admin.name} ({admin._count.assignedTickets})
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
 
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
                   <Button 
                     onClick={handleUpdateTicket}
                     disabled={!hasChanges || updatingTicket}
-                    className="w-full"
+                    className="flex-1"
                   >
                     {updatingTicket ? 'Salvando...' : 'Salvar Alterações'}
                   </Button>
+                  {ticket.assignee && (
+                    <div className="text-sm text-gray-600 flex items-center px-3 py-2 bg-gray-50 rounded">
+                      Atribuído a: {ticket.assignee.name}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Informações do usuário */}
+            {/* 2. Informações do Usuário */}
             <Card>
-              <CardContent className="pt-3 sm:pt-6 pb-3 sm:pb-6">
-                <h3 className="font-semibold mb-3 sm:mb-4 text-base sm:text-lg">Informações do Usuário</h3>
-                <div className="space-y-2 text-xs sm:text-sm">
-                  <div>
-                    <span className="font-medium">Nome:</span> {ticket.user.name || 'N/A'}
-                  </div>
-                  <div className="break-all">
-                    <span className="font-medium">Email:</span> {ticket.user.email}
-                  </div>
-                  <div>
-                    <span className="font-medium">Plano:</span> 
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      {ticket.user.subscriptionTier}
-                    </Badge>
-                  </div>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <User className="h-5 w-5" />
+                  <h3 className="font-semibold text-lg">Informações do Usuário</h3>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-600">Nome:</span>
+                    <div className="mt-1">{ticket.user.name || 'N/A'}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-600">Email:</span>
+                    <div className="mt-1 break-all">{ticket.user.email}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-600">Plano:</span>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="text-xs">
+                        {ticket.user.subscriptionTier}
+                      </Badge>
+                    </div>
+                  </div>
+                  {ticket.closedAt && (
+                    <div>
+                      <span className="font-medium text-gray-600">Fechado em:</span>
+                      <div className="mt-1">{new Date(ticket.closedAt).toLocaleDateString('pt-BR')}</div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 3. Conversa */}
+            <Card>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <MessageSquare className="h-5 w-5" />
+                  <h3 className="font-semibold text-lg">Conversa</h3>
+                </div>
+                
+                <div className="space-y-4 max-h-[300px] sm:max-h-[400px] overflow-y-auto pr-2">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      Nenhuma mensagem ainda
+                    </div>
+                  ) : (
+                    messages.map((message) => (
+                      <Card 
+                        key={message.id} 
+                        className={`${message.user.isAdmin ? 'bg-blue-50 border-blue-200' : ''} ${message.isInternal ? 'bg-yellow-50 border-yellow-200' : ''}`}
+                      >
+                        <CardContent className="pt-3 pb-3">
+                          <div className="flex items-start gap-3">
+                            <div className={`p-2 rounded-full flex-shrink-0 ${
+                              message.isInternal ? 'bg-yellow-600' :
+                              message.user.isAdmin ? 'bg-blue-600' : 'bg-gray-600'
+                            }`}>
+                              {message.isInternal ? (
+                                <Shield className="h-4 w-4 text-white" />
+                              ) : message.user.isAdmin ? (
+                                <UserCheck className="h-4 w-4 text-white" />
+                              ) : (
+                                <User className="h-4 w-4 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-gray-900">
+                                    {message.user.isAdmin ? 'Admin' : message.user.name || 'Usuário'}
+                                  </span>
+                                  {message.user.isAdmin && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Equipe
+                                    </Badge>
+                                  )}
+                                  {message.isInternal && (
+                                    <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800">
+                                      Interno
+                                    </Badge>
+                                  )}
+                                </div>
+                                <span className="text-xs text-gray-500">
+                                  {new Date(message.createdAt).toLocaleDateString('pt-BR')} {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <div className="text-gray-700 whitespace-pre-wrap text-sm break-words">
+                                {message.message}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+
+                {/* Campo de resposta */}
+                {canReply && (
+                  <div className="mt-4 space-y-3 border-t pt-4">
+                    <Textarea
+                      placeholder="Digite sua resposta..."
+                      value={newMessage}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMessage(e.target.value)}
+                      rows={3}
+                      maxLength={2000}
+                      className="resize-none"
+                    />
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox 
+                            id="internal" 
+                            checked={isInternal}
+                            onCheckedChange={(checked: boolean) => setIsInternal(checked)}
+                          />
+                          <Label htmlFor="internal" className="text-sm">
+                            Mensagem interna (apenas admins)
+                          </Label>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {newMessage.length}/2000 caracteres
+                        </span>
+                      </div>
+                      <Button 
+                        onClick={handleSendMessage}
+                        disabled={!newMessage.trim() || sendingMessage}
+                        className="flex items-center gap-2 w-full sm:w-auto"
+                      >
+                        <Send className="h-4 w-4" />
+                        {sendingMessage ? 'Enviando...' : 'Enviar'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

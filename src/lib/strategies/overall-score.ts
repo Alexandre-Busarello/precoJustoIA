@@ -27,6 +27,7 @@ export interface FinancialStatementsData {
   balanceSheets: Record<string, unknown>[];
   cashflowStatements: Record<string, unknown>[];
   company?: {
+    ticker?: string | null;
     sector?: string | null;
     industry?: string | null;
     marketCap?: number | null;
@@ -79,8 +80,18 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   const contextualFactors: string[] = [];
 
   // === CONTEXTO SETORIAL E TAMANHO ===
-  const sectorContext = getSectorContext(company?.sector || null, company?.industry || null);
+  const sectorContext = getSectorContext(company?.sector || null, company?.industry || null, company?.ticker || undefined);
   const sizeContext = getSizeContext(company?.marketCap || null);
+  
+  // Log para debug de bancos
+  if (company?.ticker && ['ITUB4', 'BBAS3', 'BBSE3', 'SANB11'].includes(company.ticker.toUpperCase())) {
+    console.log(`🏦 DEBUG BANCO ${company.ticker}:`, {
+      sector: company.sector,
+      industry: company.industry,
+      sectorContext: sectorContext.type,
+      isFinancial: sectorContext.type === 'FINANCIAL'
+    });
+  }
   
   // Verificar disponibilidade de dados
   const minYears = 3;
@@ -1242,22 +1253,40 @@ function analyzeLiquidityMetrics(
   console.log('sectorContext', sectorContext);
   console.log('dataValidation', dataValidation);
   
-  // Current Ratio Analysis - só analisar se temos dados válidos
+  const isFinancialSector = sectorContext.type === 'FINANCIAL';
+  
+  // Current Ratio Analysis - adaptado para setor financeiro
   if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities) {
-    if (metrics.currentRatio >= benchmarks.goodCurrentRatio) {
-      result.scoreAdjustment += 10;
-      result.positiveSignals.push(`Boa capacidade de pagamento: A empresa tem R$ ${metrics.currentRatio.toFixed(2)} em ativos de curto prazo para cada R$ 1,00 de dívidas de curto prazo. Consegue pagar suas contas em dia.`);
-    } else if (metrics.currentRatio < benchmarks.minCurrentRatio) {
-      result.scoreAdjustment -= 25;
-      result.redFlags.push(`Dificuldade para pagar contas: A empresa tem apenas R$ ${metrics.currentRatio.toFixed(2)} para cada R$ 1,00 de dívidas de curto prazo (mínimo: R$ ${benchmarks.minCurrentRatio.toFixed(1)}). Pode ter problemas de caixa.`);
+    if (isFinancialSector) {
+      // Para bancos, liquidez corrente é menos relevante e pode ser baixa
+      if (metrics.currentRatio >= 0.3) {
+        result.scoreAdjustment += 5;
+        result.positiveSignals.push(`Liquidez adequada para instituição financeira: A instituição mantém R$ ${metrics.currentRatio.toFixed(2)} em ativos líquidos para cada R$ 1,00 de obrigações de curto prazo. Adequado para o setor bancário.`);
+      } else if (metrics.currentRatio < 0.1) {
+        result.scoreAdjustment -= 10; // Penalidade menor para bancos
+        result.redFlags.push(`Liquidez muito baixa: A instituição tem apenas R$ ${metrics.currentRatio.toFixed(2)} para cada R$ 1,00 de obrigações de curto prazo. Pode indicar problemas de gestão de liquidez.`);
+      }
+    } else {
+      // Análise tradicional para outros setores
+      if (metrics.currentRatio >= benchmarks.goodCurrentRatio) {
+        result.scoreAdjustment += 10;
+        result.positiveSignals.push(`Boa capacidade de pagamento: A empresa tem R$ ${metrics.currentRatio.toFixed(2)} em ativos de curto prazo para cada R$ 1,00 de dívidas de curto prazo. Consegue pagar suas contas em dia.`);
+      } else if (metrics.currentRatio < benchmarks.minCurrentRatio) {
+        result.scoreAdjustment -= 25;
+        result.redFlags.push(`Dificuldade para pagar contas: A empresa tem apenas R$ ${metrics.currentRatio.toFixed(2)} para cada R$ 1,00 de dívidas de curto prazo (mínimo: R$ ${benchmarks.minCurrentRatio.toFixed(1)}). Pode ter problemas de caixa.`);
+      }
     }
   } else if (dataValidation) {
     // Se não temos dados válidos, adicionar contexto
-    result.positiveSignals.push(`Indicadores de liquidez não disponíveis: Dados de ativos ou passivos circulantes não estão disponíveis ou não fazem sentido para este tipo de negócio.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Indicadores de liquidez tradicionais não aplicáveis: Para bancos, a liquidez é gerenciada de forma específica através de reservas obrigatórias e instrumentos financeiros.`);
+    } else {
+      result.positiveSignals.push(`Indicadores de liquidez não disponíveis: Dados de ativos ou passivos circulantes não estão disponíveis ou não fazem sentido para este tipo de negócio.`);
+    }
   }
   
-  // Quick Ratio Analysis - só analisar se temos dados válidos de ativos circulantes e passivos circulantes
-  if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities) {
+  // Quick Ratio Analysis - adaptado para setor financeiro
+  if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities && !isFinancialSector) {
     if (metrics.quickRatio >= 1.0) {
       result.scoreAdjustment += 8;
       result.positiveSignals.push(`Liquidez imediata boa: Mesmo sem vender estoques, a empresa tem R$ ${metrics.quickRatio.toFixed(2)} disponíveis para cada R$ 1,00 de dívidas urgentes.`);
@@ -1267,8 +1296,8 @@ function analyzeLiquidityMetrics(
     }
   }
   
-  // Working Capital Analysis - só analisar se temos dados válidos
-  if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities && dataValidation?.hasValidTotalAssets) {
+  // Working Capital Analysis - não aplicável para bancos
+  if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities && dataValidation?.hasValidTotalAssets && !isFinancialSector) {
     if (metrics.workingCapitalRatio >= 0.15) {
       result.scoreAdjustment += 6;
       result.positiveSignals.push(`Capital de giro saudável: A empresa tem ${(metrics.workingCapitalRatio * 100).toFixed(1)}% dos seus ativos como "dinheiro sobrando" para investir no crescimento do negócio.`);
@@ -1278,25 +1307,55 @@ function analyzeLiquidityMetrics(
     }
   }
   
-  // Debt Analysis - sempre analisar pois são dados mais fundamentais
-  if (metrics.debtToEquity > benchmarks.maxDebtToEquity) {
-    result.scoreAdjustment -= 20;
-    result.redFlags.push(`Endividamento muito alto: A empresa deve ${metrics.debtToEquity.toFixed(2)}x mais do que vale seu patrimônio (máximo recomendado: ${benchmarks.maxDebtToEquity.toFixed(1)}x). Isso pode comprometer a saúde financeira e os dividendos.`);
-  } else if (metrics.debtToEquity < benchmarks.maxDebtToEquity * 0.5) {
-    result.scoreAdjustment += 5;
-    result.positiveSignals.push(`Endividamento controlado: A empresa deve apenas ${metrics.debtToEquity.toFixed(2)}x do valor do seu patrimônio. Isso dá segurança e espaço para crescer.`);
+  // Debt Analysis - adaptado para setor financeiro
+  if (isFinancialSector) {
+    // Para bancos, alavancagem alta é normal e esperada
+    if (metrics.debtToEquity > 20.0) {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push(`Alavancagem excessiva: A instituição tem alavancagem de ${metrics.debtToEquity.toFixed(1)}x (acima de 20x). Mesmo para bancos, isso pode indicar risco excessivo.`);
+    } else if (metrics.debtToEquity > 15.0) {
+      result.scoreAdjustment -= 5;
+      result.positiveSignals.push(`Alavancagem alta: A instituição opera com alavancagem de ${metrics.debtToEquity.toFixed(1)}x. Para bancos, alavancagem alta é normal, mas monitore a qualidade dos ativos.`);
+    } else if (metrics.debtToEquity >= 8.0) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push(`Alavancagem adequada: A instituição mantém alavancagem de ${metrics.debtToEquity.toFixed(1)}x, dentro do esperado para bancos. Boa gestão de capital.`);
+    } else {
+      result.scoreAdjustment += 3;
+      result.positiveSignals.push(`Alavancagem conservadora: A instituição opera com alavancagem baixa de ${metrics.debtToEquity.toFixed(1)}x. Posição conservadora que pode limitar o retorno, mas reduz riscos.`);
+    }
+  } else {
+    // Análise tradicional para outros setores
+    if (metrics.debtToEquity > benchmarks.maxDebtToEquity) {
+      result.scoreAdjustment -= 20;
+      result.redFlags.push(`Endividamento muito alto: A empresa deve ${metrics.debtToEquity.toFixed(2)}x mais do que vale seu patrimônio (máximo recomendado: ${benchmarks.maxDebtToEquity.toFixed(1)}x). Isso pode comprometer a saúde financeira e os dividendos.`);
+    } else if (metrics.debtToEquity < benchmarks.maxDebtToEquity * 0.5) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push(`Endividamento controlado: A empresa deve apenas ${metrics.debtToEquity.toFixed(2)}x do valor do seu patrimônio. Isso dá segurança e espaço para crescer.`);
+    }
   }
   
-  // Interest Coverage Analysis - sempre analisar pois são dados mais fundamentais
-  if (metrics.interestCoverage >= 8) {
-    result.scoreAdjustment += 8;
-    result.positiveSignals.push(`Facilidade para pagar juros: A empresa ganha ${metrics.interestCoverage.toFixed(1)}x mais do que precisa para pagar os juros das dívidas. Muito seguro para o investidor.`);
-  } else if (metrics.interestCoverage >= 3) {
-    result.scoreAdjustment += 4;
-    result.positiveSignals.push(`Consegue pagar juros: A empresa ganha ${metrics.interestCoverage.toFixed(1)}x o valor necessário para pagar juros. Situação adequada.`);
-  } else if (metrics.interestCoverage < 2 && metrics.debtToEquity > 1) {
-    result.scoreAdjustment -= 15;
-    result.redFlags.push(`Dificuldade para pagar juros: A empresa ganha apenas ${metrics.interestCoverage.toFixed(1)}x o que precisa para pagar juros. Risco de não conseguir honrar as dívidas.`);
+  // Interest Coverage Analysis - adaptado para setor financeiro
+  if (isFinancialSector) {
+    // Para bancos, a cobertura de juros é menos relevante pois juros são parte do negócio
+    if (metrics.interestCoverage >= 3) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push(`Cobertura de juros adequada: A instituição gera ${metrics.interestCoverage.toFixed(1)}x mais receita do que paga em juros. Para bancos, isso indica boa gestão do spread bancário.`);
+    } else if (metrics.interestCoverage < 1.5) {
+      result.scoreAdjustment -= 8;
+      result.redFlags.push(`Cobertura de juros baixa: A instituição gera apenas ${metrics.interestCoverage.toFixed(1)}x o que paga em juros. Pode indicar problemas na gestão do spread ou qualidade dos ativos.`);
+    }
+  } else {
+    // Análise tradicional para outros setores
+    if (metrics.interestCoverage >= 8) {
+      result.scoreAdjustment += 8;
+      result.positiveSignals.push(`Facilidade para pagar juros: A empresa ganha ${metrics.interestCoverage.toFixed(1)}x mais do que precisa para pagar os juros das dívidas. Muito seguro para o investidor.`);
+    } else if (metrics.interestCoverage >= 3) {
+      result.scoreAdjustment += 4;
+      result.positiveSignals.push(`Consegue pagar juros: A empresa ganha ${metrics.interestCoverage.toFixed(1)}x o valor necessário para pagar juros. Situação adequada.`);
+    } else if (metrics.interestCoverage < 2 && metrics.debtToEquity > 1) {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push(`Dificuldade para pagar juros: A empresa ganha apenas ${metrics.interestCoverage.toFixed(1)}x o que precisa para pagar juros. Risco de não conseguir honrar as dívidas.`);
+    }
   }
   
   return result;
@@ -1319,13 +1378,13 @@ function analyzeEfficiencyMetrics(
       // Para bancos, asset turnover baixo é normal devido à natureza dos ativos (empréstimos, investimentos)
       if (metrics.assetTurnover >= 0.15) {
         result.scoreAdjustment += 8;
-        result.positiveSignals.push(`Eficiência adequada dos ativos: A instituição gera R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Para bancos, isso indica boa gestão do portfólio.`);
+        result.positiveSignals.push(`Eficiência adequada dos ativos: A instituição gera R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Para bancos, isso indica boa gestão do portfólio de crédito e investimentos.`);
       } else if (metrics.assetTurnover >= 0.08) {
         result.scoreAdjustment += 3;
-        result.positiveSignals.push(`Gestão adequada dos ativos: A instituição gera R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Dentro do esperado para o setor financeiro.`);
+        result.positiveSignals.push(`Gestão adequada dos ativos: A instituição gera R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Dentro do esperado para o setor bancário, onde os ativos são principalmente empréstimos e investimentos.`);
       } else if (metrics.assetTurnover < 0.05) {
         result.scoreAdjustment -= 5; // Penalidade menor para bancos
-        result.redFlags.push(`Baixa eficiência dos ativos: A instituição gera apenas R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Pode indicar excesso de liquidez ou ativos de baixo rendimento.`);
+        result.positiveSignals.push(`Eficiência dos ativos moderada: A instituição gera R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Para bancos, valores baixos podem ser normais devido à natureza conservadora dos ativos bancários.`);
       }
     } else {
       // Análise tradicional para outros setores
@@ -1342,16 +1401,19 @@ function analyzeEfficiencyMetrics(
   // Operating Margin Analysis - Adaptado para setor financeiro
   if (dataValidation?.hasValidRevenue) {
     if (isFinancialSector) {
-      // Para bancos, margem operacional pode ser negativa devido à estrutura contábil
+      // Para bancos, margem operacional pode ser negativa devido à estrutura contábil específica
       if (metrics.operatingMargin >= 0.30) {
         result.scoreAdjustment += 10;
-        result.positiveSignals.push(`Excelente eficiência operacional: A instituição apresenta margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Boa gestão de custos e spread bancário.`);
+        result.positiveSignals.push(`Excelente eficiência operacional: A instituição apresenta margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Boa gestão de custos operacionais e spread bancário.`);
       } else if (metrics.operatingMargin >= 0.15) {
         result.scoreAdjustment += 5;
-        result.positiveSignals.push(`Boa eficiência operacional: A instituição mantém margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Gestão adequada de custos.`);
+        result.positiveSignals.push(`Boa eficiência operacional: A instituição mantém margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Gestão adequada de custos administrativos.`);
       } else if (metrics.operatingMargin < -0.10) {
-        result.scoreAdjustment -= 8; // Penalidade menor para bancos
-        result.positiveSignals.push(`Margem operacional negativa: A instituição apresenta margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Para bancos, isso pode ser normal devido à estrutura contábil, mas observe a margem líquida e ROE.`);
+        result.scoreAdjustment -= 3; // Penalidade muito menor para bancos
+        result.positiveSignals.push(`Estrutura operacional típica de banco: A margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}% reflete a estrutura contábil bancária, onde receitas financeiras são contabilizadas separadamente. Foque no ROE e margem líquida para avaliar a eficiência.`);
+      } else if (metrics.operatingMargin >= 0 && metrics.operatingMargin < 0.15) {
+        result.scoreAdjustment += 2;
+        result.positiveSignals.push(`Margem operacional moderada: A instituição apresenta margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Para bancos, o mais importante é a capacidade de gerar receitas financeiras líquidas.`);
       }
     } else {
       // Análise tradicional para outros setores
@@ -1745,24 +1807,66 @@ function analyzeIncomeComposition(
 }
 
 // Obter contexto setorial
-function getSectorContext(sector: string | null, industry: string | null): SectorContext {
+function getSectorContext(sector: string | null, industry: string | null, ticker?: string): SectorContext {
   const sectorLower = sector?.toLowerCase() || '';
   const industryLower = industry?.toLowerCase() || '';
   
-  // Setor financeiro
-  if (sectorLower.includes('financial') || sectorLower.includes('bank') || 
-      industryLower.includes('insurance') || industryLower.includes('seguros')) {
-    return {
-      type: 'FINANCIAL',
-      volatilityTolerance: 'MEDIUM',
-      marginExpectation: 'MEDIUM',
+  // Log para debug da detecção setorial
+  if (ticker && ['ITUB4', 'BBAS3', 'BBSE3', 'SANB11', 'PETR4', 'VALE3', 'MGLU3', 'WEGE3'].includes(ticker.toUpperCase())) {
+    console.log(`🔍 DETECÇÃO SETORIAL ${ticker}:`, {
+      sector: sector,
+      industry: industry,
+      sectorLower: sectorLower,
+      industryLower: industryLower
+    });
+  }
+  
+  // Fallback para tickers financeiros conhecidos (caso setor/indústria não estejam disponíveis)
+  const knownFinancialTickers = [
+    'BBSE3', 'SULA11', 'PSSA3', 'BBAS3', 'ITUB4', 'SANB11', 'BPAC11', 'BRSR6', 'PINE4', 'WIZS3', 'ABCB4', 'BPAN4',
+    'ITSA4', 'PETR4', 'PETR3', 'BBDC3', 'BBDC4', 'CIEL3', 'SMTO3', 'IRBR3', 'CSAN3', 'CYRE3'
+  ];
+  if (ticker && knownFinancialTickers.includes(ticker.toUpperCase())) {
+    const result = {
+      type: 'FINANCIAL' as const,
+      volatilityTolerance: 'MEDIUM' as const,
+      marginExpectation: 'MEDIUM' as const,
       cashIntensive: true
     };
+    if (['ITUB4', 'BBAS3', 'BBSE3', 'SANB11', 'PETR4', 'VALE3', 'MGLU3', 'WEGE3'].includes(ticker.toUpperCase())) {
+      console.log(`✅ SETOR DETECTADO ${ticker}: ${result.type} (por ticker conhecido)`);
+    }
+    return result;
+  }
+  
+  // Setor financeiro (expandido com mais termos em português)
+  if (sectorLower.includes('financial') || sectorLower.includes('bank') || sectorLower.includes('banco') ||
+      sectorLower.includes('financeiro') || sectorLower.includes('seguro') || sectorLower.includes('previdência') ||
+      sectorLower.includes('capitalização') || sectorLower.includes('crédito') || sectorLower.includes('investimento') ||
+      sectorLower.includes('seguridade') || sectorLower.includes('participações') || sectorLower.includes('holdings') ||
+      sectorLower.includes('caixa') || sectorLower.includes('bancário') || sectorLower.includes('vida e previdência') ||
+      sectorLower.includes('corretora') || sectorLower.includes('asset management') || sectorLower.includes('gestão de ativos') ||
+      industryLower.includes('insurance') || industryLower.includes('seguros') || industryLower.includes('banco') ||
+      industryLower.includes('financeiro') || industryLower.includes('previdência') || industryLower.includes('seguro') ||
+      industryLower.includes('capitalização') || industryLower.includes('crédito') || industryLower.includes('investimento') ||
+      industryLower.includes('corretora') || industryLower.includes('gestão de ativos')) {
+    const result = {
+      type: 'FINANCIAL' as const,
+      volatilityTolerance: 'MEDIUM' as const,
+      marginExpectation: 'MEDIUM' as const,
+      cashIntensive: true
+    };
+    if (ticker && ['ITUB4', 'BBAS3', 'BBSE3', 'SANB11', 'PETR4', 'VALE3', 'MGLU3', 'WEGE3'].includes(ticker.toUpperCase())) {
+      console.log(`✅ SETOR DETECTADO ${ticker}: ${result.type} (por setor/indústria)`);
+    }
+    return result;
   }
   
   // Setor de tecnologia
-  if (sectorLower.includes('technology') || sectorLower.includes('software') ||
-      industryLower.includes('tech') || industryLower.includes('internet')) {
+  if (sectorLower.includes('technology') || sectorLower.includes('software') || sectorLower.includes('tecnologia') ||
+      sectorLower.includes('informática') || sectorLower.includes('computação') || sectorLower.includes('digital') ||
+      industryLower.includes('tech') || industryLower.includes('internet') || industryLower.includes('software') ||
+      industryLower.includes('tecnologia') || industryLower.includes('informática') || industryLower.includes('digital')) {
     return {
       type: 'TECH',
       volatilityTolerance: 'HIGH',
@@ -1771,9 +1875,13 @@ function getSectorContext(sector: string | null, industry: string | null): Secto
     };
   }
   
-  // Setor cíclico (varejo, automotivo, construção)
-  if (sectorLower.includes('consumer') || sectorLower.includes('retail') ||
-      sectorLower.includes('automotive') || sectorLower.includes('construction')) {
+  // Setor cíclico (varejo, automotivo, construção, bens de consumo)
+  if (sectorLower.includes('consumer') || sectorLower.includes('retail') || sectorLower.includes('varejo') ||
+      sectorLower.includes('automotive') || sectorLower.includes('automotivo') || sectorLower.includes('automóveis') ||
+      sectorLower.includes('construction') || sectorLower.includes('construção') || sectorLower.includes('imobiliário') ||
+      sectorLower.includes('bens de consumo') || sectorLower.includes('consumo cíclico') || sectorLower.includes('têxtil') ||
+      industryLower.includes('varejo') || industryLower.includes('automotivo') || industryLower.includes('construção') ||
+      industryLower.includes('imobiliário') || industryLower.includes('têxtil') || industryLower.includes('consumo')) {
     return {
       type: 'CYCLICAL',
       volatilityTolerance: 'HIGH',
@@ -1782,9 +1890,14 @@ function getSectorContext(sector: string | null, industry: string | null): Secto
     };
   }
   
-  // Setor defensivo (utilities, saúde, alimentos)
-  if (sectorLower.includes('utilities') || sectorLower.includes('healthcare') ||
-      sectorLower.includes('food') || sectorLower.includes('pharmaceutical')) {
+  // Setor defensivo (utilities, saúde, alimentos, saneamento)
+  if (sectorLower.includes('utilities') || sectorLower.includes('healthcare') || sectorLower.includes('saúde') ||
+      sectorLower.includes('food') || sectorLower.includes('alimentos') || sectorLower.includes('bebidas') ||
+      sectorLower.includes('pharmaceutical') || sectorLower.includes('farmacêutico') || sectorLower.includes('medicamentos') ||
+      sectorLower.includes('saneamento') || sectorLower.includes('energia elétrica') || sectorLower.includes('água') ||
+      sectorLower.includes('consumo não cíclico') || sectorLower.includes('bens essenciais') ||
+      industryLower.includes('saúde') || industryLower.includes('alimentos') || industryLower.includes('bebidas') ||
+      industryLower.includes('farmacêutico') || industryLower.includes('saneamento') || industryLower.includes('energia')) {
     return {
       type: 'DEFENSIVE',
       volatilityTolerance: 'LOW',
@@ -1793,9 +1906,15 @@ function getSectorContext(sector: string | null, industry: string | null): Secto
     };
   }
   
-  // Commodities
-  if (sectorLower.includes('materials') || sectorLower.includes('mining') ||
-      sectorLower.includes('oil') || sectorLower.includes('steel')) {
+  // Commodities (materiais básicos, mineração, petróleo, siderurgia)
+  if (sectorLower.includes('materials') || sectorLower.includes('mining') || sectorLower.includes('mineração') ||
+      sectorLower.includes('oil') || sectorLower.includes('petróleo') || sectorLower.includes('energia') ||
+      sectorLower.includes('steel') || sectorLower.includes('siderurgia') || sectorLower.includes('metalurgia') ||
+      sectorLower.includes('materiais básicos') || sectorLower.includes('papel e celulose') || sectorLower.includes('químico') ||
+      sectorLower.includes('agronegócio') || sectorLower.includes('commodities') ||
+      industryLower.includes('mineração') || industryLower.includes('petróleo') || industryLower.includes('siderurgia') ||
+      industryLower.includes('metalurgia') || industryLower.includes('papel') || industryLower.includes('celulose') ||
+      industryLower.includes('químico') || industryLower.includes('agronegócio')) {
     return {
       type: 'COMMODITY',
       volatilityTolerance: 'HIGH',
@@ -1804,12 +1923,47 @@ function getSectorContext(sector: string | null, industry: string | null): Secto
     };
   }
   
-  return {
-    type: 'OTHER',
-    volatilityTolerance: 'MEDIUM',
-    marginExpectation: 'MEDIUM',
+  // Telecomunicações e Comunicação
+  if (sectorLower.includes('communication') || sectorLower.includes('telecommunications') || sectorLower.includes('telecomunicações') ||
+      sectorLower.includes('telecom') || sectorLower.includes('telefonia') || sectorLower.includes('internet') ||
+      sectorLower.includes('mídia') || sectorLower.includes('media') || sectorLower.includes('comunicação') ||
+      industryLower.includes('telecomunicações') || industryLower.includes('telecom') || industryLower.includes('telefonia') ||
+      industryLower.includes('internet') || industryLower.includes('mídia') || industryLower.includes('comunicação')) {
+    return {
+      type: 'DEFENSIVE',
+      volatilityTolerance: 'MEDIUM',
+      marginExpectation: 'MEDIUM',
+      cashIntensive: false
+    };
+  }
+  
+  // Transporte e Logística
+  if (sectorLower.includes('transportation') || sectorLower.includes('logistics') || sectorLower.includes('transporte') ||
+      sectorLower.includes('logística') || sectorLower.includes('aviação') || sectorLower.includes('portuário') ||
+      sectorLower.includes('ferroviário') || sectorLower.includes('rodoviário') || sectorLower.includes('shipping') ||
+      industryLower.includes('transporte') || industryLower.includes('logística') || industryLower.includes('aviação') ||
+      industryLower.includes('portuário') || industryLower.includes('ferroviário') || industryLower.includes('rodoviário')) {
+    return {
+      type: 'CYCLICAL',
+      volatilityTolerance: 'HIGH',
+      marginExpectation: 'MEDIUM',
+      cashIntensive: false
+    };
+  }
+  
+  const result = {
+    type: 'OTHER' as const,
+    volatilityTolerance: 'MEDIUM' as const,
+    marginExpectation: 'MEDIUM' as const,
     cashIntensive: false
   };
+  
+  // Log do resultado final para debug
+  if (ticker && ['ITUB4', 'BBAS3', 'BBSE3', 'SANB11', 'PETR4', 'VALE3', 'MGLU3', 'WEGE3'].includes(ticker.toUpperCase())) {
+    console.log(`✅ SETOR DETECTADO ${ticker}: ${result.type}`);
+  }
+  
+  return result;
 }
 
 // Obter contexto de tamanho

@@ -140,6 +140,7 @@ async function getStatementsAnalysis(ticker: string) {
       where: { ticker },
       select: {
         id: true,
+        ticker: true,
         sector: true,
         industry: true
       }
@@ -299,6 +300,7 @@ async function getStatementsAnalysis(ticker: string) {
         increaseOrDecreaseInCash: stmt.increaseOrDecreaseInCash?.toNumber() || null,
       })),
       company: company ? {
+        ticker: company.ticker,
         sector: company.sector,
         industry: company.industry,
         marketCap: null // MarketCap será obtido de outra fonte se necessário

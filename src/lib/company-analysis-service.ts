@@ -224,6 +224,7 @@ export async function getStatementsData(
         return serialized;
       }),
       company: {
+        ticker: ticker,
         sector: sector,
         industry: industry,
         marketCap: null // MarketCap será obtido de outra fonte se necessário

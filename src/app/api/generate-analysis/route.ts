@@ -139,12 +139,17 @@ async function getStatementsAnalysis(ticker: string) {
     const company = await prisma.company.findUnique({
       where: { ticker },
       select: {
+        id: true,
         sector: true,
         industry: true
       }
     });
 
-    const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
+    if (!company) {
+      return null;
+    }
+
+    const [incomeStatements, balanceSheets, cashflowStatements, financialData] = await Promise.all([
       prisma.incomeStatement.findMany({
         where: {
           company: { ticker },
@@ -180,11 +185,92 @@ async function getStatementsAnalysis(ticker: string) {
         },
         orderBy: { endDate: 'desc' },
         take: 7
+      }),
+      // Buscar dados financeiros calculados como fallback
+      prisma.financialData.findMany({
+        where: {
+          companyId: company.id,
+          year: { gte: startYear - 2 } // Pegar mais alguns anos para ter dados suficientes
+        },
+        orderBy: { year: 'desc' },
+        take: 7,
+        select: {
+          year: true,
+          roe: true,
+          roa: true,
+          margemLiquida: true,
+          margemBruta: true,
+          margemEbitda: true,
+          liquidezCorrente: true,
+          liquidezRapida: true,
+          debtToEquity: true,
+          dividaLiquidaPl: true,
+          giroAtivos: true,
+          cagrLucros5a: true,
+          cagrReceitas5a: true,
+          crescimentoLucros: true,
+          crescimentoReceitas: true,
+          fluxoCaixaOperacional: true,
+          fluxoCaixaLivre: true,
+          totalCaixa: true,
+          totalDivida: true,
+          ativoTotal: true,
+          patrimonioLiquido: true,
+          passivoCirculante: true,
+          ativoCirculante: true
+        }
       })
     ]);
 
     if (incomeStatements.length === 0 && balanceSheets.length === 0 && cashflowStatements.length === 0) {
       return null;
+    }
+
+    // Processar dados financeiros para fallback
+    let financialDataFallback = undefined;
+    if (financialData.length > 0) {
+      // Converter Decimal para number e organizar por indicador
+      const years = financialData.map(fd => fd.year);
+      
+      // Função auxiliar para converter e filtrar valores válidos
+      const processValues = (values: (any | null)[]): number[] => {
+        return values
+          .map(v => v && typeof v === 'object' && 'toNumber' in v ? v.toNumber() : v)
+          .filter(v => v !== null && v !== undefined && !isNaN(v)) as number[];
+      };
+
+      financialDataFallback = {
+        years,
+        roe: processValues(financialData.map(fd => fd.roe)),
+        roa: processValues(financialData.map(fd => fd.roa)),
+        margemLiquida: processValues(financialData.map(fd => fd.margemLiquida)),
+        margemBruta: processValues(financialData.map(fd => fd.margemBruta)),
+        margemEbitda: processValues(financialData.map(fd => fd.margemEbitda)),
+        liquidezCorrente: processValues(financialData.map(fd => fd.liquidezCorrente)),
+        liquidezRapida: processValues(financialData.map(fd => fd.liquidezRapida)),
+        debtToEquity: processValues(financialData.map(fd => fd.debtToEquity)),
+        dividaLiquidaPl: processValues(financialData.map(fd => fd.dividaLiquidaPl)),
+        giroAtivos: processValues(financialData.map(fd => fd.giroAtivos)),
+        crescimentoLucros: processValues(financialData.map(fd => fd.crescimentoLucros)),
+        crescimentoReceitas: processValues(financialData.map(fd => fd.crescimentoReceitas)),
+        fluxoCaixaOperacional: processValues(financialData.map(fd => fd.fluxoCaixaOperacional)),
+        fluxoCaixaLivre: processValues(financialData.map(fd => fd.fluxoCaixaLivre)),
+        totalCaixa: processValues(financialData.map(fd => fd.totalCaixa)),
+        totalDivida: processValues(financialData.map(fd => fd.totalDivida)),
+        ativoTotal: processValues(financialData.map(fd => fd.ativoTotal)),
+        patrimonioLiquido: processValues(financialData.map(fd => fd.patrimonioLiquido)),
+        passivoCirculante: processValues(financialData.map(fd => fd.passivoCirculante)),
+        ativoCirculante: processValues(financialData.map(fd => fd.ativoCirculante)),
+        // CAGR são valores únicos (pegar o mais recente)
+        cagrLucros5a: financialData[0]?.cagrLucros5a ? 
+          (typeof financialData[0].cagrLucros5a === 'object' && 'toNumber' in financialData[0].cagrLucros5a ? 
+            financialData[0].cagrLucros5a.toNumber() : financialData[0].cagrLucros5a) : null,
+        cagrReceitas5a: financialData[0]?.cagrReceitas5a ? 
+          (typeof financialData[0].cagrReceitas5a === 'object' && 'toNumber' in financialData[0].cagrReceitas5a ? 
+            financialData[0].cagrReceitas5a.toNumber() : financialData[0].cagrReceitas5a) : null
+      };
+
+      console.log(`Dados de fallback carregados para ${ticker} (generate-analysis): ${years.length} anos de dados`);
     }
 
     // Serializar dados para análise
@@ -216,7 +302,8 @@ async function getStatementsAnalysis(ticker: string) {
         sector: company.sector,
         industry: company.industry,
         marketCap: null // MarketCap será obtido de outra fonte se necessário
-      } : undefined
+      } : undefined,
+      financialDataFallback
     };
 
     return analyzeFinancialStatements(statementsData);

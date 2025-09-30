@@ -31,6 +31,33 @@ export interface FinancialStatementsData {
     industry?: string | null;
     marketCap?: number | null;
   };
+  // Dados financeiros calculados como fallback
+  financialDataFallback?: {
+    // Indicadores podem ser arrays (múltiplos anos) ou valores únicos
+    roe?: number | number[] | null;
+    roa?: number | number[] | null;
+    margemLiquida?: number | number[] | null;
+    margemBruta?: number | number[] | null;
+    margemEbitda?: number | number[] | null;
+    liquidezCorrente?: number | number[] | null;
+    liquidezRapida?: number | number[] | null;
+    debtToEquity?: number | number[] | null;
+    dividaLiquidaPl?: number | number[] | null;
+    giroAtivos?: number | number[] | null;
+    cagrLucros5a?: number | null; // CAGR é sempre um valor único
+    cagrReceitas5a?: number | null; // CAGR é sempre um valor único
+    crescimentoLucros?: number | number[] | null;
+    crescimentoReceitas?: number | number[] | null;
+    fluxoCaixaOperacional?: number | number[] | null;
+    fluxoCaixaLivre?: number | number[] | null;
+    totalCaixa?: number | number[] | null;
+    totalDivida?: number | number[] | null;
+    ativoTotal?: number | number[] | null;
+    patrimonioLiquido?: number | number[] | null;
+    passivoCirculante?: number | number[] | null;
+    ativoCirculante?: number | number[] | null;
+    years?: number[]; // Anos dos dados disponíveis
+  };
 }
 
 // Interface para análise das demonstrações
@@ -93,8 +120,18 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   };
 
   // === ANÁLISE BASEADA EM MÉDIAS E BENCHMARKS ===
-  const averageMetrics = calculateAverageMetrics(completedYearsData);
+  const averageMetrics = calculateAverageMetrics(completedYearsData, data.financialDataFallback);
   const benchmarks = getSectorBenchmarks(sectorContext, sizeContext);
+  
+  // === VALIDAÇÃO DE DADOS ===
+  const dataValidation = validateFinancialData(
+    completedYearsData.income, 
+    completedYearsData.balance, 
+    sectorContext,
+    company?.sector || null,
+    company?.industry || null
+  );
+  console.log('Data validation results:', dataValidation);
   
   // === SISTEMA DE PONTUAÇÃO NORMALIZADO ===
   // Definir pesos normalizados (soma = 1.0)
@@ -111,8 +148,8 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   // Coletar todas as análises
   const analyses = {
     profitability: analyzeProfitabilityMetrics(averageMetrics, benchmarks, sectorContext, completedYearsData),
-    liquidity: analyzeLiquidityMetrics(averageMetrics, benchmarks, sectorContext),
-    efficiency: analyzeEfficiencyMetrics(averageMetrics, benchmarks, sectorContext),
+    liquidity: analyzeLiquidityMetrics(averageMetrics, benchmarks, sectorContext, dataValidation),
+    efficiency: analyzeEfficiencyMetrics(averageMetrics, benchmarks, sectorContext, dataValidation),
     stability: analyzeStabilityMetrics(completedYearsData, averageMetrics, sectorContext),
     cashFlow: analyzeCashFlowQuality(averageMetrics, benchmarks, sectorContext),
     growth: analyzeGrowthQuality(completedYearsData, averageMetrics, sectorContext),
@@ -270,11 +307,14 @@ interface SectorBenchmarks {
 }
 
 // === FUNÇÃO PARA CALCULAR MÉDIAS DOS INDICADORES ===
-function calculateAverageMetrics(data: {
-  income: Record<string, unknown>[];
-  balance: Record<string, unknown>[];
-  cashflow: Record<string, unknown>[];
-}): AverageMetrics {
+function calculateAverageMetrics(
+  data: {
+    income: Record<string, unknown>[];
+    balance: Record<string, unknown>[];
+    cashflow: Record<string, unknown>[];
+  },
+  fallbackData?: FinancialStatementsData['financialDataFallback']
+): AverageMetrics {
   const { income, balance, cashflow } = data;
   const periods = Math.min(income.length, balance.length, cashflow.length);
   
@@ -334,15 +374,61 @@ function calculateAverageMetrics(data: {
     const interestExpense = toNumber(incomeStmt.interestExpense) || 0;
     const ebit = toNumber(incomeStmt.ebit) || 0;
     
-    if (revenue > 0 && totalAssets > 0 && totalEquity > 0) {
-      // Rentabilidade
-      metrics.roe += (netIncome / totalEquity);
-      metrics.roa += (netIncome / totalAssets);
-      metrics.netMargin += (netIncome / revenue);
-      metrics.grossMargin += (grossProfit / revenue);
+    // Verificações de sanidade para evitar valores extremos
+    const isValidEquity = totalEquity > 0 && Math.abs(totalEquity) > totalAssets * 0.001; // PL deve ser pelo menos 0.1% dos ativos
+    const isValidAssets = totalAssets > 0;
+    const isValidRevenue = revenue > 0;
+    const isValidLiabilities = currentLiabilities > 0 && currentLiabilities < totalAssets * 10; // Passivos não podem ser 10x os ativos
+    
+    if (isValidRevenue && isValidAssets) {
+      // Rentabilidade - só calcular se temos patrimônio líquido válido
+      if (isValidEquity) {
+        const roe = netIncome / totalEquity;
+        const roa = netIncome / totalAssets;
+        
+        // Verificações de sanidade para ROE e ROA (valores extremos indicam dados problemáticos)
+        if (Math.abs(roe) <= 10) { // ROE não deve exceder 1000% (10 em decimal)
+          metrics.roe += roe;
+        } else {
+          console.warn(`ROE extremo detectado: ${(roe * 100).toFixed(1)}% - ignorando para evitar distorção`);
+          // Usar ROA como proxy se disponível
+          if (Math.abs(roa) <= 1) {
+            metrics.roe += roa; // ROA como fallback conservador
+          }
+        }
+        
+        if (Math.abs(roa) <= 1) { // ROA não deve exceder 100%
+          metrics.roa += roa;
+        } else {
+          console.warn(`ROA extremo detectado: ${(roa * 100).toFixed(1)}% - ignorando para evitar distorção`);
+        }
+      } else {
+        console.warn(`Patrimônio líquido inválido: ${totalEquity} - pulando cálculos de rentabilidade`);
+        // Para empresas com PL problemático, usar valores neutros
+        metrics.roe += 0;
+        metrics.roa += 0;
+      }
+      
+      // Margens - sempre calcular se temos receita válida
+      const netMargin = (revenue > 0 && !isNaN(netIncome) && !isNaN(revenue)) ? netIncome / revenue : 0;
+      const grossMargin = (revenue > 0 && !isNaN(grossProfit) && !isNaN(revenue)) ? grossProfit / revenue : 0;
+      
+      // Só somar se conseguimos calcular uma margem válida
+      if (revenue > 0 && !isNaN(netMargin) && Math.abs(netMargin) <= 2) { // Margem não deve exceder 200%
+        metrics.netMargin += netMargin;
+      } else if (revenue <= 0) {
+        console.warn(`Receita inválida para cálculo de margem: ${revenue} - não calculando margem para este período`);
+      } else if (Math.abs(netMargin) > 2) {
+        console.warn(`Margem líquida extrema detectada: ${(netMargin * 100).toFixed(1)}% - ignorando`);
+      }
+      
+      if (Math.abs(grossMargin) <= 2) { // Margem bruta não deve exceder 200%
+        metrics.grossMargin += grossMargin;
+      } else {
+        console.warn(`Margem bruta extrema detectada: ${(grossMargin * 100).toFixed(1)}% - ignorando`);
+      }
       
       // Calcular margem operacional corretamente
-      // Prioridade: 1) EBIT, 2) Lucro Bruto - Despesas Operacionais, 3) Operating Income como fallback
       let operatingProfit = ebit;
       if (!operatingProfit && grossProfit > 0 && totalOperatingExpenses > 0) {
         operatingProfit = grossProfit - totalOperatingExpenses;
@@ -350,20 +436,66 @@ function calculateAverageMetrics(data: {
         operatingProfit = operatingIncome; // Fallback
       }
       
-      metrics.operatingMargin += (operatingProfit / revenue);
+      const operatingMargin = operatingProfit / revenue;
+      if (Math.abs(operatingMargin) <= 2) { // Margem operacional não deve exceder 200%
+        metrics.operatingMargin += operatingMargin;
+      } else {
+        console.warn(`Margem operacional extrema detectada: ${(operatingMargin * 100).toFixed(1)}% - ignorando`);
+      }
       
-      // Liquidez
-      metrics.currentRatio += (currentAssets / currentLiabilities);
-      metrics.quickRatio += ((currentAssets - inventory) / currentLiabilities);
-      metrics.cashRatio += (cash / currentLiabilities);
+      // Liquidez - só calcular se temos passivos válidos
+      if (isValidLiabilities) {
+        const currentRatio = currentAssets / currentLiabilities;
+        const quickRatio = (currentAssets - inventory) / currentLiabilities;
+        const cashRatio = cash / currentLiabilities;
+        
+        if (currentRatio <= 1000) { // Current ratio não deve exceder 1000x
+          metrics.currentRatio += currentRatio;
+        } else {
+          console.warn(`Current ratio extremo detectado: ${currentRatio.toFixed(1)}x - ignorando`);
+          metrics.currentRatio += 1; // Valor neutro
+        }
+        
+        if (quickRatio <= 1000) {
+          metrics.quickRatio += quickRatio;
+        } else {
+          console.warn(`Quick ratio extremo detectado: ${quickRatio.toFixed(1)}x - ignorando`);
+          metrics.quickRatio += 0.8; // Valor neutro
+        }
+        
+        if (cashRatio <= 100) {
+          metrics.cashRatio += cashRatio;
+        } else {
+          console.warn(`Cash ratio extremo detectado: ${cashRatio.toFixed(1)}x - ignorando`);
+          metrics.cashRatio += 0.1; // Valor neutro
+        }
+      } else {
+        // Passivos inválidos - usar valores neutros
+        metrics.currentRatio += 1.2;
+        metrics.quickRatio += 0.8;
+        metrics.cashRatio += 0.1;
+      }
+      
       metrics.workingCapitalRatio += ((currentAssets - currentLiabilities) / totalAssets);
       
       // Eficiência
-      metrics.assetTurnover += (revenue / totalAssets);
+      const assetTurnover = revenue / totalAssets;
+      if (assetTurnover <= 20) { // Asset turnover não deve exceder 20x
+        metrics.assetTurnover += assetTurnover;
+      } else {
+        console.warn(`Asset turnover extremo detectado: ${assetTurnover.toFixed(1)}x - ignorando`);
+        metrics.assetTurnover += 1; // Valor neutro
+      }
       
       // Giro de recebíveis (se temos dados)
       if (receivables > 0) {
-        metrics.receivablesTurnover += (revenue / receivables);
+        const receivablesTurnover = revenue / receivables;
+        if (receivablesTurnover <= 365) { // Não deve exceder 365x (1 dia)
+          metrics.receivablesTurnover += receivablesTurnover;
+        } else {
+          console.warn(`Receivables turnover extremo detectado: ${receivablesTurnover.toFixed(1)}x - usando valor neutro`);
+          metrics.receivablesTurnover += 6; // Valor neutro (60 dias)
+        }
       } else {
         metrics.receivablesTurnover += 6; // Valor neutro (60 dias)
       }
@@ -372,7 +504,13 @@ function calculateAverageMetrics(data: {
       if (inventory > 0) {
         const cogs = toNumber(incomeStmt.costOfRevenue) || (revenue - grossProfit);
         if (cogs > 0) {
-          metrics.inventoryTurnover += (cogs / inventory);
+          const inventoryTurnover = cogs / inventory;
+          if (inventoryTurnover <= 365) { // Não deve exceder 365x (1 dia)
+            metrics.inventoryTurnover += inventoryTurnover;
+          } else {
+            console.warn(`Inventory turnover extremo detectado: ${inventoryTurnover.toFixed(1)}x - usando valor neutro`);
+            metrics.inventoryTurnover += 4; // Valor neutro
+          }
         } else {
           metrics.inventoryTurnover += 4; // Valor neutro
         }
@@ -380,24 +518,72 @@ function calculateAverageMetrics(data: {
         metrics.inventoryTurnover += 12; // Empresas de serviço (sem estoque)
       }
       
-      // Endividamento e cobertura
-      metrics.debtToEquity += (totalDebt / totalEquity);
-      metrics.debtToAssets += (totalDebt / totalAssets);
+      // Endividamento e cobertura - só calcular se temos patrimônio válido
+      if (isValidEquity) {
+        const debtToEquity = totalDebt / totalEquity;
+        const debtToAssets = totalDebt / totalAssets;
+        
+        if (debtToEquity <= 100) { // Debt-to-equity não deve exceder 100x
+          metrics.debtToEquity += debtToEquity;
+        } else {
+          console.warn(`Debt-to-equity extremo detectado: ${debtToEquity.toFixed(1)}x - usando debt-to-assets como proxy`);
+          // Usar debt-to-assets como proxy mais conservador
+          metrics.debtToEquity += Math.min(debtToAssets * 2, 10); // Máximo 10x
+        }
+        
+        if (debtToAssets <= 10) { // Debt-to-assets não deve exceder 10x
+          metrics.debtToAssets += debtToAssets;
+        } else {
+          console.warn(`Debt-to-assets extremo detectado: ${debtToAssets.toFixed(1)}x - usando valor máximo`);
+          metrics.debtToAssets += 2; // Valor alto mas não extremo
+        }
+      } else {
+        // PL inválido - usar valores conservadores baseados apenas em dívida/ativos
+        const debtToAssets = totalDebt / totalAssets;
+        metrics.debtToEquity += Math.min(debtToAssets * 3, 5); // Estimativa conservadora
+        metrics.debtToAssets += Math.min(debtToAssets, 2);
+      }
       
       // Cobertura de juros
       if (interestExpense > 0 && ebit > 0) {
-        metrics.interestCoverage += (ebit / interestExpense);
+        const interestCoverage = ebit / interestExpense;
+        if (interestCoverage <= 1000) { // Cobertura não deve exceder 1000x
+          metrics.interestCoverage += interestCoverage;
+        } else {
+          console.warn(`Interest coverage extremo detectado: ${interestCoverage.toFixed(1)}x - usando valor máximo`);
+          metrics.interestCoverage += 50; // Valor alto mas não extremo
+        }
       } else {
         metrics.interestCoverage += 10; // Valor neutro para empresas sem dívida significativa
       }
       
       // Fluxo de caixa
-      metrics.operatingCashFlowMargin += (operatingCashFlow / revenue);
-      metrics.freeCashFlowMargin += (freeCashFlow / revenue);
+      const operatingCashFlowMargin = operatingCashFlow / revenue;
+      const freeCashFlowMargin = freeCashFlow / revenue;
+      
+      if (Math.abs(operatingCashFlowMargin) <= 5) { // Margem de FCO não deve exceder 500%
+        metrics.operatingCashFlowMargin += operatingCashFlowMargin;
+      } else {
+        console.warn(`Operating cash flow margin extrema detectada: ${(operatingCashFlowMargin * 100).toFixed(1)}% - ignorando`);
+        metrics.operatingCashFlowMargin += 0.1; // Valor neutro
+      }
+      
+      if (Math.abs(freeCashFlowMargin) <= 5) { // Margem de FCL não deve exceder 500%
+        metrics.freeCashFlowMargin += freeCashFlowMargin;
+      } else {
+        console.warn(`Free cash flow margin extrema detectada: ${(freeCashFlowMargin * 100).toFixed(1)}% - ignorando`);
+        metrics.freeCashFlowMargin += 0.05; // Valor neutro
+      }
       
       // Conversão lucro → caixa
       if (netIncome > 0) {
-        metrics.cashConversionRatio += (operatingCashFlow / netIncome);
+        const cashConversionRatio = operatingCashFlow / netIncome;
+        if (Math.abs(cashConversionRatio) <= 20) { // Conversão não deve exceder 20x
+          metrics.cashConversionRatio += cashConversionRatio;
+        } else {
+          console.warn(`Cash conversion ratio extremo detectado: ${cashConversionRatio.toFixed(1)}x - usando valor neutro`);
+          metrics.cashConversionRatio += 1; // Neutro
+        }
       } else {
         metrics.cashConversionRatio += 1; // Neutro
       }
@@ -437,6 +623,96 @@ function calculateAverageMetrics(data: {
     );
   }
   
+  // === APLICAR FALLBACK QUANDO NECESSÁRIO ===
+  if (fallbackData) {
+    const fallbackMetrics = calculateFallbackMetrics(fallbackData);
+    let fallbacksApplied = 0;
+    
+    // Aplicar fallback para indicadores críticos que ficaram zerados ou inválidos
+    if ((metrics.roe === 0 || isNaN(metrics.roe)) && fallbackMetrics.roe !== undefined) {
+      console.log(`Aplicando fallback para ROE: ${metrics.roe} → ${fallbackMetrics.roe}`);
+      metrics.roe = fallbackMetrics.roe;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.roa === 0 || isNaN(metrics.roa)) && fallbackMetrics.roa !== undefined) {
+      console.log(`Aplicando fallback para ROA: ${metrics.roa} → ${fallbackMetrics.roa}`);
+      metrics.roa = fallbackMetrics.roa;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.netMargin === 0 || isNaN(metrics.netMargin)) && fallbackMetrics.netMargin !== undefined) {
+      console.log(`Aplicando fallback para Net Margin: ${metrics.netMargin} → ${fallbackMetrics.netMargin}`);
+      metrics.netMargin = fallbackMetrics.netMargin;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.grossMargin === 0 || isNaN(metrics.grossMargin)) && fallbackMetrics.grossMargin !== undefined) {
+      console.log(`Aplicando fallback para Gross Margin: ${metrics.grossMargin} → ${fallbackMetrics.grossMargin}`);
+      metrics.grossMargin = fallbackMetrics.grossMargin;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.operatingMargin === 0 || isNaN(metrics.operatingMargin)) && fallbackMetrics.operatingMargin !== undefined) {
+      console.log(`Aplicando fallback para Operating Margin: ${metrics.operatingMargin} → ${fallbackMetrics.operatingMargin}`);
+      metrics.operatingMargin = fallbackMetrics.operatingMargin;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.currentRatio === 0 || isNaN(metrics.currentRatio)) && fallbackMetrics.currentRatio !== undefined) {
+      console.log(`Aplicando fallback para Current Ratio: ${metrics.currentRatio} → ${fallbackMetrics.currentRatio}`);
+      metrics.currentRatio = fallbackMetrics.currentRatio;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.quickRatio === 0 || isNaN(metrics.quickRatio)) && fallbackMetrics.quickRatio !== undefined) {
+      console.log(`Aplicando fallback para Quick Ratio: ${metrics.quickRatio} → ${fallbackMetrics.quickRatio}`);
+      metrics.quickRatio = fallbackMetrics.quickRatio;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.debtToEquity === 0 || isNaN(metrics.debtToEquity)) && fallbackMetrics.debtToEquity !== undefined) {
+      console.log(`Aplicando fallback para Debt-to-Equity: ${metrics.debtToEquity} → ${fallbackMetrics.debtToEquity}`);
+      metrics.debtToEquity = fallbackMetrics.debtToEquity;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.assetTurnover === 0 || isNaN(metrics.assetTurnover)) && fallbackMetrics.assetTurnover !== undefined) {
+      console.log(`Aplicando fallback para Asset Turnover: ${metrics.assetTurnover} → ${fallbackMetrics.assetTurnover}`);
+      metrics.assetTurnover = fallbackMetrics.assetTurnover;
+      fallbacksApplied++;
+    }
+    
+    // Aplicar fallback para crescimento se não conseguimos calcular
+    if ((metrics.revenueGrowth === 0 || isNaN(metrics.revenueGrowth)) && fallbackMetrics.revenueGrowth !== undefined) {
+      console.log(`Aplicando fallback para Revenue Growth: ${metrics.revenueGrowth} → ${fallbackMetrics.revenueGrowth}`);
+      metrics.revenueGrowth = fallbackMetrics.revenueGrowth;
+      fallbacksApplied++;
+    }
+    
+    if ((metrics.netIncomeGrowth === 0 || isNaN(metrics.netIncomeGrowth)) && fallbackMetrics.netIncomeGrowth !== undefined) {
+      console.log(`Aplicando fallback para Net Income Growth: ${metrics.netIncomeGrowth} → ${fallbackMetrics.netIncomeGrowth}`);
+      metrics.netIncomeGrowth = fallbackMetrics.netIncomeGrowth;
+      fallbacksApplied++;
+    }
+    
+    // Aplicar outros fallbacks se disponíveis
+    Object.keys(fallbackMetrics).forEach(key => {
+      const fallbackValue = (fallbackMetrics as any)[key];
+      const currentValue = (metrics as any)[key];
+      
+      if (fallbackValue !== undefined && (currentValue === 0 || isNaN(currentValue) || currentValue === undefined)) {
+        console.log(`Aplicando fallback adicional para ${key}: ${currentValue} → ${fallbackValue}`);
+        (metrics as any)[key] = fallbackValue;
+        fallbacksApplied++;
+      }
+    });
+    
+    if (fallbacksApplied > 0) {
+      console.log(`Total de ${fallbacksApplied} fallbacks aplicados usando dados do financial_data`);
+    }
+  }
+  
   return metrics;
 }
 
@@ -453,7 +729,20 @@ function getSectorBenchmarks(sectorContext: SectorContext, sizeContext: SizeCont
   };
   
   // Ajustar por setor
-  if (sectorContext.marginExpectation === 'HIGH') {
+  if (sectorContext.type === 'FINANCIAL') {
+    // Benchmarks específicos para bancos e seguradoras
+    benchmarks.minROE = 0.08;      // ROE mínimo para bancos
+    benchmarks.goodROE = 0.15;     // ROE bom para bancos
+    benchmarks.excellentROE = 0.20; // ROE excelente para bancos
+    benchmarks.minROA = 0.008;     // ROA mínimo para bancos (0.8%)
+    benchmarks.goodROA = 0.015;    // ROA bom para bancos (1.5%)
+    benchmarks.minNetMargin = 0.10; // Margem mínima para bancos (10%)
+    benchmarks.goodNetMargin = 0.25; // Margem boa para bancos (25%)
+    benchmarks.maxDebtToEquity = 15.0; // Bancos têm alta alavancagem natural
+    benchmarks.maxDebtToAssets = 0.9;  // Bancos podem ter até 90% de alavancagem
+    benchmarks.minCurrentRatio = 0.1;  // Liquidez corrente não se aplica da mesma forma
+    benchmarks.goodCurrentRatio = 0.3; // Para bancos, liquidez é diferente
+  } else if (sectorContext.marginExpectation === 'HIGH') {
     benchmarks.minNetMargin = 0.10;
     benchmarks.goodNetMargin = 0.20;
     benchmarks.minROE = 0.12;
@@ -479,6 +768,246 @@ function getSectorBenchmarks(sectorContext: SectorContext, sizeContext: SizeCont
 }
 
 // === FUNÇÕES AUXILIARES PARA CÁLCULOS ===
+
+// Função para calcular médias usando dados do financial_data como fallback
+function calculateFallbackMetrics(fallbackData?: FinancialStatementsData['financialDataFallback']): Partial<AverageMetrics> {
+  if (!fallbackData || !fallbackData.years || fallbackData.years.length === 0) {
+    return {};
+  }
+
+  const metrics: Partial<AverageMetrics> = {};
+  
+  // Função auxiliar para calcular média de um array de valores
+  const calculateAverage = (values: (number | null | undefined)[]): number | undefined => {
+    const validValues = values.filter(v => v !== null && v !== undefined && !isNaN(v as number)) as number[];
+    if (validValues.length === 0) return undefined;
+    return validValues.reduce((sum, val) => sum + val, 0) / validValues.length;
+  };
+
+  // Se temos dados de múltiplos anos, assumimos que são arrays
+  // Se não, assumimos que é um valor único (compatibilidade)
+  const isArrayData = Array.isArray(fallbackData.roe);
+  
+  if (isArrayData) {
+    // Calcular médias dos arrays de dados históricos
+    if (fallbackData.roe && Array.isArray(fallbackData.roe)) {
+      const avgRoe = calculateAverage(fallbackData.roe);
+      if (avgRoe !== undefined) metrics.roe = avgRoe;
+    }
+    
+    if (fallbackData.roa && Array.isArray(fallbackData.roa)) {
+      const avgRoa = calculateAverage(fallbackData.roa);
+      if (avgRoa !== undefined) metrics.roa = avgRoa;
+    }
+    
+    if (fallbackData.margemLiquida && Array.isArray(fallbackData.margemLiquida)) {
+      const avgNetMargin = calculateAverage(fallbackData.margemLiquida);
+      if (avgNetMargin !== undefined) metrics.netMargin = avgNetMargin;
+    }
+    
+    if (fallbackData.margemBruta && Array.isArray(fallbackData.margemBruta)) {
+      const avgGrossMargin = calculateAverage(fallbackData.margemBruta);
+      if (avgGrossMargin !== undefined) metrics.grossMargin = avgGrossMargin;
+    }
+    
+    if (fallbackData.margemEbitda && Array.isArray(fallbackData.margemEbitda)) {
+      const avgOperatingMargin = calculateAverage(fallbackData.margemEbitda);
+      if (avgOperatingMargin !== undefined) metrics.operatingMargin = avgOperatingMargin;
+    }
+    
+    if (fallbackData.liquidezCorrente && Array.isArray(fallbackData.liquidezCorrente)) {
+      const avgCurrentRatio = calculateAverage(fallbackData.liquidezCorrente);
+      if (avgCurrentRatio !== undefined) metrics.currentRatio = avgCurrentRatio;
+    }
+    
+    if (fallbackData.liquidezRapida && Array.isArray(fallbackData.liquidezRapida)) {
+      const avgQuickRatio = calculateAverage(fallbackData.liquidezRapida);
+      if (avgQuickRatio !== undefined) metrics.quickRatio = avgQuickRatio;
+    }
+    
+    if (fallbackData.debtToEquity && Array.isArray(fallbackData.debtToEquity)) {
+      const avgDebtToEquity = calculateAverage(fallbackData.debtToEquity);
+      if (avgDebtToEquity !== undefined) metrics.debtToEquity = avgDebtToEquity;
+    } else if (fallbackData.dividaLiquidaPl && Array.isArray(fallbackData.dividaLiquidaPl)) {
+      const avgDebtToEquity = calculateAverage(fallbackData.dividaLiquidaPl);
+      if (avgDebtToEquity !== undefined) metrics.debtToEquity = avgDebtToEquity;
+    }
+    
+    if (fallbackData.giroAtivos && Array.isArray(fallbackData.giroAtivos)) {
+      const avgAssetTurnover = calculateAverage(fallbackData.giroAtivos);
+      if (avgAssetTurnover !== undefined) metrics.assetTurnover = avgAssetTurnover;
+    }
+    
+    // Para crescimento, usar CAGR se disponível, senão média do crescimento anual
+    if (fallbackData.cagrReceitas5a !== null && fallbackData.cagrReceitas5a !== undefined) {
+      metrics.revenueGrowth = fallbackData.cagrReceitas5a;
+    } else if (fallbackData.crescimentoReceitas && Array.isArray(fallbackData.crescimentoReceitas)) {
+      const avgRevenueGrowth = calculateAverage(fallbackData.crescimentoReceitas);
+      if (avgRevenueGrowth !== undefined) metrics.revenueGrowth = avgRevenueGrowth;
+    }
+    
+    if (fallbackData.cagrLucros5a !== null && fallbackData.cagrLucros5a !== undefined) {
+      metrics.netIncomeGrowth = fallbackData.cagrLucros5a;
+    } else if (fallbackData.crescimentoLucros && Array.isArray(fallbackData.crescimentoLucros)) {
+      const avgNetIncomeGrowth = calculateAverage(fallbackData.crescimentoLucros);
+      if (avgNetIncomeGrowth !== undefined) metrics.netIncomeGrowth = avgNetIncomeGrowth;
+    }
+    
+  } else {
+    // Compatibilidade com dados únicos (não arrays)
+    if (fallbackData.roe !== null && fallbackData.roe !== undefined && typeof fallbackData.roe === 'number') {
+      metrics.roe = fallbackData.roe;
+    }
+    
+    if (fallbackData.roa !== null && fallbackData.roa !== undefined && typeof fallbackData.roa === 'number') {
+      metrics.roa = fallbackData.roa;
+    }
+    
+    if (fallbackData.margemLiquida !== null && fallbackData.margemLiquida !== undefined && typeof fallbackData.margemLiquida === 'number') {
+      metrics.netMargin = fallbackData.margemLiquida;
+    }
+    
+    if (fallbackData.margemBruta !== null && fallbackData.margemBruta !== undefined && typeof fallbackData.margemBruta === 'number') {
+      metrics.grossMargin = fallbackData.margemBruta;
+    }
+    
+    if (fallbackData.margemEbitda !== null && fallbackData.margemEbitda !== undefined && typeof fallbackData.margemEbitda === 'number') {
+      metrics.operatingMargin = fallbackData.margemEbitda;
+    }
+    
+    if (fallbackData.liquidezCorrente !== null && fallbackData.liquidezCorrente !== undefined && typeof fallbackData.liquidezCorrente === 'number') {
+      metrics.currentRatio = fallbackData.liquidezCorrente;
+    }
+    
+    if (fallbackData.liquidezRapida !== null && fallbackData.liquidezRapida !== undefined && typeof fallbackData.liquidezRapida === 'number') {
+      metrics.quickRatio = fallbackData.liquidezRapida;
+    }
+    
+    if (fallbackData.debtToEquity !== null && fallbackData.debtToEquity !== undefined && typeof fallbackData.debtToEquity === 'number') {
+      metrics.debtToEquity = fallbackData.debtToEquity;
+    } else if (fallbackData.dividaLiquidaPl !== null && fallbackData.dividaLiquidaPl !== undefined && typeof fallbackData.dividaLiquidaPl === 'number') {
+      metrics.debtToEquity = fallbackData.dividaLiquidaPl;
+    }
+    
+    if (fallbackData.giroAtivos !== null && fallbackData.giroAtivos !== undefined && typeof fallbackData.giroAtivos === 'number') {
+      metrics.assetTurnover = fallbackData.giroAtivos;
+    }
+    
+    if (fallbackData.cagrReceitas5a !== null && fallbackData.cagrReceitas5a !== undefined) {
+      metrics.revenueGrowth = fallbackData.cagrReceitas5a;
+    } else if (fallbackData.crescimentoReceitas !== null && fallbackData.crescimentoReceitas !== undefined && typeof fallbackData.crescimentoReceitas === 'number') {
+      metrics.revenueGrowth = fallbackData.crescimentoReceitas;
+    }
+    
+    if (fallbackData.cagrLucros5a !== null && fallbackData.cagrLucros5a !== undefined) {
+      metrics.netIncomeGrowth = fallbackData.cagrLucros5a;
+    } else if (fallbackData.crescimentoLucros !== null && fallbackData.crescimentoLucros !== undefined && typeof fallbackData.crescimentoLucros === 'number') {
+      metrics.netIncomeGrowth = fallbackData.crescimentoLucros;
+    }
+  }
+  
+  // Calcular indicadores derivados apenas se temos dados base válidos
+  // Não inventar valores se não conseguimos calcular
+  
+  console.log('Fallback metrics calculated:', metrics);
+  return metrics;
+}
+
+// Função para validar se os dados fazem sentido para análise
+interface DataValidation {
+  hasValidCurrentAssets: boolean;
+  hasValidCurrentLiabilities: boolean;
+  hasValidInventory: boolean;
+  hasValidReceivables: boolean;
+  hasValidCash: boolean;
+  hasValidTotalAssets: boolean;
+  hasValidRevenue: boolean;
+  isServiceCompany: boolean; // Empresa de serviços (sem estoque relevante)
+  isBankOrFinancial: boolean; // Banco ou financeira (estrutura diferente)
+}
+
+function validateFinancialData(
+  incomeData: Record<string, unknown>[],
+  balanceData: Record<string, unknown>[],
+  sectorContext?: SectorContext,
+  sector?: string | null,
+  industry?: string | null
+): DataValidation {
+  if (incomeData.length === 0 || balanceData.length === 0) {
+    return {
+      hasValidCurrentAssets: false,
+      hasValidCurrentLiabilities: false,
+      hasValidInventory: false,
+      hasValidReceivables: false,
+      hasValidCash: false,
+      hasValidTotalAssets: false,
+      hasValidRevenue: false,
+      isServiceCompany: false,
+      isBankOrFinancial: false
+    };
+  }
+
+  // Analisar os últimos 3 períodos para determinar padrões
+  const periodsToCheck = Math.min(3, incomeData.length, balanceData.length);
+  let validCurrentAssets = 0;
+  let validCurrentLiabilities = 0;
+  let validInventory = 0;
+  let validReceivables = 0;
+  let validCash = 0;
+  let validTotalAssets = 0;
+  let validRevenue = 0;
+
+  for (let i = 0; i < periodsToCheck; i++) {
+    const income = incomeData[i];
+    const balance = balanceData[i];
+
+    const currentAssets = toNumber(balance.totalCurrentAssets) || 0;
+    const currentLiabilities = toNumber(balance.totalCurrentLiabilities) || 0;
+    const inventory = toNumber(balance.inventory) || 0;
+    const receivables = toNumber(balance.accountsReceivable) || 0;
+    const cash = toNumber(balance.cash) || 0;
+    const totalAssets = toNumber(balance.totalAssets) || 0;
+    const revenue = toNumber(income.totalRevenue) || toNumber(income.operatingIncome) || 0;
+
+    // Considerar válido se > 0 e faz sentido proporcionalmente
+    if (currentAssets > 0 && currentAssets < totalAssets * 2) validCurrentAssets++;
+    if (currentLiabilities > 0 && currentLiabilities < totalAssets * 2) validCurrentLiabilities++;
+    if (inventory >= 0) validInventory++; // Inventory pode ser 0 para empresas de serviço
+    if (receivables >= 0) validReceivables++; // Receivables pode ser 0 para alguns negócios
+    if (cash >= 0) validCash++; // Cash pode ser 0 (empresa sem caixa)
+    if (totalAssets > 0) validTotalAssets++;
+    if (revenue > 0) validRevenue++;
+  }
+
+  // Determinar tipo de empresa
+  const isServiceCompany = validInventory > 0 && (validInventory === periodsToCheck) && 
+    balanceData.slice(0, periodsToCheck).every(stmt => (toNumber(stmt.inventory) || 0) === 0);
+  
+  const isBankOrFinancial = sectorContext?.type === 'FINANCIAL' || 
+    (sector?.toLowerCase().includes('bank') ?? false) ||
+    (sector?.toLowerCase().includes('financ') ?? false) ||
+    (sector?.toLowerCase().includes('seguros') ?? false) ||
+    (sector?.toLowerCase().includes('insurance') ?? false) ||
+    (sector?.toLowerCase().includes('previdência') ?? false) ||
+    (industry?.toLowerCase().includes('bank') ?? false) ||
+    (industry?.toLowerCase().includes('financ') ?? false) ||
+    (industry?.toLowerCase().includes('seguros') ?? false) ||
+    (industry?.toLowerCase().includes('insurance') ?? false) ||
+    (industry?.toLowerCase().includes('previdência') ?? false);
+
+  return {
+    hasValidCurrentAssets: validCurrentAssets >= Math.ceil(periodsToCheck * 0.6), // Pelo menos 60% dos períodos
+    hasValidCurrentLiabilities: validCurrentLiabilities >= Math.ceil(periodsToCheck * 0.6),
+    hasValidInventory: validInventory >= Math.ceil(periodsToCheck * 0.6),
+    hasValidReceivables: validReceivables >= Math.ceil(periodsToCheck * 0.6),
+    hasValidCash: validCash >= Math.ceil(periodsToCheck * 0.6),
+    hasValidTotalAssets: validTotalAssets >= Math.ceil(periodsToCheck * 0.6),
+    hasValidRevenue: validRevenue >= Math.ceil(periodsToCheck * 0.6),
+    isServiceCompany,
+    isBankOrFinancial
+  };
+}
+
 function calculateCAGR(values: number[]): number {
   if (values.length < 2) return 0;
   
@@ -521,34 +1050,75 @@ function analyzeProfitabilityMetrics(
 ): AnalysisResult {
   const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
   
+  // Para seguradoras e empresas financeiras, usar análise adaptada
+  const isFinancialSector = sectorContext.type === 'FINANCIAL';
+  
   // ROE Analysis
   if (metrics.roe >= benchmarks.excellentROE) {
     result.scoreAdjustment += 15;
-    result.positiveSignals.push(`Rentabilidade excepcional: A empresa gera ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 investidos pelos acionistas (acima de ${(benchmarks.goodROE * 100).toFixed(1)}% esperado). Isso significa que seu dinheiro está rendendo muito bem nesta empresa.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Rentabilidade excepcional: A ${sectorContext.type === 'FINANCIAL' ? 'instituição financeira' : 'empresa'} gera ${(metrics.roe * 100).toFixed(1)}% de retorno sobre o patrimônio líquido (acima de ${(benchmarks.goodROE * 100).toFixed(1)}% esperado). Excelente eficiência na gestão do capital.`);
+    } else {
+      result.positiveSignals.push(`Rentabilidade excepcional: A empresa gera ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 investidos pelos acionistas (acima de ${(benchmarks.goodROE * 100).toFixed(1)}% esperado). Isso significa que seu dinheiro está rendendo muito bem nesta empresa.`);
+    }
   } else if (metrics.roe >= benchmarks.goodROE) {
     result.scoreAdjustment += 8;
-    result.positiveSignals.push(`Boa rentabilidade: A empresa gera ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 dos acionistas. É um retorno sólido para seu investimento.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Boa rentabilidade: A instituição gera ${(metrics.roe * 100).toFixed(1)}% de retorno sobre o patrimônio líquido. Gestão eficiente do capital dos acionistas.`);
+    } else {
+      result.positiveSignals.push(`Boa rentabilidade: A empresa gera ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 dos acionistas. É um retorno sólido para seu investimento.`);
+    }
   } else if (metrics.roe < benchmarks.minROE) {
     result.scoreAdjustment -= 20;
-    result.redFlags.push(`Rentabilidade baixa: A empresa gera apenas ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 investidos (mínimo esperado: ${(benchmarks.minROE * 100).toFixed(1)}%). Seu dinheiro pode render mais em outras opções de investimento.`);
+    if (isFinancialSector) {
+      result.redFlags.push(`Rentabilidade baixa: A instituição gera apenas ${(metrics.roe * 100).toFixed(1)}% de retorno sobre o patrimônio líquido (mínimo esperado: ${(benchmarks.minROE * 100).toFixed(1)}%). Pode indicar ineficiência na gestão do capital ou ambiente desafiador.`);
+    } else {
+      result.redFlags.push(`Rentabilidade baixa: A empresa gera apenas ${(metrics.roe * 100).toFixed(1)}% de lucro para cada R$ 100 investidos (mínimo esperado: ${(benchmarks.minROE * 100).toFixed(1)}%). Seu dinheiro pode render mais em outras opções de investimento.`);
+    }
   }
   
   // ROA Analysis
   if (metrics.roa >= benchmarks.goodROA) {
     result.scoreAdjustment += 10;
-    result.positiveSignals.push(`Eficiência dos ativos: A empresa consegue gerar ${(metrics.roa * 100).toFixed(1)}% de lucro para cada R$ 100 em ativos que possui. Isso mostra que ela usa bem seus recursos (equipamentos, imóveis, etc.).`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Eficiência dos ativos: A instituição consegue gerar ${(metrics.roa * 100).toFixed(1)}% de retorno sobre seus ativos. Boa gestão do portfólio e operações.`);
+    } else {
+      result.positiveSignals.push(`Eficiência dos ativos: A empresa consegue gerar ${(metrics.roa * 100).toFixed(1)}% de lucro para cada R$ 100 em ativos que possui. Isso mostra que ela usa bem seus recursos (equipamentos, imóveis, etc.).`);
+    }
   } else if (metrics.roa < benchmarks.minROA) {
     result.scoreAdjustment -= 15;
-    result.redFlags.push(`Baixa eficiência dos ativos: A empresa gera apenas ${(metrics.roa * 100).toFixed(1)}% de lucro com seus recursos. Pode estar com ativos ociosos ou mal utilizados.`);
+    if (isFinancialSector) {
+      result.redFlags.push(`Baixa eficiência dos ativos: A instituição gera apenas ${(metrics.roa * 100).toFixed(1)}% de retorno sobre seus ativos. Pode indicar problemas na gestão do portfólio ou operações ineficientes.`);
+    } else {
+      result.redFlags.push(`Baixa eficiência dos ativos: A empresa gera apenas ${(metrics.roa * 100).toFixed(1)}% de lucro com seus recursos. Pode estar com ativos ociosos ou mal utilizados.`);
+    }
   }
   
-  // Net Margin Analysis
-  if (metrics.netMargin >= benchmarks.goodNetMargin) {
-    result.scoreAdjustment += 12;
-    result.positiveSignals.push(`Margem de lucro sólida: De cada R$ 100 em vendas, a empresa consegue manter R$ ${(metrics.netMargin * 100).toFixed(1)} como lucro líquido. Isso indica boa gestão de custos.`);
-  } else if (metrics.netMargin < benchmarks.minNetMargin) {
-    result.scoreAdjustment -= 18;
-    result.redFlags.push(`Margem de lucro baixa: De cada R$ 100 vendidos, sobram apenas R$ ${(metrics.netMargin * 100).toFixed(1)} de lucro (esperado: pelo menos R$ ${(benchmarks.minNetMargin * 100).toFixed(1)}). A empresa pode ter custos altos ou preços baixos.`);
+  // Net Margin Analysis - Adaptado para setor financeiro
+  if (isFinancialSector) {
+    // Para seguradoras e bancos, verificar se conseguimos calcular a margem adequadamente
+    if (metrics.netMargin === 0 || isNaN(metrics.netMargin)) {
+      // Margem líquida não disponível ou não calculável - ignorar análise
+      result.positiveSignals.push(`Análise de margem não aplicável: Para seguradoras, a margem líquida é calculada de forma específica e pode não estar disponível nos dados padronizados. Foque nos indicadores de rentabilidade (ROE/ROA).`);
+    } else if (metrics.netMargin >= benchmarks.goodNetMargin) {
+      result.scoreAdjustment += 12;
+      result.positiveSignals.push(`Margem operacional sólida: A instituição mantém ${(metrics.netMargin * 100).toFixed(1)}% de margem líquida, indicando boa gestão de custos operacionais e sinistralidade controlada.`);
+    } else if (metrics.netMargin < benchmarks.minNetMargin && metrics.netMargin > 0) {
+      result.scoreAdjustment -= 8; // Penalidade menor para setor financeiro
+      result.positiveSignals.push(`Margem operacional moderada: A instituição mantém ${(metrics.netMargin * 100).toFixed(1)}% de margem líquida. Para seguradoras, isso pode refletir períodos de alta sinistralidade ou investimentos em crescimento.`);
+    } else if (metrics.netMargin < 0) {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push(`Margem operacional negativa: A instituição apresenta margem líquida de ${(metrics.netMargin * 100).toFixed(1)}%. Pode indicar alta sinistralidade, custos elevados ou ambiente desafiador.`);
+    }
+  } else {
+    // Análise tradicional para outros setores
+    if (metrics.netMargin >= benchmarks.goodNetMargin) {
+      result.scoreAdjustment += 12;
+      result.positiveSignals.push(`Margem de lucro sólida: De cada R$ 100 em vendas, a empresa consegue manter R$ ${(metrics.netMargin * 100).toFixed(1)} como lucro líquido. Isso indica boa gestão de custos.`);
+    } else if (metrics.netMargin < benchmarks.minNetMargin) {
+      result.scoreAdjustment -= 18;
+      result.redFlags.push(`Margem de lucro baixa: De cada R$ 100 vendidos, sobram apenas R$ ${(metrics.netMargin * 100).toFixed(1)} de lucro (esperado: pelo menos R$ ${(benchmarks.minNetMargin * 100).toFixed(1)}). A empresa pode ter custos altos ou preços baixos.`);
+    }
   }
   
   // Detectar e explicar inconsistência entre margem operacional e líquida
@@ -659,37 +1229,56 @@ function analyzeOperationalVsNetMarginGap(
 }
 
 // 2. ANÁLISE DE LIQUIDEZ E SOLVÊNCIA
-function analyzeLiquidityMetrics(metrics: AverageMetrics, benchmarks: SectorBenchmarks, sectorContext: SectorContext): AnalysisResult {
+function analyzeLiquidityMetrics(
+  metrics: AverageMetrics, 
+  benchmarks: SectorBenchmarks, 
+  sectorContext: SectorContext,
+  dataValidation?: DataValidation
+): AnalysisResult {
   const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
   
-  // Current Ratio Analysis
-  if (metrics.currentRatio >= benchmarks.goodCurrentRatio) {
-    result.scoreAdjustment += 10;
-    result.positiveSignals.push(`Boa capacidade de pagamento: A empresa tem R$ ${metrics.currentRatio.toFixed(2)} em ativos de curto prazo para cada R$ 1,00 de dívidas de curto prazo. Consegue pagar suas contas em dia.`);
-  } else if (metrics.currentRatio < benchmarks.minCurrentRatio) {
-    result.scoreAdjustment -= 25;
-    result.redFlags.push(`Dificuldade para pagar contas: A empresa tem apenas R$ ${metrics.currentRatio.toFixed(2)} para cada R$ 1,00 de dívidas de curto prazo (mínimo: R$ ${benchmarks.minCurrentRatio.toFixed(1)}). Pode ter problemas de caixa.`);
+  console.log('metrics', metrics);
+  console.log('benchmarks', benchmarks);
+  console.log('sectorContext', sectorContext);
+  console.log('dataValidation', dataValidation);
+  
+  // Current Ratio Analysis - só analisar se temos dados válidos
+  if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities) {
+    if (metrics.currentRatio >= benchmarks.goodCurrentRatio) {
+      result.scoreAdjustment += 10;
+      result.positiveSignals.push(`Boa capacidade de pagamento: A empresa tem R$ ${metrics.currentRatio.toFixed(2)} em ativos de curto prazo para cada R$ 1,00 de dívidas de curto prazo. Consegue pagar suas contas em dia.`);
+    } else if (metrics.currentRatio < benchmarks.minCurrentRatio) {
+      result.scoreAdjustment -= 25;
+      result.redFlags.push(`Dificuldade para pagar contas: A empresa tem apenas R$ ${metrics.currentRatio.toFixed(2)} para cada R$ 1,00 de dívidas de curto prazo (mínimo: R$ ${benchmarks.minCurrentRatio.toFixed(1)}). Pode ter problemas de caixa.`);
+    }
+  } else if (dataValidation) {
+    // Se não temos dados válidos, adicionar contexto
+    result.positiveSignals.push(`Indicadores de liquidez não disponíveis: Dados de ativos ou passivos circulantes não estão disponíveis ou não fazem sentido para este tipo de negócio.`);
   }
   
-  // Quick Ratio Analysis
-  if (metrics.quickRatio >= 1.0) {
-    result.scoreAdjustment += 8;
-    result.positiveSignals.push(`Liquidez imediata boa: Mesmo sem vender estoques, a empresa tem R$ ${metrics.quickRatio.toFixed(2)} disponíveis para cada R$ 1,00 de dívidas urgentes.`);
-  } else if (metrics.quickRatio < 0.5) {
-    result.scoreAdjustment -= 15;
-    result.redFlags.push(`Liquidez imediata baixa: Sem vender estoques, a empresa tem apenas R$ ${metrics.quickRatio.toFixed(2)} para cada R$ 1,00 de dívidas urgentes. Depende muito das vendas para pagar contas.`);
+  // Quick Ratio Analysis - só analisar se temos dados válidos de ativos circulantes e passivos circulantes
+  if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities) {
+    if (metrics.quickRatio >= 1.0) {
+      result.scoreAdjustment += 8;
+      result.positiveSignals.push(`Liquidez imediata boa: Mesmo sem vender estoques, a empresa tem R$ ${metrics.quickRatio.toFixed(2)} disponíveis para cada R$ 1,00 de dívidas urgentes.`);
+    } else if (metrics.quickRatio < 0.5) {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push(`Liquidez imediata baixa: Sem vender estoques, a empresa tem apenas R$ ${metrics.quickRatio.toFixed(2)} para cada R$ 1,00 de dívidas urgentes. Depende muito das vendas para pagar contas.`);
+    }
   }
   
-  // Working Capital Analysis
-  if (metrics.workingCapitalRatio >= 0.15) {
-    result.scoreAdjustment += 6;
-    result.positiveSignals.push(`Capital de giro saudável: A empresa tem ${(metrics.workingCapitalRatio * 100).toFixed(1)}% dos seus ativos como "dinheiro sobrando" para investir no crescimento do negócio.`);
-  } else if (metrics.workingCapitalRatio < 0) {
-    result.scoreAdjustment -= 12;
-    result.redFlags.push(`Capital de giro negativo: A empresa deve mais no curto prazo do que tem disponível. Isso pode indicar aperto financeiro ou má gestão do caixa.`);
+  // Working Capital Analysis - só analisar se temos dados válidos
+  if (dataValidation?.hasValidCurrentAssets && dataValidation?.hasValidCurrentLiabilities && dataValidation?.hasValidTotalAssets) {
+    if (metrics.workingCapitalRatio >= 0.15) {
+      result.scoreAdjustment += 6;
+      result.positiveSignals.push(`Capital de giro saudável: A empresa tem ${(metrics.workingCapitalRatio * 100).toFixed(1)}% dos seus ativos como "dinheiro sobrando" para investir no crescimento do negócio.`);
+    } else if (metrics.workingCapitalRatio < 0) {
+      result.scoreAdjustment -= 12;
+      result.redFlags.push(`Capital de giro negativo: A empresa deve mais no curto prazo do que tem disponível. Isso pode indicar aperto financeiro ou má gestão do caixa.`);
+    }
   }
   
-  // Debt Analysis
+  // Debt Analysis - sempre analisar pois são dados mais fundamentais
   if (metrics.debtToEquity > benchmarks.maxDebtToEquity) {
     result.scoreAdjustment -= 20;
     result.redFlags.push(`Endividamento muito alto: A empresa deve ${metrics.debtToEquity.toFixed(2)}x mais do que vale seu patrimônio (máximo recomendado: ${benchmarks.maxDebtToEquity.toFixed(1)}x). Isso pode comprometer a saúde financeira e os dividendos.`);
@@ -698,7 +1287,7 @@ function analyzeLiquidityMetrics(metrics: AverageMetrics, benchmarks: SectorBenc
     result.positiveSignals.push(`Endividamento controlado: A empresa deve apenas ${metrics.debtToEquity.toFixed(2)}x do valor do seu patrimônio. Isso dá segurança e espaço para crescer.`);
   }
   
-  // Interest Coverage Analysis
+  // Interest Coverage Analysis - sempre analisar pois são dados mais fundamentais
   if (metrics.interestCoverage >= 8) {
     result.scoreAdjustment += 8;
     result.positiveSignals.push(`Facilidade para pagar juros: A empresa ganha ${metrics.interestCoverage.toFixed(1)}x mais do que precisa para pagar os juros das dívidas. Muito seguro para o investidor.`);
@@ -714,41 +1303,87 @@ function analyzeLiquidityMetrics(metrics: AverageMetrics, benchmarks: SectorBenc
 }
 
 // 3. ANÁLISE DE EFICIÊNCIA OPERACIONAL
-function analyzeEfficiencyMetrics(metrics: AverageMetrics, benchmarks: SectorBenchmarks, sectorContext: SectorContext): AnalysisResult {
+function analyzeEfficiencyMetrics(
+  metrics: AverageMetrics, 
+  benchmarks: SectorBenchmarks, 
+  sectorContext: SectorContext,
+  dataValidation?: DataValidation
+): AnalysisResult {
   const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
   
-  // Asset Turnover Analysis
-  if (metrics.assetTurnover >= 1.5) {
-    result.scoreAdjustment += 12;
-    result.positiveSignals.push(`Uso eficiente dos recursos: A empresa gera R$ ${metrics.assetTurnover.toFixed(2)} em vendas para cada R$ 1,00 investido em ativos (equipamentos, imóveis, etc.). Isso mostra boa produtividade.`);
-  } else if (metrics.assetTurnover < 0.5) {
-    result.scoreAdjustment -= 10;
-    result.redFlags.push(`Recursos mal aproveitados: A empresa gera apenas R$ ${metrics.assetTurnover.toFixed(2)} em vendas para cada R$ 1,00 em ativos. Pode ter equipamentos parados ou investimentos desnecessários.`);
+  const isFinancialSector = sectorContext.type === 'FINANCIAL';
+  
+  // Asset Turnover Analysis - Adaptado para setor financeiro
+  if (dataValidation?.hasValidTotalAssets && dataValidation?.hasValidRevenue) {
+    if (isFinancialSector) {
+      // Para bancos, asset turnover baixo é normal devido à natureza dos ativos (empréstimos, investimentos)
+      if (metrics.assetTurnover >= 0.15) {
+        result.scoreAdjustment += 8;
+        result.positiveSignals.push(`Eficiência adequada dos ativos: A instituição gera R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Para bancos, isso indica boa gestão do portfólio.`);
+      } else if (metrics.assetTurnover >= 0.08) {
+        result.scoreAdjustment += 3;
+        result.positiveSignals.push(`Gestão adequada dos ativos: A instituição gera R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Dentro do esperado para o setor financeiro.`);
+      } else if (metrics.assetTurnover < 0.05) {
+        result.scoreAdjustment -= 5; // Penalidade menor para bancos
+        result.redFlags.push(`Baixa eficiência dos ativos: A instituição gera apenas R$ ${metrics.assetTurnover.toFixed(2)} em receitas para cada R$ 1,00 em ativos. Pode indicar excesso de liquidez ou ativos de baixo rendimento.`);
+      }
+    } else {
+      // Análise tradicional para outros setores
+      if (metrics.assetTurnover >= 1.5) {
+        result.scoreAdjustment += 12;
+        result.positiveSignals.push(`Uso eficiente dos recursos: A empresa gera R$ ${metrics.assetTurnover.toFixed(2)} em vendas para cada R$ 1,00 investido em ativos (equipamentos, imóveis, etc.). Isso mostra boa produtividade.`);
+      } else if (metrics.assetTurnover < 0.5) {
+        result.scoreAdjustment -= 10;
+        result.redFlags.push(`Recursos mal aproveitados: A empresa gera apenas R$ ${metrics.assetTurnover.toFixed(2)} em vendas para cada R$ 1,00 em ativos. Pode ter equipamentos parados ou investimentos desnecessários.`);
+      }
+    }
   }
   
-  // Operating Margin Analysis
-  if (metrics.operatingMargin >= 0.15) {
-    result.scoreAdjustment += 10;
-    result.positiveSignals.push(`Operação muito lucrativa: Antes de pagar juros e impostos, a empresa já lucra R$ ${(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos. Mostra eficiência operacional.`);
-  } else if (metrics.operatingMargin < 0) {
-    result.scoreAdjustment -= 15;
-    result.redFlags.push(`Operação com prejuízo: A empresa perde R$ ${Math.abs(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos, antes de considerar receitas financeiras. Os custos operacionais estão muito altos.`);
-  } else if (metrics.operatingMargin < 0.05) {
-    result.scoreAdjustment -= 8;
-    result.redFlags.push(`Operação pouco lucrativa: A empresa lucra apenas R$ ${(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos, antes de juros e impostos. Custos operacionais podem estar altos.`);
+  // Operating Margin Analysis - Adaptado para setor financeiro
+  if (dataValidation?.hasValidRevenue) {
+    if (isFinancialSector) {
+      // Para bancos, margem operacional pode ser negativa devido à estrutura contábil
+      if (metrics.operatingMargin >= 0.30) {
+        result.scoreAdjustment += 10;
+        result.positiveSignals.push(`Excelente eficiência operacional: A instituição apresenta margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Boa gestão de custos e spread bancário.`);
+      } else if (metrics.operatingMargin >= 0.15) {
+        result.scoreAdjustment += 5;
+        result.positiveSignals.push(`Boa eficiência operacional: A instituição mantém margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Gestão adequada de custos.`);
+      } else if (metrics.operatingMargin < -0.10) {
+        result.scoreAdjustment -= 8; // Penalidade menor para bancos
+        result.positiveSignals.push(`Margem operacional negativa: A instituição apresenta margem operacional de ${(metrics.operatingMargin * 100).toFixed(1)}%. Para bancos, isso pode ser normal devido à estrutura contábil, mas observe a margem líquida e ROE.`);
+      }
+    } else {
+      // Análise tradicional para outros setores
+      if (metrics.operatingMargin >= 0.15) {
+        result.scoreAdjustment += 10;
+        result.positiveSignals.push(`Operação muito lucrativa: Antes de pagar juros e impostos, a empresa já lucra R$ ${(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos. Mostra eficiência operacional.`);
+      } else if (metrics.operatingMargin < 0) {
+        result.scoreAdjustment -= 15;
+        result.redFlags.push(`Operação com prejuízo: A empresa perde R$ ${Math.abs(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos, antes de considerar receitas financeiras. Os custos operacionais estão muito altos.`);
+      } else if (metrics.operatingMargin < 0.05) {
+        result.scoreAdjustment -= 8;
+        result.redFlags.push(`Operação pouco lucrativa: A empresa lucra apenas R$ ${(metrics.operatingMargin * 100).toFixed(1)} para cada R$ 100 vendidos, antes de juros e impostos. Custos operacionais podem estar altos.`);
+      }
+    }
   }
   
-  // Receivables Turnover Analysis
-  if (metrics.receivablesTurnover >= 8) {
-    result.scoreAdjustment += 6;
-    result.positiveSignals.push(`Cobrança rápida: A empresa recebe o dinheiro das vendas em cerca de ${(365/metrics.receivablesTurnover).toFixed(0)} dias. Isso é bom para o fluxo de caixa.`);
-  } else if (metrics.receivablesTurnover < 4) {
-    result.scoreAdjustment -= 8;
-    result.redFlags.push(`Cobrança lenta: A empresa demora cerca de ${(365/metrics.receivablesTurnover).toFixed(0)} dias para receber das vendas. Isso pode causar problemas de caixa.`);
+  // Receivables Turnover Analysis - só analisar se temos dados válidos de recebíveis
+  if (dataValidation?.hasValidReceivables && dataValidation?.hasValidRevenue) {
+    if (metrics.receivablesTurnover >= 8) {
+      result.scoreAdjustment += 6;
+      result.positiveSignals.push(`Cobrança rápida: A empresa recebe o dinheiro das vendas em cerca de ${(365/metrics.receivablesTurnover).toFixed(0)} dias. Isso é bom para o fluxo de caixa.`);
+    } else if (metrics.receivablesTurnover < 4) {
+      result.scoreAdjustment -= 8;
+      result.redFlags.push(`Cobrança lenta: A empresa demora cerca de ${(365/metrics.receivablesTurnover).toFixed(0)} dias para receber das vendas. Isso pode causar problemas de caixa.`);
+    }
+  } else if (dataValidation && !dataValidation.hasValidReceivables) {
+    // Se não temos dados de recebíveis, pode ser normal para alguns tipos de negócio
+    result.positiveSignals.push(`Indicadores de cobrança não aplicáveis: Este tipo de negócio pode não ter recebíveis significativos (ex: vendas à vista, assinaturas pré-pagas).`);
   }
   
-  // Inventory Turnover Analysis (apenas se relevante)
-  if (metrics.inventoryTurnover < 12) { // Se não é empresa de serviços
+  // Inventory Turnover Analysis - só analisar se relevante para o tipo de negócio
+  if (dataValidation?.hasValidInventory && !dataValidation?.isServiceCompany && !dataValidation?.isBankOrFinancial) {
     if (metrics.inventoryTurnover >= 6) {
       result.scoreAdjustment += 5;
       result.positiveSignals.push(`Estoque bem gerenciado: A empresa renova seu estoque ${metrics.inventoryTurnover.toFixed(1)} vezes por ano. Produtos não ficam parados.`);
@@ -756,6 +1391,12 @@ function analyzeEfficiencyMetrics(metrics: AverageMetrics, benchmarks: SectorBen
       result.scoreAdjustment -= 10;
       result.redFlags.push(`Estoque parado: A empresa demora ${(365/metrics.inventoryTurnover).toFixed(0)} dias para vender seu estoque. Produtos podem estar encalhados ou obsoletos.`);
     }
+  } else if (dataValidation?.isServiceCompany) {
+    // Para empresas de serviços, não analisar estoque
+    result.positiveSignals.push(`Modelo de negócio sem estoque: Empresa de serviços não precisa gerenciar estoques, o que reduz riscos operacionais.`);
+  } else if (dataValidation?.isBankOrFinancial) {
+    // Para bancos e financeiras, não analisar estoque
+    result.positiveSignals.push(`Setor financeiro: Indicadores de estoque não se aplicam a instituições financeiras.`);
   }
   
   return result;
@@ -765,40 +1406,81 @@ function analyzeEfficiencyMetrics(metrics: AverageMetrics, benchmarks: SectorBen
 function analyzeCashFlowQuality(metrics: AverageMetrics, benchmarks: SectorBenchmarks, sectorContext: SectorContext): AnalysisResult {
   const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
   
-  // Operating Cash Flow Margin Analysis
+  const isFinancialSector = sectorContext.type === 'FINANCIAL';
+  
+  // Operating Cash Flow Margin Analysis - Adaptado para setor financeiro
   if (metrics.operatingCashFlowMargin >= 0.15) {
     result.scoreAdjustment += 15;
-    result.positiveSignals.push(`Excelente geração de caixa: A empresa converte ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das vendas em dinheiro real no caixa. Isso é muito bom para pagar dividendos e investir.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Excelente geração de caixa: A instituição converte ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das receitas em fluxo de caixa operacional. Boa gestão de reservas e investimentos.`);
+    } else {
+      result.positiveSignals.push(`Excelente geração de caixa: A empresa converte ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das vendas em dinheiro real no caixa. Isso é muito bom para pagar dividendos e investir.`);
+    }
   } else if (metrics.operatingCashFlowMargin >= 0.08) {
     result.scoreAdjustment += 8;
-    result.positiveSignals.push(`Boa geração de caixa: A empresa transforma ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das vendas em dinheiro no caixa. Situação saudável.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Boa geração de caixa: A instituição transforma ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das receitas em fluxo de caixa operacional. Situação saudável.`);
+    } else {
+      result.positiveSignals.push(`Boa geração de caixa: A empresa transforma ${(metrics.operatingCashFlowMargin * 100).toFixed(1)}% das vendas em dinheiro no caixa. Situação saudável.`);
+    }
   } else if (metrics.operatingCashFlowMargin < 0) {
     result.scoreAdjustment -= 20;
-    result.redFlags.push(`Queima de caixa: A empresa está gastando mais dinheiro do que recebe das operações (${(metrics.operatingCashFlowMargin * 100).toFixed(1)}%). Isso pode comprometer dividendos e investimentos.`);
+    if (isFinancialSector) {
+      result.redFlags.push(`Fluxo de caixa operacional negativo: A instituição apresenta saída líquida de caixa nas operações (${(metrics.operatingCashFlowMargin * 100).toFixed(1)}%). Pode indicar alta sinistralidade ou investimentos em crescimento.`);
+    } else {
+      result.redFlags.push(`Queima de caixa: A empresa está gastando mais dinheiro do que recebe das operações (${(metrics.operatingCashFlowMargin * 100).toFixed(1)}%). Isso pode comprometer dividendos e investimentos.`);
+    }
   }
   
-  // Free Cash Flow Analysis
+  // Free Cash Flow Analysis - Adaptado para setor financeiro
   if (metrics.freeCashFlowMargin >= 0.10) {
     result.scoreAdjustment += 12;
-    result.positiveSignals.push(`Sobra muito dinheiro: Após pagar todas as contas e investimentos necessários, ainda sobram ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas em caixa livre. Ótimo para dividendos.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Excelente fluxo de caixa livre: Após todas as operações e investimentos necessários, ainda sobram ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das receitas em caixa livre. Ótimo para dividendos.`);
+    } else {
+      result.positiveSignals.push(`Sobra muito dinheiro: Após pagar todas as contas e investimentos necessários, ainda sobram ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas em caixa livre. Ótimo para dividendos.`);
+    }
   } else if (metrics.freeCashFlowMargin >= 0.05) {
     result.scoreAdjustment += 6;
-    result.positiveSignals.push(`Sobra dinheiro: Após todos os gastos, ainda restam ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas livres. Bom para remunerar acionistas.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Bom fluxo de caixa livre: Após todas as operações, ainda restam ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das receitas livres. Bom para remunerar acionistas.`);
+    } else {
+      result.positiveSignals.push(`Sobra dinheiro: Após todos os gastos, ainda restam ${(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas livres. Bom para remunerar acionistas.`);
+    }
   } else if (metrics.freeCashFlowMargin < -0.05) {
     result.scoreAdjustment -= 15;
-    result.redFlags.push(`Falta dinheiro: Após pagar contas e investimentos, a empresa fica no vermelho em ${Math.abs(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas. Pode afetar dividendos.`);
+    if (isFinancialSector) {
+      result.redFlags.push(`Fluxo de caixa livre negativo: Após operações e investimentos, a instituição consome ${Math.abs(metrics.freeCashFlowMargin * 100).toFixed(1)}% das receitas. Pode afetar dividendos.`);
+    } else {
+      result.redFlags.push(`Falta dinheiro: Após pagar contas e investimentos, a empresa fica no vermelho em ${Math.abs(metrics.freeCashFlowMargin * 100).toFixed(1)}% das vendas. Pode afetar dividendos.`);
+    }
   }
   
-  // Cash Conversion Quality
-  if (metrics.cashConversionRatio >= 1.2) {
-    result.scoreAdjustment += 10;
-    result.positiveSignals.push(`Lucro vira dinheiro real: Para cada R$ 1,00 de lucro no papel, a empresa gera R$ ${metrics.cashConversionRatio.toFixed(2)} em dinheiro real. Excelente qualidade dos lucros.`);
-  } else if (metrics.cashConversionRatio >= 0.8) {
-    result.scoreAdjustment += 5;
-    result.positiveSignals.push(`Lucro se transforma em caixa: Para cada R$ 1,00 de lucro, a empresa gera R$ ${metrics.cashConversionRatio.toFixed(2)} em caixa. Boa conversão.`);
-  } else if (metrics.cashConversionRatio < 0.5) {
-    result.scoreAdjustment -= 12;
-    result.redFlags.push(`Lucro não vira dinheiro: Para cada R$ 1,00 de lucro no papel, apenas R$ ${metrics.cashConversionRatio.toFixed(2)} viram dinheiro real. Pode ser "lucro de papel" ou problemas de cobrança.`);
+  // Cash Conversion Quality - Adaptado para setor financeiro
+  if (isFinancialSector) {
+    // Para seguradoras, a conversão lucro-caixa é mais complexa devido às reservas técnicas
+    if (metrics.cashConversionRatio >= 1.2) {
+      result.scoreAdjustment += 10;
+      result.positiveSignals.push(`Excelente conversão lucro-caixa: Para cada R$ 1,00 de lucro, a instituição gera R$ ${metrics.cashConversionRatio.toFixed(2)} em caixa. Boa gestão de reservas e investimentos.`);
+    } else if (metrics.cashConversionRatio >= 0.8) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push(`Boa conversão lucro-caixa: Para cada R$ 1,00 de lucro, a instituição gera R$ ${metrics.cashConversionRatio.toFixed(2)} em caixa. Conversão adequada.`);
+    } else if (metrics.cashConversionRatio < 0.3) {
+      result.scoreAdjustment -= 8; // Penalidade menor para setor financeiro
+      result.positiveSignals.push(`Conversão lucro-caixa moderada: Para cada R$ 1,00 de lucro, a instituição gera R$ ${metrics.cashConversionRatio.toFixed(2)} em caixa. Para seguradoras, isso pode refletir aumento de reservas técnicas ou investimentos em crescimento.`);
+    }
+  } else {
+    // Análise tradicional para outros setores
+    if (metrics.cashConversionRatio >= 1.2) {
+      result.scoreAdjustment += 10;
+      result.positiveSignals.push(`Lucro vira dinheiro real: Para cada R$ 1,00 de lucro no papel, a empresa gera R$ ${metrics.cashConversionRatio.toFixed(2)} em dinheiro real. Excelente qualidade dos lucros.`);
+    } else if (metrics.cashConversionRatio >= 0.8) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push(`Lucro se transforma em caixa: Para cada R$ 1,00 de lucro, a empresa gera R$ ${metrics.cashConversionRatio.toFixed(2)} em caixa. Boa conversão.`);
+    } else if (metrics.cashConversionRatio < 0.5) {
+      result.scoreAdjustment -= 12;
+      result.redFlags.push(`Lucro não vira dinheiro: Para cada R$ 1,00 de lucro no papel, apenas R$ ${metrics.cashConversionRatio.toFixed(2)} viram dinheiro real. Pode ser "lucro de papel" ou problemas de cobrança.`);
+    }
   }
   
   return result;
@@ -812,16 +1494,31 @@ function analyzeStabilityMetrics(
 ): AnalysisResult {
   const result: AnalysisResult = { scoreAdjustment: 0, redFlags: [], positiveSignals: [] };
   
-  // Revenue Stability
+  const isFinancialSector = sectorContext.type === 'FINANCIAL';
+  
+  // Revenue Stability - Adaptado para setor financeiro
   if (metrics.revenueStability >= 0.8) {
     result.scoreAdjustment += 15;
-    result.positiveSignals.push(`Vendas muito previsíveis: As receitas da empresa são muito estáveis ao longo dos anos (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Isso dá segurança para planejar dividendos.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Receitas muito previsíveis: A instituição apresenta receitas estáveis ao longo dos anos (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Para seguradoras, indica carteira bem diversificada e sinistralidade controlada.`);
+    } else {
+      result.positiveSignals.push(`Vendas muito previsíveis: As receitas da empresa são muito estáveis ao longo dos anos (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Isso dá segurança para planejar dividendos.`);
+    }
   } else if (metrics.revenueStability >= 0.6) {
     result.scoreAdjustment += 8;
-    result.positiveSignals.push(`Vendas relativamente previsíveis: As receitas têm boa consistência ao longo dos anos. Empresa com negócio estável.`);
+    if (isFinancialSector) {
+      result.positiveSignals.push(`Receitas relativamente previsíveis: A instituição tem boa consistência nas receitas ao longo dos anos. Negócio com base sólida.`);
+    } else {
+      result.positiveSignals.push(`Vendas relativamente previsíveis: As receitas têm boa consistência ao longo dos anos. Empresa com negócio estável.`);
+    }
   } else if (metrics.revenueStability < 0.3) {
-    result.scoreAdjustment -= 15;
-    result.redFlags.push(`Vendas imprevisíveis: As receitas variam muito de ano para ano (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Dificulta planejamento e pode afetar dividendos.`);
+    if (isFinancialSector) {
+      result.scoreAdjustment -= 8; // Penalidade menor para setor financeiro
+      result.positiveSignals.push(`Receitas com variação: As receitas variam entre os anos (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Para seguradoras, pode refletir ciclos de sinistralidade ou mudanças no portfólio, sendo comum no setor.`);
+    } else {
+      result.scoreAdjustment -= 15;
+      result.redFlags.push(`Vendas imprevisíveis: As receitas variam muito de ano para ano (${(metrics.revenueStability * 100).toFixed(0)}% de consistência). Dificulta planejamento e pode afetar dividendos.`);
+    }
   }
   
   // Margin Stability
@@ -942,99 +1639,6 @@ interface SizeContext {
   growthExpectation: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
-// Avaliar força geral da empresa
-function assessCompanyStrength(data: FinancialStatementsData): StatementsAnalysis['companyStrength'] {
-  const { incomeStatements, balanceSheets, cashflowStatements } = data;
-  
-  if (!incomeStatements.length || !balanceSheets.length || !cashflowStatements.length) {
-    return 'WEAK';
-  }
-
-  let strengthScore = 0;
-  const latest = {
-    income: incomeStatements[0],
-    balance: balanceSheets[0],
-    cashflow: cashflowStatements[0]
-  };
-
-  // 1. Posição de caixa (25 pontos) - só avaliar se temos dados
-  const cash = toNumber(latest.balance.cash);
-  const totalAssets = toNumber(latest.balance.totalAssets);
-  
-  if (cash !== null && totalAssets !== null && totalAssets > 0) {
-    const cashRatio = cash / totalAssets;
-    if (cashRatio > 0.15) strengthScore += 25;
-    else if (cashRatio > 0.08) strengthScore += 15;
-    else if (cashRatio > 0.03) strengthScore += 8;
-  } else {
-    // Dar benefício da dúvida - assumir posição média
-    strengthScore += 12; // Valor intermediário
-  }
-
-  // 2. Liquidez corrente (20 pontos) - só avaliar se temos dados
-  const currentAssets = toNumber(latest.balance.totalCurrentAssets);
-  const currentLiabilities = toNumber(latest.balance.totalCurrentLiabilities);
-  
-  if (currentAssets !== null && currentLiabilities !== null && currentLiabilities > 0) {
-    const currentRatio = currentAssets / currentLiabilities;
-    if (currentRatio > 2.0) strengthScore += 20;
-    else if (currentRatio > 1.5) strengthScore += 15;
-    else if (currentRatio > 1.2) strengthScore += 10;
-    else if (currentRatio > 1.0) strengthScore += 5;
-  } else {
-    // Dar benefício da dúvida - assumir liquidez adequada
-    strengthScore += 10; // Valor intermediário
-  }
-
-  // 3. Rentabilidade (25 pontos) - só avaliar se temos dados
-  const netIncome = toNumber(latest.income.netIncome);
-  const revenue = toNumber(latest.income.totalRevenue) || toNumber(latest.income.operatingIncome);
-  
-  if (netIncome !== null && revenue !== null && revenue > 0) {
-    const netMargin = netIncome / revenue;
-    if (netMargin > 0.15) strengthScore += 25;
-    else if (netMargin > 0.08) strengthScore += 18;
-    else if (netMargin > 0.03) strengthScore += 10;
-    else if (netMargin > 0) strengthScore += 5;
-  } else {
-    // Dar benefício da dúvida - assumir rentabilidade média
-    strengthScore += 12; // Valor intermediário
-  }
-
-  // 4. Endividamento (15 pontos) - só avaliar se temos dados
-  const totalLiab = toNumber(latest.balance.totalLiab);
-  const equity = toNumber(latest.balance.totalStockholderEquity);
-  
-  if (totalLiab !== null && equity !== null && (totalLiab + equity) > 0) {
-    const debtRatio = totalLiab / (totalLiab + equity);
-    if (debtRatio < 0.3) strengthScore += 15;
-    else if (debtRatio < 0.5) strengthScore += 10;
-    else if (debtRatio < 0.7) strengthScore += 5;
-  } else {
-    // Dar benefício da dúvida - assumir endividamento controlado
-    strengthScore += 10; // Valor intermediário
-  }
-
-  // 5. Fluxo de caixa operacional (15 pontos) - só avaliar se temos dados
-  const opCashFlow = toNumber(latest.cashflow.operatingCashFlow);
-  if (opCashFlow !== null && revenue !== null && revenue > 0) {
-    if (opCashFlow > 0) {   
-      const cashFlowMargin = opCashFlow / revenue;
-      if (cashFlowMargin > 0.12) strengthScore += 15;
-      else if (cashFlowMargin > 0.06) strengthScore += 10;
-      else if (cashFlowMargin > 0.02) strengthScore += 5;
-    }
-  } else {
-    // Dar benefício da dúvida - assumir fluxo de caixa adequado
-    strengthScore += 7; // Valor intermediário
-  }
-
-  // Classificar força da empresa
-  if (strengthScore >= 80) return 'VERY_STRONG';
-  if (strengthScore >= 60) return 'STRONG';
-  if (strengthScore >= 40) return 'MODERATE';
-  return 'WEAK';
-}
 
 // === ANÁLISE DA COMPOSIÇÃO DO RESULTADO ===
 function analyzeIncomeComposition(
@@ -1419,79 +2023,6 @@ function calculateAnnualTrends(revenues: number[], netIncomes: number[]) {
     revenueVolatility: avgRevenueChange,
     validComparisons: Math.min(validRevenueComparisons, validProfitComparisons)
   };
-}
-
-// Análise contextual de posição de caixa
-function analyzeCashPosition(
-  balanceSheets: Record<string, unknown>[],
-  cashflowStatements: Record<string, unknown>[],
-  companyStrength: StatementsAnalysis['companyStrength'],
-  sectorContext: SectorContext
-): AnalysisResult {
-  const result: AnalysisResult = {
-    scoreAdjustment: 0,
-    redFlags: [],
-    positiveSignals: [],
-    contextualFactors: []
-  };
-
-  if (!balanceSheets.length || !cashflowStatements.length) return result;
-
-    const latest = balanceSheets[0];
-  const latestCashflow = cashflowStatements[0];
-  
-  const cash = toNumber(latest.cash);
-  const totalAssets = toNumber(latest.totalAssets);
-  const currentAssets = toNumber(latest.totalCurrentAssets);
-  const currentLiabilities = toNumber(latest.totalCurrentLiabilities);
-  const opCashFlow = toNumber(latestCashflow.operatingCashFlow);
-
-  // Só calcular se temos dados válidos - dar benefício da dúvida se não temos
-  const cashRatio = (cash !== null && totalAssets !== null && totalAssets > 0) ? cash / totalAssets : null;
-  const currentRatio = (currentAssets !== null && currentLiabilities !== null && currentLiabilities > 0) ? currentAssets / currentLiabilities : null;
-  // Análise contextual baseada na força da empresa
-  if (companyStrength === 'VERY_STRONG' || companyStrength === 'STRONG') {
-    // Empresas fortes podem suportar quedas temporárias de fluxo de caixa
-    if (opCashFlow !== null && opCashFlow < 0) {
-      if (cashRatio !== null && cashRatio > 0.1) {
-        result.scoreAdjustment -= 5; // Penalidade menor
-        result.contextualFactors?.push('Empresa robusta com reservas para superar dificuldades temporárias');
-      } else if (cashRatio !== null) {
-        result.scoreAdjustment -= 10;
-        result.redFlags.push('Queima de caixa em empresa sólida - monitorar de perto');
-      }
-    }
-    
-    if (currentRatio !== null && currentRatio > 1.5) {
-      result.scoreAdjustment += 5;
-      result.positiveSignals.push('Liquidez robusta em empresa sólida');
-    }
-  } else {
-    // Empresas fracas precisam de mais caixa - mas só penalizar se temos dados
-    if (opCashFlow !== null && opCashFlow < 0) {
-      result.scoreAdjustment -= 20;
-      result.redFlags.push('Queima de caixa em empresa frágil - risco elevado');
-    }
-    
-    // Só penalizar liquidez baixa se realmente temos os dados
-    if (currentRatio !== null && currentRatio < 1.2) {
-      result.scoreAdjustment -= 15;
-      result.redFlags.push('Liquidez baixa em empresa frágil');
-    } else if (currentRatio === null) {
-      result.contextualFactors?.push('Dados de liquidez não disponíveis - benefício da dúvida aplicado');
-    }
-  }
-
-  // Contexto setorial - só avaliar se temos dados
-  if (sectorContext.cashIntensive && cashRatio !== null) {
-    if (cashRatio > 0.15) {
-      result.positiveSignals.push('Posição de caixa adequada para setor intensivo em capital');
-    } else if (cashRatio < 0.05) {
-      result.redFlags.push('Posição de caixa baixa para setor que requer reservas');
-    }
-  }
-
-  return result;
 }
 
 // Análise contextual de qualidade de receita

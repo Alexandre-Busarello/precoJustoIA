@@ -67,7 +67,7 @@ export async function getStatementsData(
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 4; // Últimos 5 anos
 
-    const [incomeStatements, balanceSheets, cashflowStatements] = await Promise.all([
+    const [incomeStatements, balanceSheets, cashflowStatements, financialData] = await Promise.all([
       prisma.incomeStatement.findMany({
         where: {
           companyId: parseInt(companyId),
@@ -94,11 +94,92 @@ export async function getStatementsData(
         },
         orderBy: { endDate: 'desc' },
         take: 7
+      }),
+      // Buscar dados financeiros calculados como fallback
+      prisma.financialData.findMany({
+        where: {
+          companyId: parseInt(companyId),
+          year: { gte: startYear }
+        },
+        orderBy: { year: 'desc' },
+        take: 7,
+        select: {
+          year: true,
+          roe: true,
+          roa: true,
+          margemLiquida: true,
+          margemBruta: true,
+          margemEbitda: true,
+          liquidezCorrente: true,
+          liquidezRapida: true,
+          debtToEquity: true,
+          dividaLiquidaPl: true,
+          giroAtivos: true,
+          cagrLucros5a: true,
+          cagrReceitas5a: true,
+          crescimentoLucros: true,
+          crescimentoReceitas: true,
+          fluxoCaixaOperacional: true,
+          fluxoCaixaLivre: true,
+          totalCaixa: true,
+          totalDivida: true,
+          ativoTotal: true,
+          patrimonioLiquido: true,
+          passivoCirculante: true,
+          ativoCirculante: true
+        }
       })
     ]);
 
     if (incomeStatements.length === 0 && balanceSheets.length === 0 && cashflowStatements.length === 0) {
       return undefined;
+    }
+
+    // Processar dados financeiros para fallback
+    let financialDataFallback = undefined;
+    if (financialData.length > 0) {
+      // Converter Decimal para number e organizar por indicador
+      const years = financialData.map(fd => fd.year);
+      
+      // Função auxiliar para converter e filtrar valores válidos
+      const processValues = (values: (any | null)[]): number[] => {
+        return values
+          .map(v => v && typeof v === 'object' && 'toNumber' in v ? v.toNumber() : v)
+          .filter(v => v !== null && v !== undefined && !isNaN(v)) as number[];
+      };
+
+      financialDataFallback = {
+        years,
+        roe: processValues(financialData.map(fd => fd.roe)),
+        roa: processValues(financialData.map(fd => fd.roa)),
+        margemLiquida: processValues(financialData.map(fd => fd.margemLiquida)),
+        margemBruta: processValues(financialData.map(fd => fd.margemBruta)),
+        margemEbitda: processValues(financialData.map(fd => fd.margemEbitda)),
+        liquidezCorrente: processValues(financialData.map(fd => fd.liquidezCorrente)),
+        liquidezRapida: processValues(financialData.map(fd => fd.liquidezRapida)),
+        debtToEquity: processValues(financialData.map(fd => fd.debtToEquity)),
+        dividaLiquidaPl: processValues(financialData.map(fd => fd.dividaLiquidaPl)),
+        giroAtivos: processValues(financialData.map(fd => fd.giroAtivos)),
+        crescimentoLucros: processValues(financialData.map(fd => fd.crescimentoLucros)),
+        crescimentoReceitas: processValues(financialData.map(fd => fd.crescimentoReceitas)),
+        fluxoCaixaOperacional: processValues(financialData.map(fd => fd.fluxoCaixaOperacional)),
+        fluxoCaixaLivre: processValues(financialData.map(fd => fd.fluxoCaixaLivre)),
+        totalCaixa: processValues(financialData.map(fd => fd.totalCaixa)),
+        totalDivida: processValues(financialData.map(fd => fd.totalDivida)),
+        ativoTotal: processValues(financialData.map(fd => fd.ativoTotal)),
+        patrimonioLiquido: processValues(financialData.map(fd => fd.patrimonioLiquido)),
+        passivoCirculante: processValues(financialData.map(fd => fd.passivoCirculante)),
+        ativoCirculante: processValues(financialData.map(fd => fd.ativoCirculante)),
+        // CAGR são valores únicos (pegar o mais recente)
+        cagrLucros5a: financialData[0]?.cagrLucros5a ? 
+          (typeof financialData[0].cagrLucros5a === 'object' && 'toNumber' in financialData[0].cagrLucros5a ? 
+            financialData[0].cagrLucros5a.toNumber() : financialData[0].cagrLucros5a) : null,
+        cagrReceitas5a: financialData[0]?.cagrReceitas5a ? 
+          (typeof financialData[0].cagrReceitas5a === 'object' && 'toNumber' in financialData[0].cagrReceitas5a ? 
+            financialData[0].cagrReceitas5a.toNumber() : financialData[0].cagrReceitas5a) : null
+      };
+
+      console.log(`Dados de fallback carregados para ${ticker}: ${years.length} anos de dados`);
     }
 
     // Serializar os dados
@@ -146,7 +227,8 @@ export async function getStatementsData(
         sector: sector,
         industry: industry,
         marketCap: null // MarketCap será obtido de outra fonte se necessário
-      }
+      },
+      financialDataFallback
     };
 
     return statementsData;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
+import { sendPaymentFailureEmail } from '@/lib/email-service'
 import Stripe from 'stripe'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -173,14 +174,45 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
     return false
   }
 
+  // CORREÇÃO CRÍTICA: Só ativar Premium se a subscription estiver ativa
+  if (subscription.status !== 'active') {
+    console.log(`⚠️ Subscription ${subscription.id} created but not active (status: ${subscription.status})`)
+    console.log('🔄 Waiting for payment confirmation before activating Premium')
+    
+    // Salvar os dados da subscription mas não ativar Premium ainda
+    try {
+      const currentPeriodEnd = (subscription as any).current_period_end
+      const periodEndDate = currentPeriodEnd 
+        ? new Date(currentPeriodEnd * 1000)
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          stripeCustomerId: subscription.customer as string,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: subscription.items.data[0].price.id,
+          stripeCurrentPeriodEnd: periodEndDate,
+          // NÃO ativar Premium ainda - aguardar pagamento
+        },
+      })
+
+      console.log(`📝 Subscription data saved for user ${userId}, awaiting payment confirmation`)
+      return true
+    } catch (error) {
+      console.error('❌ Error saving subscription data:', error)
+      return false
+    }
+  }
+
+  // Se chegou aqui, a subscription está ativa - pode ativar Premium
   try {
     const currentPeriodEnd = (subscription as any).current_period_end
     console.log('🗓️ Raw current_period_end:', currentPeriodEnd)
     
-    // Verificar se current_period_end existe e é válido
     const periodEndDate = currentPeriodEnd 
       ? new Date(currentPeriodEnd * 1000)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias a partir de agora como fallback
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     
     console.log('📅 Converted period end date:', periodEndDate)
     console.log('✅ Date is valid:', !isNaN(periodEndDate.getTime()))
@@ -205,7 +237,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
       },
     })
 
-    console.log(`✅ Subscription created successfully for user ${userId}`)
+    console.log(`✅ Subscription created and activated for user ${userId}`)
     console.log(`🎉 User ${userEmail} is now PREMIUM!`)
     return true
   } catch (error) {
@@ -356,7 +388,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<boolean> {
-  console.log('Invoice payment failed:', invoice.id)
+  console.log('💳 Invoice payment failed:', invoice.id)
 
   // Verificar se há subscription associada
   const subscriptionId = (invoice as any).subscription
@@ -376,12 +408,64 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<bool
       return false
     }
 
-    // Se o pagamento falhou, podemos manter o usuário como PREMIUM até o final do período
-    // ou downgrade imediatamente dependendo da política
-    console.log(`⚠️ Payment failed for user ${user.id}, subscription: ${subscription.id}`)
+    console.log(`⚠️ Payment failed for user ${user.id} (${user.email}), subscription: ${subscription.id}`)
     
-    // Por enquanto, vamos manter o usuário como PREMIUM até o final do período
-    // Em uma implementação real, você pode querer implementar uma lógica mais sofisticada
+    // Buscar detalhes do erro do pagamento
+    let failureReason = 'Falha no processamento do pagamento'
+    if (invoice.last_finalization_error?.message) {
+      failureReason = invoice.last_finalization_error.message
+    } else if ((invoice as any).charge && typeof (invoice as any).charge === 'string') {
+      try {
+        const charge = await stripe.charges.retrieve((invoice as any).charge)
+        if (charge.failure_message) {
+          failureReason = charge.failure_message
+        }
+      } catch (chargeError) {
+        console.log('Could not retrieve charge details:', chargeError)
+      }
+    }
+
+    // Traduzir mensagens de erro comuns para português
+    const errorTranslations: Record<string, string> = {
+      'insufficient_funds': 'Saldo insuficiente no cartão',
+      'card_declined': 'Cartão recusado pelo banco',
+      'expired_card': 'Cartão vencido',
+      'incorrect_cvc': 'Código de segurança incorreto',
+      'processing_error': 'Erro no processamento do pagamento',
+      'generic_decline': 'Pagamento recusado pelo banco'
+    }
+
+    // Buscar tradução ou usar mensagem original
+    const translatedReason = Object.keys(errorTranslations).find(key => 
+      failureReason.toLowerCase().includes(key)
+    ) ? errorTranslations[Object.keys(errorTranslations).find(key => 
+      failureReason.toLowerCase().includes(key)
+    )!] : failureReason
+
+    console.log(`📧 Sending payment failure email to ${user.email}`)
+    console.log(`🔍 Failure reason: ${translatedReason}`)
+
+    // Enviar email de notificação sobre falha no pagamento
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
+    const retryUrl = `${baseUrl}/dashboard?retry_payment=true`
+    
+    try {
+      await sendPaymentFailureEmail(
+        user.email,
+        retryUrl,
+        user.name || undefined,
+        translatedReason
+      )
+      console.log(`✅ Payment failure email sent to ${user.email}`)
+    } catch (emailError) {
+      console.error('❌ Failed to send payment failure email:', emailError)
+      // Não falhar o webhook por causa do email
+    }
+
+    // Manter o usuário como PREMIUM até o final do período atual
+    // A subscription será cancelada automaticamente pelo Stripe se não conseguir cobrar
+    console.log(`📝 Maintaining Premium access until period end for user ${user.id}`)
+    
     return true
   } catch (error) {
     console.error('❌ Error handling invoice payment failed:', error)
@@ -440,7 +524,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 }
 
 async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<boolean> {
-  console.log('Payment Intent failed:', paymentIntent.id)
+  console.log('💳 Payment Intent failed:', paymentIntent.id)
 
   const userId = paymentIntent.metadata?.userId
 
@@ -449,9 +533,66 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): P
     return false
   }
 
-  console.log(`⚠️ Payment failed for user ${userId}, payment intent: ${paymentIntent.id}`)
-  
-  // Por enquanto, apenas logamos o erro
-  // Em uma implementação real, você pode querer notificar o usuário ou tomar outras ações
-  return true // Consideramos sucesso pois processamos o evento de falha
+  try {
+    // Buscar dados do usuário
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    })
+
+    if (!user) {
+      console.error('❌ User not found:', userId)
+      return false
+    }
+
+    console.log(`⚠️ Payment failed for user ${userId} (${user.email}), payment intent: ${paymentIntent.id}`)
+    
+    // Buscar motivo da falha
+    let failureReason = 'Falha no processamento do pagamento'
+    if (paymentIntent.last_payment_error?.message) {
+      failureReason = paymentIntent.last_payment_error.message
+    }
+
+    // Traduzir mensagens de erro comuns para português
+    const errorTranslations: Record<string, string> = {
+      'insufficient_funds': 'Saldo insuficiente no cartão',
+      'card_declined': 'Cartão recusado pelo banco',
+      'expired_card': 'Cartão vencido',
+      'incorrect_cvc': 'Código de segurança incorreto',
+      'processing_error': 'Erro no processamento do pagamento',
+      'generic_decline': 'Pagamento recusado pelo banco',
+      'authentication_required': 'Autenticação adicional necessária'
+    }
+
+    // Buscar tradução ou usar mensagem original
+    const translatedReason = Object.keys(errorTranslations).find(key => 
+      failureReason.toLowerCase().includes(key)
+    ) ? errorTranslations[Object.keys(errorTranslations).find(key => 
+      failureReason.toLowerCase().includes(key)
+    )!] : failureReason
+
+    console.log(`📧 Sending payment failure email to ${user.email}`)
+    console.log(`🔍 Failure reason: ${translatedReason}`)
+
+    // Enviar email de notificação sobre falha no pagamento
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+    const retryUrl = `${baseUrl}/dashboard?retry_payment=true`
+    
+    try {
+      await sendPaymentFailureEmail(
+        user.email,
+        retryUrl,
+        user.name || undefined,
+        translatedReason
+      )
+      console.log(`✅ Payment failure email sent to ${user.email}`)
+    } catch (emailError) {
+      console.error('❌ Failed to send payment failure email:', emailError)
+      // Não falhar o webhook por causa do email
+    }
+
+    return true // Consideramos sucesso pois processamos o evento de falha
+  } catch (error) {
+    console.error('❌ Error handling payment intent failed:', error)
+    return false
+  }
 }

@@ -62,7 +62,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
 }
 
 export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
   const logoUrl = `${baseUrl}/logo-preco-justo.png`
   
   return {

@@ -118,24 +118,24 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
   // NOTA: Estratégias individuais foram removidas pois já estão incluídas no overallScore
   const weights = {
     // Indicadores Básicos (25%)
-    pl: 0.08,           // 8% - Valuation fundamental
-    pvp: 0.04,          // 4% - Valor patrimonial
-    roe: 0.08,          // 8% - Rentabilidade principal
-    dy: 0.05,           // 5% - Dividendos
+    pl: 0.05,           // 5% - Valuation fundamental
+    pvp: 0.015,          // 1.5% - Valor patrimonial
+    roe: 0.05,          // 5% - Rentabilidade principal
+    dy: 0.015,           // 1.5% - Dividendos
     
     // Indicadores Avançados (18%)
-    margemLiquida: 0.06, // 6% - Eficiência operacional
-    roic: 0.08,         // 8% - Retorno sobre capital
-    dividaLiquidaEbitda: 0.04, // 4% - Endividamento
+    margemLiquida: 0.015, // 1.5% - Eficiência operacional
+    roic: 0.015,         // 1.5% - Retorno sobre capital
+    dividaLiquidaEbitda: 0.015, // 1.5% - Endividamento
     
     // Indicadores de Crescimento (7%) - Influência leve conforme solicitado
-    cagrLucros5a: 0.02,     // 2% - Crescimento histórico de lucros
-    cagrReceitas5a: 0.02,   // 2% - Crescimento histórico de receitas
+    cagrLucros5a: 0.015,     // 1.5% - Crescimento histórico de lucros
+    cagrReceitas5a: 0.015,   // 1.5% - Crescimento histórico de receitas
     crescimentoLucros: 0.015, // 1.5% - Crescimento recente de lucros
     crescimentoReceitas: 0.015, // 1.5% - Crescimento recente de receitas
     
     // Score Geral (50%) - Peso principal pois inclui análise completa
-    overallScore: 0.50,  // 50% - Análise consolidada (inclui Graham, DY, LowPE, Magic Formula, FCD, Gordon + Demonstrações)
+    overallScore: 0.765,  // 65% - Análise consolidada (inclui Graham, DY, LowPE, Magic Formula, FCD, Gordon + Demonstrações)
   }
   
   // OTIMIZAÇÃO 1: Executar todas as estratégias em paralelo primeiro
@@ -230,14 +230,39 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     let inflatedIndicators = 0
     
     if (companyFinancialData) {
-      // Verificar indicadores críticos
+      // Verificar indicadores críticos (com fallbacks)
+      const keyStats = (company as any).keyStatistics?.[0];
       const criticalIndicators = [
-        { key: 'pl', value: toNumber(companyFinancialData.pl as PrismaDecimal), maxInflated: 100 },
-        { key: 'pvp', value: toNumber(companyFinancialData.pvp as PrismaDecimal), maxInflated: 10 },
-        { key: 'roe', value: toNumber(companyFinancialData.roe as PrismaDecimal), maxInflated: 1 }, // 100%
-        { key: 'dy', value: toNumber(companyFinancialData.dy as PrismaDecimal), maxInflated: 0.3 }, // 30%
-        { key: 'margemLiquida', value: toNumber(companyFinancialData.margemLiquida as PrismaDecimal), maxInflated: 1 }, // 100%
-        { key: 'roic', value: toNumber(companyFinancialData.roic as PrismaDecimal), maxInflated: 1 }, // 100%
+        { 
+          key: 'pl', 
+          value: toNumber(companyFinancialData.pl as PrismaDecimal) ?? (keyStats?.forwardPE ? toNumber(keyStats.forwardPE) : null), 
+          maxInflated: 100 
+        },
+        { 
+          key: 'pvp', 
+          value: toNumber(companyFinancialData.pvp as PrismaDecimal) ?? (keyStats?.priceToBook ? toNumber(keyStats.priceToBook) : null), 
+          maxInflated: 10 
+        },
+        { 
+          key: 'roe', 
+          value: toNumber(companyFinancialData.roe as PrismaDecimal), 
+          maxInflated: 1 
+        }, // 100%
+        { 
+          key: 'dy', 
+          value: toNumber(companyFinancialData.dy as PrismaDecimal) ?? (keyStats?.dividendYield ? toNumber(keyStats.dividendYield)! / 100 : null), 
+          maxInflated: 0.3 
+        }, // 30%
+        { 
+          key: 'margemLiquida', 
+          value: toNumber(companyFinancialData.margemLiquida as PrismaDecimal), 
+          maxInflated: 1 
+        }, // 100%
+        { 
+          key: 'roic', 
+          value: toNumber(companyFinancialData.roic as PrismaDecimal), 
+          maxInflated: 1 
+        }, // 100%
       ]
       
       criticalIndicators.forEach(indicator => {
@@ -912,6 +937,10 @@ export default async function CompareStocksPage({ params }: PageProps) {
       dailyQuotes: {
         orderBy: { date: 'desc' },
         take: 1
+      },
+      keyStatistics: {
+        orderBy: { endDate: 'desc' },
+        take: 1
       }
     }
   })
@@ -1178,7 +1207,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
             <ComparisonIndicatorCard
               title="P/L (Preço/Lucro)"
               values={orderedCompanies.map(c => {
-                const pl = toNumber(c.financialData[0]?.pl)
+                const pl = toNumber(c.financialData[0]?.pl) ?? toNumber(c.keyStatistics[0]?.forwardPE)
                 return pl ? pl.toFixed(2) : 'N/A'
               })}
               tickers={orderedCompanies.map(c => c.ticker)}
@@ -1193,7 +1222,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
             <ComparisonIndicatorCard
               title="P/VP (Preço/Valor Patrimonial)"
               values={orderedCompanies.map(c => {
-                const pvp = toNumber(c.financialData[0]?.pvp)
+                const pvp = toNumber(c.financialData[0]?.pvp) ?? toNumber(c.keyStatistics[0]?.priceToBook)
                 return pvp ? pvp.toFixed(2) : 'N/A'
               })}
               tickers={orderedCompanies.map(c => c.ticker)}
@@ -1223,7 +1252,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
             <ComparisonIndicatorCard
               title="Dividend Yield"
               values={orderedCompanies.map(c => {
-                const dy = toNumber(c.financialData[0]?.dy)
+                const dy = toNumber(c.financialData[0]?.dy) ?? (toNumber(c.keyStatistics[0]?.dividendYield) ? toNumber(c.keyStatistics[0]?.dividendYield)! / 100 : null)
                 return dy ? formatPercent(dy) : 'N/A'
               })}
               tickers={orderedCompanies.map(c => c.ticker)}
@@ -1517,6 +1546,12 @@ export default async function CompareStocksPage({ params }: PageProps) {
                 crescimentoLucros: toNumber(company.financialData[0].crescimentoLucros),
                 crescimentoReceitas: toNumber(company.financialData[0].crescimentoReceitas),
               } : null,
+              // Adicionar keyStatistics para fallbacks
+              keyStatistics: company.keyStatistics?.length > 0 ? [{
+                forwardPE: toNumber(company.keyStatistics[0].forwardPE),
+                priceToBook: toNumber(company.keyStatistics[0].priceToBook),
+                dividendYield: toNumber(company.keyStatistics[0].dividendYield)
+              }] : undefined,
               historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined,
               strategies,
               overallScore

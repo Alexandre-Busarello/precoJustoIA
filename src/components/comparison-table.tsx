@@ -49,6 +49,12 @@ interface CompanyData {
     crescimentoLucros?: number | null
     crescimentoReceitas?: number | null
   } | null
+  // Dados de fallback
+  keyStatistics?: Array<{
+    forwardPE?: number | null
+    priceToBook?: number | null
+    dividendYield?: number | null
+  }>
   // Dados históricos para médias
   historicalFinancials?: Array<{
     year: number
@@ -410,8 +416,28 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                     return strategy?.score || null
                   }
                   
-                  // Indicadores Financeiros
-                  return c.financialData ? (c.financialData as Record<string, number | null>)[indicator.key] : null
+                  // Indicadores Financeiros com fallbacks
+                  if (c.financialData) {
+                    const financialData = c.financialData as Record<string, number | null>
+                    const keyStats = (c as any).keyStatistics?.[0] // Assumindo que keyStatistics foi incluído
+                    
+                    // Aplicar fallbacks específicos
+                    switch (indicator.key) {
+                      case 'pl':
+                        return financialData.pl ?? (keyStats?.forwardPE ? Number(keyStats.forwardPE) : null)
+                      
+                      case 'pvp':
+                        return financialData.pvp ?? (keyStats?.priceToBook ? Number(keyStats.priceToBook) : null)
+                      
+                      case 'dy':
+                        return financialData.dy ?? (keyStats?.dividendYield ? Number(keyStats.dividendYield) / 100 : null)
+                      
+                      default:
+                        return financialData[indicator.key]
+                    }
+                  }
+                  
+                  return null
                 })
                 const { bestIndex, tiedIndices, historicalAverages } = getBestValueInfo(values, indicator.getBestType(), indicator.key)
                 const shouldBlur = indicator.isPremium && !userIsPremium

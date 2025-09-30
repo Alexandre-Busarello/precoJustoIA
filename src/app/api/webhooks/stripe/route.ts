@@ -525,7 +525,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<bool
 
     // Enviar email de notificação sobre falha no pagamento
     const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
-    const retryUrl = `${baseUrl}/dashboard?retry_payment=true`
+    const retryUrl = `${baseUrl}/checkout?retry_payment=true`
     
     try {
       await sendPaymentFailureEmail(
@@ -653,7 +653,7 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): P
 
     // Enviar email de notificação sobre falha no pagamento
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
-    const retryUrl = `${baseUrl}/dashboard?retry_payment=true`
+    const retryUrl = `${baseUrl}/checkout?retry_payment=true`
     
     try {
       await sendPaymentFailureEmail(

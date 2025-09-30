@@ -1216,11 +1216,15 @@ async function getExistingDataDates(
 
 // Função para filtrar dados que ainda não existem no banco
 function filterMissingData<T extends { endDate?: string; updatedAt?: string }>(
-  dataArray: T[] | undefined,
+  dataArray: T[] | undefined | null,
   existingDates: Set<string>,
   period: 'YEARLY' | 'QUARTERLY'
 ): T[] {
-  if (!dataArray || dataArray.length === 0) return [];
+  // Verificação mais robusta para garantir que dataArray é um array válido
+  if (!dataArray || !Array.isArray(dataArray) || dataArray.length === 0) {
+    console.log(`  ⚠️  Dados não disponíveis ou não é um array válido para período ${period}`);
+    return [];
+  }
   
   // Se não há dados existentes, processar todos os dados históricos
   const hasExistingData = existingDates.size > 0;

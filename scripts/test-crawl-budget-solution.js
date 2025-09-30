@@ -12,6 +12,7 @@ const BASE_URL = 'https://precojusto.ai';
 const TEST_URLS = [
   '/sitemap.xml',
   '/sitemap-index.xml', 
+  '/sitemap-blog.xml',
   '/sitemap-companies.xml',
   '/sitemap-comparisons.xml',
   '/robots.txt'

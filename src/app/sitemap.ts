@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next'
 import { prisma } from '@/lib/prisma'
+import { blogPosts } from '@/lib/blog-data'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://precojusto.ai'
@@ -73,6 +74,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     },
   ]
+
+  // URLs do blog - artigos individuais
+  const blogUrls: MetadataRoute.Sitemap = blogPosts.map((post) => ({
+    url: `${baseUrl}/blog/${post.slug}`,
+    lastModified: new Date(post.publishDate),
+    changeFrequency: 'monthly' as const,
+    priority: post.featured ? 0.8 : 0.6, // Posts em destaque têm prioridade maior
+  }))
 
   try {
     // Buscar todas as empresas para gerar URLs das ações
@@ -209,12 +218,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Combinar todas as URLs
     const allUrls = [
       ...staticUrls,
+      ...blogUrls,
       ...companyUrls,
       ...finalComparisonUrls,
     ]
 
     console.log(`✅ Sitemap otimizado gerado com ${allUrls.length} URLs total`)
-    console.log(`📊 Breakdown: ${staticUrls.length} estáticas + ${companyUrls.length} empresas + ${finalComparisonUrls.length} comparações`)
+    console.log(`📊 Breakdown: ${staticUrls.length} estáticas + ${blogUrls.length} blog + ${companyUrls.length} empresas + ${finalComparisonUrls.length} comparações`)
     
     // Estatísticas por prioridade
     const priorityStats = allUrls.reduce((acc, url) => {
@@ -230,7 +240,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   } catch (error) {
     console.error('❌ Erro ao gerar sitemap:', error)
     
-    // Retornar apenas URLs estáticas em caso de erro
-    return staticUrls
+    // Retornar URLs estáticas + blog em caso de erro
+    return [...staticUrls, ...blogUrls]
   }
 }

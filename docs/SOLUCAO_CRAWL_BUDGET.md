@@ -26,13 +26,19 @@
 - ✅ **changeFrequency: weekly**
 - ✅ **Cache de 24 horas**
 
-#### **C. Sitemap de Comparações (`/sitemap-comparisons.xml`)**
+#### **C. Sitemap do Blog (`/sitemap-blog.xml`)**
+- ✅ **Todas as páginas do blog** (`/blog` + `/blog/[slug]`)
+- ✅ **5 artigos de alta qualidade**
+- ✅ **Posts em destaque com priority 0.8**
+- ✅ **Posts normais com priority 0.6**
+
+#### **D. Sitemap de Comparações (`/sitemap-comparisons.xml`)**
 - ✅ **Apenas 500 comparações de alta qualidade**
 - ✅ **Filtro por market cap > 1 bilhão**
 - ✅ **Apenas top 3 empresas por setor**
 - ✅ **Priority 0.8-0.9 baseada em relevância**
 
-#### **D. Sitemap Index (`/sitemap-index.xml`)**
+#### **E. Sitemap Index (`/sitemap-index.xml`)**
 - ✅ **Organiza todos os sitemaps**
 - ✅ **lastModified específico por tipo**
 - ✅ **Facilita crawling pelo Google**
@@ -70,8 +76,9 @@
 
 | Métrica | Antes | Depois | Melhoria |
 |---------|-------|--------|----------|
-| **URLs Totais** | ~5.000 | ~1.500 | **-70%** |
+| **URLs Totais** | ~5.000 | ~1.550 | **-69%** |
 | **URLs de Comparação** | 4.441 | 500 | **-89%** |
+| **URLs do Blog** | 0 | 5 | **+100%** |
 | **Qualidade URLs** | Baixa | Alta | **+300%** |
 | **Crawl Budget** | Desperdiçado | Otimizado | **+500%** |
 
@@ -110,6 +117,7 @@ curl https://precojusto.ai/robots.txt
 # 2. Adicionar novos sitemaps
 - Adicionar: /sitemap-index.xml (PRINCIPAL)
 - Adicionar: /sitemap.xml
+- Adicionar: /sitemap-blog.xml
 - Adicionar: /sitemap-companies.xml  
 - Adicionar: /sitemap-comparisons.xml
 

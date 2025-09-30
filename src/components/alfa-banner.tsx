@@ -27,7 +27,7 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
 
   if (variant === 'landing') {
     return (
-      <div className={`fixed top-0 left-0 right-0 z-40 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-4 mt-[103px] ${className}`}>
+      <div className={`fixed top-0 left-0 right-0 z-40 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-4 mt-[81px] md:mt-[103px] ${className}`}>
         <div className="container mx-auto flex items-center justify-center gap-4 text-sm">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />

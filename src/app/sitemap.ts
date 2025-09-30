@@ -4,91 +4,73 @@ import { prisma } from '@/lib/prisma'
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://precojusto.ai'
   
-  // URLs estáticas
+  // URLs estáticas com lastModified realista
   const staticUrls: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
-      lastModified: new Date(),
+      lastModified: new Date('2025-09-30'), // Data atual - última grande atualização
       changeFrequency: 'daily',
       priority: 1,
     },
     {
       url: `${baseUrl}/ranking`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-09-30'),
       changeFrequency: 'daily',
       priority: 0.9,
     },
     {
       url: `${baseUrl}/backtesting-carteiras`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-09-15'),
       changeFrequency: 'weekly',
       priority: 0.9,
     },
     {
       url: `${baseUrl}/planos`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
+      lastModified: new Date('2025-09-01'),
+      changeFrequency: 'monthly',
       priority: 0.9,
     },
     {
       url: `${baseUrl}/comparador`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-09-30'),
       changeFrequency: 'daily',
       priority: 0.9,
     },
     {
       url: `${baseUrl}/metodologia`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-08-15'),
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/como-funciona`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-08-15'),
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/sobre`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-08-01'),
       changeFrequency: 'monthly',
       priority: 0.7,
     },
     {
       url: `${baseUrl}/fundador`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-07-01'),
       changeFrequency: 'monthly',
       priority: 0.6,
     },
     {
       url: `${baseUrl}/contato`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-07-01'),
       changeFrequency: 'monthly',
       priority: 0.6,
     },
     {
       url: `${baseUrl}/blog`,
-      lastModified: new Date(),
+      lastModified: new Date('2025-09-01'),
       changeFrequency: 'weekly',
       priority: 0.7,
-    },
-    {
-      url: `${baseUrl}/dashboard`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/lgpd`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-    {
-      url: `${baseUrl}/termos-de-uso`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
     },
   ]
 
@@ -106,16 +88,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     console.log(`📊 Gerando sitemap com ${companies.length} empresas`)
 
-    // URLs das páginas individuais de ações
+    // URLs das páginas individuais de ações - ALTA PRIORIDADE
     const companyUrls: MetadataRoute.Sitemap = companies.map((company) => ({
       url: `${baseUrl}/acao/${company.ticker.toLowerCase()}`,
-      lastModified: company.updatedAt || new Date(),
-      changeFrequency: 'daily' as const,
+      lastModified: company.updatedAt || new Date('2025-09-01'),
+      changeFrequency: 'weekly' as const, // Mudou de daily para weekly
       priority: 0.8,
     }))
 
-    // ESTRATÉGIA INTELIGENTE DE COMPARAÇÕES
-    // Buscar todas as empresas com dados financeiros, agrupadas por setor e indústria
+    // ESTRATÉGIA OTIMIZADA DE COMPARAÇÕES - APENAS AS MAIS RELEVANTES
     const companiesForComparison = await prisma.company.findMany({
       select: {
         ticker: true,
@@ -147,20 +128,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }
     })
 
-    // Filtrar empresas com market cap válido
+    // Filtrar apenas empresas com market cap significativo (> 1 bilhão)
     const validCompanies = companiesForComparison
-      .filter(company => company.financialData[0]?.marketCap)
+      .filter(company => {
+        const marketCap = Number(company.financialData[0]?.marketCap || 0)
+        return marketCap > 1000000000 // Apenas empresas com market cap > 1 bi
+      })
       .map(company => ({
         ...company,
         marketCap: Number(company.financialData[0]?.marketCap || 0)
       }))
       .sort((a, b) => b.marketCap - a.marketCap)
+      .slice(0, 150) // Limitar a top 150 empresas por market cap
 
-    console.log(`📈 Gerando comparações inteligentes para ${validCompanies.length} empresas`)
+    console.log(`📈 Gerando comparações para ${validCompanies.length} empresas principais`)
 
     const comparisonUrls: MetadataRoute.Sitemap = []
 
-    // 1. COMPARAÇÕES POR SETOR (Prioridade máxima)
+    // 1. APENAS LÍDERES SETORIAIS - MÁXIMA QUALIDADE
     const companiesBySector = validCompanies.reduce((acc, company) => {
       if (!company.sector) return acc
       if (!acc[company.sector]) acc[company.sector] = []
@@ -168,130 +153,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return acc
     }, {} as Record<string, typeof validCompanies>)
 
+    // Apenas top 3 empresas por setor para comparações 2x2
     Object.entries(companiesBySector).forEach(([, sectorCompanies]) => {
       if (sectorCompanies.length >= 2) {
-        const sortedCompanies = sectorCompanies.sort((a, b) => b.marketCap - a.marketCap)
+        const topCompanies = sectorCompanies.slice(0, 3) // Apenas top 3 por setor
         
-        // Comparações 2x2 dentro do setor (todas as combinações possíveis)
-        for (let i = 0; i < sortedCompanies.length; i++) {
-          for (let j = i + 1; j < sortedCompanies.length; j++) {
-            const ticker1 = sortedCompanies[i].ticker.toLowerCase()
-            const ticker2 = sortedCompanies[j].ticker.toLowerCase()
+        // Comparações 2x2 apenas entre top empresas do setor
+        for (let i = 0; i < topCompanies.length; i++) {
+          for (let j = i + 1; j < topCompanies.length; j++) {
+            const ticker1 = topCompanies[i].ticker.toLowerCase()
+            const ticker2 = topCompanies[j].ticker.toLowerCase()
             
             comparisonUrls.push({
               url: `${baseUrl}/compara-acoes/${ticker1}/${ticker2}`,
-              lastModified: new Date(),
-              changeFrequency: 'weekly' as const,
-              priority: 0.8, // Alta prioridade para comparações setoriais
+              lastModified: new Date('2025-09-15'), // Data fixa realista
+              changeFrequency: 'monthly' as const, // Mudou de weekly para monthly
+              priority: 0.8, // Alta prioridade apenas para líderes setoriais
             })
           }
         }
-
-        // Comparações 3x3 dentro do setor (top empresas)
-        if (sortedCompanies.length >= 3) {
-          const topInSector = sortedCompanies.slice(0, Math.min(6, sortedCompanies.length))
-          
-          for (let i = 0; i < topInSector.length - 2; i++) {
-            for (let j = i + 1; j < topInSector.length - 1; j++) {
-              for (let k = j + 1; k < topInSector.length; k++) {
-                const ticker1 = topInSector[i].ticker.toLowerCase()
-                const ticker2 = topInSector[j].ticker.toLowerCase()
-                const ticker3 = topInSector[k].ticker.toLowerCase()
-                
-                comparisonUrls.push({
-                  url: `${baseUrl}/compara-acoes/${ticker1}/${ticker2}/${ticker3}`,
-                  lastModified: new Date(),
-                  changeFrequency: 'weekly' as const,
-                  priority: 0.7,
-                })
-              }
-            }
-          }
-        }
       }
     })
 
-    // 2. COMPARAÇÕES POR INDÚSTRIA (Prioridade alta)
-    const companiesByIndustry = validCompanies.reduce((acc, company) => {
-      if (!company.industry) return acc
-      if (!acc[company.industry]) acc[company.industry] = []
-      acc[company.industry].push(company)
-      return acc
-    }, {} as Record<string, typeof validCompanies>)
-
-    Object.entries(companiesByIndustry).forEach(([, industryCompanies]) => {
-      if (industryCompanies.length >= 2) {
-        const sortedCompanies = industryCompanies.sort((a, b) => b.marketCap - a.marketCap)
-        
-        // Comparações 2x2 dentro da indústria
-        for (let i = 0; i < sortedCompanies.length; i++) {
-          for (let j = i + 1; j < sortedCompanies.length; j++) {
-            const ticker1 = sortedCompanies[i].ticker.toLowerCase()
-            const ticker2 = sortedCompanies[j].ticker.toLowerCase()
-            
-            // Evitar duplicatas (já criadas por setor)
-            const url = `${baseUrl}/compara-acoes/${ticker1}/${ticker2}`
-            const exists = comparisonUrls.some(existing => existing.url === url)
-            
-            if (!exists) {
-              comparisonUrls.push({
-                url,
-                lastModified: new Date(),
-                changeFrequency: 'weekly' as const,
-                priority: 0.75, // Prioridade alta para comparações por indústria
-              })
-            }
-          }
-        }
-
-        // Comparações 3x3 dentro da indústria
-        if (sortedCompanies.length >= 3) {
-          const topInIndustry = sortedCompanies.slice(0, Math.min(5, sortedCompanies.length))
-          
-          for (let i = 0; i < topInIndustry.length - 2; i++) {
-            for (let j = i + 1; j < topInIndustry.length - 1; j++) {
-              for (let k = j + 1; k < topInIndustry.length; k++) {
-                const ticker1 = topInIndustry[i].ticker.toLowerCase()
-                const ticker2 = topInIndustry[j].ticker.toLowerCase()
-                const ticker3 = topInIndustry[k].ticker.toLowerCase()
-                
-                const url = `${baseUrl}/compara-acoes/${ticker1}/${ticker2}/${ticker3}`
-                const exists = comparisonUrls.some(existing => existing.url === url)
-                
-                if (!exists) {
-                  comparisonUrls.push({
-                    url,
-                    lastModified: new Date(),
-                    changeFrequency: 'weekly' as const,
-                    priority: 0.65,
-                  })
-                }
-              }
-            }
-          }
-        }
-      }
-    })
-
-    // 3. COMPARAÇÕES CROSS-SETORIAIS (Top empresas de diferentes setores)
-    const topCompaniesOverall = validCompanies.slice(0, 30)
-    const sectorLeaders = new Map<string, typeof validCompanies[0]>()
+    // 2. COMPARAÇÕES CROSS-SETORIAIS - APENAS TOP 20 EMPRESAS
+    const topCompaniesOverall = validCompanies.slice(0, 20) // Apenas top 20
     
-    // Identificar líderes de cada setor
-    topCompaniesOverall.forEach(company => {
-      if (company.sector && (!sectorLeaders.has(company.sector) || 
-          company.marketCap > (sectorLeaders.get(company.sector)?.marketCap || 0))) {
-        sectorLeaders.set(company.sector, company)
-      }
-    })
-
-    const leaders = Array.from(sectorLeaders.values()).slice(0, 15)
-    
-    // Comparações entre líderes setoriais
-    for (let i = 0; i < leaders.length; i++) {
-      for (let j = i + 1; j < leaders.length; j++) {
-        const ticker1 = leaders[i].ticker.toLowerCase()
-        const ticker2 = leaders[j].ticker.toLowerCase()
+    // Comparações entre as maiores empresas do Brasil
+    for (let i = 0; i < Math.min(10, topCompaniesOverall.length); i++) {
+      for (let j = i + 1; j < Math.min(15, topCompaniesOverall.length); j++) {
+        const ticker1 = topCompaniesOverall[i].ticker.toLowerCase()
+        const ticker2 = topCompaniesOverall[j].ticker.toLowerCase()
         
         const url = `${baseUrl}/compara-acoes/${ticker1}/${ticker2}`
         const exists = comparisonUrls.some(existing => existing.url === url)
@@ -299,18 +190,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         if (!exists) {
           comparisonUrls.push({
             url,
-            lastModified: new Date(),
-            changeFrequency: 'daily' as const,
-            priority: 0.9, // Prioridade máxima para líderes setoriais
+            lastModified: new Date('2025-09-15'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.9, // Prioridade máxima para gigantes
           })
         }
       }
     }
 
-    // OTIMIZAÇÃO: Limitar URLs para não impactar performance do sitemap
-    const maxComparisonUrls = 5000 // Limite para não sobrecarregar o sitemap
+    // LIMITE RÍGIDO: Máximo 800 URLs de comparação
+    const maxComparisonUrls = 800
     const finalComparisonUrls = comparisonUrls
-      .sort((a, b) => (b.priority || 0) - (a.priority || 0)) // Ordenar por prioridade
+      .sort((a, b) => (b.priority || 0) - (a.priority || 0))
       .slice(0, maxComparisonUrls)
 
     console.log(`🔗 Geradas ${comparisonUrls.length} URLs de comparação (limitadas a ${finalComparisonUrls.length})`)
@@ -322,11 +213,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...finalComparisonUrls,
     ]
 
-    console.log(`✅ Sitemap gerado com ${allUrls.length} URLs total`)
+    console.log(`✅ Sitemap otimizado gerado com ${allUrls.length} URLs total`)
     console.log(`📊 Breakdown: ${staticUrls.length} estáticas + ${companyUrls.length} empresas + ${finalComparisonUrls.length} comparações`)
     
     // Estatísticas por prioridade
-    const priorityStats = finalComparisonUrls.reduce((acc, url) => {
+    const priorityStats = allUrls.reduce((acc, url) => {
       const priority = url.priority || 0
       acc[priority] = (acc[priority] || 0) + 1
       return acc

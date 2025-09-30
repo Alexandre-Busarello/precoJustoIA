@@ -20,6 +20,7 @@ export default function robots(): MetadataRoute.Robots {
           '/contato',
           '/como-funciona',
           '/fundador',
+          '/backtesting-carteiras',
         ],
         disallow: [
           '/api/',
@@ -34,7 +35,48 @@ export default function robots(): MetadataRoute.Robots {
           '/checkout/',
           '/esqueci-senha/',
           '/redefinir-senha/',
+          '/lgpd',
+          '/termos-de-uso',
+          '/*?*', // Bloquear URLs com parâmetros de query
+          '/sitemap-*.xml', // Bloquear sitemaps individuais do crawl direto
         ],
+        crawlDelay: 1, // 1 segundo entre requests para preservar crawl budget
+      },
+      {
+        userAgent: 'Googlebot',
+        allow: [
+          '/',
+          '/acao/',
+          '/compara-acoes/',
+          '/ranking',
+          '/comparador',
+          '/metodologia',
+          '/planos',
+          '/blog/',
+          '/sobre',
+          '/contato',
+          '/como-funciona',
+          '/fundador',
+          '/backtesting-carteiras',
+        ],
+        disallow: [
+          '/api/',
+          '/dashboard/',
+          '/login/',
+          '/register/',
+          '/_next/',
+          '/admin/',
+          '/private/',
+          '*.json',
+          '/test-markdown/',
+          '/checkout/',
+          '/esqueci-senha/',
+          '/redefinir-senha/',
+          '/lgpd',
+          '/termos-de-uso',
+          '/*?*',
+        ],
+        // Sem crawlDelay para Googlebot para não limitar muito
       },
       {
         userAgent: 'GPTBot',
@@ -57,7 +99,10 @@ export default function robots(): MetadataRoute.Robots {
         disallow: '/',
       },
     ],
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: [
+      `${baseUrl}/sitemap-index.xml`,
+      `${baseUrl}/sitemap.xml`,
+    ],
     host: baseUrl,
   }
 }

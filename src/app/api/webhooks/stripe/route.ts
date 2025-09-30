@@ -421,21 +421,68 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<boolean> {
   console.log('💳 Invoice payment failed:', invoice.id)
 
-  // Verificar se há subscription associada
-  const subscriptionId = (invoice as any).subscription
+  // Verificar se há subscription associada - pode estar em diferentes lugares
+  let subscriptionId = (invoice as any).subscription
+  
+  // Se não encontrou diretamente, verificar em parent.subscription_details
+  if (!subscriptionId && (invoice as any).parent?.subscription_details?.subscription) {
+    subscriptionId = (invoice as any).parent.subscription_details.subscription
+  }
+  
+  console.log('🔍 Subscription ID found:', subscriptionId)
 
   if (!subscriptionId) {
+    console.log('📭 No subscription associated with this invoice, skipping')
     return true // Sem subscription associada, consideramos sucesso
   }
 
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-    const user = await prisma.user.findUnique({
+    console.log('📋 Subscription retrieved:', subscription.id, 'status:', subscription.status)
+    
+    let user = await prisma.user.findUnique({
       where: { stripeSubscriptionId: subscription.id },
     })
 
+    // Se não encontrou o usuário pela subscription, tentar pelos metadados do invoice
+    if (!user) {
+      console.log('🔍 User not found by subscription, trying metadata...')
+      
+      // Tentar extrair userId dos metadados do line item
+      const lineItems = (invoice as any).lines?.data || []
+      let userId = null
+      
+      for (const lineItem of lineItems) {
+        if (lineItem.metadata?.userId) {
+          userId = lineItem.metadata.userId
+          break
+        }
+      }
+      
+      // Também tentar dos metadados da subscription no parent
+      if (!userId && (invoice as any).parent?.subscription_details?.metadata?.userId) {
+        userId = (invoice as any).parent.subscription_details.metadata.userId
+      }
+      
+      console.log('🔍 UserId from metadata:', userId)
+      
+      if (userId) {
+        user = await prisma.user.findUnique({
+          where: { id: userId },
+        })
+        console.log('👤 User found by metadata:', user?.email)
+      }
+    }
+
     if (!user) {
       console.error('❌ User not found for subscription:', subscription.id)
+      console.error('📋 Invoice data for debugging:', {
+        invoiceId: invoice.id,
+        customerId: (invoice as any).customer,
+        customerEmail: (invoice as any).customer_email,
+        subscriptionId,
+        lineItemsMetadata: (invoice as any).lines?.data?.map((item: any) => item.metadata) || []
+      })
       return false
     }
 

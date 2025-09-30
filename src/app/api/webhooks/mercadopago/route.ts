@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processWebhookNotification, validateWebhookSignature } from '@/lib/mercadopago'
 import { prisma } from '@/lib/prisma'
+import { sendWelcomeEmail } from '@/lib/email-service'
 
 export async function POST(request: NextRequest) {
   console.log('🔗 MercadoPago webhook POST request received')
@@ -144,7 +145,7 @@ async function handlePaymentApproved(paymentData: any): Promise<boolean> {
     // Buscar usuário atual para verificar se já foi premium
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { wasPremiumBefore: true, firstPremiumAt: true, email: true }
+      select: { wasPremiumBefore: true, firstPremiumAt: true, email: true, name: true }
     })
 
     if (!currentUser) {
@@ -183,6 +184,21 @@ async function handlePaymentApproved(paymentData: any): Promise<boolean> {
 
     console.log(`✅ User ${userId} (${currentUser.email}) upgraded to PREMIUM via PIX (${planType}) until ${expiresAt}`)
     console.log(`🎉 PIX payment processed successfully! Amount: R$ ${amount}`)
+    
+    // Enviar email de boas-vindas
+    if (currentUser.email) {
+      try {
+        // Verificar se é Early Adopter baseado no tipo de plano
+        const isEarlyAdopter = planType === 'early'
+        
+        await sendWelcomeEmail(currentUser.email, currentUser.name || undefined, isEarlyAdopter)
+        console.log(`📧 Welcome email sent to ${currentUser.email} (Early Adopter: ${isEarlyAdopter})`)
+      } catch (emailError) {
+        console.error('❌ Failed to send welcome email:', emailError)
+        // Não falhar o webhook por causa do email
+      }
+    }
+    
     return true
   } catch (error) {
     console.error('❌ Error handling PIX payment approved:', error)

@@ -60,6 +60,16 @@ export async function GET() {
       prisma.company.count()
     );
 
+    console.log('📊 Verificando se usuário já usou Backtest...')
+    const backtestCount = await safeQuery('backtest-count', () =>
+      prisma.backtestConfig.count({
+        where: {
+          userId: currentUser.id
+        }
+      })
+    );
+    const hasUsedBacktest = backtestCount > 0;
+
     // Contar modelos disponíveis baseado na subscription
     const isPremium = session.user.subscriptionTier === 'PREMIUM';
     const availableModels = isPremium ? 7 : 1; // Premium: 7 modelos, Free: 1 modelo
@@ -69,7 +79,8 @@ export async function GET() {
       totalRankings,
       totalCompanies,
       availableModels,
-      isPremium
+      isPremium,
+      hasUsedBacktest // ← Novo campo
     });
 
   } catch (error) {
@@ -81,7 +92,8 @@ export async function GET() {
       totalRankings: 0,
       totalCompanies: 0,
       availableModels: 1, // Padrão para usuários não logados
-      isPremium: false
+      isPremium: false,
+      hasUsedBacktest: false
     });
   }
 }

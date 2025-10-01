@@ -51,18 +51,29 @@ export function AlfaEarlyAdopterCard() {
           <Crown className="w-10 h-10 text-white" />
         </div>
         <CardTitle className="text-3xl font-bold mb-4">Early Adopter</CardTitle>
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="text-2xl text-gray-400 line-through">R$ 497,00</span>
-        </div>
-        <div className="text-5xl font-bold text-yellow-600 mb-2">
-          R$ 249,00
-        </div>
-        <p className="text-sm text-muted-foreground">por ano • PIX ou Cartão</p>
-        <p className="text-lg font-bold text-green-600 mt-1">Economia de R$ 248/ano!</p>
+        <p className="text-base text-muted-foreground mb-4">Apoie o projeto e seja pioneiro!</p>
         
-        <div className="flex items-center justify-center gap-2 text-lg font-semibold text-yellow-600 mt-4">
-          <Lock className="w-6 h-6" />
-          <span>Preço congelado PARA SEMPRE</span>
+        <div className="space-y-3">
+          <div className="border-2 border-yellow-300 rounded-lg p-3 bg-yellow-50/50">
+            <div className="text-3xl font-bold text-yellow-600 mb-1">
+              R$ 118,80/ano
+            </div>
+            <p className="text-sm text-muted-foreground">R$ 16,58 por mês</p>
+          </div>
+          
+          <div className="text-sm text-muted-foreground">ou</div>
+          
+          <div className="border-2 border-yellow-200 rounded-lg p-3">
+            <div className="text-2xl font-bold text-yellow-600 mb-1">
+              R$ 9,90/mês
+            </div>
+            <p className="text-xs text-muted-foreground">Sem compromisso</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center gap-2 text-base font-semibold text-green-600 mt-4">
+          <Sparkles className="w-5 h-5" />
+          <span>Contribuição simbólica para apoiar o projeto</span>
         </div>
       </CardHeader>
       
@@ -76,19 +87,19 @@ export function AlfaEarlyAdopterCard() {
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-sm">
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                <span><strong>Preço congelado</strong> em todas as renovações</span>
+                <span><strong>Acesso antecipado</strong> a todas as features</span>
               </div>
               <div className="flex items-center gap-3 text-sm">
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                <span><strong>Canal exclusivo WhatsApp</strong> com CEO</span>
+                <span><strong>Badge exclusiva</strong> Early Adopter</span>
               </div>
               <div className="flex items-center gap-3 text-sm">
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                <span><strong>Acesso antecipado</strong> a novos recursos</span>
+                <span><strong>Influência direta</strong> na evolução do produto</span>
               </div>
               <div className="flex items-center gap-3 text-sm">
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                <span><strong>Badge especial</strong> Early Adopter</span>
+                <span><strong>Reconhecimento</strong> como fundador</span>
               </div>
             </div>
           </div>
@@ -129,7 +140,7 @@ export function AlfaEarlyAdopterCard() {
         
         <div className="text-center mt-6">
           <p className="text-xs text-muted-foreground">
-            ✅ Sem limite de vagas • ✅ Preço garantido para sempre • ✅ Ativação instantânea
+            ✅ Contribua com o projeto • ✅ Acesso antecipado • ✅ Badge exclusiva
           </p>
         </div>
       </CardContent>

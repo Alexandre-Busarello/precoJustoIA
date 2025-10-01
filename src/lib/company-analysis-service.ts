@@ -274,7 +274,13 @@ export async function executeCompanyAnalysis(
   // Buscar dados das demonstrações financeiras se solicitado
   let statementsData: FinancialStatementsData | undefined;
   if (includeStatements && companyId) {
-    statementsData = await getStatementsData(companyId, companyData.ticker, companyData.sector, industry);
+    try {
+      statementsData = await getStatementsData(companyId, companyData.ticker, companyData.sector, industry);
+    } catch (error) {
+      console.warn(`⚠️ Falha ao buscar demonstrações para ${companyData.ticker}, continuando sem statements:`, error);
+      // Continua análise sem statements - score ainda pode ser calculado
+      statementsData = undefined;
+    }
   }
 
   // Calcular score geral

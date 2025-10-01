@@ -57,17 +57,16 @@ const PLANS = {
   },
   early: {
     name: 'Early Adopter',
-    price: 249,
-    originalPrice: 497,
-    discount: 'PREÇO CONGELADO',
+    price: 118.80,
+    originalPrice: null,
+    discount: 'CONTRIBUIÇÃO',
     period: '/ano',
-    description: 'Oferta exclusiva - Preço congelado para sempre',
+    description: 'Apoie o projeto com uma contribuição simbólica',
     features: [
-      'Tudo do Premium Anual',
-      'Preço congelado para sempre',
-      'Canal exclusivo WhatsApp com CEO',
-      'Acesso antecipado a novos recursos',
-      'Badge especial Early Adopter'
+      'Acesso antecipado a todas as novas features',
+      'Badge exclusiva de Early Adopter',
+      'Grupo WhatsApp exclusivo com CEO',
+      'Seja reconhecido como pioneiro da plataforma'
     ],
     popular: true,
     exclusive: true
@@ -164,10 +163,10 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                 <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Star className="w-5 h-5 text-purple-600" />
-                    <span className="font-semibold text-purple-800">Fase Alfa - Oferta Especial</span>
+                    <span className="font-semibold text-purple-800">Fase Alfa - Seja um Early Adopter</span>
                   </div>
                   <p className="text-sm text-purple-700">
-                    Durante a Fase Alfa, apenas o plano <strong>Early Adopter</strong> está disponível com preço congelado para sempre!
+                    Apoie o projeto com uma <strong>contribuição simbólica</strong> e ganhe acesso Premium completo + benefícios exclusivos!
                   </p>
                 </div>
               )}
@@ -215,14 +214,23 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                           </span>
                           <span className="text-gray-500 ml-1">{plan.period}</span>
                         </div>
-                        <div className="flex items-center justify-center gap-2 mb-2">
-                          <span className="text-sm text-gray-500 line-through">
-                            R$ {plan.originalPrice}
-                          </span>
-                          <Badge variant="secondary" className="bg-green-100 text-green-700">
-                            {plan.discount}
-                          </Badge>
-                        </div>
+                        {plan.originalPrice && (
+                          <div className="flex items-center justify-center gap-2 mb-2">
+                            <span className="text-sm text-gray-500 line-through">
+                              R$ {plan.originalPrice}
+                            </span>
+                            <Badge variant="secondary" className="bg-green-100 text-green-700">
+                              {plan.discount}
+                            </Badge>
+                          </div>
+                        )}
+                        {!plan.originalPrice && (
+                          <div className="flex items-center justify-center gap-2 mb-2">
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                              {plan.discount}
+                            </Badge>
+                          </div>
+                        )}
                         <p className="text-sm text-gray-600">{plan.description}</p>
                       </div>
 
@@ -360,12 +368,14 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                           <span>{PLANS[selectedPlan].name}</span>
                           <span>R$ {PLANS[selectedPlan].price}</span>
                         </div>
-                        <div className="flex justify-between text-sm text-gray-500">
-                          <span>Desconto</span>
-                          <span className="text-green-600">
-                            -R$ {PLANS[selectedPlan].originalPrice - PLANS[selectedPlan].price}
-                          </span>
-                        </div>
+                        {PLANS[selectedPlan].originalPrice && (
+                          <div className="flex justify-between text-sm text-gray-500">
+                            <span>Desconto</span>
+                            <span className="text-green-600">
+                              -R$ {PLANS[selectedPlan].originalPrice - PLANS[selectedPlan].price}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       <Separator className="my-4" />

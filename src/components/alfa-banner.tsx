@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Sparkles, Calendar, Users } from 'lucide-react'
 import Link from 'next/link'
 import { useAlfa } from '@/contexts/alfa-context'
+import { useSession } from 'next-auth/react'
 
 interface AlfaBannerProps {
   variant?: 'landing' | 'dashboard'
@@ -13,6 +14,7 @@ interface AlfaBannerProps {
 
 export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBannerProps) {
   const { stats, isLoading } = useAlfa()
+  const { data: session } = useSession()
 
   // Não mostrar o banner se não estiver na fase Alfa
   if (isLoading || !stats || stats.phase !== 'ALFA') {
@@ -39,8 +41,8 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
           <div className="flex items-center gap-2">
             <span className="font-medium">
               {stats.isLimitReached 
-                ? "Vagas esgotadas! Torne-se Early Adopter por R$ 249/ano" 
-                : `Acesso PREMIUM gratuito até ${formattedEndDate}`
+                ? "Vagas Alfa esgotadas! Garanta acesso com Early Adopter" 
+                : `${stats.spotsAvailable}/${stats.userLimit} vagas para Acesso Premium VITALÍCIO GRATUITO`
               }
             </span>
           </div>
@@ -54,11 +56,21 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
                 asChild
               >
                 <Link href="/checkout?plan=early">
-                  Oferta Early Adopter
+                  Plano Early Adopter
+                </Link>
+              </Button>
+            ) : !session ? (
+              <Button 
+                size="sm" 
+                className="bg-green-500 hover:bg-green-600 text-white font-bold px-3 py-1 h-auto text-xs"
+                asChild
+              >
+                <Link href="/register">
+                  Garantir Vaga Alfa
                 </Link>
               </Button>
             ) : (
-              <span>{stats.spotsAvailable} vagas restantes</span>
+              <span>{stats.spotsAvailable}/{stats.userLimit} vagas restantes</span>
             )}
           </div>
         </div>
@@ -78,16 +90,12 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
               </Badge>
               <span className="font-medium">
                 {stats.isLimitReached 
-                  ? "Vagas esgotadas! Torne-se Early Adopter e garanta preço congelado para sempre!"
-                  : `Você tem acesso PREMIUM gratuito até ${formattedEndDate}!`
+                  ? "Vagas Alfa esgotadas! Mas você pode garantir acesso com Early Adopter."
+                  : `Você tem acesso PREMIUM VITALÍCIO GRATUITO! Participe do grupo WhatsApp.`
                 }
               </span>
             </div>
             <div className="flex items-center gap-4 text-sm text-purple-600">
-              <div className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                <span>Até {formattedEndDate}</span>
-              </div>
               <div className="flex items-center gap-1">
                 <Users className="h-3 w-3" />
                 {stats.isLimitReached ? (
@@ -97,11 +105,11 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
                     asChild
                   >
                     <Link href="/checkout?plan=early">
-                      Early Adopter: R$ 249/ano
+                      Early Adopter: R$ 9,90/mês
                     </Link>
                   </Button>
                 ) : (
-                  <span>{stats.spotsAvailable} vagas restantes</span>
+                  <span>{stats.spotsAvailable}/{stats.userLimit} vagas restantes</span>
                 )}
               </div>
             </div>

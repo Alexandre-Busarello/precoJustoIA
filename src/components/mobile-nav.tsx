@@ -15,7 +15,6 @@ import {
   BarChart3, 
   Shield, 
   Zap, 
-  Home, 
   LogOut,
   User,
   Settings,
@@ -23,7 +22,8 @@ import {
   GitCompare,
   Headphones,
   TrendingUp,
-  Wrench
+  Wrench,
+  Building2
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -56,12 +56,6 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
 
   const menuItems = [
     {
-      title: "Início",
-      href: "/",
-      icon: <Home className="w-5 h-5" />,
-      show: true
-    },
-    {
       title: "Dashboard",
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
@@ -78,6 +72,14 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       description: "Análise fundamentalista"
     },
     {
+      title: "Análise Setorial",
+      href: "/analise-setorial", 
+      icon: <Building2 className="w-5 h-5" />,
+      show: true,
+      description: "Compare setores da B3",
+      isNew: true
+    },
+    {
       title: "Comparador",
       href: "/comparador", 
       icon: <GitCompare className="w-5 h-5" />,
@@ -90,8 +92,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       icon: <TrendingUp className="w-5 h-5" />,
       show: true,
       description: "Simule carteiras",
-      isPremiumFeature: !isPremium,
-      isNew: true
+      isPremiumFeature: !isPremium
     }
   ]
 
@@ -182,24 +183,27 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
             <div className="p-4 pb-20">
               <nav className="space-y-4">
               {/* Menu Principal */}
-              <div className="space-y-2">
-                {menuItems
-                  .filter(item => item.show)
-                  .map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                        pathname === item.href
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      {item.icon}
-                      <span className="font-medium flex-1">{item.title}</span>
-                    </Link>
-                  ))}
-              </div>
+              {session && menuItems.filter(item => item.show).length > 0 && (
+                <div className="space-y-2">
+                  {menuItems
+                    .filter(item => item.show)
+                    .map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setIsOpen(false)}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                          pathname === item.href
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        {item.icon}
+                        <span className="font-medium flex-1">{item.title}</span>
+                      </Link>
+                    ))}
+                </div>
+              )}
 
               {/* Seção Ferramentas */}
               <div>
@@ -216,6 +220,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                       <Link
                         key={item.href}
                         href={item.href}
+                        onClick={() => setIsOpen(false)}
                         className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                           pathname === item.href
                             ? 'bg-primary text-primary-foreground'
@@ -225,6 +230,8 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                         <div className={`p-1.5 rounded-md ${
                           item.href === '/backtest' 
                             ? 'bg-gradient-to-br from-emerald-500 to-teal-500' 
+                            : item.href === '/analise-setorial'
+                            ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
                             : 'bg-gradient-to-br from-blue-500 to-purple-500'
                         }`}>
                           <div className="text-white text-sm">
@@ -262,6 +269,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                         <Link
                           key={item.href}
                           href={item.href}
+                          onClick={() => setIsOpen(false)}
                           className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                             pathname === item.href
                               ? 'bg-primary text-primary-foreground'
@@ -293,7 +301,11 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                   Desbloqueie todos os modelos de valuation, análises com IA e Central de Suporte Premium
                 </p>
                 <Button asChild size="sm" className="w-full bg-gradient-to-r from-violet-600 to-pink-600">
-                  <Link href="/checkout" className="flex items-center justify-center gap-2">
+                  <Link 
+                    href="/checkout" 
+                    className="flex items-center justify-center gap-2"
+                    onClick={() => setIsOpen(false)}
+                  >
                     <CreditCard className="w-4 h-4" />
                     Fazer Upgrade
                   </Link>
@@ -311,13 +323,19 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                   </p>
                   <div className="space-y-2">
                     <Button asChild size="sm" className="w-full">
-                      <Link href="/register" className="flex items-center justify-center gap-2">
+                      <Link 
+                        href="/register" 
+                        className="flex items-center justify-center gap-2"
+                        onClick={() => setIsOpen(false)}
+                      >
                         <User className="w-4 h-4" />
                         Criar Conta
                       </Link>
                     </Button>
                     <Button variant="outline" size="sm" className="w-full" asChild>
-                      <Link href="/login">Fazer Login</Link>
+                      <Link href="/login" onClick={() => setIsOpen(false)}>
+                        Fazer Login
+                      </Link>
                     </Button>
                   </div>
                 </div>
@@ -336,7 +354,11 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                   className="w-full justify-start"
                   asChild
                 >
-                  <Link href="/settings" className="flex items-center gap-3">
+                  <Link 
+                    href="/settings" 
+                    className="flex items-center gap-3"
+                    onClick={() => setIsOpen(false)}
+                  >
                     <Settings className="w-4 h-4" />
                     Configurações
                   </Link>

@@ -38,6 +38,7 @@ import { blogPosts } from "@/lib/blog-data"
 import { AlfaBanner } from "@/components/alfa-banner"
 import { AlfaEarlyAdopterCTA } from "@/components/alfa-early-adopter-cta"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
+import { AlfaVitalicioConditions } from "@/components/alfa-vitalicio-conditions"
 
 export const metadata: Metadata = {
   title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI - Investimentos Bovespa",
@@ -84,7 +85,7 @@ export default async function Home() {
     <div>
       <AlfaBanner variant="landing" />
       {/* Hero Section - Enhanced */}
-      <section className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 py-20 sm:py-32 pt-24 sm:pt-36">
+      <section className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 py-20 sm:py-32">
         {/* Background Pattern */}
         <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))]"></div>
         
@@ -148,6 +149,9 @@ export default async function Home() {
           </p>
         </div>
       </section>
+
+      {/* Alfa Vitalicio Conditions - Logo após Hero */}
+      <AlfaVitalicioConditions />
 
       {/* Quick Ranker Section */}
       <section className="py-20 bg-gradient-to-b from-white to-gray-50 dark:from-background dark:to-background/80">

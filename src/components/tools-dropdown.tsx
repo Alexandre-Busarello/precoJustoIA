@@ -10,7 +10,8 @@ import {
   GitCompare, 
   TrendingUp, 
   ChevronDown,
-  Wrench
+  Wrench,
+  Building2
 } from "lucide-react"
 
 interface ToolsDropdownProps {
@@ -41,7 +42,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
     setIsOpen(false)
   }, [pathname])
 
-  const isToolsActive = ['/ranking', '/comparador', '/backtest'].includes(pathname)
+  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial'].includes(pathname)
 
   const tools = [
     {
@@ -49,6 +50,13 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       icon: <BarChart3 className="w-4 h-4" />,
       title: 'Rankings',
       description: 'Análise fundamentalista automatizada',
+      isPremium: false
+    },
+    {
+      href: '/analise-setorial',
+      icon: <Building2 className="w-4 h-4" />,
+      title: 'Análise Setorial',
+      description: 'Compare setores da B3',
       isPremium: false
     },
     {
@@ -94,6 +102,8 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
                 <div className={`p-2 rounded-lg ${
                   tool.isPremium 
                     ? 'bg-gradient-to-br from-emerald-500 to-teal-500' 
+                    : tool.href === '/analise-setorial'
+                    ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
                     : 'bg-gradient-to-br from-blue-500 to-purple-500'
                 }`}>
                   <div className="text-white">
@@ -108,7 +118,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
                         Premium
                       </Badge>
                     )}
-                    {tool.href === '/backtest' && (
+                    {tool.href === '/analise-setorial' && (
                       <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
                         🚀 Novo
                       </Badge>

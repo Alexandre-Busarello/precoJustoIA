@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
 import { ToolsDropdown } from "@/components/tools-dropdown"
 import { LayoutDashboard, Shield, Zap, Headphones } from "lucide-react"
+import { GlobalSearchBar } from "@/components/global-search-bar"
 
 export default function Header() {
   const { data: session, status } = useSession()
@@ -160,6 +161,9 @@ export default function Header() {
           </div>
         </div>
       </header>
+
+      {/* Global Search Bar - Below Header */}
+      <GlobalSearchBar />
 
       {/* Mobile Navigation Drawer */}
       <MobileNav 

@@ -118,9 +118,9 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
   // NOTA: Estratégias individuais foram removidas pois já estão incluídas no overallScore
   const weights = {
     // Indicadores Básicos (25%)
-    pl: 0.05,           // 5% - Valuation fundamental
+    pl: 0.015,           // 1.5% - Valuation fundamental
     pvp: 0.015,          // 1.5% - Valor patrimonial
-    roe: 0.05,          // 5% - Rentabilidade principal
+    roe: 0.015,          // 1.5% - Rentabilidade principal
     dy: 0.015,           // 1.5% - Dividendos
     
     // Indicadores Avançados (18%)
@@ -134,8 +134,8 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     crescimentoLucros: 0.015, // 1.5% - Crescimento recente de lucros
     crescimentoReceitas: 0.015, // 1.5% - Crescimento recente de receitas
     
-    // Score Geral (50%) - Peso principal pois inclui análise completa
-    overallScore: 0.765,  // 65% - Análise consolidada (inclui Graham, DY, LowPE, Magic Formula, FCD, Gordon + Demonstrações)
+    // Score Geral (83%) - Peso principal pois inclui análise completa
+    overallScore: 0.835,  // 83% - Análise consolidada (inclui Graham, DY, LowPE, Magic Formula, FCD, Gordon + Demonstrações)
   }
   
   // OTIMIZAÇÃO 1: Executar todas as estratégias em paralelo primeiro
@@ -294,7 +294,7 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
       if (statementsAnalysis) {
         switch (statementsAnalysis.riskLevel) {
           case 'CRITICAL':
-            penaltyFactor *= 0.5 // Penalidade de 50%
+            penaltyFactor *= 0.85 // Penalidade de 15%
             console.log(`Penalidade CRÍTICA por demonstrações aplicada para ${company.ticker}: risco ${statementsAnalysis.riskLevel}, score ${statementsAnalysis.score}`)
             break
           case 'HIGH':

@@ -52,12 +52,12 @@ export function AlfaEarlyAdopterCTA() {
               </div>
               
               <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                Mas você ainda pode garantir seu lugar!
+                Ainda pode garantir seu lugar!
               </h2>
               
               <p className="text-lg opacity-90 max-w-2xl mx-auto mb-6">
                 As vagas gratuitas da Fase Alfa se esgotaram, mas você pode se tornar um 
-                <strong> Early Adopter</strong> e garantir acesso imediato + preço congelado para sempre.
+                <strong> Early Adopter</strong> com uma contribuição simbólica e acesso imediato à plataforma.
               </p>
             </div>
 
@@ -71,28 +71,29 @@ export function AlfaEarlyAdopterCTA() {
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-yellow-300" />
-                    <span>Acesso <strong>imediato</strong> à plataforma</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-yellow-300" />
-                    <span>Preço <strong>congelado para sempre</strong></span>
+                    <span>Acesso <strong>antecipado</strong> a todas as features</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Crown className="w-4 h-4 text-yellow-300" />
-                    <span>Canal exclusivo WhatsApp com CEO</span>
+                    <span><strong>Badge exclusiva</strong> Early Adopter</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-yellow-300" />
+                    <span>Apoie o projeto e seja <strong>pioneiro</strong></span>
                   </div>
                 </div>
               </div>
 
               <div className="text-center">
                 <div className="mb-4">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <span className="text-lg line-through opacity-60">R$ 497/ano</span>
+                  <div className="text-sm opacity-80 mb-2">Contribuição simbólica</div>
+                  <div className="space-y-2">
+                    <div className="text-3xl font-bold text-yellow-300">
+                      R$ 118,80/ano
+                    </div>
+                    <p className="text-sm opacity-80">ou R$ 9,90/mês</p>
                   </div>
-                  <div className="text-4xl font-bold text-yellow-300">
-                    R$ 249/ano
-                  </div>
-                  <p className="text-sm opacity-80">Economia de R$ 248 por ano, para sempre!</p>
+                  <p className="text-xs opacity-70 mt-2">Valor de lançamento para apoiar o projeto</p>
                 </div>
 
                 <Button 
@@ -108,7 +109,7 @@ export function AlfaEarlyAdopterCTA() {
                 </Button>
 
                 <p className="text-xs opacity-70 mt-3">
-                  ✅ Sem limite de vagas • ✅ Ativação instantânea
+                  ✅ Acesso antecipado • ✅ Badge exclusiva • ✅ Ativação instantânea
                 </p>
               </div>
             </div>

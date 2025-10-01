@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, safeQuery } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
-import { StrategyAnalysis, toNumber } from '@/lib/strategies';
+import { StrategyAnalysis } from '@/lib/strategies';
 import { OverallScore } from '@/lib/strategies/overall-score';
-import { executeCompanyAnalysis, CompanyAnalysisData } from '@/lib/company-analysis-service';
+import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 
 
 // Interface para resposta da API
@@ -40,96 +39,32 @@ export async function GET(
     const isLoggedIn = !!user;
     const isPremium = user?.isPremium || false;
 
-    // Buscar dados da empresa
-    const companyData = await safeQuery(`company-data-${ticker}`, () =>
-      prisma.company.findUnique({
-        where: { ticker },
-        include: {
-          financialData: {
-            orderBy: { year: 'desc' },
-            take: 8 // Dados atuais + até 7 anos históricos
-          },
-          dailyQuotes: {
-            orderBy: { date: 'desc' },
-            take: 1
-          }
-        }
-      })
-    );
-
-    if (!companyData) {
-      return NextResponse.json(
-        { error: `Empresa ${ticker} não encontrada` },
-        { status: 404 }
-      );
-    }
-
-    const latestFinancials = companyData.financialData[0];
-    const latestQuote = companyData.dailyQuotes[0];
-
-    if (!latestFinancials) {
-      return NextResponse.json(
-        { error: `Dados financeiros não disponíveis para ${ticker}` },
-        { status: 404 }
-      );
-    }
-
-    // Preço atual
-    const currentPrice = toNumber(latestQuote?.price) || 0;
-
-    // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
-    const historicalFinancials = companyData.financialData.slice(1).map(data => ({
-      year: data.year,
-      roe: toNumber(data.roe),
-      roic: toNumber(data.roic),
-      pl: toNumber(data.pl),
-      pvp: toNumber(data.pvp),
-      dy: toNumber(data.dy),
-      margemLiquida: toNumber(data.margemLiquida),
-      margemEbitda: toNumber(data.margemEbitda),
-      margemBruta: toNumber(data.margemBruta),
-      liquidezCorrente: toNumber(data.liquidezCorrente),
-      liquidezRapida: toNumber(data.liquidezRapida),
-      dividaLiquidaPl: toNumber(data.dividaLiquidaPl),
-      dividaLiquidaEbitda: toNumber(data.dividaLiquidaEbitda),
-      lpa: toNumber(data.lpa),
-      vpa: toNumber(data.vpa),
-      marketCap: toNumber(data.marketCap),
-      earningsYield: toNumber(data.earningsYield),
-      evEbitda: toNumber(data.evEbitda),
-      roa: toNumber(data.roa),
-      passivoAtivos: toNumber(data.passivoAtivos)
-    }));
-
-    // Preparar dados da empresa para análise
-    const companyAnalysisData: CompanyAnalysisData = {
-      ticker: companyData.ticker,
-      name: companyData.name,
-      sector: companyData.sector,
-      currentPrice,
-      financials: latestFinancials,
-      historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined
-    };
-
-    // Executar análise completa usando o serviço centralizado
-    const analysisResult = await executeCompanyAnalysis(companyAnalysisData, {
-      isLoggedIn,
+    // ✅ USAR SERVIÇO CENTRALIZADO - Garantia de cálculo idêntico ao Dashboard
+    const analysisResult = await calculateCompanyOverallScore(ticker, {
       isPremium,
+      isLoggedIn,
       includeStatements: isPremium, // Incluir demonstrações apenas para premium
-      companyId: String(companyData.id),
-      industry: companyData.industry
+      includeStrategies: true, // ← IMPORTANTE: Incluir estratégias individuais para a página
+      // companyId e industry serão buscados automaticamente pelo serviço
     });
 
-    const { strategies, overallScore } = analysisResult;
+    if (!analysisResult) {
+      return NextResponse.json(
+        { error: `Empresa ${ticker} não encontrada ou dados insuficientes` },
+        { status: 404 }
+      );
+    }
+
+    const { ticker: companyTicker, companyName, sector, currentPrice, overallScore, strategies: resultStrategies } = analysisResult;
 
     const response: CompanyAnalysisResponse = {
-      ticker: companyData.ticker,
-      name: companyData.name,
-      sector: companyData.sector,
+      ticker: companyTicker,
+      name: companyName,
+      sector: sector,
       currentPrice,
       overallScore,
       strategies: {
-        graham: strategies.graham || {
+        graham: resultStrategies?.graham || {
           isEligible: false,
           score: 0,
           fairValue: null,
@@ -137,7 +72,7 @@ export async function GET(
           reasoning: isLoggedIn ? '' : 'Login necessário para acessar análise Graham',
           criteria: [],
         },
-        dividendYield: strategies.dividendYield || {
+        dividendYield: resultStrategies?.dividendYield || {
           isEligible: false,
           score: 0,
           fairValue: null,
@@ -145,7 +80,7 @@ export async function GET(
           reasoning: isPremium ? '' : 'Premium necessário para análise Dividend Yield',
           criteria: [],
         },
-        lowPE: strategies.lowPE || {
+        lowPE: resultStrategies?.lowPE || {
           isEligible: false,
           score: 0,
           fairValue: null,
@@ -153,7 +88,7 @@ export async function GET(
           reasoning: isPremium ? '' : 'Premium necessário para análise Value Investing',
           criteria: [],
         },
-        magicFormula: strategies.magicFormula || {
+        magicFormula: resultStrategies?.magicFormula || {
           isEligible: false,
           score: 0,
           fairValue: null,
@@ -161,7 +96,7 @@ export async function GET(
           reasoning: isPremium ? '' : 'Premium necessário para análise Magic Formula',
           criteria: [],
         },
-        fcd: strategies.fcd || {
+        fcd: resultStrategies?.fcd || {
           isEligible: false,
           score: 0,
           fairValue: null,
@@ -169,7 +104,7 @@ export async function GET(
           reasoning: isPremium ? '' : 'Premium necessário para análise FCD',
           criteria: [],
         },
-        gordon: strategies.gordon || {
+        gordon: resultStrategies?.gordon || {
           isEligible: false,
           score: 0,
           fairValue: null,
@@ -177,7 +112,7 @@ export async function GET(
           reasoning: isPremium ? '' : 'Premium necessário para análise Fórmula de Gordon',
           criteria: [],
         },
-        fundamentalist: strategies.fundamentalist || {
+        fundamentalist: resultStrategies?.fundamentalist || {
           isEligible: false,
           score: 0,
           fairValue: null,

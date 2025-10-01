@@ -33,3 +33,6 @@ ${blogPosts.map(post => `  <url>
     return new NextResponse('Erro interno', { status: 500 })
   }
 }
+
+
+

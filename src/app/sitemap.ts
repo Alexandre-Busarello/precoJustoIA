@@ -38,6 +38,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
+      url: `${baseUrl}/analise-setorial`,
+      lastModified: new Date('2025-10-01'),
+      changeFrequency: 'daily',
+      priority: 0.9,
+    },
+    {
       url: `${baseUrl}/metodologia`,
       lastModified: new Date('2025-08-15'),
       changeFrequency: 'monthly',

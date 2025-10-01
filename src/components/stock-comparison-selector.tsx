@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,11 @@ export function StockComparisonSelector({ initialTickers = [] }: StockComparison
   const [tickers, setTickers] = useState<string[]>(initialTickers)
   const [inputValue, setInputValue] = useState('')
   const router = useRouter()
+
+  // ✅ Marcar que usuário usou o Comparador (tracking para Dashboard Tips)
+  useEffect(() => {
+    localStorage.setItem('has_used_comparator', 'true')
+  }, [])
 
   const addTicker = () => {
     const ticker = inputValue.toUpperCase().trim()

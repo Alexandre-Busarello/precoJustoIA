@@ -59,13 +59,13 @@ export function EarlyAdopterDashboardBanner({ className = '' }: EarlyAdopterDash
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-xl font-bold">Oferta Especial Early Adopter</h3>
+                  <h3 className="text-xl font-bold">Seja um Early Adopter</h3>
                   <Badge className="bg-yellow-500 text-black font-bold px-2 py-1 text-xs">
-                    LIMITADA
+                    ESPECIAL
                   </Badge>
                 </div>
                 <p className="text-purple-100 text-sm">
-                  Garanta o preço atual para sempre + benefícios exclusivos
+                  Apoie o projeto com uma contribuição simbólica + benefícios exclusivos
                 </p>
               </div>
             </div>
@@ -73,28 +73,27 @@ export function EarlyAdopterDashboardBanner({ className = '' }: EarlyAdopterDash
             {/* Benefícios Exclusivos */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div className="flex items-center gap-2 text-sm">
-                <Infinity className="w-4 h-4 text-yellow-300 flex-shrink-0" />
-                <span className="font-medium">Preço congelado para sempre</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <MessageCircle className="w-4 h-4 text-yellow-300 flex-shrink-0" />
-                <span className="font-medium">Canal exclusivo WhatsApp</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
                 <Star className="w-4 h-4 text-yellow-300 flex-shrink-0" />
-                <span className="font-medium">Acesso antecipado</span>
+                <span className="font-medium">Acesso antecipado a features</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Crown className="w-4 h-4 text-yellow-300 flex-shrink-0" />
+                <span className="font-medium">Badge exclusiva Early Adopter</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Infinity className="w-4 h-4 text-yellow-300 flex-shrink-0" />
+                <span className="font-medium">Reconhecimento como pioneiro</span>
               </div>
             </div>
 
             {/* Preço e Economia */}
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-purple-200">De R$ 497/ano por</span>
-                <span className="text-2xl font-bold text-yellow-300">R$ 249/ano</span>
+                <span className="text-purple-200">Contribuição simbólica:</span>
+                <span className="text-2xl font-bold text-yellow-300">R$ 118,80/ano</span>
+                <span className="text-purple-200">ou</span>
+                <span className="text-xl font-bold text-yellow-300">R$ 9,90/mês</span>
               </div>
-              <Badge className="bg-green-500 text-white font-bold">
-                Economia de R$ 248/ano
-              </Badge>
             </div>
           </div>
 
@@ -120,8 +119,8 @@ export function EarlyAdopterDashboardBanner({ className = '' }: EarlyAdopterDash
         {/* Indicador de urgência */}
         <div className="mt-4 pt-4 border-t border-white/20">
           <div className="flex items-center justify-between text-xs text-purple-100">
-            <span>🔥 Oferta exclusiva da Fase Alfa</span>
-            <span>⏰ Disponível apenas durante esta fase</span>
+            <span>🚀 Apoie o projeto desde o início</span>
+            <span>⭐ Seja reconhecido como pioneiro</span>
           </div>
         </div>
       </CardContent>

@@ -494,7 +494,7 @@ export default async function TickerPage({ params }: PageProps) {
   return (
     <>
       {/* Barra de Busca no Topo */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto py-4 px-4">
           <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
             <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
@@ -511,7 +511,7 @@ export default async function TickerPage({ params }: PageProps) {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
 
       <div className="container mx-auto py-8 px-4">
         {/* Layout Responsivo: 2 Cards Separados */}

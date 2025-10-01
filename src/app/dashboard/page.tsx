@@ -413,7 +413,7 @@ export default function Dashboard() {
                         Explore {isPremium ? '8 modelos' : 'novos modelos'} de valuation
                       </p>
                       <div className="flex items-center justify-center gap-2 text-blue-600 group-hover:text-blue-700 font-semibold text-sm">
-                        <span>Criar Ranking</span>
+                        <span>Explorar Ranking</span>
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                       </div>
                     </CardContent>

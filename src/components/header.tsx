@@ -21,7 +21,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
+      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50 will-change-transform">
         <div className="container mx-auto px-4 py-4 relative">
           {/* Mobile Layout */}
           <div className="lg:hidden flex items-center">

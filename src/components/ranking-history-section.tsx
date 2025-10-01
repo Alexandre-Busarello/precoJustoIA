@@ -263,37 +263,58 @@ export function RankingHistorySection({ onLoadRanking }: RankingHistorySectionPr
 
         {/* Paginação */}
         {totalPages > 1 && (
-          <div className="mt-6 flex items-center justify-between border-t pt-4">
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 border-t pt-4">
             <div className="text-sm text-muted-foreground">
               Mostrando {startIndex + 1}-{Math.min(endIndex, totalCount)} de {totalCount} rankings
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
+                className="flex-shrink-0"
               >
                 Anterior
               </Button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <Button
-                    key={page}
-                    variant={page === currentPage ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCurrentPage(page)}
-                    className="w-9"
-                  >
-                    {page}
-                  </Button>
-                ))}
+              
+              {/* Container com scroll horizontal para botões de página */}
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent px-1 flex-1 sm:flex-initial">
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                    // No mobile, mostrar apenas página atual e adjacentes
+                    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+                    const showInMobile = !isMobile || Math.abs(page - currentPage) <= 1 || page === 1 || page === totalPages
+                    
+                    if (!showInMobile) {
+                      // Mostrar "..." entre páginas
+                      if (page === currentPage - 2 || page === currentPage + 2) {
+                        return <span key={page} className="px-2 text-muted-foreground">...</span>
+                      }
+                      return null
+                    }
+                    
+                    return (
+                      <Button
+                        key={page}
+                        variant={page === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(page)}
+                        className="w-9 flex-shrink-0"
+                      >
+                        {page}
+                      </Button>
+                    )
+                  })}
+                </div>
               </div>
+              
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
+                className="flex-shrink-0"
               >
                 Próxima
               </Button>

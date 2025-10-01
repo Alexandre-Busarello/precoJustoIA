@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   Info,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LineChart as LineChartIcon
 } from 'lucide-react';
 import { 
   XAxis, 
@@ -26,10 +27,15 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  Area,
-  AreaChart
+  Line,
+  LineChart,
+  Legend
 } from 'recharts';
 import { BacktestTransactions } from './backtest-transactions';
+import {
+  alignBenchmarkDates,
+  type BenchmarkData
+} from '@/lib/benchmark-service';
 
 // Interfaces
 interface BacktestResult {
@@ -119,13 +125,80 @@ interface BacktestResultsProps {
 }
 
 export function BacktestResults({ result, config, transactions }: BacktestResultsProps) {
-  // Debug: verificar se as transações estão chegando
-  console.log('🔍 BacktestResults - Transações recebidas:', transactions?.length || 0);
-  console.log('📋 Primeira transação:', transactions?.[0] || 'Nenhuma');
+  // Ref para scroll automático ao carregar resultados
+  const resultsTopRef = useRef<HTMLDivElement>(null);
+  
+  // Scroll automático para o topo quando os resultados carregam
+  useEffect(() => {
+    if (resultsTopRef.current) {
+      // Pequeno delay para garantir que o componente está totalmente renderizado
+      setTimeout(() => {
+        resultsTopRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }, 100);
+    }
+  }, [result]); // Dispara quando result muda (novo backtest carregado)
+  
 
   // Estado para paginação
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12; // 12 meses por página
+  
+  // Estados para benchmarks
+  const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
+  const [loadingBenchmarks, setLoadingBenchmarks] = useState(true);
+  const [showBenchmarks, setShowBenchmarks] = useState(true);
+  
+  // Buscar dados de benchmarks quando o componente montar
+  useEffect(() => {
+    async function loadBenchmarks() {
+      if (!config || !result.monthlyReturns || result.monthlyReturns.length === 0) {
+        setLoadingBenchmarks(false);
+        return;
+      }
+
+      try {
+        setLoadingBenchmarks(true);
+        
+        // Usar as datas efetivas do backtest
+        const sortedReturns = [...result.monthlyReturns].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        
+        const startDate = new Date(sortedReturns[0].date);
+        const endDate = new Date(sortedReturns[sortedReturns.length - 1].date);
+        
+        console.log('📊 Buscando benchmarks para período:', startDate, '-', endDate);
+        
+        // Buscar benchmarks via API (servidor)
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        const response = await fetch(`/api/benchmarks?startDate=${startDateStr}&endDate=${endDateStr}`);
+        
+        if (!response.ok) {
+          throw new Error('Erro ao buscar benchmarks');
+        }
+        
+        const data = await response.json();
+        setBenchmarkData(data);
+        
+        console.log('✅ Benchmarks carregados:', {
+          cdi: data.cdi.length,
+          ibov: data.ibov.length
+        });
+      } catch (error) {
+        console.error('❌ Erro ao carregar benchmarks:', error);
+        setBenchmarkData(null);
+      } finally {
+        setLoadingBenchmarks(false);
+      }
+    }
+
+    loadBenchmarks();
+  }, [config, result.monthlyReturns]);
   
   // Funções de formatação
   const formatCurrency = (value: number) => {
@@ -337,18 +410,245 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
   const recoveryMetrics = calculateRecoveryMetrics();
 
-  // Preparar dados para o gráfico
-  const chartData = result.monthlyReturns && result.monthlyReturns.length > 0 
-    ? result.monthlyReturns.map((month, index) => ({
-        month: new Date(month.date).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-        value: month.portfolioValue,
+  // Preparar dados para o gráfico com benchmarks
+  const chartData = useMemo(() => {
+    if (!result.monthlyReturns || result.monthlyReturns.length === 0) return [];
+    
+    // Ordenar dados cronologicamente
+    let sortedReturns = [...result.monthlyReturns].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    
+    // CORREÇÃO: Se falta o primeiro mês, adicionar manualmente
+    if (transactions && transactions.length > 0) {
+      // Descobrir a data da primeira transação
+      const sortedTransactions = [...transactions].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      const firstTransactionDate = sortedTransactions[0]?.date.split('T')[0]; // Remover hora
+      const firstReturnDate = sortedReturns[0]?.date.split('T')[0];
+      
+      if (firstReturnDate !== firstTransactionDate) {
+        // Inferir dados do primeiro mês baseado no capital inicial + primeiro aporte
+        const firstMonthData = {
+          date: firstTransactionDate,
+          return: 0, // Primeiro mês sem retorno calculado
+          portfolioValue: (config?.initialCapital || 0) + (config?.monthlyContribution || 0), // Capital + aporte
+          contribution: (config?.initialCapital || 0) + (config?.monthlyContribution || 0),
+        };
+        
+        sortedReturns = [firstMonthData, ...sortedReturns];
+      }
+    }
+    
+    // Preparar dados da carteira
+    const portfolioData = sortedReturns.map((month) => {
+      // CORREÇÃO: Forçar UTC para evitar problemas de timezone
+      const date = new Date(month.date + 'T12:00:00Z'); // Adicionar hora meio-dia UTC
+      const monthLabel = date.toLocaleDateString('pt-BR', { 
+        month: 'short', 
+        year: '2-digit',
+        timeZone: 'UTC' // Forçar UTC
+      });
+      
+      return {
+        month: monthLabel,
+        date: month.date,
+        carteira: month.portfolioValue,
         contribution: month.contribution,
-        return: month.return * 100, // Converter para porcentagem
-        cumulativeReturn: index === 0 ? 0 : 
-          ((month.portfolioValue - (result.monthlyReturns[0]?.portfolioValue || 0)) / 
-           (result.monthlyReturns[0]?.portfolioValue || 1)) * 100
-      }))
-    : [];
+        return: month.return * 100,
+      };
+    });
+    
+    // Se não temos benchmarks ou estão desabilitados, retornar apenas dados da carteira
+    if (!benchmarkData || !showBenchmarks || loadingBenchmarks) {
+      return portfolioData;
+    }
+    
+    // Alinhar benchmarks com as datas do backtest
+    const backtestDates = sortedReturns.map(m => m.date);
+    const alignedCDI = alignBenchmarkDates(benchmarkData.cdi, backtestDates);
+    const alignedIBOV = alignBenchmarkDates(benchmarkData.ibov, backtestDates);
+    
+    // Simular investimento no CDI (taxa % diária do Banco Central)
+    const simulateCDIInvestment = (cdiData: Array<{ date: string; value: number }>) => {
+      if (cdiData.length === 0 || !config) return [];
+      
+      console.log('🟢 ===== VALIDAÇÃO CDI =====');
+      console.log('🟢 Taxa CDI inicial (raw):', cdiData[0]?.value);
+      console.log('🟢 Taxa CDI final (raw):', cdiData[cdiData.length - 1]?.value);
+      console.log('🟢 Número de meses:', cdiData.length);
+      
+      // O Banco Central retorna o CDI como taxa diária (%)
+      // Valores típicos: 0.03% a 0.06% ao dia
+      
+      // Calcular taxa média diária do período
+      const avgDailyRate = cdiData.reduce((sum, item) => sum + item.value, 0) / cdiData.length;
+      
+      // Converter taxa diária para mensal (assumindo ~21 dias úteis por mês)
+      // Juros compostos: (1 + taxa_diária)^21 - 1
+      const avgMonthlyRate = Math.pow(1 + (avgDailyRate / 100), 21) - 1;
+      
+      // Taxa anualizada: (1 + taxa_mensal)^12 - 1
+      const avgAnnualRate = Math.pow(1 + avgMonthlyRate, 12) - 1;
+      
+      console.log('🟢 Taxa CDI média diária:', avgDailyRate.toFixed(4) + '% a.d.');
+      console.log('🟢 Taxa mensal equivalente:', (avgMonthlyRate * 100).toFixed(3) + '% a.m.');
+      console.log('🟢 Taxa anualizada equivalente:', (avgAnnualRate * 100).toFixed(2) + '% a.a.');
+      console.log('🟢 ========================');
+      
+      // CORREÇÃO: Adicionar capital inicial + aporte no primeiro mês (igual à carteira)
+      let accumulatedValue = (config.initialCapital || 0) + config.monthlyContribution;
+      const results: number[] = [accumulatedValue];
+      
+      for (let i = 1; i < sortedReturns.length; i++) {
+        // Aplicar rendimento CDI mensal sobre saldo atual
+        accumulatedValue = accumulatedValue * (1 + avgMonthlyRate);
+        
+        // Adicionar novo aporte após rendimento
+        accumulatedValue += config.monthlyContribution;
+        
+        results.push(accumulatedValue);
+      }
+      
+      // Calcular retorno total e validar (SEMPRE sortedReturns.length aportes)
+      const numAportes = sortedReturns.length;
+      const totalAportes = config.monthlyContribution * numAportes;
+      const initialInvestment = (config.initialCapital || 0) + totalAportes;
+      const finalValue = results[results.length - 1];
+      const totalReturn = ((finalValue - initialInvestment) / initialInvestment) * 100;
+      const annualizedReturn = (Math.pow(finalValue / initialInvestment, 12 / sortedReturns.length) - 1) * 100;
+      
+      console.log('🟢 ===== RESULTADO CDI =====');
+      console.log('🟢 📊 BREAKDOWN DO TOTAL INVESTIDO:');
+      console.log('🟢   Capital Inicial:', formatCurrency(config.initialCapital || 0));
+      console.log('🟢   Número de Aportes Mensais:', numAportes, 'meses');
+      console.log('🟢   Aporte Mensal:', formatCurrency(config.monthlyContribution));
+      console.log('🟢   Total Aportes:', formatCurrency(totalAportes));
+      console.log('🟢   ➡️ TOTAL INVESTIDO:', formatCurrency(initialInvestment));
+      console.log('🟢 Valor Final:', formatCurrency(finalValue));
+      console.log('🟢 Ganho Líquido:', formatCurrency(finalValue - initialInvestment));
+      console.log('🟢 Retorno Total:', totalReturn.toFixed(2) + '%');
+      console.log('🟢 Retorno Anualizado (com aportes):', annualizedReturn.toFixed(2) + '% a.a.');
+      console.log('🟢 Primeiros 5 meses:', results.slice(0, 5).map(v => formatCurrency(v)));
+      console.log('🟢 Últimos 5 meses:', results.slice(-5).map(v => formatCurrency(v)));
+      console.log('🟢 ========================');
+      
+      return results;
+    };
+    
+    // Simular investimento no IBOV (índice de preço)
+    const simulateIBOVInvestment = (ibovData: Array<{ date: string; value: number }>) => {
+      if (ibovData.length === 0 || !config) return [];
+      
+      console.log('🟠 ===== DEBUG IBOV SIMULATION =====');
+      console.log('🟠 Total de meses (sortedReturns.length):', sortedReturns.length);
+      console.log('🟠 Total de dados IBOV:', ibovData.length);
+      console.log('🟠 Primeiros 5 meses IBOV:', ibovData.slice(0, 5));
+      console.log('🟠 Últimos 5 meses IBOV:', ibovData.slice(-5));
+      
+      // CORREÇÃO: Adicionar capital inicial + aporte no primeiro mês (igual à carteira)
+      let accumulatedValue = (config.initialCapital || 0) + config.monthlyContribution;
+      const results: number[] = [accumulatedValue];
+      
+      console.log('🟠 Mês 0 (inicial): Valor Acumulado =', formatCurrency(accumulatedValue));
+      
+      for (let i = 1; i < sortedReturns.length; i++) {
+        const prevValue = accumulatedValue;
+        
+        // IBOV é índice de preço, calculamos variação percentual
+        const monthReturn = ibovData[i] && ibovData[i - 1]
+          ? (ibovData[i].value - ibovData[i - 1].value) / ibovData[i - 1].value
+          : 0;
+        
+        // Aplicar retorno sobre saldo atual
+        accumulatedValue = accumulatedValue * (1 + monthReturn);
+        
+        // Log detalhado dos últimos 5 meses
+        if (i >= sortedReturns.length - 5) {
+          console.log(`🟠 Mês ${i}:`, 
+            `Data: ${ibovData[i]?.date || 'N/A'}`,
+            `IBOV[${i-1}]: ${ibovData[i-1]?.value.toFixed(2)}`,
+            `IBOV[${i}]: ${ibovData[i]?.value.toFixed(2)}`,
+            `Retorno: ${(monthReturn * 100).toFixed(2)}%`,
+            `Antes: ${formatCurrency(prevValue)}`,
+            `Depois retorno: ${formatCurrency(accumulatedValue)}`
+          );
+        }
+        
+        // Adicionar novo aporte
+        accumulatedValue += config.monthlyContribution;
+        
+        if (i >= sortedReturns.length - 5) {
+          console.log(`🟠   + Aporte: ${formatCurrency(config.monthlyContribution)} → Total: ${formatCurrency(accumulatedValue)}`);
+        }
+        
+        results.push(accumulatedValue);
+      }
+      
+      console.log('🟠 ===========================');
+      
+      // Calcular retorno total e validar (SEMPRE sortedReturns.length aportes)
+      const numAportes = sortedReturns.length;
+      const totalAportes = config.monthlyContribution * numAportes;
+      const initialInvestment = (config.initialCapital || 0) + totalAportes;
+      const finalValue = results[results.length - 1];
+      const totalReturn = ((finalValue - initialInvestment) / initialInvestment) * 100;
+      const annualizedReturn = (Math.pow(finalValue / initialInvestment, 12 / sortedReturns.length) - 1) * 100;
+      
+      console.log('🟠 ===== RESULTADO IBOV =====');
+      console.log('🟠 📊 BREAKDOWN DO TOTAL INVESTIDO:');
+      console.log('🟠   Capital Inicial:', formatCurrency(config.initialCapital || 0));
+      console.log('🟠   Número de Aportes Mensais:', numAportes, 'meses');
+      console.log('🟠   Aporte Mensal:', formatCurrency(config.monthlyContribution));
+      console.log('🟠   Total Aportes:', formatCurrency(totalAportes));
+      console.log('🟠   ➡️ TOTAL INVESTIDO:', formatCurrency(initialInvestment));
+      console.log('🟠 Valor Final:', formatCurrency(finalValue));
+      console.log('🟠 Ganho Líquido:', formatCurrency(finalValue - initialInvestment));
+      console.log('🟠 Retorno Total:', totalReturn.toFixed(2) + '%');
+      console.log('🟠 Retorno Anualizado:', annualizedReturn.toFixed(2) + '% a.a.');
+      console.log('🟠 Primeiros 5 meses:', results.slice(0, 5).map(v => formatCurrency(v)));
+      console.log('🟠 Últimos 5 meses:', results.slice(-5).map(v => formatCurrency(v)));
+      console.log('🟠 ========================');
+      
+      return results;
+    };
+    
+    const cdiValues = simulateCDIInvestment(alignedCDI);
+    const ibovValues = simulateIBOVInvestment(alignedIBOV);
+    
+    // Log comparativo final
+    if (cdiValues.length > 0 && ibovValues.length > 0) {
+      const carteiraFinal = sortedReturns[sortedReturns.length - 1]?.portfolioValue || 0;
+      const cdiFinal = cdiValues[cdiValues.length - 1] || 0;
+      const ibovFinal = ibovValues[ibovValues.length - 1] || 0;
+      
+      console.log('');
+      console.log('💼 ===== COMPARAÇÃO FINAL =====');
+      console.log('💼 Sua Carteira:', formatCurrency(carteiraFinal));
+      console.log('🟢 CDI:', formatCurrency(cdiFinal), '(', (cdiFinal > carteiraFinal ? '+' : ''), formatCurrency(cdiFinal - carteiraFinal), ')');
+      console.log('🟠 IBOV:', formatCurrency(ibovFinal), '(', (ibovFinal > carteiraFinal ? '+' : ''), formatCurrency(ibovFinal - carteiraFinal), ')');
+      console.log('================================');
+      console.log('');
+    }
+    
+    // Combinar todos os dados
+    const finalChartData = portfolioData.map((data, index) => ({
+      ...data,
+      cdi: cdiValues[index] ?? null,
+      ibov: ibovValues[index] ?? null,
+    }));
+    
+    console.log('📊 ===== CHART DATA FINAL =====');
+    console.log('📊 Total de pontos no gráfico:', finalChartData.length);
+    console.log('📊 Últimos 5 pontos do gráfico:');
+    finalChartData.slice(-5).forEach((point, idx) => {
+      console.log(`📊   [${finalChartData.length - 5 + idx}] ${point.month} (${point.date}): Carteira: R$ ${point.carteira.toFixed(2)}, IBOV: R$ ${point.ibov ? point.ibov.toFixed(2) : 'N/A'}`);
+    });
+    console.log('📊 ========================');
+    
+    return finalChartData;
+  }, [result.monthlyReturns, benchmarkData, showBenchmarks, loadingBenchmarks, config, transactions]);
 
   // Ordenar dados por data mais recente e lógica de paginação
   const sortedMonthlyReturns = result.monthlyReturns && result.monthlyReturns.length > 0 
@@ -467,7 +767,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
   const periodAdjusted = startDateAdjusted || endDateAdjusted;
 
   return (
-    <div className="space-y-6">
+    <div ref={resultsTopRef} className="space-y-6">
       {/* Alerta de Período Ajustado */}
       {periodAdjusted && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
@@ -826,48 +1126,139 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
         {/* Evolução da Carteira */}
         <TabsContent value="evolution">
           <div className="space-y-6">
-            {/* Gráfico de Evolução */}
+            {/* Gráfico de Evolução com Benchmarks */}
             <Card>
               <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  Evolução da Carteira ao Longo do Tempo
+                    <LineChartIcon className="w-5 h-5" />
+                    Evolução Patrimonial Comparativa
                 </CardTitle>
+                  {benchmarkData && !loadingBenchmarks && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={showBenchmarks ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowBenchmarks(!showBenchmarks)}
+                        className="text-xs"
+                      >
+                        <BarChart3 className="w-3 h-3 mr-1" />
+                        {showBenchmarks ? 'Ocultar' : 'Mostrar'} Benchmarks
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {showBenchmarks && benchmarkData && (
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                    Comparação do valor acumulado investindo com a mesma estratégia de aportes mensais em cada opção (Carteira, CDI, IBOVESPA)
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
-                {chartData.length > 0 ? (
-                  <div className="h-80">
+                {loadingBenchmarks ? (
+                  <div className="h-80 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <BarChart3 className="w-16 h-16 mx-auto text-gray-400 mb-4 animate-pulse" />
+                      <p className="text-gray-500">Carregando benchmarks...</p>
+                    </div>
+                  </div>
+                ) : chartData.length > 0 ? (
+                  <div className="h-80 sm:h-96">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                         <XAxis 
                           dataKey="month" 
-                          tick={{ fontSize: 12 }}
+                          tick={{ fontSize: 11 }}
                           angle={-45}
                           textAnchor="end"
-                          height={60}
+                          height={70}
+                          stroke="#6b7280"
                         />
                         <YAxis 
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => formatCurrency(value)}
+                          tick={{ fontSize: 11 }}
+                          stroke="#6b7280"
+                          label={{ 
+                            value: 'Valor (R$)', 
+                            angle: -90, 
+                            position: 'insideLeft',
+                            style: { fontSize: 12, fill: '#6b7280' }
+                          }}
+                          tickFormatter={(value) => {
+                            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+                            if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+                            return value.toFixed(0);
+                          }}
                         />
                         <Tooltip 
-                          formatter={(value, name) => {
-                            if (name === 'value') return [formatCurrency(Number(value)), 'Valor da Carteira'];
-                            if (name === 'contribution') return [formatCurrency(Number(value)), 'Aporte Mensal'];
-                            return [value, name];
+                          contentStyle={{
+                            backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            padding: '12px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                           }}
-                          labelFormatter={(label) => `Mês: ${label}`}
+                          formatter={(value: any, name: string) => {
+                            // Garantir que o valor é um número válido
+                            const numValue = Number(value);
+                            if (isNaN(numValue) || numValue === null || numValue === undefined) {
+                              return ['N/A', name];
+                            }
+                            
+                            const formattedValue = formatCurrency(numValue);
+                            
+                            // Mapear nomes amigáveis
+                            if (name === 'carteira') return [formattedValue, '💼 Sua Carteira'];
+                            if (name === 'cdi') return [formattedValue, '🟢 CDI'];
+                            if (name === 'ibov') return [formattedValue, '🟠 IBOVESPA'];
+                            
+                            return [formattedValue, name];
+                          }}
+                          labelFormatter={(label) => `📅 ${label}`}
                         />
-                        <Area 
+                        <Legend 
+                          wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+                          iconType="line"
+                        />
+                        
+                        {/* Linha da Carteira - Destaque */}
+                        <Line 
                           type="monotone" 
-                          dataKey="value" 
+                          dataKey="carteira" 
                           stroke="#3b82f6" 
-                          fill="#3b82f6" 
-                          fillOpacity={0.3}
-                          strokeWidth={2}
+                          strokeWidth={3}
+                          dot={false}
+                          name="Sua Carteira"
+                          activeDot={{ r: 6 }}
                         />
-                      </AreaChart>
+                        
+                        {/* Linha do CDI */}
+                        {showBenchmarks && benchmarkData?.cdi && benchmarkData.cdi.length > 0 && (
+                          <Line 
+                            type="monotone" 
+                            dataKey="cdi" 
+                            stroke="#10b981" 
+                          strokeWidth={2}
+                            strokeDasharray="5 5"
+                            dot={false}
+                            name="CDI"
+                          />
+                        )}
+                        
+                        {/* Linha do IBOVESPA */}
+                        {showBenchmarks && benchmarkData?.ibov && benchmarkData.ibov.length > 0 && (
+                          <Line 
+                            type="monotone" 
+                            dataKey="ibov" 
+                            stroke="#f59e0b" 
+                            strokeWidth={2}
+                            strokeDasharray="5 5"
+                            dot={false}
+                            name="IBOVESPA"
+                          />
+                        )}
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 ) : (
@@ -878,6 +1269,111 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                     </div>
                   </div>
                 )}
+                
+                {/* Card de Performance Comparativa */}
+                {showBenchmarks && benchmarkData && chartData.length > 0 && (() => {
+                  const finalCarteira = chartData[chartData.length - 1]?.carteira || 0;
+                  const finalCDI = (chartData[chartData.length - 1] as any)?.cdi || 0;
+                  const finalIBOV = (chartData[chartData.length - 1] as any)?.ibov || 0;
+                  const totalInvested = result.totalInvested;
+                  
+                  const returnCarteira = totalInvested > 0 ? ((finalCarteira - totalInvested) / totalInvested) * 100 : 0;
+                  const returnCDI = totalInvested > 0 ? ((finalCDI - totalInvested) / totalInvested) * 100 : 0;
+                  const returnIBOV = totalInvested > 0 ? ((finalIBOV - totalInvested) / totalInvested) * 100 : 0;
+                  
+                  // Debug: logs dos cards
+                  // CORREÇÃO: Usar meses únicos das TRANSAÇÕES (fonte da verdade), não chartData.length
+                  const uniqueMonths = transactions ? new Set(transactions.map(t => t.month)).size : chartData.length;
+                  const numMesesReais = uniqueMonths;
+                  const numAportesEstimado = numMesesReais; // SEMPRE todos os meses
+                  const totalAportesEstimado = (config?.monthlyContribution || 0) * numAportesEstimado;
+                  const totalInvestidoCalculado = (config?.initialCapital || 0) + totalAportesEstimado;
+                  
+                  console.log('📊 ===== CARDS DE PERFORMANCE =====');
+                  console.log('📊 📊 BREAKDOWN DO TOTAL INVESTIDO:');
+                  console.log('📊   Capital Inicial:', formatCurrency(config?.initialCapital || 0));
+                  console.log('📊   Aporte Mensal:', formatCurrency(config?.monthlyContribution || 0));
+                  console.log('📊   Número de Meses (Transações):', numMesesReais, '✅ (fonte da verdade)');
+                  console.log('📊   Número de Meses (chartData):', chartData.length, chartData.length !== numMesesReais ? '⚠️  (DIFERENTE!)' : '');
+                  console.log('📊   Número de Aportes:', numAportesEstimado);
+                  console.log('📊   Total Aportes Calculado:', formatCurrency(totalAportesEstimado));
+                  console.log('📊   ➡️ TOTAL INVESTIDO (Calculado):', formatCurrency(totalInvestidoCalculado));
+                  console.log('📊   ➡️ TOTAL INVESTIDO (Backend):', formatCurrency(totalInvested));
+                  console.log('📊   ⚠️  Diferença:', formatCurrency(totalInvestidoCalculado - totalInvested), `(${((Math.abs(totalInvestidoCalculado - totalInvested) / totalInvested) * 100).toFixed(2)}%)`);
+                  console.log('📊');
+                  console.log('📊 VALORES FINAIS:');
+                  console.log('📊 Final Carteira:', formatCurrency(finalCarteira), '→ Ganho:', formatCurrency(finalCarteira - totalInvested), '→ Retorno:', returnCarteira.toFixed(2) + '%');
+                  console.log('📊 Final CDI:', formatCurrency(finalCDI), '→ Ganho:', formatCurrency(finalCDI - totalInvested), '→ Retorno:', returnCDI.toFixed(2) + '%');
+                  console.log('📊 Final IBOV:', formatCurrency(finalIBOV), '→ Ganho:', formatCurrency(finalIBOV - totalInvested), '→ Retorno:', returnIBOV.toFixed(2) + '%');
+                  console.log('📊 ==================================');
+                  
+                  return (
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                      {/* Sua Carteira */}
+                      <div className="p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="text-xs sm:text-sm font-medium text-blue-900 dark:text-blue-100 block">Sua Carteira</span>
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400">Retorno Total</span>
+                          </div>
+                          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                        </div>
+                        <p className="text-lg sm:text-2xl font-bold text-blue-600">
+                          {returnCarteira >= 0 ? '+' : ''}{returnCarteira.toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          {formatCurrency(finalCarteira)}
+                        </p>
+                      </div>
+                      
+                      {/* CDI */}
+                      {benchmarkData.cdi.length > 0 && (
+                        <div className="p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <span className="text-xs sm:text-sm font-medium text-green-900 dark:text-green-100 block">CDI</span>
+                              <span className="text-[10px] text-green-600 dark:text-green-400">Retorno Total</span>
+                            </div>
+                            <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-dashed border-green-700"></div>
+                          </div>
+                          <p className="text-lg sm:text-2xl font-bold text-green-600">
+                            {returnCDI >= 0 ? '+' : ''}{returnCDI.toFixed(1)}%
+                          </p>
+                          <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                            {formatCurrency(finalCDI)}
+                            <span className="ml-2">
+                              {(returnCarteira - returnCDI) >= 0 ? '▲' : '▼'} 
+                              {Math.abs(returnCarteira - returnCDI).toFixed(1)}pp
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* IBOVESPA */}
+                      {benchmarkData.ibov.length > 0 && (
+                        <div className="p-3 sm:p-4 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <span className="text-xs sm:text-sm font-medium text-orange-900 dark:text-orange-100 block">IBOVESPA</span>
+                              <span className="text-[10px] text-orange-600 dark:text-orange-400">Retorno Total</span>
+                            </div>
+                            <div className="w-3 h-3 rounded-full bg-orange-500 border-2 border-dashed border-orange-700"></div>
+                          </div>
+                          <p className="text-lg sm:text-2xl font-bold text-orange-600">
+                            {returnIBOV >= 0 ? '+' : ''}{returnIBOV.toFixed(1)}%
+                          </p>
+                          <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                            {formatCurrency(finalIBOV)}
+                            <span className="ml-2">
+                              {(returnCarteira - returnIBOV) >= 0 ? '▲' : '▼'} 
+                              {Math.abs(returnCarteira - returnIBOV).toFixed(1)}pp
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 

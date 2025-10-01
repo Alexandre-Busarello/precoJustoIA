@@ -184,20 +184,34 @@ function RankingContent() {
   const [showHistory, setShowHistory] = useState(true)
   const quickRankerRef = useRef<HTMLDivElement>(null)
 
+  // Função para scrollar para o quick ranker e resetar estado
+  const scrollToQuickRanker = () => {
+    // Remover ID da URL para resetar o QuickRanker
+    const currentUrl = new URL(window.location.href)
+    currentUrl.searchParams.delete('id')
+    window.history.pushState({}, '', currentUrl.toString())
+    
+    // Forçar atualização do componente removendo o rankingId
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    
+    // Scroll para o QuickRanker
+    setTimeout(() => {
+      quickRankerRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      })
+    }, 100)
+  }
+
   // Scroll para o histórico se houver ID na URL
   useEffect(() => {
     if (rankingId) {
       setShowHistory(true)
+    } else {
+      scrollToQuickRanker()
     }
   }, [rankingId, showHistory])
 
-  // Função para scrollar para o quick ranker
-  const scrollToQuickRanker = () => {
-    quickRankerRef.current?.scrollIntoView({ 
-      behavior: 'smooth', 
-      block: 'start' 
-    })
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">

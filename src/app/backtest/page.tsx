@@ -5,6 +5,8 @@ import { getCurrentUser } from '@/lib/user-service';
 import { redirect } from 'next/navigation';
 import { BacktestPageClient } from '@/components/backtest-page-client';
 import { Footer } from '@/components/footer';
+import { BarChart3, Crown, Home } from 'lucide-react';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Backtesting de Carteira | Preço Justo',
@@ -33,32 +35,46 @@ export default async function BacktestPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      {/* Header */}
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="container mx-auto px-4 py-4 sm:py-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
+      {/* Header - Padronizado com outras páginas */}
+      <section className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 py-8 md:py-12">
+        <div className="container mx-auto max-w-7xl">
+          {/* Breadcrumbs */}
+          <div className="flex items-center gap-2 text-sm text-blue-100 mb-4">
+            <Link href="/dashboard" className="hover:text-white transition-colors flex items-center gap-1">
+              <Home className="w-4 h-4" />
+              Dashboard
+            </Link>
+            <span>/</span>
+            <span className="text-white">Backtest</span>
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">
-                📊 Backtesting de Carteira
-              </h1>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1 sm:mt-2">
-                Simule o desempenho histórico de suas estratégias de investimento
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-3 bg-white/10 backdrop-blur-sm rounded-xl">
+                  <BarChart3 className="w-6 h-6 md:w-8 md:h-8" />
+                </div>
+                <h1 className="text-2xl md:text-4xl font-bold">
+                  Backtesting de Carteira
+                </h1>
+              </div>
+              <p className="text-base md:text-lg text-blue-100 max-w-2xl">
+                Simule o desempenho histórico de suas estratégias de investimento com rebalanceamento automático
               </p>
             </div>
             
             {/* Badge Premium */}
-            <div className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full text-white font-semibold text-xs sm:text-sm flex-shrink-0">
-              <span className="text-sm sm:text-lg">👑</span>
-              <span className="hidden xs:inline">Funcionalidade Premium</span>
-              <span className="xs:hidden">Premium</span>
+            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full text-white font-semibold text-sm shadow-lg flex-shrink-0">
+              <Crown className="w-4 h-4" />
+              <span>Premium</span>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto max-w-7xl px-4 py-8">
         <BacktestPageClient />
       </div>
 

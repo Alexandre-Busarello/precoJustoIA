@@ -9,6 +9,7 @@ import { BacktestHistory } from '@/components/backtest-history';
 import { BacktestDataQualityPanel } from '@/components/backtest-data-quality-panel';
 import { BacktestWelcomeScreen } from '@/components/backtest-welcome-screen';
 import { BacktestConfigHistory } from '@/components/backtest-config-history';
+import { BacktestProgressIndicator } from '@/components/backtest-progress-indicator';
 import { Button } from '@/components/ui/button';
 import { 
   TrendingUp, 
@@ -16,7 +17,8 @@ import {
   History, 
   BarChart3,
   AlertTriangle,
-  Loader2
+  Loader2,
+  DollarSign
 } from 'lucide-react';
 
 // Interfaces
@@ -272,6 +274,12 @@ export function BacktestPageClient() {
         const updatedConfig = { ...config, id: data.configId };
         setCurrentConfig(updatedConfig as BacktestConfig);
       }
+      
+      // 🎯 MELHORIA UX: Auto-redirect para aba de resultados após sucesso
+      setTimeout(() => {
+        setActiveTab('results');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 500);
       
       // Extrair transações do monthlyHistory se disponível
       if (data.result.monthlyHistory) {
@@ -601,15 +609,19 @@ export function BacktestPageClient() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                     <p className="text-amber-800 dark:text-amber-200">
-                      <strong>⚠️ Aviso:</strong> Resultados passados não garantem resultados futuros. 
+                      <strong>Aviso:</strong> Resultados passados não garantem resultados futuros. 
                       Use o backtesting como ferramenta de análise, não como previsão.
                     </p>
                   </div>
                   
                   <div className="space-y-2">
-                    <h4 className="font-semibold">📋 Como funciona:</h4>
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4" />
+                      <h4 className="font-semibold">Como funciona:</h4>
+                    </div>
                     <ul className="space-y-1 text-xs text-muted-foreground">
                       <li>• Simula aportes mensais regulares no primeiro dia do mês</li>
                       <li>• <strong>Rebalanceamento mensal automático</strong> da carteira</li>
@@ -620,7 +632,10 @@ export function BacktestPageClient() {
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="font-semibold">💎 Simulação de Dividendos:</h4>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4" />
+                      <h4 className="font-semibold">Simulação de Dividendos:</h4>
+                    </div>
                     <ul className="space-y-1 text-xs text-muted-foreground">
                       <li>• Yield médio configurado por ativo</li>
                       <li>• Pagamentos apenas em <strong>Março, Agosto e Outubro</strong></li>
@@ -631,7 +646,10 @@ export function BacktestPageClient() {
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="font-semibold">📊 Métricas incluídas:</h4>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      <h4 className="font-semibold">Métricas incluídas:</h4>
+                    </div>
                     <ul className="space-y-1 text-xs text-muted-foreground">
                       <li>• Retorno total e anualizado</li>
                       <li>• Volatilidade e Sharpe Ratio</li>
@@ -642,24 +660,8 @@ export function BacktestPageClient() {
                 </CardContent>
               </Card>
 
-              {/* Status da Simulação */}
-              {isRunning && (
-                <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                      <div>
-                        <p className="font-semibold text-blue-800 dark:text-blue-200">
-                          Processando...
-                        </p>
-                        <p className="text-xs text-blue-600 dark:text-blue-300">
-                          Analisando dados históricos e executando simulação
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Status da Simulação - Indicador Visual Melhorado */}
+              <BacktestProgressIndicator isRunning={isRunning} />
             </div>
           </div>
         </TabsContent>

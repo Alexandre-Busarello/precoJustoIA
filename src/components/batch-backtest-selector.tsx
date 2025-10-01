@@ -287,8 +287,8 @@ export function BatchBacktestSelector({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full h-full sm:w-[95vw] sm:h-auto sm:max-h-[90vh] overflow-hidden p-4 sm:p-6 sm:rounded-lg rounded-none" showCloseButton={false}>
-        <DialogHeader className="pb-4 flex-shrink-0">
+      <DialogContent className="max-w-4xl w-[100vw] sm:w-[95vw] h-[100vh] sm:h-auto sm:max-h-[90vh] flex flex-col p-0 sm:rounded-lg rounded-none overflow-hidden" showCloseButton={false}>
+        <DialogHeader className="pb-3 sm:pb-4 flex-shrink-0 px-4 pt-4 sm:px-6 sm:pt-6 border-b">{/* Indicador de passos */}
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl flex-1 min-w-0">
               <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
@@ -349,11 +349,12 @@ export function BatchBacktestSelector({
           </div>
         </DialogHeader>
 
-        <div className="flex flex-col h-full min-h-0">
+        {/* Conteúdo Scrollável */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-3 sm:py-4">
           {currentStep === 'select-companies' ? (
             // PASSO 1: Seleção de Empresas
-            <>
-              <div className="space-y-4 flex-shrink-0">
+            <div className="space-y-3 sm:space-y-4 h-full flex flex-col">
+              <div className="space-y-3 sm:space-y-4 flex-shrink-0">
                 <div className="p-4 sm:p-6 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-lg border">
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
@@ -386,16 +387,15 @@ export function BatchBacktestSelector({
               </div>
 
               {/* Preview das empresas selecionadas */}
-              <div className="flex-1 min-h-0 space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-base font-semibold">Empresas Selecionadas</Label>
-                  <Badge variant="secondary" className="text-sm">
+                  <Label className="text-sm sm:text-base font-semibold">Empresas Selecionadas</Label>
+                  <Badge variant="secondary" className="text-xs sm:text-sm">
                     {(100 / topCount).toFixed(1)}% cada
                   </Badge>
                 </div>
                 
-                <ScrollArea className="h-full max-h-[calc(100vh-450px)] sm:max-h-[250px]">
-                  <div className="grid grid-cols-1 gap-3 pr-3 pb-4">
+                <div className="grid grid-cols-1 gap-2 sm:gap-3">
                     {selectedAssets.map((asset, index) => (
                       <div key={asset.ticker} className="flex items-center gap-3 p-3 bg-white dark:bg-background rounded-lg border hover:shadow-sm transition-shadow">
                         <div className="flex items-center gap-2">
@@ -419,84 +419,95 @@ export function BatchBacktestSelector({
                         </div>
                       </div>
                     ))}
-                  </div>
-                </ScrollArea>
+                </div>
               </div>
-            </>
+            </div>
           ) : (
             // PASSO 2: Escolha de Configuração
-            <>
-              {/* Resumo das empresas selecionadas */}
-              <div className="mb-4 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium text-green-900 dark:text-green-100 text-sm">
-                    ✅ {topCount} Empresas Selecionadas
-                  </h4>
+            <div className="flex flex-col h-full min-h-0">
+              {/* Resumo das empresas selecionadas - Compacto */}
+              <div className="mb-3 p-2 sm:p-2.5 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800 flex-shrink-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs font-bold">✓</span>
+                      </div>
+                      <span className="font-medium text-green-900 dark:text-green-100 text-xs sm:text-sm whitespace-nowrap">
+                        {topCount} empresas
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 min-w-0">
+                      {selectedAssets.slice(0, 3).map((asset) => (
+                        <Badge key={asset.ticker} variant="outline" className="text-xs bg-white dark:bg-background">
+                          {asset.ticker}
+                        </Badge>
+                      ))}
+                      {topCount > 3 && (
+                        <Badge variant="outline" className="text-xs bg-white dark:bg-background">
+                          +{topCount - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setCurrentStep('select-companies')}
-                    className="text-xs text-green-700 hover:text-green-900"
+                    className="text-xs text-green-700 hover:text-green-900 h-6 px-2 flex-shrink-0"
                   >
                     Alterar
                   </Button>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {selectedAssets.map((asset, index) => (
-                    <Badge key={asset.ticker} variant="outline" className="text-xs bg-white dark:bg-background">
-                      #{index + 1} {asset.ticker}
-                    </Badge>
-                  ))}
-                </div>
               </div>
 
               {/* Botões de ação */}
-              <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 mb-3 flex-shrink-0">
                 <Button
                   variant={!showCreateForm ? "default" : "outline"}
                   onClick={() => setShowCreateForm(false)}
-                  className="flex-1"
+                  className="flex-1 h-11 sm:h-10"
                 >
                   <Settings className="w-4 h-4 mr-2" />
-                  <span className="hidden sm:inline">Configurações Existentes</span>
-                  <span className="sm:hidden">Existentes</span>
+                  <span className="hidden sm:inline text-sm">Configurações Existentes</span>
+                  <span className="sm:hidden text-sm">Existentes</span>
                 </Button>
                 <Button
                   variant={showCreateForm ? "default" : "outline"}
                   onClick={() => setShowCreateForm(true)}
-                  className="flex-1"
+                  className="flex-1 h-11 sm:h-10"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  <span className="hidden sm:inline">Nova Configuração</span>
-                  <span className="sm:hidden">Nova</span>
+                  <span className="hidden sm:inline text-sm">Nova Configuração</span>
+                  <span className="sm:hidden text-sm">Nova</span>
                 </Button>
               </div>
-              <ScrollArea className="flex-1 max-h-[calc(100vh-300px)] sm:max-h-[400px] md:max-h-[500px]">
+              
             {!showCreateForm ? (
               // Lista de configurações existentes
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {configs.length > 0 && (
-                  <div className="text-xs text-gray-500 mb-3 px-1">
+                  <div className="text-xs text-gray-500 mb-2 sm:mb-3 px-1">
                     Mostrando as 10 configurações mais recentes
                   </div>
                 )}
                 {isLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                    Carregando configurações...
+                  <div className="flex items-center justify-center py-6 sm:py-8">
+                    <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin mr-2" />
+                    <span className="text-sm sm:text-base">Carregando configurações...</span>
                   </div>
                 ) : configs.length === 0 ? (
-                  <div className="text-center py-8">
-                    <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  <div className="text-center py-6 sm:py-8">
+                    <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-gray-400 mb-3 sm:mb-4" />
+                    <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 mb-2 px-4">
                       Nenhuma configuração encontrada
                     </h3>
-                    <p className="text-gray-500 mb-4">
+                    <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-3 sm:mb-4 px-4">
                       Crie sua primeira configuração de backtest para começar
                     </p>
-                    <Button onClick={() => setShowCreateForm(true)}>
+                    <Button onClick={() => setShowCreateForm(true)} size="sm">
                       <Plus className="w-4 h-4 mr-2" />
-                      Criar Primeira Configuração
+                      <span className="text-sm">Criar Primeira Configuração</span>
                     </Button>
                   </div>
                 ) : (
@@ -561,56 +572,56 @@ export function BatchBacktestSelector({
               </div>
             ) : (
               // Formulário para nova configuração
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div>
-                  <Label htmlFor="name">Nome da Configuração *</Label>
+                  <Label htmlFor="name" className="text-sm sm:text-base">Nome da Configuração *</Label>
                   <Input
                     id="name"
                     value={newConfigForm.name}
                     onChange={(e) => setNewConfigForm(prev => ({ ...prev, name: e.target.value }))}
                     placeholder={`Backtest Top ${topCount} - ${new Date().toLocaleDateString('pt-BR')}`}
-                    className="mt-1"
+                    className="mt-1 text-sm sm:text-base h-9 sm:h-10"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="description">Descrição (opcional)</Label>
+                  <Label htmlFor="description" className="text-sm sm:text-base">Descrição (opcional)</Label>
                   <Textarea
                     id="description"
                     value={newConfigForm.description}
                     onChange={(e) => setNewConfigForm(prev => ({ ...prev, description: e.target.value }))}
                     placeholder={`Backtest criado a partir do ranking - Top ${topCount} empresas`}
-                    className="mt-1"
+                    className="mt-1 text-sm sm:text-base min-h-[60px] sm:min-h-[70px]"
                     rows={2}
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <Label htmlFor="startDate">Data de Início</Label>
+                    <Label htmlFor="startDate" className="text-sm sm:text-base">Data de Início</Label>
                     <Input
                       id="startDate"
                       type="date"
                       value={newConfigForm.startDate}
                       onChange={(e) => setNewConfigForm(prev => ({ ...prev, startDate: e.target.value }))}
-                      className="mt-1"
+                      className="mt-1 text-sm sm:text-base h-9 sm:h-10"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="endDate">Data de Fim</Label>
+                    <Label htmlFor="endDate" className="text-sm sm:text-base">Data de Fim</Label>
                     <Input
                       id="endDate"
                       type="date"
                       value={newConfigForm.endDate}
                       onChange={(e) => setNewConfigForm(prev => ({ ...prev, endDate: e.target.value }))}
-                      className="mt-1"
+                      className="mt-1 text-sm sm:text-base h-9 sm:h-10"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <Label htmlFor="initialCapital">Capital Inicial (R$)</Label>
+                    <Label htmlFor="initialCapital" className="text-sm sm:text-base">Capital Inicial (R$)</Label>
                     <Input
                       id="initialCapital"
                       type="number"
@@ -621,11 +632,11 @@ export function BatchBacktestSelector({
                         ...prev, 
                         initialCapital: parseFloat(e.target.value) || 0 
                       }))}
-                      className="mt-1"
+                      className="mt-1 text-sm sm:text-base h-9 sm:h-10"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="monthlyContribution">Aporte Mensal (R$)</Label>
+                    <Label htmlFor="monthlyContribution" className="text-sm sm:text-base">Aporte Mensal (R$)</Label>
                     <Input
                       id="monthlyContribution"
                       type="number"
@@ -636,13 +647,13 @@ export function BatchBacktestSelector({
                         ...prev, 
                         monthlyContribution: parseFloat(e.target.value) || 0 
                       }))}
-                      className="mt-1"
+                      className="mt-1 text-sm sm:text-base h-9 sm:h-10"
                     />
                   </div>
                 </div>
 
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900 mb-2">Ativos Selecionados</h4>
+                <div className="bg-blue-50 dark:bg-blue-950/20 p-3 sm:p-4 rounded-lg">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 text-sm sm:text-base">Ativos Selecionados</h4>
                   <div className="space-y-2">
                     <div className="flex flex-wrap gap-1">
                       {selectedAssets.map((asset, index) => (
@@ -651,65 +662,71 @@ export function BatchBacktestSelector({
                         </Badge>
                       ))}
                     </div>
-                    <p className="text-xs text-blue-600">
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
                       {topCount} empresas com {(100 / topCount).toFixed(1)}% de alocação cada
                     </p>
                   </div>
                 </div>
               </div>
               )}
-              </ScrollArea>
-            </>
+            </div>
           )}
+        </div>
 
-          {/* Botões de ação */}
-          <Separator className="my-3 sm:my-4 flex-shrink-0" />
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 flex-shrink-0">
+        {/* Rodapé com Botões - Fixo no fundo */}
+        <div className="border-t bg-background flex-shrink-0">
+          <div className="px-4 py-3 sm:px-6 sm:py-4">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
             <Button 
               variant="outline" 
               onClick={onClose}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto h-9 sm:h-10"
+              size="sm"
             >
-              Cancelar
+              <span className="text-sm">Cancelar</span>
             </Button>
             
             {currentStep === 'select-companies' ? (
               <Button
                 onClick={() => setCurrentStep('choose-config')}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-9 sm:h-10"
+                size="sm"
               >
-                <span className="hidden sm:inline">Continuar com {topCount} Empresas</span>
-                <span className="sm:hidden">Continuar</span>
+                <span className="hidden sm:inline text-sm">Continuar com {topCount} Empresas</span>
+                <span className="sm:hidden text-sm">Continuar</span>
               </Button>
             ) : !showCreateForm ? (
               <Button
                 onClick={() => selectedConfigId && addAssetsToConfig(selectedConfigId)}
                 disabled={!selectedConfigId || isAddingAssets}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-9 sm:h-10"
+                size="sm"
               >
                 {isAddingAssets ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-2 animate-spin" />
                 ) : (
-                  <Check className="w-4 h-4 mr-2" />
+                  <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-2" />
                 )}
-                <span className="hidden sm:inline">Adicionar {topCount} Empresas</span>
-                <span className="sm:hidden">Adicionar</span>
+                <span className="hidden sm:inline text-sm">Adicionar {topCount} Empresas</span>
+                <span className="sm:hidden text-sm">Adicionar</span>
               </Button>
             ) : (
               <Button
                 onClick={createNewConfigWithAssets}
                 disabled={!newConfigForm.name.trim() || isCreating}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-9 sm:h-10"
+                size="sm"
               >
                 {isCreating ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-2 animate-spin" />
                 ) : (
-                  <Plus className="w-4 h-4 mr-2" />
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-2" />
                 )}
-                <span className="hidden sm:inline">Criar com {topCount} Empresas</span>
-                <span className="sm:hidden">Criar</span>
+                <span className="hidden sm:inline text-sm">Criar com {topCount} Empresas</span>
+                <span className="sm:hidden text-sm">Criar</span>
               </Button>
             )}
+            </div>
           </div>
         </div>
       </DialogContent>

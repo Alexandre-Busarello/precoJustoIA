@@ -37,8 +37,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Flame,
-  Share2
+  Flame
 } from "lucide-react"
 import Link from "next/link"
 
@@ -174,6 +173,7 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
   const [selectedModel, setSelectedModel] = useState<string>("")
   const [params, setParams] = useState<RankingParams>({})
   const [loading, setLoading] = useState(false)
+  const [loadingType, setLoadingType] = useState<'generating' | 'loading'>('generating')
   const [results, setResults] = useState<RankingResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isViewingCached, setIsViewingCached] = useState(false) // Estado para resultados em cache
@@ -190,6 +190,12 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
       // Prioridade 1: Carregar ranking específico por ID
       if (rankingId) {
         try {
+          // Limpar resultados anteriores e mostrar loading
+          setResults(null)
+          setIsViewingCached(false)
+          setCachedInfo(null)
+          setLoadingType('loading') // Abrindo ranking salvo
+          setLoading(true)
           const response = await fetch(`/api/ranking/${rankingId}`)
           if (response.ok) {
             const data = await response.json()
@@ -214,13 +220,17 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
                 resultCount: ranking.resultCount, 
                 createdAt: ranking.createdAt 
               })
+              setIsResultsExpanded(true) // Expandir automaticamente
             }
+            setLoading(false)
             return
           } else {
             console.error('Erro ao carregar ranking:', response.status)
+            setLoading(false)
           }
         } catch (error) {
           console.error('Erro ao carregar ranking por ID:', error)
+          setLoading(false)
         }
       }
 
@@ -262,7 +272,7 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
 
   // Scroll automático para os resultados quando forem carregados
   useEffect(() => {
-    if (results && results.results.length > 0 && !isViewingCached && resultsRef.current) {
+    if (results && results.results.length > 0 && resultsRef.current) {
       // Pequeno delay para garantir que o DOM foi atualizado
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ 
@@ -271,7 +281,7 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
         })
       }, 100)
     }
-  }, [results, isViewingCached])
+  }, [results])
   
   const isLoggedIn = !!session
   const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
@@ -457,6 +467,7 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
   const handleGenerateRanking = async () => {
     if (!selectedModel) return
 
+    setLoadingType('generating') // Gerando novo ranking
     setLoading(true)
     setError(null)
     setIsViewingCached(false) // Resetar estado de cache ao gerar novo ranking
@@ -503,27 +514,6 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
     setCachedInfo(null)
     setResults(null)
     setIsResultsExpanded(false)
-  }
-
-  // Função para copiar link do ranking
-  const handleShareRanking = async () => {
-    if (!results) return
-    
-    try {
-      // Se estamos visualizando um ranking cached, usar o ID do ranking
-      if (isViewingCached && rankingId) {
-        const shareUrl = `${window.location.origin}/ranking?id=${rankingId}`
-        await navigator.clipboard.writeText(shareUrl)
-        // Aqui você pode adicionar uma notificação de sucesso
-        console.log('Link copiado:', shareUrl)
-      } else {
-        // Para rankings recém-gerados, primeiro precisamos encontrar o ID
-        // Isso pode ser implementado salvando o ID quando o ranking é criado
-        console.log('Funcionalidade de compartilhamento para rankings novos em desenvolvimento')
-      }
-    } catch (error) {
-      console.error('Erro ao copiar link:', error)
-    }
   }
 
   // Callback quando configuração de backtest em lote é selecionada
@@ -924,6 +914,39 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
   }
 
   return (
+    <>
+      {/* Loading Overlay Fullscreen */}
+      {loading && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 max-w-md mx-4 shadow-2xl">
+            <div className="text-center space-y-6">
+              <div className="relative w-20 h-20 mx-auto">
+                <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <BarChart3 className="absolute inset-0 m-auto w-8 h-8 text-blue-600" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                  {loadingType === 'generating' ? 'Analisando empresas...' : 'Carregando dados...'}
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {loadingType === 'generating' 
+                    ? 'Processando dados fundamentalistas da B3' 
+                    : 'Recuperando ranking salvo'}
+                </p>
+              </div>
+              
+              <div className="flex items-center justify-center gap-1">
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center space-y-4">
@@ -945,7 +968,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
       {/* Results - prioridade quando cached */}
       {results && (
-        <div ref={resultsRef} className="space-y-6">
+        <div className="space-y-6">
           <Collapsible open={isResultsExpanded} onOpenChange={setIsResultsExpanded}>
             {/* Results Header - Collapsible Trigger */}
             <CollapsibleTrigger asChild>
@@ -974,38 +997,6 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
-                      {/* Botão de backtest em lote */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setShowBatchBacktestModal(true)
-                        }}
-                        className="flex items-center gap-1 h-8 px-2 bg-gradient-to-r from-green-50 to-blue-50 hover:from-green-100 hover:to-blue-100 dark:from-green-950/20 dark:to-blue-950/20 border border-green-200 dark:border-green-800"
-                        title="Criar backtest com múltiplas empresas"
-                      >
-                        <BarChart3 className="w-3 h-3 text-green-600" />
-                        <span className="hidden sm:inline text-xs text-green-700 font-medium">Backtest do Ranking</span>
-                        <span className="sm:hidden text-xs text-green-700 font-medium">Backtest do Ranking</span>
-                      </Button>
-                      
-                      {/* Botão de compartilhar - apenas para rankings salvos */}
-                      {/* {isViewingCached && rankingId && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleShareRanking()
-                          }}
-                          className="flex items-center gap-1 h-8 px-2"
-                          title="Copiar link do ranking"
-                        >
-                          <Share2 className="w-3 h-3" />
-                          <span className="hidden sm:inline text-xs">Compartilhar</span>
-                        </Button>
-                      )} */}
                       <Badge variant="secondary" className="text-xs sm:text-sm px-2 sm:px-3 py-1">
                         {results.results.length} resultados
                       </Badge>
@@ -1034,11 +1025,52 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Results List - Sempre Visível */}
+          {/* CTA Backtest do Ranking - Destaque */}
+          {results.results.length > 0 && (
+            <Card className="border-0 bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 shadow-lg">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3 sm:gap-4 flex-1">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-500 rounded-xl flex items-center justify-center shrink-0">
+                      <BarChart3 className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                        🎯 Backtest do Ranking Completo
+                      </h3>
+                      <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">
+                        Simule como este ranking teria performado no passado! Teste múltiplas empresas simultaneamente 
+                        e compare com índices de mercado.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="text-xs bg-white/50 dark:bg-slate-800/50">
+                          📊 Múltiplas empresas
+                        </Badge>
+                        <Badge variant="outline" className="text-xs bg-white/50 dark:bg-slate-800/50">
+                          📈 Comparação com índices
+                        </Badge>
+                        <Badge variant="outline" className="text-xs bg-white/50 dark:bg-slate-800/50">
+                          💰 Performance histórica
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => setShowBatchBacktestModal(true)}
+                    size="lg"
+                    className="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 shadow-lg w-full sm:w-auto"
+                  >
+                    <BarChart3 className="w-5 h-5 mr-2" />
+                    Criar Backtest
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Results List */}
           {results.results.length > 0 ? (
-            <div className="grid gap-3 sm:gap-4">
+            <div ref={resultsRef} className="grid gap-3 sm:gap-4">
               {results.results.map((result, index) => (
                 <Card 
                   key={result.ticker} 
@@ -2386,5 +2418,6 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
         />
       )}
     </div>
+    </>
   )
 }

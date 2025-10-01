@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
-import { useState, useEffect, useRef, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { QuickRanker } from "@/components/quick-ranker"
 import { RankingHistorySection } from "@/components/ranking-history-section"
@@ -11,10 +11,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Footer } from "@/components/footer"
 import { 
+  ArrowLeft, 
   BarChart3, 
   Target, 
   TrendingUp,
   Shield,
+  Zap,
   Sparkles,
   Brain,
   Calculator,
@@ -182,29 +184,18 @@ function RankingContent() {
   const rankingId = searchParams.get('id')
   const isLoggedIn = !!session
   const [showHistory, setShowHistory] = useState(true)
-  const quickRankerRef = useRef<HTMLDivElement>(null)
 
   // Scroll para o histórico se houver ID na URL
   useEffect(() => {
-    if (rankingId) {
+    if (rankingId && showHistory) {
       setShowHistory(true)
     }
-  }, [rankingId, showHistory])
-
-  // Função para scrollar para o quick ranker
-  const scrollToQuickRanker = () => {
-    quickRankerRef.current?.scrollIntoView({ 
-      behavior: 'smooth', 
-      block: 'start' 
-    })
-  }
+  }, [rankingId])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
-      {/* Hero Section - Compacto para Premium */}
-      <section className={`bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 ${
-        isPremium ? 'py-6 md:py-8' : 'py-12 md:py-20'
-      }`}>
+      {/* Hero Section Melhorado */}
+      <section className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white py-12 md:py-20 px-4">
         <div className="container mx-auto max-w-7xl">
           {/* Breadcrumb */}
           <div className="mb-6">
@@ -216,33 +207,25 @@ function RankingContent() {
           </div>
 
           <div className="text-center">
-            {!isPremium && (
-              <div className="flex items-center justify-center mb-6">
-                <div className="p-4 bg-white/10 backdrop-blur-sm rounded-2xl">
-                  <BarChart3 className="w-12 h-12 md:w-16 md:h-16" />
-                </div>
+            <div className="flex items-center justify-center mb-6">
+              <div className="p-4 bg-white/10 backdrop-blur-sm rounded-2xl">
+                <BarChart3 className="w-12 h-12 md:w-16 md:h-16" />
               </div>
-            )}
+            </div>
             
-            <h1 className={`font-bold ${
-              isPremium ? 'text-2xl md:text-3xl mb-2' : 'text-3xl md:text-5xl mb-4'
-            }`}>
+            <h1 className="text-3xl md:text-5xl font-bold mb-4">
               Rankings de Ações B3
             </h1>
             
-            {!isPremium && (
-              <>
-                <p className="text-lg md:text-xl text-blue-100 mb-3 max-w-3xl mx-auto">
-                  Encontre as melhores oportunidades de investimento com 8 modelos de análise fundamentalista
-                </p>
-                
-                <p className="text-base text-blue-200 max-w-2xl mx-auto mb-6">
-                  De Graham a Inteligência Artificial: escolha a estratégia ideal para seu perfil de investidor
-                </p>
-              </>
-            )}
+            <p className="text-lg md:text-xl text-blue-100 mb-3 max-w-3xl mx-auto">
+              Encontre as melhores oportunidades de investimento com 8 modelos de análise fundamentalista
+            </p>
+            
+            <p className="text-base text-blue-200 max-w-2xl mx-auto mb-6">
+              De Graham a Inteligência Artificial: escolha a estratégia ideal para seu perfil de investidor
+            </p>
 
-            <div className={`flex flex-wrap justify-center gap-3 ${isPremium ? 'mt-3' : ''}`}>
+            <div className="flex flex-wrap justify-center gap-3">
               <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30">
                 <CheckCircle2 className="w-4 h-4 mr-2" />
                 {isLoggedIn ? 'Histórico Salvo' : 'Modelo Gratuito'}
@@ -264,39 +247,6 @@ function RankingContent() {
 
       {/* Main Content */}
       <div className="container mx-auto max-w-7xl px-4 py-8">
-        {/* Botão Novo Ranking - Destaque */}
-        {isLoggedIn && (
-          <div className="mb-8">
-            <Card className="border-0 bg-gradient-to-r from-green-50 via-blue-50 to-purple-50 dark:from-green-950/20 dark:via-blue-950/20 dark:to-purple-950/20 shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
-                      <Sparkles className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                        Criar Novo Ranking
-                      </h3>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Analise empresas com 8 modelos fundamentalistas
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={scrollToQuickRanker}
-                    size="lg"
-                    className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-lg w-full sm:w-auto"
-                  >
-                    <TrendingUp className="w-5 h-5 mr-2" />
-                    Novo Ranking
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
         {/* CTA Cards */}
         {!isLoggedIn && (
           <div className="mb-8">
@@ -362,12 +312,11 @@ function RankingContent() {
         )}
 
         {/* Gerador de Ranking */}
-        <div ref={quickRankerRef} id="ranking-generator" className="mb-12">
+        <div id="ranking-generator" className="mb-12">
           <QuickRanker rankingId={rankingId} />
         </div>
 
-        {/* Modelos Disponíveis - Oculto para Premium */}
-        {!isPremium && (
+        {/* Modelos Disponíveis */}
         <div className="mb-12">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
@@ -441,10 +390,8 @@ function RankingContent() {
             })}
           </div>
         </div>
-        )}
 
-        {/* Como Funciona - Oculto para Premium */}
-        {!isPremium && (
+        {/* Como Funciona */}
         <div className="mb-12">
           <Card className="border-2">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950/30">
@@ -488,10 +435,8 @@ function RankingContent() {
             </CardContent>
           </Card>
         </div>
-        )}
 
-        {/* FAQs - Oculto para Premium */}
-        {!isPremium && (
+        {/* FAQs */}
         <div className="mb-12">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
@@ -522,7 +467,6 @@ function RankingContent() {
             ))}
           </div>
         </div>
-        )}
       </div>
 
       {/* Footer */}
@@ -618,4 +562,5 @@ export default function RankingPage() {
     </Suspense>
   )
 }
+
 

@@ -18,19 +18,17 @@ export function LandingPricingSection() {
       <div className="container mx-auto px-4">
         <div className="text-center mb-20">
           <h2 className="text-4xl sm:text-5xl font-bold mb-6">
-            Invista em você por{" "}
-            <span className="text-violet-600">menos de R$ 1,60 por dia</span>
+            Apoie o projeto e nos ajude a crescer!
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             <strong>Economize milhares</strong> em decisões ruins de investimento. 
-            Nossos planos custam menos que <strong>uma taxa de corretagem</strong>.
           </p>
-          <div className="inline-flex items-center gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-full px-4 py-2 mt-4">
+          {/* <div className="inline-flex items-center gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-full px-4 py-2 mt-4">
             <CheckCircle className="w-4 h-4 text-green-600" />
             <span className="text-sm font-medium text-green-700 dark:text-green-400">
               💳 PIX ou Cartão • Ativação instantânea
             </span>
-          </div>
+          </div> */}
         </div>
 
         {/* Aviso Premium Gratuito na Fase Alfa */}

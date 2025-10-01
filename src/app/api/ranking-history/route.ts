@@ -59,7 +59,7 @@ export async function GET() {
         orderBy: {
           createdAt: 'desc'
         },
-        take: 10, // Limitar a 10 resultados mais recentes
+        // Sem limite - retornar todos os rankings
         select: {
           id: true,
           model: true,

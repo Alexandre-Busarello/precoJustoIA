@@ -162,7 +162,7 @@ export function SectorSelector({
               Continue explorando todos os setores
             </h3>
             <p className="text-slate-600 dark:text-slate-400 text-sm">
-              Selecione um ou mais setores abaixo e clique em "Analisar" para ver as melhores empresas de cada segmento
+              Selecione um ou mais setores abaixo e clique em Analisar para ver as melhores empresas de cada segmento
             </p>
           </div>
         </div>

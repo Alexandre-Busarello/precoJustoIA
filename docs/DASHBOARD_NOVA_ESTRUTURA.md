@@ -19,7 +19,7 @@
 │     ┌─────────────────────────────┐│
 │     │ Card GRANDE e destaque       ││
 │     │ • Entre no grupo exclusivo   ││
-│     │ • Ganhe acesso vitalício     ││
+│     │ • Ganhe 3 anos gratuitos     ││
 │     │ • Interaja com CEO           ││
 │     │                               ││
 │     │ [Entrar no Grupo Agora →]   ││
@@ -136,7 +136,7 @@ Landing Page
     ↓
 Dashboard
     ↓ VÊ: Card GIGANTE WhatsApp
-    ↓ "Entre no grupo para acesso vitalício"
+    ↓ "Entre no grupo para 3 anos de acesso gratuito"
     ↓ [Clica e entra]
     ↓
     ↓ VÊ: Card GRANDE "Criar Primeiro Ranking"

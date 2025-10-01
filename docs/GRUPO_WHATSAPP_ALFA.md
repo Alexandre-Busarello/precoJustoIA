@@ -2,7 +2,7 @@
 
 ## 🎯 Objetivo
 
-O Grupo WhatsApp é parte fundamental da estratégia de acesso vitalício na Fase Alfa. Usuários que participam ativamente com feedbacks no grupo garantem acesso Premium gratuito para sempre.
+O Grupo WhatsApp é parte fundamental da estratégia de acesso gratuito na Fase Alfa. Usuários que participam ativamente com feedbacks no grupo garantem 3 anos de acesso Premium gratuito.
 
 ---
 
@@ -71,7 +71,7 @@ O card aparece **apenas na Fase Alfa** na coluna direita do Dashboard, entre:
 1. **Título**: "Grupo WhatsApp"
 2. **Subtítulo**: "Comunidade exclusiva Alfa"
 3. **Descrição**: 
-   - Explica que participação ativa garante acesso vitalício
+   - Explica que participação ativa garante 3 anos de acesso gratuito
    - Destaca interação com CEO e outros usuários
 4. **CTA**: Botão "Entrar no Grupo" com ícone
 5. **Footer**: "Grupo privado • Apenas membros Alfa"
@@ -85,7 +85,7 @@ O card aparece **apenas na Fase Alfa** na coluna direita do Dashboard, entre:
 O card deixa claro que:
 - ✅ **Participação ativa** é necessária
 - ✅ **Feedbacks** são valorizados
-- ✅ **Acesso vitalício** é a recompensa
+- ✅ **3 anos de acesso gratuito** é a recompensa
 
 ### **Fluxo do Usuário**
 
@@ -110,7 +110,7 @@ O link usa:
 - 🔒 Mude o link apenas para o oficial do grupo
 - 👥 Configure o grupo como "Somente administradores podem adicionar"
 - 📝 Crie regras claras de participação
-- 🎯 Monitore atividade para validar acesso vitalício
+- 🎯 Monitore atividade para validar elegibilidade ao benefício
 
 ---
 
@@ -122,7 +122,7 @@ O link usa:
 - Quantos efetivamente entraram no grupo
 - Nível de atividade (mensagens por usuário)
 - Quality score dos feedbacks
-- Elegibilidade para acesso vitalício
+- Elegibilidade para o benefício de 3 anos gratuitos
 
 ---
 
@@ -148,7 +148,7 @@ Quando a fase Alfa terminar (`LAUNCH_PHASE=BETA`), o card **automaticamente desa
 ### **Grupo Permanente?**
 
 Você pode optar por:
-- ✅ Manter o grupo apenas para usuários Alfa vitalícios
+- ✅ Manter o grupo apenas para usuários Alfa com benefício
 - ✅ Criar novo grupo para Early Adopters
 - ✅ Expandir o grupo para todos Premium na fase Beta
 
@@ -177,9 +177,9 @@ Você faz parte de um grupo seleto de pioneiros que estão moldando o futuro da 
 • Testar features em primeira mão
 • Dar feedbacks valiosos
 • Influenciar decisões de produto
-• Garantir acesso Premium vitalício
+• Garantir 3 anos de acesso Premium gratuito
 
-🎯 Como garantir acesso vitalício?
+🎯 Como garantir 3 anos de acesso gratuito?
 • Seja ativo com feedbacks construtivos
 • Reporte bugs encontrados
 • Sugira melhorias e novas features

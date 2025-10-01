@@ -42,7 +42,7 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
             <span className="font-medium">
               {stats.isLimitReached 
                 ? "Vagas Alfa esgotadas! Garanta acesso com Early Adopter" 
-                : `${stats.spotsAvailable}/${stats.userLimit} vagas para Acesso Premium VITALÍCIO GRATUITO`
+                : `${stats.spotsAvailable}/${stats.userLimit} vagas para poder reinvidicar 3 ANOS de Acesso Premium GRATUITO`
               }
             </span>
           </div>
@@ -91,7 +91,7 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
               <span className="font-medium">
                 {stats.isLimitReached 
                   ? "Vagas Alfa esgotadas! Mas você pode garantir acesso com Early Adopter."
-                  : `Você tem acesso PREMIUM VITALÍCIO GRATUITO! Participe do grupo WhatsApp.`
+                  : `Você tem 3 ANOS de acesso PREMIUM GRATUITO! Participe do grupo WhatsApp.`
                 }
               </span>
             </div>

@@ -8,10 +8,10 @@
 
 ### **Nova Proposta de Valor:**
 
-#### **ALFA (100 vagas gratuitas vitalícias):**
+#### **ALFA (vagas com 3 anos gratuitos):**
 - ✅ **Condição**: Participação ativa no grupo WhatsApp com feedbacks
 - ✅ **Limite dinâmico**: Usa `ALFA_USER_LIMIT` (env var)
-- ✅ **Comunicação**: "X/LIMIT vagas para Acesso Premium VITALÍCIO GRATUITO"
+- ✅ **Comunicação**: "X/LIMIT vagas para 3 ANOS de Acesso Premium GRATUITO"
 - ✅ **Grupo WhatsApp**: Link visível na Dashboard após login
 - ✅ **Seção explicativa**: Nova seção na landing explicando condições
 
@@ -63,13 +63,13 @@
 - ✅ Preços e benefícios atualizados
 
 #### **7. `alfa-vitalicio-conditions.tsx` (NOVO)**
-- ✅ Seção explicando condições do acesso vitalício
+- ✅ Seção explicando condições do benefício de 3 anos gratuitos
 - ✅ Localização: Logo após Hero na landing
 - ✅ Cards com:
   - 📝 Cadastre-se na plataforma
   - 💬 Entre no grupo WhatsApp
   - 🎯 Participe ativamente
-  - ✨ Ganhe acesso vitalício
+  - ✨ Ganhe 3 anos de acesso gratuito
 
 #### **8. `page.tsx` (Landing)**
 - ✅ Import de `AlfaVitalicioConditions`
@@ -86,7 +86,7 @@
 - ✅ **Design**: Verde/emerald, badge "FASE ALFA"
 - ✅ **Conteúdo**:
   - Título: "Grupo WhatsApp"
-  - Descrição: "Participe ativamente para garantir acesso Premium vitalício"
+  - Descrição: "Participe ativamente para garantir 3 anos de acesso Premium gratuito"
   - CTA: "Entrar no Grupo" (link para WhatsApp)
 - ✅ **Condição**: Só aparece se `alfaStats.phase === 'ALFA'`
 
@@ -212,7 +212,7 @@ Interface intuitiva e mobile-first com jornada clara do usuário.
 #### **3. Grupo WhatsApp Destacado:**
 - Card gigante no topo (mobile) ou coluna principal (desktop)
 - Só aparece na fase Alfa
-- Explica benefício do acesso vitalício
+- Explica benefício dos 3 anos de acesso gratuito
 
 ---
 
@@ -336,7 +336,7 @@ ALFA_END_DATE=2025-12-31       # Data fim Alfa (opcional)
 ### **O que foi alcançado:**
 
 ✅ **Oferta Early Adopter** reformulada com valores acessíveis e foco em apoio ao projeto  
-✅ **Fase Alfa** com condições claras para acesso vitalício  
+✅ **Fase Alfa** com condições claras para o benefício de 3 anos gratuitos  
 ✅ **Grupo WhatsApp** integrado à Dashboard como prioridade  
 ✅ **Dashboard** completamente reorganizada com foco mobile-first  
 ✅ **Jornada do usuário** clara e intuitiva  

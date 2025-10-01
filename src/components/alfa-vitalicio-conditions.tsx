@@ -25,9 +25,9 @@ export function AlfaVitalicioConditions() {
               🎯 FASE ALFA - {stats.spotsAvailable}/{stats.userLimit} Vagas Disponíveis
             </Badge>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Como Garantir Acesso{" "}
+              Como Garantir{" "}
               <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                Premium VITALÍCIO GRATUITO
+                3 Anos de Acesso Premium GRATUITO
               </span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
@@ -148,7 +148,7 @@ export function AlfaVitalicioConditions() {
                 <div className="space-y-3 ml-15">
                   <div className="flex items-start gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span><strong className="text-yellow-700 dark:text-yellow-500">Acesso Premium VITALÍCIO</strong> gratuito</span>
+                    <span><strong className="text-yellow-700 dark:text-yellow-500">3 Anos de Acesso Premium</strong> gratuito</span>
                   </div>
                   <div className="flex items-start gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -156,7 +156,7 @@ export function AlfaVitalicioConditions() {
                   </div>
                   <div className="flex items-start gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span>Sem mensalidade, para sempre</span>
+                    <span>Sem mensalidade por 3 anos completos</span>
                   </div>
                 </div>
               </CardContent>
@@ -173,8 +173,8 @@ export function AlfaVitalicioConditions() {
                     ⚠️ Importante: Participação ativa é obrigatória
                   </h4>
                   <p className="text-sm text-orange-800 dark:text-orange-200 leading-relaxed">
-                    O acesso vitalício <strong>não é automático</strong> para quem apenas se cadastra. 
-                    Ele é reservado para usuários que <strong>contribuem ativamente</strong> com feedbacks 
+                    Os 3 anos de acesso gratuito <strong>não são automáticos</strong> para quem apenas se cadastra. 
+                    Este benefício é reservado para usuários que <strong>contribuem ativamente</strong> com feedbacks 
                     no grupo WhatsApp durante a Fase Alfa. Queremos construir junto com você!
                   </p>
                 </div>

@@ -279,7 +279,7 @@ export default function Dashboard() {
                         Entre no Grupo WhatsApp Exclusivo
                       </h3>
                       <p className="text-sm text-green-700 dark:text-green-300">
-                        Participe ativamente para garantir <strong>acesso Premium vitalício</strong>!
+                        Participe ativamente para garantir <strong>3 anos de acesso Premium gratuito</strong>!
                       </p>
                     </div>
                   </div>
@@ -295,7 +295,7 @@ export default function Dashboard() {
                           <li>• Dê feedbacks e molde o produto</li>
                           <li>• Interaja diretamente com o CEO</li>
                           <li>• Seja reconhecido como pioneiro</li>
-                          <li>• Ganhe acesso Premium vitalício a plataforma</li>
+                          <li>• Ganhe 3 anos de acesso Premium gratuito</li>
                         </ul>
                       </div>
                     </div>
@@ -625,7 +625,7 @@ export default function Dashboard() {
                         </Badge>
                       </h4>
                       <p className="text-xs text-green-700 dark:text-green-300 mb-2">
-                        Continue ativo para garantir acesso vitalício!
+                        Continue ativo para garantir 3 anos de acesso gratuito!
                       </p>
                       <Button 
                         asChild 

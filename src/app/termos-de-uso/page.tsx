@@ -59,9 +59,13 @@ export default function TermosDeUsoPage() {
             </p>
 
             <div className="flex flex-wrap justify-center gap-3 mb-8">
+              <Badge className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-3 py-1">
+                <Zap className="w-4 h-4 mr-1" />
+                Fase ALFA Ativa
+              </Badge>
               <Badge variant="secondary" className="px-3 py-1">
                 <FileText className="w-4 h-4 mr-1" />
-                Vigência: Janeiro 2025
+                Atualizado: Out/2025
               </Badge>
               <Badge variant="secondary" className="px-3 py-1">
                 <Scale className="w-4 h-4 mr-1" />
@@ -95,7 +99,8 @@ export default function TermosDeUsoPage() {
                     <strong>Plataforma:</strong> precojusto.ai<br/>
                     <strong>E-mail de contato:</strong> busamar@gmail.com (temporariamente)<br/>
                     <strong>Suporte:</strong> busamar@gmail.com (temporariamente)<br/>
-                    <strong>Data de vigência:</strong> 01 de janeiro de 2025
+                    <strong>Data de vigência:</strong> 01 de janeiro de 2025<br/>
+                    <strong>Última atualização:</strong> 01 de outubro de 2025 (Fase ALFA)
                   </p>
                 </div>
               </CardContent>
@@ -413,6 +418,91 @@ export default function TermosDeUsoPage() {
                           Faturas enviadas por e-mail após cada cobrança
                         </li>
                       </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-2 border-purple-200 dark:border-purple-800">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-xl font-bold">Programa Fase ALFA</h3>
+                        <Badge className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+                          Ativo
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground mb-4 leading-relaxed">
+                        Durante a <strong>Fase ALFA</strong> da plataforma, oferecemos um programa especial 
+                        para usuários pioneiros que desejam contribuir com o desenvolvimento do produto:
+                      </p>
+                      <ul className="space-y-3 text-muted-foreground mb-4">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Benefício:</strong> Usuários que se cadastrarem durante a Fase ALFA 
+                            e participarem ativamente do grupo exclusivo WhatsApp podem reivindicar 
+                            <strong className="text-purple-700 dark:text-purple-400"> 3 anos de acesso Premium gratuito</strong>.
+                          </div>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Requisitos:</strong> Para reivindicar o benefício, o usuário deve 
+                            participar ativamente do grupo WhatsApp exclusivo fornecendo feedbacks, 
+                            reportando bugs e sugerindo melhorias durante a Fase ALFA.
+                          </div>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Critérios de Participação:</strong> A elegibilidade ao benefício 
+                            será avaliada com base na qualidade e frequência das contribuições. 
+                            Participação passiva não garante o benefício.
+                          </div>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Duração:</strong> O benefício concede acesso Premium por 36 meses 
+                            consecutivos a partir da data de ativação. Após este período, o usuário 
+                            poderá optar por continuar com plano pago ou retornar ao plano gratuito.
+                          </div>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Limite de Vagas:</strong> O programa tem limite de participantes 
+                            definido pela variável ALFA_USER_LIMIT. Quando o limite for atingido, 
+                            novos cadastros não terão acesso ao programa.
+                          </div>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Não Transferível:</strong> O benefício é pessoal e intransferível, 
+                            vinculado ao e-mail de cadastro do usuário.
+                          </div>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Revogação:</strong> Reservamo-nos o direito de revogar o benefício 
+                            caso o usuário viole estes Termos de Uso ou demonstre má-fé.
+                          </div>
+                        </li>
+                      </ul>
+                      <div className="bg-purple-100 dark:bg-purple-900/30 rounded-lg p-4 mt-4">
+                        <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed">
+                          <strong>📌 Importante:</strong> A Fase ALFA é uma oportunidade limitada. 
+                          O programa pode ser encerrado a qualquer momento com aviso prévio de 30 dias. 
+                          Usuários que já tiverem o benefício ativado manterão seus 3 anos garantidos.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -773,12 +863,12 @@ export default function TermosDeUsoPage() {
                   <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-2">
                       <Clock className="w-4 h-4" />
-                      Última atualização: Janeiro 2025
+                      Última atualização: Outubro 2025
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-2">
                       <FileText className="w-4 h-4" />
-                      Versão 1.0
+                      Versão 1.1 (Fase ALFA)
                     </span>
                   </div>
                 </div>

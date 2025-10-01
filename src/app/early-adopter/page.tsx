@@ -5,7 +5,7 @@ import { EarlyAdopterContent } from "@/components/early-adopter-content"
 export const metadata: Metadata = {
   title: "Oferta Especial Early Adopter | Preço Congelado Para Sempre - Preço Justo AI",
   description: "🚀 Oferta exclusiva para Early Adopters: Preço congelado PARA SEMPRE + Canal exclusivo WhatsApp com CEO + Acesso antecipado. Apenas durante a Fase Alfa. Garante já o seu!",
-  keywords: "early adopter, oferta especial, preço congelado, análise fundamentalista, investimentos, ações B3, bovespa, desconto vitalício",
+  keywords: "early adopter, oferta especial, preço congelado, análise fundamentalista, investimentos, ações B3, bovespa, desconto especial",
   openGraph: {
     title: "Oferta Especial Early Adopter - Preço Justo AI",
     description: "Preço congelado PARA SEMPRE + Canal exclusivo com CEO. Oferta limitada da Fase Alfa.",

@@ -1,6 +1,7 @@
 import { Metadata } from 'next'
 import { SectorAnalysisClient } from '@/components/sector-analysis-client'
 import { getCurrentUser } from '@/lib/user-service'
+import { analyzeSectors } from '@/lib/sector-analysis-service'
 import { 
   BarChart3, 
   TrendingUp, 
@@ -48,31 +49,29 @@ export const metadata: Metadata = {
   }
 }
 
-// Função para buscar dados server-side
-async function fetchInitialSectorData(isPremium: boolean) {
+// Função para buscar dados server-side (chamada direta, sem HTTP)
+async function fetchInitialSectorData() {
   try {
-    // Setores gratuitos (3) vs Premium (3 iniciais)
-    const freeSectors = ['Energia', 'Tecnologia da Informação'];
-    const premiumInitialSectors = ['Energia', 'Tecnologia da Informação'];
+    // Setores iniciais (2 setores para carregamento rápido)
+    const initialSectors = ['Energia', 'Tecnologia da Informação'];
     
-    const sectorsToFetch = isPremium ? premiumInitialSectors : freeSectors;
-    const sectorsQuery = sectorsToFetch.join(',');
+    console.log('📊 [SSR] Carregando setores iniciais:', initialSectors);
     
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const response = await fetch(`${baseUrl}/api/sector-analysis?sectors=${encodeURIComponent(sectorsQuery)}`, {
-      cache: 'no-store' // Sempre buscar dados frescos para SSR
-    });
+    // Chamar serviço diretamente (sem HTTP fetch)
+    const sectors = await analyzeSectors(initialSectors);
     
-    if (!response.ok) {
-      console.error('Erro ao buscar dados setoriais');
-      return { sectors: [], cached: false };
-    }
+    console.log(`✅ [SSR] ${sectors.length} setores carregados com sucesso`);
     
-    const data = await response.json();
-    return data;
+    return { 
+      sectors, 
+      cached: false 
+    };
   } catch (error) {
-    console.error('Erro ao buscar dados setoriais:', error);
-    return { sectors: [], cached: false };
+    console.error('❌ [SSR] Erro ao buscar dados setoriais:', error);
+    return { 
+      sectors: [], 
+      cached: false 
+    };
   }
 }
 
@@ -82,7 +81,7 @@ export default async function AnaliseSetorialPage() {
   const isPremium = user?.isPremium || false;
   
   // Buscar dados iniciais server-side
-  const initialData = await fetchInitialSectorData(isPremium);
+  const initialData = await fetchInitialSectorData();
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">

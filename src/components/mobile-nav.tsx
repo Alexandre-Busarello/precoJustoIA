@@ -106,13 +106,26 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
     }
   ]
 
+  // Handler para fechar o menu - garante compatibilidade com touch events
+  const handleClose = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    setIsOpen(false)
+  }
+
   return (
     <>
       {/* Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setIsOpen(false)}
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden touch-none"
+          onClick={handleClose}
+          onTouchEnd={handleClose}
+          role="button"
+          tabIndex={0}
+          aria-label="Fechar menu"
         />
       )}
 
@@ -124,7 +137,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center justify-between p-4 border-b border-border relative z-[60]">
             <Link
               href="/"
               className="flex items-center"
@@ -139,14 +152,15 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                 className="h-9 w-auto"
               />
             </Link>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => setIsOpen(false)}
-              className="p-2"
+            <button
+              type="button"
+              onClick={handleClose}
+              onTouchEnd={handleClose}
+              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors touch-manipulation pointer-events-auto relative z-[70]"
+              aria-label="Fechar menu"
             >
-              <X className="w-5 h-5" />
-            </Button>
+              <X className="w-5 h-5 text-foreground" />
+            </button>
           </div>
 
           {/* User Info */}
@@ -385,12 +399,18 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
 }
 
 export function MobileMenuButton({ isOpen, setIsOpen }: MobileNavProps) {
+  const handleToggle = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsOpen(!isOpen)
+  }
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="lg:hidden p-2"
-      onClick={() => setIsOpen(!isOpen)}
+    <button
+      type="button"
+      className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors touch-manipulation pointer-events-auto"
+      onClick={handleToggle}
+      onTouchEnd={handleToggle}
       aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
     >
       {isOpen ? (
@@ -398,6 +418,6 @@ export function MobileMenuButton({ isOpen, setIsOpen }: MobileNavProps) {
       ) : (
         <Menu className="w-5 h-5" />
       )}
-    </Button>
+    </button>
   )
 }

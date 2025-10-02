@@ -110,7 +110,7 @@ const STRATEGIES_CACHE_TTL = 1440 * 60; // 1 dia em segundos
 const STATEMENTS_ANALYSIS_CACHE_TTL = 1440 * 60; // 1 dia em segundos
 
 // Sistema de pontuação ponderada para determinar a melhor empresa (OTIMIZADO)
-async function calculateWeightedScore(companies: Record<string, unknown>[]): Promise<{ scores: number[], bestIndex: number, tiedIndices: number[] }> {
+async function calculateWeightedScore(companies: Record<string, unknown>[]): Promise<{ scores: number[], bestIndex: number, tiedIndices: number[], companiesWithStrategies: any[] }> {
   // Definir pesos para cada indicador (total = 100%)
   // NOTA: Estratégias individuais foram removidas pois já estão incluídas no overallScore
   const weights = {
@@ -464,7 +464,7 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     console.log('=== END DEBUG ===')
   }
   
-  return { scores, bestIndex, tiedIndices }
+  return { scores, bestIndex, tiedIndices, companiesWithStrategies }
 }
 
 // Função para obter análise das demonstrações financeiras
@@ -965,7 +965,20 @@ export default async function CompareStocksPage({ params }: PageProps) {
   )
 
   // Calcular scores e ordenar por ranking
-  const { scores } = await calculateWeightedScore(initialOrderedCompanies)
+  const { scores, companiesWithStrategies } = await calculateWeightedScore(initialOrderedCompanies)
+
+  // Anexar dados de strategies e overallScore aos objetos das empresas
+  // Criar mapa para acesso rápido aos dados de estratégias
+  const strategiesMap = new Map(companiesWithStrategies.map((c: any) => [c.company.ticker, c.strategies]));
+  
+  // Anexar os dados de strategies aos objetos das empresas
+  initialOrderedCompanies.forEach(company => {
+    const strategies = strategiesMap.get(company.ticker as string);
+    if (strategies) {
+      (company as any).strategies = strategies.strategies;
+      (company as any).overallScore = strategies.overallScore;
+    }
+  });
   
   // Criar array com empresas e seus scores para ordenação
   const companiesWithScores = initialOrderedCompanies.map((company, index) => ({

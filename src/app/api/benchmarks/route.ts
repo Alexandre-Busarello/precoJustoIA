@@ -22,12 +22,10 @@ async function fetchCdiData(startDate: Date, endDate: Date): Promise<BenchmarkDa
     
     console.log('📊 Buscando CDI do BCB:', startStr, '-', endStr);
     
-    const response = await fetch(url, {
-      next: { revalidate: 86400 } // Cache de 24 horas
-    });
+    const response = await fetch(url);
     
     if (!response.ok) {
-      console.error('❌ Erro ao buscar CDI:', response.status);
+      console.error('❌ Erro ao buscar CDI:', response);
       return [];
     }
     

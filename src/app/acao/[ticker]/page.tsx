@@ -195,7 +195,7 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
     const currentYear = new Date().getFullYear()
     
     // Sempre incluir dados financeiros para filtrar por tamanho e lucro
-    // Para blue chips, incluir dados financiais para filtrar por market cap
+    // Para Large Caps, incluir dados financiais para filtrar por market cap
     
     const allCompetitors = await prisma.company.findMany({
       where: {

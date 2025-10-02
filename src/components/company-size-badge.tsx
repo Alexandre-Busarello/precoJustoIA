@@ -44,8 +44,8 @@ const sizeConfig = {
     className: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'
   },
   blue_chips: {
-    label: 'Blue Chips',
-    fullLabel: 'Blue Chips',
+    label: 'Large Caps',
+    fullLabel: 'Large Caps',
     description: 'Mais de R$ 10 bi',
     icon: Building2,
     variant: 'secondary' as const,

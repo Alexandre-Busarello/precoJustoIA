@@ -1425,7 +1425,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                           <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                           <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
@@ -1478,7 +1478,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                           <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                           <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
@@ -1531,7 +1531,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                           <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                           <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
@@ -1606,7 +1606,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                           <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                           <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
@@ -1659,7 +1659,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                           <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                           <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
@@ -1815,7 +1815,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                           <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                           <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
@@ -1975,7 +1975,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                   <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                   <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                   <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                  <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -2153,7 +2153,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
                           <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
                           <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Blue Chips (&gt; R$ 10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">

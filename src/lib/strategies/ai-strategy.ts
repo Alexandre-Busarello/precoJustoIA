@@ -869,7 +869,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
       'all': 'Todas as empresas',
       'small_caps': 'Small Caps (< R$ 2 bi)',
       'mid_caps': 'Empresas Médias (R$ 2-10 bi)',
-      'blue_chips': 'Blue Chips (> R$ 10 bi)'
+      'blue_chips': 'Large Caps (> R$ 10 bi)'
     };
     return descriptions[sizeFilter as keyof typeof descriptions] || 'Todas as empresas';
   }

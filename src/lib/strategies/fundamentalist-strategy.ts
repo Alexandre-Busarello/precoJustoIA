@@ -479,7 +479,7 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
       'all': 'Todas as empresas',
       'small_caps': 'Small Caps (< R$ 2 bi)',
       'mid_caps': 'Empresas Médias (R$ 2-10 bi)',
-      'blue_chips': 'Blue Chips (> R$ 10 bi)'
+      'blue_chips': 'Large Caps (> R$ 10 bi)'
     }[sizeFilter];
     
     return `**ESTRATÉGIA FUNDAMENTALISTA 3+1**

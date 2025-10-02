@@ -1,5 +1,6 @@
 import { BacktestDataValidator, type BacktestDataValidation, type DataAvailability } from './backtest-data-validator';
 import { prisma } from '@/lib/prisma';
+import { safeWrite } from '@/lib/prisma-wrapper';
 import { toNumber } from '@/lib/strategies/base-strategy';
 
 // ===== INTERFACES BASE =====
@@ -116,26 +117,30 @@ export class AdaptiveBacktestService {
     name?: string,
     description?: string
   ): Promise<string> {
-    const config = await prisma.backtestConfig.create({
-      data: {
-        userId,
-        name: name || `Backtest ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
-        description: description || `Simulação criada em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
-        startDate: params.startDate,
-        endDate: params.endDate,
-        initialCapital: params.initialCapital,
-        monthlyContribution: params.monthlyContribution,
-        rebalanceFrequency: params.rebalanceFrequency,
-        assets: {
-          create: params.assets.map(asset => ({
-            ticker: asset.ticker.toUpperCase(),
-            targetAllocation: asset.allocation,
-            averageDividendYield: asset.averageDividendYield || null
-          }))
-        }
-      },
-      include: { assets: true }
-    });
+    const config = await safeWrite(
+      'save-backtest-config-adaptive',
+      () => prisma.backtestConfig.create({
+        data: {
+          userId,
+          name: name || `Backtest ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
+          description: description || `Simulação criada em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
+          startDate: params.startDate,
+          endDate: params.endDate,
+          initialCapital: params.initialCapital,
+          monthlyContribution: params.monthlyContribution,
+          rebalanceFrequency: params.rebalanceFrequency,
+          assets: {
+            create: params.assets.map(asset => ({
+              ticker: asset.ticker.toUpperCase(),
+              targetAllocation: asset.allocation,
+              averageDividendYield: asset.averageDividendYield || null
+            }))
+          }
+        },
+        include: { assets: true }
+      }),
+      ['backtest_configs', 'backtest_assets']
+    ) as any;
     
     return config.id;
   }
@@ -145,26 +150,30 @@ export class AdaptiveBacktestService {
    */
   async saveBacktestResult(configId: string, result: BacktestResult | AdaptiveBacktestResult): Promise<void> {
     // Criar novo resultado sempre (permitir múltiplos resultados por configuração)
-    await prisma.backtestResult.create({
-      data: {
-        backtestId: configId,
-        totalReturn: result.totalReturn,
-        annualizedReturn: result.annualizedReturn,
-        volatility: result.volatility,
-        sharpeRatio: result.sharpeRatio,
-        maxDrawdown: result.maxDrawdown,
-        positiveMonths: result.positiveMonths,
-        negativeMonths: result.negativeMonths,
-        totalMonths: result.monthlyReturns.length,
-        totalInvested: result.totalInvested,
-        finalValue: result.finalValue,
-        finalCashReserve: 'finalCashReserve' in result ? Number(result.finalCashReserve) : 0,
-        totalDividendsReceived: 'totalDividendsReceived' in result ? Number(result.totalDividendsReceived) : 0,
-        monthlyReturns: result.monthlyReturns as any,
-        assetPerformance: result.assetPerformance as any,
-        portfolioEvolution: result.portfolioEvolution as any
-      }
-    });
+    await safeWrite(
+      'save-backtest-result-adaptive',
+      () => prisma.backtestResult.create({
+        data: {
+          backtestId: configId,
+          totalReturn: result.totalReturn,
+          annualizedReturn: result.annualizedReturn,
+          volatility: result.volatility,
+          sharpeRatio: result.sharpeRatio,
+          maxDrawdown: result.maxDrawdown,
+          positiveMonths: result.positiveMonths,
+          negativeMonths: result.negativeMonths,
+          totalMonths: result.monthlyReturns.length,
+          totalInvested: result.totalInvested,
+          finalValue: result.finalValue,
+          finalCashReserve: 'finalCashReserve' in result ? Number(result.finalCashReserve) : 0,
+          totalDividendsReceived: 'totalDividendsReceived' in result ? Number(result.totalDividendsReceived) : 0,
+          monthlyReturns: result.monthlyReturns as any,
+          assetPerformance: result.assetPerformance as any,
+          portfolioEvolution: result.portfolioEvolution as any
+        }
+      }),
+      ['backtest_results', 'backtest_configs']
+    );
     
     // Salvar transações mensais se disponíveis (apenas para AdaptiveBacktestResult)
     console.log('🔍 Debug - Verificando monthlyHistory:', {
@@ -178,12 +187,16 @@ export class AdaptiveBacktestService {
       console.log('📊 Total de meses no histórico:', result.monthlyHistory.length);
       
       // Primeiro, remover transações existentes para este backtest
-      await prisma.backtestTransaction.deleteMany({
-        where: { backtestId: configId }
-      });
+      await safeWrite(
+        'delete-backtest-transactions',
+        () => prisma.backtestTransaction.deleteMany({
+          where: { backtestId: configId }
+        }),
+        ['backtest_transactions']
+      );
       
       // Preparar dados das transações
-      const transactionData = [];
+      const transactionData: any[] = [];
       for (const monthData of result.monthlyHistory) {
         for (const transaction of monthData.transactions) {
           const progressiveCashBalance = (transaction as any).cashBalance;
@@ -209,9 +222,13 @@ export class AdaptiveBacktestService {
       
       // Salvar todas as transações em lote
       if (transactionData.length > 0) {
-        await prisma.backtestTransaction.createMany({
-          data: transactionData
-        });
+        await safeWrite(
+          'create-backtest-transactions',
+          () => prisma.backtestTransaction.createMany({
+            data: transactionData
+          }),
+          ['backtest_transactions']
+        );
         console.log(`✅ ${transactionData.length} transações salvas com sucesso`);
       }
     }

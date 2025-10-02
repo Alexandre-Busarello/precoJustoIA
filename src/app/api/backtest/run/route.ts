@@ -179,8 +179,9 @@ export async function POST(request: NextRequest) {
             params,
             `Backtest ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
             `Simulação executada em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`
-          )
-        ), ['backtest_configs'];
+          ),
+          { affectedTables: ['backtest_configs'] }
+        );
         
         console.log('✅ Configuração temporária criada:', finalConfigId);
       }
@@ -190,8 +191,9 @@ export async function POST(request: NextRequest) {
         console.log('💾 Salvando resultado do backtest...');
         
         await safeTransaction('save-backtest-result', () =>
-          backtestService.saveBacktestResult(finalConfigId!, result)
-        ), ['backtest_results'];
+          backtestService.saveBacktestResult(finalConfigId!, result),
+          { affectedTables: ['backtest_results'] }
+        );
         
         console.log('✅ Resultado salvo com sucesso');
       }

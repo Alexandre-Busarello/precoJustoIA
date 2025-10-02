@@ -10,10 +10,11 @@ import StrategicAnalysisClient from '@/components/strategic-analysis-client'
 import HeaderScoreWrapper from '@/components/header-score-wrapper'
 import AIAnalysis from '@/components/ai-analysis'
 import FinancialIndicators from '@/components/financial-indicators'
-import CompanySearch from '@/components/company-search'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisSection from '@/components/technical-analysis-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
+import { RelatedCompanies } from '@/components/related-companies'
+import { Footer } from '@/components/footer'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import Link from 'next/link'
 
@@ -38,6 +39,14 @@ interface PageProps {
   params: {
     ticker: string
   }
+}
+
+interface CompetitorData {
+  ticker: string;
+  name: string;
+  sector: string | null;
+  logoUrl?: string | null;
+  marketCap?: any;
 }
 
 
@@ -73,8 +82,100 @@ const COMPETITORS_CACHE_DURATION = 30 * 60 * 1000 // 30 minutos
 const metadataCache = new Map<string, { metadata: any; timestamp: number }>()
 const METADATA_CACHE_DURATION = 15 * 60 * 1000 // 15 minutos
 
+// Função mista: combina empresas inteligentes (premium) + básicas para SEO
+async function getMixedRelatedCompanies(
+  currentTicker: string, 
+  sector: string | null, 
+  intelligentCompetitors: CompetitorData[], 
+  limit: number = 6
+): Promise<CompetitorData[]> {
+  if (!sector) return []
+  
+  try {
+    // Pegar 2-3 empresas do comparador inteligente (as melhores)
+    const intelligentPick = intelligentCompetitors.slice(0, 3)
+    const intelligentTickers = intelligentPick.map(c => c.ticker)
+    
+    // Completar com empresas básicas do setor (excluindo as já selecionadas)
+    const remainingSlots = limit - intelligentPick.length
+    const basicCompanies = await getBasicRelatedCompanies(
+      currentTicker, 
+      sector, 
+      remainingSlots + 3, // Buscar mais para ter opções
+      [...intelligentTickers, currentTicker] // Excluir empresas já selecionadas
+    )
+    
+    // Combinar e limitar ao total desejado
+    const mixed = [...intelligentPick, ...basicCompanies.slice(0, remainingSlots)]
+    return mixed.slice(0, limit)
+    
+  } catch (error) {
+    console.error('❌ Erro ao buscar empresas relacionadas mistas:', error)
+    return []
+  }
+}
+
+// Função básica para empresas relacionadas (SEO) - sem inteligência premium
+async function getBasicRelatedCompanies(
+  currentTicker: string, 
+  sector: string | null, 
+  limit: number = 6, 
+  excludeTickers: string[] = []
+): Promise<CompetitorData[]> {
+  if (!sector) return []
+  
+  try {
+    // Busca simples por setor, ordenada por market cap (sem inteligência premium)
+    const companies = await prisma.company.findMany({
+      where: {
+        sector: sector,
+        ticker: { 
+          notIn: excludeTickers.length > 0 ? excludeTickers : [currentTicker]
+        },
+        // Apenas empresas com dados financeiros básicos
+        financialData: {
+          some: {
+            marketCap: { not: null }
+          }
+        }
+      },
+      select: {
+        ticker: true,
+        name: true,
+        sector: true,
+        logoUrl: true,
+        financialData: {
+          select: {
+            marketCap: true,
+          },
+          orderBy: { year: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: {
+        financialData: {
+          _count: 'desc' // Priorizar empresas com mais dados
+        }
+      },
+      take: limit
+    })
+
+    return companies.map(company => ({
+      ticker: company.ticker,
+      name: company.name,
+      sector: company.sector,
+      logoUrl: company.logoUrl,
+      marketCap: company.financialData[0]?.marketCap || null
+    } as CompetitorData))
+
+  } catch (error) {
+    console.error('❌ Erro ao buscar empresas relacionadas:', error)
+    return []
+  }
+}
+
 // Função para buscar concorrentes do mesmo setor com priorização de subsetor (otimizada)
-async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, currentMarketCap: number | null = null, limit: number = 5) {
+async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, currentMarketCap: number | null = null, limit: number = 5): Promise<CompetitorData[]> {
   if (!sector) return []
   
   try {
@@ -118,6 +219,7 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
         name: true,
         sector: true,
         industry: true,
+        logoUrl: true,
         // Incluir dados financiais apenas se for blue chip
         financialData: {
           select: {
@@ -188,8 +290,10 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
           competitors.push({
             ticker: company.ticker,
             name: company.name,
-            sector: company.sector
-          })
+            sector: company.sector,
+            logoUrl: company.logoUrl,
+            marketCap: company.financialData[0]?.marketCap || null
+          } as CompetitorData)
         }
       }
     }
@@ -466,11 +570,17 @@ export default async function TickerPage({ params }: PageProps) {
   const latestQuote = companyData.dailyQuotes[0]
   const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
 
-  // Buscar concorrentes apenas se houver setor definido (otimização)
+  // Buscar concorrentes inteligentes para comparador premium
   const currentMarketCap = toNumber(latestFinancials?.marketCap)
   const competitors = companyData.sector 
     ? await getSectorCompetitors(ticker, companyData.sector, companyData.industry, currentMarketCap, 5)
     : []
+  
+  // Buscar empresas relacionadas mesclando inteligentes + básicas para SEO
+  const relatedCompanies = companyData.sector 
+    ? await getMixedRelatedCompanies(ticker, companyData.sector, competitors, 6)
+    : []
+  
   
   // Criar URL do comparador inteligente
   const smartComparatorUrl = competitors.length > 0 
@@ -732,6 +842,29 @@ export default async function TickerPage({ params }: PageProps) {
           </>
         )}
       </div>
+
+      {/* Seção de Empresas Relacionadas - SEO Links Internos */}
+      {relatedCompanies.length > 0 && (
+        <div className="container mx-auto px-4 pb-8">
+          <RelatedCompanies
+            companies={relatedCompanies.map(comp => ({
+              ticker: comp.ticker,
+              name: comp.name,
+              sector: comp.sector,
+              logoUrl: comp.logoUrl || null,
+              marketCap: comp.marketCap || null
+            }))}
+            currentTicker={ticker}
+            currentSector={companyData.sector}
+            currentIndustry={companyData.industry}
+          />
+        </div>
+      )}
+
+      {/* Footer para usuários não logados - SEO */}
+      {!session && (
+        <Footer />
+      )}
 
       {/* Schema Structured Data para SEO */}
       {latestFinancials && (

@@ -131,7 +131,7 @@ async function analyzeSingleSector(sector: string): Promise<SectorAnalysisResult
               includeStatements: true
             });
 
-            if (result && result.overallScore.score >= 60) {
+            if (result && result.overallScore && result.overallScore.score >= 60) {
               return {
                 ticker: result.ticker,
                 name: result.companyName,

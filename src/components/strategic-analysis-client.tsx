@@ -165,69 +165,6 @@ function RegisterPrompt({ strategy }: { strategy: string }) {
   );
 }
 
-// Componente inline para upgrade premium
-function PremiumUpgrade({ strategy }: { strategy: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-950/20 dark:to-yellow-950/20 rounded-lg">
-      <div className="mb-6">
-        <Crown className="w-16 h-16 text-orange-600 mx-auto mb-4" />
-        <h3 className="text-2xl font-bold text-foreground mb-2">
-          Recurso Premium
-        </h3>
-        <p className="text-muted-foreground">
-          A análise <strong>{strategy}</strong> está disponível para assinantes Premium
-        </p>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg mb-6 max-w-md">
-        <h4 className="font-semibold mb-4 flex items-center">
-          <Crown className="w-5 h-5 text-orange-600 mr-2" />
-          Premium inclui:
-        </h4>
-        <div className="space-y-3 text-left">
-          <div className="flex items-center space-x-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-            <CheckCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
-            <span className="text-sm text-orange-800 dark:text-orange-200">
-              Anti-Dividend Trap
-            </span>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-            <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0" />
-            <span className="text-sm text-purple-800 dark:text-purple-200">
-              Value Investing Completo
-            </span>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-            <span className="text-sm text-green-800 dark:text-green-200">
-              Fórmula Mágica de Greenblatt
-            </span>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <Zap className="w-5 h-5 text-blue-600 flex-shrink-0" />
-            <span className="text-sm text-blue-800 dark:text-blue-200">
-              Rankings ilimitados
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Button asChild size="lg" className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
-          <Link href="/planos">
-            <Crown className="w-4 h-4 mr-2" />
-            Assinar Premium
-          </Link>
-        </Button>
-        <Button asChild variant="outline" size="lg">
-          <Link href="/planos">
-            Ver planos
-          </Link>
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 // Componente para exibir análise das demonstrações financeiras
 function StatementsAnalysisContent({ analysis }: { analysis: StatementsAnalysis }) {
@@ -1028,7 +965,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     </div>
                   </div>
                   <CardDescription>
-                    Identifica empresas com dividendos sustentáveis e evita "armadilhas de dividendos"
+                    Identifica empresas com dividendos sustentáveis e evita &quot;armadilhas de dividendos&quot;
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

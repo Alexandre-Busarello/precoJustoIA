@@ -140,11 +140,11 @@ export async function GET(request: NextRequest) {
             return {
               ticker: result.ticker,
               companyName: result.companyName,
-              score: result.overallScore.score,
+              score: result.overallScore?.score || 0,
               sector: result.sector,
               currentPrice: result.currentPrice,
               logoUrl: result.logoUrl,
-              recommendation: result.overallScore.recommendation
+              recommendation: result.overallScore?.recommendation || 'NEUTRO'
             };
           } catch (error) {
             console.error(`❌ Erro ao processar ${company.ticker}:`, error);

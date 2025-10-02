@@ -180,40 +180,80 @@ export class SmartQueryCache {
   }
   
   /**
-   * Invalida cache baseado nas tabelas modificadas
+   * Normaliza nomes de tabelas para incluir variações com hífen e underscore
    */
-  static async invalidateCacheForTables(tables: string[]): Promise<void> {
+  static normalizeTableNames(tables: string[]): string[] {
+    const normalized = new Set<string>()
+    
+    tables.forEach(table => {
+      // Adicionar a tabela original
+      normalized.add(table)
+      
+      // Adicionar versão com hífen se tem underscore
+      if (table.includes('_')) {
+        normalized.add(table.replace(/_/g, '-'))
+      }
+      
+      // Adicionar versão com underscore se tem hífen
+      if (table.includes('-')) {
+        normalized.add(table.replace(/-/g, '_'))
+      }
+    })
+    
+    return Array.from(normalized)
+  }
+
+  /**
+   * Invalida cache baseado nas tabelas modificadas (assíncrono, não bloqueia)
+   */
+  static invalidateCacheForTables(tables: string[]): void {
+    // Executar invalidação de forma assíncrona sem bloquear a operação principal
+    this.invalidateCacheAsync(tables).catch(error => {
+      console.error('❌ Erro na invalidação assíncrona de cache:', error)
+    })
+  }
+
+  /**
+   * Executa a invalidação de cache de forma assíncrona
+   */
+  private static async invalidateCacheAsync(tables: string[]): Promise<void> {
     try {
       const tablesToInvalidate = this.getTablesForInvalidation(tables)
+      const normalizedTables = this.normalizeTableNames(tablesToInvalidate)
       
-      console.log(`🗑️ Invalidando cache para tabelas: ${tablesToInvalidate.join(', ')}`)
+      console.log(`🗑️ Invalidando cache assíncrono para tabelas: ${tablesToInvalidate.join(', ')}`)
+      console.log(`🔄 Tabelas normalizadas (hífen/underscore): ${normalizedTables.join(', ')}`)
       
       // Invalidar cache usando múltiplos padrões para capturar todas as chaves relacionadas
       const patterns = [
-        // Padrão principal por tabela
-        ...tablesToInvalidate.map(table => `${CACHE_PREFIX}-${table}`),
+        // Padrão principal por tabela com prefixo global (versões normalizadas)
+        ...normalizedTables.map(table => `analisador-acoes:${CACHE_PREFIX}-${table}*`),
         // Padrão geral que pode conter qualquer tabela
-        `${CACHE_PREFIX}-general`,
-        // Padrões específicos para queries que podem afetar múltiplas tabelas
-        ...tablesToInvalidate.map(table => `*${table}*`),
+        // `analisador-acoes:${CACHE_PREFIX}-general*`,
+        // Padrões específicos para queries que podem afetar múltiplas tabelas (versões normalizadas)
+        ...normalizedTables.map(table => `analisador-acoes:*${table}*`),
       ]
       
-      let totalKeysCleared = 0
-      
-      for (const pattern of patterns) {
+      // Executar todas as invalidações em paralelo para máxima performance
+      const invalidationPromises = patterns.map(async (pattern) => {
         try {
-          const keysCleared = await this.clearCacheByPattern(pattern)
-          totalKeysCleared += keysCleared
+          return await this.clearCacheByPattern(pattern)
         } catch (patternError) {
           console.warn(`⚠️ Erro ao limpar padrão ${pattern}:`, patternError)
+          return 0
         }
-      }
+      })
+      
+      const results = await Promise.allSettled(invalidationPromises)
+      const totalKeysCleared = results
+        .filter(result => result.status === 'fulfilled')
+        .reduce((sum, result) => sum + (result as PromiseFulfilledResult<number>).value, 0)
       
       // Log de invalidação
-      console.log(`✅ Cache invalidado: ${totalKeysCleared} chaves para ${tablesToInvalidate.length} tabelas`)
+      console.log(`✅ Cache invalidado assíncrono: ${totalKeysCleared} chaves para ${tablesToInvalidate.length} tabelas`)
       
     } catch (error) {
-      console.error('❌ Erro ao invalidar cache:', error)
+      console.error('❌ Erro ao invalidar cache assíncrono:', error)
     }
   }
 

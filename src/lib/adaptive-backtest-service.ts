@@ -175,13 +175,6 @@ export class AdaptiveBacktestService {
       ['backtest_results', 'backtest_configs']
     );
     
-    // Salvar transações mensais se disponíveis (apenas para AdaptiveBacktestResult)
-    console.log('🔍 Debug - Verificando monthlyHistory:', {
-      hasMonthlyHistory: 'monthlyHistory' in result,
-      monthlyHistoryLength: 'monthlyHistory' in result ? result.monthlyHistory?.length : 'N/A',
-      resultType: typeof result
-    });
-    
     if ('monthlyHistory' in result && result.monthlyHistory) {
       console.log('💾 Salvando histórico de transações mensais...');
       console.log('📊 Total de meses no histórico:', result.monthlyHistory.length);

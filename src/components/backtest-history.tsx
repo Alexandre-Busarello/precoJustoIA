@@ -95,12 +95,6 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
       const data = await response.json();
       console.log('📊 Histórico carregado:', data.configs?.length || 0, 'configurações');
       
-      // Debug: verificar se as transações estão chegando
-      if (data.configs && data.configs.length > 0) {
-        console.log('🔍 Debug - Primeira config tem transações:', data.configs[0].transactions?.length || 0);
-        console.log('📋 Exemplo de transação:', data.configs[0].transactions?.[0] || 'Nenhuma');
-      }
-      
       setHistory(data.configs || []);
 
     } catch (err) {

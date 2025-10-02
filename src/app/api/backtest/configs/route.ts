@@ -63,22 +63,7 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    console.log('🔍 Debug - Configs encontradas:', configs.length);
     if (configs.length > 0) {
-      console.log('📊 Primeira config - Transações:', configs[0].transactions?.length || 0);
-      console.log('📋 Exemplo de transação:', configs[0].transactions?.[0] || 'Nenhuma');
-      console.log('🏗️ Estrutura da primeira config:', {
-        id: configs[0].id,
-        name: configs[0].name,
-        hasAssets: !!configs[0].assets,
-        assetsCount: configs[0].assets?.length || 0,
-        hasResults: !!configs[0].results,
-        resultsCount: configs[0].results?.length || 0,
-        hasTransactions: !!configs[0].transactions,
-        transactionsCount: configs[0].transactions?.length || 0
-      });
-      
-      // Debug específico para resultados
       if (configs[0].results && configs[0].results.length > 0) {
         console.log('📈 Primeiro resultado:', {
           id: configs[0].results[0].id,

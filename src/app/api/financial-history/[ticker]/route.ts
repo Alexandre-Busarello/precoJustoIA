@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 
 export async function GET(
   request: NextRequest,
@@ -18,9 +19,11 @@ export async function GET(
     }
 
     // Buscar a empresa
-    const company = await prisma.company.findUnique({
-      where: { ticker: ticker.toUpperCase() }
-    });
+    const company = await safeQueryWithParams('get-company-by-ticker', () => prisma.company.findUnique({
+        where: { ticker: ticker.toUpperCase() }
+      }),
+      { ticker: ticker.toUpperCase() }
+    );
 
     if (!company) {
       return NextResponse.json(
@@ -93,24 +96,26 @@ export async function GET(
     const currentYear = new Date().getFullYear();
     const fiveYearsAgo = currentYear - 5;
     
-    const historicalData = await prisma.financialData.findMany({
-      where: {
-        companyId: company.id,
-        year: {
-          gte: fiveYearsAgo
+    const historicalData = await safeQueryWithParams('get-financial-data', () => prisma.financialData.findMany({
+        where: {
+          companyId: company.id,
+          year: {
+            gte: fiveYearsAgo
+          },
+          [dbField]: {
+            not: null
+          }
         },
-        [dbField]: {
-          not: null
+        select: {
+          year: true,
+          [dbField]: true
+        },
+        orderBy: {
+          year: 'asc'
         }
-      },
-      select: {
-        year: true,
-        [dbField]: true
-      },
-      orderBy: {
-        year: 'asc'
-      }
-    });
+      }),
+      { companyId: company.id, year: { gte: fiveYearsAgo }, [dbField]: { not: null } }
+    );
 
     // Indicadores que são percentuais (precisam ser multiplicados por 100)
     const percentualIndicators = [

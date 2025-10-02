@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePremiumUser } from "@/lib/user-service";
 import { prisma } from "@/lib/prisma";
 import { calculateCompanyOverallScore } from "@/lib/calculate-company-score-service";
+import { cache } from "@/lib/cache-service";
 
-// Cache de empresas top para evitar recalcular sempre
-let cachedTopCompanies: Array<{
+// Cache agora usa Redis com fallback para memória
+const TOP_COMPANIES_CACHE_TTL = 1440 * 60; // 1 dia em segundos
+
+interface TopCompany {
   ticker: string;
   companyName: string;
   score: number;
@@ -12,9 +15,7 @@ let cachedTopCompanies: Array<{
   currentPrice: number;
   logoUrl: string | null;
   recommendation: string;
-}> = [];
-let cacheTimestamp: number = 0;
-const CACHE_DURATION = 1000 * 60 * 60; // 1 hora
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,15 +36,20 @@ export async function GET(request: NextRequest) {
     const minScore = parseInt(searchParams.get('minScore') || '80');
 
     // Verificar cache
-    const now = Date.now();
-    if (cachedTopCompanies.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
+    const cacheKey = 'top-companies-all'
+    const cachedTopCompanies = await cache.get<TopCompany[]>(cacheKey, {
+      prefix: 'companies',
+      ttl: TOP_COMPANIES_CACHE_TTL
+    });
+
+    if (cachedTopCompanies && cachedTopCompanies.length > 0) {
       // Filtrar por minScore e retornar aleatoriamente
       const filtered = cachedTopCompanies.filter(c => c.score >= minScore);
       const shuffled = filtered.sort(() => 0.5 - Math.random());
       return NextResponse.json({ 
         companies: shuffled.slice(0, limit),
         cached: true,
-        cacheAge: Math.floor((now - cacheTimestamp) / 1000 / 60) // em minutos
+        cacheAge: 'Redis/Memory cache'
       });
     }
 
@@ -169,8 +175,10 @@ export async function GET(request: NextRequest) {
     console.log(`✅ Encontradas ${validCompanies.length} empresas com score >= ${minScore}`);
 
     // Atualizar cache
-    cachedTopCompanies = validCompanies;
-    cacheTimestamp = now;
+    await cache.set(cacheKey, validCompanies, {
+      prefix: 'companies',
+      ttl: TOP_COMPANIES_CACHE_TTL
+    });
 
     // Retornar 'limit' empresas (default: 3)
     // Se houver mais empresas válidas que o limit, embaralhar e retornar aleatoriamente

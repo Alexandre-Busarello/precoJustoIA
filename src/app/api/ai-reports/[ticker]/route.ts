@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { AIReportsService } from '@/lib/ai-reports-service'
+import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(
@@ -111,9 +112,13 @@ export async function POST(
     }
 
     // Buscar empresa
-    const company = await prisma.company.findUnique({
-      where: { ticker }
-    })
+    const company = await safeQueryWithParams(
+      'company-by-ticker-ai-reports-route',
+      () => prisma.company.findUnique({
+        where: { ticker }
+      }),
+      { ticker }
+    ) as { id: number } | null
 
     if (!company) {
       return NextResponse.json(

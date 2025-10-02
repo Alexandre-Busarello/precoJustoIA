@@ -414,7 +414,7 @@ export function SectorAnalysisClient({ initialSectors, isPremium }: SectorAnalys
             Quer ir além da análise setorial? Crie rankings personalizados com diferentes modelos de análise para escolher as melhores empresas de acordo com sua estratégia.
           </p>
           <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700">
-            <Link href="/quick-ranker">
+            <Link href="/ranking">
               <TrendingUp className="w-5 h-5 mr-2" />
               Criar Ranking Personalizado
             </Link>

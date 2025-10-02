@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from '@/lib/prisma';
+import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 
 // Importar estratégias para análises comparativas
 import { GrahamStrategy } from '@/lib/strategies/graham-strategy';
@@ -136,92 +137,112 @@ async function getStatementsAnalysis(ticker: string) {
     const startYear = currentYear - 7; // Últimos 7 anos
 
     // Buscar dados da empresa primeiro
-    const company = await prisma.company.findUnique({
-      where: { ticker },
-      select: {
-        id: true,
-        ticker: true,
-        sector: true,
-        industry: true
-      }
-    });
+    const company = await safeQueryWithParams(
+      'company-by-ticker-statements',
+      () => prisma.company.findUnique({
+        where: { ticker },
+        select: {
+          id: true,
+          ticker: true,
+          sector: true,
+          industry: true
+        }
+      }),
+      { ticker }
+    ) as { id: number; ticker: string; sector: string | null; industry: string | null } | null;
 
     if (!company) {
       return null;
     }
 
     const [incomeStatements, balanceSheets, cashflowStatements, financialData] = await Promise.all([
-      prisma.incomeStatement.findMany({
-        where: {
-          company: { ticker },
-          period: 'YEARLY',
-          endDate: {
-            gte: new Date(`${startYear}-01-01`),
-            lte: new Date(`${currentYear}-12-31`)
-          }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 7
-      }),
-      prisma.balanceSheet.findMany({
-        where: {
-          company: { ticker },
-          period: 'YEARLY',
-          endDate: {
-            gte: new Date(`${startYear}-01-01`),
-            lte: new Date(`${currentYear}-12-31`)
-          }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 7
-      }),
-      prisma.cashflowStatement.findMany({
-        where: {
-          company: { ticker },
-          period: 'YEARLY',
-          endDate: {
-            gte: new Date(`${startYear}-01-01`),
-            lte: new Date(`${currentYear}-12-31`)
-          }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 7
-      }),
+      safeQueryWithParams(
+        'income-statements-yearly',
+        () => prisma.incomeStatement.findMany({
+          where: {
+            company: { ticker },
+            period: 'YEARLY',
+            endDate: {
+              gte: new Date(`${startYear}-01-01`),
+              lte: new Date(`${currentYear}-12-31`)
+            }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 7
+        }),
+        { ticker, period: 'YEARLY', startYear, currentYear }
+      ),
+      safeQueryWithParams(
+        'balance-sheets-yearly',
+        () => prisma.balanceSheet.findMany({
+          where: {
+            company: { ticker },
+            period: 'YEARLY',
+            endDate: {
+              gte: new Date(`${startYear}-01-01`),
+              lte: new Date(`${currentYear}-12-31`)
+            }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 7
+        }),
+        { ticker, period: 'YEARLY', startYear, currentYear }
+      ),
+      safeQueryWithParams(
+        'cashflow-statements-yearly',
+        () => prisma.cashflowStatement.findMany({
+          where: {
+            company: { ticker },
+            period: 'YEARLY',
+            endDate: {
+              gte: new Date(`${startYear}-01-01`),
+              lte: new Date(`${currentYear}-12-31`)
+            }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 7
+        }),
+        { ticker, period: 'YEARLY', startYear, currentYear }
+      ),
       // Buscar dados financeiros calculados como fallback
-      prisma.financialData.findMany({
-        where: {
-          companyId: company.id,
-          year: { gte: startYear - 2 } // Pegar mais alguns anos para ter dados suficientes
-        },
-        orderBy: { year: 'desc' },
-        take: 7,
-        select: {
-          year: true,
-          roe: true,
-          roa: true,
-          margemLiquida: true,
-          margemBruta: true,
-          margemEbitda: true,
-          liquidezCorrente: true,
-          liquidezRapida: true,
-          debtToEquity: true,
-          dividaLiquidaPl: true,
-          giroAtivos: true,
-          cagrLucros5a: true,
-          cagrReceitas5a: true,
-          crescimentoLucros: true,
-          crescimentoReceitas: true,
-          fluxoCaixaOperacional: true,
-          fluxoCaixaLivre: true,
-          totalCaixa: true,
-          totalDivida: true,
-          ativoTotal: true,
-          patrimonioLiquido: true,
-          passivoCirculante: true,
-          ativoCirculante: true
-        }
-      })
-    ]);
+      safeQueryWithParams(
+        'financial-data-fallback',
+        () => prisma.financialData.findMany({
+          where: {
+            companyId: company.id,
+            year: { gte: startYear - 2 } // Pegar mais alguns anos para ter dados suficientes
+          },
+          orderBy: { year: 'desc' },
+          take: 7,
+          select: {
+            year: true,
+            roe: true,
+            roa: true,
+            margemLiquida: true,
+            margemBruta: true,
+            margemEbitda: true,
+            liquidezCorrente: true,
+            liquidezRapida: true,
+            debtToEquity: true,
+            dividaLiquidaPl: true,
+            giroAtivos: true,
+            cagrLucros5a: true,
+            cagrReceitas5a: true,
+            crescimentoLucros: true,
+            crescimentoReceitas: true,
+            fluxoCaixaOperacional: true,
+            fluxoCaixaLivre: true,
+            totalCaixa: true,
+            totalDivida: true,
+            ativoTotal: true,
+            patrimonioLiquido: true,
+            passivoCirculante: true,
+            ativoCirculante: true
+          }
+        }),
+        { companyId: company.id, startYear: startYear - 2 }
+      )
+    ]) as [any[], any[], any[], any[]];
 
     if (incomeStatements.length === 0 && balanceSheets.length === 0 && cashflowStatements.length === 0) {
       return null;

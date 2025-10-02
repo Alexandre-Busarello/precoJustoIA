@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/user-service'
 import { syncUserSubscription } from '@/lib/subscription-service'
+import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 
 // GET /api/debug/user-status - Debug do status do usuário
 export async function GET() {
@@ -22,20 +23,22 @@ export async function GET() {
     }
 
     // Buscar dados completos do usuário no banco
-    const user = await prisma.user.findUnique({
-      where: { id: currentUser.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        subscriptionTier: true,
-        premiumExpiresAt: true,
-        stripeCustomerId: true,
-        stripeSubscriptionId: true,
-        stripeCurrentPeriodEnd: true,
-        isAdmin: true
-      }
-    })
+    const user = await safeQueryWithParams('get-user-by-id', () => prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          subscriptionTier: true,
+          premiumExpiresAt: true,
+          stripeCustomerId: true,
+          stripeSubscriptionId: true,
+          stripeCurrentPeriodEnd: true,
+          isAdmin: true
+        }
+      }),
+      { id: currentUser.id }
+    )
 
     if (!user) {
       return NextResponse.json({ error: 'Dados do usuário não encontrados' }, { status: 404 })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 
 // GET /api/backtest/configs/[id] - Buscar configuração específica
@@ -40,7 +40,7 @@ export async function GET(
     const { id: configId } = await params;
 
     // Buscar configuração completa
-    const config = await safeQuery('get-backtest-config-full', () =>
+    const config = await safeQueryWithParams('get-backtest-config-full', () =>
       prisma.backtestConfig.findFirst({
         where: { 
           id: configId,
@@ -52,7 +52,11 @@ export async function GET(
             orderBy: [{ month: 'asc' }, { id: 'asc' }]
           }
         }
-      })
+      }),
+      {
+        id: configId,
+        userId: currentUser.id
+      }
     );
 
     if (!config) {

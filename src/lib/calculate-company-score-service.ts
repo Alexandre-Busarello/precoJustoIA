@@ -12,6 +12,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { toNumber, StrategyAnalysis } from '@/lib/strategies';
 import { OverallScore } from '@/lib/strategies/overall-score';
 import { executeCompanyAnalysis, CompanyAnalysisData } from '@/lib/company-analysis-service';
@@ -75,19 +76,23 @@ export async function calculateCompanyOverallScore(
   try {
     // === 1. BUSCAR DADOS DA EMPRESA ===
     // Exatamente como no /api/company-analysis/[ticker]
-    const companyData = await prisma.company.findUnique({
-      where: { ticker: ticker.toUpperCase() },
-      include: {
-        financialData: {
-          orderBy: { year: 'desc' },
-          take: 8 // Dados atuais + até 7 anos históricos (IGUAL AO ORIGINAL)
-        },
-        dailyQuotes: {
-          orderBy: { date: 'desc' },
-          take: 1
+    const companyData = await safeQueryWithParams(
+      'company-with-financials-and-quotes',
+      () => prisma.company.findUnique({
+        where: { ticker: ticker.toUpperCase() },
+        include: {
+          financialData: {
+            orderBy: { year: 'desc' },
+            take: 8 // Dados atuais + até 7 anos históricos (IGUAL AO ORIGINAL)
+          },
+          dailyQuotes: {
+            orderBy: { date: 'desc' },
+            take: 1
+          }
         }
-      }
-    });
+      }),
+      { ticker: ticker.toUpperCase() }
+    ) as any;
 
     if (!companyData) {
       console.log(`⚠️ Empresa ${ticker} não encontrada`);
@@ -113,7 +118,7 @@ export async function calculateCompanyOverallScore(
 
     // === 3. PREPARAR DADOS HISTÓRICOS ===
     // Exatamente como no original: excluir o primeiro (atual) e pegar os 7 anteriores
-    const historicalFinancials = companyData.financialData.slice(1).map(data => ({
+    const historicalFinancials = companyData.financialData.slice(1).map((data: any) => ({
       year: data.year,
       roe: toNumber(data.roe),
       roic: toNumber(data.roic),

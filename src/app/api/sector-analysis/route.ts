@@ -1,41 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeSectors } from '@/lib/sector-analysis-service';
+import { cache } from '@/lib/cache-service';
 
-// Cache para evitar recalcular constantemente
-let cachedSectorData: any = null;
-let cacheTimestamp = 0;
-const CACHE_DURATION = 1000 * 60 * 60 * 24; // 24 horas
+const CACHE_DURATION = 60 * 60 * 24; // 24 horas em segundos
 
 export async function GET(request: NextRequest) {
   try {
-    const now = Date.now();
     const searchParams = request.nextUrl.searchParams;
     const sectorsParam = searchParams.get('sectors');
     
-    // Verificar cache apenas se não houver parâmetro de setores específicos
-    if (!sectorsParam && cachedSectorData && (now - cacheTimestamp) < CACHE_DURATION) {
-      console.log('📊 Retornando análise setorial do cache');
+    // Parsear setores do parâmetro
+    const sectorsToAnalyze = sectorsParam 
+      ? sectorsParam.split(',').map(s => s.trim())
+      : undefined;
+
+    // Criar chave de cache baseada nos setores solicitados
+    const cacheKey = sectorsParam 
+      ? `sector-analysis-specific-${sectorsParam.replace(/,/g, '-')}`
+      : 'sector-analysis-all';
+
+    // Verificar cache Redis
+    const cachedData = await cache.get(cacheKey);
+    if (cachedData) {
+      console.log('📊 Retornando análise setorial do cache Redis');
       return NextResponse.json({
-        sectors: cachedSectorData,
+        sectors: cachedData,
         cached: true
       });
     }
 
     console.log('📊 [API] Calculando análise setorial...');
 
-    // Parsear setores do parâmetro
-    const sectorsToAnalyze = sectorsParam 
-      ? sectorsParam.split(',').map(s => s.trim())
-      : undefined;
-
     // Chamar serviço de análise
     const sectorAnalysis = await analyzeSectors(sectorsToAnalyze);
 
-    // Atualizar cache apenas se não foi requisição específica de setores
-    if (!sectorsParam) {
-      cachedSectorData = sectorAnalysis;
-      cacheTimestamp = now;
-    }
+    // Salvar no cache Redis
+    await cache.set(cacheKey, sectorAnalysis, { ttl: CACHE_DURATION });
 
     return NextResponse.json({
       sectors: sectorAnalysis,

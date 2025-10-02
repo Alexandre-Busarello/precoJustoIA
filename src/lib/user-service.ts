@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import type { Session } from 'next-auth'
@@ -37,34 +38,42 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
 
   // Tentar primeiro pelo ID da sessão
   if (session.user.id) {
-    user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          subscriptionTier: true,
-          premiumExpiresAt: true,
-          isAdmin: true,
-          stripeCustomerId: true
-        }
-    })
+    user = await safeQueryWithParams(
+      'user-by-session-id',
+      () => prisma.user.findUnique({
+        where: { id: session.user.id },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            subscriptionTier: true,
+            premiumExpiresAt: true,
+            isAdmin: true,
+            stripeCustomerId: true
+          }
+      }),
+      { userId: session.user.id }
+    ) as any
   }
 
   // Se não encontrar pelo ID, tentar pelo email
   if (!user && session.user.email) {
-    user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          subscriptionTier: true,
-          premiumExpiresAt: true,
-          isAdmin: true,
-          stripeCustomerId: true
-        }
-    })
+    user = await safeQueryWithParams(
+      'user-by-session-email',
+      () => prisma.user.findUnique({
+        where: { email: session.user.email! },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            subscriptionTier: true,
+            premiumExpiresAt: true,
+            isAdmin: true,
+            stripeCustomerId: true
+          }
+      }),
+      { email: session.user.email }
+    ) as any
   }
 
   if (!user) {
@@ -123,23 +132,31 @@ export async function isCurrentUserPremium(): Promise<boolean> {
 export async function isUserPremium(identifier: string): Promise<boolean> {
   try {
     // Tentar como ID primeiro
-    let user = await prisma.user.findUnique({
-      where: { id: identifier },
-      select: {
-        subscriptionTier: true,
-        premiumExpiresAt: true
-      }
-    })
-
-    // Se não encontrar, tentar como email
-    if (!user) {
-      user = await prisma.user.findUnique({
-        where: { email: identifier },
+    let user = await safeQueryWithParams(
+      'user-premium-by-id',
+      () => prisma.user.findUnique({
+        where: { id: identifier },
         select: {
           subscriptionTier: true,
           premiumExpiresAt: true
         }
-      })
+      }),
+      { identifier, type: 'id' }
+    ) as any
+
+    // Se não encontrar, tentar como email
+    if (!user) {
+      user = await safeQueryWithParams(
+        'user-premium-by-email',
+        () => prisma.user.findUnique({
+          where: { email: identifier },
+          select: {
+            subscriptionTier: true,
+            premiumExpiresAt: true
+          }
+        }),
+        { identifier, type: 'email' }
+      ) as any
     }
 
     if (!user) {
@@ -198,18 +215,22 @@ export async function requireAdminUser(): Promise<UserData | null> {
  */
 export async function getUserById(userId: string): Promise<UserData | null> {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          subscriptionTier: true,
-          premiumExpiresAt: true,
-          isAdmin: true,
-          stripeCustomerId: true
-        }
-    })
+    const user = await safeQueryWithParams(
+      'user-by-id',
+      () => prisma.user.findUnique({
+        where: { id: userId },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            subscriptionTier: true,
+            premiumExpiresAt: true,
+            isAdmin: true,
+            stripeCustomerId: true
+          }
+      }),
+      { userId }
+    ) as any
 
     if (!user) {
       return null

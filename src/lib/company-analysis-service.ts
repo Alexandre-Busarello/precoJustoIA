@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { 
   StrategyFactory,
   StrategyAnalysis,
@@ -68,68 +69,84 @@ export async function getStatementsData(
     const startYear = currentYear - 4; // Últimos 5 anos
 
     const [incomeStatements, balanceSheets, cashflowStatements, financialData] = await Promise.all([
-      prisma.incomeStatement.findMany({
-        where: {
-          companyId: parseInt(companyId),
-          period: 'YEARLY',
-          endDate: { gte: new Date(`${startYear}-01-01`) }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 7 // Últimos 5 anos para análise
-      }),
-      prisma.balanceSheet.findMany({
-        where: {
-          companyId: parseInt(companyId),
-          period: 'YEARLY',
-          endDate: { gte: new Date(`${startYear}-01-01`) }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 7
-      }),
-      prisma.cashflowStatement.findMany({
-        where: {
-          companyId: parseInt(companyId),
-          period: 'YEARLY',
-          endDate: { gte: new Date(`${startYear}-01-01`) }
-        },
-        orderBy: { endDate: 'desc' },
-        take: 7
-      }),
+      safeQueryWithParams(
+        'income-statements-company-analysis',
+        () => prisma.incomeStatement.findMany({
+          where: {
+            companyId: parseInt(companyId),
+            period: 'YEARLY',
+            endDate: { gte: new Date(`${startYear}-01-01`) }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 7 // Últimos 5 anos para análise
+        }),
+        { companyId: parseInt(companyId), period: 'YEARLY', startYear }
+      ),
+      safeQueryWithParams(
+        'balance-sheets-company-analysis',
+        () => prisma.balanceSheet.findMany({
+          where: {
+            companyId: parseInt(companyId),
+            period: 'YEARLY',
+            endDate: { gte: new Date(`${startYear}-01-01`) }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 7
+        }),
+        { companyId: parseInt(companyId), period: 'YEARLY', startYear }
+      ),
+      safeQueryWithParams(
+        'cashflow-statements-company-analysis',
+        () => prisma.cashflowStatement.findMany({
+          where: {
+            companyId: parseInt(companyId),
+            period: 'YEARLY',
+            endDate: { gte: new Date(`${startYear}-01-01`) }
+          },
+          orderBy: { endDate: 'desc' },
+          take: 7
+        }),
+        { companyId: parseInt(companyId), period: 'YEARLY', startYear }
+      ),
       // Buscar dados financeiros calculados como fallback
-      prisma.financialData.findMany({
-        where: {
-          companyId: parseInt(companyId),
-          year: { gte: startYear }
-        },
-        orderBy: { year: 'desc' },
-        take: 7,
-        select: {
-          year: true,
-          roe: true,
-          roa: true,
-          margemLiquida: true,
-          margemBruta: true,
-          margemEbitda: true,
-          liquidezCorrente: true,
-          liquidezRapida: true,
-          debtToEquity: true,
-          dividaLiquidaPl: true,
-          giroAtivos: true,
-          cagrLucros5a: true,
-          cagrReceitas5a: true,
-          crescimentoLucros: true,
-          crescimentoReceitas: true,
-          fluxoCaixaOperacional: true,
-          fluxoCaixaLivre: true,
-          totalCaixa: true,
-          totalDivida: true,
-          ativoTotal: true,
-          patrimonioLiquido: true,
-          passivoCirculante: true,
-          ativoCirculante: true
-        }
-      })
-    ]);
+      safeQueryWithParams(
+        'financial-data-company-analysis',
+        () => prisma.financialData.findMany({
+          where: {
+            companyId: parseInt(companyId),
+            year: { gte: startYear }
+          },
+          orderBy: { year: 'desc' },
+          take: 7,
+          select: {
+            year: true,
+            roe: true,
+            roa: true,
+            margemLiquida: true,
+            margemBruta: true,
+            margemEbitda: true,
+            liquidezCorrente: true,
+            liquidezRapida: true,
+            debtToEquity: true,
+            dividaLiquidaPl: true,
+            giroAtivos: true,
+            cagrLucros5a: true,
+            cagrReceitas5a: true,
+            crescimentoLucros: true,
+            crescimentoReceitas: true,
+            fluxoCaixaOperacional: true,
+            fluxoCaixaLivre: true,
+            totalCaixa: true,
+            totalDivida: true,
+            ativoTotal: true,
+            patrimonioLiquido: true,
+            passivoCirculante: true,
+            ativoCirculante: true
+          }
+        }),
+        { companyId: parseInt(companyId), startYear }
+      )
+    ]) as [any[], any[], any[], any[]];
 
     if (incomeStatements.length === 0 && balanceSheets.length === 0 && cashflowStatements.length === 0) {
       return undefined;

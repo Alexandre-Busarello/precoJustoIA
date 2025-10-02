@@ -16,6 +16,7 @@ import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import { RelatedCompanies } from '@/components/related-companies'
 import { Footer } from '@/components/footer'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
+import { cache } from '@/lib/cache-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -74,13 +75,9 @@ function getCompanySize(marketCap: number | null): 'small_caps' | 'mid_caps' | '
   }
 }
 
-// Cache para concorrentes (válido por 30 minutos)
-const competitorsCache = new Map<string, { competitors: { ticker: string; name: string; sector: string | null }[]; timestamp: number }>()
-const COMPETITORS_CACHE_DURATION = 30 * 60 * 1000 // 30 minutos
-
-// Cache para metadata (válido por 15 minutos)
-const metadataCache = new Map<string, { metadata: any; timestamp: number }>()
-const METADATA_CACHE_DURATION = 15 * 60 * 1000 // 15 minutos
+// Cache agora usa Redis com fallback para memória
+const COMPETITORS_CACHE_TTL = 1440 * 60 // 1 dia em segundos
+const METADATA_CACHE_TTL = 60 * 60 // 60 minutos em segundos
 
 // Função mista: combina empresas inteligentes (premium) + básicas para SEO
 async function getMixedRelatedCompanies(
@@ -183,11 +180,15 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
     const currentCompanySize = getCompanySize(currentMarketCap)
     
     // Verificar cache primeiro (incluir tamanho na chave do cache)
-    const cacheKey = `${currentTicker}-${sector}-${industry}-${currentCompanySize}-${limit}-v2`
-    const cached = competitorsCache.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < COMPETITORS_CACHE_DURATION) {
+    const cacheKey = `competitors-${currentTicker}-${sector}-${industry}-${currentCompanySize}-${limit}-v2`
+    const cached = await cache.get<{ ticker: string; name: string; sector: string | null }[]>(cacheKey, {
+      prefix: 'companies',
+      ttl: COMPETITORS_CACHE_TTL
+    })
+    
+    if (cached) {
       console.log('📋 Usando concorrentes do cache para', currentTicker)
-      return cached.competitors
+      return cached
     }
 
     const currentPrefix = getTickerPrefix(currentTicker)
@@ -352,9 +353,9 @@ async function getSectorCompetitors(currentTicker: string, sector: string | null
     console.log(`🔍 Empresa ${currentTicker} (${currentCompanySize}): encontrados ${competitors.length} concorrentes válidos (${sameSize} do mesmo tamanho, ${competitors.length - sameSize} de outros tamanhos)`)
 
     // Armazenar no cache
-    competitorsCache.set(cacheKey, {
-      competitors,
-      timestamp: Date.now()
+    await cache.set(cacheKey, competitors, {
+      prefix: 'companies',
+      ttl: COMPETITORS_CACHE_TTL
     })
     
     return competitors
@@ -402,9 +403,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
   
   // Verificar cache primeiro
-  const cached = metadataCache.get(ticker)
-  if (cached && Date.now() - cached.timestamp < METADATA_CACHE_DURATION) {
-    return cached.metadata
+  const cacheKey = `metadata-${ticker}`
+  const cached = await cache.get<any>(cacheKey, {
+    prefix: 'companies',
+    ttl: METADATA_CACHE_TTL
+  })
+  
+  if (cached) {
+    return cached
   }
   
   try {
@@ -511,9 +517,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     // Armazenar no cache
-    metadataCache.set(ticker, {
-      metadata,
-      timestamp: Date.now()
+    await cache.set(cacheKey, metadata, {
+      prefix: 'companies',
+      ttl: METADATA_CACHE_TTL
     })
 
     return metadata

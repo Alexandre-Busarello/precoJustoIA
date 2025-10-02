@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processWebhookNotification, validateWebhookSignature } from '@/lib/mercadopago'
 import { prisma } from '@/lib/prisma'
+import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
 import { sendWelcomeEmail } from '@/lib/email-service'
 
 export async function POST(request: NextRequest) {
@@ -143,10 +144,14 @@ async function handlePaymentApproved(paymentData: any): Promise<boolean> {
 
     console.log('🔍 Looking up user in database...')
     // Buscar usuário atual para verificar se já foi premium
-    const currentUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { wasPremiumBefore: true, firstPremiumAt: true, email: true, name: true }
-    })
+    const currentUser = await safeQueryWithParams(
+      'user-by-id-mercadopago',
+      () => prisma.user.findUnique({
+        where: { id: userId },
+        select: { wasPremiumBefore: true, firstPremiumAt: true, email: true, name: true }
+      }),
+      { userId }
+    ) as any
 
     if (!currentUser) {
       console.error('❌ User not found in database:', userId)
@@ -177,10 +182,14 @@ async function handlePaymentApproved(paymentData: any): Promise<boolean> {
     }
 
     // Atualizar usuário no banco de dados
-    await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-    })
+    await safeWrite(
+      'mercadopago-payment-approved',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+      }),
+      ['users']
+    )
 
     console.log(`✅ User ${userId} (${currentUser.email}) upgraded to PREMIUM via PIX (${planType}) until ${expiresAt}`)
     console.log(`🎉 PIX payment processed successfully! Amount: R$ ${amount}`)

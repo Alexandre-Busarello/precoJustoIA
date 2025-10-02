@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 
 export async function GET(
@@ -38,7 +38,7 @@ export async function GET(
     }
 
     // Buscar o ranking específico do usuário
-    const ranking = await safeQuery('get-ranking-by-id', () =>
+    const ranking = await safeQueryWithParams('get-ranking-by-id', () =>
       prisma.rankingHistory.findFirst({
         where: {
           id: id,
@@ -52,7 +52,11 @@ export async function GET(
           resultCount: true,
           createdAt: true,
         }
-      })
+      }),
+      {
+        id: id,
+        userId: currentUser.id
+      }
     );
 
     if (!ranking) {

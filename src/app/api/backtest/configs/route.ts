@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery, safeTransaction } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams, safeTransaction, safeWrite } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 
 // GET /api/backtest/configs - Listar configurações do usuário
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const skip = (page - 1) * limit;
 
-    const configs = await safeQuery('get-backtest-configs', () =>
+    const configs = await safeQueryWithParams('get-backtest-configs', () =>
       prisma.backtestConfig.findMany({
         where: { userId: currentUser.id },
         include: { 
@@ -55,7 +55,12 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' }, // Mais recentes primeiro, independente de ter resultados
         skip,
         take: limit
-      })
+      }),
+      {
+        userId: currentUser.id,
+        page,
+        limit
+      }
     );
 
     console.log('🔍 Debug - Configs encontradas:', configs.length);
@@ -186,7 +191,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const config = await safeTransaction('create-backtest-config', () =>
+    const config = await safeWrite('create-backtest-config', () =>
       prisma.backtestConfig.create({
         data: {
           userId: currentUser.id,
@@ -206,7 +211,8 @@ export async function POST(request: NextRequest) {
           }
         },
         include: { assets: true }
-      })
+      }),
+      ['backtest_configs', 'backtest_assets']
     );
 
     return NextResponse.json({ config });

@@ -9,6 +9,7 @@ import { CompanyLogo } from '@/components/company-logo'
 import { CompanySizeBadge } from '@/components/company-size-badge'
 import { analyzeFinancialStatements } from '@/lib/strategies/overall-score'
 import { executeMultipleCompanyAnalysis, getStatementsData } from '@/lib/company-analysis-service'
+import { cache } from '@/lib/cache-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -104,13 +105,9 @@ function calculateHistoricalAverage(financialDataArray: Record<string, unknown>[
   return sum / validValues.length
 }
 
-// Cache para estratégias calculadas (válido por 10 minutos)
-const strategiesCache = new Map<string, { data: any; timestamp: number }>();
-const STRATEGIES_CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
-
-// Cache para análise de demonstrações (válido por 15 minutos)
-const statementsAnalysisCache = new Map<string, { data: any; timestamp: number }>();
-const STATEMENTS_ANALYSIS_CACHE_DURATION = 15 * 60 * 1000; // 15 minutos
+// Cache agora usa Redis com fallback para memória
+const STRATEGIES_CACHE_TTL = 1440 * 60; // 1 dia em segundos
+const STATEMENTS_ANALYSIS_CACHE_TTL = 1440 * 60; // 1 dia em segundos
 
 // Sistema de pontuação ponderada para determinar a melhor empresa (OTIMIZADO)
 async function calculateWeightedScore(companies: Record<string, unknown>[]): Promise<{ scores: number[], bestIndex: number, tiedIndices: number[] }> {
@@ -147,17 +144,21 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     
     // Verificar cache primeiro
     const cacheKey = `strategies-${company.ticker}-${currentPrice}`;
-    const cached = strategiesCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < STRATEGIES_CACHE_DURATION) {
-      return { company, strategies: cached.data, currentPrice };
+    const cached = await cache.get<any>(cacheKey, {
+      prefix: 'comparison',
+      ttl: STRATEGIES_CACHE_TTL
+    });
+    
+    if (cached) {
+      return { company, strategies: cached, currentPrice };
     }
     
     const strategies = await executeStrategiesForCompany(company, currentPrice, true);
     
     // Armazenar no cache
-    strategiesCache.set(cacheKey, {
-      data: strategies,
-      timestamp: Date.now()
+    await cache.set(cacheKey, strategies, {
+      prefix: 'comparison',
+      ttl: STRATEGIES_CACHE_TTL
     });
     
     return { company, strategies, currentPrice };
@@ -170,17 +171,22 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     const ticker = company.ticker as string;
     
     // Verificar cache primeiro
-    const cached = statementsAnalysisCache.get(ticker);
-    if (cached && Date.now() - cached.timestamp < STATEMENTS_ANALYSIS_CACHE_DURATION) {
-      return { ticker, analysis: cached.data };
+    const cacheKey = `statements-${ticker}`;
+    const cached = await cache.get<any>(cacheKey, {
+      prefix: 'comparison',
+      ttl: STATEMENTS_ANALYSIS_CACHE_TTL
+    });
+    
+    if (cached) {
+      return { ticker, analysis: cached };
     }
     
     const analysis = await getStatementsAnalysisForCompany(ticker);
     
     // Armazenar no cache
-    statementsAnalysisCache.set(ticker, {
-      data: analysis,
-      timestamp: Date.now()
+    await cache.set(cacheKey, analysis, {
+      prefix: 'comparison',
+      ttl: STATEMENTS_ANALYSIS_CACHE_TTL
     });
     
     return { ticker, analysis };
@@ -1495,10 +1501,10 @@ export default async function CompareStocksPage({ params }: PageProps) {
           companies={orderedCompanies.map(company => {
             const currentPrice = toNumber(company.dailyQuotes[0]?.price) || toNumber(company.financialData[0]?.lpa) || 0
             
-            // Buscar dados já calculados no cache
-            const cacheKey = `strategies-${company.ticker}-${currentPrice}`;
-            const cached = strategiesCache.get(cacheKey);
-            const { strategies, overallScore } = cached?.data || { strategies: {}, overallScore: null };
+            // Os dados de estratégias já foram calculados e estão disponíveis nos dados da empresa
+            // Usar dados já processados anteriormente
+            const strategies = (company as any).strategies || {};
+            const overallScore = (company as any).overallScore || null;
             
             // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
             // IMPORTANTE: Converter todos os Decimal para number para evitar erros de serialização

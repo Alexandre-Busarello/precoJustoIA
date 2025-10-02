@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 
 interface SectorAnalysisResult {
@@ -90,28 +91,37 @@ async function analyzeSingleSector(sector: string): Promise<SectorAnalysisResult
     console.log(`🔍 Analisando setor: ${sector}`);
 
     // Buscar empresas do setor com indicadores mínimos
-    const companies = await prisma.company.findMany({
-      where: {
-        sector: sector,
-        financialData: {
-          some: {
-            roe: { gte: 0.08 },
-            pl: { gt: 0, lt: 100 },
-            lpa: { not: null },
-            vpa: { not: null },
-            OR: [
-              { liquidezCorrente: { gte: 0.8 } },
-              { liquidezCorrente: null }
-            ]
+    const companies = await safeQueryWithParams(
+      'companies-by-sector-qualified',
+      () => prisma.company.findMany({
+        where: {
+          sector: sector,
+          financialData: {
+            some: {
+              roe: { gte: 0.08 },
+              pl: { gt: 0, lt: 100 },
+              lpa: { not: null },
+              vpa: { not: null },
+              OR: [
+                { liquidezCorrente: { gte: 0.8 } },
+                { liquidezCorrente: null }
+              ]
+            }
           }
-        }
-      },
-      select: {
-        ticker: true,
-        name: true
-      },
-      take: 50
-    });
+        },
+        select: {
+          ticker: true,
+          name: true
+        },
+        take: 50
+      }),
+      { 
+        sector, 
+        minRoe: 0.08, 
+        maxPl: 100, 
+        minLiquidez: 0.8 
+      }
+    ) as Array<{ ticker: string; name: string }>;
 
     if (companies.length === 0) {
       console.log(`⚠️  Nenhuma empresa qualificada no setor ${sector}`);

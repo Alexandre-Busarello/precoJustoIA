@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, safeQuery } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Buscar empresas por ticker ou nome (case insensitive)
-    const companies = await safeQuery('search-companies', () =>
+    const companies = await safeQueryWithParams('search-companies', () =>
       prisma.company.findMany({
         where: {
           OR: [
@@ -47,7 +47,12 @@ export async function GET(request: NextRequest) {
           }
         ],
         take: 10 // Limitar a 10 resultados
-      })
+      }),
+      {
+        q: query,
+        take: 10,
+        mode: 'insensitive'
+      }
     );
 
     // Ordenar resultados priorizando matches exatos de ticker

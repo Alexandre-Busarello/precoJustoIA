@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { TechnicalIndicators, type PriceData, type TechnicalAnalysisResult } from '@/lib/technical-indicators'
 
 export async function GET(
@@ -11,10 +12,14 @@ export async function GET(
     const ticker = resolvedParams.ticker.toUpperCase()
 
     // Buscar empresa
-    const company = await prisma.company.findUnique({
-      where: { ticker },
-      select: { id: true, name: true }
-    })
+    const company = await safeQueryWithParams(
+      `company-by-ticker`,
+      () => prisma.company.findUnique({
+        where: { ticker },
+        select: { id: true, name: true }
+      }),
+      { ticker }
+    ) as { id: number; name: string } | null
 
     if (!company) {
       return NextResponse.json(
@@ -27,23 +32,39 @@ export async function GET(
     const twoYearsAgo = new Date()
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2)
 
-    const historicalData = await prisma.historicalPrice.findMany({
-      where: {
-        companyId: company.id,
-        interval: '1mo', // Dados mensais
-        date: { gte: twoYearsAgo }
-      },
-      select: {
-        date: true,
-        open: true,
-        high: true,
-        low: true,
-        close: true,
-        volume: true,
-        adjustedClose: true
-      },
-      orderBy: { date: 'asc' }
-    })
+    const historicalData = await safeQueryWithParams(
+      `historical-prices`,
+      () => prisma.historicalPrice.findMany({
+        where: {
+          companyId: company.id,
+          interval: '1mo', // Dados mensais
+          date: { gte: twoYearsAgo }
+        },
+        select: {
+          date: true,
+          open: true,
+          high: true,
+          low: true,
+          close: true,
+          volume: true,
+          adjustedClose: true
+        },
+        orderBy: { date: 'asc' }
+      }),
+      { 
+        companyId: company.id, 
+        interval: '1mo', 
+        dateFrom: twoYearsAgo.toISOString() 
+      }
+    ) as Array<{
+      date: Date;
+      open: any;
+      high: any;
+      low: any;
+      close: any;
+      volume: any;
+      adjustedClose: any;
+    }>
 
     if (historicalData.length === 0) {
       return NextResponse.json({
@@ -57,14 +78,14 @@ export async function GET(
 
     // Converter dados para o formato esperado pelos indicadores técnicos
     // Filtrar registros com dados inválidos (valores zerados)
-    const validHistoricalData = historicalData.filter(data => 
+    const validHistoricalData = historicalData.filter((data: any) => 
       Number(data.high) > 0 && 
       Number(data.low) > 0 && 
       Number(data.close) > 0 &&
       Number(data.open) > 0
     )
 
-    const priceData: PriceData[] = validHistoricalData.map(data => ({
+    const priceData: PriceData[] = validHistoricalData.map((data: any) => ({
       date: data.date,
       open: Number(data.open),
       high: Number(data.high),
@@ -85,8 +106,8 @@ export async function GET(
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
     
     const chartData = validHistoricalData
-      .filter(data => data.date >= oneYearAgo)
-      .map(data => ({
+      .filter((data: any) => data.date >= oneYearAgo)
+      .map((data: any) => ({
         date: data.date.toISOString(),
         open: Number(data.open),
         high: Number(data.high),

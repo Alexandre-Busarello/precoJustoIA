@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 
 // GET /api/backtest/configs/[id]/results - Buscar resultados de uma configuração específica
@@ -40,14 +40,15 @@ export async function GET(
     const { id: configId } = await params;
 
     // Primeiro verificar se a configuração existe e pertence ao usuário
-    const config = await safeQuery('get-backtest-config-ownership', () =>
+    const config = await safeQueryWithParams('get-backtest-config-ownership', () =>
       prisma.backtestConfig.findFirst({
         where: { 
           id: configId,
           userId: currentUser.id 
         },
         select: { id: true, name: true }
-      })
+      }),
+      { id: configId, userId: currentUser.id }
     );
 
     if (!config) {
@@ -58,11 +59,12 @@ export async function GET(
     }
 
     // Buscar todos os resultados desta configuração
-    const results = await safeQuery('get-backtest-results', () =>
+    const results = await safeQueryWithParams('get-backtest-results', () =>
       prisma.backtestResult.findMany({
         where: { backtestId: configId },
         orderBy: { calculatedAt: 'desc' } // Mais recente primeiro
-      })
+      }),
+      { configId }
     );
 
     console.log(`📊 Encontrados ${results.length} resultados para config ${config.name}`);

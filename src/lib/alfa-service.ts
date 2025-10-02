@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
 
 /**
  * SERVIÇO CENTRALIZADO PARA CONTROLE DA FASE ALFA
@@ -58,12 +59,16 @@ export function isProdPhase(): boolean {
  * Conta o número atual de usuários registrados (excluindo Early Adopters e inativos)
  */
 export async function getCurrentUserCount(): Promise<number> {
-  return await prisma.user.count({
-    where: {
-      isEarlyAdopter: false,
-      isInactive: false
-    }
-  })
+  return await safeQueryWithParams(
+    'user-count-active',
+    () => prisma.user.count({
+      where: {
+        isEarlyAdopter: false,
+        isInactive: false
+      }
+    }),
+    { isEarlyAdopter: false, isInactive: false }
+  ) as number
 }
 
 /**
@@ -104,12 +109,16 @@ export async function canUserRegister(isEarlyAdopter: boolean = false): Promise<
  */
 export async function addToWaitlist(name: string, email: string): Promise<boolean> {
   try {
-    await prisma.alfaWaitlist.create({
-      data: {
-        name,
-        email
-      }
-    })
+    await safeWrite(
+      'add-to-waitlist',
+      () => prisma.alfaWaitlist.create({
+        data: {
+          name,
+          email
+        }
+      }),
+      ['alfa_waitlist']
+    )
     return true
   } catch (error) {
     // Se email já existe, ignora o erro
@@ -122,27 +131,35 @@ export async function addToWaitlist(name: string, email: string): Promise<boolea
  * Obtém o próximo usuário da lista de interesse para ser convidado
  */
 export async function getNextWaitlistUser() {
-  return await prisma.alfaWaitlist.findFirst({
-    where: {
-      isInvited: false
-    },
-    orderBy: {
-      createdAt: 'asc'
-    }
-  })
+  return await safeQueryWithParams(
+    'next-waitlist-user',
+    () => prisma.alfaWaitlist.findFirst({
+      where: {
+        isInvited: false
+      },
+      orderBy: {
+        createdAt: 'asc'
+      }
+    }),
+    { isInvited: false }
+  ) as any
 }
 
 /**
  * Marca um usuário da lista como convidado
  */
 export async function markAsInvited(waitlistId: string): Promise<void> {
-  await prisma.alfaWaitlist.update({
-    where: { id: waitlistId },
-    data: {
-      isInvited: true,
-      invitedAt: new Date()
-    }
-  })
+  await safeWrite(
+    'mark-waitlist-invited',
+    () => prisma.alfaWaitlist.update({
+      where: { id: waitlistId },
+      data: {
+        isInvited: true,
+        invitedAt: new Date()
+      }
+    }),
+    ['alfa_waitlist']
+  )
 }
 
 /**
@@ -152,32 +169,40 @@ export async function findInactiveUsers(): Promise<string[]> {
   const fifteenDaysAgo = new Date()
   fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15)
   
-  const inactiveUsers = await prisma.user.findMany({
-    where: {
-      isEarlyAdopter: false,
-      isInactive: false, // Apenas usuários que ainda não foram marcados como inativos
-      OR: [
-        {
-          lastLoginAt: {
-            lt: fifteenDaysAgo
+  const inactiveUsers = await safeQueryWithParams(
+    'find-inactive-users',
+    () => prisma.user.findMany({
+      where: {
+        isEarlyAdopter: false,
+        isInactive: false, // Apenas usuários que ainda não foram marcados como inativos
+        OR: [
+          {
+            lastLoginAt: {
+              lt: fifteenDaysAgo
+            }
+          },
+          {
+            lastLoginAt: null,
+            // Se nunca fez login, considera a data de verificação do email
+            emailVerified: {
+              lt: fifteenDaysAgo
+            }
           }
-        },
-        {
-          lastLoginAt: null,
-          // Se nunca fez login, considera a data de verificação do email
-          emailVerified: {
-            lt: fifteenDaysAgo
-          }
-        }
-      ]
-    },
-    select: {
-      id: true,
-      email: true
+        ]
+      },
+      select: {
+        id: true,
+        email: true
+      }
+    }),
+    { 
+      isEarlyAdopter: false, 
+      isInactive: false, 
+      cutoffDate: fifteenDaysAgo.toISOString() 
     }
-  })
+  ) as Array<{ id: string; email: string }>
   
-  return inactiveUsers.map(user => user.id)
+  return inactiveUsers.map((user: { id: string; email: string }) => user.id)
 }
 
 /**
@@ -186,13 +211,17 @@ export async function findInactiveUsers(): Promise<string[]> {
 export async function processInactiveUser(userId: string): Promise<boolean> {
   try {
     // Marcar usuário como inativo ao invés de deletar
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        isInactive: true,
-        inactivatedAt: new Date()
-      }
-    })
+    await safeWrite(
+      'mark-user-inactive',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: {
+          isInactive: true,
+          inactivatedAt: new Date()
+        }
+      }),
+      ['users']
+    )
     
     // Convida o próximo da lista
     const nextUser = await getNextWaitlistUser()
@@ -214,15 +243,34 @@ export async function processInactiveUser(userId: string): Promise<boolean> {
  */
 export async function updateLastLogin(userId: string): Promise<void> {
   try {
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        lastLoginAt: new Date(),
-        // Reativar usuário se estava inativo
-        isInactive: false,
-        inactivatedAt: null
-      }
-    })
+    // Primeiro verificar se o usuário existe
+    const userExists = await safeQueryWithParams(
+      'check-user-exists',
+      () => prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true }
+      }),
+      { userId }
+    ) as { id: string } | null
+
+    if (!userExists) {
+      console.warn(`⚠️ Tentativa de atualizar login para usuário inexistente: ${userId}`)
+      return
+    }
+
+    await safeWrite(
+      'update-last-login',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: {
+          lastLoginAt: new Date(),
+          // Reativar usuário se estava inativo
+          isInactive: false,
+          inactivatedAt: null
+        }
+      }),
+      ['users']
+    )
   } catch (error) {
     console.error('Erro ao atualizar último login:', error)
   }
@@ -233,14 +281,18 @@ export async function updateLastLogin(userId: string): Promise<void> {
  */
 export async function reactivateUser(userId: string): Promise<boolean> {
   try {
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        isInactive: false,
-        inactivatedAt: null,
-        lastLoginAt: new Date()
-      }
-    })
+    await safeWrite(
+      'reactivate-user',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: {
+          isInactive: false,
+          inactivatedAt: null,
+          lastLoginAt: new Date()
+        }
+      }),
+      ['users']
+    )
     return true
   } catch (error) {
     console.error('Erro ao reativar usuário:', error)
@@ -252,23 +304,31 @@ export async function reactivateUser(userId: string): Promise<boolean> {
  * Marca um usuário como Early Adopter
  */
 export async function markAsEarlyAdopter(userId: string): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      isEarlyAdopter: true,
-      earlyAdopterDate: new Date()
-    }
-  })
+  await safeWrite(
+    'mark-early-adopter',
+    () => prisma.user.update({
+      where: { id: userId },
+      data: {
+        isEarlyAdopter: true,
+        earlyAdopterDate: new Date()
+      }
+    }),
+    ['users']
+  )
 }
 
 /**
  * Verifica se um usuário é Early Adopter
  */
 export async function isEarlyAdopter(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isEarlyAdopter: true }
-  })
+  const user = await safeQueryWithParams(
+    'check-early-adopter',
+    () => prisma.user.findUnique({
+      where: { id: userId },
+      select: { isEarlyAdopter: true }
+    }),
+    { userId }
+  ) as { isEarlyAdopter: boolean } | null
   
   return user?.isEarlyAdopter || false
 }
@@ -279,18 +339,33 @@ export async function isEarlyAdopter(userId: string): Promise<boolean> {
 export async function getAlfaStats() {
   const config = getAlfaConfig()
   const currentUsers = await getCurrentUserCount()
-  const earlyAdopters = await prisma.user.count({
-    where: { isEarlyAdopter: true }
-  })
-  const inactiveUsers = await prisma.user.count({
-    where: { 
-      isInactive: true,
-      isEarlyAdopter: false
-    }
-  })
-  const waitlistCount = await prisma.alfaWaitlist.count({
-    where: { isInvited: false }
-  })
+  
+  const [earlyAdopters, inactiveUsers, waitlistCount] = await Promise.all([
+    safeQueryWithParams(
+      'count-early-adopters',
+      () => prisma.user.count({
+        where: { isEarlyAdopter: true }
+      }),
+      { isEarlyAdopter: true }
+    ),
+    safeQueryWithParams(
+      'count-inactive-users',
+      () => prisma.user.count({
+        where: { 
+          isInactive: true,
+          isEarlyAdopter: false
+        }
+      }),
+      { isInactive: true, isEarlyAdopter: false }
+    ),
+    safeQueryWithParams(
+      'count-waitlist',
+      () => prisma.alfaWaitlist.count({
+        where: { isInvited: false }
+      }),
+      { isInvited: false }
+    )
+  ]) as [number, number, number]
   
   return {
     phase: config.phase,

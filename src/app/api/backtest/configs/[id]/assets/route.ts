@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery, safeTransaction } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams, safeTransaction, safeWrite } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 import { calculateAverageDividendYield } from '@/lib/dividend-yield-calculator';
 
@@ -50,7 +50,7 @@ export async function POST(
     }
 
     // Verificar se a configuração existe e pertence ao usuário
-    const config = await safeQuery('get-backtest-config', () =>
+    const config = await safeQueryWithParams('get-backtest-config', () =>
       prisma.backtestConfig.findFirst({
         where: {
           id: configId,
@@ -59,7 +59,11 @@ export async function POST(
         include: {
           assets: true
         }
-      })
+      }),
+      {
+        id: configId,
+        userId: currentUser.id
+      }
     );
 
     if (!config) {
@@ -133,10 +137,10 @@ export async function POST(
       });
 
       return newAsset;
-    });
+    }, { affectedTables: ['backtest_assets', 'backtest_configs'] });
 
     // Buscar configuração atualizada
-    const updatedConfig = await safeQuery('get-updated-config', () =>
+    const updatedConfig = await safeQueryWithParams('get-updated-config', () =>
       prisma.backtestConfig.findUnique({
         where: { id: configId },
         include: {
@@ -146,7 +150,8 @@ export async function POST(
             take: 1
           }
         }
-      })
+      }),
+      { id: configId }
     );
 
     return NextResponse.json({ 
@@ -209,7 +214,7 @@ export async function DELETE(
     }
 
     // Verificar se a configuração existe e pertence ao usuário
-    const config = await safeQuery('get-backtest-config-for-delete', () =>
+    const config = await safeQueryWithParams('get-backtest-config-for-delete', () =>
       prisma.backtestConfig.findFirst({
         where: {
           id: configId,
@@ -218,7 +223,8 @@ export async function DELETE(
         include: {
           assets: true
         }
-      })
+      }),
+      { id: configId, userId: currentUser.id }
     );
 
     if (!config) {
@@ -280,10 +286,10 @@ export async function DELETE(
         where: { id: configId },
         data: { updatedAt: new Date() }
       });
-    });
+    }, { affectedTables: ['backtest_assets', 'backtest_configs'] });
 
     // Buscar configuração atualizada
-    const updatedConfig = await safeQuery('get-updated-config-after-delete', () =>
+    const updatedConfig = await safeQueryWithParams('get-updated-config-after-delete', () =>
       prisma.backtestConfig.findUnique({
         where: { id: configId },
         include: {
@@ -293,7 +299,8 @@ export async function DELETE(
             take: 1
           }
         }
-      })
+      }),
+      { id: configId }
     );
 
     return NextResponse.json({ 

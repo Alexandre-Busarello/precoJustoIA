@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery, safeTransaction } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams, safeTransaction } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 import { BacktestService, type BacktestParams } from '@/lib/backtest-service';
 
@@ -48,11 +48,12 @@ export async function POST(request: NextRequest) {
 
     if (body.configId && body.params) {
       // Configuração existente com parâmetros atualizados - atualizar a config primeiro
-      const existingConfig = await safeQuery('get-backtest-config', () =>
+      const existingConfig = await safeQueryWithParams('get-backtest-config', () =>
         prisma.backtestConfig.findFirst({
           where: { id: body.configId, userId: currentUser.id },
           include: { assets: true }
-        })
+        }),
+        { id: body.configId, userId: currentUser.id }
       );
       
       if (!existingConfig) {
@@ -100,15 +101,16 @@ export async function POST(request: NextRequest) {
             averageDividendYield: asset.averageDividendYield || null
           }))
         });
-      });
+      }, { affectedTables: ['backtest_assets', 'backtest_configs'] });
 
     } else if (body.configId) {
       // Apenas configId - usar configuração salva sem alterações
-      const config = await safeQuery('get-backtest-config', () =>
+      const config = await safeQueryWithParams('get-backtest-config', () =>
         prisma.backtestConfig.findFirst({
           where: { id: body.configId, userId: currentUser.id },
           include: { assets: true }
-        })
+        }),
+        { id: body.configId, userId: currentUser.id }
       );
       
       if (!config) {

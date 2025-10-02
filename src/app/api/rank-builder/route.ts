@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, safeQuery, safeTransaction } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getCurrentUser } from '@/lib/user-service';
@@ -31,7 +31,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
   const currentYear = new Date().getFullYear();
   const startYear = currentYear - 4; // Últimos 5 anos para demonstrações
   
-  const companies = await safeQuery('all-companies-data', () =>
+  const companies = await safeQueryWithParams('all-companies-data', () =>
     prisma.company.findMany({
       include: {
         financialData: {
@@ -97,7 +97,12 @@ async function getCompaniesData(): Promise<CompanyData[]> {
           some: {}
         }
       }
-    })
+    }),
+    {
+      type: 'all-companies',
+      startYear,
+      currentYear
+    }
   );
 
   // Debug: verificar quantas empresas têm dados históricos
@@ -300,7 +305,7 @@ export async function POST(request: NextRequest) {
         const currentUser = await getCurrentUser();
         
         if (currentUser?.id) {
-          await safeTransaction('save-ranking-history', () =>
+          await safeWrite('save-ranking-history', () =>
             prisma.rankingHistory.create({
               data: {
                 userId: currentUser.id,
@@ -309,7 +314,8 @@ export async function POST(request: NextRequest) {
                 results: JSON.parse(JSON.stringify(results)), // Cache dos resultados como Json
                 resultCount: results.length,
               }
-            })
+            }),
+            ['ranking_history', 'users']
           );
         } else {
           console.warn('Usuário não encontrado pelo serviço centralizado');

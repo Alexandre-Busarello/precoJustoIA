@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
+import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
 import { sendPaymentFailureEmail, sendWelcomeEmail } from '@/lib/email-service'
 import Stripe from 'stripe'
 
@@ -129,23 +130,27 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session):
       ? new Date(currentPeriodEnd * 1000)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        subscriptionTier: 'PREMIUM',
-        stripeCustomerId: session.customer as string,
-        stripeSubscriptionId: subscription.id,
-        stripePriceId: subscription.items.data[0].price.id,
-        stripeCurrentPeriodEnd: periodEndDate,
-        premiumExpiresAt: periodEndDate,
-        wasPremiumBefore: true,
-        firstPremiumAt: new Date(),
-        lastPremiumAt: new Date(),
-        premiumCount: {
-          increment: 1,
+    await safeWrite(
+      'stripe-checkout-completed',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: {
+          subscriptionTier: 'PREMIUM',
+          stripeCustomerId: session.customer as string,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: subscription.items.data[0].price.id,
+          stripeCurrentPeriodEnd: periodEndDate,
+          premiumExpiresAt: periodEndDate,
+          wasPremiumBefore: true,
+          firstPremiumAt: new Date(),
+          lastPremiumAt: new Date(),
+          premiumCount: {
+            increment: 1,
+          },
         },
-      },
-    })
+      }),
+      ['users']
+    )
 
     console.log(`✅ User ${userId} upgraded to PREMIUM`)
     return true
@@ -186,16 +191,20 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
         ? new Date(currentPeriodEnd * 1000)
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          stripeCustomerId: subscription.customer as string,
-          stripeSubscriptionId: subscription.id,
-          stripePriceId: subscription.items.data[0].price.id,
-          stripeCurrentPeriodEnd: periodEndDate,
-          // NÃO ativar Premium ainda - aguardar pagamento
-        },
-      })
+      await safeWrite(
+        'stripe-subscription-created-pending',
+        () => prisma.user.update({
+          where: { id: userId },
+          data: {
+            stripeCustomerId: subscription.customer as string,
+            stripeSubscriptionId: subscription.id,
+            stripePriceId: subscription.items.data[0].price.id,
+            stripeCurrentPeriodEnd: periodEndDate,
+            // NÃO ativar Premium ainda - aguardar pagamento
+          },
+        }),
+        ['users']
+      )
 
       console.log(`📝 Subscription data saved for user ${userId}, awaiting payment confirmation`)
       return true
@@ -217,25 +226,29 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
     console.log('📅 Converted period end date:', periodEndDate)
     console.log('✅ Date is valid:', !isNaN(periodEndDate.getTime()))
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        subscriptionTier: 'PREMIUM',
-        stripeCustomerId: subscription.customer as string,
-        stripeSubscriptionId: subscription.id,
-        stripePriceId: subscription.items.data[0].price.id,
-        stripeCurrentPeriodEnd: periodEndDate,
-        premiumExpiresAt: periodEndDate,
-        earlyAdopterDate: subscription.items.data[0].price.id ? new Date() : null,
-        isEarlyAdopter: subscription.items.data[0].price.id ? true : false,
-        wasPremiumBefore: true,
-        firstPremiumAt: new Date(),
-        lastPremiumAt: new Date(),
-        premiumCount: {
-          increment: 1,
+    await safeWrite(
+      'stripe-subscription-created-active',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: {
+          subscriptionTier: 'PREMIUM',
+          stripeCustomerId: subscription.customer as string,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: subscription.items.data[0].price.id,
+          stripeCurrentPeriodEnd: periodEndDate,
+          premiumExpiresAt: periodEndDate,
+          earlyAdopterDate: subscription.items.data[0].price.id ? new Date() : null,
+          isEarlyAdopter: subscription.items.data[0].price.id ? true : false,
+          wasPremiumBefore: true,
+          firstPremiumAt: new Date(),
+          lastPremiumAt: new Date(),
+          premiumCount: {
+            increment: 1,
+          },
         },
-      },
-    })
+      }),
+      ['users']
+    )
 
     console.log(`✅ Subscription created and activated for user ${userId}`)
     console.log(`🎉 User ${userEmail} is now PREMIUM!`)
@@ -288,9 +301,13 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
   console.log('Subscription updated:', subscription.id)
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { stripeSubscriptionId: subscription.id },
-    })
+    const user = await safeQueryWithParams(
+      'user-by-stripe-subscription',
+      () => prisma.user.findUnique({
+        where: { stripeSubscriptionId: subscription.id },
+      }),
+      { stripeSubscriptionId: subscription.id }
+    ) as any
 
     if (!user) {
       console.error('❌ User not found for subscription:', subscription.id)
@@ -306,16 +323,20 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
     ? new Date(currentPeriodEnd * 1000)
     : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      subscriptionTier,
-      stripePriceId: subscription.items.data[0].price.id,
-      stripeCurrentPeriodEnd: periodEndDate,
-      premiumExpiresAt: isActive ? periodEndDate : null,
-      lastPremiumAt: isActive ? new Date() : user.lastPremiumAt,
-    },
-  })
+  await safeWrite(
+    'stripe-subscription-updated',
+    () => prisma.user.update({
+      where: { id: user.id },
+      data: {
+        subscriptionTier,
+        stripePriceId: subscription.items.data[0].price.id,
+        stripeCurrentPeriodEnd: periodEndDate,
+        premiumExpiresAt: isActive ? periodEndDate : null,
+        lastPremiumAt: isActive ? new Date() : user.lastPremiumAt,
+      },
+    }),
+    ['users']
+  )
 
     console.log(`✅ Subscription updated for user ${user.id}, status: ${subscription.status}`)
     return true
@@ -329,25 +350,33 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Pro
   console.log('Subscription deleted:', subscription.id)
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { stripeSubscriptionId: subscription.id },
-    })
+    const user = await safeQueryWithParams(
+      'user-by-stripe-subscription-delete',
+      () => prisma.user.findUnique({
+        where: { stripeSubscriptionId: subscription.id },
+      }),
+      { stripeSubscriptionId: subscription.id }
+    ) as any
 
     if (!user) {
       console.error('User not found for subscription:', subscription.id)
       return false
     }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        subscriptionTier: 'FREE',
-        stripeSubscriptionId: null,
-        stripePriceId: null,
-        stripeCurrentPeriodEnd: null,
-        premiumExpiresAt: null,
-      },
-    })
+    await safeWrite(
+      'stripe-subscription-deleted',
+      () => prisma.user.update({
+        where: { id: user.id },
+        data: {
+          subscriptionTier: 'FREE',
+          stripeSubscriptionId: null,
+          stripePriceId: null,
+          stripeCurrentPeriodEnd: null,
+          premiumExpiresAt: null,
+        },
+      }),
+      ['users']
+    )
 
     console.log(`✅ Subscription deleted for user ${user.id}`)
     return true
@@ -369,9 +398,13 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
 
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-    const user = await prisma.user.findUnique({
-      where: { stripeSubscriptionId: subscription.id },
-    })
+    const user = await safeQueryWithParams(
+      'user-by-stripe-subscription-invoice',
+      () => prisma.user.findUnique({
+        where: { stripeSubscriptionId: subscription.id },
+      }),
+      { stripeSubscriptionId: subscription.id }
+    ) as any
 
     if (!user) {
       console.error('User not found for subscription:', subscription.id)
@@ -384,15 +417,19 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
     ? new Date(currentPeriodEnd * 1000)
     : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      subscriptionTier: 'PREMIUM',
-      stripeCurrentPeriodEnd: periodEndDate,
-      premiumExpiresAt: periodEndDate,
-      lastPremiumAt: new Date(),
-    },
-  })
+  await safeWrite(
+    'stripe-invoice-payment-succeeded',
+    () => prisma.user.update({
+      where: { id: user.id },
+      data: {
+        subscriptionTier: 'PREMIUM',
+        stripeCurrentPeriodEnd: periodEndDate,
+        premiumExpiresAt: periodEndDate,
+        lastPremiumAt: new Date(),
+      },
+    }),
+    ['users']
+  )
 
     console.log(`✅ Payment succeeded for user ${user.id}`)
     
@@ -440,9 +477,13 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<bool
     const subscription = await stripe.subscriptions.retrieve(subscriptionId)
     console.log('📋 Subscription retrieved:', subscription.id, 'status:', subscription.status)
     
-    let user = await prisma.user.findUnique({
-      where: { stripeSubscriptionId: subscription.id },
-    })
+    let user = await safeQueryWithParams(
+      'user-by-stripe-subscription-failed',
+      () => prisma.user.findUnique({
+        where: { stripeSubscriptionId: subscription.id },
+      }),
+      { stripeSubscriptionId: subscription.id }
+    ) as any
 
     // Se não encontrou o usuário pela subscription, tentar pelos metadados do invoice
     if (!user) {
@@ -467,9 +508,13 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<bool
       console.log('🔍 UserId from metadata:', userId)
       
       if (userId) {
-        user = await prisma.user.findUnique({
-          where: { id: userId },
-        })
+        user = await safeQueryWithParams(
+          'user-by-id-metadata',
+          () => prisma.user.findUnique({
+            where: { id: userId },
+          }),
+          { userId }
+        ) as any
         console.log('👤 User found by metadata:', user?.email)
       }
     }
@@ -579,19 +624,23 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     }
 
     // Atualizar usuário no banco de dados
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        subscriptionTier: 'PREMIUM',
-        premiumExpiresAt: expiresAt,
-        wasPremiumBefore: true,
-        firstPremiumAt: new Date(),
-        lastPremiumAt: new Date(),
-        premiumCount: {
-          increment: 1,
+    await safeWrite(
+      'stripe-payment-intent-succeeded',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: {
+          subscriptionTier: 'PREMIUM',
+          premiumExpiresAt: expiresAt,
+          wasPremiumBefore: true,
+          firstPremiumAt: new Date(),
+          lastPremiumAt: new Date(),
+          premiumCount: {
+            increment: 1,
+          },
         },
-      },
-    })
+      }),
+      ['users']
+    )
 
     console.log(`✅ User ${userId} upgraded to PREMIUM via Payment Intent (${planType})`)
     return true
@@ -613,9 +662,13 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): P
 
   try {
     // Buscar dados do usuário
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    })
+    const user = await safeQueryWithParams(
+      'user-by-id-payment-failed',
+      () => prisma.user.findUnique({
+        where: { id: userId },
+      }),
+      { userId }
+    ) as any
 
     if (!user) {
       console.error('❌ User not found:', userId)

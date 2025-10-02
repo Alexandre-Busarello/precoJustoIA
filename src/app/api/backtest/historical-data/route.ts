@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 import { toNumber } from '@/lib/strategies/base-strategy';
 
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Buscar dados históricos
-    const historicalData = await safeQuery('get-historical-data-for-backtest', () =>
+    const historicalData = await safeQueryWithParams('get-historical-data-for-backtest', () =>
       prisma.historicalPrice.findMany({
         where: {
           company: { ticker: { in: tickers } },
@@ -99,7 +99,8 @@ export async function GET(request: NextRequest) {
         },
         include: { company: { select: { ticker: true, name: true } } },
         orderBy: [{ company: { ticker: 'asc' } }, { date: 'asc' }]
-      })
+      }),
+      { tickers: tickers.join(','), startDate: startDate.toISOString(), endDate: endDate.toISOString() }
     );
 
     // Agrupar dados por ticker

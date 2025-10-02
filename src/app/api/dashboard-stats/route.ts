@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQuery } from '@/lib/prisma-wrapper';
+import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 
 // Função helper removida pois não é usada
@@ -34,7 +34,7 @@ export async function GET() {
 
     // Executar queries sequencialmente para evitar sobrecarga do pgbouncer
     console.log('📊 Buscando rankings de hoje...')
-    const rankingsToday = await safeQuery('rankings-today', () => 
+    const rankingsToday = await safeQueryWithParams('rankings-today', () => 
       prisma.rankingHistory.count({
         where: {
           userId: currentUser.id,
@@ -43,30 +43,43 @@ export async function GET() {
             lte: endOfToday
           }
         }
-      })
+      }),
+      {
+        userId: currentUser.id,
+        date: startOfToday.toISOString().split('T')[0]
+      }
     );
 
     console.log('📊 Buscando total de rankings...')
-    const totalRankings = await safeQuery('total-rankings', () =>
+    const totalRankings = await safeQueryWithParams('total-rankings', () =>
       prisma.rankingHistory.count({
         where: {
           userId: currentUser.id
         }
-      })
+      }),
+      {
+        userId: currentUser.id
+      }
     );
 
     console.log('📊 Buscando total de empresas...')
-    const totalCompanies = await safeQuery('total-companies', () => 
-      prisma.company.count()
+    const totalCompanies = await safeQueryWithParams('total-companies', () => 
+      prisma.company.count(),
+      {
+        type: 'all'
+      }
     );
 
     console.log('📊 Verificando se usuário já usou Backtest...')
-    const backtestCount = await safeQuery('backtest-count', () =>
+    const backtestCount = await safeQueryWithParams('backtest-count', () =>
       prisma.backtestConfig.count({
         where: {
           userId: currentUser.id
         }
-      })
+      }),
+      {
+        userId: currentUser.id
+      }
     );
     const hasUsedBacktest = backtestCount > 0;
 

@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
             `Backtest ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
             `Simulação executada em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`
           )
-        );
+        ), ['backtest_configs'];
         
         console.log('✅ Configuração temporária criada:', finalConfigId);
       }
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
         
         await safeTransaction('save-backtest-result', () =>
           backtestService.saveBacktestResult(finalConfigId!, result)
-        );
+        ), ['backtest_results'];
         
         console.log('✅ Resultado salvo com sucesso');
       }

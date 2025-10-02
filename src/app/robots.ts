@@ -22,6 +22,11 @@ export default function robots(): MetadataRoute.Robots {
           '/como-funciona',
           '/fundador',
           '/backtesting-carteiras',
+          '/favicon.ico',
+          '/icon',
+          '/apple-icon',
+          '/site.webmanifest',
+          '/browserconfig.xml',
         ],
         disallow: [
           '/api/',
@@ -60,6 +65,11 @@ export default function robots(): MetadataRoute.Robots {
           '/como-funciona',
           '/fundador',
           '/backtesting-carteiras',
+          '/favicon.ico',
+          '/icon',
+          '/apple-icon',
+          '/site.webmanifest',
+          '/browserconfig.xml',
         ],
         disallow: [
           '/api/',

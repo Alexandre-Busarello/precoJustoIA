@@ -25,7 +25,7 @@ export interface CompanyScoreResult {
   sector: string | null;
   currentPrice: number;
   logoUrl: string | null;
-  overallScore: OverallScore;
+  overallScore: OverallScore | null; // ← Permitir null para usuários não-Premium
   strategies?: { // Opcional: incluir estratégias individuais
     graham: StrategyAnalysis | null;
     dividendYield: StrategyAnalysis | null;
@@ -159,8 +159,10 @@ export async function calculateCompanyOverallScore(
 
     const { overallScore, strategies } = analysisResult;
 
-    if (!overallScore) {
-      console.log(`⚠️ ${ticker}: Score não pôde ser calculado`);
+    // ✅ CORREÇÃO: Não falhar se overallScore for null (pode ser null para não-Premium)
+    // O importante é ter as estratégias (especialmente Graham para usuários logados)
+    if (!strategies) {
+      console.log(`⚠️ ${ticker}: Estratégias não puderam ser calculadas`);
       return null;
     }
 

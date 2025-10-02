@@ -483,19 +483,25 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
           <TabsTrigger value="fair-value" className="flex items-center space-x-1">
             <Calculator className="w-4 h-4" />
             <span className="hidden sm:inline">Preço Justo</span>
-            {!isLoggedIn && <Crown className="w-3 h-3 ml-1" />}
+            {!isLoggedIn && <Badge variant="outline" className="ml-1 text-xs">Login</Badge>}
           </TabsTrigger>
           
           <TabsTrigger value="strategies" className="flex items-center space-x-1">
             <Target className="w-4 h-4" />
             <span className="hidden sm:inline">Estratégias</span>
-            {!isPremium && <Crown className="w-3 h-3 ml-1 text-yellow-500" />}
+            {!isLoggedIn ? (
+              <Badge variant="outline" className="ml-1 text-xs">Login</Badge>
+            ) : !isPremium ? (
+              <Badge variant="secondary" className="ml-1 text-xs bg-orange-100 text-orange-800">Premium</Badge>
+            ) : null}
           </TabsTrigger>
 
           <TabsTrigger value="statements" className="flex items-center space-x-1">
             <FileText className="w-4 h-4" />
             <span className="hidden sm:inline">Demonstrações</span>
-            {!isPremium && <Crown className="w-3 h-3 ml-1 text-yellow-500" />}
+            {!isPremium && (
+              <Badge variant="secondary" className="ml-1 text-xs bg-orange-100 text-orange-800">Premium</Badge>
+            )}
           </TabsTrigger>
           
           <TabsTrigger value="overview" className="flex items-center space-x-1">
@@ -506,11 +512,11 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
 
         {/* Preço Justo Tab */}
         <TabsContent value="fair-value" className="mt-6">
-          {!isLoggedIn ? (
-            <RegisterPrompt strategy="Cálculos de Preço Justo" />
-          ) : (
-            <div className="space-y-6">
-              {/* Graham Analysis */}
+          <div className="space-y-6">
+            {/* Graham Analysis - SEMPRE VISÍVEL */}
+            {!isLoggedIn ? (
+              <RegisterPrompt strategy="Benjamin Graham" />
+            ) : (
               <Card className={
                 isLoggedIn && strategies.graham?.score
                   ? !strategies.graham?.isEligible
@@ -618,11 +624,80 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   </CollapsibleContent>
                 </Collapsible>
               </Card>
+            )}
 
-              {/* FCD Analysis - Requires Premium */}
-              {!isPremium ? (
-                <PremiumUpgrade strategy="Fluxo de Caixa Descontado" />
-              ) : (
+            {/* FCD Analysis - Preview + Paywall para não-Premium */}
+            {!isPremium ? (
+              <Card className="border-purple-200 bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Calculator className="w-5 h-5 text-purple-600" />
+                      <span className="text-lg font-semibold">Fluxo de Caixa Descontado (FCD)</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Método mais sofisticado para calcular o valor intrínseco baseado em projeções de fluxo de caixa futuro
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Preview do que o usuário veria */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 opacity-60">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Preço Atual</p>
+                      <p className="text-2xl font-bold">{formatCurrency(currentPrice)}</p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Preço Justo FCD</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-purple-600 blur-sm">R$ XX,XX</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Upside Potencial</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-green-600 blur-sm">+XX,X%</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CTA de Conversão */}
+                  <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-950/20 dark:to-yellow-950/20 p-6 rounded-lg border border-orange-200 text-center">
+                    <Crown className="w-12 h-12 text-orange-600 mx-auto mb-3" />
+                    <h4 className="text-lg font-semibold text-orange-900 dark:text-orange-100 mb-2">
+                      Desbloqueie o Fluxo de Caixa Descontado
+                    </h4>
+                    <p className="text-sm text-orange-700 dark:text-orange-200 mb-4">
+                      Veja o valor intrínseco calculado com projeções de crescimento e taxa de desconto personalizada
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
+                        <Link href="/planos">
+                          <Crown className="w-4 h-4 mr-2" />
+                          Assinar Premium
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline">
+                        <Link href="/planos">
+                          Ver todos os benefícios
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
                 <Card className={
                   isPremium && strategies.fcd?.score
                     ? !strategies.fcd?.isEligible
@@ -732,10 +807,80 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                 </Card>
               )}
 
-              {/* Gordon Analysis - Requires Premium */}
-              {!isPremium ? (
-                <PremiumUpgrade strategy="Fórmula de Gordon (Método dos Dividendos)" />
-              ) : (
+            {/* Gordon Analysis - Preview + Paywall para não-Premium */}
+            {!isPremium ? (
+              <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <DollarSign className="w-5 h-5 text-orange-600" />
+                      <span className="text-lg font-semibold">Fórmula de Gordon (Método dos Dividendos)</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Avalia empresas pagadoras de dividendos baseado no crescimento sustentável dos proventos
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Preview do que o usuário veria */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 opacity-60">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Dividend Yield</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatPercent(latestFinancials.dy)}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Preço Justo Gordon</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-orange-600 blur-sm">R$ XX,XX</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Crescimento Dividendos</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-blue-600 blur-sm">+X,X%</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CTA de Conversão */}
+                  <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-950/20 dark:to-yellow-950/20 p-6 rounded-lg border border-orange-200 text-center">
+                    <DollarSign className="w-12 h-12 text-orange-600 mx-auto mb-3" />
+                    <h4 className="text-lg font-semibold text-orange-900 dark:text-orange-100 mb-2">
+                      Desbloqueie a Fórmula de Gordon
+                    </h4>
+                    <p className="text-sm text-orange-700 dark:text-orange-200 mb-4">
+                      Ideal para empresas pagadoras de dividendos consistentes. Veja se os proventos são sustentáveis!
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
+                        <Link href="/planos">
+                          <Crown className="w-4 h-4 mr-2" />
+                          Assinar Premium
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline">
+                        <Link href="/planos">
+                          Ver metodologia completa
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
                 <Card className={
                   isPremium && strategies.gordon?.score
                     ? !strategies.gordon?.isEligible
@@ -840,22 +985,267 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                           ))}
                         </div>
                       </CardContent>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </Card>
-              )}
-            </div>
-          )}
+                  </CollapsibleContent>
+                </Collapsible>
+              </Card>
+            )}
+          </div>
         </TabsContent>
 
         {/* Strategies Tab */}
         <TabsContent value="strategies" className="mt-6">
-          {!isPremium ? (
-            !isLoggedIn ? (
-              <RegisterPrompt strategy="Estratégias Premium" />
-            ) : (
-              <PremiumUpgrade strategy="Estratégias Premium" />
-            )
+          {!isLoggedIn ? (
+            <RegisterPrompt strategy="Estratégias de Investimento" />
+          ) : !isPremium ? (
+            <div className="space-y-6">
+              {/* Preview das Estratégias Premium */}
+              <div className="text-center mb-6 p-6 bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-950/20 dark:to-yellow-950/20 rounded-lg border border-orange-200">
+                <Crown className="w-16 h-16 text-orange-600 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold text-orange-900 dark:text-orange-100 mb-2">
+                  Estratégias Premium de Investimento
+                </h3>
+                <p className="text-orange-700 dark:text-orange-200 mb-4">
+                  Acesse 5 estratégias avançadas para identificar as melhores oportunidades do mercado
+                </p>
+                <Button asChild size="lg" className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
+                  <Link href="/planos">
+                    <Crown className="w-4 h-4 mr-2" />
+                    Assinar Premium - 7 dias grátis
+                  </Link>
+                </Button>
+              </div>
+
+              {/* Preview Anti-Dividend Trap */}
+              <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 opacity-75">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Coins className="w-5 h-5 text-green-600" />
+                      <span className="text-lg font-semibold">Anti-Dividend Trap</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Identifica empresas com dividendos sustentáveis e evita "armadilhas de dividendos"
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4 opacity-60">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Dividend Yield</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatPercent(latestFinancials.dy)}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Sustentabilidade</p>
+                      <div className="relative">
+                        <p className="text-lg font-bold text-green-600 blur-sm">Segura</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-5 h-5 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Score</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-blue-600 blur-sm">XX%</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-5 h-5 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center p-4 bg-white/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      🔒 Análise completa disponível para assinantes Premium
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Preview Value Investing */}
+              <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 opacity-75">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Target className="w-5 h-5 text-blue-600" />
+                      <span className="text-lg font-semibold">Value Investing</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Estratégia clássica para encontrar empresas subvalorizadas com fundamentos sólidos
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4 opacity-60">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">P/L</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {latestFinancials.pl ? parseFloat(latestFinancials.pl.toString()).toFixed(1) : 'N/A'}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">P/VP</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {latestFinancials.pvp ? parseFloat(latestFinancials.pvp.toString()).toFixed(2) : 'N/A'}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Qualificação</p>
+                      <div className="relative">
+                        <p className="text-lg font-bold text-green-600 blur-sm">Aprovada</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-5 h-5 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center p-4 bg-white/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      🔒 Critérios anti-value trap disponíveis no Premium
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Preview Fórmula Mágica */}
+              <Card className="border-purple-200 bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 opacity-75">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Crown className="w-5 h-5 text-purple-600" />
+                      <span className="text-lg font-semibold">Fórmula Mágica (Greenblatt)</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Estratégia quantitativa que combina qualidade operacional com preço atrativo
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4 opacity-60">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">ROIC</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {formatPercent(latestFinancials.roic)}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Earnings Yield</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatPercent(latestFinancials.earningsYield)}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Ranking</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-purple-600 blur-sm">Top XX</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-5 h-5 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center p-4 bg-white/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      🔒 Ranking completo e critérios no Premium
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Preview Fundamentalista 3+1 */}
+              <Card className="border-indigo-200 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/20 dark:to-blue-950/20 opacity-75">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <BarChart3 className="w-5 h-5 text-indigo-600" />
+                      <span className="text-lg font-semibold">Fundamentalista 3+1</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Metodologia adaptativa que analisa Qualidade + Preço + Endividamento + Dividendos
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4 opacity-60">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">ROE</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {formatPercent(latestFinancials.roe)}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Dívida/PL</p>
+                      <p className="text-2xl font-bold text-orange-600">
+                        {latestFinancials.dividaLiquidaPl ? parseFloat(latestFinancials.dividaLiquidaPl.toString()).toFixed(2) : 'N/A'}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Score Final</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-indigo-600 blur-sm">XX/100</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-5 h-5 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center p-4 bg-white/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      🔒 Análise completa dos 4 pilares no Premium
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* CTA Final */}
+              <div className="text-center p-8 bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-950/20 dark:to-yellow-950/20 rounded-lg border border-orange-200">
+                <Crown className="w-20 h-20 text-orange-600 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold text-orange-900 dark:text-orange-100 mb-3">
+                  Desbloqueie Todas as Estratégias
+                </h3>
+                <p className="text-orange-700 dark:text-orange-200 mb-6 max-w-2xl mx-auto">
+                  Tenha acesso completo a 5 estratégias Premium + análise de demonstrações financeiras + rankings ilimitados
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button asChild size="lg" className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
+                    <Link href="/planos">
+                      <Crown className="w-5 h-5 mr-2" />
+                      Começar teste grátis de 7 dias
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="lg">
+                    <Link href="/planos">
+                      Ver todos os planos
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="space-y-6">
               {/* Dividend Yield Analysis */}
@@ -1227,7 +1617,107 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
         {/* Demonstrações Tab */}
         <TabsContent value="statements" className="mt-6">
           {!isPremium ? (
-            <PremiumUpgrade strategy="Análise Inteligente das Demonstrações Financeiras" />
+            <div className="space-y-6">
+              {/* Preview da Análise de Demonstrações */}
+              <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="w-5 h-5 text-blue-600" />
+                      <span className="text-lg font-semibold">Análise Inteligente das Demonstrações</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    IA analisa automaticamente DRE, Balanço e Fluxo de Caixa de todos os anos disponíveis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Preview do Score */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg mb-6 opacity-60">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-white rounded-full shadow-sm">
+                        <BarChart3 className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Score de Qualidade</p>
+                        <p className="text-xs text-gray-500">Baseado em 20+ indicadores</p>
+                      </div>
+                    </div>
+                    <div className="text-right relative">
+                      <p className="text-2xl font-bold text-blue-600 blur-sm">XX</p>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Crown className="w-6 h-6 text-orange-600" />
+                      </div>
+                      <p className="text-xs text-gray-500">de 100</p>
+                    </div>
+                  </div>
+
+                  {/* Preview dos Alertas */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 opacity-60">
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        <span className="font-medium text-green-800">Pontos Fortes</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-start space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm text-green-800 blur-sm">Crescimento consistente de receitas</span>
+                        </div>
+                        <div className="flex items-start space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm text-green-800 blur-sm">Margens estáveis nos últimos anos</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                        <span className="font-medium text-red-800">Alertas</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-start space-x-2">
+                          <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm text-red-800 blur-sm">Aumento do endividamento</span>
+                        </div>
+                        <div className="flex items-start space-x-2">
+                          <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm text-red-800 blur-sm">Queda na geração de caixa</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CTA de Conversão */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-6 rounded-lg border border-blue-200 text-center">
+                    <FileText className="w-12 h-12 text-blue-600 mx-auto mb-3" />
+                    <h4 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                      Desbloqueie a Análise Completa
+                    </h4>
+                    <p className="text-sm text-blue-700 dark:text-blue-200 mb-4">
+                      IA examina automaticamente anos de demonstrações financeiras e detecta red flags e oportunidades
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                        <Link href="/planos">
+                          <Crown className="w-4 h-4 mr-2" />
+                          Assinar Premium
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline">
+                        <Link href="/planos">
+                          Ver exemplo completo
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ) : (
             <div className="space-y-6">
               {analysisData?.overallScore?.statementsAnalysis ? (
@@ -1269,7 +1759,11 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   <div className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
                     <div>
                       <span className="font-medium">Graham</span>
-                      {!isLoggedIn && <Crown className="w-3 h-3 ml-1 inline text-gray-400" />}
+                      {!isLoggedIn && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          Gratuito
+                        </Badge>
+                      )}
                     </div>
                     <span className="text-lg font-bold text-blue-600">
                       {isLoggedIn && strategies.graham?.fairValue 

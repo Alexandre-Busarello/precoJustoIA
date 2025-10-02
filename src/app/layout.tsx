@@ -43,11 +43,23 @@ export const metadata: Metadata = {
     icon: [
       {
         url: '/favicon.ico',
-        sizes: '32x32',
         type: 'image/x-icon',
+        sizes: '16x16 32x32 48x48',
+      },
+      {
+        url: '/icon',
+        type: 'image/png',
+        sizes: '32x32',
       },
     ],
     shortcut: '/favicon.ico',
+    apple: [
+      {
+        url: '/apple-icon',
+        type: 'image/png',
+        sizes: '180x180',
+      },
+    ],
   },
   openGraph: {
     type: 'website',
@@ -58,7 +70,7 @@ export const metadata: Metadata = {
     description: '🚀 Plataforma completa de análise fundamentalista com IA para ações da B3/Bovespa. Encontre ações subvalorizadas usando modelos consagrados: Graham, Dividend Yield, Fórmula Mágica + 5 estratégias.',
     images: [
       {
-        url: '/logo-preco-justo.png',
+        url: 'https://precojusto.ai/logo-preco-justo.png',
         width: 1200,
         height: 630,
         alt: 'Preço Justo AI - Análise Fundamentalista com IA',
@@ -98,7 +110,14 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
-        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        {/* Favicon explícito para máxima compatibilidade com Google */}
+        <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon" />
+        <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+        <link rel="apple-touch-icon" href="/apple-icon" sizes="180x180" />
+        <link rel="manifest" href="/site.webmanifest" />
+        <meta name="theme-color" content="#2563eb" />
+        <meta name="msapplication-TileColor" content="#2563eb" />
+        <meta name="msapplication-config" content="/browserconfig.xml" />
         <StructuredData type="website" />
         <StructuredData type="organization" />
         <StructuredData type="product" />

@@ -41,7 +41,7 @@ export async function GET(
 
     // ✅ USAR SERVIÇO CENTRALIZADO - Garantia de cálculo idêntico ao Dashboard
     const analysisResult = await calculateCompanyOverallScore(ticker, {
-      isPremium,
+      isPremium, // ← Usar valor real do usuário
       isLoggedIn,
       includeStatements: isPremium, // Incluir demonstrações apenas para premium
       includeStrategies: true, // ← IMPORTANTE: Incluir estratégias individuais para a página
@@ -57,67 +57,70 @@ export async function GET(
 
     const { ticker: companyTicker, companyName, sector, currentPrice, overallScore, strategies: resultStrategies } = analysisResult;
 
+    // ✅ CORRIGIR LÓGICA: Graham deve ser retornada para usuários logados, outras para Premium
     const response: CompanyAnalysisResponse = {
       ticker: companyTicker,
       name: companyName,
       sector: sector,
       currentPrice,
-      overallScore,
+      overallScore: isPremium ? overallScore : null, // ← Overall Score apenas para Premium
       strategies: {
-        graham: resultStrategies?.graham || {
+        // ✅ GRAHAM: Gratuita para usuários logados
+        graham: (isLoggedIn && resultStrategies?.graham) ? resultStrategies.graham : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isLoggedIn ? '' : 'Login necessário para acessar análise Graham',
+          reasoning: isLoggedIn ? 'Dados insuficientes para análise Graham' : 'Login necessário para acessar análise Graham',
           criteria: [],
         },
-        dividendYield: resultStrategies?.dividendYield || {
+        // ✅ PREMIUM: Apenas para assinantes Premium
+        dividendYield: (isPremium && resultStrategies?.dividendYield) ? resultStrategies.dividendYield : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isPremium ? '' : 'Premium necessário para análise Dividend Yield',
+          reasoning: isPremium ? 'Dados insuficientes para análise Dividend Yield' : 'Premium necessário para análise Dividend Yield',
           criteria: [],
         },
-        lowPE: resultStrategies?.lowPE || {
+        lowPE: (isPremium && resultStrategies?.lowPE) ? resultStrategies.lowPE : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isPremium ? '' : 'Premium necessário para análise Value Investing',
+          reasoning: isPremium ? 'Dados insuficientes para análise Value Investing' : 'Premium necessário para análise Value Investing',
           criteria: [],
         },
-        magicFormula: resultStrategies?.magicFormula || {
+        magicFormula: (isPremium && resultStrategies?.magicFormula) ? resultStrategies.magicFormula : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isPremium ? '' : 'Premium necessário para análise Magic Formula',
+          reasoning: isPremium ? 'Dados insuficientes para análise Magic Formula' : 'Premium necessário para análise Magic Formula',
           criteria: [],
         },
-        fcd: resultStrategies?.fcd || {
+        fcd: (isPremium && resultStrategies?.fcd) ? resultStrategies.fcd : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isPremium ? '' : 'Premium necessário para análise FCD',
+          reasoning: isPremium ? 'Dados insuficientes para análise FCD' : 'Premium necessário para análise FCD',
           criteria: [],
         },
-        gordon: resultStrategies?.gordon || {
+        gordon: (isPremium && resultStrategies?.gordon) ? resultStrategies.gordon : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isPremium ? '' : 'Premium necessário para análise Fórmula de Gordon',
+          reasoning: isPremium ? 'Dados insuficientes para análise Fórmula de Gordon' : 'Premium necessário para análise Fórmula de Gordon',
           criteria: [],
         },
-        fundamentalist: resultStrategies?.fundamentalist || {
+        fundamentalist: (isPremium && resultStrategies?.fundamentalist) ? resultStrategies.fundamentalist : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isPremium ? '' : 'Premium necessário para análise Fundamentalista 3+1',
+          reasoning: isPremium ? 'Dados insuficientes para análise Fundamentalista 3+1' : 'Premium necessário para análise Fundamentalista 3+1',
           criteria: [],
         }
       }

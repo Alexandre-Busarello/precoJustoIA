@@ -34,9 +34,7 @@ async function fetchCDIData(startDate: Date, endDate: Date): Promise<BenchmarkDa
     // API do Banco Central
     const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.4391/dados?formato=json&dataInicial=${dataInicial}&dataFinal=${dataFinal}`;
     
-    const response = await fetch(url, {
-      next: { revalidate: 86400 } // Cache de 1 dia
-    });
+    const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error(`Erro ao buscar dados do CDI: ${response.status}`);

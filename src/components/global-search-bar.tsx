@@ -20,9 +20,10 @@ export function GlobalSearchBar() {
   const isAlfaBannerVisible = !isLoading && stats?.phase === 'ALFA' && isPageWithBanner
   
   // Ajustar o top baseado na presença do banner ALFA
-  // Banner ALFA tem ~48px de altura (py-3 + conteúdo)
+  // Mobile: Banner tem ~80px (py-4 + texto que quebra em múltiplas linhas)
+  // Desktop: Banner tem ~48px (texto cabe em uma linha)
   const topClass = isAlfaBannerVisible 
-    ? "top-[129px] md:top-[151px]" // Header (81/103px) + Banner ALFA (~48px)
+    ? "top-[192px] md:top-[158px]" // Header (81/103px) + Banner ALFA (80/48px)
     : "top-[81px] md:top-[103px]"  // Apenas Header
   
   return (

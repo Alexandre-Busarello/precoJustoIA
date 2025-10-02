@@ -85,7 +85,7 @@ export default async function Home() {
     <div>
       <AlfaBanner variant="landing" />
       {/* Hero Section - Enhanced */}
-      <section className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 py-20 sm:py-32">
+      <section className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-32 sm:pt-40 pb-20 sm:pb-32">
         {/* Background Pattern */}
         <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))]"></div>
         
@@ -988,7 +988,7 @@ export default async function Home() {
             <p className="text-muted-foreground mb-6">
               Ou crie sua própria comparação personalizada
             </p>
-            <Button size="lg" variant="outline" className="text-lg px-8 py-4" asChild>
+            <Button size="lg" variant="outline" className="text-lg px-8 py-4 text-sm" asChild>
               <Link href="/comparador" className="flex items-center gap-3">
                 <Calculator className="w-5 h-5" />
                 Criar Comparação Personalizada

@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Calendar, Users } from 'lucide-react'
+import { Sparkles, Users } from 'lucide-react'
 import Link from 'next/link'
 import { useAlfa } from '@/contexts/alfa-context'
 import { useSession } from 'next-auth/react'
@@ -21,16 +21,10 @@ export function AlfaBanner({ variant = 'dashboard', className = '' }: AlfaBanner
     return null
   }
 
-  const endDate = new Date(stats.endDate)
-  const formattedEndDate = endDate.toLocaleDateString('pt-BR', {
-    month: 'long',
-    year: 'numeric'
-  })
-
   if (variant === 'landing') {
     return (
-      <div className={`fixed top-0 left-0 right-0 z-40 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-4 mt-[81px] md:mt-[103px] ${className}`}>
-        <div className="container mx-auto flex items-center justify-center gap-4 text-sm">
+      <div className={`fixed top-0 left-0 right-0 z-40 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 px-4 mt-[81px] md:mt-[103px] ${className}`}>
+        <div className="container mx-auto flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-sm leading-relaxed">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
             <Badge variant="secondary" className="bg-white/20 text-white border-white/30">

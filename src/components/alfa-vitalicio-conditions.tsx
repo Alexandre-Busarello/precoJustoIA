@@ -190,7 +190,7 @@ export function AlfaVitalicioConditions() {
               asChild
             >
               <Link href="/register">
-                Garantir Minha Vaga Alfa Agora →
+                Acessar Alfa Agora →
               </Link>
             </Button>
             <p className="text-sm text-muted-foreground mt-4">

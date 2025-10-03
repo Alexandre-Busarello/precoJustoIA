@@ -6,11 +6,17 @@
     }
   ],
   "functions": {
+    "src/app/api/**": {
+      "memory": 1024
+    },
     "src/app/api/fetch-ward-data/route.ts": {
       "maxDuration": 300
     },
     "src/app/api/cron/fetch-ward/route.ts": {
       "maxDuration": 300
     }
+  },
+  "env": {
+    "VERCEL": "1"
   }
 }

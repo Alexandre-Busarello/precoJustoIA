@@ -21,6 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://precojusto.ai'),
   title: {
     default: "Preço Justo AI - Análise Fundamentalista de Ações B3 com IA",
     template: "%s | Preço Justo AI - Análise Fundamentalista Ações B3"
@@ -35,7 +36,6 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL('https://precojusto.ai'),
   alternates: {
     canonical: '/',
   },

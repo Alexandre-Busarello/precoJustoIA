@@ -12,6 +12,20 @@
  * - TTL (Time To Live) configurável
  * - Logs detalhados para debugging
  * - Reconexão automática do Redis
+ * 
+ * GESTÃO DE CONEXÕES (melhorias v2 + Serverless):
+ * - Singleton real: UMA única conexão Redis compartilhada POR INSTÂNCIA
+ * - Mutex de inicialização: evita race conditions
+ * - Reutilização de conexão: verifica antes de criar nova
+ * - Cleanup adequado: libera recursos na desconexão
+ * - Keep-alive: mantém conexão ativa com ping automático
+ * 
+ * OTIMIZAÇÕES SERVERLESS (Vercel):
+ * - Lazy loading: conecta apenas quando necessário
+ * - Idle disconnect: desconecta após 30s de inatividade
+ * - Reconexão automática: reconecta na próxima operação
+ * - IMPORTANTE: Cada função Lambda tem sua própria instância/conexão
+ *   (isso é normal e esperado em ambientes serverless)
  */
 
 // Importação condicional do Redis apenas no servidor
@@ -42,11 +56,19 @@ export interface CacheItem<T = any> {
   ttl?: number
 }
 
-// Cliente Redis
+// Cliente Redis (GLOBAL ÚNICO)
 let redisClient: any | null = null
 let redisConnected = false
 let reconnectAttempts = 0
 const MAX_RECONNECT_ATTEMPTS = 5
+
+// Controle de inicialização (evita múltiplas conexões)
+let initializationPromise: Promise<void> | null = null
+let isInitializing = false
+
+// Controle de atividade (para desconexão automática em serverless)
+let lastActivity = Date.now()
+let idleCheckInterval: NodeJS.Timeout | null = null
 
 // Cache em memória como fallback
 const memoryCache = new Map<string, CacheItem>()
@@ -55,6 +77,8 @@ const memoryCache = new Map<string, CacheItem>()
 const DEFAULT_TTL = 3600 // 1 hora em segundos
 const MEMORY_CLEANUP_INTERVAL = 5 * 60 * 1000 // 5 minutos
 const REDIS_RECONNECT_DELAY = 5000 // 5 segundos
+const REDIS_IDLE_TIMEOUT = 30000 // 30 segundos de inatividade antes de desconectar (serverless)
+const LAZY_CONNECT = true // Conecta apenas quando necessário (otimização serverless)
 
 /**
  * Classe principal do serviço de cache
@@ -77,20 +101,72 @@ export class CacheService {
 
   /**
    * Inicializar o serviço de cache
+   * Usa mutex para evitar múltiplas inicializações simultâneas
    */
   async initialize(): Promise<void> {
+    // Se já inicializado, retorna imediatamente
     if (this.initialized) return
 
+    // Se já está inicializando, aguarda a inicialização em progresso
+    if (isInitializing && initializationPromise) {
+      console.log('⏳ CacheService já está sendo inicializado, aguardando...')
+      return initializationPromise
+    }
+
+    // Marca como inicializando e cria a promise
+    isInitializing = true
+    initializationPromise = this._doInitialize()
+
+    try {
+      await initializationPromise
+    } finally {
+      isInitializing = false
+      initializationPromise = null
+    }
+  }
+
+  /**
+   * Realiza a inicialização efetiva (método privado)
+   */
+  private async _doInitialize(): Promise<void> {
     console.log('🚀 Inicializando CacheService...')
 
-    // Tentar conectar ao Redis
-    await this.initializeRedis()
+    // Em modo lazy, não conecta ao Redis imediatamente
+    if (!LAZY_CONNECT) {
+      await this.initializeRedis()
+    }
 
-    // Configurar limpeza automática do cache em memória
-    this.setupMemoryCleanup()
+    // Configurar limpeza automática do cache em memória (apenas uma vez)
+    if (!this.initialized) {
+      this.setupMemoryCleanup()
+      
+      // Configurar monitoramento de inatividade (serverless)
+      this.setupIdleDisconnect()
+    }
 
     this.initialized = true
-    console.log('✅ CacheService inicializado com sucesso')
+    console.log('✅ CacheService inicializado com sucesso' + (LAZY_CONNECT ? ' (lazy mode)' : ''))
+  }
+
+  /**
+   * Configurar desconexão automática por inatividade (otimização serverless)
+   */
+  private setupIdleDisconnect(): void {
+    // Apenas em ambientes serverless (Vercel)
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      idleCheckInterval = setInterval(() => {
+        const idleTime = Date.now() - lastActivity
+        
+        if (idleTime > REDIS_IDLE_TIMEOUT && redisClient && redisConnected) {
+          console.log(`⏰ Redis ocioso por ${Math.round(idleTime / 1000)}s, desconectando...`)
+          this.disconnectRedis().catch(err => 
+            console.warn('Erro ao desconectar Redis ocioso:', err)
+          )
+        }
+      }, REDIS_IDLE_TIMEOUT / 2) // Verifica a cada 15s
+      
+      console.log(`⏰ Monitoramento de inatividade configurado (${REDIS_IDLE_TIMEOUT / 1000}s)`)
+    }
   }
 
   /**
@@ -103,6 +179,31 @@ export class CacheService {
       return
     }
 
+    // Se já existe uma conexão ativa, reutiliza
+    if (redisClient && redisConnected) {
+      console.log('♻️ Redis já conectado, reutilizando conexão existente')
+      return
+    }
+
+    // Se já existe um cliente mas não está conectado, tenta reconectar
+    if (redisClient && !redisConnected) {
+      try {
+        console.log('🔄 Tentando reconectar cliente Redis existente...')
+        await redisClient.connect()
+        console.log('✅ Redis reconectado com sucesso')
+        return
+      } catch (error) {
+        console.warn('⚠️ Falha ao reconectar, criando nova conexão:', error)
+        // Limpa o cliente anterior antes de criar novo
+        try {
+          await redisClient.disconnect()
+        } catch (e) {
+          // Ignora erros ao desconectar
+        }
+        redisClient = null
+      }
+    }
+
     const redisUrl = process.env.REDIS_URL
 
     if (!redisUrl) {
@@ -111,12 +212,12 @@ export class CacheService {
     }
 
     try {
-      console.log('🔗 Conectando ao Redis...')
+      console.log('🔗 Criando nova conexão Redis...')
       
       redisClient = createClient({
         url: redisUrl,
         socket: {
-          connectTimeout: 5000,
+          connectTimeout: 10000, // Aumentado para 10s
           reconnectStrategy: (retries: number) => {
             if (retries > MAX_RECONNECT_ATTEMPTS) {
               console.error('❌ Redis: Máximo de tentativas de reconexão atingido')
@@ -126,7 +227,9 @@ export class CacheService {
             console.log(`🔄 Redis: Tentativa de reconexão ${retries}/${MAX_RECONNECT_ATTEMPTS} em ${delay}ms`)
             return delay
           }
-        }
+        },
+        // Configurações de pool para limitar conexões
+        pingInterval: 60000 // Keep-alive a cada 60s
       })
 
       // Event listeners
@@ -196,12 +299,26 @@ export class CacheService {
   }
 
   /**
+   * Garantir que Redis está conectado (lazy loading)
+   */
+  private async ensureRedisConnection(): Promise<void> {
+    if (LAZY_CONNECT && !redisConnected && !isInitializing) {
+      await this.initializeRedis()
+    }
+    // Atualizar timestamp de atividade
+    lastActivity = Date.now()
+  }
+
+  /**
    * Obter valor do cache
    */
   async get<T = any>(key: string, options: CacheOptions = {}): Promise<T | null> {
     const fullKey = this.buildKey(key, options.prefix)
 
     try {
+      // Garantir conexão (lazy loading)
+      await this.ensureRedisConnection()
+      
       // Tentar Redis primeiro
       if (redisConnected && redisClient) {
         const value = await redisClient.get(fullKey)
@@ -241,6 +358,9 @@ export class CacheService {
     const serialized = JSON.stringify(value)
 
     try {
+      // Garantir conexão (lazy loading)
+      await this.ensureRedisConnection()
+      
       // Tentar Redis primeiro
       if (redisConnected && redisClient) {
         await redisClient.setEx(fullKey, ttl, serialized)
@@ -398,6 +518,29 @@ export class CacheService {
   }
 
   /**
+   * Obter informações detalhadas sobre a conexão Redis
+   */
+  getConnectionInfo(): {
+    connected: boolean
+    clientExists: boolean
+    reconnectAttempts: number
+    initialized: boolean
+    idleTime: number
+    lazyMode: boolean
+    isServerless: boolean
+  } {
+    return {
+      connected: redisConnected,
+      clientExists: redisClient !== null,
+      reconnectAttempts,
+      initialized: this.initialized,
+      idleTime: Math.round((Date.now() - lastActivity) / 1000), // em segundos
+      lazyMode: LAZY_CONNECT,
+      isServerless: !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+    }
+  }
+
+  /**
    * Obter estatísticas do cache
    */
   async getStats(): Promise<{
@@ -458,20 +601,48 @@ export class CacheService {
   }
 
   /**
-   * Fechar conexões
+   * Desconectar apenas o Redis (mantém serviço ativo para reconexão)
    */
-  async disconnect(): Promise<void> {
+  private async disconnectRedis(): Promise<void> {
     try {
-      if (redisClient) {
+      if (redisClient && redisConnected) {
         await redisClient.disconnect()
-        console.log('🔌 Redis: Desconectado')
+        redisConnected = false
+        console.log('🔌 Redis: Desconectado (idle)')
       }
     } catch (error) {
       console.warn('⚠️ Erro ao desconectar Redis:', error)
+      redisConnected = false
+    }
+  }
+
+  /**
+   * Fechar conexões e limpar tudo
+   */
+  async disconnect(): Promise<void> {
+    // Limpar interval de idle check
+    if (idleCheckInterval) {
+      clearInterval(idleCheckInterval)
+      idleCheckInterval = null
+    }
+
+    try {
+      if (redisClient) {
+        await redisClient.disconnect()
+        redisClient = null
+        redisConnected = false
+        console.log('🔌 Redis: Desconectado e cliente limpo')
+      }
+    } catch (error) {
+      console.warn('⚠️ Erro ao desconectar Redis:', error)
+      // Força limpeza mesmo com erro
+      redisClient = null
+      redisConnected = false
     }
 
     memoryCache.clear()
-    console.log('🧹 Cache em memória limpo')
+    this.initialized = false
+    console.log('🧹 Cache em memória limpo e serviço resetado')
   }
 }
 
@@ -560,7 +731,13 @@ export const cache = {
    * Verificar se Redis está conectado
    */
   isRedisConnected: () => 
-    cacheService.isRedisConnected()
+    cacheService.isRedisConnected(),
+
+  /**
+   * Obter informações detalhadas da conexão
+   */
+  getConnectionInfo: () => 
+    cacheService.getConnectionInfo()
 }
 
 // Cleanup na saída do processo

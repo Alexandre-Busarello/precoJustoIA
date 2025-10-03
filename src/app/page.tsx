@@ -33,7 +33,7 @@ import Image from "next/image"
 import { Metadata } from "next"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { blogPosts } from "@/lib/blog-data"
+import { getAllPosts } from "@/lib/blog-service"
 import { AlfaBanner } from "@/components/alfa-banner"
 import { AlfaEarlyAdopterCTA } from "@/components/alfa-early-adopter-cta"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
@@ -97,9 +97,8 @@ export default async function Home() {
   const session = await getServerSession(authOptions)
   
   // Pegar os 3 posts mais recentes para exibir na homepage
-  const recentPosts = blogPosts
-    .sort((a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime())
-    .slice(0, 3)
+  const blogPosts = getAllPosts()
+  const recentPosts = blogPosts.slice(0, 3)
 
   return (
     <div>

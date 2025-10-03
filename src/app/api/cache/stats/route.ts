@@ -20,9 +20,13 @@ export async function GET() {
     // Obter estatísticas do cache de queries
     const queryStats = await getCacheStats()
 
+    // Obter informações detalhadas de conexão
+    const connectionInfo = cache.getConnectionInfo()
+
     return NextResponse.json({
       general: generalStats,
       queries: queryStats,
+      connection: connectionInfo,
       timestamp: new Date().toISOString()
     })
 

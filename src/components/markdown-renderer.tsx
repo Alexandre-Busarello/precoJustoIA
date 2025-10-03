@@ -12,14 +12,17 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
-    <div className={cn("markdown-content", className)}>
+    <article className={cn("prose prose-lg max-w-none", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
-          // Títulos com hierarquia visual clara
+          // Títulos com fonte do sistema
           h1: ({ children, ...props }) => (
             <h1 
-              className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-8 mt-12 first:mt-0 pb-4 border-b-2 border-blue-100 dark:border-blue-900/30 leading-tight" 
+              className="scroll-mt-20 text-[2.5rem] md:text-[3rem] font-bold text-[#1a1a1a] dark:text-gray-100 mb-6 mt-10 first:mt-0 leading-tight" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
@@ -28,7 +31,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           h2: ({ children, ...props }) => (
             <h2 
-              className="text-3xl font-semibold text-gray-800 dark:text-gray-200 mb-6 mt-10 first:mt-0 pb-3 border-b border-gray-200 dark:border-gray-700 leading-tight" 
+              className="scroll-mt-20 text-[2rem] md:text-[2.25rem] font-bold text-[#1a1a1a] dark:text-gray-100 mb-4 mt-10 first:mt-0 leading-tight" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
@@ -37,7 +43,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           h3: ({ children, ...props }) => (
             <h3 
-              className="text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-4 mt-8 first:mt-0 leading-tight" 
+              className="scroll-mt-20 text-[1.5rem] md:text-[1.75rem] font-semibold text-[#1a1a1a] dark:text-gray-100 mb-3 mt-8 first:mt-0 leading-snug" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
@@ -46,7 +55,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           h4: ({ children, ...props }) => (
             <h4 
-              className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-3 mt-6 first:mt-0 leading-tight" 
+              className="scroll-mt-20 text-[1.25rem] md:text-[1.375rem] font-semibold text-[#242424] dark:text-gray-200 mb-3 mt-6 first:mt-0 leading-snug" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
@@ -55,7 +67,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           h5: ({ children, ...props }) => (
             <h5 
-              className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2 mt-5 first:mt-0 leading-tight" 
+              className="scroll-mt-20 text-[1.125rem] font-semibold text-[#242424] dark:text-gray-200 mb-2 mt-5 first:mt-0 leading-snug" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
@@ -64,27 +79,33 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           h6: ({ children, ...props }) => (
             <h6 
-              className="text-base font-medium text-gray-600 dark:text-gray-400 mb-2 mt-4 first:mt-0 leading-tight" 
+              className="scroll-mt-20 text-[1rem] font-semibold text-[#3a3a3a] dark:text-gray-300 mb-2 mt-4 first:mt-0 leading-normal" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
             </h6>
           ),
 
-          // Parágrafos com espaçamento otimizado para leitura
+          // Parágrafos com fonte do sistema
           p: ({ children, ...props }) => (
             <p 
-              className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6 text-base sm:text-lg" 
+              className="text-[#3a3a3a] dark:text-gray-300 leading-relaxed mb-4 text-[1rem] font-normal" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
             </p>
           ),
 
-          // Listas com melhor espaçamento
+          // Listas compactas
           ul: ({ children, ...props }) => (
             <ul 
-              className="list-disc pl-6 mb-6 space-y-2 text-gray-700 dark:text-gray-300" 
+              className="space-y-2 mb-4 ml-0 list-none" 
               {...props}
             >
               {children}
@@ -93,7 +114,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           ol: ({ children, ...props }) => (
             <ol 
-              className="list-decimal pl-6 mb-6 space-y-2 text-gray-700 dark:text-gray-300" 
+              className="space-y-2 mb-4 ml-6 list-decimal" 
               {...props}
             >
               {children}
@@ -102,17 +123,20 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           li: ({ children, ...props }) => (
             <li 
-              className="leading-relaxed text-base sm:text-lg mb-1" 
+              className="leading-relaxed text-[1rem] text-[#3a3a3a] dark:text-gray-300 pl-6 relative before:content-['•'] before:absolute before:left-0 before:text-[#666]" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
             </li>
           ),
 
-          // Texto em destaque
+          // Texto em destaque sutil
           strong: ({ children, ...props }) => (
             <strong 
-              className="font-semibold text-gray-900 dark:text-gray-100" 
+              className="font-bold text-[#1a1a1a] dark:text-gray-50" 
               {...props}
             >
               {children}
@@ -121,18 +145,18 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           em: ({ children, ...props }) => (
             <em 
-              className="italic text-gray-800 dark:text-gray-200" 
+              className="italic text-[#242424] dark:text-gray-200" 
               {...props}
             >
               {children}
             </em>
           ),
 
-          // Links com hover suave
+          // Links minimalistas
           a: ({ children, href, ...props }) => (
             <a 
               href={href}
-              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2 decoration-blue-600/30 hover:decoration-blue-600 transition-colors duration-200" 
+              className="text-[#1a1a1a] dark:text-gray-200 underline decoration-[#1a1a1a]/30 dark:decoration-gray-400/30 underline-offset-2 hover:decoration-[#1a1a1a] dark:hover:decoration-gray-200 transition-colors duration-150" 
               target={href?.startsWith('http') ? '_blank' : undefined}
               rel={href?.startsWith('http') ? 'noopener noreferrer' : undefined}
               {...props}
@@ -141,24 +165,27 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             </a>
           ),
 
-          // Citações com estilo elegante
+          // Citações compactas
           blockquote: ({ children, ...props }) => (
             <blockquote 
-              className="border-l-4 border-blue-500 pl-6 py-2 my-6 bg-blue-50 dark:bg-blue-950/20 rounded-r-lg italic text-gray-700 dark:text-gray-300" 
+              className="border-l-[3px] border-gray-300 dark:border-gray-600 bg-transparent pl-6 pr-0 py-1 my-6 italic text-[1rem] text-[#3a3a3a] dark:text-gray-300" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
             </blockquote>
           ),
 
-          // Código inline e blocos
+          // Código inline minimalista
           code: ({ children, className, ...props }) => {
             const isInline = !className
             
             if (isInline) {
               return (
                 <code 
-                  className="bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-md text-sm font-mono border border-blue-200 dark:border-blue-800" 
+                  className="bg-[#f6f6f6] dark:bg-gray-800 text-[#1a1a1a] dark:text-gray-200 px-1.5 py-0.5 rounded text-[0.925em] font-mono" 
                   {...props}
                 >
                   {children}
@@ -169,7 +196,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             // Para blocos de código
             return (
               <code 
-                className="block text-sm font-mono leading-relaxed whitespace-pre-wrap" 
+                className="block text-[14px] font-mono leading-[1.6] whitespace-pre-wrap" 
                 {...props}
               >
                 {children}
@@ -178,38 +205,31 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           
           pre: ({ children, ...props }) => (
-            <div className="my-8 relative">
-              {/* Header do bloco de código */}
-              <div className="bg-gray-200 dark:bg-gray-800 px-4 py-2 rounded-t-xl border-b border-gray-300 dark:border-gray-600">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                  </div>
-                  <span className="text-xs text-gray-600 dark:text-gray-400 ml-2 font-mono">
-                    Dados
-                  </span>
-                </div>
+            <div className="my-6">
+              {/* Header minimalista */}
+              <div className="bg-[#f6f6f6] dark:bg-gray-800 px-4 py-2 rounded-t-lg border-b border-gray-200 dark:border-gray-700">
+                <span className="text-xs text-[#666] dark:text-gray-400 font-mono">
+                  Dados
+                </span>
               </div>
               
               {/* Conteúdo do código */}
               <pre 
-                className="bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900 dark:to-gray-900 border-x border-b border-gray-200 dark:border-gray-700 rounded-b-xl p-6 overflow-x-auto shadow-sm" 
+                className="bg-[#fafafa] dark:bg-gray-900 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-lg p-4 overflow-x-auto" 
                 {...props}
               >
-                <div className="text-gray-700 dark:text-gray-300 font-mono text-sm leading-loose tracking-wide">
+                <div className="text-[#1a1a1a] dark:text-gray-200 font-mono text-[14px] leading-normal">
                   {children}
                 </div>
               </pre>
             </div>
           ),
 
-          // Tabelas responsivas
+          // Tabelas compactas
           table: ({ children, ...props }) => (
-            <div className="overflow-x-auto mb-6">
+            <div className="overflow-x-auto my-6 border border-gray-200 dark:border-gray-700 rounded-lg">
               <table 
-                className="min-w-full border-collapse border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden" 
+                className="min-w-full border-collapse" 
                 {...props}
               >
                 {children}
@@ -219,7 +239,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           thead: ({ children, ...props }) => (
             <thead 
-              className="bg-gray-50 dark:bg-gray-800" 
+              className="bg-[#fafafa] dark:bg-gray-800" 
               {...props}
             >
               {children}
@@ -228,7 +248,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           th: ({ children, ...props }) => (
             <th 
-              className="border border-gray-300 dark:border-gray-600 px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-100" 
+              className="border-b border-gray-200 dark:border-gray-700 px-4 py-2 text-left font-semibold text-[0.875rem] text-[#1a1a1a] dark:text-gray-200" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
@@ -237,35 +260,45 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           td: ({ children, ...props }) => (
             <td 
-              className="border border-gray-300 dark:border-gray-600 px-4 py-3 text-gray-700 dark:text-gray-300" 
+              className="border-b border-gray-100 dark:border-gray-800 px-4 py-2 text-[0.875rem] text-[#3a3a3a] dark:text-gray-300" 
+              style={{ 
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
+              }}
               {...props}
             >
               {children}
             </td>
           ),
 
-          // Linha horizontal
+          // Linha horizontal compacta
           hr: ({ ...props }) => (
             <hr 
-              className="border-0 border-t border-gray-300 dark:border-gray-600 my-8" 
+              className="border-0 border-t border-gray-200 dark:border-gray-700 my-8" 
               {...props}
             />
           ),
 
-          // Imagens responsivas
+          // Imagens compactas
           img: ({ src, alt, ...props }) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img 
-              src={src}
-              alt={alt}
-              className="max-w-full h-auto rounded-lg shadow-md mb-6 mx-auto block" 
-              {...props}
-            />
+            <figure className="my-6">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img 
+                src={src}
+                alt={alt}
+                className="max-w-full h-auto rounded-lg mx-auto block border border-gray-200 dark:border-gray-700" 
+                {...props}
+              />
+              {alt && (
+                <figcaption className="text-center text-[0.8125rem] text-[#666] dark:text-gray-400 mt-2">
+                  {alt}
+                </figcaption>
+              )}
+            </figure>
           ),
         }}
       >
         {content}
       </ReactMarkdown>
-    </div>
+    </article>
   )
 }

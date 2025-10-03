@@ -213,7 +213,7 @@ function RegisterForm() {
             </Button>
           </form>
 
-          <div className="relative">
+          {/* <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -232,7 +232,7 @@ function RegisterForm() {
             disabled={isLoading}
           >
             Google
-          </Button>
+          </Button> */}
         </CardContent>
         <CardFooter>
           <p className="text-center text-sm text-muted-foreground w-full">

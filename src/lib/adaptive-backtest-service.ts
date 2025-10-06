@@ -1569,7 +1569,7 @@ export class AdaptiveBacktestService {
       startDate.getFullYear(),
       startDate.getMonth(),
       1, // SEMPRE dia 1
-      0, 0, 0, 0
+      12, 0, 0, 0
     ));
     
     console.log(`🔍 generateMonthlyDates - startDate: ${startDate.toISOString()}`);

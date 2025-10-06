@@ -262,7 +262,7 @@ function validateBacktestParams(params: BacktestParams): string[] {
     errors.push('Capital inicial deve ser positivo');
   }
 
-  if (!params.monthlyContribution || params.monthlyContribution <= 0) {
+  if ((!params.monthlyContribution && params.monthlyContribution !== 0) || params.monthlyContribution < 0) {
     errors.push('Aporte mensal deve ser positivo');
   }
 

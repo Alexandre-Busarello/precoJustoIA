@@ -19,9 +19,7 @@ async function fetchCdiData(startDate: Date, endDate: Date): Promise<BenchmarkDa
     
     // SGS 12 = CDI
     const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?formato=json&dataInicial=${startStr}&dataFinal=${endStr}`;
-    
-    console.log('📊 Buscando CDI do BCB:', startStr, '-', endStr);
-    
+
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -30,6 +28,8 @@ async function fetchCdiData(startDate: Date, endDate: Date): Promise<BenchmarkDa
     }
     
     const data = await response.json();
+
+    console.log('🔍 Data do CDI:', data);
     
     // Transformar para formato padrão
     const transformedData: BenchmarkDataPoint[] = data.map((item: any) => {

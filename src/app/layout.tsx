@@ -9,6 +9,7 @@ import { SessionRefreshProvider } from "@/components/session-refresh-provider";
 import { AlfaProvider } from "@/contexts/alfa-context";
 import { Toaster } from "sonner";
 import AdminLink from "@/components/admin-link";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -141,6 +142,7 @@ export default function RootLayout({
         <AuthProvider>
           <SessionRefreshProvider>
             <AlfaProvider>
+              <ScrollToTop />
               <div className="min-h-screen bg-background">
                 <Header />
                 <main>

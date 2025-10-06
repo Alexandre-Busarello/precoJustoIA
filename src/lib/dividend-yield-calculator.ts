@@ -70,9 +70,12 @@ export async function calculateAverageDividendYield(ticker: string): Promise<num
     // Calcular média
     const averageYield = validYields.reduce((sum, yield_) => sum + yield_, 0) / validYields.length;
 
-    console.log(`✅ ${ticker}: DY médio calculado = ${(averageYield * 100).toFixed(2)}% (${validYields.length} anos)`);
+    // Aplicar cap de 10% (muito difícil uma empresa manter >10% de yield no longo prazo)
+    const cappedYield = Math.min(averageYield, 0.10);
+
+    console.log(`✅ ${ticker}: DY médio calculado = ${(cappedYield * 100).toFixed(2)}% (${validYields.length} anos)${averageYield > 0.10 ? ' [limitado a 10%]' : ''}`);
     
-    return averageYield;
+    return cappedYield;
 
   } catch (error) {
     console.error(`❌ Erro ao calcular DY médio para ${ticker}:`, error);
@@ -126,7 +129,9 @@ export async function getLatestDividendYield(ticker: string): Promise<number | n
       yield_ = toNumber(latest.dividendYield12m);
     }
 
-    return yield_ && yield_ > 0 && yield_ <= 1 ? yield_ : null;
+    // Aplicar cap de 10% no dividend yield mais recente também
+    const validYield = yield_ && yield_ > 0 && yield_ <= 1 ? yield_ : null;
+    return validYield ? Math.min(validYield, 0.10) : null;
 
   } catch (error) {
     console.error(`❌ Erro ao buscar DY mais recente para ${ticker}:`, error);

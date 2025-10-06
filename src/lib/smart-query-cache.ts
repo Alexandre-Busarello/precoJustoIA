@@ -206,11 +206,8 @@ export class SmartQueryCache {
   /**
    * Invalida cache baseado nas tabelas modificadas (assíncrono, não bloqueia)
    */
-  static invalidateCacheForTables(tables: string[]): void {
-    // Executar invalidação de forma assíncrona sem bloquear a operação principal
-    this.invalidateCacheAsync(tables).catch(error => {
-      console.error('❌ Erro na invalidação assíncrona de cache:', error)
-    })
+  static async invalidateCacheForTables(tables: string[]): Promise<void> {
+    await this.invalidateCacheAsync(tables);
   }
 
   /**

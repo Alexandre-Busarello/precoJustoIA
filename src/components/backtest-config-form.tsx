@@ -19,7 +19,9 @@ import {
   CheckCircle,
   Search,
   Loader2,
-  Info
+  Info,
+  Settings,
+  BarChart3
 } from 'lucide-react';
 
 // Interfaces
@@ -45,7 +47,9 @@ interface BacktestConfigFormProps {
   initialConfig?: BacktestConfig | null;
   onConfigChange: (config: BacktestConfig) => void;
   onRunBacktest: (config: BacktestConfig) => void;
+  onSaveConfig?: (config: BacktestConfig) => Promise<void>;
   isRunning: boolean;
+  isSaving?: boolean;
 }
 
 interface CompanySearchResult {
@@ -60,9 +64,11 @@ export function BacktestConfigForm({
   initialConfig, 
   onConfigChange, 
   onRunBacktest, 
-  isRunning 
+  onSaveConfig,
+  isRunning,
+  isSaving = false
 }: BacktestConfigFormProps) {
-  const [config, setConfig] = useState<BacktestConfig>({
+  const [config, setConfig] = useState<BacktestConfig & { id?: string }>({
     name: 'Nova Simulação',
     description: '',
     assets: [],
@@ -85,6 +91,8 @@ export function BacktestConfigForm({
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<CompanySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isAddingAsset, setIsAddingAsset] = useState(false);
+  const [isRemovingAsset, setIsRemovingAsset] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const initialConfigRef = useRef<string>('');
@@ -206,45 +214,139 @@ export function BacktestConfigForm({
       return; // Já existe
     }
 
-    // Buscar dividend yield médio dos últimos 5 anos
-    let averageDividendYield: number | undefined;
+    setIsAddingAsset(true);
     try {
-      const response = await fetch(`/api/dividend-yield-average/${company.ticker}`);
-      if (response.ok) {
-        const data = await response.json();
-        averageDividendYield = data.averageDividendYield;
+      // Se não tem ID ainda, gerar um temporário
+      if (!config.id) {
+        config.id = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
+
+      // Usar o endpoint do backend para adicionar o ativo
+      const isFirstAsset = config.assets.length === 0;
+      const requestBody: any = {
+        ticker: company.ticker
+      };
+
+      // Se é o primeiro ativo, enviar dados da configuração
+      if (isFirstAsset) {
+        requestBody.configData = {
+          name: config.name,
+          description: config.description,
+          startDate: config.startDate.toISOString(),
+          endDate: config.endDate.toISOString(),
+          initialCapital: config.initialCapital,
+          monthlyContribution: config.monthlyContribution,
+          rebalanceFrequency: config.rebalanceFrequency
+        };
+      }
+
+      const response = await fetch(`/api/backtest/configs/${config.id}/assets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao adicionar ativo');
+      }
+
+      const { config: updatedConfig } = await response.json();
+
+      // Atualizar config local com os dados do backend (inclui alocações corretas)
+      const updatedAssets = updatedConfig.assets.map((asset: any) => ({
+        ticker: asset.ticker,
+        companyName: company.ticker === asset.ticker ? company.name : asset.ticker,
+        allocation: parseFloat(asset.targetAllocation.toString()),
+        averageDividendYield: asset.averageDividendYield ? parseFloat(asset.averageDividendYield.toString()) : undefined
+      }));
+
+      setConfig(prev => ({
+        ...prev,
+        id: updatedConfig.id,
+        assets: updatedAssets
+      }));
+
+      // Inicializar DY inputs para todos os ativos
+      const newDYInputs: Record<string, string> = {};
+      updatedAssets.forEach((asset: BacktestAsset) => {
+        if (asset.averageDividendYield) {
+          newDYInputs[asset.ticker] = (asset.averageDividendYield * 100).toFixed(2);
+        }
+      });
+      setDividendYieldInputs(newDYInputs);
+
+      setSearchTerm('');
+      setSearchResults([]);
     } catch (error) {
-      console.error(`Erro ao buscar DY médio para ${company.ticker}:`, error);
+      console.error('Erro ao adicionar ativo:', error);
+      // Em caso de erro, fallback para lógica local
+      const newAssets = [...config.assets, {
+        ticker: company.ticker,
+        companyName: company.name,
+        allocation: 0,
+        averageDividendYield: undefined
+      }];
+
+      const equalAllocation = 1 / newAssets.length;
+      newAssets.forEach(asset => {
+        asset.allocation = equalAllocation;
+      });
+
+      setConfig(prev => ({ ...prev, assets: newAssets }));
+      setSearchTerm('');
+      setSearchResults([]);
+    } finally {
+      setIsAddingAsset(false);
     }
-
-    const newAssets = [...config.assets, {
-      ticker: company.ticker,
-      companyName: company.name,
-      allocation: 0,
-      averageDividendYield
-    }];
-
-    // Redistribuir alocações igualmente
-    const equalAllocation = 1 / newAssets.length;
-    newAssets.forEach(asset => {
-      asset.allocation = equalAllocation;
-    });
-
-    setConfig(prev => ({ ...prev, assets: newAssets }));
-    
-    // Inicializar DY input para o novo ativo
-    setDividendYieldInputs(prev => ({
-      ...prev,
-      [company.ticker]: averageDividendYield ? (averageDividendYield * 100).toFixed(2) : ''
-    }));
-    
-    setSearchTerm('');
-    setSearchResults([]);
   };
 
   // Remover ativo
-  const removeAsset = (ticker: string) => {
+  const removeAsset = async (ticker: string) => {
+    setIsRemovingAsset(true);
+    
+    // Se a config tem ID e está salva, usar o endpoint do backend
+    if (config.id && !config.id.startsWith('temp-')) {
+      try {
+        const response = await fetch(`/api/backtest/configs/${config.id}/assets?ticker=${ticker}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Erro ao remover ativo');
+        }
+
+        const { config: updatedConfig } = await response.json();
+
+        // Atualizar config local com os dados do backend (inclui alocações corretas)
+        const updatedAssets = updatedConfig.assets.map((asset: any) => ({
+          ticker: asset.ticker,
+          companyName: asset.ticker,
+          allocation: parseFloat(asset.targetAllocation.toString()),
+          averageDividendYield: asset.averageDividendYield ? parseFloat(asset.averageDividendYield.toString()) : undefined
+        }));
+
+        setConfig(prev => ({
+          ...prev,
+          assets: updatedAssets
+        }));
+
+        // Remover DY input do ativo removido
+        setDividendYieldInputs(prev => {
+          const newInputs = { ...prev };
+          delete newInputs[ticker];
+          return newInputs;
+        });
+
+        return;
+      } catch (error) {
+        console.error('Erro ao remover ativo:', error);
+        // Em caso de erro, continuar com lógica local abaixo
+      }
+    }
+
+    // Fallback: lógica local (para configs não salvas ou em caso de erro)
     const newAssets = config.assets.filter(a => a.ticker !== ticker);
     
     if (newAssets.length > 0) {
@@ -263,6 +365,8 @@ export function BacktestConfigForm({
       delete newInputs[ticker];
       return newInputs;
     });
+    
+    setIsRemovingAsset(false);
   };
 
   // Atualizar alocação de um ativo
@@ -283,7 +387,7 @@ export function BacktestConfigForm({
     setConfig(prev => ({ ...prev, assets: newAssets }));
   };
 
-  // Redistribuir alocações igualmente
+  // Redistribuir alocações igualmente (fallback local, o backend faz isso automaticamente ao adicionar/remover)
   const redistributeEqually = () => {
     if (config.assets.length === 0) return;
     
@@ -304,25 +408,29 @@ export function BacktestConfigForm({
       newErrors.name = 'Nome é obrigatório';
     }
 
-    if (config.assets.length === 0) {
-      newErrors.assets = 'Adicione pelo menos um ativo';
-    }
+    // Permitir config sem ativos (serão adicionados depois)
+    // if (config.assets.length === 0) {
+    //   newErrors.assets = 'Adicione pelo menos um ativo';
+    // }
 
     if (config.assets.length > 20) {
       newErrors.assets = 'Máximo 20 ativos por carteira';
     }
 
-    const totalAllocation = config.assets.reduce((sum, asset) => sum + asset.allocation, 0);
-    if (Math.abs(totalAllocation - 1) > 0.01) {
-      newErrors.allocation = 'Alocações devem somar 100%';
+    // Validar alocações apenas se houver ativos
+    if (config.assets.length > 0) {
+      const totalAllocation = config.assets.reduce((sum, asset) => sum + asset.allocation, 0);
+      if (Math.abs(totalAllocation - 1) > 0.01) {
+        newErrors.allocation = 'Alocações devem somar 100%';
+      }
     }
 
     if (config.initialCapital <= 0) {
       newErrors.initialCapital = 'Capital inicial deve ser positivo';
     }
 
-    if (config.monthlyContribution <= 0) {
-      newErrors.monthlyContribution = 'Aporte mensal deve ser positivo';
+    if (config.monthlyContribution < 0) {
+      newErrors.monthlyContribution = 'Aporte mensal não pode ser negativo';
     }
 
     if (config.startDate >= config.endDate) {
@@ -345,10 +453,56 @@ export function BacktestConfigForm({
     }
   };
 
+  // Salvar configuração sem executar
+  const handleSaveConfig = async () => {
+    if (validateConfig() && onSaveConfig) {
+      await onSaveConfig(config);
+    }
+  };
+
   const totalAllocation = config.assets.reduce((sum, asset) => sum + asset.allocation, 0);
   const isValidAllocation = Math.abs(totalAllocation - 1) < 0.01;
+  
+  const isLoading = isAddingAsset || isRemovingAsset || isSaving || isRunning;
 
   return (
+    <>
+      {/* Loading Overlay Fullscreen - Similar ao quick-ranker */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl">
+            <div className="text-center space-y-4 sm:space-y-6">
+              <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
+                <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <BarChart3 className="absolute inset-0 m-auto w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                  {isAddingAsset && 'Adicionando ativo...'}
+                  {isRemovingAsset && 'Removendo ativo...'}
+                  {isSaving && 'Salvando configuração...'}
+                  {isRunning && 'Executando backtest...'}
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 px-2">
+                  {isAddingAsset && 'Calculando alocações proporcionais'}
+                  {isRemovingAsset && 'Redistribuindo alocações'}
+                  {isSaving && 'Salvando suas configurações'}
+                  {isRunning && 'Processando simulação histórica'}
+                </p>
+              </div>
+              
+              <div className="flex items-center justify-center gap-1">
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
     <div className="space-y-6">
       {/* Informações Básicas */}
       <Card>
@@ -406,7 +560,12 @@ export function BacktestConfigForm({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="monthlyContribution">Aporte Mensal (R$)</Label>
+              <Label htmlFor="monthlyContribution">
+                Aporte Mensal (R$)
+                <span className="text-xs text-muted-foreground ml-2">
+                  • Use 0 para simular sem aportes
+                </span>
+              </Label>
               <Input
                 id="monthlyContribution"
                 type="text"
@@ -426,11 +585,17 @@ export function BacktestConfigForm({
                   const numericValue = parseInt(monthlyContributionInput.replace(/\D/g, '')) || 0;
                   setMonthlyContributionInput(numericValue.toLocaleString('pt-BR'));
                 }}
-                placeholder="1.000"
+                placeholder="0"
                 className={errors.monthlyContribution ? 'border-red-500' : ''}
               />
               {errors.monthlyContribution && (
                 <p className="text-sm text-red-500">{errors.monthlyContribution}</p>
+              )}
+              {config.monthlyContribution === 0 && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <Info className="w-3 h-3" />
+                  Simulação apenas com capital inicial, sem novos aportes
+                </p>
               )}
             </div>
           </div>
@@ -807,12 +972,36 @@ export function BacktestConfigForm({
         </CardContent>
       </Card>
 
-      {/* Botão de Execução */}
+      {/* Botões de Ação */}
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-3">
+          {/* Botão Salvar Configuração */}
+          {onSaveConfig && (
+            <Button
+              onClick={handleSaveConfig}
+              disabled={isSaving || isRunning || (config.assets.length > 0 && !isValidAllocation)}
+              variant="outline"
+              className="w-full"
+              size="lg"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Salvando Configuração...
+                </>
+              ) : (
+                <>
+                  <Settings className="w-5 h-5 mr-2" />
+                  Salvar Configuração
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Botão Executar Backtesting */}
           <Button
             onClick={handleRunBacktest}
-            disabled={isRunning || config.assets.length === 0 || !isValidAllocation}
+            disabled={isRunning || isSaving || config.assets.length === 0 || !isValidAllocation}
             className="w-full"
             size="lg"
           >
@@ -830,14 +1019,19 @@ export function BacktestConfigForm({
           </Button>
           
           {config.assets.length > 0 && isValidAllocation && (
-            <p className="text-sm text-center text-gray-600 dark:text-gray-400 mt-2">
+            <p className="text-sm text-center text-gray-600 dark:text-gray-400">
               Simulação de {config.assets.length} ativo(s) • 
-              Período: {((config.endDate.getTime() - config.startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)).toFixed(0)} meses • 
-              Aporte: R$ {config.monthlyContribution.toLocaleString()}
+              Período: {((config.endDate.getTime() - config.startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)).toFixed(0)} meses
+              {config.monthlyContribution > 0 ? (
+                <> • Aporte: R$ {config.monthlyContribution.toLocaleString()}/mês</>
+              ) : (
+                <> • Sem aportes mensais</>
+              )}
             </p>
           )}
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

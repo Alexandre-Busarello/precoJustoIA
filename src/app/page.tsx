@@ -797,7 +797,7 @@ export default async function Home() {
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-green-600" />
-                      <span>Carteiras Recomendadas IA</span>
+                      <span>Carteiras com IA</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-green-600" />

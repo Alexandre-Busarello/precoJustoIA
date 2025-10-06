@@ -159,7 +159,7 @@ export default function SobrePage() {
                       <h3 className="text-xl font-bold mb-3">O Futuro</h3>
                       <p className="text-muted-foreground leading-relaxed">
                         Continuamos evoluindo nossa plataforma com novos recursos como análise 
-                        de FIIs, carteiras recomendadas por IA, backtesting e muito mais. 
+                        de FIIs, carteiras criadas com IA, backtesting e muito mais. 
                         Nosso compromisso é sempre oferecer as melhores ferramentas para 
                         investidores de longo prazo.
                       </p>

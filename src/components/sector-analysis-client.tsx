@@ -132,14 +132,14 @@ export function SectorAnalysisClient({ initialSectors, isPremium }: SectorAnalys
   }
 
   const getRecommendationIcon = (recommendation: string) => {
-    if (recommendation.includes('Compra')) return <TrendingUp className="w-4 h-4" />
-    if (recommendation.includes('Venda')) return <TrendingDown className="w-4 h-4" />
+    if (recommendation.includes('Excelente') || recommendation.includes('Boa')) return <TrendingUp className="w-4 h-4" />
+    if (recommendation.includes('Fraca')) return <TrendingDown className="w-4 h-4" />
     return <Minus className="w-4 h-4" />
   }
 
   const getRecommendationColor = (recommendation: string) => {
-    if (recommendation.includes('Compra')) return 'text-green-600 dark:text-green-400'
-    if (recommendation.includes('Venda')) return 'text-red-600 dark:text-red-400'
+    if (recommendation.includes('Excelente') || recommendation.includes('Boa')) return 'text-green-600 dark:text-green-400'
+    if (recommendation.includes('Fraca')) return 'text-red-600 dark:text-red-400'
     return 'text-slate-600 dark:text-slate-400'
   }
 

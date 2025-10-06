@@ -9,7 +9,6 @@ import Link from 'next/link';
 import { 
   Award, 
   TrendingUp, 
-  TrendingDown, 
   Crown, 
   Shield, 
   AlertTriangle,
@@ -21,10 +20,10 @@ import {
 interface OverallScore {
   score: number;
   grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
-  classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Muito Fraco';
+  classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
   strengths: string[];
   weaknesses: string[];
-  recommendation: 'Compra Forte' | 'Compra' | 'Neutro' | 'Venda' | 'Venda Forte';
+  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssimo';
 }
 
 interface OverallScoreCardProps {
@@ -96,35 +95,35 @@ function ScoreGauge({ score, grade }: { score: number; grade: string }) {
 function RecommendationBadge({ recommendation }: { recommendation: string }) {
   const getRecommendationStyle = (rec: string) => {
     switch (rec) {
-      case 'Compra Forte':
+      case 'Empresa Excelente':
         return {
           variant: 'default' as const,
           className: 'bg-green-600 hover:bg-green-700 text-white',
-          icon: TrendingUp
+          icon: CheckCircle
         };
-      case 'Compra':
+      case 'Empresa Boa':
         return {
           variant: 'default' as const,
           className: 'bg-green-500 hover:bg-green-600 text-white',
           icon: TrendingUp
         };
-      case 'Neutro':
+      case 'Empresa Regular':
         return {
           variant: 'secondary' as const,
           className: 'bg-yellow-500 hover:bg-yellow-600 text-white',
           icon: Shield
         };
-      case 'Venda':
+      case 'Empresa Fraca':
         return {
           variant: 'destructive' as const,
           className: 'bg-red-500 hover:bg-red-600 text-white',
-          icon: TrendingDown
+          icon: AlertTriangle
         };
-      case 'Venda Forte':
+      case 'Empresa Péssimo':
         return {
           variant: 'destructive' as const,
           className: 'bg-red-600 hover:bg-red-700 text-white',
-          icon: TrendingDown
+          icon: XCircle
         };
       default:
         return {
@@ -154,7 +153,7 @@ function PremiumPrompt({ reason }: { reason: string }) {
           <ScoreGauge score={85} grade="B+" />
           <div className="text-center">
             <p className="text-lg font-semibold text-muted-foreground">Muito Bom</p>
-            <RecommendationBadge recommendation="Compra" />
+            <RecommendationBadge recommendation="Empresa Excelente" />
           </div>
           <div className="grid grid-cols-2 gap-4 w-full text-sm">
             <div>

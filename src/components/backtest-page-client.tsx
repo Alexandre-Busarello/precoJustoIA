@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BacktestConfigForm } from '@/components/backtest-config-form';
@@ -11,13 +12,13 @@ import { BacktestWelcomeScreen } from '@/components/backtest-welcome-screen';
 import { BacktestConfigHistory } from '@/components/backtest-config-history';
 import { BacktestProgressIndicator } from '@/components/backtest-progress-indicator';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { 
   TrendingUp, 
   Settings, 
   History, 
   BarChart3,
   AlertTriangle,
-  Loader2,
   DollarSign
 } from 'lucide-react';
 
@@ -96,19 +97,186 @@ interface DataValidation {
 }
 
 export function BacktestPageClient() {
-  const [activeTab, setActiveTab] = useState('configure');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+  
+  // Ler estado da URL
+  const urlView = searchParams.get('view') || 'welcome'; // welcome, lista, configure, results, history
+  const urlConfigId = searchParams.get('configId');
+  
+  const [activeTab, setActiveTab] = useState(urlView === 'welcome' ? 'configure' : urlView);
   const [currentConfig, setCurrentConfig] = useState<BacktestConfig | null>(null);
   const [currentResult, setCurrentResult] = useState<BacktestResult | null>(null);
   const [currentTransactions, setCurrentTransactions] = useState<any[]>([]);
   const [dataValidation, setDataValidation] = useState<DataValidation | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(urlView === 'welcome' || (!urlView && !urlConfigId));
+  const [isLoadingResults, setIsLoadingResults] = useState(false);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
 
+  // Sincronizar URL com estado interno
+  useEffect(() => {
+    const view = searchParams.get('view');
+    const configId = searchParams.get('configId');
+    
+    if (view) {
+      setActiveTab(view);
+      setShowWelcome(false);
+    }
+    
+    if (configId) {
+      const shouldLoadResults = view === 'results';
+      
+      // Se é a mesma config e já tem resultado, não precisa carregar novamente
+      if (configId === (currentConfig as any)?.id && currentResult && shouldLoadResults) {
+        console.log('✅ Config e resultado já carregados, não precisa buscar novamente');
+        setIsLoadingResults(false);
+        return;
+      }
+      
+      // Limpar resultado anterior se estiver mudando para results e não tem resultado
+      if (shouldLoadResults && !currentResult) {
+        setIsLoadingResults(true);
+        setCurrentResult(null);
+      }
+      
+      // Se é a mesma config mas precisa carregar results, apenas carregar o resultado
+      if (configId === (currentConfig as any)?.id && shouldLoadResults && !currentResult) {
+        loadLatestResult(configId, currentConfig);
+      } 
+      // Se é config diferente, carregar tudo
+      else if (configId !== (currentConfig as any)?.id) {
+        loadConfigFromUrl(configId, shouldLoadResults);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+  
   // Scroll para o topo quando o componente for montado
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+  
+  // Função auxiliar para atualizar URL
+  const updateUrl = useCallback((view?: string, configId?: string) => {
+    const params = new URLSearchParams();
+    if (view && view !== 'welcome') params.set('view', view);
+    if (configId) params.set('configId', configId);
+    
+    const query = params.toString();
+    router.push(`/backtest${query ? `?${query}` : ''}`, { scroll: false });
+  }, [router]);
+  
+  // Carregar config da URL
+  const loadConfigFromUrl = async (configId: string, loadResults = false) => {
+    try {
+      setIsLoadingConfig(true);
+      if (loadResults) {
+        setIsLoadingResults(true);
+      }
+      
+      const response = await fetch(`/api/backtest/configs/${configId}`);
+      if (!response.ok) {
+        setIsLoadingResults(false);
+        return;
+      }
+      
+      const data = await response.json();
+      const loadedConfig: BacktestConfig = {
+        name: data.config.name,
+        description: data.config.description,
+        assets: data.config.assets.map((asset: any) => ({
+          ticker: asset.ticker,
+          companyName: asset.ticker,
+          allocation: asset.targetAllocation,
+          averageDividendYield: asset.averageDividendYield
+        })),
+        startDate: new Date(data.config.startDate),
+        endDate: new Date(data.config.endDate),
+        initialCapital: data.config.initialCapital,
+        monthlyContribution: data.config.monthlyContribution,
+        rebalanceFrequency: data.config.rebalanceFrequency
+      };
+      (loadedConfig as any).id = configId;
+      setCurrentConfig(loadedConfig);
+      
+      // Se deve carregar resultados, buscar o último resultado
+      if (loadResults) {
+        await loadLatestResult(configId, data.config);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar config da URL:', error);
+      setIsLoadingResults(false);
+    } finally {
+      setIsLoadingConfig(false);
+    }
+  };
+  
+  // Carregar último resultado de uma config
+  const loadLatestResult = async (configId: string, config: any) => {
+    try {
+      setIsLoadingResults(true);
+      
+      // Buscar resultados específicos da config
+      const response = await fetch(`/api/backtest/configs/${configId}`);
+      if (!response.ok) {
+        setIsLoadingResults(false);
+        return;
+      }
+      
+      const data = await response.json();
+      const configWithResults = data.config;
+      
+      console.log('📊 Carregando resultados para config:', configId);
+      console.log('🔍 Resultados encontrados:', configWithResults?.results?.length || 0);
+      
+      if (configWithResults?.results && configWithResults.results.length > 0) {
+        const latestResult = configWithResults.results[0];
+        
+        const formattedResult = {
+          totalReturn: latestResult.totalReturn,
+          annualizedReturn: latestResult.annualizedReturn,
+          volatility: latestResult.volatility,
+          sharpeRatio: latestResult.sharpeRatio,
+          maxDrawdown: latestResult.maxDrawdown,
+          positiveMonths: latestResult.positiveMonths,
+          negativeMonths: latestResult.negativeMonths,
+          totalInvested: latestResult.totalInvested,
+          finalValue: latestResult.finalValue,
+          finalCashReserve: latestResult.finalCashReserve || 0,
+          totalDividendsReceived: latestResult.totalDividendsReceived || 0,
+          monthlyReturns: latestResult.monthlyReturns || [],
+          assetPerformance: latestResult.assetPerformance || [],
+          portfolioEvolution: latestResult.portfolioEvolution || [],
+          dataValidation: null,
+          dataQualityIssues: [],
+          effectiveStartDate: new Date(config.startDate),
+          effectiveEndDate: new Date(config.endDate),
+          actualInvestment: latestResult.totalInvested,
+          plannedInvestment: latestResult.totalInvested,
+          missedContributions: 0,
+          missedAmount: 0
+        };
+        
+        console.log('✅ Resultado formatado e setado no estado');
+        setCurrentResult(formattedResult);
+        setCurrentTransactions(configWithResults.transactions || []);
+      } else {
+        console.log('⚠️ Nenhum resultado encontrado para esta config');
+        setCurrentResult(null);
+        setCurrentTransactions([]);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar resultado:', error);
+      setCurrentResult(null);
+      setCurrentTransactions([]);
+    } finally {
+      setIsLoadingResults(false);
+    }
+  };
 
   // Carregar ativos pré-configurados do localStorage
   useEffect(() => {
@@ -215,7 +383,11 @@ export function BacktestPageClient() {
       
     } catch (error) {
       console.error('Erro na validação:', error);
-      alert(error instanceof Error ? error.message : 'Erro ao validar dados');
+      toast({
+        title: "Erro na validação",
+        description: error instanceof Error ? error.message : 'Erro ao validar dados',
+        variant: "destructive"
+      });
     } finally {
       setIsRunning(false);
     }
@@ -277,6 +449,8 @@ export function BacktestPageClient() {
       
       // 🎯 MELHORIA UX: Auto-redirect para aba de resultados após sucesso
       setTimeout(() => {
+        const configId = data.configId || (config as any).id;
+        updateUrl('results', configId);
         setActiveTab('results');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 500);
@@ -304,7 +478,11 @@ export function BacktestPageClient() {
       
     } catch (error) {
       console.error('Erro no backtesting:', error);
-      alert(error instanceof Error ? error.message : 'Erro ao executar backtesting');
+      toast({
+        title: "Erro ao executar backtest",
+        description: error instanceof Error ? error.message : 'Erro ao executar backtesting',
+        variant: "destructive"
+      });
     } finally {
       setIsRunning(false);
     }
@@ -322,16 +500,80 @@ export function BacktestPageClient() {
     setDataValidation(null);
   };
 
+  const handleSaveConfig = async (config: BacktestConfig) => {
+    if (!config.assets.length) return;
+
+    try {
+      setIsSaving(true);
+      
+      const params = {
+        name: config.name,
+        description: config.description,
+        assets: config.assets,
+        startDate: config.startDate.toISOString(),
+        endDate: config.endDate.toISOString(),
+        initialCapital: config.initialCapital,
+        monthlyContribution: config.monthlyContribution,
+        rebalanceFrequency: config.rebalanceFrequency
+      };
+
+      // Se há configId, é uma atualização, senão é criação
+      const endpoint = (config as any).id 
+        ? `/api/backtest/configs/${(config as any).id}`
+        : '/api/backtest/config';
+      
+      const method = (config as any).id ? 'PUT' : 'POST';
+
+      const response = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao salvar configuração');
+      }
+
+      const data = await response.json();
+      
+      // Atualizar o currentConfig com o configId retornado
+      if (!((config as any).id) && data.configId) {
+        console.log('🔄 Configuração salva com ID:', data.configId);
+        const updatedConfig = { ...config, id: data.configId };
+        setCurrentConfig(updatedConfig as BacktestConfig);
+      }
+      
+      toast({
+        title: "Configuração salva!",
+        description: "Suas configurações foram salvas com sucesso."
+      });
+      
+    } catch (error) {
+      console.error('Erro ao salvar configuração:', error);
+      toast({
+        title: "Erro ao salvar",
+        description: error instanceof Error ? error.message : 'Erro ao salvar configuração',
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleShowDetails = useCallback((result: any, config: any, transactions?: any[]) => {
     console.log('🔍 handleShowDetails - Transações recebidas:', transactions?.length || 0);
     console.log('📋 Primeira transação:', transactions?.[0] || 'Nenhuma');
+    console.log('✅ Dados já carregados da lista, não precisa buscar novamente');
     
     setCurrentResult(result);
     setCurrentConfig(config);
     setCurrentTransactions(transactions || []);
     setShowWelcome(false);
+    setIsLoadingResults(false); // Garantir que não está em loading
+    updateUrl('results', config.id);
     setActiveTab('results');
-  }, []);
+  }, [updateUrl]);
 
   // Handlers para a tela de boas-vindas
   const handleCreateNew = useCallback(() => {
@@ -339,8 +581,15 @@ export function BacktestPageClient() {
     setCurrentConfig(null);
     setCurrentResult(null);
     setCurrentTransactions([]);
+    updateUrl('configure');
     setActiveTab('configure');
-  }, []);
+  }, [updateUrl]);
+  
+  const handleViewList = useCallback(() => {
+    setShowWelcome(false);
+    updateUrl('lista');
+    setActiveTab('lista');
+  }, [updateUrl]);
 
   const handleSelectExisting = useCallback(async (configPreview: any) => {
     try {
@@ -404,6 +653,7 @@ export function BacktestPageClient() {
 
         setCurrentResult(formattedResult);
         setCurrentTransactions(configPreview.transactions || []);
+        updateUrl('results', configPreview.id);
         setActiveTab('results');
         console.log('✅ Resultado carregado, indo para aba Results');
       } else {
@@ -411,13 +661,18 @@ export function BacktestPageClient() {
         // Se não tem resultados, ir para configuração
         setCurrentResult(null);
         setCurrentTransactions([]);
+        updateUrl('configure', configPreview.id);
         setActiveTab('configure');
       }
     } catch (error) {
       console.error('Erro ao carregar configuração:', error);
-      alert('Erro ao carregar configuração selecionada');
+      toast({
+        title: "Erro ao carregar",
+        description: "Não foi possível carregar a configuração selecionada",
+        variant: "destructive"
+      });
     }
-  }, []);
+  }, [updateUrl, toast]);
 
   const handleUseAsBase = useCallback((configPreview: any) => {
     // Converter preview para formato completo (similar ao handleSelectExisting)
@@ -442,8 +697,9 @@ export function BacktestPageClient() {
     setCurrentResult(null);
     setCurrentTransactions([]);
     setShowWelcome(false);
+    updateUrl('configure');
     setActiveTab('configure');
-  }, []);
+  }, [updateUrl]);
 
   // Estabilizar initialConfig para evitar re-renders desnecessários
   const stableInitialConfig = useMemo(() => {
@@ -476,11 +732,43 @@ export function BacktestPageClient() {
         onCreateNew={handleCreateNew}
         onSelectExisting={handleSelectExisting}
         onUseAsBase={handleUseAsBase}
+        onViewList={handleViewList}
       />
     );
   }
 
   return (
+    <>
+      {/* Loading Overlay Fullscreen - Similar ao quick-ranker */}
+      {isLoadingConfig && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl">
+            <div className="text-center space-y-4 sm:space-y-6">
+              <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
+                <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <BarChart3 className="absolute inset-0 m-auto w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                  Carregando configuração...
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 px-2">
+                  Buscando dados da configuração de backtest
+                </p>
+              </div>
+              
+              <div className="flex items-center justify-center gap-1">
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
     <div className="space-y-6">
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -553,19 +841,41 @@ export function BacktestPageClient() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <TabsList className="grid grid-cols-3 w-full sm:w-auto">
-            <TabsTrigger value="configure" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <TabsList className="grid grid-cols-4 w-full sm:w-auto">
+            <TabsTrigger 
+              value="lista" 
+              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
+              onClick={() => updateUrl('lista')}
+            >
+              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Minhas Configs</span>
+              <span className="xs:hidden">Lista</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="configure" 
+              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
+              onClick={() => updateUrl('configure', (currentConfig as any)?.id)}
+            >
               <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden xs:inline">Configurar</span>
               <span className="xs:hidden">Config</span>
             </TabsTrigger>
-            <TabsTrigger value="results" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" disabled={!currentResult}>
+            <TabsTrigger 
+              value="results" 
+              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" 
+              disabled={!currentResult}
+              onClick={() => updateUrl('results', (currentConfig as any)?.id)}
+            >
               <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden xs:inline">Resultados</span>
               <span className="xs:hidden">Result</span>
             </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+          <TabsTrigger 
+            value="history" 
+            className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
+            onClick={() => updateUrl('history', (currentConfig as any)?.id)}
+          >
             <History className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">
               {currentConfig && (currentConfig as any).id ? 'Histórico da Config' : 'Histórico Geral'}
@@ -574,17 +884,14 @@ export function BacktestPageClient() {
           </TabsTrigger>
           </TabsList>
           
-          {/* Botão para voltar à tela inicial */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowWelcome(true)}
-            className="flex items-center gap-2 w-full sm:w-auto"
-          >
-            <TrendingUp className="w-4 h-4" />
-            Nova Simulação
-          </Button>
         </div>
+
+        {/* Lista de Configurações */}
+        <TabsContent value="lista">
+          <BacktestHistory 
+            onShowDetails={handleShowDetails}
+          />
+        </TabsContent>
 
         {/* Configuração */}
         <TabsContent value="configure" className="space-y-6">
@@ -595,7 +902,9 @@ export function BacktestPageClient() {
                 initialConfig={stableInitialConfig}
                 onConfigChange={handleConfigChange}
                 onRunBacktest={handleRunBacktest}
+                onSaveConfig={handleSaveConfig}
                 isRunning={isRunning}
+                isSaving={isSaving}
               />
             </div>
 
@@ -623,7 +932,7 @@ export function BacktestPageClient() {
                       <h4 className="font-semibold">Como funciona:</h4>
                     </div>
                     <ul className="space-y-1 text-xs text-muted-foreground">
-                      <li>• Simula aportes mensais regulares no primeiro dia do mês</li>
+                      <li>• Simula aportes mensais regulares ou <strong>apenas capital inicial</strong></li>
                       <li>• <strong>Rebalanceamento mensal automático</strong> da carteira</li>
                       <li>• Calcula métricas de risco e retorno</li>
                       <li>• Considera dados históricos reais</li>
@@ -668,7 +977,21 @@ export function BacktestPageClient() {
 
         {/* Resultados */}
         <TabsContent value="results">
-          {currentResult ? (
+          {isLoadingResults ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <div className="relative w-16 h-16 mx-auto mb-4">
+                  <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
+                  <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <BarChart3 className="absolute inset-0 m-auto w-8 h-8 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Carregando resultados...</h3>
+                <p className="text-muted-foreground">
+                  Buscando os dados do backtest
+                </p>
+              </CardContent>
+            </Card>
+          ) : currentResult ? (
             <BacktestResults 
               result={currentResult} 
               config={currentConfig}
@@ -682,7 +1005,10 @@ export function BacktestPageClient() {
                 <p className="text-muted-foreground mb-4">
                   Configure sua carteira e execute uma simulação para ver os resultados
                 </p>
-                <Button onClick={() => setActiveTab('configure')}>
+                <Button onClick={() => {
+                  updateUrl('configure', (currentConfig as any)?.id);
+                  setActiveTab('configure');
+                }}>
                   <Settings className="w-4 h-4 mr-2" />
                   Ir para Configuração
                 </Button>
@@ -716,5 +1042,6 @@ export function BacktestPageClient() {
         </TabsContent>
       </Tabs>
     </div>
+    </>
   );
 }

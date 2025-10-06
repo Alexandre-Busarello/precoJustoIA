@@ -94,9 +94,9 @@ export async function safeTransaction<T>(
         operation.toString()
     });
     
-    // Invalidar cache das tabelas afetadas se especificado (assíncrono, não bloqueia)
+    // Invalidar cache das tabelas afetadas se especificado
     if (options?.affectedTables && options.affectedTables.length > 0) {
-      SmartQueryCache.invalidateCacheForTables(options.affectedTables);
+      await SmartQueryCache.invalidateCacheForTables(options.affectedTables);
       console.log(`🗑️ Cache sendo invalidado para transação '${transactionName}': ${options.affectedTables.join(', ')}`);
     }
     
@@ -127,9 +127,9 @@ export async function safeWrite<T>(
     // Executar operação de escrita
     const result = await withPrismaRetry(operation);
     
-    // Invalidar cache das tabelas afetadas (assíncrono, não bloqueia)
+    // Invalidar cache das tabelas afetadas
     if (affectedTables.length > 0) {
-      SmartQueryCache.invalidateCacheForTables(affectedTables);
+      await SmartQueryCache.invalidateCacheForTables(affectedTables);
       console.log(`✍️ Operação '${operationName}' executada, cache sendo invalidado: ${affectedTables.join(', ')}`);
     }
     

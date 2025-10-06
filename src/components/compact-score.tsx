@@ -10,10 +10,10 @@ import { Crown } from 'lucide-react';
 interface OverallScore {
   score: number;
   grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
-  classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Muito Fraco';
+  classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
   strengths: string[];
   weaknesses: string[];
-  recommendation: 'Compra Forte' | 'Compra' | 'Neutro' | 'Venda' | 'Venda Forte';
+  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssimo';
 }
 
 interface CompactScoreProps {
@@ -84,15 +84,15 @@ function CompactScoreGauge({ score, grade }: { score: number; grade: string }) {
 function RecommendationBadge({ recommendation }: { recommendation: string }) {
   const getRecommendationStyle = (rec: string) => {
     switch (rec) {
-      case 'Compra Forte':
+      case 'Empresa Excelente':
         return { variant: 'default' as const, className: 'bg-green-600 text-white text-xs' };
-      case 'Compra':
+      case 'Empresa Boa':
         return { variant: 'default' as const, className: 'bg-green-500 text-white text-xs' };
-      case 'Neutro':
+      case 'Empresa Regular':
         return { variant: 'secondary' as const, className: 'bg-yellow-500 text-white text-xs' };
-      case 'Venda':
+      case 'Empresa Fraca':
         return { variant: 'destructive' as const, className: 'bg-red-500 text-white text-xs' };
-      case 'Venda Forte':
+      case 'Empresa Péssimo':
         return { variant: 'destructive' as const, className: 'bg-red-600 text-white text-xs' };
       default:
         return { variant: 'secondary' as const, className: 'text-xs' };
@@ -158,7 +158,7 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn }: Co
         <p className="text-sm text-center text-muted-foreground mb-4">
           Bom
         </p>
-        <RecommendationBadge recommendation="Compra" />
+        <RecommendationBadge recommendation="Empresa Boa" />
       </div>
 
       {/* Overlay para Premium/Login */}

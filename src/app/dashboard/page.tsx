@@ -493,7 +493,7 @@ export default function Dashboard() {
                     <div>
                       <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-blue-600" />
-                        Análises Recomendadas
+                        Boas Empresas para Analisar
                         {companiesFromCache && (
                           <Badge variant="outline" className="ml-2 text-xs bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 font-normal">
                             Cache
@@ -563,11 +563,11 @@ export default function Dashboard() {
 
                             {/* Recomendação */}
                             <div className="text-right">
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Recomendação</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Classificação</p>
                               <p className={`text-sm font-bold ${
-                                company.recommendation === 'Compra Forte' ? 'text-green-600 dark:text-green-400' :
-                                company.recommendation === 'Compra' ? 'text-green-500 dark:text-green-400' :
-                                company.recommendation === 'Neutro' ? 'text-yellow-600 dark:text-yellow-400' :
+                                company.recommendation === 'Empresa Excelente' ? 'text-green-600 dark:text-green-400' :
+                                company.recommendation === 'Empresa Boa' ? 'text-green-500 dark:text-green-400' :
+                                company.recommendation === 'Empresa Regular' ? 'text-yellow-600 dark:text-yellow-400' :
                                 'text-red-500 dark:text-red-400'
                               }`}>
                                 {company.recommendation}
@@ -594,7 +594,7 @@ export default function Dashboard() {
                 <CardContent className="p-6 flex items-center justify-center">
                   <div className="flex items-center gap-2 text-slate-500">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                    <span className="text-sm">Carregando análises recomendadas...</span>
+                    <span className="text-sm">Carregando análises...</span>
                   </div>
               </CardContent>
             </Card>

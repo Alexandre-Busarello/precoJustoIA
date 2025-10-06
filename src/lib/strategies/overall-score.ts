@@ -5,10 +5,10 @@ import { toNumber } from './base-strategy';
 export interface OverallScore {
   score: number; // Score de 0-100
   grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
-  classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Muito Fraco';
+  classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
   strengths: string[];
   weaknesses: string[];
-  recommendation: 'Compra Forte' | 'Compra' | 'Neutro' | 'Venda' | 'Venda Forte';
+  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssimo';
   statementsAnalysis?: StatementsAnalysis; // Análise das demonstrações financeiras
 }
 
@@ -69,6 +69,266 @@ export interface StatementsAnalysis {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   companyStrength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
   contextualFactors: string[];
+}
+
+// === FUNÇÃO DE RECONCILIAÇÃO: REMOVE CONTRADIÇÕES ENTRE PONTOS FORTES E ALERTAS ===
+// Prioriza sempre os alertas (red flags), removendo pontos fortes contraditórios
+// Filosofia: Empresas de qualidade devem ter análise conservadora e pessimista
+function reconcileContradictions(
+  positiveSignals: string[],
+  redFlags: string[],
+  metrics: AverageMetrics
+): { reconciledSignals: string[]; removedCount: number } {
+  const reconciled = [...positiveSignals];
+  const toRemove: number[] = [];
+
+  // Mapeamento de contradições: quando há um alerta, remove pontos fortes específicos
+  const contradictionRules = [
+    // 1. ENDIVIDAMENTO: Se endividamento é alto, NENHUM aspecto de liquidez/capacidade é válido
+    {
+      redFlagKeywords: ['Endividamento muito alto', 'Endividamento crítico', 'Endividamento alto'],
+      positiveKeywordsToRemove: [
+        'Facilidade para pagar juros',
+        'Consegue pagar juros',
+        'Boa capacidade de pagamento',
+        'Endividamento controlado',
+        'Endividamento baixo',
+        'Liquidez imediata boa',  // NOVO: liquidez de curto prazo não importa com endividamento estrutural alto
+        'Liquidez adequada',
+        'Capital de giro saudável',  // NOVO: capital de giro não resolve endividamento alto
+        'Capital de giro positivo',
+        'Boa liquidez'
+      ]
+    },
+    
+    // 2. MARGENS: Se margem líquida é baixa, a operação não pode ser "muito lucrativa" nem "geração de caixa excelente"
+    {
+      redFlagKeywords: ['Margem de lucro baixa', 'Margem líquida baixa'],
+      positiveKeywordsToRemove: [
+        'Operação muito lucrativa',
+        'Operação lucrativa',
+        'Excelente margem',
+        'Boa margem',
+        'Boa geração de caixa',  // NOVO: margens baixas contradizem boa geração de caixa
+        'Sobra muito dinheiro',  // NOVO: se margem é baixa, não "sobra muito"
+        'Fluxo de caixa forte',
+        'Excelente conversão em caixa'
+      ]
+    },
+    
+    // 3. RENTABILIDADE: Se ROE/ROA são baixos, não há "rentabilidade excepcional" nem "qualidade"
+    {
+      redFlagKeywords: ['Rentabilidade baixa', 'Baixa eficiência dos ativos', 'Margem de lucro baixa'],
+      positiveKeywordsToRemove: [
+        'Rentabilidade excepcional',
+        'Rentabilidade excelente',
+        'Boa rentabilidade',
+        'Eficiência dos ativos',
+        'Qualidade dos lucros',  // NOVO: rentabilidade baixa contradiz qualidade
+        'Lucros de qualidade',
+        'Lucro vira dinheiro',  // NOVO: mesmo virando dinheiro, lucro baixo é problema
+        'Excelente qualidade dos lucros'
+      ]
+    },
+    
+    // 4. CRESCIMENTO: Se lucros estão em queda, NENHUM tipo de crescimento é válido
+    {
+      redFlagKeywords: [
+        'Lucros em queda',
+        'Receitas em queda',
+        'Crescimento negativo',
+        'Queda de receita',
+        'Queda de lucros',
+        'Crescimento sem lucro'  // NOVO: crescimento de vendas sem lucro
+      ],
+      positiveKeywordsToRemove: [
+        'Crescimento sustentável',
+        'Crescimento forte',
+        'Crescimento consistente',
+        'Boa expansão',
+        'Bom crescimento',
+        'Crescimento acelerado',  // NOVO: crescimento de vendas não importa se lucros caem
+        'Vendas crescem',  // NOVO: vendas crescendo não é positivo se lucros caem
+        'Receitas em expansão',
+        'Expansão de vendas',
+        'Boa geração de caixa',  // NOVO: lucros em queda contradizem boa geração
+        'Sobra muito dinheiro',  // NOVO: lucros em queda indicam que não sobra
+        'Fluxo de caixa livre alto',
+        'Caixa livre abundante',
+        'Qualidade dos lucros',  // NOVO: se lucros caem, qualidade não importa
+        'Lucro vira dinheiro',  // NOVO: irrelevante se lucros estão caindo
+        'Lucros sólidos'
+      ]
+    },
+    
+    // 5. EFICIÊNCIA: Se recursos são mal aproveitados, não há "eficiência"
+    {
+      redFlagKeywords: ['Recursos mal aproveitados', 'Ativos ociosos', 'Baixo giro de ativos'],
+      positiveKeywordsToRemove: [
+        'Eficiência operacional',
+        'Uso eficiente',
+        'Boa gestão de ativos',
+        'Ativos produtivos'
+      ]
+    },
+    
+    // 6. ESTABILIDADE: Se há instabilidade, não pode haver "consistência" ou "previsibilidade"
+    {
+      redFlagKeywords: [
+        'Lucratividade instável',
+        'Resultados voláteis',
+        'Margem instável',
+        'Receitas irregulares',
+        'Margens de lucro variam muito'  // NOVO: variação de margens
+      ],
+      positiveKeywordsToRemove: [
+        'Resultados consistentes',
+        'Margem estável',
+        'Receita previsível',
+        'Resultados previsíveis',
+        'Vendas relativamente previsíveis',  // NOVO: instabilidade de lucro suprime previsibilidade de vendas
+        'Vendas previsíveis',
+        'Receitas consistentes',
+        'Estabilidade operacional'
+      ]
+    },
+    
+    // 7. LIQUIDEZ: Se há problemas de liquidez, não pode haver "boa capacidade"
+    {
+      redFlagKeywords: [
+        'Dificuldade para pagar contas',
+        'Liquidez baixa',
+        'Problemas de caixa',
+        'Capital de giro negativo'
+      ],
+      positiveKeywordsToRemove: [
+        'Boa capacidade de pagamento',
+        'Liquidez imediata boa',
+        'Capital de giro saudável',
+        'Boa liquidez'
+      ]
+    },
+    
+    // 8. QUALIDADE DOS LUCROS: Se lucros são de baixa qualidade, não pode haver "lucros sólidos"
+    {
+      redFlagKeywords: [
+        'Qualidade dos lucros questionável',
+        'Dependência de resultados não operacionais',
+        'Lucros artificiais',
+        'Lucros não recorrentes'
+      ],
+      positiveKeywordsToRemove: [
+        'Lucros de qualidade',
+        'Lucros recorrentes',
+        'Lucros consistentes',
+        'Base sólida de lucros'
+      ]
+    },
+    
+    // 9. FLUXO DE CAIXA: Se há problemas de caixa, não pode haver "geração sólida"
+    {
+      redFlagKeywords: [
+        'Fluxo de caixa negativo',
+        'Queima de caixa',
+        'Caixa deteriorando',
+        'Problemas de conversão'
+      ],
+      positiveKeywordsToRemove: [
+        'Geração sólida de caixa',
+        'Fluxo de caixa forte',
+        'Boa conversão em caixa',
+        'Caixa robusto'
+      ]
+    }
+  ];
+
+  // Aplicar regras de contradição
+  for (const rule of contradictionRules) {
+    // Verificar se algum red flag corresponde a esta regra
+    const hasMatchingRedFlag = redFlags.some(flag => 
+      rule.redFlagKeywords.some(keyword => flag.includes(keyword))
+    );
+
+    if (hasMatchingRedFlag) {
+      // Marcar para remoção todos os pontos fortes que contradizem este alerta
+      reconciled.forEach((signal, index) => {
+        const shouldRemove = rule.positiveKeywordsToRemove.some(keyword => 
+          signal.includes(keyword)
+        );
+        
+        if (shouldRemove && !toRemove.includes(index)) {
+          toRemove.push(index);
+          console.log(`❌ Removendo ponto forte contraditório: "${signal.substring(0, 60)}..."`);
+          console.log(`   Motivo: Alerta sobre ${rule.redFlagKeywords[0]}`);
+        }
+      });
+    }
+  }
+
+  // CASOS ESPECIAIS: Verificações adicionais baseadas em métricas específicas
+  
+  // Se D/E > 2x e Interest Coverage alto, remover "facilidade para pagar juros"
+  if (metrics.debtToEquity > 2.0 && metrics.interestCoverage >= 8) {
+    reconciled.forEach((signal, index) => {
+      if (signal.includes('Facilidade para pagar juros') && !toRemove.includes(index)) {
+        toRemove.push(index);
+        console.log(`❌ Removendo "Facilidade para pagar juros" - endividamento muito alto (${metrics.debtToEquity.toFixed(2)}x) suprime esta vantagem`);
+      }
+    });
+  }
+  
+  // Se margem operacional > 15% mas margem líquida < 5%, remover "operação muito lucrativa"
+  if (metrics.operatingMargin >= 0.15 && metrics.netMargin < 0.05) {
+    reconciled.forEach((signal, index) => {
+      if (signal.includes('Operação muito lucrativa') && !toRemove.includes(index)) {
+        toRemove.push(index);
+        console.log(`❌ Removendo "Operação muito lucrativa" - margem líquida baixa (${(metrics.netMargin * 100).toFixed(1)}%) indica que lucro operacional não se converte em lucro líquido`);
+      }
+    });
+  }
+  
+  // COMBINAÇÃO CRÍTICA: Endividamento alto + Lucros em queda = Remover TODOS os pontos sobre caixa/dividendos
+  const hasHighDebt = redFlags.some(flag => 
+    flag.includes('Endividamento muito alto') || flag.includes('Endividamento crítico')
+  );
+  const hasFallingProfits = redFlags.some(flag => 
+    flag.includes('Lucros em queda') || flag.includes('Crescimento sem lucro')
+  );
+  
+  if (hasHighDebt && hasFallingProfits) {
+    reconciled.forEach((signal, index) => {
+      const isCashRelated = signal.includes('caixa') || 
+                           signal.includes('Sobra') || 
+                           signal.includes('dividendo') ||
+                           signal.includes('Fluxo de caixa livre');
+      if (isCashRelated && !toRemove.includes(index)) {
+        toRemove.push(index);
+        console.log(`❌ Removendo ponto sobre caixa/dividendos - combinação crítica: endividamento alto + lucros em queda`);
+      }
+    });
+  }
+  
+  // MARGEM BAIXA + LUCROS EM QUEDA: Remover qualquer ponto sobre geração de valor
+  const hasLowMargins = redFlags.some(flag => flag.includes('Margem de lucro baixa'));
+  if (hasLowMargins && hasFallingProfits) {
+    reconciled.forEach((signal, index) => {
+      const isValueGeneration = signal.includes('geração') || 
+                               signal.includes('Sobra') ||
+                               signal.includes('lucrativ');
+      if (isValueGeneration && !toRemove.includes(index)) {
+        toRemove.push(index);
+        console.log(`❌ Removendo ponto sobre geração de valor - combinação crítica: margens baixas + lucros em queda`);
+      }
+    });
+  }
+
+  // Remover os índices marcados (de trás para frente para não alterar índices)
+  const filtered = reconciled.filter((_, index) => !toRemove.includes(index));
+  const removedCount = toRemove.length;
+  
+  console.log(`📊 Reconciliação: ${positiveSignals.length} pontos fortes → ${filtered.length} após remoção de ${removedCount} contradições`);
+  
+  return { reconciledSignals: filtered, removedCount };
 }
 
 // === ANÁLISE INTELIGENTE BASEADA EM MÉDIAS E BENCHMARKS SETORIAIS ===
@@ -173,6 +433,13 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
     positiveSignals.push(...analysis.positiveSignals);
   });
 
+  // === RECONCILIAÇÃO: REMOVER PONTOS FORTES CONTRADITÓRIOS AOS ALERTAS ===
+  // Como priorizamos empresas de qualidade, devemos ser pessimistas na análise
+  // Alertas sempre suprimem pontos fortes contraditórios
+  const reconciliationResult = reconcileContradictions(positiveSignals, redFlags, averageMetrics);
+  const reconciledPositiveSignals = reconciliationResult.reconciledSignals;
+  const contradictionsRemoved = reconciliationResult.removedCount;
+
   // === NORMALIZAÇÃO DO SCORE ===
   // Converter scoreAdjustments para scores de 0-100 e aplicar pesos
   let weightedScore = 0;
@@ -202,6 +469,63 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   // === GARANTIR QUE O SCORE ESTÁ ENTRE 0-100 ===
   let finalScore = Math.max(0, Math.min(100, Math.round(weightedScore)));
 
+  // === AJUSTE DO SCORE BASEADO EM CONTRADIÇÕES E PROPORÇÃO DE ALERTAS ===
+  // Cada contradição removida indica um problema estrutural que estava sendo mascarado
+  // NOVA LÓGICA: Penalização muito mais agressiva baseada na proporção de alertas vs pontos fortes
+  
+  const totalSignals = redFlags.length + reconciledPositiveSignals.length;
+  const alertRatio = totalSignals > 0 ? redFlags.length / totalSignals : 0;
+  
+  console.log(`📊 Proporção de Alertas: ${redFlags.length} alertas / ${totalSignals} sinais totais = ${(alertRatio * 100).toFixed(1)}%`);
+  
+  let additionalPenalty = 0;
+  
+  // PENALIZAÇÃO POR ALTA PROPORÇÃO DE ALERTAS
+  if (alertRatio >= 0.85 && redFlags.length >= 6) {
+    // 85%+ de alertas com 6+ problemas = empresa Péssimo
+    additionalPenalty = 30;
+    console.log(`🚨 EMPRESA Péssimo: ${(alertRatio * 100).toFixed(0)}% de alertas (${redFlags.length} problemas) - penalização crítica de -30 pontos`);
+  } else if (alertRatio >= 0.75 && redFlags.length >= 5) {
+    // 75%+ de alertas com 5+ problemas = empresa fraca
+    additionalPenalty = 25;
+    console.log(`⚠️ EMPRESA FRACA: ${(alertRatio * 100).toFixed(0)}% de alertas (${redFlags.length} problemas) - penalização severa de -25 pontos`);
+  } else if (alertRatio >= 0.65 && redFlags.length >= 4) {
+    // 65%+ de alertas com 4+ problemas = empresa problemática
+    additionalPenalty = 20;
+    console.log(`⚠️ EMPRESA PROBLEMÁTICA: ${(alertRatio * 100).toFixed(0)}% de alertas (${redFlags.length} problemas) - penalização de -20 pontos`);
+  } else if (alertRatio >= 0.50 && redFlags.length >= 3) {
+    // 50%+ de alertas com 3+ problemas = empresa mediana com problemas
+    additionalPenalty = 15;
+    console.log(`⚠️ PROBLEMAS SIGNIFICATIVOS: ${(alertRatio * 100).toFixed(0)}% de alertas (${redFlags.length} problemas) - penalização de -15 pontos`);
+  }
+  
+  // PENALIZAÇÃO POR CONTRADIÇÕES REMOVIDAS
+  if (contradictionsRemoved > 0) {
+    let contradictionPenalty = 0;
+    
+    if (contradictionsRemoved >= 5) {
+      // 5+ contradições: empresa com sérios problemas estruturais mascarados
+      contradictionPenalty = 20;
+      console.log(`⚠️ PENALIZAÇÃO SEVERA: ${contradictionsRemoved} contradições removidas indicam problemas graves mascarados`);
+    } else if (contradictionsRemoved >= 3) {
+      // 3-4 contradições: problemas significativos
+      contradictionPenalty = 15;
+      console.log(`⚠️ PENALIZAÇÃO MODERADA: ${contradictionsRemoved} contradições removidas`);
+    } else if (contradictionsRemoved >= 1) {
+      // 1-2 contradições: problemas menores
+      contradictionPenalty = 10;
+      console.log(`⚠️ PENALIZAÇÃO LEVE: ${contradictionsRemoved} contradições removidas`);
+    }
+    
+    additionalPenalty += contradictionPenalty;
+  }
+  
+  // APLICAR PENALIZAÇÃO TOTAL
+  if (additionalPenalty > 0) {
+    finalScore = Math.max(0, finalScore - additionalPenalty);
+    console.log(`Score ajustado após análise de proporção: ${finalScore} (penalização total: -${additionalPenalty} pontos)`);
+  }
+
   // === PENALIZAÇÕES CRÍTICAS DIRETAS ===
   // Aplicar penalizações mínimas garantidas para problemas críticos
   const incomeCompositionAnalysis = analyses.incomeComposition;
@@ -218,6 +542,46 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   // === DETERMINAR FORÇA DA EMPRESA BASEADA NAS MÉDIAS ===
   const companyStrength = assessCompanyStrengthFromAverages(averageMetrics, benchmarks, sectorContext);
   console.log('Company Strength:', companyStrength);
+
+  // === VERIFICAÇÃO DE PROBLEMAS CRÍTICOS COMBINADOS ===
+  // Certas combinações de problemas são tão graves que o score deve ser limitado
+  const hasCriticalDebt = redFlags.some(flag => flag.includes('Endividamento muito alto') || flag.includes('Endividamento crítico'));
+  const hasFallingProfits = redFlags.some(flag => flag.includes('Lucros em queda'));
+  const hasLowProfitability = redFlags.some(flag => flag.includes('Rentabilidade baixa'));
+  const hasLowMargins = redFlags.some(flag => flag.includes('Margem de lucro baixa'));
+  const hasUnstableProfits = redFlags.some(flag => flag.includes('Lucratividade instável'));
+  
+  // Combinação CRÍTICA 1: Endividamento alto + Lucros em queda + Rentabilidade baixa
+  if (hasCriticalDebt && hasFallingProfits && hasLowProfitability) {
+    if (finalScore > 40) {
+      console.log(`🚨 LIMITAÇÃO DE SCORE: Combinação crítica detectada (endividamento + lucros em queda + baixa rentabilidade)`);
+      console.log(`   Score limitado de ${finalScore} para 40`);
+      finalScore = 40;
+    }
+  }
+  
+  // Combinação CRÍTICA 2: Margens baixas + Lucros em queda + Instabilidade
+  if (hasLowMargins && hasFallingProfits && hasUnstableProfits) {
+    if (finalScore > 45) {
+      console.log(`🚨 LIMITAÇÃO DE SCORE: Combinação crítica detectada (margens baixas + lucros em queda + instabilidade)`);
+      console.log(`   Score limitado de ${finalScore} para 45`);
+      finalScore = 45;
+    }
+  }
+  
+  // Se tem 6+ alertas, score máximo deve ser 50
+  if (redFlags.length >= 6 && finalScore > 50) {
+    console.log(`🚨 LIMITAÇÃO DE SCORE: ${redFlags.length} alertas graves - score máximo permitido: 50`);
+    console.log(`   Score limitado de ${finalScore} para 50`);
+    finalScore = 50;
+  }
+  
+  // Se tem 8+ alertas, score máximo deve ser 35
+  if (redFlags.length >= 8 && finalScore > 35) {
+    console.log(`🚨 LIMITAÇÃO DE SCORE: ${redFlags.length} alertas graves - score máximo permitido: 35`);
+    console.log(`   Score limitado de ${finalScore} para 35`);
+    finalScore = 35;
+  }
 
   // === DETERMINAR NÍVEL DE RISCO BASEADO NO SCORE FINAL ===
   let riskLevel: StatementsAnalysis['riskLevel'] = 'LOW';
@@ -238,13 +602,16 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
     riskLevel,
     companyStrength,
     redFlagsCount: redFlags.length,
-    positiveSignalsCount: positiveSignals.length
+    positiveSignalsCount: positiveSignals.length,
+    reconciledPositiveSignalsCount: reconciledPositiveSignals.length,
+    contradictionsRemoved: contradictionsRemoved,
+    scoreAdjustment: contradictionsRemoved > 0 ? `Penalizado por ${contradictionsRemoved} contradições` : 'Nenhuma contradição'
   });
 
   return {
     score: finalScore,
     redFlags: redFlags.filter(Boolean).slice(0, 8), // Máximo 8 red flags mais relevantes
-    positiveSignals: positiveSignals.filter(Boolean).slice(0, 6), // Máximo 6 sinais positivos
+    positiveSignals: reconciledPositiveSignals.filter(Boolean).slice(0, 6), // Máximo 6 sinais positivos (após reconciliação)
     riskLevel,
     companyStrength,
     contextualFactors: contextualFactors.filter(Boolean).slice(0, 3)
@@ -2969,47 +3336,47 @@ export function calculateOverallScore(strategies: {
   if (finalScore >= 95) {
     grade = 'A+';
     classification = 'Excelente';
-    recommendation = 'Compra Forte';
+    recommendation = 'Empresa Excelente';
   } else if (finalScore >= 90) {
     grade = 'A';
     classification = 'Excelente';
-    recommendation = 'Compra Forte';
+    recommendation = 'Empresa Excelente';
   } else if (finalScore >= 85) {
     grade = 'A-';
     classification = 'Muito Bom';
-    recommendation = 'Compra';
+    recommendation = 'Empresa Excelente';
   } else if (finalScore >= 80) {
     grade = 'B+';
     classification = 'Muito Bom';
-    recommendation = 'Compra';
+    recommendation = 'Empresa Boa';
   } else if (finalScore >= 75) {
     grade = 'B';
     classification = 'Bom';
-    recommendation = 'Compra';
+    recommendation = 'Empresa Boa';
   } else if (finalScore >= 70) {
     grade = 'B-';
     classification = 'Bom';
-    recommendation = 'Neutro';
+    recommendation = 'Empresa Boa';
   } else if (finalScore >= 65) {
     grade = 'C+';
     classification = 'Regular';
-    recommendation = 'Neutro';
+    recommendation = 'Empresa Regular';
   } else if (finalScore >= 60) {
     grade = 'C';
     classification = 'Regular';
-    recommendation = 'Neutro';
+    recommendation = 'Empresa Regular';
   } else if (finalScore >= 50) {
     grade = 'C-';
     classification = 'Regular';
-    recommendation = 'Venda';
+    recommendation = 'Empresa Regular';
   } else if (finalScore >= 30) {
     grade = 'D';
     classification = 'Fraco';
-    recommendation = 'Venda';
+    recommendation = 'Empresa Fraca';
   } else {
     grade = 'F';
-    classification = 'Muito Fraco';
-    recommendation = 'Venda Forte';
+    classification = 'Péssimo';
+    recommendation = 'Empresa Péssimo';
   }
 
   return {

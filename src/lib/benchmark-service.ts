@@ -41,6 +41,8 @@ async function fetchCDIData(startDate: Date, endDate: Date): Promise<BenchmarkDa
     }
 
     const data = await response.json();
+
+    console.log('🔍 Data do CDI:', data);
     
     // Transformar dados para o formato padronizado
     // API retorna: [{ data: "dd/MM/yyyy", valor: "x.xx" }]

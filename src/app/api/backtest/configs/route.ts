@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeQueryWithParams, safeTransaction, safeWrite } from '@/lib/prisma-wrapper';
+import { prisma, safeWrite } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 
 // GET /api/backtest/configs - Listar configurações do usuário
@@ -40,28 +40,28 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const skip = (page - 1) * limit;
 
-    const configs = await safeQueryWithParams('get-backtest-configs', () =>
-      prisma.backtestConfig.findMany({
-        where: { userId: currentUser.id },
-        include: { 
-          assets: true, 
-          results: {
-            orderBy: { calculatedAt: 'desc' } // Mais recente primeiro
-          },
-          transactions: {
-            orderBy: [{ month: 'asc' }, { id: 'asc' }] // Ordenar por month e depois por ID (ordem de criação)
-          }
+    // Contar total de configurações
+    const total = await prisma.backtestConfig.count({
+      where: { userId: currentUser.id }
+    });
+
+    const configs = await prisma.backtestConfig.findMany({
+      where: { userId: currentUser.id },
+      include: { 
+        assets: true, 
+        results: {
+          orderBy: { calculatedAt: 'desc' } // Mais recente primeiro
         },
-        orderBy: { createdAt: 'desc' }, // Mais recentes primeiro, independente de ter resultados
-        skip,
-        take: limit
-      }),
-      {
-        userId: currentUser.id,
-        page,
-        limit
-      }
-    );
+        transactions: {
+          orderBy: [{ month: 'asc' }, { id: 'asc' }] // Ordenar por month e depois por ID (ordem de criação)
+        }
+      },
+      orderBy: { createdAt: 'desc' }, // Mais recentes primeiro, independente de ter resultados
+      skip,
+      take: limit
+    });
+
+    const totalPages = Math.ceil(total / limit);
 
     if (configs.length > 0) {
       if (configs[0].results && configs[0].results.length > 0) {
@@ -83,16 +83,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Converter Decimals para numbers nos resultados
+    // Converter Decimals para numbers e aplicar cap de 10% no DY nos resultados
     const processedConfigs = configs.map(config => ({
       ...config,
       initialCapital: Number(config.initialCapital),
       monthlyContribution: Number(config.monthlyContribution),
-      assets: config.assets.map(asset => ({
-        ...asset,
-        targetAllocation: Number(asset.targetAllocation),
-        averageDividendYield: (asset as any).averageDividendYield ? Number((asset as any).averageDividendYield) : null
-      })),
+      assets: config.assets.map(asset => {
+        const dy = (asset as any).averageDividendYield ? Number((asset as any).averageDividendYield) : null;
+        return {
+          ...asset,
+          targetAllocation: Number(asset.targetAllocation),
+          // Aplicar cap de 10% no dividend yield ao retornar
+          averageDividendYield: dy !== null ? Math.min(dy, 0.10) : null
+        };
+      }),
       results: config.results.map(result => ({
         ...result,
         totalReturn: Number(result.totalReturn),
@@ -124,7 +128,13 @@ export async function GET(request: NextRequest) {
     }));
 
 
-    return NextResponse.json({ configs: processedConfigs });
+    return NextResponse.json({ 
+      configs: processedConfigs,
+      total,
+      totalPages,
+      page,
+      limit
+    });
 
   } catch (error) {
     console.error('Erro ao buscar configurações de backtest:', error);
@@ -231,7 +241,7 @@ function validateBacktestConfigData(data: any): string[] {
     errors.push('Capital inicial deve ser positivo');
   }
 
-  if (!data.monthlyContribution || data.monthlyContribution <= 0) {
+  if ((!data.monthlyContribution && data.monthlyContribution !== 0) || data.monthlyContribution < 0) {
     errors.push('Aporte mensal deve ser positivo');
   }
 

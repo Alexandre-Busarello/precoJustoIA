@@ -23,7 +23,7 @@ interface OverallScore {
   classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
   strengths: string[];
   weaknesses: string[];
-  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssimo';
+  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssima';
 }
 
 interface OverallScoreCardProps {
@@ -119,7 +119,7 @@ function RecommendationBadge({ recommendation }: { recommendation: string }) {
           className: 'bg-red-500 hover:bg-red-600 text-white',
           icon: AlertTriangle
         };
-      case 'Empresa Péssimo':
+      case 'Empresa Péssima':
         return {
           variant: 'destructive' as const,
           className: 'bg-red-600 hover:bg-red-700 text-white',

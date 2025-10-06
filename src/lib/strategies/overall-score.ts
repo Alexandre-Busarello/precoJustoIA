@@ -8,7 +8,7 @@ export interface OverallScore {
   classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
   strengths: string[];
   weaknesses: string[];
-  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssimo';
+  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssima';
   statementsAnalysis?: StatementsAnalysis; // Análise das demonstrações financeiras
 }
 
@@ -482,9 +482,9 @@ export function analyzeFinancialStatements(data: FinancialStatementsData): State
   
   // PENALIZAÇÃO POR ALTA PROPORÇÃO DE ALERTAS
   if (alertRatio >= 0.85 && redFlags.length >= 6) {
-    // 85%+ de alertas com 6+ problemas = empresa Péssimo
+    // 85%+ de alertas com 6+ problemas = Empresa Péssima
     additionalPenalty = 30;
-    console.log(`🚨 EMPRESA Péssimo: ${(alertRatio * 100).toFixed(0)}% de alertas (${redFlags.length} problemas) - penalização crítica de -30 pontos`);
+    console.log(`🚨 Empresa Péssima: ${(alertRatio * 100).toFixed(0)}% de alertas (${redFlags.length} problemas) - penalização crítica de -30 pontos`);
   } else if (alertRatio >= 0.75 && redFlags.length >= 5) {
     // 75%+ de alertas com 5+ problemas = empresa fraca
     additionalPenalty = 25;
@@ -3376,7 +3376,7 @@ export function calculateOverallScore(strategies: {
   } else {
     grade = 'F';
     classification = 'Péssimo';
-    recommendation = 'Empresa Péssimo';
+    recommendation = 'Empresa Péssima';
   }
 
   return {

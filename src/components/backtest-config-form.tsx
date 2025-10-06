@@ -305,9 +305,9 @@ export function BacktestConfigForm({
   const removeAsset = async (ticker: string) => {
     setIsRemovingAsset(true);
     
-    // Se a config tem ID e está salva, usar o endpoint do backend
-    if (config.id && !config.id.startsWith('temp-')) {
-      try {
+    try {
+      // Se a config tem ID e está salva, usar o endpoint do backend
+      if (config.id && !config.id.startsWith('temp-')) {
         const response = await fetch(`/api/backtest/configs/${config.id}/assets?ticker=${ticker}`, {
           method: 'DELETE'
         });
@@ -340,33 +340,30 @@ export function BacktestConfigForm({
         });
 
         return;
-      } catch (error) {
-        console.error('Erro ao remover ativo:', error);
-        // Em caso de erro, continuar com lógica local abaixo
       }
-    }
 
-    // Fallback: lógica local (para configs não salvas ou em caso de erro)
-    const newAssets = config.assets.filter(a => a.ticker !== ticker);
-    
-    if (newAssets.length > 0) {
-      // Redistribuir alocações igualmente
-      const equalAllocation = 1 / newAssets.length;
-      newAssets.forEach(asset => {
-        asset.allocation = equalAllocation;
+      // Fallback: lógica local (para configs não salvas ou em caso de erro)
+      const newAssets = config.assets.filter(a => a.ticker !== ticker);
+      
+      if (newAssets.length > 0) {
+        // Redistribuir alocações igualmente
+        const equalAllocation = 1 / newAssets.length;
+        newAssets.forEach(asset => {
+          asset.allocation = equalAllocation;
+        });
+      }
+
+      setConfig(prev => ({ ...prev, assets: newAssets }));
+      
+      // Remover DY input do ativo removido
+      setDividendYieldInputs(prev => {
+        const newInputs = { ...prev };
+        delete newInputs[ticker];
+        return newInputs;
       });
+    } finally {
+      setIsRemovingAsset(false);
     }
-
-    setConfig(prev => ({ ...prev, assets: newAssets }));
-    
-    // Remover DY input do ativo removido
-    setDividendYieldInputs(prev => {
-      const newInputs = { ...prev };
-      delete newInputs[ticker];
-      return newInputs;
-    });
-    
-    setIsRemovingAsset(false);
   };
 
   // Atualizar alocação de um ativo

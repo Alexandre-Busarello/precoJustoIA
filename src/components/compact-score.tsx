@@ -13,7 +13,7 @@ interface OverallScore {
   classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
   strengths: string[];
   weaknesses: string[];
-  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssimo';
+  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssima';
 }
 
 interface CompactScoreProps {
@@ -92,7 +92,7 @@ function RecommendationBadge({ recommendation }: { recommendation: string }) {
         return { variant: 'secondary' as const, className: 'bg-yellow-500 text-white text-xs' };
       case 'Empresa Fraca':
         return { variant: 'destructive' as const, className: 'bg-red-500 text-white text-xs' };
-      case 'Empresa Péssimo':
+      case 'Empresa Péssima':
         return { variant: 'destructive' as const, className: 'bg-red-600 text-white text-xs' };
       default:
         return { variant: 'secondary' as const, className: 'text-xs' };

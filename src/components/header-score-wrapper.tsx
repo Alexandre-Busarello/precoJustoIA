@@ -13,7 +13,7 @@ interface OverallScore {
   classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
   strengths: string[];
   weaknesses: string[];
-  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssimo';
+  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssima';
 }
 
 interface HeaderScoreWrapperProps {

@@ -237,7 +237,7 @@ function validateBacktestConfigData(data: any): string[] {
     errors.push('Data de início deve ser anterior à data de fim');
   }
 
-  if (!data.initialCapital || data.initialCapital < 0) {
+  if ((!data.initialCapital && data.initialCapital !== 0) || data.initialCapital < 0) {
     errors.push('Capital inicial deve ser positivo');
   }
 

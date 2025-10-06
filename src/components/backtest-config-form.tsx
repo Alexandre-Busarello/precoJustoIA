@@ -422,7 +422,7 @@ export function BacktestConfigForm({
       }
     }
 
-    if (config.initialCapital < 0) {
+    if ((!config.initialCapital && config.initialCapital !== 0) || config.initialCapital < 0) {
       newErrors.initialCapital = 'Capital inicial deve ser positivo';
     }
 

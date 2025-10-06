@@ -3037,7 +3037,7 @@ export function calculateOverallScore(strategies: {
       } else if (strategies.graham.score < 60) {
         weaknesses.push('Fundamentos fracos');
       }
-    } else {
+    } else if (strategies.graham.fairValue) {
       // Penaliza com score baixo se preço incompatível
       const penalizedScore = strategies.graham.fairValue && strategies.graham.upside && strategies.graham.upside < 10 ? 20 : strategies.graham.score;
       const grahamContribution = penalizedScore * grahamWeight;
@@ -3105,7 +3105,7 @@ export function calculateOverallScore(strategies: {
       if (strategies.fcd.fairValue && strategies.fcd.upside && strategies.fcd.upside > 20) {
         strengths.push('Alto potencial de valorização');
       }
-    } else {
+    } else if (strategies.fcd.fairValue) {
       // Penaliza com score baixo se preço incompatível
       const penalizedScore = strategies.fcd.fairValue && strategies.fcd.upside && strategies.fcd.upside < 10 ? 20 : strategies.fcd.score;
       const fcdContribution = penalizedScore * fcdWeight;
@@ -3133,7 +3133,7 @@ export function calculateOverallScore(strategies: {
       } else if (strategies.gordon.score < 60) {
         weaknesses.push('Dividendos inconsistentes');
       }
-    } else {
+    } else if (strategies.gordon.fairValue) {
       // Penaliza com score baixo se preço incompatível
       const penalizedScore = strategies.gordon.fairValue && strategies.gordon.upside && strategies.gordon.upside < 15 ? 25 : strategies.gordon.score;
       const gordonContribution = penalizedScore * gordonWeight;

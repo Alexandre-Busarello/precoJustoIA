@@ -258,7 +258,7 @@ function validateBacktestParams(params: BacktestParams): string[] {
     }
   }
 
-  if (!params.initialCapital || params.initialCapital <= 0) {
+  if (!params.initialCapital || params.initialCapital < 0) {
     errors.push('Capital inicial deve ser positivo');
   }
 

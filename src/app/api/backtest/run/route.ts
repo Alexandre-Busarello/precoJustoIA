@@ -126,8 +126,8 @@ export async function POST(request: NextRequest) {
           allocation: Number(a.targetAllocation),
           averageDividendYield: (a as any).averageDividendYield ? Number((a as any).averageDividendYield) : undefined
         })),
-        startDate: config.startDate,
-        endDate: config.endDate,
+        startDate: new Date(config.startDate),
+        endDate: new Date(config.endDate),
         initialCapital: Number(config.initialCapital),
         monthlyContribution: Number(config.monthlyContribution),
         rebalanceFrequency: config.rebalanceFrequency as any

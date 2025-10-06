@@ -320,7 +320,7 @@ export class AdaptiveBacktestService {
     const pricesMap = new Map<string, PricePoint[]>();
     
     for (const ticker of tickers) {
-      let tickerPrices = historicalData
+      const tickerPrices = historicalData
         .filter(d => d.company.ticker === ticker)
         .map(d => ({
           date: d.date,

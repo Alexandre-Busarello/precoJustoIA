@@ -200,7 +200,14 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
 
   // Mostrar detalhes do backtest
   const showDetails = (item: BacktestHistoryItem) => {
-    if (!item.results || item.results.length === 0 || !onShowDetails) return;
+    // Se não tem resultados, redirecionar para abrir a configuração no formulário
+    if (!item.results || item.results.length === 0) {
+      router.push(`/backtest?configId=${item.id}`);
+      return;
+    }
+
+    // Se não tem callback, não pode mostrar os detalhes
+    if (!onShowDetails) return;
 
     // Pegar o primeiro (e único) resultado
     const result = item.results[0];
@@ -463,7 +470,7 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
 
               {/* Ações */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t">
-                {/* Botão Principal: Ver Detalhes ou Executar */}
+                {/* Botão Principal: Ver Detalhes ou Abrir Config */}
                 {item.results && item.results.length > 0 ? (
                   <Button
                     variant="default"
@@ -475,36 +482,16 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
                     Ver Detalhes
                   </Button>
                 ) : (
-                  <>  
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => showDetails(item)}
-                      className="flex-1 sm:flex-none"
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      Ver Detalhes
-                    </Button>
-                    {/* <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => rerunBacktest(item)}
-                      disabled={runningBacktest === item.id}
-                      className="flex-1 sm:flex-none"
-                    >
-                      {runningBacktest === item.id ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Executando...
-                        </>
-                      ) : (
-                        <>
-                          <BarChart3 className="w-4 h-4 mr-2" />
-                          Executar Simulação
-                        </>
-                      )}
-                    </Button> */}
-                  </>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => showDetails(item)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    <span className="hidden sm:inline">Abrir Configuração</span>
+                    <span className="sm:hidden">Abrir</span>
+                  </Button>
                 )}
                 
                 {/* Botão Secundário: Executar Novamente (apenas se já tem resultado) */}

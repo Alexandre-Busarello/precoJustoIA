@@ -294,13 +294,23 @@ export class AdaptiveBacktestService {
     startDate: Date,
     endDate: Date
   ): Promise<Map<string, PricePoint[]>> {
+    console.log('🔥🔥🔥 VERSÃO ATUALIZADA - getHistoricalPricesWithFallbacks v2.0 🔥🔥🔥');
     console.log('📈 Obtendo preços históricos com fallbacks...');
+    
+    // IMPORTANTE: Adicionar margem de 45 dias ao endDate para ter dados futuros disponíveis
+    // Isso permite usar o próximo preço quando o preço exato não está disponível
+    const endDateWithMargin = new Date(endDate);
+    endDateWithMargin.setDate(endDateWithMargin.getDate() + 45);
+    
+    console.log(`📊 Query SEM margem: ${startDate.toISOString().split('T')[0]} até ${endDate.toISOString().split('T')[0]}`);
+    console.log(`📊 Query COM margem (+45 dias): ${startDate.toISOString().split('T')[0]} até ${endDateWithMargin.toISOString().split('T')[0]}`);
+    console.log(`🔍 Tickers: ${tickers.join(', ')}`);
     
     const historicalData = await prisma.historicalPrice.findMany({
       where: {
         company: { ticker: { in: tickers } },
         interval: '1mo',
-        date: { gte: startDate, lte: endDate }
+        date: { gte: startDate, lte: endDateWithMargin }
       },
       include: { company: { select: { ticker: true } } },
       orderBy: [{ company: { ticker: 'asc' } }, { date: 'asc' }]
@@ -319,21 +329,38 @@ export class AdaptiveBacktestService {
         }))
         .filter(p => p.price > 0); // Filtrar preços inválidos
 
-      tickerPrices = this.fillMissingPrices(tickerPrices, startDate, endDate);
+      console.log(`🔍 ${ticker}: ${tickerPrices.length} preços RAW do banco`);
+      
+      // IMPORTANTE: NÃO usar fillMissingPrices para dados diários!
+      // O fillMissingPrices foi desenhado para dados mensais espaçados, não diários
+      // Ele cria preços FICTÍCIOS através de forward fill, o que distorce os resultados
+      // O getPriceForDateAdaptive() já faz a busca inteligente do preço mais próximo
+      console.log(`✅ ${ticker}: Usando dados RAW sem fillMissingPrices (evita preços fictícios)`);
       
       pricesMap.set(ticker, tickerPrices);
       
-      console.log(`📊 ${ticker}: ${tickerPrices.length} pontos processados`);
+      console.log(`📊 ${ticker}: ${tickerPrices.length} pontos FINAL`);
       
       if (tickerPrices.length > 0) {
-        console.log(`🔍 ${ticker} - Primeiro preço:`, {
-          date: tickerPrices[0].date.toISOString().split('T')[0],
-          price: tickerPrices[0].adjustedClose
-        });
-        console.log(`🔍 ${ticker} - Último preço:`, {
-          date: tickerPrices[tickerPrices.length - 1].date.toISOString().split('T')[0],
-          price: tickerPrices[tickerPrices.length - 1].adjustedClose
-        });
+        const firstDate = tickerPrices[0].date.toISOString().split('T')[0];
+        const lastDate = tickerPrices[tickerPrices.length - 1].date.toISOString().split('T')[0];
+        
+        console.log(`🔍 ${ticker} - Primeiro preço: ${firstDate} = R$ ${tickerPrices[0].adjustedClose.toFixed(2)}`);
+        console.log(`🔍 ${ticker} - Último preço: ${lastDate} = R$ ${tickerPrices[tickerPrices.length - 1].adjustedClose.toFixed(2)}`);
+        
+        // Verificar se temos dados de outubro/novembro 2025
+        const oct2025 = tickerPrices.find(p => p.date.toISOString().startsWith('2025-10'));
+        const nov2025 = tickerPrices.find(p => p.date.toISOString().startsWith('2025-11'));
+        
+        if (oct2025) {
+          console.log(`   ✅ ${ticker} TEM dados de OUTUBRO/2025: ${oct2025.date.toISOString().split('T')[0]} = R$ ${oct2025.adjustedClose.toFixed(2)}`);
+        } else {
+          console.log(`   ❌ ${ticker} NÃO TEM dados de outubro/2025`);
+        }
+        
+        if (nov2025) {
+          console.log(`   ✅ ${ticker} TEM dados de NOVEMBRO/2025: ${nov2025.date.toISOString().split('T')[0]} = R$ ${nov2025.adjustedClose.toFixed(2)}`);
+        }
         
         // Mostrar alguns preços do meio para debug
         if (tickerPrices.length > 5) {
@@ -550,7 +577,9 @@ export class AdaptiveBacktestService {
       const lastDayOfMonth = this.getLastDayOfMonth(firstDayOfMonth); // Último dia - para avaliação
       const isFirstMonth = i === 0;
       
-      console.log(`\n🔍 Processando mês ${i + 1} (índice ${i}) - ${firstDayOfMonth.toISOString().split('T')[0]}`);
+      console.log(`\n🔍 Processando mês ${i + 1} (índice ${i})`);
+      console.log(`   📅 Primeiro dia (aportes/compras): ${firstDayOfMonth.toISOString().split('T')[0]}`);
+      console.log(`   📅 Último dia (avaliação): ${lastDayOfMonth.toISOString().split('T')[0]}`);
       
       // Verificar quais ativos têm dados disponíveis nesta data
       const availableAssets = this.getAvailableAssetsForDate(
@@ -733,19 +762,36 @@ export class AdaptiveBacktestService {
 
       // 5. Avaliar carteira no ÚLTIMO DIA do mês (usar preços do último dia)
       let portfolioValueEndOfMonth = cashBalance; // Começar com o saldo em caixa
+      const isLastMonth = i === monthlyDates.length - 1;
       
-      if (i < 5) console.log(`\n📊 Avaliação da carteira no ÚLTIMO DIA do mês (${lastDayOfMonth.toISOString().split('T')[0]}):`);
+      if (i < 5 || isLastMonth) console.log(`\n📊 Avaliação da carteira no ÚLTIMO DIA do mês (${lastDayOfMonth.toISOString().split('T')[0]}):`);
+      if (isLastMonth) console.log(`   ⚠️ Este é o ÚLTIMO MÊS do backtest`);
       
+      let hasValidPricesForEndOfMonth = true;
       for (const [ticker, shares] of currentHoldings.entries()) {
         const prices = pricesData.get(ticker) || [];
-        const priceAtEndOfMonth = this.getPriceForDateAdaptive(prices, lastDayOfMonth);
+        let priceAtEndOfMonth = this.getPriceForDateAdaptive(prices, lastDayOfMonth);
+        const priceAtStartOfMonth = this.getPriceForDateAdaptive(prices, firstDayOfMonth) || 0;
+        
+        // CORREÇÃO: Se não há preço no fim do mês, usar preço do início (pode ser mês futuro/atual)
+        if (!priceAtEndOfMonth || priceAtEndOfMonth <= 0) {
+          if (isLastMonth) {
+            console.log(`   ⚠️ ${ticker}: Sem preço para fim do mês, usando preço do início`);
+          }
+          priceAtEndOfMonth = priceAtStartOfMonth;
+          hasValidPricesForEndOfMonth = false;
+        }
+        
+        // Se os preços são idênticos no último mês, pode ser problema de dados
+        if (isLastMonth && priceAtEndOfMonth === priceAtStartOfMonth && priceAtStartOfMonth > 0) {
+          console.log(`   ⚠️ ${ticker}: Preço início = fim (R$ ${priceAtStartOfMonth.toFixed(2)}) - pode não haver dados novos`);
+        }
         
         if (priceAtEndOfMonth && priceAtEndOfMonth > 0) {
           const valueAtEndOfMonth = shares * priceAtEndOfMonth;
           portfolioValueEndOfMonth += valueAtEndOfMonth;
           
-          if (i < 5) {
-            const priceAtStartOfMonth = this.getPriceForDateAdaptive(prices, firstDayOfMonth) || 0;
+          if (i < 5 || isLastMonth) {
             const assetReturn = priceAtStartOfMonth > 0 ? 
               ((priceAtEndOfMonth - priceAtStartOfMonth) / priceAtStartOfMonth) * 100 : 0;
             console.log(`   📈 ${ticker}: ${shares.toFixed(2)} ações × R$ ${priceAtEndOfMonth.toFixed(2)} = R$ ${valueAtEndOfMonth.toFixed(2)} (${assetReturn > 0 ? '+' : ''}${assetReturn.toFixed(2)}%)`);
@@ -753,9 +799,12 @@ export class AdaptiveBacktestService {
         }
       }
       
-      if (i < 5) {
+      if (i < 5 || isLastMonth) {
         console.log(`   💰 Caixa: R$ ${cashBalance.toFixed(2)}`);
         console.log(`   💰 Valor total fim do mês: R$ ${portfolioValueEndOfMonth.toFixed(2)}`);
+        if (isLastMonth && !hasValidPricesForEndOfMonth) {
+          console.log(`   ⚠️ Último mês pode ter rentabilidade 0% por falta de dados de fim de mês`);
+        }
       }
 
       // 6. Calcular rentabilidade mensal
@@ -777,7 +826,14 @@ export class AdaptiveBacktestService {
         if (previousPortfolioValue > 0) {
           monthlyReturn = (portfolioValueEndOfMonth - previousPortfolioValue - monthlyContribution) / previousPortfolioValue;
         }
-        if (i < 5) console.log(`📊 Retorno mensal: ${(monthlyReturn * 100).toFixed(2)}% (${portfolioValueEndOfMonth.toFixed(2)} vs ${previousPortfolioValue.toFixed(2)} + ${monthlyContribution.toFixed(2)})`);
+        if (i < 5 || isLastMonth) {
+          console.log(`📊 Retorno mensal: ${(monthlyReturn * 100).toFixed(2)}%`);
+          console.log(`   💰 Cálculo: (${portfolioValueEndOfMonth.toFixed(2)} - ${previousPortfolioValue.toFixed(2)} - ${monthlyContribution.toFixed(2)}) / ${previousPortfolioValue.toFixed(2)}`);
+          if (isLastMonth && monthlyReturn === 0 && portfolioValueEndOfMonth > previousPortfolioValue) {
+            console.log(`   ⚠️ ATENÇÃO: Retorno 0% mas valor aumentou! Pode ser que os preços de início = fim de mês`);
+            console.log(`   💡 Isso acontece quando não há dados de preços para o final do mês (mês atual/futuro)`);
+          }
+        }
       }
 
       // 7. Registrar snapshot (usar data do último dia para visualização)
@@ -791,12 +847,14 @@ export class AdaptiveBacktestService {
       
       evolution.push(snapshot);
       
-      console.log(`\n✅ SNAPSHOT REGISTRADO para mês ${i + 1}:`);
-      console.log(`   📅 Data: ${lastDayOfMonth.toISOString().split('T')[0]}`);
-      console.log(`   💰 Valor: R$ ${portfolioValueEndOfMonth.toFixed(2)}`);
-      console.log(`   💰 Aporte: R$ ${monthlyContribution.toFixed(2)}`);
-      console.log(`   📊 Retorno: ${(monthlyReturn * 100).toFixed(2)}%`);
-      console.log(`   📊 Holdings: ${currentHoldings.size} ativos`);
+      if (i < 5 || isLastMonth) {
+        console.log(`\n✅ SNAPSHOT REGISTRADO para mês ${i + 1}${isLastMonth ? ' (ÚLTIMO MÊS)' : ''}:`);
+        console.log(`   📅 Data: ${lastDayOfMonth.toISOString().split('T')[0]}`);
+        console.log(`   💰 Valor: R$ ${portfolioValueEndOfMonth.toFixed(2)}`);
+        console.log(`   💰 Aporte: R$ ${monthlyContribution.toFixed(2)}`);
+        console.log(`   📊 Retorno: ${(monthlyReturn * 100).toFixed(2)}%`);
+        console.log(`   📊 Holdings: ${currentHoldings.size} ativos`);
+      }
 
       previousPortfolioValue = portfolioValueEndOfMonth;
     }
@@ -1137,11 +1195,11 @@ export class AdaptiveBacktestService {
     let remainingRebalanceCash = totalSalesValue; // Dinheiro de vendas
     let remainingPreviousCash = cashBalance; // Sobras de meses anteriores
     
-      console.log(`💰 Caixa separado:`);
-      console.log(`   💰 Capital Próprio: R$ ${remainingContributionCash.toFixed(2)}`);
-      console.log(`   💎 Dividendos: R$ ${remainingDividendCash.toFixed(2)}`);
-      console.log(`   🔄 Vendas: R$ ${remainingRebalanceCash.toFixed(2)}`);
-      console.log(`   💰 Sobras anteriores: R$ ${remainingPreviousCash.toFixed(2)}`);
+      console.log(`💰 Caixa separado por origem:`);
+      console.log(`   🥇 PRIORIDADE 1 - Sobras anteriores: R$ ${remainingPreviousCash.toFixed(2)} (usar PRIMEIRO)`);
+      console.log(`   🥈 PRIORIDADE 2 - Capital Próprio: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`   🥉 PRIORIDADE 3 - Dividendos: R$ ${remainingDividendCash.toFixed(2)}`);
+      console.log(`   4️⃣ PRIORIDADE 4 - Vendas: R$ ${remainingRebalanceCash.toFixed(2)}`);
       console.log(`   💰 Total disponível: R$ ${currentCash.toFixed(2)}`);
       
       // Verificar se a soma está correta
@@ -1149,6 +1207,8 @@ export class AdaptiveBacktestService {
       if (Math.abs(expectedTotal - currentCash) > 0.01) {
         console.log(`   ⚠️ ERRO: Soma não confere! ${expectedTotal.toFixed(2)} ≠ ${currentCash.toFixed(2)}`);
       }
+      
+      console.log(`   ℹ️ NOVA PRIORIDADE: Sobras antigas são usadas PRIMEIRO para evitar acúmulo de caixa parado`);
       
       // DEBUG: Rastrear sobras acumuladas
       let totalRoundingLeftovers = 0;
@@ -1198,15 +1258,16 @@ export class AdaptiveBacktestService {
           let rebalancePart = 0;
           let previousCashPart = 0;
           
-          // CORREÇÃO: Calcular quanto PODE gastar de cada fonte baseado no valor REAL (prioridade: capital próprio > dividendos > vendas > sobras)
+          // CORREÇÃO: Nova prioridade - usar SOBRAS PRIMEIRO para não acumular caixa parado
+          // Prioridade: sobras anteriores > capital próprio > dividendos > vendas
           const actualPurchaseValueForSplit = actualPurchaseValue; // Usar valor real, não planejado
-          const plannedContributionPart = Math.min(remainingContributionCash, actualPurchaseValueForSplit);
-          const remainingAfterContribution = actualPurchaseValueForSplit - plannedContributionPart;
+          const plannedPreviousCashPart = Math.min(remainingPreviousCash, actualPurchaseValueForSplit);
+          const remainingAfterPrevious = actualPurchaseValueForSplit - plannedPreviousCashPart;
+          const plannedContributionPart = Math.min(remainingContributionCash, remainingAfterPrevious);
+          const remainingAfterContribution = remainingAfterPrevious - plannedContributionPart;
           const plannedDividendPart = Math.min(remainingDividendCash, remainingAfterContribution);
           const remainingAfterDividend = remainingAfterContribution - plannedDividendPart;
           const plannedRebalancePart = Math.min(remainingRebalanceCash, remainingAfterDividend);
-          const remainingAfterRebalance = remainingAfterDividend - plannedRebalancePart;
-          const plannedPreviousCashPart = Math.min(remainingPreviousCash, remainingAfterRebalance);
           
           // CORREÇÃO: Usar valores diretos sem proporções para evitar erros de arredondamento
           contributionPart = plannedContributionPart;
@@ -1236,29 +1297,53 @@ export class AdaptiveBacktestService {
           remainingRebalanceCash -= rebalancePart;
           remainingPreviousCash -= previousCashPart;
           
-          // DEBUG: Mostrar a diferença
+          // DEBUG: Mostrar a diferença (na ordem de prioridade: previous > contribution > dividend > rebalance)
+          const previousCashLeftover = plannedPreviousCashPart - previousCashPart;
           const contributionLeftover = plannedContributionPart - contributionPart;
           const dividendLeftover = plannedDividendPart - dividendPart;
           const rebalanceLeftover = plannedRebalancePart - rebalancePart;
-          const previousCashLeftover = plannedPreviousCashPart - previousCashPart;
           
+          if (previousCashLeftover > 0.01) {
+            console.log(`   🥇 Sobra de caixa anterior (P1): R$ ${previousCashLeftover.toFixed(2)}`);
+          }
           if (contributionLeftover > 0.01) {
-            console.log(`   💰 Sobra de capital próprio: R$ ${contributionLeftover.toFixed(2)}`);
+            console.log(`   🥈 Sobra de capital próprio (P2): R$ ${contributionLeftover.toFixed(2)}`);
           }
           if (dividendLeftover > 0.01) {
-            console.log(`   💎 Sobra de dividendos: R$ ${dividendLeftover.toFixed(2)}`);
+            console.log(`   🥉 Sobra de dividendos (P3): R$ ${dividendLeftover.toFixed(2)}`);
           }
           if (rebalanceLeftover > 0.01) {
-            console.log(`   🔄 Sobra de vendas: R$ ${rebalanceLeftover.toFixed(2)}`);
-          }
-          if (previousCashLeftover > 0.01) {
-            console.log(`   💰 Sobra de caixa anterior: R$ ${previousCashLeftover.toFixed(2)}`);
+            console.log(`   4️⃣ Sobra de vendas (P4): R$ ${rebalanceLeftover.toFixed(2)}`);
           }
           
           // CORREÇÃO: Criar transações com totalShares progressivo
+          // NOVA ORDEM: previous cash > contribution > dividend > rebalance
           let runningTotalShares = currentShares;
           
+          // 1. Usar caixa anterior PRIMEIRO (prioridade máxima)
+          if (previousCashPart > 0) {
+            const previousCashShares = Math.round((previousCashPart / actualPurchaseValue) * actualSharesToBuy);
+            runningTotalShares += previousCashShares;
+            
+            transactions.push({
+              month: monthIndex,
+              date: new Date(date),
+              ticker: ticker,
+              transactionType: 'PREVIOUS_CASH_USE',
+              contribution: previousCashPart,
+              price: target.price,
+              sharesAdded: previousCashShares,
+              totalShares: runningTotalShares,
+              totalInvested: totalInvestedByAsset.get(ticker) || 0,
+              cashReserved: sharesToBuy > actualSharesToBuy ? (sharesToBuy - actualSharesToBuy) * target.price : undefined
+            });
+            
+            console.log(`💰 USO CAIXA ANTERIOR (DÉBITO - PRIORIDADE 1): ${ticker} - ${previousCashShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${previousCashPart.toFixed(2)}`);
+          }
+          
+          // 2. Usar capital próprio/aporte
           if (contributionPart > 0) {
+            const previousCashShares = previousCashPart > 0 ? Math.round((previousCashPart / actualPurchaseValue) * actualSharesToBuy) : 0;
             const contributionShares = Math.round((contributionPart / actualPurchaseValue) * actualSharesToBuy);
             runningTotalShares += contributionShares;
             
@@ -1275,10 +1360,13 @@ export class AdaptiveBacktestService {
               cashReserved: sharesToBuy > actualSharesToBuy ? (sharesToBuy - actualSharesToBuy) * target.price : undefined
             });
             
-            console.log(`💰 APORTE (DÉBITO): ${ticker} - ${contributionShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${contributionPart.toFixed(2)}`);
+            console.log(`💰 APORTE (DÉBITO - PRIORIDADE 2): ${ticker} - ${contributionShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${contributionPart.toFixed(2)}`);
           }
           
+          // 3. Usar dividendos
           if (dividendPart > 0) {
+            const previousCashShares = previousCashPart > 0 ? Math.round((previousCashPart / actualPurchaseValue) * actualSharesToBuy) : 0;
+            const contributionShares = contributionPart > 0 ? Math.round((contributionPart / actualPurchaseValue) * actualSharesToBuy) : 0;
             const dividendShares = Math.round((dividendPart / actualPurchaseValue) * actualSharesToBuy);
             runningTotalShares += dividendShares;
             
@@ -1295,13 +1383,15 @@ export class AdaptiveBacktestService {
               cashReserved: sharesToBuy > actualSharesToBuy ? (sharesToBuy - actualSharesToBuy) * target.price : undefined
             });
             
-            console.log(`💎 DIVIDENDO REINVESTIDO (DÉBITO): ${ticker} - ${dividendShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${dividendPart.toFixed(2)}`);
+            console.log(`💎 DIVIDENDO REINVESTIDO (DÉBITO - PRIORIDADE 3): ${ticker} - ${dividendShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${dividendPart.toFixed(2)}`);
           }
           
+          // 4. Usar vendas de rebalanceamento
           if (rebalancePart > 0) {
+            const previousCashShares = previousCashPart > 0 ? Math.round((previousCashPart / actualPurchaseValue) * actualSharesToBuy) : 0;
             const contributionShares = contributionPart > 0 ? Math.round((contributionPart / actualPurchaseValue) * actualSharesToBuy) : 0;
             const dividendShares = dividendPart > 0 ? Math.round((dividendPart / actualPurchaseValue) * actualSharesToBuy) : 0;
-            const rebalanceShares = actualSharesToBuy - contributionShares - dividendShares;
+            const rebalanceShares = actualSharesToBuy - previousCashShares - contributionShares - dividendShares;
             runningTotalShares += rebalanceShares;
             
             transactions.push({
@@ -1317,40 +1407,7 @@ export class AdaptiveBacktestService {
               cashReserved: sharesToBuy > actualSharesToBuy ? (sharesToBuy - actualSharesToBuy) * target.price : undefined
             });
             
-            console.log(`🔄 COMPRA (REBAL.) (DÉBITO): ${ticker} - ${rebalanceShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${rebalancePart.toFixed(2)}`);
-          }
-          
-          // CORREÇÃO: Criar transação para uso do caixa anterior APENAS se realmente comprou ações
-          if (previousCashPart > 0) {
-            const contributionShares = contributionPart > 0 ? Math.round((contributionPart / actualPurchaseValue) * actualSharesToBuy) : 0;
-            const dividendShares = dividendPart > 0 ? Math.round((dividendPart / actualPurchaseValue) * actualSharesToBuy) : 0;
-            const rebalanceShares = rebalancePart > 0 ? actualSharesToBuy - contributionShares - dividendShares : 0;
-            const previousCashShares = actualSharesToBuy - contributionShares - dividendShares - rebalanceShares;
-            
-            // CORREÇÃO CRÍTICA: Só criar transação se realmente comprou ações com o caixa anterior
-            if (previousCashShares > 0) {
-              runningTotalShares += previousCashShares;
-              
-              transactions.push({
-                month: monthIndex,
-                date: new Date(date),
-                ticker: ticker,
-                transactionType: 'PREVIOUS_CASH_USE',
-                contribution: previousCashPart,
-                price: target.price,
-                sharesAdded: previousCashShares,
-                totalShares: runningTotalShares,
-                totalInvested: totalInvestedByAsset.get(ticker) || 0,
-                cashReserved: sharesToBuy > actualSharesToBuy ? (sharesToBuy - actualSharesToBuy) * target.price : undefined
-              });
-              
-              console.log(`💰 USO CAIXA ANTERIOR (DÉBITO): ${ticker} - ${previousCashShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${previousCashPart.toFixed(2)}`);
-            } else {
-              console.log(`💰 CAIXA ANTERIOR NÃO USADO: R$ ${previousCashPart.toFixed(2)} permanece no caixa (não comprou ações)`);
-              // CORREÇÃO: Devolver o dinheiro ao caixa se não foi usado para comprar ações
-              currentCash += previousCashPart;
-              remainingPreviousCash += previousCashPart;
-            }
+            console.log(`🔄 COMPRA (REBAL.) (DÉBITO - PRIORIDADE 4): ${ticker} - ${rebalanceShares} ações por R$ ${target.price.toFixed(2)} = -R$ ${rebalancePart.toFixed(2)}`);
           }
           
           console.log(`💰 → Caixa após compras: R$ ${currentCash.toFixed(2)} (gasto real: R$ ${actualPurchaseValue.toFixed(2)})`);
@@ -1407,18 +1464,14 @@ export class AdaptiveBacktestService {
       const totalUsedFromRebalance = totalSalesValue - remainingRebalanceCash;
       const totalUsedFromPrevious = cashBalance - remainingPreviousCash;
       
-      console.log(`\n🔍 VALIDAÇÃO DA SEPARAÇÃO (4 FONTES):`);
-      console.log(`   💰 Usado de capital próprio: R$ ${totalUsedFromContribution.toFixed(2)} de R$ ${totalContributionSource.toFixed(2)}`);
-      console.log(`   💎 Usado de dividendos: R$ ${totalUsedFromDividends.toFixed(2)} de R$ ${totalDividendSource.toFixed(2)}`);
-      console.log(`   🔄 Usado de vendas: R$ ${totalUsedFromRebalance.toFixed(2)} de R$ ${totalSalesValue.toFixed(2)}`);
-      console.log(`   💰 Usado de caixa anterior: R$ ${totalUsedFromPrevious.toFixed(2)} de R$ ${cashBalance.toFixed(2)}`);
-      console.log(`   💰 Sobrou de capital próprio: R$ ${remainingContributionCash.toFixed(2)}`);
-      console.log(`   💎 Sobrou de dividendos: R$ ${remainingDividendCash.toFixed(2)}`);
-      console.log(`   🔄 Sobrou de vendas: R$ ${remainingRebalanceCash.toFixed(2)}`);
-      console.log(`   💰 Sobrou de caixa anterior: R$ ${remainingPreviousCash.toFixed(2)}`);
+      console.log(`\n🔍 VALIDAÇÃO DA SEPARAÇÃO (4 FONTES - NOVA PRIORIDADE):`);
+      console.log(`   🥇 P1 - Caixa anterior: R$ ${totalUsedFromPrevious.toFixed(2)} usado de R$ ${cashBalance.toFixed(2)} → Sobrou: R$ ${remainingPreviousCash.toFixed(2)}`);
+      console.log(`   🥈 P2 - Capital próprio: R$ ${totalUsedFromContribution.toFixed(2)} usado de R$ ${totalContributionSource.toFixed(2)} → Sobrou: R$ ${remainingContributionCash.toFixed(2)}`);
+      console.log(`   🥉 P3 - Dividendos: R$ ${totalUsedFromDividends.toFixed(2)} usado de R$ ${totalDividendSource.toFixed(2)} → Sobrou: R$ ${remainingDividendCash.toFixed(2)}`);
+      console.log(`   4️⃣ P4 - Vendas: R$ ${totalUsedFromRebalance.toFixed(2)} usado de R$ ${totalSalesValue.toFixed(2)} → Sobrou: R$ ${remainingRebalanceCash.toFixed(2)}`);
       console.log(`   💰 Total de sobras nos potes: R$ ${totalLeftoverInPotsForCash.toFixed(2)} (JÁ incluídas no caixa)`);
       console.log(`   💰 Sobras de arredondamento: R$ ${totalRoundingLeftovers.toFixed(2)} (automáticas no caixa)`);
-      console.log(`   ✅ CORREÇÃO: Capital próprio e dividendos agora separados!`);
+      console.log(`   ✅ PRIORIDADE: Sobras antigas usadas PRIMEIRO para evitar acúmulo de caixa parado`);
 
       // Não registrar débito consolidado - cada compra individual já debita do caixa
     
@@ -1511,14 +1564,36 @@ export class AdaptiveBacktestService {
    */
   private generateMonthlyDatesAdaptive(startDate: Date, endDate: Date): Date[] {
     const dates: Date[] = [];
-    const current = new Date(startDate);
+    // CRÍTICO: Criar data em UTC para evitar problemas de timezone
+    const current = new Date(Date.UTC(
+      startDate.getFullYear(),
+      startDate.getMonth(),
+      1, // SEMPRE dia 1
+      0, 0, 0, 0
+    ));
     
-    // Ajustar para o primeiro dia do mês inicial
-    current.setDate(1);
+    console.log(`🔍 generateMonthlyDates - startDate: ${startDate.toISOString()}`);
+    console.log(`🔍 generateMonthlyDates - current (ajustado dia 1): ${current.toISOString()}`);
     
-    while (current <= endDate) {
-      dates.push(new Date(current));
-      current.setMonth(current.getMonth() + 1);
+    const endTime = endDate.getTime();
+    
+    while (current.getTime() <= endTime) {
+      const monthDate = new Date(current);
+      dates.push(monthDate);
+      
+      // Debug das primeiras 3 datas
+      if (dates.length <= 3) {
+        console.log(`   📅 Data ${dates.length}: ${monthDate.toISOString().split('T')[0]}`);
+      }
+      
+      // Avançar para o próximo mês (sempre dia 1)
+      current.setUTCMonth(current.getUTCMonth() + 1);
+    }
+    
+    console.log(`✅ generateMonthlyDates - Total de ${dates.length} datas geradas`);
+    if (dates.length > 0) {
+      console.log(`   📅 Primeira: ${dates[0].toISOString().split('T')[0]}`);
+      console.log(`   📅 Última: ${dates[dates.length - 1].toISOString().split('T')[0]}`);
     }
     
     return dates;
@@ -1528,7 +1603,13 @@ export class AdaptiveBacktestService {
    * Retorna o último dia do mês para uma data
    */
   private getLastDayOfMonth(date: Date): Date {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    // CRÍTICO: Usar UTC para consistência
+    return new Date(Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth() + 1,
+      0, // Dia 0 do próximo mês = último dia do mês atual
+      23, 59, 59, 999
+    ));
   }
   
   /**
@@ -1540,7 +1621,8 @@ export class AdaptiveBacktestService {
   }
   
   /**
-   * Obtém preço para data específica (método herdado)
+   * Obtém preço para data específica com busca inteligente
+   * Prioriza: data exata > próximo preço futuro > preço anterior mais próximo
    */
   private getPriceForDateAdaptive(prices: PricePoint[], targetDate: Date): number | null {
     if (prices.length === 0) {
@@ -1549,34 +1631,108 @@ export class AdaptiveBacktestService {
     }
 
     const targetDateStr = targetDate.toISOString().split('T')[0];
+    const targetTime = targetDate.getTime();
     
-    // Buscar preço exato
-    const exactMatch = prices.find(p => 
-      p.date.getTime() === targetDate.getTime()
-    );
+    // Filtrar preços válidos (> 0)
+    const validPrices = prices.filter(p => p.adjustedClose > 0 && p.price > 0);
+    if (validPrices.length === 0) {
+      console.log(`⚠️ getPriceForDateAdaptive: Nenhum preço VÁLIDO disponível para ${targetDateStr}`);
+      return null;
+    }
+    
+    // DEBUG: Mostrar TODOS os preços disponíveis (aumentado para 50 dias para ver outubro)
+    const sortedByDate = [...validPrices].sort((a, b) => a.date.getTime() - b.date.getTime());
+    
+    // Mostrar SEMPRE os 5 preços mais próximos (passado e futuro)
+    console.log(`🔍 DEBUG - Buscando preço para ${targetDateStr} entre ${validPrices.length} preços válidos`);
+    console.log(`🔍 DEBUG - Primeiro preço disponível: ${sortedByDate[0].date.toISOString().split('T')[0]}`);
+    console.log(`🔍 DEBUG - Último preço disponível: ${sortedByDate[sortedByDate.length - 1].date.toISOString().split('T')[0]}`);
+    
+    const nearbyPrices = sortedByDate.filter(p => {
+      const priceDateStr = p.date.toISOString().split('T')[0];
+      const priceTime = new Date(priceDateStr + 'T00:00:00.000Z').getTime();
+      const targetTimeCorrected = new Date(targetDateStr + 'T00:00:00.000Z').getTime();
+      const diffDays = Math.abs((priceTime - targetTimeCorrected) / (24 * 60 * 60 * 1000));
+      return diffDays <= 50; // Aumentado para 50 dias
+    });
+    
+    if (nearbyPrices.length > 0) {
+      console.log(`🔍 DEBUG - ${nearbyPrices.length} preços próximos a ${targetDateStr} (até 50 dias):`);
+      nearbyPrices.forEach(p => {
+        const priceDateStr = p.date.toISOString().split('T')[0];
+        const priceTime = new Date(priceDateStr + 'T00:00:00.000Z').getTime();
+        const targetTimeCorrected = new Date(targetDateStr + 'T00:00:00.000Z').getTime();
+        const diffDays = Math.round((priceTime - targetTimeCorrected) / (24 * 60 * 60 * 1000));
+        const relation = diffDays > 0 ? `+${diffDays} dias (FUTURO)` : diffDays < 0 ? `${diffDays} dias (PASSADO)` : 'EXATO';
+        console.log(`   ${priceDateStr}: R$ ${p.adjustedClose.toFixed(2)} (${relation})`);
+      });
+    } else {
+      console.log(`⚠️ DEBUG - NENHUM preço próximo a ${targetDateStr} encontrado! Range do banco:`);
+      console.log(`   Primeiro: ${sortedByDate[0].date.toISOString().split('T')[0]}`);
+      console.log(`   Último: ${sortedByDate[sortedByDate.length - 1].date.toISOString().split('T')[0]}`);
+    }
+    
+    // 1. Buscar preço exato
+    const exactMatch = validPrices.find(p => {
+      const priceDateStr = p.date.toISOString().split('T')[0];
+      return priceDateStr === targetDateStr;
+    });
+    
     if (exactMatch) {
+      console.log(`✅ getPriceForDateAdaptive: Match EXATO para ${targetDateStr} = R$ ${exactMatch.adjustedClose.toFixed(2)}`);
       return exactMatch.adjustedClose;
     }
 
-    // Buscar preço mais próximo (até 45 dias de diferença)
+    // 2. Buscar próximo preço FUTURO mais próximo (até 45 dias depois)
     const maxDiffMs = 45 * 24 * 60 * 60 * 1000;
-    let closestPrice: PricePoint | null = null;
-    let minDiff = Infinity;
-
-    for (const price of prices) {
-      const diff = Math.abs(price.date.getTime() - targetDate.getTime());
-      if (diff < minDiff && diff <= maxDiffMs) {
-        minDiff = diff;
-        closestPrice = price;
+    let nextPrice: PricePoint | null = null;
+    let minFutureDiff = Infinity;
+    
+    for (const price of validPrices) {
+      const priceDateStr = price.date.toISOString().split('T')[0];
+      const priceTime = new Date(priceDateStr + 'T00:00:00.000Z').getTime();
+      const targetTimeCorrected = new Date(targetDateStr + 'T00:00:00.000Z').getTime();
+      const diff = priceTime - targetTimeCorrected;
+      
+      // Se o preço é DEPOIS da data alvo e está dentro da janela
+      if (diff > 0 && diff < minFutureDiff && diff <= maxDiffMs) {
+        minFutureDiff = diff;
+        nextPrice = price;
       }
     }
-
-    if (closestPrice) {
-      return closestPrice.adjustedClose;
+    
+    if (nextPrice) {
+      const daysDiff = Math.floor(minFutureDiff / (24 * 60 * 60 * 1000));
+      console.log(`📊 getPriceForDateAdaptive: Usando PRÓXIMO preço para ${targetDateStr}: ${nextPrice.date.toISOString().split('T')[0]} (${daysDiff} dias depois) = R$ ${nextPrice.adjustedClose.toFixed(2)}`);
+      return nextPrice.adjustedClose;
     }
 
-    // Se não encontrou preço próximo, usar o último preço disponível
-    const sortedPrices = [...prices].sort((a, b) => a.date.getTime() - b.date.getTime());
+    // 3. Buscar preço ANTERIOR mais próximo (até 45 dias antes)
+    let prevPrice: PricePoint | null = null;
+    let minPastDiff = Infinity;
+    
+    for (const price of validPrices) {
+      const priceDateStr = price.date.toISOString().split('T')[0];
+      const priceTime = new Date(priceDateStr + 'T00:00:00.000Z').getTime();
+      const targetTimeCorrected = new Date(targetDateStr + 'T00:00:00.000Z').getTime();
+      const diff = targetTimeCorrected - priceTime;
+      
+      // Se o preço é ANTES da data alvo e está dentro da janela
+      if (diff > 0 && diff < minPastDiff && diff <= maxDiffMs) {
+        minPastDiff = diff;
+        prevPrice = price;
+      }
+    }
+    
+    if (prevPrice) {
+      const daysDiff = Math.floor(minPastDiff / (24 * 60 * 60 * 1000));
+      console.log(`📊 getPriceForDateAdaptive: Usando preço ANTERIOR para ${targetDateStr}: ${prevPrice.date.toISOString().split('T')[0]} (${daysDiff} dias antes) = R$ ${prevPrice.adjustedClose.toFixed(2)}`);
+      console.log(`   ⚠️ Não encontrou preço futuro, usando anterior como fallback`);
+      return prevPrice.adjustedClose;
+    }
+
+    // 4. Fallback: último preço disponível
+    const sortedPrices = [...validPrices].sort((a, b) => a.date.getTime() - b.date.getTime());
     const lastPrice = sortedPrices[sortedPrices.length - 1];
     
     console.log(`⚠️ getPriceForDateAdaptive: Usando último preço disponível para ${targetDateStr}`);

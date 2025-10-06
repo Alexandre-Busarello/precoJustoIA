@@ -475,25 +475,36 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
                     Ver Detalhes
                   </Button>
                 ) : (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => rerunBacktest(item)}
-                    disabled={runningBacktest === item.id}
-                    className="flex-1 sm:flex-none"
-                  >
-                    {runningBacktest === item.id ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Executando...
-                      </>
-                    ) : (
-                      <>
-                        <BarChart3 className="w-4 h-4 mr-2" />
-                        Executar Simulação
-                      </>
-                    )}
-                  </Button>
+                  <>  
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => showDetails(item)}
+                      className="flex-1 sm:flex-none"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      Ver Detalhes
+                    </Button>
+                    {/* <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => rerunBacktest(item)}
+                      disabled={runningBacktest === item.id}
+                      className="flex-1 sm:flex-none"
+                    >
+                      {runningBacktest === item.id ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Executando...
+                        </>
+                      ) : (
+                        <>
+                          <BarChart3 className="w-4 h-4 mr-2" />
+                          Executar Simulação
+                        </>
+                      )}
+                    </Button> */}
+                  </>
                 )}
                 
                 {/* Botão Secundário: Executar Novamente (apenas se já tem resultado) */}

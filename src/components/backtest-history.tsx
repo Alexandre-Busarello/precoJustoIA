@@ -202,7 +202,7 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
   const showDetails = (item: BacktestHistoryItem) => {
     // Se não tem resultados, redirecionar para abrir a configuração no formulário
     if (!item.results || item.results.length === 0) {
-      router.push(`/backtest?configId=${item.id}`);
+      router.push(`/backtest?view=configure&configId=${item.id}`);
       return;
     }
 

@@ -506,6 +506,12 @@ export class AdaptiveBacktestService {
 
   /**
    * Simula evolução da carteira com tratamento de dados faltantes
+   * 
+   * IMPORTANTE: A simulação separa aportes de avaliação:
+   * - Aportes e compras acontecem no PRIMEIRO DIA do mês (usando preços do dia 1)
+   * - Avaliação da carteira ocorre no ÚLTIMO DIA do mês (usando preços do último dia)
+   * - Rentabilidade é calculada entre avaliações de fim de mês (último dia mês anterior vs último dia mês atual)
+   * - O PRIMEIRO MÊS TEM rentabilidade (valorização entre dia 1 e último dia do mês)
    */
   private async simulateAdaptivePortfolio(
     pricesData: Map<string, PricePoint[]>,
@@ -513,132 +519,134 @@ export class AdaptiveBacktestService {
     assetsAvailability: DataAvailability[]
   ): Promise<{ evolution: PortfolioSnapshot[], monthlyHistory: MonthlyPortfolioHistory[], totalDividendsReceived: number }> {
     console.log('🔄 Simulando carteira adaptativa...');
+    console.log('   💡 Aportes: PRIMEIRO DIA do mês');
+    console.log('   💡 Avaliação: ÚLTIMO DIA do mês');
 
     const evolution: PortfolioSnapshot[] = [];
     const monthlyHistory: MonthlyPortfolioHistory[] = [];
     let currentHoldings = new Map<string, number>();
-    let portfolioValue = params.initialCapital; // Começar com capital inicial
-    let previousPortfolioValue = 0;
+    let previousPortfolioValue = 0; // Valor da carteira no ÚLTIMO DIA do mês anterior
     let missedContributions = 0;
-    let cashBalance = 0; // Saldo em caixa inicial = 0 (capital inicial será usado no primeiro rebalanceamento)
-    let totalDividendsReceived = 0; // Total de dividendos recebidos durante todo o período
+    let cashBalance = 0;
+    let totalDividendsReceived = 0;
     
     // Rastrear investimento total por ativo
     const totalInvestedByAsset = new Map<string, number>();
     params.assets.forEach(asset => totalInvestedByAsset.set(asset.ticker, 0));
 
-    // Gerar datas mensais no período
+    // Gerar datas mensais (PRIMEIRO DIA de cada mês)
     const monthlyDates = this.generateMonthlyDatesAdaptive(params.startDate, params.endDate);
     
+    console.log(`📅 Datas mensais geradas: ${monthlyDates.length} meses`);
+    if (monthlyDates.length > 0) {
+      console.log(`   📅 Primeira data: ${monthlyDates[0].toISOString().split('T')[0]} (primeiro dia - aportes)`);
+      console.log(`   📅 Última data: ${monthlyDates[monthlyDates.length - 1].toISOString().split('T')[0]} (primeiro dia - aportes)`);
+    }
+    
+    console.log(`\n🔄 INICIANDO LOOP DE SIMULAÇÃO (${monthlyDates.length} meses)...`);
+    
     for (let i = 0; i < monthlyDates.length; i++) {
-      const currentDate = monthlyDates[i];
+      const firstDayOfMonth = monthlyDates[i]; // Dia 1 - para aportes e compras
+      const lastDayOfMonth = this.getLastDayOfMonth(firstDayOfMonth); // Último dia - para avaliação
       const isFirstMonth = i === 0;
+      
+      console.log(`\n🔍 Processando mês ${i + 1} (índice ${i}) - ${firstDayOfMonth.toISOString().split('T')[0]}`);
       
       // Verificar quais ativos têm dados disponíveis nesta data
       const availableAssets = this.getAvailableAssetsForDate(
-        currentDate, 
+        firstDayOfMonth, 
         pricesData, 
         assetsAvailability
       );
+      
+      console.log(`   📊 Ativos disponíveis: ${availableAssets.length > 0 ? availableAssets.join(', ') : 'NENHUM'}`);
       
       const monthlyContribution = params.monthlyContribution;
       
       if (availableAssets.length === 0) {
         // Se nenhum ativo tem dados, pular este mês
-        console.log(`⚠️ Pulando ${currentDate.toISOString().split('T')[0]} - nenhum ativo disponível`);
+        console.log(`   ⚠️ ❌ PULANDO MÊS ${i + 1} - nenhum ativo disponível`);
         missedContributions++;
         continue;
       }
       
+      console.log(`   ✅ Mês ${i + 1} será processado`);
+      
       if (i < 5) { // Log detalhado apenas nos primeiros 5 meses
-        console.log(`\n📅 === MÊS ${i} (${currentDate.toISOString().split('T')[0]}) ===`);
-        console.log(`💰 Portfolio inicial: R$ ${portfolioValue.toFixed(2)}`);
+        console.log(`\n📅 === MÊS ${i + 1} ===`);
+        console.log(`   📅 Primeiro dia: ${firstDayOfMonth.toISOString().split('T')[0]} (aportes)`);
+        console.log(`   📅 Último dia: ${lastDayOfMonth.toISOString().split('T')[0]} (avaliação)`);
       }
       
-      // 1. Aplicar retornos dos ativos (se não for o primeiro mês)
-      if (!isFirstMonth && currentHoldings.size > 0) {
-        const previousDate = monthlyDates[i - 1];
-        
-        if (i < 5) console.log(`📈 Aplicando retornos dos ativos (${currentHoldings.size} posições)`);
-        portfolioValue = this.applyAssetReturnsAdaptive(
-          portfolioValue,
-          currentHoldings,
-          pricesData,
-          previousDate,
-          currentDate,
-          availableAssets
-        );
-        if (i < 5) console.log(`💰 Portfolio após retornos: R$ ${portfolioValue.toFixed(2)}`);
-      }
-
       // Salvar saldo inicial do mês (antes de qualquer transação)
       const initialCashBalance = cashBalance;
 
-      // 1.5. Calcular e aplicar dividendos (se não for o primeiro mês)
+      // 1. Calcular dividendos do período (se não for o primeiro mês)
       let monthlyDividends = 0;
       let dividendTransactions: MonthlyAssetTransaction[] = [];
       
       if (!isFirstMonth && currentHoldings.size > 0) {
-        const dividendResult = this.calculateMonthlyDividends(currentHoldings, params, currentDate, pricesData);
+        const dividendResult = this.calculateMonthlyDividends(currentHoldings, params, firstDayOfMonth, pricesData);
         dividendTransactions = dividendResult.dividendTransactions;
         monthlyDividends = dividendResult.totalDividends;
-        
-        // CORREÇÃO: NÃO adicionar dividendos ao cashBalance aqui
-        // Os dividendos serão gerenciados pelo rebalancePortfolioAdaptive
         totalDividendsReceived += monthlyDividends;
         
-        // Atualizar índice do mês nas transações de dividendos
         dividendTransactions.forEach(transaction => {
           transaction.month = i;
         });
         
         if (monthlyDividends > 0 && i < 5) {
-          console.log(`💰 Dividendos recebidos: R$ ${monthlyDividends.toFixed(2)} (serão gerenciados no rebalanceamento)`);
+          console.log(`💰 Dividendos recebidos: R$ ${monthlyDividends.toFixed(2)}`);
         }
       }
       
-      // 2. Adicionar aporte mensal (exceto no primeiro mês, onde o capital inicial já inclui o primeiro aporte)
-      if (!isFirstMonth) {
-      portfolioValue += monthlyContribution;
-        if (i < 5) {
-          console.log(`💰 Portfolio após aporte (+R$ ${monthlyContribution}): R$ ${portfolioValue.toFixed(2)}`);
+      // 2. Calcular NOVO DINHEIRO disponível para investimento (NÃO inclui valor dos ativos)
+      // CORREÇÃO CRÍTICA: Apenas somar DINHEIRO NOVO, não o valor da carteira!
+      const newMoney = (isFirstMonth ? params.initialCapital : 0) + 
+        monthlyContribution + 
+        monthlyDividends;
+      
+      if (i < 5) {
+        console.log(`💰 Novo dinheiro para investir:`);
+        if (isFirstMonth && params.initialCapital > 0) {
+          console.log(`   💰 Capital inicial: R$ ${params.initialCapital.toFixed(2)}`);
         }
-      } else {
-        if (i < 5) {
-          console.log(`💰 Portfolio inicial (capital inicial): R$ ${portfolioValue.toFixed(2)}`);
-        }
+        console.log(`   💰 Aporte mensal: R$ ${monthlyContribution.toFixed(2)}`);
+        if (monthlyDividends > 0) console.log(`   💎 Dividendos: R$ ${monthlyDividends.toFixed(2)}`);
+        console.log(`   💰 Total de dinheiro novo: R$ ${newMoney.toFixed(2)}`);
       }
 
-      // 3. Rebalancear carteira com ativos disponíveis
+      // 3. Rebalancear carteira usando preços do PRIMEIRO DIA do mês
       const shouldRebalance = this.shouldRebalanceAdaptive(i, params.rebalanceFrequency);
-      if (i < 5) console.log(`🔄 Deve rebalancear: ${shouldRebalance}`);
+      if (i < 5) console.log(`🔄 Rebalanceamento: ${shouldRebalance ? 'SIM' : 'NÃO'}`);
       
       if (shouldRebalance) {
-        if (i < 5) console.log(`🔄 Rebalanceando carteira...`);
+        if (i < 5) console.log(`🔄 Rebalanceando (compras a preços de ${firstDayOfMonth.toISOString().split('T')[0]})...`);
         const adjustedAssets = this.adjustAllocationsForAvailableAssets(
           params.assets,
           availableAssets
         );
         
         const rebalanceResult = this.rebalancePortfolioAdaptive(
-          portfolioValue,
+          newMoney, // CORREÇÃO: passar apenas o dinheiro novo
           adjustedAssets,
           pricesData,
-          currentDate,
+          firstDayOfMonth, // IMPORTANTE: usar primeiro dia para compras
           currentHoldings,
           totalInvestedByAsset,
           i,
           cashBalance,
-          params.monthlyContribution, // Sempre passar o aporte mensal
-          monthlyDividends // Passar dividendos do mês
+          monthlyContribution, // CORREÇÃO: sempre passar monthlyContribution
+          monthlyDividends,
+          isFirstMonth ? params.initialCapital : 0 // Passar initialCapital separadamente
         );
         
         currentHoldings = rebalanceResult.newHoldings;
         const oldCashBalance = cashBalance;
-        cashBalance = rebalanceResult.finalCashBalance; // Usar o saldo corrigido com as sobras
+        cashBalance = rebalanceResult.finalCashBalance;
         
         if (i < 5) {
-          console.log(`💰 Saldo atualizado: R$ ${oldCashBalance.toFixed(2)} → R$ ${cashBalance.toFixed(2)} (inclui sobras de arredondamento)`);
+          console.log(`💰 Saldo em caixa: R$ ${oldCashBalance.toFixed(2)} → R$ ${cashBalance.toFixed(2)}`);
         }
         
         // Calcular valor total das vendas de rebalanceamento para logs
@@ -699,61 +707,116 @@ export class AdaptiveBacktestService {
           (transaction as any).cashBalance = runningBalance;
         });
         
-        // Preparar holdings para o histórico
+        // Preparar holdings para o histórico (usar preços do primeiro dia - compra)
         const holdingsArray: Array<{ ticker: string; shares: number; value: number; price: number }> = [];
         for (const [ticker, shares] of currentHoldings.entries()) {
           const prices = pricesData.get(ticker) || [];
-          const currentPrice = this.getPriceForDateAdaptive(prices, currentDate) || 0;
-          const value = shares * currentPrice;
-          holdingsArray.push({ ticker, shares, value, price: currentPrice });
+          const purchasePrice = this.getPriceForDateAdaptive(prices, firstDayOfMonth) || 0;
+          const value = shares * purchasePrice;
+          holdingsArray.push({ ticker, shares, value, price: purchasePrice });
         }
         
         // Registrar histórico mensal
         monthlyHistory.push({
           month: i,
-          date: new Date(currentDate),
-          totalContribution: monthlyContribution, // Sempre registrar o aporte mensal
-          portfolioValue: portfolioValue,
-          cashBalance: rebalanceResult.finalCashBalance, // CORREÇÃO: Usar o cashBalance corrigido do rebalanceamento
+          date: new Date(firstDayOfMonth), // Data do aporte
+          totalContribution: monthlyContribution, // CORREÇÃO: sempre registrar monthlyContribution
+          portfolioValue: newMoney, // CORREÇÃO: apenas o dinheiro novo
+          cashBalance: rebalanceResult.finalCashBalance,
           totalDividendsReceived: monthlyDividends,
           transactions: allTransactions,
-          holdings: holdingsArray // CORREÇÃO: Incluir holdings no histórico
+          holdings: holdingsArray
         });
         
-        if (i < 5) console.log(`✅ Rebalanceamento concluído:`, {
-          portfolioValue: portfolioValue.toFixed(2),
-          holdings: Array.from(currentHoldings.entries()).map(([ticker, shares]) => 
-            `${ticker}: ${shares.toFixed(6)} ações`
-          )
-        });
+        if (i < 5) console.log(`✅ Rebalanceamento concluído`);
       }
 
-      // 4. Calcular retorno mensal
-      const monthlyReturn = isFirstMonth ? 0 : 
-        previousPortfolioValue > 0 ? (portfolioValue - previousPortfolioValue - monthlyContribution) / previousPortfolioValue : 0;
+      // 5. Avaliar carteira no ÚLTIMO DIA do mês (usar preços do último dia)
+      let portfolioValueEndOfMonth = cashBalance; // Começar com o saldo em caixa
       
-      if (i < 5) console.log(`📊 Retorno mensal: ${(monthlyReturn * 100).toFixed(2)}%`);
+      if (i < 5) console.log(`\n📊 Avaliação da carteira no ÚLTIMO DIA do mês (${lastDayOfMonth.toISOString().split('T')[0]}):`);
+      
+      for (const [ticker, shares] of currentHoldings.entries()) {
+        const prices = pricesData.get(ticker) || [];
+        const priceAtEndOfMonth = this.getPriceForDateAdaptive(prices, lastDayOfMonth);
+        
+        if (priceAtEndOfMonth && priceAtEndOfMonth > 0) {
+          const valueAtEndOfMonth = shares * priceAtEndOfMonth;
+          portfolioValueEndOfMonth += valueAtEndOfMonth;
+          
+          if (i < 5) {
+            const priceAtStartOfMonth = this.getPriceForDateAdaptive(prices, firstDayOfMonth) || 0;
+            const assetReturn = priceAtStartOfMonth > 0 ? 
+              ((priceAtEndOfMonth - priceAtStartOfMonth) / priceAtStartOfMonth) * 100 : 0;
+            console.log(`   📈 ${ticker}: ${shares.toFixed(2)} ações × R$ ${priceAtEndOfMonth.toFixed(2)} = R$ ${valueAtEndOfMonth.toFixed(2)} (${assetReturn > 0 ? '+' : ''}${assetReturn.toFixed(2)}%)`);
+          }
+        }
+      }
+      
+      if (i < 5) {
+        console.log(`   💰 Caixa: R$ ${cashBalance.toFixed(2)}`);
+        console.log(`   💰 Valor total fim do mês: R$ ${portfolioValueEndOfMonth.toFixed(2)}`);
+      }
 
-      // 5. Registrar snapshot
-      evolution.push({
-        date: currentDate,
-        value: portfolioValue,
+      // 6. Calcular rentabilidade mensal
+      let monthlyReturn = 0;
+      if (isFirstMonth) {
+        // Primeiro mês: rentabilidade = (Valor Final - Aporte Total) / Aporte Total
+        // Aporte Total = initialCapital + monthlyContribution
+        const totalInvested = params.initialCapital + monthlyContribution;
+        if (totalInvested > 0) {
+          monthlyReturn = (portfolioValueEndOfMonth - totalInvested) / totalInvested;
+        }
+        if (i < 5) {
+          console.log(`📊 Retorno do primeiro mês: ${(monthlyReturn * 100).toFixed(2)}%`);
+          console.log(`   💰 Valor final: R$ ${portfolioValueEndOfMonth.toFixed(2)}`);
+          console.log(`   💰 Total investido: R$ ${totalInvested.toFixed(2)} (inicial: ${params.initialCapital.toFixed(2)} + mensal: ${monthlyContribution.toFixed(2)})`);
+        }
+      } else {
+        // Demais meses: Retorno = (Valor Final - Valor Anterior - Aporte) / Valor Anterior
+        if (previousPortfolioValue > 0) {
+          monthlyReturn = (portfolioValueEndOfMonth - previousPortfolioValue - monthlyContribution) / previousPortfolioValue;
+        }
+        if (i < 5) console.log(`📊 Retorno mensal: ${(monthlyReturn * 100).toFixed(2)}% (${portfolioValueEndOfMonth.toFixed(2)} vs ${previousPortfolioValue.toFixed(2)} + ${monthlyContribution.toFixed(2)})`);
+      }
+
+      // 7. Registrar snapshot (usar data do último dia para visualização)
+      const snapshot = {
+        date: lastDayOfMonth, // IMPORTANTE: usar último dia para visualização
+        value: portfolioValueEndOfMonth,
         holdings: new Map(currentHoldings),
         monthlyReturn,
-        contribution: monthlyContribution
-      });
+        contribution: monthlyContribution // CORREÇÃO: sempre registrar monthlyContribution
+      };
+      
+      evolution.push(snapshot);
+      
+      console.log(`\n✅ SNAPSHOT REGISTRADO para mês ${i + 1}:`);
+      console.log(`   📅 Data: ${lastDayOfMonth.toISOString().split('T')[0]}`);
+      console.log(`   💰 Valor: R$ ${portfolioValueEndOfMonth.toFixed(2)}`);
+      console.log(`   💰 Aporte: R$ ${monthlyContribution.toFixed(2)}`);
+      console.log(`   📊 Retorno: ${(monthlyReturn * 100).toFixed(2)}%`);
+      console.log(`   📊 Holdings: ${currentHoldings.size} ativos`);
 
-      previousPortfolioValue = portfolioValue;
+      previousPortfolioValue = portfolioValueEndOfMonth;
     }
 
-    console.log(`📊 Simulação adaptativa concluída: ${evolution.length} meses, ${missedContributions} aportes perdidos`);
-    console.log(`💰 Total de dividendos recebidos: R$ ${totalDividendsReceived.toFixed(2)}`);
+    console.log(`\n📊 ===== SIMULAÇÃO CONCLUÍDA =====`);
+    console.log(`   📅 Total de meses processados: ${evolution.length}`);
+    console.log(`   ⚠️ Aportes perdidos: ${missedContributions}`);
+    console.log(`   💰 Total de dividendos: R$ ${totalDividendsReceived.toFixed(2)}`);
     
-    // Debug: verificar se há valores válidos
+    // Debug: mostrar TODOS os snapshots criados
+    console.log(`\n📋 RESUMO DOS SNAPSHOTS CRIADOS:`);
+    evolution.forEach((snap, idx) => {
+      console.log(`   Mês ${idx + 1}: ${snap.date.toISOString().split('T')[0]} - Valor: R$ ${snap.value.toFixed(2)} - Aporte: R$ ${snap.contribution.toFixed(2)} - Retorno: ${(snap.monthlyReturn * 100).toFixed(2)}%`);
+    });
+    
+    // Debug adicional
     if (evolution.length > 0) {
       const firstValue = evolution[0].value;
       const lastValue = evolution[evolution.length - 1].value;
-      console.log('🔍 Debug evolução:', {
+      console.log('\n🔍 Debug detalhado:', {
         firstValue,
         lastValue,
         totalMonths: evolution.length,
@@ -875,9 +938,10 @@ export class AdaptiveBacktestService {
   
   /**
    * Rebalanceia carteira considerando apenas ativos disponíveis
+   * @param newMoney - Dinheiro NOVO disponível (initial capital + monthly contribution + dividends)
    */
   private rebalancePortfolioAdaptive(
-    portfolioValue: number,
+    newMoney: number,
     targetAssets: Array<{ ticker: string; allocation: number }>,
     pricesData: Map<string, PricePoint[]>,
     date: Date,
@@ -886,32 +950,39 @@ export class AdaptiveBacktestService {
     monthIndex: number,
     cashBalance: number = 0,
     monthlyContribution: number = 1000,
-    monthlyDividends: number = 0
+    monthlyDividends: number = 0,
+    initialCapital: number = 0
   ): { newHoldings: Map<string, number>, transactions: MonthlyAssetTransaction[], finalCashBalance: number } {
     const newHoldings = new Map<string, number>();
     const transactions: MonthlyAssetTransaction[] = [];
     const MIN_REBALANCE_VALUE = 100; // Valor mínimo para rebalancear
     
-    // LÓGICA CORRIGIDA: Caixa acumula sobras + recebe novos aportes
-    let currentCash = cashBalance + monthlyContribution + monthlyDividends;
-
-    // No primeiro mês, adicionar capital inicial ao caixa
-    if (monthIndex === 0) {
-      currentCash += portfolioValue; // Adicionar capital inicial
-    }
-    
     console.log(`🏦 GESTÃO CONTÁBIL DO MÊS:`);
     console.log(`   💰 Caixa anterior (sobras): R$ ${cashBalance.toFixed(2)}`);
-    console.log(`   💰 Aporte mensal: +R$ ${monthlyContribution.toFixed(2)}`);
-    console.log(`   💎 Dividendos: +R$ ${monthlyDividends.toFixed(2)}`);
-    if (monthIndex === 0) {
-      console.log(`   💰 Capital inicial: +R$ ${portfolioValue.toFixed(2)}`);
+    if (monthIndex === 0 && initialCapital > 0) {
+      console.log(`   💰 Capital inicial: R$ ${initialCapital.toFixed(2)}`);
     }
-    console.log(`   💰 Caixa total disponível: R$ ${currentCash.toFixed(2)}`)
+    console.log(`   💰 Aporte mensal: R$ ${monthlyContribution.toFixed(2)}`);
+    console.log(`   💎 Dividendos: R$ ${monthlyDividends.toFixed(2)}`);
+    console.log(`   💰 Dinheiro novo: R$ ${newMoney.toFixed(2)}`)
 
-    // CORREÇÃO: Apenas o dinheiro NOVO deve ser investido (aportes + dividendos)
-    // O caixa anterior (sobras) pode ficar acumulado
-    const newMoneyToInvest = monthlyContribution + monthlyDividends + (monthIndex === 0 ? portfolioValue : 0);
+    // CORREÇÃO: Calcular valor atual dos ativos existentes
+    let currentAssetsValue = 0;
+    for (const [ticker, shares] of previousHoldings.entries()) {
+      const prices = pricesData.get(ticker) || [];
+      const currentPrice = this.getPriceForDateAdaptive(prices, date);
+      if (currentPrice && currentPrice > 0) {
+        currentAssetsValue += shares * currentPrice;
+      }
+    }
+    
+    console.log(`   📊 Valor dos ativos atuais: R$ ${currentAssetsValue.toFixed(2)}`);
+    
+    // Caixa disponível = sobras anteriores + dinheiro novo
+    let currentCash = cashBalance + newMoney;
+    console.log(`   💰 Caixa total disponível: R$ ${currentCash.toFixed(2)}`);
+    
+    const newMoneyToInvest = initialCapital + monthlyContribution + monthlyDividends;
 
       console.log(`   🎯 DINHEIRO NOVO PARA INVESTIR: R$ ${newMoneyToInvest.toFixed(2)} (aportes + dividendos)`);
       console.log(`   💰 SOBRAS ANTERIORES: R$ ${cashBalance.toFixed(2)} (podem ficar no caixa)`);
@@ -924,47 +995,32 @@ export class AdaptiveBacktestService {
     // Registrar crédito no caixa com saldo progressivo
     let progressiveCashBalance = cashBalance;
     
-    if (monthIndex === 0) {
-      // Primeiro mês: registrar capital inicial
-      progressiveCashBalance += portfolioValue;
+    if (monthIndex === 0 && initialCapital > 0) {
+      // Primeiro mês: registrar capital inicial (se houver)
+      progressiveCashBalance += initialCapital;
       transactions.push({
         month: monthIndex,
         date: new Date(date),
         ticker: 'CASH',
         transactionType: 'CASH_CREDIT',
-        contribution: portfolioValue, // Capital inicial
+        contribution: initialCapital, // Capital inicial
         price: 1,
         sharesAdded: 0,
         totalShares: 0,
         totalInvested: 0,
-        cashReserved: portfolioValue
+        cashReserved: initialCapital
       });
-      
-      // Aporte mensal
-      if (monthlyContribution > 0) {
-        progressiveCashBalance += monthlyContribution;
-        transactions.push({
-          month: monthIndex,
-          date: new Date(date),
-          ticker: 'CASH',
-          transactionType: 'CASH_CREDIT',
-          contribution: monthlyContribution, // Aporte mensal
-          price: 1,
-          sharesAdded: 0,
-          totalShares: 0,
-          totalInvested: 0,
-          cashReserved: monthlyContribution
-        });
-      }
-    } else if (monthlyContribution > 0) {
-      // Demais meses: apenas aporte mensal
+    }
+    
+    // Sempre registrar aporte mensal (inclusive no primeiro mês)
+    if (monthlyContribution > 0) {
       progressiveCashBalance += monthlyContribution;
       transactions.push({
         month: monthIndex,
         date: new Date(date),
         ticker: 'CASH',
         transactionType: 'CASH_CREDIT',
-        contribution: monthlyContribution, // Positivo para crédito
+        contribution: monthlyContribution, // Aporte mensal
         price: 1,
         sharesAdded: 0,
         totalShares: 0,
@@ -994,9 +1050,9 @@ export class AdaptiveBacktestService {
     // FASE 2: Calcular posições alvo e identificar vendas
     const targetPositions = new Map<string, { targetShares: number, targetValue: number, currentShares: number, price: number }>();
     
-    // Valor total para alocação = valor da carteira + caixa disponível (que já inclui aporte mensal)
-    const totalValueForAllocation = totalCurrentValue + currentCash;
-    console.log(`💰 Valor total para alocação (carteira + caixa disponível): R$ ${totalValueForAllocation.toFixed(2)}`);
+    // Valor total para alocação = valor dos ativos atuais + caixa disponível
+    const totalValueForAllocation = currentAssetsValue + currentCash;
+    console.log(`💰 Valor total para alocação (ativos: R$ ${currentAssetsValue.toFixed(2)} + caixa: R$ ${currentCash.toFixed(2)}): R$ ${totalValueForAllocation.toFixed(2)}`);
     
     for (const asset of targetAssets) {
       const prices = pricesData.get(asset.ticker) || [];
@@ -1075,8 +1131,8 @@ export class AdaptiveBacktestService {
     const hasRebalancingSales = totalSalesValue > 0;
     console.log(`🔄 Rebalanceamento com vendas: ${hasRebalancingSales ? 'SIM' : 'NÃO'} (vendas: R$ ${totalSalesValue.toFixed(2)})`);
     
-    // CORREÇÃO: Rastrear separadamente o dinheiro por origem (4 fontes distintas)
-    let remainingContributionCash = monthlyContribution + (monthIndex === 0 ? portfolioValue : 0); // Apenas capital próprio
+      // CORREÇÃO: Rastrear separadamente o dinheiro por origem (4 fontes distintas)
+      let remainingContributionCash = initialCapital + monthlyContribution; // Capital inicial + aporte mensal
     let remainingDividendCash = monthlyDividends; // Dividendos recebidos (separado!)
     let remainingRebalanceCash = totalSalesValue; // Dinheiro de vendas
     let remainingPreviousCash = cashBalance; // Sobras de meses anteriores
@@ -1327,15 +1383,15 @@ export class AdaptiveBacktestService {
       console.log(`   💰 Sobras de arredondamento: R$ ${totalRoundingLeftovers.toFixed(2)} (JÁ incluídas no caixa após compras)`);
       console.log(`   💰 Caixa final: R$ ${finalCashBalance.toFixed(2)} (sobras dos potes JÁ incluídas)`);
       console.log(`   💰 Caixa inicial: R$ ${cashBalance.toFixed(2)}`);
+      if (monthIndex === 0 && initialCapital > 0) {
+        console.log(`   💰 Capital inicial: +R$ ${initialCapital.toFixed(2)}`);
+      }
       console.log(`   💰 Aporte mensal: +R$ ${monthlyContribution.toFixed(2)}`);
       console.log(`   💎 Dividendos: +R$ ${monthlyDividends.toFixed(2)}`);
-      if (monthIndex === 0) {
-        console.log(`   💰 Capital inicial: +R$ ${portfolioValue.toFixed(2)}`);
-      }
       console.log(`   💰 Vendas: +R$ ${totalSalesValue.toFixed(2)}`);
       
       // Calcular total de créditos incluindo capital inicial no primeiro mês e dividendos
-      const totalCredits = monthlyContribution + monthlyDividends + totalSalesValue + (monthIndex === 0 ? portfolioValue : 0);
+      const totalCredits = initialCapital + monthlyContribution + monthlyDividends + totalSalesValue;
       console.log(`   💰 Total de créditos: R$ ${totalCredits.toFixed(2)}`);
       
       const totalPurchases = (cashBalance + totalCredits) - currentCash;
@@ -1344,7 +1400,7 @@ export class AdaptiveBacktestService {
       console.log(`   ✅ Verificação: R$ ${cashBalance.toFixed(2)} + R$ ${totalCredits.toFixed(2)} - R$ ${totalPurchases.toFixed(2)} = R$ ${finalCashBalance.toFixed(2)} (sobras já incluídas)`);
       
       // Validar se a separação de caixa foi correta (4 fontes separadas)
-      const totalContributionSource = monthlyContribution + (monthIndex === 0 ? portfolioValue : 0);
+      const totalContributionSource = initialCapital + monthlyContribution;
       const totalDividendSource = monthlyDividends;
       const totalUsedFromContribution = totalContributionSource - remainingContributionCash;
       const totalUsedFromDividends = totalDividendSource - remainingDividendCash;
@@ -1449,13 +1505,15 @@ export class AdaptiveBacktestService {
   }
   
   /**
-   * Gera datas mensais (método herdado, mas redefinido para clareza)
+   * Gera datas mensais usando o PRIMEIRO DIA de cada mês
+   * Estas datas são usadas para aportes e compras de ações
+   * A avaliação da carteira é feita no ÚLTIMO DIA do mês
    */
   private generateMonthlyDatesAdaptive(startDate: Date, endDate: Date): Date[] {
     const dates: Date[] = [];
     const current = new Date(startDate);
     
-    // Ajustar para o primeiro dia do mês
+    // Ajustar para o primeiro dia do mês inicial
     current.setDate(1);
     
     while (current <= endDate) {
@@ -1464,6 +1522,13 @@ export class AdaptiveBacktestService {
     }
     
     return dates;
+  }
+  
+  /**
+   * Retorna o último dia do mês para uma data
+   */
+  private getLastDayOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
   }
   
   /**
@@ -1547,7 +1612,8 @@ export class AdaptiveBacktestService {
       throw new Error('Nenhum dado de evolução disponível');
     }
 
-    const monthlyReturns = evolution.slice(1).map(snapshot => snapshot.monthlyReturn);
+    // CORREÇÃO: Agora o primeiro mês TEM rentabilidade, então incluir todos os meses
+    const monthlyReturns = evolution.map(snapshot => snapshot.monthlyReturn);
     const portfolioValues = evolution.map(snapshot => snapshot.value);
     
     const initialValue = evolution[0].value;
@@ -1804,8 +1870,8 @@ export class AdaptiveBacktestService {
     const assetPerformance = (monthlyHistory && pricesData) ? 
       this.calculateAssetPerformanceFromTransactions(params, monthlyHistory, pricesData, finalDate) : [];
 
-    // Formatação dos retornos mensais
-    const monthlyReturnsFormatted = evolution.slice(1).map((snapshot, index) => ({
+    // Formatação dos retornos mensais (incluir TODOS os meses, incluindo o primeiro)
+    const monthlyReturnsFormatted = evolution.map((snapshot) => ({
       date: snapshot.date.toISOString().split('T')[0],
       return: snapshot.monthlyReturn,
       portfolioValue: snapshot.value,

@@ -200,7 +200,7 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                   size="sm"
                   onClick={() => handleMonthFilter(month)}
                 >
-                  Mês {month}
+                  Mês {month === 0 ? month + 1 : month}
                 </Button>
               ))}
             </div>

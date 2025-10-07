@@ -38,7 +38,7 @@ export class AIReportsService {
     try {
       // Buscar empresa pelo ticker
       const company = await safeQueryWithParams(
-        'company-by-ticker-ai-reports',
+        'companies-by-ticker-ai-reports',
         () => prisma.company.findUnique({
           where: { ticker: ticker.toUpperCase() }
         }),
@@ -51,7 +51,7 @@ export class AIReportsService {
 
       // Verificar se há relatório em geração
       const generatingReport = await safeQueryWithParams(
-        'ai-report-generating',
+        'ai_reports-generating',
         () => prisma.aIReport.findFirst({
           where: {
             companyId: company.id,
@@ -75,7 +75,7 @@ export class AIReportsService {
     try {
       // Buscar empresa pelo ticker
       const company = await safeQueryWithParams(
-        'company-by-ticker-start-generation',
+        'companies-by-ticker-start-generation',
         () => prisma.company.findUnique({
           where: { ticker: ticker.toUpperCase() }
         }),
@@ -94,7 +94,7 @@ export class AIReportsService {
 
       // Desativar relatórios anteriores da mesma empresa
       await safeWrite(
-        'deactivate-previous-ai-reports',
+        'deactivate-previous-ai_reports',
         () => prisma.aIReport.updateMany({
           where: {
             companyId: company.id,
@@ -109,7 +109,7 @@ export class AIReportsService {
 
       // Criar registro de geração
       const generatingReport = await safeWrite(
-        'create-ai-report-generating',
+        'create-ai_reports-generating',
         () => prisma.aIReport.create({
           data: {
             companyId: company.id,
@@ -179,7 +179,7 @@ export class AIReportsService {
   static async failGeneration(reportId: string): Promise<void> {
     try {
       await safeWrite(
-        'fail-ai-report-generation',
+        'fail-ai_reports-generation',
         () => prisma.aIReport.update({
           where: { id: reportId },
           data: {
@@ -201,7 +201,7 @@ export class AIReportsService {
     try {
       // Buscar empresa pelo ticker
       const company = await safeQueryWithParams(
-        'company-by-ticker-get-latest-report',
+        'companies-by-ticker-get-latest-report',
         () => prisma.company.findUnique({
           where: { ticker: ticker.toUpperCase() }
         }),
@@ -214,7 +214,7 @@ export class AIReportsService {
 
       // Buscar o relatório mais recente ativo e completo
       const report = await safeQueryWithParams(
-        'ai-report-latest',
+        'ai_reports-latest',
         () => prisma.aIReport.findFirst({
           where: {
             companyId: company.id,
@@ -295,7 +295,7 @@ export class AIReportsService {
     try {
       // Desativar relatórios anteriores da mesma empresa
       await safeWrite(
-        'deactivate-previous-ai-reports-create',
+        'deactivate-previous-ai_reports-create',
         () => prisma.aIReport.updateMany({
           where: {
             companyId: data.companyId,
@@ -310,7 +310,7 @@ export class AIReportsService {
 
       // Criar novo relatório
       const report = await safeWrite(
-        'create-new-ai-report',
+        'create-new-ai_reports',
         () => prisma.aIReport.create({
           data: {
             companyId: data.companyId,
@@ -352,7 +352,7 @@ export class AIReportsService {
     try {
       // Buscar empresa pelo ticker
       const company = await safeQueryWithParams(
-        'company-by-ticker-report-history',
+        'companies-by-ticker-report-history',
         () => prisma.company.findUnique({
           where: { ticker: ticker.toUpperCase() }
         }),
@@ -364,7 +364,7 @@ export class AIReportsService {
       }
 
       const reports = await safeQueryWithParams(
-        'ai-reports-history',
+        'ai_reports-history',
         () => prisma.aIReport.findMany({
           where: {
             companyId: company.id
@@ -413,7 +413,7 @@ export class AIReportsService {
 
       // Verificar se já existe feedback do usuário
       const existingFeedback = await safeQueryWithParams(
-        'ai-report-feedback-check',
+        'ai_reports-feedback-check',
         () => prisma.aIReportFeedback.findUnique({
           where: {
             reportId_userId: {
@@ -428,7 +428,7 @@ export class AIReportsService {
       if (existingFeedback) {
         // Atualizar feedback existente
         await safeWrite(
-          'update-ai-report-feedback',
+          'update-ai_reports-feedback',
           () => prisma.aIReportFeedback.update({
             where: {
               id: existingFeedback.id
@@ -447,7 +447,7 @@ export class AIReportsService {
       } else {
         // Criar novo feedback
         await safeWrite(
-          'create-ai-report-feedback',
+          'create-ai_reports-feedback',
           () => prisma.aIReportFeedback.create({
             data: {
               reportId,
@@ -478,14 +478,14 @@ export class AIReportsService {
       // Contar likes e dislikes
       const [likeCount, dislikeCount] = await Promise.all([
         safeQueryWithParams(
-          'ai-report-feedback-like-count',
+          'ai_reports-feedback-like-count',
           () => prisma.aIReportFeedback.count({
             where: { reportId, type: 'LIKE' }
           }),
           { reportId, type: 'LIKE' }
         ) as Promise<number>,
         safeQueryWithParams(
-          'ai-report-feedback-dislike-count',
+          'ai_reports-feedback-dislike-count',
           () => prisma.aIReportFeedback.count({
             where: { reportId, type: 'DISLIKE' }
           }),
@@ -495,7 +495,7 @@ export class AIReportsService {
 
       // Atualizar relatório
       await safeWrite(
-        'update-ai-report-counters',
+        'update-ai_reports-counters',
         () => prisma.aIReport.update({
           where: { id: reportId },
           data: {
@@ -521,7 +521,7 @@ export class AIReportsService {
       }
 
       await safeWrite(
-        'remove-ai-report-feedback',
+        'remove-ai_reports-feedback',
         () => prisma.aIReportFeedback.delete({
           where: {
             reportId_userId: {

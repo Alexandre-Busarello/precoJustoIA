@@ -10,6 +10,13 @@
  * - Detecção de tabelas afetadas por queries
  * - Mapeamento de dependências entre tabelas
  * - Logs detalhados para debugging
+ * - Suporte para Turbopack/webpack (["prisma"].model)
+ * - Mapeamento automático Prisma Client -> nomes de tabelas
+ * 
+ * MANUTENÇÃO:
+ * - Ao adicionar novo model no schema.prisma, atualizar PRISMA_MODEL_TO_TABLE
+ * - Ao adicionar nova tabela, atualizar TABLE_DEPENDENCIES se houver relações
+ * - O mapeamento usa o nome do model no client (ex: aIReport) -> nome da tabela (ai_reports)
  */
 
 import { cache } from './cache-service'
@@ -18,6 +25,53 @@ import crypto from 'crypto'
 // Configurações do cache
 const QUERY_CACHE_TTL = 60 * 60 // 1 hora em segundos
 const CACHE_PREFIX = 'query'
+
+// Mapeamento de models do Prisma Client para nomes de tabelas no banco
+// Baseado no schema.prisma com @@map
+const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
+  // Auth & Users
+  'account': 'Account',
+  'session': 'Session',
+  'user': 'users',
+  'verificationToken': 'VerificationToken',
+  'passwordResetToken': 'password_reset_tokens',
+  
+  // Companies & Market Data
+  'company': 'companies',
+  'financialData': 'financial_data',
+  'dailyQuote': 'daily_quotes',
+  'historicalPrice': 'historical_prices',
+  'priceOscillations': 'price_oscillations',
+  
+  // Financial Statements
+  'balanceSheet': 'balance_sheets',
+  'incomeStatement': 'income_statements',
+  'cashflowStatement': 'cashflow_statements',
+  'quarterlyFinancials': 'quarterly_financials',
+  'keyStatistics': 'key_statistics',
+  'valueAddedStatement': 'value_added_statements',
+  
+  // Portfolio & Ranking
+  'portfolio': 'portfolios',
+  'portfolioAsset': 'portfolio_assets',
+  'rankingHistory': 'ranking_history',
+  
+  // Backtest
+  'backtestConfig': 'backtest_configs',
+  'backtestAsset': 'backtest_assets',
+  'backtestResult': 'backtest_results',
+  'backtestTransaction': 'backtest_transactions',
+  
+  // Support & AI
+  'supportTicket': 'support_tickets',
+  'ticketMessage': 'ticket_messages',
+  'aIReport': 'ai_reports',           // AIReport -> aIReport (client) -> ai_reports (table)
+  'aIReportFeedback': 'ai_report_feedbacks',  // AIReportFeedback -> aIReportFeedback -> ai_report_feedbacks
+  
+  // Processing
+  'tickerProcessingStatus': 'ticker_processing_status',
+  'alfaWaitlist': 'alfa_waitlist'
+}
 
 // Mapeamento de dependências entre tabelas
 // Quando uma tabela é modificada, invalida cache de tabelas relacionadas
@@ -91,11 +145,18 @@ const WRITE_PATTERNS = [
 
 // Extração de nomes de tabelas de queries
 const TABLE_PATTERNS = [
+  // Formato tradicional: prisma.tableName.
   /prisma\.(\w+)\./g,
+  // Formato Turbopack/webpack: ["prisma"].tableName.
+  /\["prisma"\]\.(\w+)\./g,
+  // Formato com variável: prisma['tableName'] ou prisma["tableName"]
+  /prisma\[['"](\w+)['"]\]/g,
+  // SQL direto
   /FROM\s+(\w+)/gi,
   /UPDATE\s+(\w+)/gi,
   /INSERT\s+INTO\s+(\w+)/gi,
-  /DELETE\s+FROM\s+(\w+)/gi
+  /DELETE\s+FROM\s+(\w+)/gi,
+  /JOIN\s+(\w+)/gi,
 ]
 
 /**
@@ -125,6 +186,11 @@ export class SmartQueryCache {
   
   /**
    * Extrai nomes de tabelas de uma query
+   * Suporta múltiplos formatos:
+   * - prisma.tableName (tradicional)
+   * - ["prisma"].tableName (Turbopack/webpack)
+   * - prisma['tableName'] (acesso dinâmico)
+   * - SQL direto (FROM, UPDATE, INSERT, etc)
    */
   static extractTableNames(operationString: string): string[] {
     const tables = new Set<string>()
@@ -134,12 +200,25 @@ export class SmartQueryCache {
       const matches = operationString.matchAll(pattern)
       for (const match of matches) {
         if (match[1]) {
-          // Converter de camelCase para snake_case se necessário
-          const tableName = this.camelToSnakeCase(match[1])
-          tables.add(tableName)
+          const modelName = match[1]
+          
+          // Primeiro tentar o mapeamento direto do Prisma Client
+          // Ex: aIReport -> ai_reports
+          if (PRISMA_MODEL_TO_TABLE[modelName]) {
+            tables.add(PRISMA_MODEL_TO_TABLE[modelName])
+          } else {
+            // Fallback: converter camelCase para snake_case
+            const tableName = this.camelToSnakeCase(modelName)
+            tables.add(tableName)
+          }
         }
       }
     })
+    
+    // Debug: descomentar para ver tabelas extraídas
+    // if (tables.size > 0) {
+    //   console.log(`📊 Tabelas extraídas (${tables.size}):`, Array.from(tables))
+    // }
     
     return Array.from(tables)
   }
@@ -374,6 +453,33 @@ export class SmartQueryCache {
         totalKeys: 0,
         topTables: []
       }
+    }
+  }
+  
+  /**
+   * Valida se um model name do Prisma está mapeado
+   * Útil para debugging e validação
+   */
+  static validateModelMapping(modelName: string): {
+    isMapped: boolean
+    tableName: string
+    warning?: string
+  } {
+    const mappedTable = PRISMA_MODEL_TO_TABLE[modelName]
+    
+    if (mappedTable) {
+      return {
+        isMapped: true,
+        tableName: mappedTable
+      }
+    }
+    
+    // Não mapeado - usar fallback
+    const fallbackTable = this.camelToSnakeCase(modelName)
+    return {
+      isMapped: false,
+      tableName: fallbackTable,
+      warning: `Model '${modelName}' não está mapeado em PRISMA_MODEL_TO_TABLE. Usando fallback: '${fallbackTable}'. Considere adicionar ao mapeamento para precisão.`
     }
   }
 }

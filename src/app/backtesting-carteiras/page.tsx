@@ -406,7 +406,7 @@ export default function BacktestingCarteirasPage() {
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>
-            <Button variant="outline" size="lg" className="border-2 border-white hover:bg-white hover:text-emerald-600 text-lg px-8 py-4" asChild>
+            <Button variant="outline" size="lg" className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-emerald-600 text-lg px-8 py-4" asChild>
               <Link href="/planos">Ver Planos Premium</Link>
             </Button>
           </div>

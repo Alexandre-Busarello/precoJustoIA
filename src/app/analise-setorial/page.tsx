@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import { SectorAnalysisClient } from '@/components/sector-analysis-client'
 import { getCurrentUser } from '@/lib/user-service'
 import { analyzeSectors } from '@/lib/sector-analysis-service'
+import { Footer } from '@/components/footer'
 import { 
   BarChart3, 
   TrendingUp, 
@@ -319,6 +320,8 @@ export default async function AnaliseSetorialPage() {
           </div>
         </div>
       </section>
+
+      <Footer />
     </div>
   )
 }

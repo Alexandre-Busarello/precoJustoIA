@@ -2,6 +2,7 @@ import { Metadata } from "next"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Footer } from "@/components/footer"
 import { 
   Brain, 
   Calculator, 
@@ -792,6 +793,8 @@ export default function MetodologiaPage() {
           </div>
         </div>
       </section>
+
+      <Footer />
     </div>
   )
 }

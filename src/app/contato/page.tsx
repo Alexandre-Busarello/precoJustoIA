@@ -2,6 +2,7 @@ import { Metadata } from "next"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Footer } from "@/components/footer"
 import { 
   Mail, 
   MessageCircle, 
@@ -422,6 +423,8 @@ export default function ContatoPage() {
           </div>
         </div>
       </section>
+
+      <Footer />
     </div>
   )
 }

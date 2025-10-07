@@ -2,6 +2,7 @@ import { Metadata } from "next"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Footer } from "@/components/footer"
 import { 
   Building2, 
   Users, 
@@ -536,6 +537,8 @@ export default function FundadorPage() {
           </div>
         </div>
       </section>
+
+      <Footer />
     </div>
   )
 }

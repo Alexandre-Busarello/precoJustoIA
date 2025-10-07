@@ -226,17 +226,17 @@ function RankingContent() {
             </p>
 
             <div className="flex flex-wrap justify-center gap-3">
-              <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30">
+              <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
                 <CheckCircle2 className="w-4 h-4 mr-2" />
                 {isLoggedIn ? 'Histórico Salvo' : 'Modelo Gratuito'}
               </Badge>
               {isPremium && (
-                <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30">
+                <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
                   <Crown className="w-4 h-4 mr-2" />
                   8 Modelos Premium
                 </Badge>
               )}
-              <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30">
+              <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
                 <Sparkles className="w-4 h-4 mr-2" />
                 Análise com IA
               </Badge>

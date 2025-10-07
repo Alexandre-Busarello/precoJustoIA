@@ -55,15 +55,15 @@ export function ComparadorHero() {
           )}
 
           <div className={`flex flex-wrap justify-center gap-3 ${isPremium ? 'mt-3' : ''}`}>
-            <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30">
+            <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
               <CheckCircle2 className="w-4 h-4 mr-2" />
               Grátis para Começar
             </Badge>
-            <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30">
+            <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
               <Sparkles className="w-4 h-4 mr-2" />
               Análise com IA
             </Badge>
-            <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30">
+            <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
               <Activity className="w-4 h-4 mr-2" />
               Dados Atualizados
             </Badge>

@@ -454,24 +454,28 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
      
     const minValue = Math.min(...data.map((d: any) => d.value))
     const range = maxValue - minValue || 1
+    
+    // Calcular média
+    const avgValue = data.reduce((sum: number, d: any) => sum + d.value, 0) / data.length
+    const avgY = 100 - ((avgValue - minValue) / range) * 100
 
     return (
-      <div className="space-y-4">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold mb-2">{chartData.indicatorInfo.name}</h3>
-          <p className="text-sm text-muted-foreground mb-1">{chartData.indicatorInfo.description}</p>
+      <div className="space-y-3 md:space-y-4">
+        <div className="mb-3 md:mb-4">
+          <h3 className="text-base md:text-lg font-semibold mb-1 md:mb-2">{chartData.indicatorInfo.name}</h3>
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">{chartData.indicatorInfo.description}</p>
           <p className="text-xs text-muted-foreground">
             {data.length} anos de dados • {data[0]?.year} - {data[data.length - 1]?.year}
           </p>
         </div>
         
         {/* Gráfico melhorado */}
-        <div className="bg-white dark:bg-gray-900 border rounded-lg p-6">
+        <div className="bg-white dark:bg-gray-900 border rounded-lg p-3 md:p-6">
           <div className="relative">
             {/* Container do gráfico */}
-            <div className="h-80 flex">
+            <div className="h-64 md:h-80 flex">
               {/* Eixo Y - valores */}
-              <div className="w-20 flex flex-col justify-between text-xs text-muted-foreground pr-3">
+              <div className="w-12 md:w-20 flex flex-col justify-between text-[10px] md:text-xs text-muted-foreground pr-2 md:pr-3">
                 <div className="text-right">{maxValue.toFixed(2)}</div>
                 <div className="text-right">{(maxValue * 0.75 + minValue * 0.25).toFixed(2)}</div>
                 <div className="text-right">{(maxValue * 0.5 + minValue * 0.5).toFixed(2)}</div>
@@ -567,19 +571,55 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
                       </g>
                     )
                   })}
+                  
+                  {/* Linha da média (pontilhada) - desenhada por último para ficar visível */}
+                  <line
+                    x1="0"
+                    y1={avgY}
+                    x2="100"
+                    y2={avgY}
+                    stroke="#f59e0b"
+                    strokeWidth="1.5"
+                    strokeDasharray="2,2"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  
+                  {/* Label da média */}
+                  <g>
+                    <rect
+                      x="75"
+                      y={avgY - 2.5}
+                      width="23"
+                      height="5"
+                      fill="white"
+                      stroke="#f59e0b"
+                      strokeWidth="0.2"
+                      rx="0.5"
+                    />
+                    <text
+                      x="86.5"
+                      y={avgY + 1.2}
+                      fontSize="3.5"
+                      fill="#f59e0b"
+                      fontWeight="700"
+                      textAnchor="middle"
+                    >
+                      Média
+                    </text>
+                  </g>
                 </svg>
               </div>
             </div>
             
             {/* Eixo X - anos */}
-            <div className="mt-3 ml-20">
-              <div className="relative h-6">
+            <div className="mt-2 md:mt-3 ml-12 md:ml-20">
+              <div className="relative h-5 md:h-6">
                 {data.map((d: any, i: number) => {  
                   const x = (i / (data.length - 1)) * 100
                   return (
                     <div
                       key={i}
-                      className="absolute text-xs text-muted-foreground font-medium"
+                      className="absolute text-[10px] md:text-xs text-muted-foreground font-medium"
                       style={{ 
                         left: `${x}%`,
                         transform: 'translateX(-50%)',
@@ -596,22 +636,28 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
         </div>
         
         {/* Estatísticas */}
-        <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-3 md:pt-4 border-t">
           <div className="text-center">
-            <p className="text-xs text-muted-foreground">Atual</p>
-            <p className="font-medium">
+            <p className="text-[10px] md:text-xs text-muted-foreground mb-0.5">Atual</p>
+            <p className="text-sm md:text-base font-medium">
               {data[data.length - 1]?.value?.toFixed(2)} {chartData.indicatorInfo.unit}
             </p>
           </div>
           <div className="text-center">
-            <p className="text-xs text-muted-foreground">Máximo</p>
-            <p className="font-medium">
+            <p className="text-[10px] md:text-xs text-muted-foreground mb-0.5">Média</p>
+            <p className="text-sm md:text-base font-medium text-amber-600 dark:text-amber-400">
+              {avgValue.toFixed(2)} {chartData.indicatorInfo.unit}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] md:text-xs text-muted-foreground mb-0.5">Máximo</p>
+            <p className="text-sm md:text-base font-medium text-green-600 dark:text-green-400">
               {maxValue.toFixed(2)} {chartData.indicatorInfo.unit}
             </p>
           </div>
           <div className="text-center">
-            <p className="text-xs text-muted-foreground">Mínimo</p>
-            <p className="font-medium">
+            <p className="text-[10px] md:text-xs text-muted-foreground mb-0.5">Mínimo</p>
+            <p className="text-sm md:text-base font-medium text-red-600 dark:text-red-400">
               {minValue.toFixed(2)} {chartData.indicatorInfo.unit}
             </p>
           </div>
@@ -622,11 +668,11 @@ function IndicatorChart({ indicator, ticker, isOpen, onClose }: {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Evolução do {indicator} - {ticker}</DialogTitle>
+          <DialogTitle className="text-base md:text-lg">Evolução do {indicator} - {ticker}</DialogTitle>
         </DialogHeader>
-        <div className="p-6">
+        <div className="p-3 md:p-6">
           {renderContent()}
         </div>
       </DialogContent>

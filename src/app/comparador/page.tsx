@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import { EnhancedStockComparisonSelector } from '@/components/enhanced-stock-comparison-selector'
 import { SEOSectionWrapper } from '@/components/seo-section-wrapper'
 import { ComparadorHero } from '@/components/comparador-hero'
+import { Footer } from '@/components/footer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -571,6 +572,8 @@ export default function ComparadorPage() {
           })
         }}
       />
+
+      <Footer />
     </div>
   )
 }

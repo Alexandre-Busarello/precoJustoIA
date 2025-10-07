@@ -2,6 +2,7 @@ import { Metadata } from "next"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Footer } from "@/components/footer"
 import { 
   Brain, 
   Calculator, 
@@ -379,12 +380,14 @@ export default function ComoFuncionaPage() {
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>
-            <Button variant="outline" size="lg" className="border-2 border-white text-white hover:bg-white hover:text-blue-600 text-lg px-8 py-4" asChild>
+            <Button variant="outline" size="lg" className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-blue-600 text-lg px-8 py-4" asChild>
               <Link href="/ranking">Ver Demonstração</Link>
             </Button>
           </div>
         </div>
       </section>
+
+      <Footer />
     </div>
   )
 }

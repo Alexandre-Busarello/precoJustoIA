@@ -626,19 +626,19 @@ export default function ScreeningAcoesPage() {
         {/* Bottom CTA */}
         {!isLoggedIn && (
           <Card className="mt-8 border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20">
-            <CardContent className="p-6">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-3 flex-1">
-                  <Crown className="w-8 h-8 text-violet-600" />
-                  <div>
-                    <h4 className="font-semibold">Crie uma conta gratuita</h4>
-                    <p className="text-sm text-muted-foreground">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-4 w-full">
+                <div className="flex items-center gap-3 min-w-0 flex-shrink w-full sm:w-auto">
+                  <Crown className="w-8 h-8 text-violet-600 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-semibold text-sm sm:text-base">Crie uma conta gratuita</h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       Salve seus screenings, crie rankings personalizados e muito mais
                     </p>
                   </div>
                 </div>
-                <Button size="lg" className="bg-gradient-to-r from-violet-600 to-pink-600" asChild>
-                  <Link href="/register" className="flex items-center gap-2">
+                <Button size="lg" className="bg-gradient-to-r from-violet-600 to-pink-600 w-full sm:w-auto whitespace-nowrap flex-shrink-0" asChild>
+                  <Link href="/register" className="flex items-center justify-center gap-2">
                     Começar Grátis
                     <ArrowRight className="w-4 h-4" />
                   </Link>

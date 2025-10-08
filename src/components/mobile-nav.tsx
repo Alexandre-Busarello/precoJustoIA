@@ -23,7 +23,8 @@ import {
   Headphones,
   TrendingUp,
   Wrench,
-  Building2
+  Building2,
+  Filter
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -77,6 +78,14 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       icon: <Building2 className="w-5 h-5" />,
       show: true,
       description: "Compare setores da B3",
+      isNew: true
+    },
+    {
+      title: "Screening de Ações",
+      href: "/screening-acoes", 
+      icon: <Filter className="w-5 h-5" />,
+      show: true,
+      description: "Filtros customizáveis",
       isNew: true
     },
     {
@@ -246,6 +255,8 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                             ? 'bg-gradient-to-br from-emerald-500 to-teal-500' 
                             : item.href === '/analise-setorial'
                             ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
+                            : item.href === '/screening-acoes'
+                            ? 'bg-gradient-to-br from-amber-500 to-yellow-500'
                             : 'bg-gradient-to-br from-blue-500 to-purple-500'
                         }`}>
                           <div className="text-white text-sm">

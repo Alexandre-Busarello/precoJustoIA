@@ -154,7 +154,10 @@ Quando o usuário mencionar qualidade/solidez, SEMPRE combine múltiplos filtros
   → liquidezCorrenteFilter (min: 1.2)
 
 - "Descontadas" / "Baratas" / "Subvalorizadas":
-  → P/VP baixo (max: 1.5)
+  → P/VP muito barato (max: 1)
+  → P/VP barato (max: 1.7)
+  → P/VP normal (max: 2)
+  → P/L possivelmente barato (max: 10)
   → P/L razoável (max: 15)
   → Graham Upside positivo (min: 10)
 

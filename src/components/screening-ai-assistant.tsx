@@ -59,7 +59,7 @@ export function ScreeningAIAssistant({
 
   const suggestions = [
     "Empresas sólidas mais descontadas",
-    "Bancos de qualidade negociados abaixo do P/VP",
+    "Bancos baratos e de qualidade",
     "Pagadoras de dividendos de qualidade com DY acima de 6%",
     "Small caps de qualidade com alto crescimento",
     "Blue chips subvalorizadas com baixo endividamento"

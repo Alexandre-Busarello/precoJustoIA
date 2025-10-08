@@ -162,9 +162,9 @@ Quando o usuário mencionar qualidade/solidez, SEMPRE combine múltiplos filtros
 
 **EXEMPLOS DE CONVERSÃO COMPLETOS**:
 
-Exemplo 1: "Boas empresas com P/VP abaixo de 1"
+Exemplo 1: "Boas empresas com P/VP abaixo de 2"
 → {
-  "pvpFilter": { "enabled": true, "max": 1 },
+  "pvpFilter": { "enabled": true, "max": 2 },
   "roeFilter": { "enabled": true, "min": 0.15 },
   "roicFilter": { "enabled": true, "min": 0.12 },
   "margemLiquidaFilter": { "enabled": true, "min": 0.05 },

@@ -44,6 +44,13 @@ if (typeof window === 'undefined') {
   }
 }
 
+// Função auxiliar para serializar valores com BigInt
+function serializeValue(value: any): string {
+  return JSON.stringify(value, (_, v) => 
+    typeof v === 'bigint' ? v.toString() : v
+  )
+}
+
 // Tipos para o cache
 export interface CacheOptions {
   ttl?: number // Time to live em segundos
@@ -355,7 +362,7 @@ export class CacheService {
   async set<T = any>(key: string, value: T, options: CacheOptions = {}): Promise<void> {
     const fullKey = this.buildKey(key, options.prefix)
     const ttl = options.ttl || DEFAULT_TTL
-    const serialized = JSON.stringify(value)
+    const serialized = serializeValue(value)
 
     try {
       // Garantir conexão (lazy loading)
@@ -592,7 +599,7 @@ export class CacheService {
     let size = 0
     for (const [key, value] of memoryCache.entries()) {
       size += key.length * 2 // Aproximação para string UTF-16
-      size += JSON.stringify(value).length * 2
+      size += serializeValue(value).length * 2
     }
     
     if (size < 1024) return `${size} B`

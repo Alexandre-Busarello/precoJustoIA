@@ -7,7 +7,7 @@ import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RankingHistory } from "@/components/ranking-history"
+import { RankingHistorySection } from "@/components/ranking-history-section"
 import { Footer } from "@/components/footer"
 import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner"
 import { CompanyLogo } from "@/components/company-logo"
@@ -602,7 +602,7 @@ export default function Dashboard() {
 
             {/* 4. HISTÓRICO DE RANKINGS */}
             <div id="rankings">
-            <RankingHistory />
+            <RankingHistorySection />
             </div>
           </div>
 

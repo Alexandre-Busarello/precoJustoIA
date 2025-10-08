@@ -43,6 +43,7 @@ const modelIcons: Record<string, any> = {
   'magicFormula': PieChart,
   'dividendYield': DollarSign,
   'gordon': DollarSign,
+  'screening': Sparkles,
 }
 
 const modelColors: Record<string, string> = {
@@ -54,6 +55,7 @@ const modelColors: Record<string, string> = {
   'magicFormula': 'from-yellow-500 to-orange-500',
   'dividendYield': 'from-green-600 to-teal-600',
   'gordon': 'from-violet-500 to-purple-500',
+  'screening': 'from-amber-500 to-yellow-500',
 }
 
 export function RankingHistorySection({ onLoadRanking }: RankingHistorySectionProps) {

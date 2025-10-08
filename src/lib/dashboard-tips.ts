@@ -92,7 +92,18 @@ export const DASHBOARD_TIPS: DashboardTip[] = [
     icon: '📊',
     color: 'blue',
     priority: 65,
-    condition: (ctx) => ctx.totalRankings >= 5 // && ctx.totalRankings < 20
+    condition: (ctx) => ctx.totalRankings >= 5 && ctx.totalRankings < 7
+  },
+  {
+    id: 'screening-acoes',
+    title: '🎯 Screening Customizável',
+    description: 'Crie filtros personalizados e encontre ações que atendem exatamente seus critérios de investimento.',
+    cta: 'Fazer Screening',
+    ctaLink: '/screening-acoes',
+    icon: '🎯',
+    color: 'emerald',
+    priority: 68,
+    condition: (ctx) => ctx.totalRankings >= 6 && ctx.totalRankings < 10
   },
 
   // USUÁRIOS AVANÇADOS (10+ rankings)

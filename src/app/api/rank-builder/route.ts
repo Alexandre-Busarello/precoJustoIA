@@ -13,16 +13,17 @@ import {
   GordonParams,
   FundamentalistParams,
   AIParams,
+  ScreeningParams,
   RankBuilderResult,
   CompanyData,
   toNumber
 } from '@/lib/strategies';
 import { TechnicalIndicators, type PriceData } from '@/lib/technical-indicators';
 
-type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams;
+type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams | ScreeningParams;
 
 interface RankBuilderRequest {
-  model: 'graham' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'fcd' | 'gordon' | 'fundamentalist' | 'ai';
+  model: 'graham' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'fcd' | 'gordon' | 'fundamentalist' | 'ai' | 'screening';
   params: ModelParams;
 }
 
@@ -179,6 +180,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
       ticker: company.ticker,
       name: company.name,
       sector: company.sector,
+      industry: company.industry,
       currentPrice: toNumber(company.dailyQuotes[0]?.price) || 0,
       logoUrl: company.logoUrl,
       financials: company.financialData[0] || {},
@@ -211,6 +213,8 @@ function generateRational(model: string, params: ModelParams): string {
       return StrategyFactory.generateRational('fundamentalist', params as FundamentalistParams);
     case 'ai':
       return StrategyFactory.generateRational('ai', params as AIParams);
+    case 'screening':
+      return StrategyFactory.generateRational('screening', params as ScreeningParams);
     default:
       return 'Modelo não encontrado.';
   }
@@ -254,6 +258,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Verificar restrições para o modelo Screening
+    if (model === 'screening') {
+      const user = session?.user?.id ? await getCurrentUser() : null;
+      const isPremium = user?.isPremium || false;
+
+      // Se não for Premium, limitar apenas aos parâmetros de Valuation
+      if (!isPremium) {
+        const screeningParams = params as ScreeningParams;
+        
+        // Limpar todos os filtros exceto Valuation
+        const restrictedParams: ScreeningParams = {
+          // Permitir apenas filtros de Valuation
+          plFilter: screeningParams.plFilter,
+          pvpFilter: screeningParams.pvpFilter,
+          evEbitdaFilter: screeningParams.evEbitdaFilter,
+          psrFilter: screeningParams.psrFilter,
+          
+          // Manter parâmetros básicos
+          limit: screeningParams.limit || 20,
+          companySize: screeningParams.companySize || 'all',
+          useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
+          
+          // Remover todos os outros filtros (ficam undefined)
+          roeFilter: undefined,
+          roicFilter: undefined,
+          roaFilter: undefined,
+          margemLiquidaFilter: undefined,
+          margemEbitdaFilter: undefined,
+          cagrLucros5aFilter: undefined,
+          cagrReceitas5aFilter: undefined,
+          dyFilter: undefined,
+          payoutFilter: undefined,
+          dividaLiquidaPlFilter: undefined,
+          liquidezCorrenteFilter: undefined,
+          dividaLiquidaEbitdaFilter: undefined,
+          marketCapFilter: undefined,
+          overallScoreFilter: undefined,
+          grahamUpsideFilter: undefined,
+          selectedSectors: undefined,
+          selectedIndustries: undefined,
+        };
+        
+        // Substituir params com os parâmetros restritos
+        body.params = restrictedParams;
+      }
+    }
+
     // Buscar dados de todas as empresas
     const companies = await getCompaniesData();
     
@@ -287,6 +338,9 @@ export async function POST(request: NextRequest) {
         break;
       case 'ai':
         results = await StrategyFactory.runAIRanking(companies, params as AIParams);
+        break;
+      case 'screening':
+        results = StrategyFactory.runScreeningRanking(companies, params as ScreeningParams);
         break;
       default:
         return NextResponse.json(

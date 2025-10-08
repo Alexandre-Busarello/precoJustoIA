@@ -47,7 +47,55 @@ export interface AIParams extends StrategyParams {
   focus?: 'Valor' | 'Crescimento' | 'Dividendos' | 'Crescimento e Valor'; // Foco da análise
 }
 
-export type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | AIParams;
+// Filtros individuais para Screening
+export interface ScreeningFilter {
+  enabled: boolean;
+  min?: number;
+  max?: number;
+}
+
+export interface ScreeningParams extends StrategyParams {
+  // Valuation
+  plFilter?: ScreeningFilter;
+  pvpFilter?: ScreeningFilter;
+  evEbitdaFilter?: ScreeningFilter;
+  psrFilter?: ScreeningFilter;
+  
+  // Rentabilidade
+  roeFilter?: ScreeningFilter;
+  roicFilter?: ScreeningFilter;
+  roaFilter?: ScreeningFilter;
+  margemLiquidaFilter?: ScreeningFilter;
+  margemEbitdaFilter?: ScreeningFilter;
+  
+  // Crescimento
+  cagrLucros5aFilter?: ScreeningFilter;
+  cagrReceitas5aFilter?: ScreeningFilter;
+  
+  // Dividendos
+  dyFilter?: ScreeningFilter;
+  payoutFilter?: ScreeningFilter;
+  
+  // Endividamento & Liquidez
+  dividaLiquidaPlFilter?: ScreeningFilter;
+  liquidezCorrenteFilter?: ScreeningFilter;
+  dividaLiquidaEbitdaFilter?: ScreeningFilter;
+  
+  // Market Cap
+  marketCapFilter?: ScreeningFilter;
+  
+  // Score Geral (calculado pelo overall-score.ts)
+  overallScoreFilter?: ScreeningFilter;
+  
+  // Graham Upside (margem de segurança calculada pelo graham-strategy.ts)
+  grahamUpsideFilter?: ScreeningFilter;
+  
+  // Seleção de Setores e Indústrias
+  selectedSectors?: string[]; // Array de setores selecionados
+  selectedIndustries?: string[]; // Array de indústrias selecionadas (filtradas pelo setor)
+}
+
+export type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | AIParams | ScreeningParams;
 
 // Dados financeiros padronizados (aceita qualquer tipo que será convertido por toNumber)
 export interface CompanyFinancialData {
@@ -137,6 +185,7 @@ export interface CompanyData {
   ticker: string;
   name: string;
   sector: string | null;
+  industry?: string | null;
   currentPrice: number;
   logoUrl?: string | null;
   financials: CompanyFinancialData;

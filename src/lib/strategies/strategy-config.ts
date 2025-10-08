@@ -69,6 +69,31 @@ export const STRATEGY_CONFIG = {
     companySize: 'all',         // Filtro de tamanho: todas as empresas
     useTechnicalAnalysis: true, // Análise técnica ativada por padrão
     use7YearAverages: true      // Médias de 7 anos habilitadas por padrão
+  },
+  
+  // Screening Customizável de Ações
+  screening: {
+    limit: 20,                  // Máximo de 20 resultados
+    companySize: 'all',         // Filtro de tamanho: todas as empresas
+    useTechnicalAnalysis: true, // Análise técnica ativada por padrão
+    // Todos os filtros desativados por padrão (usuário configura)
+    plFilter: { enabled: false, min: undefined, max: undefined },
+    pvpFilter: { enabled: false, min: undefined, max: undefined },
+    evEbitdaFilter: { enabled: false, min: undefined, max: undefined },
+    psrFilter: { enabled: false, min: undefined, max: undefined },
+    roeFilter: { enabled: false, min: undefined, max: undefined },
+    roicFilter: { enabled: false, min: undefined, max: undefined },
+    roaFilter: { enabled: false, min: undefined, max: undefined },
+    margemLiquidaFilter: { enabled: false, min: undefined, max: undefined },
+    margemEbitdaFilter: { enabled: false, min: undefined, max: undefined },
+    cagrLucros5aFilter: { enabled: false, min: undefined, max: undefined },
+    cagrReceitas5aFilter: { enabled: false, min: undefined, max: undefined },
+    dyFilter: { enabled: false, min: undefined, max: undefined },
+    payoutFilter: { enabled: false, min: undefined, max: undefined },
+    dividaLiquidaPlFilter: { enabled: false, min: undefined, max: undefined },
+    liquidezCorrenteFilter: { enabled: false, min: undefined, max: undefined },
+    dividaLiquidaEbitdaFilter: { enabled: false, min: undefined, max: undefined },
+    marketCapFilter: { enabled: false, min: undefined, max: undefined }
   }
 } as const;
 

@@ -214,3 +214,4 @@ export async function executarTestes() {
 if (require.main === module) {
   executarTestes().catch(console.error)
 }
+

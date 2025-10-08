@@ -11,7 +11,8 @@ import {
   TrendingUp, 
   ChevronDown,
   Wrench,
-  Building2
+  Building2,
+  Search
 } from "lucide-react"
 
 interface ToolsDropdownProps {
@@ -42,7 +43,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
     setIsOpen(false)
   }, [pathname])
 
-  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial'].includes(pathname)
+  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes'].includes(pathname)
 
   const tools = [
     {
@@ -51,6 +52,14 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       title: 'Rankings',
       description: 'Análise fundamentalista automatizada',
       isPremium: false
+    },
+    {
+      href: '/screening-acoes',
+      icon: <Search className="w-4 h-4" />,
+      title: 'Screening de Ações',
+      description: 'Filtros customizáveis por categoria',
+      isPremium: false,
+      isNew: true
     },
     {
       href: '/analise-setorial',
@@ -118,7 +127,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
                         Premium
                       </Badge>
                     )}
-                    {tool.href === '/analise-setorial' && (
+                    {(tool.isNew || tool.href === '/analise-setorial') && (
                       <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
                         🚀 Novo
                       </Badge>

@@ -45,8 +45,6 @@ export async function safeQuery<T>(
       const operationString = options?.cacheKey 
         ? `${operation.toString()}_PARAMS_${options.cacheKey}`
         : options?.operationString || operation.toString()
-
-      console.log('operationString', operationString);
       
       result = await SmartQueryCache.executeWithCache(
         queryName,

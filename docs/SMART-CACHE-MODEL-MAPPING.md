@@ -394,3 +394,4 @@ console.log(`Top tabelas: ${stats.topTables.join(', ')}`)
 - [Prisma Client API](https://www.prisma.io/docs/concepts/components/prisma-client)
 - [Redis Cache Patterns](https://redis.io/docs/manual/patterns/)
 - [Turbopack Build](https://turbo.build/pack/docs)
+

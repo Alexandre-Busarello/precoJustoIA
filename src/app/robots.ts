@@ -19,6 +19,7 @@ export default function robots(): MetadataRoute.Robots {
           '/blog/',
           '/sobre',
           '/contato',
+          '/screening-acoes',
           '/como-funciona',
           '/fundador',
           '/backtesting-carteiras',

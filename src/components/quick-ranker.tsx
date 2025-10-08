@@ -42,6 +42,12 @@ import {
 import Link from "next/link"
 
 // Interfaces para tipagem
+interface ScreeningFilter {
+  enabled: boolean;
+  min?: number;
+  max?: number;
+}
+
 interface RankingParams {
   marginOfSafety?: number;
   minYield?: number;
@@ -69,6 +75,24 @@ interface RankingParams {
   focus?: string;
   // Parâmetro de Análise Técnica (comum a todas as estratégias)
   useTechnicalAnalysis?: boolean;
+  // Parâmetros Screening
+  plFilter?: ScreeningFilter;
+  pvpFilter?: ScreeningFilter;
+  evEbitdaFilter?: ScreeningFilter;
+  psrFilter?: ScreeningFilter;
+  roeFilter?: ScreeningFilter;
+  roicFilter?: ScreeningFilter;
+  roaFilter?: ScreeningFilter;
+  margemLiquidaFilter?: ScreeningFilter;
+  margemEbitdaFilter?: ScreeningFilter;
+  cagrLucros5aFilter?: ScreeningFilter;
+  cagrReceitas5aFilter?: ScreeningFilter;
+  dyFilter?: ScreeningFilter;
+  payoutFilter?: ScreeningFilter;
+  dividaLiquidaPlFilter?: ScreeningFilter;
+  liquidezCorrenteFilter?: ScreeningFilter;
+  dividaLiquidaEbitdaFilter?: ScreeningFilter;
+  marketCapFilter?: ScreeningFilter;
 }
 
 interface RankingResult {
@@ -110,6 +134,14 @@ const models = [
     icon: <Target className="w-4 h-4" />,
     free: true,
     badge: "Gratuito"
+  },
+  { 
+    id: "screening", 
+    name: "Screening de Ações", 
+    description: "Filtros customizáveis por categoria: valuation, rentabilidade, crescimento, dividendos e endividamento",
+    icon: <Search className="w-4 h-4" />,
+    free: true,
+    badge: "Novo"
   },
   { 
     id: "fundamentalist", 
@@ -401,6 +433,14 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
             useTechnicalAnalysis: true // Análise técnica ativada por padrão
           })
           break
+      case "screening":
+        setParams({ 
+          limit: 20,                    // 20 resultados
+          companySize: 'all',           // Todas as empresas
+          useTechnicalAnalysis: true    // Análise técnica ativada por padrão
+          // Filtros são opcionais e ativados pelo usuário
+        })
+        break
       case "ai":
         setParams({ 
           riskTolerance: "Moderado",           // Tolerância ao risco
@@ -920,6 +960,134 @@ ${sectoralAdjustment ? `
 
 **Resultado**: Ranking preditivo personalizado com base no seu perfil de risco e objetivos de investimento.`;
 
+      case 'screening':
+        // Contar filtros ativos e listar quais estão aplicados
+        const activeFilters: string[] = [];
+        
+        // Valuation
+        if (params.plFilter?.enabled) {
+          const min = params.plFilter.min !== undefined ? params.plFilter.min.toFixed(1) : 'sem mínimo';
+          const max = params.plFilter.max !== undefined ? params.plFilter.max.toFixed(1) : 'sem máximo';
+          activeFilters.push(`• **P/L**: ${min} - ${max}`);
+        }
+        if (params.pvpFilter?.enabled) {
+          const min = params.pvpFilter.min !== undefined ? params.pvpFilter.min.toFixed(1) : 'sem mínimo';
+          const max = params.pvpFilter.max !== undefined ? params.pvpFilter.max.toFixed(1) : 'sem máximo';
+          activeFilters.push(`• **P/VP**: ${min} - ${max}`);
+        }
+        if (params.evEbitdaFilter?.enabled) {
+          const min = params.evEbitdaFilter.min !== undefined ? params.evEbitdaFilter.min.toFixed(1) : 'sem mínimo';
+          const max = params.evEbitdaFilter.max !== undefined ? params.evEbitdaFilter.max.toFixed(1) : 'sem máximo';
+          activeFilters.push(`• **EV/EBITDA**: ${min} - ${max}`);
+        }
+        if (params.psrFilter?.enabled) {
+          const min = params.psrFilter.min !== undefined ? params.psrFilter.min.toFixed(1) : 'sem mínimo';
+          const max = params.psrFilter.max !== undefined ? params.psrFilter.max.toFixed(1) : 'sem máximo';
+          activeFilters.push(`• **PSR**: ${min} - ${max}`);
+        }
+        
+        // Rentabilidade
+        if (params.roeFilter?.enabled) {
+          const min = params.roeFilter.min !== undefined ? (params.roeFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.roeFilter.max !== undefined ? (params.roeFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **ROE**: ${min} - ${max}`);
+        }
+        if (params.roicFilter?.enabled) {
+          const min = params.roicFilter.min !== undefined ? (params.roicFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.roicFilter.max !== undefined ? (params.roicFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **ROIC**: ${min} - ${max}`);
+        }
+        if (params.roaFilter?.enabled) {
+          const min = params.roaFilter.min !== undefined ? (params.roaFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.roaFilter.max !== undefined ? (params.roaFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **ROA**: ${min} - ${max}`);
+        }
+        if (params.margemLiquidaFilter?.enabled) {
+          const min = params.margemLiquidaFilter.min !== undefined ? (params.margemLiquidaFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.margemLiquidaFilter.max !== undefined ? (params.margemLiquidaFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **Margem Líquida**: ${min} - ${max}`);
+        }
+        if (params.margemEbitdaFilter?.enabled) {
+          const min = params.margemEbitdaFilter.min !== undefined ? (params.margemEbitdaFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.margemEbitdaFilter.max !== undefined ? (params.margemEbitdaFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **Margem EBITDA**: ${min} - ${max}`);
+        }
+        
+        // Crescimento
+        if (params.cagrLucros5aFilter?.enabled) {
+          const min = params.cagrLucros5aFilter.min !== undefined ? (params.cagrLucros5aFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.cagrLucros5aFilter.max !== undefined ? (params.cagrLucros5aFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **CAGR Lucros 5a**: ${min} - ${max}`);
+        }
+        if (params.cagrReceitas5aFilter?.enabled) {
+          const min = params.cagrReceitas5aFilter.min !== undefined ? (params.cagrReceitas5aFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.cagrReceitas5aFilter.max !== undefined ? (params.cagrReceitas5aFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **CAGR Receitas 5a**: ${min} - ${max}`);
+        }
+        
+        // Dividendos
+        if (params.dyFilter?.enabled) {
+          const min = params.dyFilter.min !== undefined ? (params.dyFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.dyFilter.max !== undefined ? (params.dyFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **Dividend Yield**: ${min} - ${max}`);
+        }
+        if (params.payoutFilter?.enabled) {
+          const min = params.payoutFilter.min !== undefined ? (params.payoutFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.payoutFilter.max !== undefined ? (params.payoutFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **Payout**: ${min} - ${max}`);
+        }
+        
+        // Endividamento
+        if (params.dividaLiquidaPlFilter?.enabled) {
+          const min = params.dividaLiquidaPlFilter.min !== undefined ? (params.dividaLiquidaPlFilter.min * 100).toFixed(1) + '%' : 'sem mínimo';
+          const max = params.dividaLiquidaPlFilter.max !== undefined ? (params.dividaLiquidaPlFilter.max * 100).toFixed(1) + '%' : 'sem máximo';
+          activeFilters.push(`• **Dívida Líq./PL**: ${min} - ${max}`);
+        }
+        if (params.liquidezCorrenteFilter?.enabled) {
+          const min = params.liquidezCorrenteFilter.min !== undefined ? params.liquidezCorrenteFilter.min.toFixed(1) : 'sem mínimo';
+          const max = params.liquidezCorrenteFilter.max !== undefined ? params.liquidezCorrenteFilter.max.toFixed(1) : 'sem máximo';
+          activeFilters.push(`• **Liquidez Corrente**: ${min} - ${max}`);
+        }
+        if (params.dividaLiquidaEbitdaFilter?.enabled) {
+          const min = params.dividaLiquidaEbitdaFilter.min !== undefined ? params.dividaLiquidaEbitdaFilter.min.toFixed(1) + 'x' : 'sem mínimo';
+          const max = params.dividaLiquidaEbitdaFilter.max !== undefined ? params.dividaLiquidaEbitdaFilter.max.toFixed(1) + 'x' : 'sem máximo';
+          activeFilters.push(`• **Dívida Líq./EBITDA**: ${min} - ${max}`);
+        }
+        
+        // Market Cap
+        if (params.marketCapFilter?.enabled) {
+          const min = params.marketCapFilter.min !== undefined ? 'R$ ' + (params.marketCapFilter.min / 1_000_000_000).toFixed(1) + 'B' : 'sem mínimo';
+          const max = params.marketCapFilter.max !== undefined ? 'R$ ' + (params.marketCapFilter.max / 1_000_000_000).toFixed(1) + 'B' : 'sem máximo';
+          activeFilters.push(`• **Market Cap**: ${min} - ${max}`);
+        }
+        
+        const companySizeLabel = params.companySize === 'small_caps' ? 'Small Caps (< R$ 2bi)' : 
+                                 params.companySize === 'mid_caps' ? 'Mid Caps (R$ 2-10bi)' : 
+                                 params.companySize === 'blue_chips' ? 'Blue Chips (> R$ 10bi)' : 
+                                 'Todas as empresas';
+        
+        return `**SCREENING DE AÇÕES CUSTOMIZÁVEL**
+
+**Filosofia**: Ferramenta de filtros customizáveis que permite encontrar empresas específicas baseado em critérios totalmente configuráveis.
+
+**Parâmetros Gerais**:
+• **Tamanho**: ${companySizeLabel}
+• **Limite de Resultados**: ${params.limit || 20} empresas
+• **Análise Técnica**: ${params.useTechnicalAnalysis !== false ? 'Ativada (prioriza sobrevenda)' : 'Desativada'}
+
+**Filtros Aplicados** (${activeFilters.length} ativos):
+${activeFilters.length > 0 ? activeFilters.join('\n') : '• Nenhum filtro ativo - todas as empresas elegíveis serão exibidas'}
+
+**Lógica de Filtros**:
+• Apenas empresas que atendem **TODOS** os filtros ativos são exibidas
+• Filtros desativados não são considerados na análise
+• Valores "sem mínimo" ou "sem máximo" significam range aberto
+
+**Ordenação**:
+• Por Market Cap (empresas maiores primeiro)${params.useTechnicalAnalysis !== false ? '\n• Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}
+
+**Objetivo**: Encontrar empresas que atendem exatamente aos seus critérios personalizados, com total flexibilidade de configuração.`;
+
       default:
         return `📊 **ESTRATÉGIA PERSONALIZADA**
 
@@ -1250,15 +1418,34 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                   </p>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRegenerateMode}
-                className="text-xs bg-white/70 hover:bg-white"
-              >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                Gerar Novo
-              </Button>
+              <div className="flex gap-2">
+                {/* Botão especial para Screening - abre página com parâmetros */}
+                {selectedModel === "screening" && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      // Salvar parâmetros no sessionStorage para pre-preencher a página de screening
+                      sessionStorage.setItem('screeningParams', JSON.stringify(params));
+                      // Redirecionar para página de screening
+                      window.location.href = '/screening-acoes';
+                    }}
+                    className="text-xs bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Search className="w-3 h-3 mr-1" />
+                    Editar Filtros
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerateMode}
+                  className="text-xs bg-white/70 hover:bg-white"
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Gerar Novo
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -2262,11 +2449,51 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                     </div>
                   </div>
                 )}
+
+                {/* Configuração Screening */}
+                {selectedModel === "screening" && (
+                  <div className="space-y-6">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-start space-x-3">
+                        <Search className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1 text-sm">
+                            🎯 Screening Customizável
+                          </h4>
+                          <p className="text-xs text-blue-800 dark:text-blue-200">
+                            Configure filtros personalizados por categoria. Apenas empresas que atendem <strong>TODOS</strong> os 
+                            critérios selecionados serão exibidas. Deixe filtros desativados para não aplicar restrições.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Importar e usar o ScreeningConfigurator */}
+                    <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg border-2 border-dashed border-blue-300 dark:border-blue-700">
+                      <Search className="w-12 h-12 mx-auto mb-3 text-blue-600" />
+                      <h4 className="font-semibold text-lg mb-2">Screening Avançado Disponível!</h4>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Para uma experiência completa de screening com todos os filtros organizados por categoria, 
+                        acesse nossa página dedicada.
+                      </p>
+                      <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                        <Link href="/screening-acoes" className="flex items-center gap-2">
+                          <Search className="w-5 h-5" />
+                          Ir para Screening Completo
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        💡 Dica: A página de screening oferece interface otimizada com 17 filtros customizáveis
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Generate Button - só mostrar quando não estiver visualizando cache */}
-            {!isViewingCached && (
+            {/* Generate Button - só mostrar quando não estiver visualizando cache E não for screening */}
+            {!isViewingCached && selectedModel !== "screening" && (
               <div className="flex justify-center">
                 <Button 
                   onClick={handleGenerateRanking} 

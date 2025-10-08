@@ -6,6 +6,7 @@ import { MagicFormulaStrategy } from './magic-formula-strategy';
 import { GordonStrategy } from './gordon-strategy';
 import { FundamentalistStrategy } from './fundamentalist-strategy';
 import { AIStrategy } from './ai-strategy';
+import { ScreeningStrategy } from './screening-strategy';
 import { 
   StrategyParams, 
   StrategyAnalysis, 
@@ -17,11 +18,12 @@ import {
   LowPEParams,
   MagicFormulaParams,
   GordonParams,
-  AIParams
+  AIParams,
+  ScreeningParams
 } from './types';
 import { FundamentalistParams } from './fundamentalist-strategy';
 
-type StrategyType = 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'fundamentalist' | 'ai';
+type StrategyType = 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'fundamentalist' | 'ai' | 'screening';
 
 export class StrategyFactory {
   static createStrategy(type: StrategyType) {
@@ -42,6 +44,8 @@ export class StrategyFactory {
         return new FundamentalistStrategy();
       case 'ai':
         return new AIStrategy();
+      case 'screening':
+        return new ScreeningStrategy();
       default:
         throw new Error(`Unknown strategy type: ${type}`);
     }
@@ -95,6 +99,10 @@ export class StrategyFactory {
     return this.runAnalysis('fundamentalist', companyData, params);
   }
 
+  static runScreeningAnalysis(companyData: CompanyData, params: ScreeningParams): StrategyAnalysis {
+    return this.runAnalysis('screening', companyData, params);
+  }
+
   static runGrahamRanking(companies: CompanyData[], params: GrahamParams): RankBuilderResult[] {
     return this.runRanking('graham', companies, params) as RankBuilderResult[];
   }
@@ -123,13 +131,17 @@ export class StrategyFactory {
     return this.runRanking('fundamentalist', companies, params) as RankBuilderResult[];
   }
 
+  static runScreeningRanking(companies: CompanyData[], params: ScreeningParams): RankBuilderResult[] {
+    return this.runRanking('screening', companies, params) as RankBuilderResult[];
+  }
+
   static async runAIRanking(companies: CompanyData[], params: AIParams): Promise<RankBuilderResult[]> {
     const strategy = new AIStrategy();
     return await strategy.runRanking(companies, params);
   }
 
-  static generateRational(type: StrategyType, params: GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams): string {
+  static generateRational(type: StrategyType, params: GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams | ScreeningParams): string {
     const strategy = this.createStrategy(type);
-    return strategy.generateRational(params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & AIParams);
+    return strategy.generateRational(params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & AIParams & ScreeningParams);
   }
 }

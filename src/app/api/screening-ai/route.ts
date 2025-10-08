@@ -127,6 +127,7 @@ Você deve retornar APENAS um objeto JSON válido (sem markdown, sem explicaçõ
 2. Use "min" para valores mínimos desejados e "max" para valores máximos
 3. Valores em % devem ser convertidos para decimal (6% = 0.06, 15% = 0.15)
 4. Market cap em bilhões: 1bi = 1000000000
+5. Para Bancos e Financeiras, de preferência a usar o "dividaLiquidaEbitdaFilter" para endividamento
 
 **INTERPRETAÇÃO DE TERMOS DE QUALIDADE** (MUITO IMPORTANTE):
 

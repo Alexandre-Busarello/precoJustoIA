@@ -395,3 +395,4 @@ console.log(`Top tabelas: ${stats.topTables.join(', ')}`)
 - [Redis Cache Patterns](https://redis.io/docs/manual/patterns/)
 - [Turbopack Build](https://turbo.build/pack/docs)
 
+

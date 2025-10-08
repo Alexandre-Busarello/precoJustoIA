@@ -15,7 +15,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
    */
   private isValueInRange(value: number | null, filter: ScreeningFilter | undefined): boolean {
     if (!filter || !filter.enabled) return true; // Filtro desativado, aceita qualquer valor
-    if (value === null) return false; // Sem dados, rejeita
+    if (value === null) return true; // Sem dados, IGNORA o filtro (não reprova)
     
     // Verifica min
     if (filter.min !== undefined && value < filter.min) return false;
@@ -287,22 +287,24 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     // Setor
     if (params.selectedSectors && params.selectedSectors.length > 0) {
       const companySector = companyData.sector;
-      const inSelectedSector = companySector && params.selectedSectors.includes(companySector);
+      // Se não tem dados de setor, IGNORA o filtro (considera como passou)
+      const inSelectedSector = !companySector || params.selectedSectors.includes(companySector);
       criteria.push({
         label: 'Setor',
-        value: !!inSelectedSector,
-        description: `Setores selecionados: ${params.selectedSectors.join(', ')} (empresa: ${companySector || 'N/A'})`
+        value: inSelectedSector,
+        description: `Setores selecionados: ${params.selectedSectors.join(', ')} (empresa: ${companySector || 'N/A - filtro ignorado'})`
       });
     }
     
     // Indústria
     if (params.selectedIndustries && params.selectedIndustries.length > 0) {
       const companyIndustry = companyData.industry;
-      const inSelectedIndustry = companyIndustry && params.selectedIndustries.includes(companyIndustry);
+      // Se não tem dados de indústria, IGNORA o filtro (considera como passou)
+      const inSelectedIndustry = !companyIndustry || params.selectedIndustries.includes(companyIndustry);
       criteria.push({
         label: 'Indústria',
-        value: !!inSelectedIndustry,
-        description: `Indústrias selecionadas: ${params.selectedIndustries.join(', ')} (empresa: ${companyIndustry || 'N/A'})`
+        value: inSelectedIndustry,
+        description: `Indústrias selecionadas: ${params.selectedIndustries.join(', ')} (empresa: ${companyIndustry || 'N/A - filtro ignorado'})`
       });
     }
 

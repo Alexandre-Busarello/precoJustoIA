@@ -494,7 +494,7 @@ export function ScreeningConfigurator({
       </div>
 
       {/* CATEGORIA: RENTABILIDADE */}
-      <PremiumCategoryLock>
+      {/* <PremiumCategoryLock> */}
       <div className="space-y-6">
       <div className="border-2 border-green-200 dark:border-green-800 rounded-xl p-4 bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-green-950/20 dark:to-emerald-950/20">
         <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-green-900 dark:text-green-100">
@@ -1513,7 +1513,7 @@ export function ScreeningConfigurator({
         </div>
       </div>
       </div>
-      </PremiumCategoryLock>
+      {/* </PremiumCategoryLock> */}
     </div>
   );
 }

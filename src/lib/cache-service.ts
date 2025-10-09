@@ -115,9 +115,16 @@ function isCriticalError(error: any): boolean {
 }
 
 function handleRedisError(error: any): void {
+  const errorMsg = error?.message || 'Unknown error'
+  console.log(`🔍 DEBUG handleRedisError:`, {
+    message: errorMsg,
+    isCritical: isCriticalError(error),
+    redisDisabled,
+    redisConnected
+  })
+  
   // Se for erro crítico (max clients, connection refused, etc), desabilita Redis nesta instância
   if (isCriticalError(error)) {
-    const errorMsg = error?.message || 'Unknown error'
     console.error(`🚨 Redis: ERRO CRÍTICO (${errorMsg}) - Redis DESABILITADO nesta instância`)
     console.log('📝 Aplicação continuará usando cache em memória como fallback')
     
@@ -132,18 +139,24 @@ function handleRedisError(error: any): void {
     }
   } else {
     // Erros não críticos apenas logam
-    console.warn(`⚠️ Redis: Erro não crítico, tentará novamente na próxima operação:`, error?.message)
+    console.warn(`⚠️ Redis: Erro não crítico, tentará novamente na próxima operação:`, errorMsg)
   }
 }
 
 function shouldUseRedis(): boolean {
-  // Se Redis foi desabilitado devido a erro crítico, não usar
-  if (redisDisabled) {
-    return false
+  const result = !redisDisabled && redisConnected && redisClient !== null
+  
+  // 🔍 DEBUG: Log detalhado
+  if (!result) {
+    console.log(`🔍 shouldUseRedis = false:`, {
+      disabled: redisDisabled,
+      connected: redisConnected,
+      clientExists: redisClient !== null,
+      lastError: lastCriticalError
+    })
   }
   
-  // Caso contrário, usar se estiver conectado
-  return redisConnected && redisClient !== null
+  return result
 }
 
 /**
@@ -325,6 +338,13 @@ export class CacheService {
         console.log('✅ Redis: Pronto para uso')
         redisConnected = true
         reconnectAttempts = 0
+        
+        // 🔧 IMPORTANTE: Resetar flag disabled quando conectar com sucesso
+        if (redisDisabled) {
+          console.log('🔓 Redis foi reabilitado após conexão bem-sucedida')
+          redisDisabled = false
+          lastCriticalError = null
+        }
       })
 
       redisClient.on('error', (error: any) => {
@@ -401,6 +421,15 @@ export class CacheService {
     const fullKey = this.buildKey(key, options.prefix)
 
     try {
+      // 🔍 DEBUG: Log estado antes da operação
+      const debugInfo = {
+        shouldUse: shouldUseRedis(),
+        connected: redisConnected,
+        disabled: redisDisabled,
+        clientExists: redisClient !== null
+      }
+      console.log(`🔍 Cache.get("${fullKey.substring(0, 50)}..."):`, debugInfo)
+      
       // ⚡ FAIL-FAST: Verificar se deve usar Redis
       if (shouldUseRedis()) {
         // Garantir conexão (lazy loading)
@@ -419,8 +448,8 @@ export class CacheService {
             return parsed
           }
         }
-      } else if (redisDisabled) {
-        // Redis desabilitado, usando apenas memória (silencioso para não poluir logs)
+      } else {
+        console.log(`⚠️ Cache.get: Não usando Redis -`, debugInfo)
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao buscar no Redis (${fullKey}):`, error)
@@ -800,9 +829,13 @@ export class CacheService {
       redisConnected = false
     }
 
+    // 🔧 IMPORTANTE: Resetar flags ao desconectar (preparar para reconexão limpa)
+    redisDisabled = false
+    lastCriticalError = null
+
     memoryCache.clear()
     this.initialized = false
-    console.log('🧹 Cache em memória limpo e serviço resetado')
+    console.log('🧹 Cache em memória limpo e serviço resetado (flags resetadas)')
   }
 }
 

@@ -399,7 +399,18 @@ export default function CacheMonitorPage() {
             >
               Reinicializar Redis
             </Button>
+            <Button
+              variant="default"
+              onClick={() => executeAction('force-connect')}
+              disabled={actionLoading}
+            >
+              🔌 Forçar Conexão (Debug)
+            </Button>
           </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            💡 Se o Redis aparece sempre como &quot;DESCONECTADO&quot; mesmo com requisições, 
+            use <strong>Forçar Conexão</strong> para testar se o Redis está acessível.
+          </p>
         </CardContent>
       </Card>
     </div>

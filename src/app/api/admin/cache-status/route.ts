@@ -188,6 +188,19 @@ export async function POST(request: Request) {
         }
         break
 
+      case 'force-connect':
+        // Forçar conexão imediata (útil para debug)
+        await cacheService.initialize()
+        // Fazer uma operação para forçar conexão
+        await cacheService.set('test:force-connect', 'ok', { ttl: 10 })
+        const testValue = await cacheService.get('test:force-connect')
+        result = { 
+          success: true, 
+          message: `Redis conectado! Teste: ${testValue || 'falhou'}`,
+          connected: !!testValue
+        }
+        break
+
       default:
         return NextResponse.json(
           { error: 'Ação inválida. Use: clear, reconnect' },

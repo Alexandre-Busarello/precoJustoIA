@@ -96,8 +96,11 @@ const memoryCache = new Map<string, CacheItem>()
 const DEFAULT_TTL = 3600 // 1 hora em segundos
 const MEMORY_CLEANUP_INTERVAL = 5 * 60 * 1000 // 5 minutos
 const REDIS_RECONNECT_DELAY = 5000 // 5 segundos
-const REDIS_IDLE_TIMEOUT = 30000 // 30 segundos de inatividade antes de desconectar (serverless)
+const REDIS_IDLE_TIMEOUT = 10000 // 10 segundos de inatividade antes de desconectar (agressivo para serverless)
 const LAZY_CONNECT = true // Conecta apenas quando necessário (otimização serverless)
+const CONNECTION_TIMEOUT = 3000 // 3 segundos timeout para conectar (fail-fast)
+const COMMAND_TIMEOUT = 2000 // 2 segundos timeout para comandos (fail-fast)
+const DISCONNECT_AFTER_OPERATION = process.env.REDIS_DISCONNECT_AFTER_OP === 'true' // Desconectar após cada operação (modo ultra-agressivo)
 
 /**
  * Funções auxiliares de Fail-Fast (otimizado para serverless)
@@ -141,6 +144,22 @@ function shouldUseRedis(): boolean {
   
   // Caso contrário, usar se estiver conectado
   return redisConnected && redisClient !== null
+}
+
+/**
+ * Desconectar após operação (modo ultra-agressivo para minimizar conexões)
+ * Só executa se a variável de ambiente REDIS_DISCONNECT_AFTER_OP=true
+ */
+async function disconnectAfterOperation(): Promise<void> {
+  if (DISCONNECT_AFTER_OPERATION && redisClient && redisConnected) {
+    try {
+      await redisClient.disconnect()
+      redisConnected = false
+      console.log('🔌 Redis: Desconectado após operação (modo ultra-agressivo)')
+    } catch (error) {
+      // Ignora erros ao desconectar
+    }
+  }
 }
 
 /**
@@ -221,14 +240,14 @@ export class CacheService {
         const idleTime = Date.now() - lastActivity
         
         if (idleTime > REDIS_IDLE_TIMEOUT && redisClient && redisConnected) {
-          console.log(`⏰ Redis ocioso por ${Math.round(idleTime / 1000)}s, desconectando...`)
+          console.log(`⏰ Redis ocioso por ${Math.round(idleTime / 1000)}s, desconectando para liberar conexão...`)
           this.disconnectRedis().catch(err => 
             console.warn('Erro ao desconectar Redis ocioso:', err)
           )
         }
-      }, REDIS_IDLE_TIMEOUT / 2) // Verifica a cada 15s
+      }, Math.min(REDIS_IDLE_TIMEOUT / 2, 5000)) // Verifica com mais frequência (máx 5s)
       
-      console.log(`⏰ Monitoramento de inatividade configurado (${REDIS_IDLE_TIMEOUT / 1000}s)`)
+      console.log(`⏰ Monitoramento agressivo de inatividade configurado (${REDIS_IDLE_TIMEOUT / 1000}s)`)
     }
   }
 
@@ -280,19 +299,21 @@ export class CacheService {
       redisClient = createClient({
         url: redisUrl,
         socket: {
-          connectTimeout: 10000, // Aumentado para 10s
+          connectTimeout: CONNECTION_TIMEOUT, // 3s timeout (fail-fast)
+          commandTimeout: COMMAND_TIMEOUT, // 2s timeout para comandos
           reconnectStrategy: (retries: number) => {
-            if (retries > MAX_RECONNECT_ATTEMPTS) {
-              console.error('❌ Redis: Máximo de tentativas de reconexão atingido')
-              return false
-            }
-            const delay = Math.min(retries * 1000, REDIS_RECONNECT_DELAY)
-            console.log(`🔄 Redis: Tentativa de reconexão ${retries}/${MAX_RECONNECT_ATTEMPTS} em ${delay}ms`)
-            return delay
-          }
+            // Em serverless, não tentar reconectar automaticamente
+            // (deixa a próxima Lambda tentar)
+            console.warn(`❌ Redis: Falha na conexão (tentativa ${retries}), desabilitando reconexão automática`)
+            return false // Não reconectar
+          },
+          // Otimizações para reduzir uso de conexões
+          keepAlive: 0, // Desabilitar TCP keep-alive (reduz overhead)
+          noDelay: true // Desabilitar algoritmo de Nagle (menor latência, menos buffers)
         },
-        // Configurações de pool para limitar conexões
-        pingInterval: 60000 // Keep-alive a cada 60s
+        // IMPORTANTE: Desabilitar ping/keep-alive para não manter conexão aberta
+        // Em serverless, queremos desconectar rapidamente quando ocioso
+        // pingInterval não é definido (desabilitado)
       })
 
       // Event listeners
@@ -388,6 +409,10 @@ export class CacheService {
         // Tentar Redis primeiro
         if (redisConnected && redisClient) {
           const value = await redisClient.get(fullKey)
+          
+          // Desconectar após operação (modo ultra-agressivo)
+          await disconnectAfterOperation()
+          
           if (value !== null) {
             const parsed = JSON.parse(value)
             console.log(`📦 Cache HIT (Redis): ${fullKey}`)
@@ -400,6 +425,7 @@ export class CacheService {
     } catch (error) {
       console.warn(`⚠️ Erro ao buscar no Redis (${fullKey}):`, error)
       handleRedisError(error)
+      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
     }
 
     // Fallback para memória
@@ -437,11 +463,15 @@ export class CacheService {
         if (redisConnected && redisClient) {
           await redisClient.setEx(fullKey, ttl, serialized)
           console.log(`💾 Cache SET (Redis): ${fullKey} (TTL: ${ttl}s)`)
+          
+          // Desconectar após operação (modo ultra-agressivo)
+          await disconnectAfterOperation()
         }
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao salvar no Redis (${fullKey}):`, error)
       handleRedisError(error)
+      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
     }
 
     // Sempre salvar na memória também (fallback)
@@ -466,11 +496,15 @@ export class CacheService {
         if (redisConnected && redisClient) {
           await redisClient.del(fullKey)
           console.log(`🗑️ Cache DELETE (Redis): ${fullKey}`)
+          
+          // Desconectar após operação (modo ultra-agressivo)
+          await disconnectAfterOperation()
         }
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao deletar do Redis (${fullKey}):`, error)
       handleRedisError(error)
+      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
     }
 
     // Remover da memória
@@ -498,11 +532,15 @@ export class CacheService {
             await redisClient.flushDb()
             console.log('🧹 Cache CLEAR (Redis): Todos os dados')
           }
+          
+          // Desconectar após operação (modo ultra-agressivo)
+          await disconnectAfterOperation()
         }
       }
     } catch (error) {
       console.warn('⚠️ Erro ao limpar Redis:', error)
       handleRedisError(error)
+      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
     }
 
     // Limpar memória
@@ -528,6 +566,10 @@ export class CacheService {
       // ⚡ FAIL-FAST: Verificar se deve usar Redis
       if (shouldUseRedis() && redisConnected && redisClient) {
         const keys = await redisClient.keys(pattern)
+        
+        // Desconectar após operação (modo ultra-agressivo)
+        await disconnectAfterOperation()
+        
         return keys
       }
       
@@ -545,6 +587,7 @@ export class CacheService {
     } catch (error) {
       console.warn(`⚠️ Erro ao buscar chaves por padrão ${pattern}:`, error)
       handleRedisError(error)
+      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
       
       // Fallback para memória em caso de erro
       const keys: string[] = []
@@ -574,11 +617,15 @@ export class CacheService {
         // Deletar do Redis
         if (redisConnected && redisClient && keys.length > 0) {
           deleted += await redisClient.del(keys)
+          
+          // Desconectar após operação (modo ultra-agressivo)
+          await disconnectAfterOperation()
         }
       }
     } catch (error) {
       console.warn('⚠️ Erro ao deletar chaves do Redis:', error)
       handleRedisError(error)
+      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
     }
     
     // Deletar da memória
@@ -668,10 +715,14 @@ export class CacheService {
         const info = await redisClient.info('keyspace')
         const dbKeys = info.match(/keys=(\d+)/)
         stats.redis.keys = dbKeys ? parseInt(dbKeys[1]) : 0
+        
+        // Desconectar após operação (modo ultra-agressivo)
+        await disconnectAfterOperation()
       }
     } catch (error) {
       console.warn('⚠️ Erro ao obter stats do Redis:', error)
       handleRedisError(error)
+      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
     }
 
     return stats

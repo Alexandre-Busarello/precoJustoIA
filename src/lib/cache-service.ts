@@ -225,10 +225,19 @@ export class CacheService {
    */
   private async _doInitialize(): Promise<void> {
     console.log('🚀 Inicializando CacheService...')
+    console.log('🔍 Configuração:', {
+      LAZY_CONNECT,
+      REDIS_IDLE_TIMEOUT,
+      DISCONNECT_AFTER_OPERATION,
+      isServerless: !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+    })
 
     // Em modo lazy, não conecta ao Redis imediatamente
     if (!LAZY_CONNECT) {
+      console.log('📡 LAZY_CONNECT = false: Conectando imediatamente ao Redis')
       await this.initializeRedis()
+    } else {
+      console.log('⏳ LAZY_CONNECT = true: Redis conectará quando necessário')
     }
 
     // Configurar limpeza automática do cache em memória (apenas uma vez)
@@ -268,11 +277,20 @@ export class CacheService {
    * Inicializar conexão Redis
    */
   private async initializeRedis(): Promise<void> {
+    console.log('🚀 initializeRedis CHAMADO')
+    
     // Verificar se estamos no servidor e se Redis está disponível
-    if (typeof window !== 'undefined' || !createClient) {
-      console.log('🔄 Redis não disponível, usando apenas cache em memória')
+    if (typeof window !== 'undefined') {
+      console.log('⚠️ Rodando no browser, não pode usar Redis')
       return
     }
+    
+    if (!createClient) {
+      console.log('⚠️ createClient não disponível (módulo redis não carregado)')
+      return
+    }
+    
+    console.log('✅ Ambiente: Servidor + Redis module disponível')
 
     // Se já existe uma conexão ativa, reutiliza
     if (redisClient && redisConnected) {
@@ -305,6 +323,8 @@ export class CacheService {
       console.warn('⚠️ REDIS_URL não configurada, usando apenas cache em memória')
       return
     }
+    
+    console.log('✅ REDIS_URL configurada:', redisUrl.substring(0, 30) + '...')
 
     try {
       console.log('🔗 Criando nova conexão Redis...')
@@ -364,13 +384,21 @@ export class CacheService {
       })
 
       // Conectar
+      console.log('📡 Chamando redisClient.connect()...')
       await redisClient.connect()
+      console.log('✅ redisClient.connect() completou (aguardando evento "ready")')
 
     } catch (error) {
       console.error('❌ Erro ao conectar ao Redis:', error)
+      console.error('❌ Stack:', error instanceof Error ? error.stack : 'N/A')
       redisClient = null
       redisConnected = false
     }
+    
+    console.log('🏁 initializeRedis finalizado. Estado:', {
+      clientExists: redisClient !== null,
+      connected: redisConnected
+    })
   }
 
   /**
@@ -407,7 +435,16 @@ export class CacheService {
    * Garantir que Redis está conectado (lazy loading)
    */
   private async ensureRedisConnection(): Promise<void> {
+    console.log('🔍 ensureRedisConnection:', {
+      LAZY_CONNECT,
+      redisConnected,
+      isInitializing,
+      clientExists: redisClient !== null,
+      willInitialize: LAZY_CONNECT && !redisConnected && !isInitializing
+    })
+    
     if (LAZY_CONNECT && !redisConnected && !isInitializing) {
+      console.log('🔄 Iniciando Redis via lazy loading...')
       await this.initializeRedis()
     }
     // Atualizar timestamp de atividade
@@ -421,21 +458,14 @@ export class CacheService {
     const fullKey = this.buildKey(key, options.prefix)
 
     try {
-      // 🔍 DEBUG: Log estado antes da operação
-      const debugInfo = {
-        shouldUse: shouldUseRedis(),
-        connected: redisConnected,
-        disabled: redisDisabled,
-        clientExists: redisClient !== null
-      }
-      console.log(`🔍 Cache.get("${fullKey.substring(0, 50)}..."):`, debugInfo)
-      
-      // ⚡ FAIL-FAST: Verificar se deve usar Redis
-      if (shouldUseRedis()) {
-        // Garantir conexão (lazy loading)
+      // ⚡ FAIL-FAST: Verificar se foi DESABILITADO (erro crítico anterior)
+      if (redisDisabled) {
+        // Redis desabilitado, usar apenas memória (silencioso)
+      } else {
+        // 🔄 Garantir conexão (lazy loading) - SEMPRE tentar se não disabled
         await this.ensureRedisConnection()
         
-        // Tentar Redis primeiro
+        // ✅ Agora verificar se está conectado e usar Redis
         if (redisConnected && redisClient) {
           const value = await redisClient.get(fullKey)
           
@@ -448,8 +478,6 @@ export class CacheService {
             return parsed
           }
         }
-      } else {
-        console.log(`⚠️ Cache.get: Não usando Redis -`, debugInfo)
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao buscar no Redis (${fullKey}):`, error)
@@ -483,12 +511,12 @@ export class CacheService {
     const serialized = serializeValue(value)
 
     try {
-      // ⚡ FAIL-FAST: Verificar se deve usar Redis
-      if (shouldUseRedis()) {
-        // Garantir conexão (lazy loading)
+      // ⚡ FAIL-FAST: Verificar se foi DESABILITADO
+      if (!redisDisabled) {
+        // 🔄 Garantir conexão (lazy loading)
         await this.ensureRedisConnection()
         
-        // Tentar Redis primeiro
+        // ✅ Tentar Redis se conectado
         if (redisConnected && redisClient) {
           await redisClient.setEx(fullKey, ttl, serialized)
           console.log(`💾 Cache SET (Redis): ${fullKey} (TTL: ${ttl}s)`)
@@ -519,21 +547,20 @@ export class CacheService {
     const fullKey = this.buildKey(key, options.prefix)
 
     try {
-      // ⚡ FAIL-FAST: Verificar se deve usar Redis
-      if (shouldUseRedis()) {
-        // Remover do Redis
+      // ⚡ FAIL-FAST: Verificar se foi DESABILITADO
+      if (!redisDisabled) {
+        await this.ensureRedisConnection()
+        
         if (redisConnected && redisClient) {
           await redisClient.del(fullKey)
           console.log(`🗑️ Cache DELETE (Redis): ${fullKey}`)
-          
-          // Desconectar após operação (modo ultra-agressivo)
           await disconnectAfterOperation()
         }
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao deletar do Redis (${fullKey}):`, error)
       handleRedisError(error)
-      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
+      await disconnectAfterOperation()
     }
 
     // Remover da memória
@@ -546,9 +573,10 @@ export class CacheService {
    */
   async clear(prefix?: string): Promise<void> {
     try {
-      // ⚡ FAIL-FAST: Verificar se deve usar Redis
-      if (shouldUseRedis()) {
-        // Limpar Redis
+      // ⚡ FAIL-FAST: Verificar se foi DESABILITADO
+      if (!redisDisabled) {
+        await this.ensureRedisConnection()
+        
         if (redisConnected && redisClient) {
           if (prefix) {
             const pattern = this.buildKey('*', prefix)
@@ -561,15 +589,13 @@ export class CacheService {
             await redisClient.flushDb()
             console.log('🧹 Cache CLEAR (Redis): Todos os dados')
           }
-          
-          // Desconectar após operação (modo ultra-agressivo)
           await disconnectAfterOperation()
         }
       }
     } catch (error) {
       console.warn('⚠️ Erro ao limpar Redis:', error)
       handleRedisError(error)
-      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
+      await disconnectAfterOperation()
     }
 
     // Limpar memória
@@ -592,14 +618,15 @@ export class CacheService {
    */
   async getKeysByPattern(pattern: string): Promise<string[]> {
     try {
-      // ⚡ FAIL-FAST: Verificar se deve usar Redis
-      if (shouldUseRedis() && redisConnected && redisClient) {
-        const keys = await redisClient.keys(pattern)
+      // ⚡ FAIL-FAST: Verificar se foi DESABILITADO
+      if (!redisDisabled) {
+        await this.ensureRedisConnection()
         
-        // Desconectar após operação (modo ultra-agressivo)
-        await disconnectAfterOperation()
-        
-        return keys
+        if (redisConnected && redisClient) {
+          const keys = await redisClient.keys(pattern)
+          await disconnectAfterOperation()
+          return keys
+        }
       }
       
       // Fallback para memória
@@ -616,7 +643,7 @@ export class CacheService {
     } catch (error) {
       console.warn(`⚠️ Erro ao buscar chaves por padrão ${pattern}:`, error)
       handleRedisError(error)
-      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
+      await disconnectAfterOperation()
       
       // Fallback para memória em caso de erro
       const keys: string[] = []
@@ -641,20 +668,19 @@ export class CacheService {
     let deleted = 0
     
     try {
-      // ⚡ FAIL-FAST: Verificar se deve usar Redis
-      if (shouldUseRedis()) {
-        // Deletar do Redis
+      // ⚡ FAIL-FAST: Verificar se foi DESABILITADO
+      if (!redisDisabled) {
+        await this.ensureRedisConnection()
+        
         if (redisConnected && redisClient && keys.length > 0) {
           deleted += await redisClient.del(keys)
-          
-          // Desconectar após operação (modo ultra-agressivo)
           await disconnectAfterOperation()
         }
       }
     } catch (error) {
       console.warn('⚠️ Erro ao deletar chaves do Redis:', error)
       handleRedisError(error)
-      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
+      await disconnectAfterOperation()
     }
     
     // Deletar da memória
@@ -739,19 +765,21 @@ export class CacheService {
     }
 
     try {
-      // ⚡ FAIL-FAST: Verificar se deve usar Redis
-      if (shouldUseRedis() && redisConnected && redisClient) {
-        const info = await redisClient.info('keyspace')
-        const dbKeys = info.match(/keys=(\d+)/)
-        stats.redis.keys = dbKeys ? parseInt(dbKeys[1]) : 0
+      // ⚡ FAIL-FAST: Verificar se foi DESABILITADO
+      if (!redisDisabled) {
+        await this.ensureRedisConnection()
         
-        // Desconectar após operação (modo ultra-agressivo)
-        await disconnectAfterOperation()
+        if (redisConnected && redisClient) {
+          const info = await redisClient.info('keyspace')
+          const dbKeys = info.match(/keys=(\d+)/)
+          stats.redis.keys = dbKeys ? parseInt(dbKeys[1]) : 0
+          await disconnectAfterOperation()
+        }
       }
     } catch (error) {
       console.warn('⚠️ Erro ao obter stats do Redis:', error)
       handleRedisError(error)
-      await disconnectAfterOperation() // Desconectar mesmo em caso de erro
+      await disconnectAfterOperation()
     }
 
     return stats
@@ -844,9 +872,13 @@ export const cacheService = CacheService.getInstance()
 
 // Inicializar automaticamente se não estiver no browser
 if (typeof window === 'undefined') {
+  console.log('🌟 Módulo cache-service carregado no servidor - iniciando auto-init')
   cacheService.initialize().catch(error => {
-    console.error('❌ Erro ao inicializar CacheService:', error)
+    console.error('❌ Erro ao inicializar CacheService automaticamente:', error)
+    console.error('❌ Stack:', error instanceof Error ? error.stack : 'N/A')
   })
+} else {
+  console.log('🌐 Módulo cache-service carregado no browser - pulando init')
 }
 
 // Funções de conveniência para uso direto

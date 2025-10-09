@@ -396,3 +396,4 @@ console.log(`Top tabelas: ${stats.topTables.join(', ')}`)
 - [Turbopack Build](https://turbo.build/pack/docs)
 
 
+

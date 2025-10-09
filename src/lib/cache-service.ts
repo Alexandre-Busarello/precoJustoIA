@@ -26,6 +26,13 @@
  * - Reconexão automática: reconecta na próxima operação
  * - IMPORTANTE: Cada função Lambda tem sua própria instância/conexão
  *   (isso é normal e esperado em ambientes serverless)
+ * 
+ * FAIL-FAST PATTERN (prevenção de degradação):
+ * - Detecta erros críticos do Redis (max clients, connection refused, etc)
+ * - Desabilita Redis automaticamente nesta instância quando erro crítico ocorre
+ * - Aplicação continua funcionando normalmente com cache em memória
+ * - Evita tentativas repetidas que causariam timeout e degradação
+ * - Cada nova instância Lambda tenta conectar normalmente (stateless)
  */
 
 // Importação condicional do Redis apenas no servidor
@@ -77,6 +84,11 @@ let isInitializing = false
 let lastActivity = Date.now()
 let idleCheckInterval: NodeJS.Timeout | null = null
 
+// ⚡ FAIL-FAST: Evita degradação quando Redis está indisponível (otimizado para serverless)
+let redisDisabled = false // true = Redis desabilitado nesta instância (max clients ou erro crítico)
+let lastCriticalError: string | null = null // Último erro crítico
+const CRITICAL_ERRORS = ['max number of clients', 'maxclients', 'too many clients', 'econnrefused', 'connection refused']
+
 // Cache em memória como fallback
 const memoryCache = new Map<string, CacheItem>()
 
@@ -86,6 +98,50 @@ const MEMORY_CLEANUP_INTERVAL = 5 * 60 * 1000 // 5 minutos
 const REDIS_RECONNECT_DELAY = 5000 // 5 segundos
 const REDIS_IDLE_TIMEOUT = 30000 // 30 segundos de inatividade antes de desconectar (serverless)
 const LAZY_CONNECT = true // Conecta apenas quando necessário (otimização serverless)
+
+/**
+ * Funções auxiliares de Fail-Fast (otimizado para serverless)
+ */
+function isCriticalError(error: any): boolean {
+  const errorMsg = error?.message?.toLowerCase() || ''
+  const errorCode = error?.code?.toLowerCase() || ''
+  
+  return CRITICAL_ERRORS.some(criticalErr => 
+    errorMsg.includes(criticalErr) || errorCode.includes(criticalErr)
+  )
+}
+
+function handleRedisError(error: any): void {
+  // Se for erro crítico (max clients, connection refused, etc), desabilita Redis nesta instância
+  if (isCriticalError(error)) {
+    const errorMsg = error?.message || 'Unknown error'
+    console.error(`🚨 Redis: ERRO CRÍTICO (${errorMsg}) - Redis DESABILITADO nesta instância`)
+    console.log('📝 Aplicação continuará usando cache em memória como fallback')
+    
+    redisDisabled = true
+    lastCriticalError = errorMsg
+    redisConnected = false
+    
+    // Desconectar e limpar cliente para liberar recursos
+    if (redisClient) {
+      redisClient.disconnect().catch(() => {})
+      redisClient = null
+    }
+  } else {
+    // Erros não críticos apenas logam
+    console.warn(`⚠️ Redis: Erro não crítico, tentará novamente na próxima operação:`, error?.message)
+  }
+}
+
+function shouldUseRedis(): boolean {
+  // Se Redis foi desabilitado devido a erro crítico, não usar
+  if (redisDisabled) {
+    return false
+  }
+  
+  // Caso contrário, usar se estiver conectado
+  return redisConnected && redisClient !== null
+}
 
 /**
  * Classe principal do serviço de cache
@@ -253,6 +309,7 @@ export class CacheService {
       redisClient.on('error', (error: any) => {
         console.error('❌ Redis: Erro de conexão:', error.message)
         redisConnected = false
+        handleRedisError(error)
       })
 
       redisClient.on('end', () => {
@@ -323,20 +380,26 @@ export class CacheService {
     const fullKey = this.buildKey(key, options.prefix)
 
     try {
-      // Garantir conexão (lazy loading)
-      await this.ensureRedisConnection()
-      
-      // Tentar Redis primeiro
-      if (redisConnected && redisClient) {
-        const value = await redisClient.get(fullKey)
-        if (value !== null) {
-          const parsed = JSON.parse(value)
-          console.log(`📦 Cache HIT (Redis): ${fullKey}`)
-          return parsed
+      // ⚡ FAIL-FAST: Verificar se deve usar Redis
+      if (shouldUseRedis()) {
+        // Garantir conexão (lazy loading)
+        await this.ensureRedisConnection()
+        
+        // Tentar Redis primeiro
+        if (redisConnected && redisClient) {
+          const value = await redisClient.get(fullKey)
+          if (value !== null) {
+            const parsed = JSON.parse(value)
+            console.log(`📦 Cache HIT (Redis): ${fullKey}`)
+            return parsed
+          }
         }
+      } else if (redisDisabled) {
+        // Redis desabilitado, usando apenas memória (silencioso para não poluir logs)
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao buscar no Redis (${fullKey}):`, error)
+      handleRedisError(error)
     }
 
     // Fallback para memória
@@ -365,16 +428,20 @@ export class CacheService {
     const serialized = serializeValue(value)
 
     try {
-      // Garantir conexão (lazy loading)
-      await this.ensureRedisConnection()
-      
-      // Tentar Redis primeiro
-      if (redisConnected && redisClient) {
-        await redisClient.setEx(fullKey, ttl, serialized)
-        console.log(`💾 Cache SET (Redis): ${fullKey} (TTL: ${ttl}s)`)
+      // ⚡ FAIL-FAST: Verificar se deve usar Redis
+      if (shouldUseRedis()) {
+        // Garantir conexão (lazy loading)
+        await this.ensureRedisConnection()
+        
+        // Tentar Redis primeiro
+        if (redisConnected && redisClient) {
+          await redisClient.setEx(fullKey, ttl, serialized)
+          console.log(`💾 Cache SET (Redis): ${fullKey} (TTL: ${ttl}s)`)
+        }
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao salvar no Redis (${fullKey}):`, error)
+      handleRedisError(error)
     }
 
     // Sempre salvar na memória também (fallback)
@@ -393,13 +460,17 @@ export class CacheService {
     const fullKey = this.buildKey(key, options.prefix)
 
     try {
-      // Remover do Redis
-      if (redisConnected && redisClient) {
-        await redisClient.del(fullKey)
-        console.log(`🗑️ Cache DELETE (Redis): ${fullKey}`)
+      // ⚡ FAIL-FAST: Verificar se deve usar Redis
+      if (shouldUseRedis()) {
+        // Remover do Redis
+        if (redisConnected && redisClient) {
+          await redisClient.del(fullKey)
+          console.log(`🗑️ Cache DELETE (Redis): ${fullKey}`)
+        }
       }
     } catch (error) {
       console.warn(`⚠️ Erro ao deletar do Redis (${fullKey}):`, error)
+      handleRedisError(error)
     }
 
     // Remover da memória
@@ -412,22 +483,26 @@ export class CacheService {
    */
   async clear(prefix?: string): Promise<void> {
     try {
-      // Limpar Redis
-      if (redisConnected && redisClient) {
-        if (prefix) {
-          const pattern = this.buildKey('*', prefix)
-          const keys = await redisClient.keys(pattern)
-          if (keys.length > 0) {
-            await redisClient.del(keys)
-            console.log(`🧹 Cache CLEAR (Redis): ${keys.length} chaves com prefixo "${prefix}"`)
+      // ⚡ FAIL-FAST: Verificar se deve usar Redis
+      if (shouldUseRedis()) {
+        // Limpar Redis
+        if (redisConnected && redisClient) {
+          if (prefix) {
+            const pattern = this.buildKey('*', prefix)
+            const keys = await redisClient.keys(pattern)
+            if (keys.length > 0) {
+              await redisClient.del(keys)
+              console.log(`🧹 Cache CLEAR (Redis): ${keys.length} chaves com prefixo "${prefix}"`)
+            }
+          } else {
+            await redisClient.flushDb()
+            console.log('🧹 Cache CLEAR (Redis): Todos os dados')
           }
-        } else {
-          await redisClient.flushDb()
-          console.log('🧹 Cache CLEAR (Redis): Todos os dados')
         }
       }
     } catch (error) {
       console.warn('⚠️ Erro ao limpar Redis:', error)
+      handleRedisError(error)
     }
 
     // Limpar memória
@@ -450,8 +525,10 @@ export class CacheService {
    */
   async getKeysByPattern(pattern: string): Promise<string[]> {
     try {
-      if (redisConnected && redisClient) {
-        return await redisClient.keys(pattern)
+      // ⚡ FAIL-FAST: Verificar se deve usar Redis
+      if (shouldUseRedis() && redisConnected && redisClient) {
+        const keys = await redisClient.keys(pattern)
+        return keys
       }
       
       // Fallback para memória
@@ -467,7 +544,19 @@ export class CacheService {
       return keys
     } catch (error) {
       console.warn(`⚠️ Erro ao buscar chaves por padrão ${pattern}:`, error)
-      return []
+      handleRedisError(error)
+      
+      // Fallback para memória em caso de erro
+      const keys: string[] = []
+      const regex = new RegExp(pattern.replace(/\*/g, '.*'))
+      
+      for (const key of memoryCache.keys()) {
+        if (regex.test(key)) {
+          keys.push(key)
+        }
+      }
+      
+      return keys
     }
   }
 
@@ -480,12 +569,16 @@ export class CacheService {
     let deleted = 0
     
     try {
-      // Deletar do Redis
-      if (redisConnected && redisClient && keys.length > 0) {
-        deleted += await redisClient.del(keys)
+      // ⚡ FAIL-FAST: Verificar se deve usar Redis
+      if (shouldUseRedis()) {
+        // Deletar do Redis
+        if (redisConnected && redisClient && keys.length > 0) {
+          deleted += await redisClient.del(keys)
+        }
       }
     } catch (error) {
       console.warn('⚠️ Erro ao deletar chaves do Redis:', error)
+      handleRedisError(error)
     }
     
     // Deletar da memória
@@ -535,6 +628,8 @@ export class CacheService {
     idleTime: number
     lazyMode: boolean
     isServerless: boolean
+    redisDisabled: boolean
+    lastCriticalError: string | null
   } {
     return {
       connected: redisConnected,
@@ -543,7 +638,9 @@ export class CacheService {
       initialized: this.initialized,
       idleTime: Math.round((Date.now() - lastActivity) / 1000), // em segundos
       lazyMode: LAZY_CONNECT,
-      isServerless: !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+      isServerless: !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME),
+      redisDisabled: redisDisabled,
+      lastCriticalError: lastCriticalError
     }
   }
 
@@ -551,11 +648,14 @@ export class CacheService {
    * Obter estatísticas do cache
    */
   async getStats(): Promise<{
-    redis: { connected: boolean; keys?: number }
+    redis: { connected: boolean; keys?: number; disabled?: boolean }
     memory: { keys: number; size: string }
   }> {
     const stats = {
-      redis: { connected: redisConnected } as any,
+      redis: { 
+        connected: redisConnected,
+        disabled: redisDisabled
+      } as any,
       memory: {
         keys: memoryCache.size,
         size: this.getMemoryCacheSize()
@@ -563,13 +663,15 @@ export class CacheService {
     }
 
     try {
-      if (redisConnected && redisClient) {
+      // ⚡ FAIL-FAST: Verificar se deve usar Redis
+      if (shouldUseRedis() && redisConnected && redisClient) {
         const info = await redisClient.info('keyspace')
         const dbKeys = info.match(/keys=(\d+)/)
         stats.redis.keys = dbKeys ? parseInt(dbKeys[1]) : 0
       }
     } catch (error) {
       console.warn('⚠️ Erro ao obter stats do Redis:', error)
+      handleRedisError(error)
     }
 
     return stats

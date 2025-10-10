@@ -24,7 +24,8 @@ import {
   Check,
   Lightbulb,
   RefreshCw,
-  ChevronRight
+  ChevronRight,
+  Bell
 } from "lucide-react"
 import Link from "next/link"
 
@@ -674,6 +675,19 @@ export default function Dashboard() {
                   >
                     {isPremium ? "Premium" : "Gratuito"}
                   </Badge>
+                </div>
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="w-full text-xs"
+                    asChild
+                  >
+                    <Link href="/dashboard/subscriptions" className="flex items-center justify-center gap-2">
+                      <Bell className="w-3 h-3" />
+                      Minhas Inscrições
+                    </Link>
+                  </Button>
                 </div>
                 {!isPremium && (
                   <Button 

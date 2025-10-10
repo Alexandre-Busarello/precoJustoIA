@@ -345,8 +345,15 @@ function buildAnalysisPrompt(data: {
   financials: CompanyFinancialData;
   strategicAnalyses: Record<string, StrategicAnalysisResult>;
   statementsAnalysis?: any;
+  fundamentalChangeContext?: {
+    summary: string;
+    direction: string;
+    scoreBefore: number;
+    scoreAfter: number;
+    date: Date;
+  };
 }) {
-  const { ticker, name, sector, currentPrice, financials, strategicAnalyses, statementsAnalysis } = data;
+  const { ticker, name, sector, currentPrice, financials, strategicAnalyses, statementsAnalysis, fundamentalChangeContext } = data;
   
   const financialIndicators = formatFinancialIndicators(financials);
   
@@ -360,6 +367,18 @@ function buildAnalysisPrompt(data: {
 ${statementsAnalysis.positiveSignals && statementsAnalysis.positiveSignals.length > 0 ? statementsAnalysis.positiveSignals.map((insight: string) => `  • ${insight}`).join('\n') : '  • Nenhum insight positivo identificado'}
 **Alertas Identificados:**
 ${statementsAnalysis.redFlags && statementsAnalysis.redFlags.length > 0 ? statementsAnalysis.redFlags.map((alert: string) => `  ⚠️ ${alert}`).join('\n') : '  • Nenhum alerta crítico identificado'}
+` : '';
+  
+  // Incluir contexto de mudança fundamental se disponível
+  const fundamentalChangeSection = fundamentalChangeContext ? `
+
+#### **Última Mudança Fundamental Detectada**
+**Data:** ${new Date(fundamentalChangeContext.date).toLocaleDateString('pt-BR')}
+**Direção:** ${fundamentalChangeContext.direction === 'positive' ? '📈 Melhora' : '📉 Piora'}
+**Score Overall:** ${fundamentalChangeContext.scoreBefore.toFixed(1)} → ${fundamentalChangeContext.scoreAfter.toFixed(1)}
+**Resumo da Mudança:** ${fundamentalChangeContext.summary}
+
+⚠️ **IMPORTANTE:** Na sua análise mensal, leve em consideração esta mudança fundamental recente. Avalie se os fatores que causaram esta mudança ainda estão presentes e como eles afetam a tese de investimento atual.
 ` : '';
   
   const strategicSummary = Object.entries(strategicAnalyses)
@@ -408,6 +427,8 @@ ${financialIndicators}
 ${strategicSummary}
 
 ${statementsSection}
+
+${fundamentalChangeSection}
 
 ---
 
@@ -510,8 +531,15 @@ export async function generateAnalysisInternal(params: {
   currentPrice: number
   financials: any
   includeStatements?: boolean
+  fundamentalChangeContext?: {
+    summary: string
+    direction: string
+    scoreBefore: number
+    scoreAfter: number
+    date: Date
+  }
 }) {
-  const { ticker, name, sector, currentPrice, financials, includeStatements = false } = params
+  const { ticker, name, sector, currentPrice, financials, includeStatements = false, fundamentalChangeContext } = params
 
   // Validar dados obrigatórios
   if (!ticker || !name || !currentPrice || !financials) {
@@ -544,6 +572,7 @@ export async function generateAnalysisInternal(params: {
     sector,
     currentPrice: Number(currentPrice),
     financials,
+    fundamentalChangeContext,
     strategicAnalyses,
     statementsAnalysis
   })

@@ -8,6 +8,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { 
   Menu, 
   X, 
@@ -24,7 +25,9 @@ import {
   TrendingUp,
   Wrench,
   Building2,
-  Filter
+  Filter,
+  Sparkles,
+  Bell
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -36,6 +39,22 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
+
+  // Extrair iniciais do nome ou email
+  const getInitials = () => {
+    if (session?.user?.name) {
+      return session.user.name
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    }
+    if (session?.user?.email) {
+      return session.user.email.slice(0, 2).toUpperCase()
+    }
+    return 'U'
+  }
 
   // Close menu on route change
   useEffect(() => {
@@ -174,29 +193,76 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
 
           {/* User Info */}
           {session && (
-            <div className="p-4 border-b border-border bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-violet-500 rounded-full flex items-center justify-center">
-                  <User className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-sm">
+            <div className="p-4 border-b border-border bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
+              <div className="flex items-start gap-3 mb-3">
+                <Avatar className="h-12 w-12 border-2 border-primary/20">
+                  <AvatarFallback className={`text-sm font-semibold ${
+                    isPremium 
+                      ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white' 
+                      : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                  }`}>
+                    {getInitials()}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">
                     {session.user?.name || session.user?.email?.split('@')[0]}
                   </p>
-                  <Badge variant={isPremium ? "default" : "secondary"} className="text-xs mt-1">
+                  <p className="text-xs text-muted-foreground truncate mb-2">
+                    {session.user?.email}
+                  </p>
+                  <Badge 
+                    variant={isPremium ? "default" : "secondary"} 
+                    className={`text-xs ${
+                      isPremium 
+                        ? 'bg-gradient-to-r from-violet-600 to-purple-600 border-0' 
+                        : ''
+                    }`}
+                  >
                     {isPremium ? (
                       <>
-                        <Shield className="w-3 h-3 mr-1" />
+                        <Sparkles className="w-3 h-3 mr-1" />
                         Premium
                       </>
                     ) : (
-                      <>
-                        <Zap className="w-3 h-3 mr-1" />
-                        Gratuito
-                      </>
+                      'Plano Gratuito'
                     )}
                   </Badge>
                 </div>
+              </div>
+              
+              {/* Quick Actions */}
+              <div className="flex gap-2">
+                <Link 
+                  href="/dashboard/subscriptions" 
+                  className="flex-1"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full text-xs"
+                  >
+                    <Bell className="w-3 h-3 mr-1" />
+                    Inscrições
+                  </Button>
+                </Link>
+                {!isPremium && (
+                  <Link 
+                    href="/checkout" 
+                    className="flex-1"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Button 
+                      size="sm" 
+                      className="w-full text-xs bg-gradient-to-r from-violet-600 to-purple-600"
+                    >
+                      <CreditCard className="w-3 h-3 mr-1" />
+                      Upgrade
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
           )}

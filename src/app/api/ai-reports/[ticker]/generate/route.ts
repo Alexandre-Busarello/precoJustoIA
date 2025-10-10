@@ -5,6 +5,8 @@ import { getCurrentUser } from '@/lib/user-service'
 import { AIReportsService } from '@/lib/ai-reports-service'
 import { generateAnalysisInternal } from '@/app/api/generate-analysis/route'
 import { reviewAnalysisInternal } from '@/app/api/review-analysis/route'
+import { prisma } from '@/lib/prisma'
+import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 
 // Validar se a API key do Gemini está configurada
 function validateGeminiConfig() {
@@ -23,7 +25,7 @@ export async function POST(
     const resolvedParams = await params
     const ticker = resolvedParams.ticker.toUpperCase()
     const body = await request.json()
-    const { name, sector, currentPrice, financials } = body
+    const { name, sector, currentPrice, financials, type = 'MONTHLY_OVERVIEW' } = body
 
     // 1. Verificar sessão do usuário para garantir que é Premium
     const session = await getServerSession(authOptions)
@@ -52,13 +54,62 @@ export async function POST(
       })
     }
 
+    // 2.5 Se for MONTHLY_OVERVIEW, buscar o último relatório de FUNDAMENTAL_CHANGE para contexto
+    let fundamentalChangeContext = null
+    if (type === 'MONTHLY_OVERVIEW') {
+      const company = await safeQueryWithParams(
+        'company-by-ticker-for-context',
+        () => prisma.company.findUnique({
+          where: { ticker }
+        }),
+        { ticker }
+      ) as { id: number } | null
+
+      if (company) {
+        const lastChangeReport = await safeQueryWithParams(
+          'ai_reports-last-fundamental-change',
+          () => prisma.aIReport.findFirst({
+            where: {
+              companyId: company.id,
+              type: 'FUNDAMENTAL_CHANGE',
+              status: 'COMPLETED'
+            },
+            orderBy: {
+              createdAt: 'desc'
+            },
+            select: {
+              content: true,
+              changeDirection: true,
+              previousScore: true,
+              currentScore: true,
+              createdAt: true
+            }
+          }),
+          { companyId: company.id }
+        ) as any
+
+        if (lastChangeReport) {
+          fundamentalChangeContext = {
+            summary: lastChangeReport.content.substring(0, 500), // Primeiros 500 caracteres
+            direction: lastChangeReport.changeDirection,
+            scoreBefore: lastChangeReport.previousScore,
+            scoreAfter: lastChangeReport.currentScore,
+            date: lastChangeReport.createdAt
+          }
+          console.log(`📊 Contexto de mudança fundamental encontrado para ${ticker}`)
+        }
+      }
+    }
+
     // 3. Iniciar Geração: Criar registro com status GENERATING
-    console.log(`🤖 Iniciando geração do relatório para ${ticker}`)
+    console.log(`🤖 Iniciando geração do relatório ${type} para ${ticker}`)
     const reportId = await AIReportsService.startGeneration(ticker, {
+      type,
       ticker,
       name,
       sector,
       currentPrice,
+      fundamentalChangeContext,
       timestamp: new Date().toISOString()
     })
 
@@ -89,7 +140,8 @@ export async function POST(
           sector,
           currentPrice: Number(currentPrice),
           financials,
-          includeStatements: true
+          includeStatements: true,
+          fundamentalChangeContext: fundamentalChangeContext || undefined
         })
 
         if (!analysisResult.success || !analysisResult.analysis) {

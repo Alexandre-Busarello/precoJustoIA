@@ -1335,3 +1335,294 @@ export async function sendWelcomeEmail(email: string, userName?: string, isEarly
     text: template.text
   })
 }
+
+// ===== TEMPLATES PARA MONITORAMENTO DE ATIVOS =====
+
+export function generateAssetChangeEmailTemplate(params: {
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+  changeDirection: 'positive' | 'negative';
+  previousScore: number;
+  currentScore: number;
+  reportSummary: string;
+  reportUrl: string;
+}) {
+  const {
+    userName,
+    ticker,
+    companyName,
+    companyLogoUrl,
+    changeDirection,
+    previousScore,
+    currentScore,
+    reportSummary,
+    reportUrl,
+  } = params;
+
+  const isPositive = changeDirection === 'positive';
+  const badgeColor = isPositive ? '#10b981' : '#ef4444';
+  const badgeText = isPositive ? 'Mudança Positiva' : 'Mudança Negativa';
+  const scoreDelta = Math.abs(currentScore - previousScore).toFixed(1);
+  const arrow = isPositive ? '↑' : '↓';
+  const changeVerb = isPositive ? 'melhorou' : 'piorou';
+  
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
+  const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
+  const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
+  
+  // Converter URLs SVG para formato compatível com email
+  // SVGs diretos não funcionam bem com o proxy do Gmail
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    
+    // Se for uma URL da brapi.dev (SVG), usar um serviço de conversão
+    if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
+      // Usar um serviço de proxy que converte SVG para PNG
+      // Alternativa 1: wsrv.nl (free image proxy)
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/667eea/ffffff?text=${ticker}`;
+    }
+    
+    // Se for URL relativa, adicionar base URL
+    if (url.startsWith('/')) {
+      return baseUrl + url;
+    }
+    
+    // Se já for URL absoluta e não for SVG problemático, retornar como está
+    return url;
+  };
+  
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
+
+  return {
+    subject: `${ticker}: Score Geral ${changeVerb} - ${previousScore.toFixed(1)} → ${currentScore.toFixed(1)}`,
+    html: `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atualização: ${ticker}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+          
+          <!-- Header with Logo -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+              <div style="margin: 0 auto 20px; display: inline-block; background-color: #ffffff; padding: 12px 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+                <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block;" />
+              </div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">
+                Atualização de Monitoramento
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Company Header with Logo -->
+          <tr>
+            <td style="padding: 40px 30px 30px; text-align: center;">
+              ${emailCompatibleLogoUrl ? `
+              <table role="presentation" style="margin: 0 auto 24px;">
+                <tr>
+                  <td style="text-align: center;">
+                    <div style="width: 96px; height: 96px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); border: 2px solid #f3f4f6;">
+                      <img src="${emailCompatibleLogoUrl}" 
+                           alt="${companyName}" 
+                           style="width: 64px; height: 64px; border-radius: 8px; object-fit: contain; display: block; margin: 0 auto;" 
+                           width="64" 
+                           height="64" />
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
+              <h2 style="color: #111827; margin: 0 0 8px 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">
+                ${companyName}
+              </h2>
+              <div style="color: #6b7280; font-size: 16px; font-weight: 500; margin-bottom: 16px; letter-spacing: 0.5px;">
+                ${ticker}
+              </div>
+              <div style="text-align: center;">
+                <span style="display: inline-block; background-color: ${badgeColor}; color: #ffffff; padding: 8px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px ${badgeColor}40;">
+                  ${badgeText}
+                </span>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Saudação -->
+          <tr>
+            <td style="padding: 0 30px 20px;">
+              <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0;">
+                Olá <strong>${userName}</strong>,
+              </p>
+            </td>
+          </tr>
+
+          <!-- Informação Principal -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                Detectamos uma mudança relevante nos fundamentos de <strong>${companyName} (${ticker})</strong>, uma empresa que você está monitorando.
+              </p>
+
+              <!-- Score Comparison Box -->
+              <table role="presentation" style="width: 100%; background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%); border-radius: 16px; border: 2px solid ${badgeColor}; margin: 24px 0; box-shadow: 0 4px 12px ${badgeColor}20;">
+                <tr>
+                  <td style="padding: 32px 20px; text-align: center;">
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
+                      Score Geral
+                    </div>
+                    <div style="font-size: 36px; font-weight: 700; color: #111827; margin: 16px 0;">
+                      <span style="color: #9ca3af; font-size: 32px;">${previousScore.toFixed(1)}</span>
+                      <span style="margin: 0 12px; color: ${badgeColor}; font-size: 28px;">${arrow}</span>
+                      <span style="color: ${badgeColor}; font-size: 40px;">${currentScore.toFixed(1)}</span>
+                    </div>
+                    <div style="display: inline-block; background-color: ${badgeColor}15; color: ${badgeColor}; padding: 6px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-top: 8px;">
+                      ${isPositive ? '+' : ''}${scoreDelta} pontos
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Resumo do Relatório -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <div style="background: linear-gradient(135deg, ${badgeColor}08 0%, ${badgeColor}15 100%); border-left: 4px solid ${badgeColor}; padding: 20px 24px; border-radius: 12px; box-shadow: 0 2px 8px ${badgeColor}10;">
+                <h3 style="margin: 0 0 12px 0; color: #111827; font-size: 17px; font-weight: 700;">
+                  📊 Principais Mudanças Identificadas
+                </h3>
+                <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.7;">
+                  ${reportSummary}
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- CTA Button -->
+          <tr>
+            <td style="padding: 0 30px 40px; text-align: center;">
+              <table role="presentation" style="margin: 0 auto;">
+                <tr>
+                  <td style="border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.35);">
+                    <a href="${reportUrl}" style="display: inline-block; color: #ffffff; text-decoration: none; padding: 16px 36px; font-weight: 600; font-size: 16px; letter-spacing: 0.3px;">
+                      📄 Ver Relatório Completo
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Secondary CTA -->
+          <tr>
+            <td style="padding: 0 30px 40px; text-align: center;">
+              <a href="${assetUrl}" style="color: #667eea; text-decoration: none; font-size: 15px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
+                📈 Ver página completa de ${ticker}
+              </a>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding: 0 30px;">
+              <div style="border-top: 1px solid #e5e7eb;"></div>
+            </td>
+          </tr>
+
+          <!-- Footer Info -->
+          <tr>
+            <td style="padding: 32px 30px; text-align: center;">
+              <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
+                💌 Você está recebendo este email porque se inscreveu para receber atualizações sobre <strong>${ticker}</strong>
+              </p>
+              <table role="presentation" style="margin: 0 auto;">
+                <tr>
+                  <td style="padding: 0 12px;">
+                    <a href="${manageSubscriptionsUrl}" style="color: #667eea; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      ⚙️ Gerenciar inscrições
+                    </a>
+                  </td>
+                  <td style="padding: 0 12px; color: #d1d5db;">|</td>
+                  <td style="padding: 0 12px;">
+                    <a href="${baseUrl}/contato" style="color: #667eea; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      💬 Suporte
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer Branding -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%); padding: 24px; text-align: center;">
+              <p style="color: #9ca3af; font-size: 13px; margin: 0 0 8px 0; font-weight: 500;">
+                © ${new Date().getFullYear()} Preço Justo AI
+              </p>
+              <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                Análise fundamentalista inteligente • ${baseUrl}
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `,
+    text: `
+${ticker}: Score Geral ${changeVerb}
+
+Olá ${userName},
+
+Detectamos uma mudança relevante nos fundamentos de ${companyName} (${ticker}), uma empresa que você está monitorando.
+
+Score Geral: ${previousScore.toFixed(1)} → ${currentScore.toFixed(1)} (variação de ${scoreDelta} pontos)
+
+Principais Mudanças:
+${reportSummary}
+
+Ver relatório completo: ${reportUrl}
+
+Ver página da empresa: ${assetUrl}
+
+Você está recebendo este email porque se inscreveu para receber atualizações sobre ${ticker}.
+Gerenciar inscrições: ${manageSubscriptionsUrl}
+
+Preço Justo AI - Análise fundamentalista inteligente
+${baseUrl}
+    `
+  };
+}
+
+export async function sendAssetChangeEmail(params: {
+  email: string;
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+  changeDirection: 'positive' | 'negative';
+  previousScore: number;
+  currentScore: number;
+  reportSummary: string;
+  reportUrl: string;
+}) {
+  const template = generateAssetChangeEmailTemplate(params);
+  
+  return await sendEmail({
+    to: params.email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  });
+}

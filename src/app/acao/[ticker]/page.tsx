@@ -8,11 +8,12 @@ import { CompanyLogo } from '@/components/company-logo'
 import { CompanySizeBadge } from '@/components/company-size-badge'
 import StrategicAnalysisClient from '@/components/strategic-analysis-client'
 import HeaderScoreWrapper from '@/components/header-score-wrapper'
-import AIAnalysis from '@/components/ai-analysis'
+import AIAnalysisDual from '@/components/ai-analysis-dual'
 import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisSection from '@/components/technical-analysis-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
+import AssetSubscriptionButton from '@/components/asset-subscription-button'
 import { RelatedCompanies } from '@/components/related-companies'
 import { Footer } from '@/components/footer'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
@@ -33,7 +34,8 @@ import {
   User,
   GitCompare,
   ChevronDown,
-  Info
+  Info,
+  FileText
 } from 'lucide-react'
 
 interface PageProps {
@@ -550,7 +552,7 @@ export default async function TickerPage({ params }: PageProps) {
   }
 
   // Buscar dados da empresa e dados financeiros completos em paralelo (incluindo dados históricos)
-  const [companyData, comprehensiveData] = await Promise.all([
+  const [companyData, comprehensiveData, reportsCount] = await Promise.all([
     prisma.company.findUnique({
       where: { ticker },
       include: {
@@ -564,7 +566,16 @@ export default async function TickerPage({ params }: PageProps) {
         }
       }
     }),
-    getComprehensiveFinancialData(ticker, 'YEARLY', 7)
+    getComprehensiveFinancialData(ticker, 'YEARLY', 7),
+    // Contar relatórios de mudança fundamental
+    prisma.aIReport.count({
+      where: {
+        company: {
+          ticker: ticker
+        },
+        type: 'FUNDAMENTAL_CHANGE'
+      }
+    })
   ])
 
 
@@ -727,6 +738,23 @@ export default async function TickerPage({ params }: PageProps) {
                         size="default"
                         showLabel={true}
                       />
+
+                      <AssetSubscriptionButton
+                        ticker={ticker}
+                        companyId={companyData.id}
+                        variant="outline"
+                        size="default"
+                        showLabel={true}
+                      />
+
+                      {reportsCount > 0 && (
+                        <Button asChild variant="outline" size="default">
+                          <Link href={`/acao/${ticker.toLowerCase()}/relatorios`}>
+                            <FileText className="w-4 h-4 mr-2" />
+                            Relatórios ({reportsCount})
+                          </Link>
+                        </Button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
@@ -806,13 +834,14 @@ export default async function TickerPage({ params }: PageProps) {
             />
 
             {/* Análise com IA */}
-            <AIAnalysis
+            <AIAnalysisDual
               ticker={ticker}
               name={companyData.name}
               sector={companyData.sector}
               currentPrice={currentPrice}
               financials={serializedFinancials}
               userIsPremium={userIsPremium}
+              companyId={companyData.id}
             />
 
             {/* Dados Financeiros Completos */}

@@ -68,6 +68,10 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   'aIReport': 'ai_reports',           // AIReport -> aIReport (client) -> ai_reports (table)
   'aIReportFeedback': 'ai_report_feedbacks',  // AIReportFeedback -> aIReportFeedback -> ai_report_feedbacks
   
+  // Asset Monitoring
+  'userAssetSubscription': 'user_asset_subscriptions',
+  'assetSnapshot': 'asset_snapshots',
+  
   // Processing
   'tickerProcessingStatus': 'ticker_processing_status',
   'alfaWaitlist': 'alfa_waitlist'
@@ -90,7 +94,7 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'value_added_statements': ['companies', 'value_added_statements'],
   
   // Usuários e dados pessoais
-  'users': ['users', 'portfolios', 'portfolio_assets', 'ranking_history', 'backtest_configs'],
+  'users': ['users', 'portfolios', 'portfolio_assets', 'ranking_history', 'backtest_configs', 'user_asset_subscriptions'],
   'portfolios': ['users', 'portfolios', 'portfolio_assets'],
   'portfolio_assets': ['portfolios', 'portfolio_assets'],
   
@@ -98,6 +102,10 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'ranking_history': ['users', 'ranking_history'],
   'backtest_configs': ['users', 'backtest_configs', 'backtest_results', 'backtest_assets'],
   'backtest_results': ['backtest_configs', 'backtest_results'],
+  
+  // Asset Monitoring
+  'user_asset_subscriptions': ['users', 'companies', 'user_asset_subscriptions'],
+  'asset_snapshots': ['companies', 'asset_snapshots'],
   'backtest_assets': ['backtest_configs', 'backtest_assets'],
   'backtest_transactions': ['backtest_configs', 'backtest_transactions'],
   

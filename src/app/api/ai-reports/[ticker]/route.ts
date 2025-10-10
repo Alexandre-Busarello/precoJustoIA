@@ -14,26 +14,27 @@ export async function GET(
     const resolvedParams = await params
     const ticker = resolvedParams.ticker.toUpperCase()
     
+    // Extrair query parameters
+    const { searchParams } = new URL(request.url)
+    const type = searchParams.get('type') as 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE' | null
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : undefined
+    
     // Verificar sessão para feedback personalizado
     const session = await getServerSession(authOptions)
     const userId = session?.user?.id
 
-    // Verificar se está sendo gerado
-    const isGenerating = await AIReportsService.isGenerating(ticker)
-    if (isGenerating) {
-      return NextResponse.json({
-        success: true,
-        generating: true,
-        message: 'Relatório sendo gerado. Aguarde alguns instantes.'
-      })
-    }
+    // Buscar empresa
+    const company = await safeQueryWithParams(
+      'company-by-ticker-ai-reports-route',
+      () => prisma.company.findUnique({
+        where: { ticker }
+      }),
+      { ticker }
+    ) as { id: number } | null
 
-    // Buscar relatório mais recente
-    const report = await AIReportsService.getLatestReport(ticker, userId)
-
-    if (!report) {
+    if (!company) {
       return NextResponse.json(
-        { error: 'Nenhum relatório encontrado para este ativo' },
+        { error: 'Empresa não encontrada' },
         { status: 404 }
       )
     }
@@ -43,6 +44,91 @@ export async function GET(
     if (userId) {
       const user = await getCurrentUser()
       userIsPremium = user?.isPremium || false
+    }
+
+    // Se tipo for FUNDAMENTAL_CHANGE ou limit especificado, buscar múltiplos relatórios
+    if (type === 'FUNDAMENTAL_CHANGE' || limit) {
+      const reports = await safeQueryWithParams(
+        `ai_reports-by-type-${type || 'all'}`,
+        () => prisma.aIReport.findMany({
+          where: {
+            companyId: company.id,
+            type: type || undefined,
+            status: 'COMPLETED'
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: limit || 10,
+          select: {
+            id: true,
+            companyId: true,
+            type: true,
+            content: true,
+            changeDirection: true,
+            previousScore: true,
+            currentScore: true,
+            strategicAnalyses: true,
+            likeCount: true,
+            dislikeCount: true,
+            createdAt: true,
+            isActive: true,
+            status: true
+          }
+        }),
+        { companyId: company.id, type: type || 'all' }
+      ) as any[]
+
+      // Processar preview para usuários não Premium
+      const processedReports = reports.map(report => ({
+        ...report,
+        content: !userIsPremium ? AIReportsService.generatePreview(report.content) : report.content,
+        isPreview: !userIsPremium
+      }))
+
+      return NextResponse.json({
+        success: true,
+        reports: processedReports,
+        count: reports.length
+      })
+    }
+
+    // Buscar relatório único (comportamento padrão para MONTHLY_OVERVIEW)
+    const report = await safeQueryWithParams(
+      `ai_reports-latest-${type || 'default'}`,
+      () => prisma.aIReport.findFirst({
+        where: {
+          companyId: company.id,
+          type: type || 'MONTHLY_OVERVIEW',
+          status: 'COMPLETED'
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        select: {
+          id: true,
+          companyId: true,
+          type: true,
+          content: true,
+          changeDirection: true,
+          previousScore: true,
+          currentScore: true,
+          strategicAnalyses: true,
+          likeCount: true,
+          dislikeCount: true,
+          createdAt: true,
+          isActive: true,
+          status: true
+        }
+      }),
+      { companyId: company.id, type: type || 'MONTHLY_OVERVIEW' }
+    ) as any
+
+    if (!report) {
+      return NextResponse.json(
+        { error: 'Nenhum relatório encontrado para este ativo' },
+        { status: 404 }
+      )
     }
 
     // Para usuários não Premium, retornar apenas preview

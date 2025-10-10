@@ -73,6 +73,7 @@ model User {
   assignedTickets  SupportTicket[] @relation("AssignedTickets")
   aiReportFeedbacks AIReportFeedback[]
   backtestConfigs  BacktestConfig[]
+  assetSubscriptions UserAssetSubscription[]
 
   @@map("users")
 }
@@ -134,10 +135,14 @@ model Company {
   priceOscillations PriceOscillations[]
   quarterlyFinancials QuarterlyFinancials[]
   aiReports       AIReport[]
+  userSubscriptions UserAssetSubscription[]
+  snapshot        AssetSnapshot?
+  lastCheckedAt   DateTime? @map("last_checked_at")
 
   @@index([sector])
   @@index([industry])
   @@index([sector, industry])
+  @@index([lastCheckedAt])
   @@map("companies")
 }
 
@@ -719,6 +724,10 @@ model AIReport {
   version           Int                @default(1) // Versão do relatório
   isActive          Boolean            @default(true) @map("is_active") // Se é o relatório ativo
   status            ReportStatus       @default(COMPLETED) // Status do relatório
+  type              AIReportType       @default(MONTHLY_OVERVIEW)
+  changeDirection   String?            @map("change_direction") // 'positive', 'negative'
+  previousScore     Decimal?           @map("previous_score") @db.Decimal(5, 2)
+  currentScore      Decimal?           @map("current_score") @db.Decimal(5, 2)
   likeCount         Int                @default(0) @map("like_count")
   dislikeCount      Int                @default(0) @map("dislike_count")
   createdAt         DateTime           @default(now()) @map("created_at")
@@ -730,6 +739,7 @@ model AIReport {
   @@index([companyId, isActive])
   @@index([companyId, createdAt])
   @@index([companyId, status])
+  @@index([companyId, type])
   @@index([createdAt])
   @@map("ai_reports")
 }
@@ -762,6 +772,11 @@ enum ReportStatus {
   GENERATING  // Relatório sendo gerado
   COMPLETED   // Relatório finalizado
   FAILED      // Falha na geração
+}
+
+enum AIReportType {
+  MONTHLY_OVERVIEW
+  FUNDAMENTAL_CHANGE
 }
 
 // ===== MODELOS DE BACKTESTING =====
@@ -898,4 +913,38 @@ model AlfaWaitlist {
   @@index([createdAt])
   @@index([isInvited])
   @@map("alfa_waitlist")
+}
+
+// ===== MODELOS PARA MONITORAMENTO DE ATIVOS =====
+
+// Inscrições de usuários em ativos
+model UserAssetSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  companyId Int      @map("company_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, companyId])
+  @@index([userId])
+  @@index([companyId])
+  @@map("user_asset_subscriptions")
+}
+
+// Snapshots dos ativos
+model AssetSnapshot {
+  id            String   @id @default(cuid())
+  companyId     Int      @unique @map("company_id")
+  snapshotData  Json     @map("snapshot_data") // Dados completos do ativo
+  overallScore  Decimal  @map("overall_score") @db.Decimal(5, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId])
+  @@index([updatedAt])
+  @@map("asset_snapshots")
 }

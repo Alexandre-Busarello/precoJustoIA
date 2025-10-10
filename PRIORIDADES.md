@@ -1,6 +1,7 @@
 <!-- 1. Integação pagamento (mercado pago) e permitr o cancelamento da assinatura a qualquer momento na plataforma; -->
 <!-- 2. Criar Central de SUPORTE dentro da APP (controle de ticked) por interface e Chat IA; -->
 <!-- Resolve Historcio não carregando no backtest -->
+Usar o mesmo calculo centralizado usado para o email em @monitor-asset para as estrategias que usam o SCORE.
 
 Usuario Gratuito pode fazer backtest apenas com PETR4 e VALE3. A simulação não é salva no banco e fica disponivel apenas na interface, saiu da tela não volta mais
 

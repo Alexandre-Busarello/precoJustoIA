@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
 import { ToolsDropdown } from "@/components/tools-dropdown"
+import { UserProfileDropdown } from "@/components/user-profile-dropdown"
 import { LayoutDashboard, Shield, Zap, Headphones } from "lucide-react"
 import { GlobalSearchBar } from "@/components/global-search-bar"
 
@@ -107,35 +108,12 @@ export default function Header() {
                 </Button>
               </div>
 
-              {/* User Info */}
-              <div className="flex items-center space-x-3">
-                <div className="hidden xl:flex items-center gap-2">
-                  <Badge variant={isPremium ? "default" : "secondary"} className="text-xs">
-                    {isPremium ? (
-                      <>
-                        <Shield className="w-3 h-3 mr-1" />
-                        Premium
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3 h-3 mr-1" />
-                        Gratuito
-                      </>
-                    )}
-                  </Badge>
-                  <span className="text-sm text-muted-foreground">
-                    {session.user?.name || session.user?.email?.split('@')[0]}
-                  </span>
-                </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => signOut()}
-                >
-                  Sair
-                </Button>
-              </div>
+              {/* User Profile Dropdown */}
+              <UserProfileDropdown
+                userName={session.user?.name}
+                userEmail={session.user?.email}
+                isPremium={isPremium}
+              />
             </div>
           ) : (
             // Not logged in navigation

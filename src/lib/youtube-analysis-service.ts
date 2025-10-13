@@ -105,10 +105,45 @@ export class YouTubeAnalysisService {
   }
 
   /**
+   * Converte o texto de publicação (ex: "há 1 hora", "há 3 dias") em número de dias
+   */
+  private static parsePublishedTime(publishedTimeText: string): number {
+    if (!publishedTimeText) return 999999; // Se não tiver data, considerar muito antigo
+    
+    const text = publishedTimeText.toLowerCase();
+    
+    // Extrair número e unidade
+    const match = text.match(/(\d+)\s*(hora|dia|semana|mês|meses|ano)/);
+    if (!match) return 999999;
+    
+    const value = parseInt(match[1]);
+    const unit = match[2];
+    
+    // Converter para dias
+    switch (unit) {
+      case 'hora':
+        return value / 24;
+      case 'dia':
+        return value;
+      case 'semana':
+        return value * 7;
+      case 'mês':
+      case 'meses':
+        return value * 30;
+      case 'ano':
+        return value * 365;
+      default:
+        return 999999;
+    }
+  }
+
+  /**
    * Extrai IDs de vídeos da resposta da API do YouTube
+   * PRIORIZA vídeos mais recentes (máximo 6 meses)
    */
   private static extractVideoIds(data: any, ticker: string, companyName: string): string[] {
-    const videoIds: string[] = [];
+    const MAX_AGE_DAYS = 180; // 6 meses
+    const candidateVideos: { videoId: string; ageDays: number; title: string; channel: string }[] = [];
     
     try {
       const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
@@ -129,28 +164,47 @@ export class YouTubeAnalysisService {
             const title = item.videoRenderer.title?.runs?.[0]?.text || '';
             const channel = item.videoRenderer.longBylineText?.runs?.[0]?.text || '';
             const lengthText = item.videoRenderer.lengthText?.simpleText || '';
+            const publishedTimeText = item.videoRenderer.publishedTimeText?.simpleText || '';
             
-            console.log(`🎥 Avaliando: ${title} (${channel}) - ${lengthText}`);
+            // Calcular idade do vídeo em dias
+            const ageDays = this.parsePublishedTime(publishedTimeText);
             
-            // Aplicar filtros
+            console.log(`🎥 Avaliando: ${title} (${channel}) - ${lengthText} - ${publishedTimeText} (${ageDays.toFixed(1)} dias)`);
+            
+            // Filtro de idade: rejeitar vídeos muito antigos (> 6 meses)
+            if (ageDays > MAX_AGE_DAYS) {
+              console.log(`   ⏳ Vídeo muito antigo (${ageDays.toFixed(0)} dias > ${MAX_AGE_DAYS} dias)`);
+              continue;
+            }
+            
+            // Aplicar outros filtros
             if (this.isValidVideo(videoId, title, channel, lengthText, ticker, companyName)) {
-              console.log(`   ✅ Vídeo aprovado: ${videoId}`);
-              videoIds.push(videoId);
-              
-              if (videoIds.length >= 2) {
-                return videoIds; // Máximo de 2 vídeos
-              }
+              console.log(`   ✅ Vídeo aprovado - adicionando aos candidatos`);
+              candidateVideos.push({ videoId, ageDays, title, channel });
             } else {
-              console.log(`   ❌ Vídeo rejeitado`);
+              console.log(`   ❌ Vídeo rejeitado pelos filtros`);
             }
           }
         }
       }
+      
+      // Ordenar por idade (mais recentes primeiro)
+      candidateVideos.sort((a, b) => a.ageDays - b.ageDays);
+      
+      // Log dos vídeos selecionados
+      console.log(`\n📊 Vídeos candidatos ordenados por recência:`);
+      candidateVideos.slice(0, 2).forEach((video, index) => {
+        console.log(`   ${index + 1}. ${video.title} (${video.channel}) - ${video.ageDays.toFixed(1)} dias atrás`);
+      });
+      
+      // Retornar os 2 vídeos mais recentes
+      return candidateVideos.slice(0, 2).map(v => v.videoId);
+      
     } catch (error) {
       console.error(`❌ Erro ao extrair IDs de vídeos:`, error);
     }
     
-    return videoIds;
+    return [];
   }
 
   /**
@@ -259,6 +313,9 @@ export class YouTubeAnalysisService {
       'dividendos em ação',
       'engenheiro e investidor',
       'felipe eduardo',
+      'método de investimento',
+      'market makers',
+      'clube dos dividendos'
     ];
     
     const channelLower = channel.toLowerCase();

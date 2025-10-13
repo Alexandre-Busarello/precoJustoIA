@@ -82,7 +82,7 @@ export class AssetMonitoringService {
     }>
   > {
     const subscriptions = await safeQueryWithParams(
-      'asset-subscriptions-by-company',
+      'user_asset_subscriptions-by-company',
       () => prisma.userAssetSubscription.findMany({
         where: { companyId },
         include: {
@@ -110,25 +110,21 @@ export class AssetMonitoringService {
    * Ordena por lastCheckedAt mais antigo (ou null primeiro)
    */
   static async getNextBatchToProcess(batchSize: number = 20) {
-    return await safeQueryWithParams(
-      'companies-next-batch-monitoring',
-      () => prisma.company.findMany({
-        take: batchSize,
-        orderBy: [
-          { lastCheckedAt: 'asc' }, // null values primeiro, depois os mais antigos
-        ],
-        select: {
-          id: true,
-          ticker: true,
-          name: true,
-          sector: true,
-          industry: true,
-          logoUrl: true,
-          lastCheckedAt: true,
-        },
-      }),
-      { batchSize }
-    );
+    return prisma.company.findMany({
+      take: batchSize,
+      orderBy: [
+        { lastCheckedAt: 'asc' }, // null values primeiro, depois os mais antigos
+      ],
+      select: {
+        id: true,
+        ticker: true,
+        name: true,
+        sector: true,
+        industry: true,
+        logoUrl: true,
+        lastCheckedAt: true,
+      },
+    });
   }
 
   /**

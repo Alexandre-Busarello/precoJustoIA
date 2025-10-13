@@ -72,6 +72,9 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   'userAssetSubscription': 'user_asset_subscriptions',
   'assetSnapshot': 'asset_snapshots',
   
+  // YouTube Analysis
+  'youTubeAnalysis': 'youtube_analyses',
+  
   // Processing
   'tickerProcessingStatus': 'ticker_processing_status',
   'alfaWaitlist': 'alfa_waitlist'
@@ -114,6 +117,9 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'ticket_messages': ['support_tickets', 'ticket_messages'],
   'ai_reports': ['companies', 'ai_reports', 'ai_report_feedbacks'],
   'ai_report_feedbacks': ['ai_reports', 'ai_report_feedbacks'],
+  
+  // YouTube Analysis
+  'youtube_analyses': ['companies', 'youtube_analyses', 'asset_snapshots'],
   
   // Dados de mercado
   'historical_prices': ['companies', 'historical_prices'],

@@ -98,6 +98,11 @@ export async function GET(request: NextRequest) {
               orderBy: { year: 'desc' },
               take: 1,
             },
+            youtubeAnalyses: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
           },
         });
 
@@ -109,6 +114,14 @@ export async function GET(request: NextRequest) {
         }
 
         const latestFinancials = companyWithData.financialData[0];
+        
+        // Preparar análise do YouTube se disponível
+        const youtubeAnalysisData = companyWithData.youtubeAnalyses && companyWithData.youtubeAnalyses[0] ? {
+          score: toNumber(companyWithData.youtubeAnalyses[0].score) || 0,
+          summary: companyWithData.youtubeAnalyses[0].summary,
+          positivePoints: companyWithData.youtubeAnalyses[0].positivePoints as string[] | null,
+          negativePoints: companyWithData.youtubeAnalyses[0].negativePoints as string[] | null,
+        } : null;
 
         // 7. Verificar se existe snapshot
         const existingSnapshot = await AssetMonitoringService.getSnapshot(company.id);
@@ -123,6 +136,7 @@ export async function GET(request: NextRequest) {
             strategies,
             overallScore: overallScoreResult,
             financials: latestFinancials,
+            youtubeAnalysis: youtubeAnalysisData,
             timestamp: new Date().toISOString(),
           };
 
@@ -166,6 +180,7 @@ export async function GET(request: NextRequest) {
                 strategies,
                 overallScore: overallScoreResult,
                 financials: latestFinancials,
+                youtubeAnalysis: youtubeAnalysisData,
                 timestamp: new Date().toISOString(),
               };
 
@@ -220,6 +235,7 @@ export async function GET(request: NextRequest) {
                   strategies,
                   overallScore: overallScoreResult,
                   financials: latestFinancials,
+                  youtubeAnalysis: youtubeAnalysisData,
                   timestamp: new Date().toISOString(),
                 };
 

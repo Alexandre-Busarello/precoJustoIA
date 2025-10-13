@@ -69,6 +69,7 @@ export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) 
           overallScore={overallScore}
           isPremium={isPremium}
           isLoggedIn={isLoggedIn}
+          ticker={ticker}
         />
       </CardContent>
     </Card>

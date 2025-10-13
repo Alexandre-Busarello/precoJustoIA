@@ -300,6 +300,35 @@ export async function executeCompanyAnalysis(
     }
   }
 
+  // Buscar análise do YouTube se for Premium e tiver companyId
+  if (isPremium && companyId) {
+    try {
+      const youtubeAnalysis = await safeQueryWithParams(
+        'youtube-analysis-company',
+        () => prisma.youTubeAnalysis.findFirst({
+          where: { 
+            companyId: parseInt(companyId), 
+            isActive: true 
+          },
+          orderBy: { createdAt: 'desc' }
+        }),
+        { companyId: parseInt(companyId) }
+      );
+
+      if (youtubeAnalysis) {
+        financialData.youtubeAnalysis = {
+          score: toNumber((youtubeAnalysis as any).score) || 0,
+          summary: (youtubeAnalysis as any).summary,
+          positivePoints: (youtubeAnalysis as any).positivePoints as string[] | undefined,
+          negativePoints: (youtubeAnalysis as any).negativePoints as string[] | undefined,
+        };
+      }
+    } catch (error) {
+      console.warn(`⚠️ Falha ao buscar análise do YouTube para ${companyData.ticker}:`, error);
+      // Continua sem análise do YouTube
+    }
+  }
+
   // Calcular score geral
   const overallScore = isPremium ? calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData) : null;
 

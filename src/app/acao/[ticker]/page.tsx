@@ -12,6 +12,7 @@ import AIAnalysisDual from '@/components/ai-analysis-dual'
 import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisSection from '@/components/technical-analysis-section'
+import MarketSentimentSection from '@/components/market-sentiment-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import AssetSubscriptionButton from '@/components/asset-subscription-button'
 import { RelatedCompanies } from '@/components/related-companies'
@@ -552,7 +553,7 @@ export default async function TickerPage({ params }: PageProps) {
   }
 
   // Buscar dados da empresa e dados financeiros completos em paralelo (incluindo dados históricos)
-  const [companyData, comprehensiveData, reportsCount] = await Promise.all([
+  const [companyData, comprehensiveData, reportsCount, youtubeAnalysis] = await Promise.all([
     prisma.company.findUnique({
       where: { ticker },
       include: {
@@ -574,6 +575,25 @@ export default async function TickerPage({ params }: PageProps) {
           ticker: ticker
         },
         type: 'FUNDAMENTAL_CHANGE'
+      }
+    }),
+    // Buscar análise do YouTube
+    prisma.youTubeAnalysis.findFirst({
+      where: {
+        company: {
+          ticker: ticker
+        },
+        isActive: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      select: {
+        score: true,
+        summary: true,
+        positivePoints: true,
+        negativePoints: true,
+        updatedAt: true
       }
     })
   ])
@@ -617,6 +637,15 @@ export default async function TickerPage({ params }: PageProps) {
     ])
    
   ) as any : null
+
+  // Converter dados da análise do YouTube
+  const serializedYoutubeAnalysis = youtubeAnalysis ? {
+    score: toNumber(youtubeAnalysis.score) || 0,
+    summary: youtubeAnalysis.summary,
+    positivePoints: youtubeAnalysis.positivePoints as string[] | null,
+    negativePoints: youtubeAnalysis.negativePoints as string[] | null,
+    updatedAt: youtubeAnalysis.updatedAt
+  } : null
 
   return (
     <>
@@ -819,6 +848,13 @@ export default async function TickerPage({ params }: PageProps) {
                 userIsPremium={userIsPremium}
               />
             )}
+
+            {/* Análise de Sentimento de Mercado - YouTube */}
+            <MarketSentimentSection
+              ticker={ticker}
+              youtubeAnalysis={serializedYoutubeAnalysis}
+              userIsPremium={userIsPremium}
+            />
 
             {/* Análise Técnica - Logo após as análises fundamentalistas */}
             <TechnicalAnalysisSection 

@@ -345,6 +345,13 @@ function buildAnalysisPrompt(data: {
   financials: CompanyFinancialData;
   strategicAnalyses: Record<string, StrategicAnalysisResult>;
   statementsAnalysis?: any;
+  youtubeAnalysis?: {
+    score: number;
+    summary: string;
+    positivePoints: string[] | null;
+    negativePoints: string[] | null;
+    updatedAt: Date;
+  } | null;
   fundamentalChangeContext?: {
     summary: string;
     direction: string;
@@ -353,7 +360,7 @@ function buildAnalysisPrompt(data: {
     date: Date;
   };
 }) {
-  const { ticker, name, sector, currentPrice, financials, strategicAnalyses, statementsAnalysis, fundamentalChangeContext } = data;
+  const { ticker, name, sector, currentPrice, financials, strategicAnalyses, statementsAnalysis, youtubeAnalysis, fundamentalChangeContext } = data;
   
   const financialIndicators = formatFinancialIndicators(financials);
   
@@ -367,6 +374,21 @@ function buildAnalysisPrompt(data: {
 ${statementsAnalysis.positiveSignals && statementsAnalysis.positiveSignals.length > 0 ? statementsAnalysis.positiveSignals.map((insight: string) => `  • ${insight}`).join('\n') : '  • Nenhum insight positivo identificado'}
 **Alertas Identificados:**
 ${statementsAnalysis.redFlags && statementsAnalysis.redFlags.length > 0 ? statementsAnalysis.redFlags.map((alert: string) => `  ⚠️ ${alert}`).join('\n') : '  • Nenhum alerta crítico identificado'}
+` : '';
+
+  // Incluir análise de sentimento de mercado se disponível
+  const youtubeAnalysisSection = youtubeAnalysis ? `
+
+#### **Análise de Sentimento de Mercado**
+**Score de Sentimento:** ${youtubeAnalysis.score}/100
+**Data da Análise:** ${new Date(youtubeAnalysis.updatedAt).toLocaleDateString('pt-BR')}
+**Resumo:** ${youtubeAnalysis.summary}
+${youtubeAnalysis.positivePoints && youtubeAnalysis.positivePoints.length > 0 ? `**Pontos Positivos Identificados:**
+${youtubeAnalysis.positivePoints.map((point: string) => `  ✅ ${point}`).join('\n')}` : ''}
+${youtubeAnalysis.negativePoints && youtubeAnalysis.negativePoints.length > 0 ? `**Pontos de Atenção Identificados:**
+${youtubeAnalysis.negativePoints.map((point: string) => `  ⚠️ ${point}`).join('\n')}` : ''}
+
+⚠️ **IMPORTANTE:** Esta análise reflete o sentimento agregado de múltiplas fontes especializadas de mercado. Use como contexto adicional sobre a percepção geral da empresa, mas não deixe que seja o único fator da sua análise fundamentalista.
 ` : '';
   
   // Incluir contexto de mudança fundamental se disponível
@@ -427,6 +449,8 @@ ${financialIndicators}
 ${strategicSummary}
 
 ${statementsSection}
+
+${youtubeAnalysisSection}
 
 ${fundamentalChangeSection}
 
@@ -565,6 +589,50 @@ export async function generateAnalysisInternal(params: {
     console.log('statementsAnalysis', statementsAnalysis)
   }
 
+  // Buscar análise de sentimento de mercado (YouTube) se disponível
+  let youtubeAnalysis = null
+  try {
+    const company = await safeQueryWithParams(
+      'find-companies-for-youtube-analysis',
+      () => prisma.company.findUnique({
+        where: { ticker },
+        select: {
+          id: true,
+          youtubeAnalyses: {
+            where: { isActive: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              score: true,
+              summary: true,
+              positivePoints: true,
+              negativePoints: true,
+              updatedAt: true
+            }
+          }
+        }
+      }),
+      { ticker }
+    )
+
+    if (company && company.youtubeAnalyses && company.youtubeAnalyses.length > 0) {
+      const analysis = company.youtubeAnalyses[0]
+      youtubeAnalysis = {
+        score: typeof analysis.score === 'object' && 'toNumber' in analysis.score 
+          ? analysis.score.toNumber() 
+          : Number(analysis.score),
+        summary: analysis.summary,
+        positivePoints: analysis.positivePoints as string[] | null,
+        negativePoints: analysis.negativePoints as string[] | null,
+        updatedAt: analysis.updatedAt
+      }
+      console.log(`youtubeAnalysis encontrada para ${ticker}: Score ${youtubeAnalysis.score}/100`)
+    }
+  } catch (error) {
+    console.error(`Erro ao buscar análise YouTube para ${ticker}:`, error)
+    // Não falhar se não encontrar análise do YouTube
+  }
+
   // Construir prompt para o Gemini
   const prompt = buildAnalysisPrompt({
     ticker,
@@ -574,7 +642,8 @@ export async function generateAnalysisInternal(params: {
     financials,
     fundamentalChangeContext,
     strategicAnalyses,
-    statementsAnalysis
+    statementsAnalysis,
+    youtubeAnalysis
   })
 
   // Configurar Gemini AI

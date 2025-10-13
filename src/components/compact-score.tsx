@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 // Lucide Icons
-import { Crown } from 'lucide-react';
+import { Crown, Calculator } from 'lucide-react';
 
 interface OverallScore {
   score: number;
@@ -20,6 +20,7 @@ interface CompactScoreProps {
   overallScore: OverallScore | null;
   isPremium: boolean;
   isLoggedIn: boolean;
+  ticker?: string;
 }
 
 function CompactScoreGauge({ score, grade }: { score: number; grade: string }) {
@@ -108,7 +109,7 @@ function RecommendationBadge({ recommendation }: { recommendation: string }) {
   );
 }
 
-export default function CompactScore({ overallScore, isPremium, isLoggedIn }: CompactScoreProps) {
+export default function CompactScore({ overallScore, isPremium, isLoggedIn, ticker }: CompactScoreProps) {
   // Para usuários Premium - mostrar score real
   if (isPremium && overallScore) {
     return (
@@ -127,14 +128,24 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn }: Co
         </div>
 
         {/* Classificação */}
-        <p className="text-sm text-center text-muted-foreground mb-4">
+        <p className="text-sm text-center text-muted-foreground mb-3">
           {overallScore.classification}
         </p>
 
         {/* Recomendação */}
-        <div className="w-full flex justify-center">
+        <div className="w-full flex justify-center mb-3">
           <RecommendationBadge recommendation={overallScore.recommendation} />
         </div>
+
+        {/* Botão Ver Breakdown */}
+        {ticker && (
+          <Button asChild variant="outline" size="sm" className="w-full text-xs">
+            <Link href={`/acao/${ticker.toLowerCase()}/entendendo-score`}>
+              <Calculator className="w-3 h-3 mr-1" />
+              Entender Score
+            </Link>
+          </Button>
+        )}
       </div>
     );
   }

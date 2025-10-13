@@ -40,7 +40,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const minMarginOfSafety = params.minMarginOfSafety || 0.20;
 
     const criteria = [
-      { label: `Upside >= ${(minMarginOfSafety * 100)}`, value: !!(!!upside && upside >= (minMarginOfSafety * 100)), description: `Upside: ${formatPercent(upside! / 100)}` },
+      { label: `Upside >= ${(minMarginOfSafety * 100)}`, value: !!((!!upside && upside >= (minMarginOfSafety * 100)) || !upside), description: `Upside: ${formatPercent(upside! / 100)}` },
       { label: 'EBITDA > 0', value: !!(ebitda && ebitda > 0), description: `EBITDA: ${formatCurrency(ebitda)}` },
       { label: 'FCO > 0', value: !fluxoCaixaOperacional || fluxoCaixaOperacional > 0, description: `FCO: ${formatCurrency(fluxoCaixaOperacional) || 'N/A - Benefício da dúvida'}` },
       { label: 'ROE ≥ 12%', value: !roe || roe >= 0.12, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
@@ -55,14 +55,30 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const score = (passedCriteria / criteria.length) * 100;
     
     // Calcular quality score como no backend
-    let fcdQualityScore = Math.min(100, (
-      Math.min(roe || 0, 0.4) * 100 +          // ROE strong (até 40% = 40 pontos)
-      Math.min(margemEbitda || 0, 0.5) * 80 +  // Margem EBITDA (até 50% = 40 pontos)
-      Math.max(0, (crescimentoReceitas || 0) + 0.2) * 50 + // Crescimento não negativo
-      Math.min(liquidezCorrente || 0, 3) * 5 +  // Liquidez adequada
-      Math.min((upside || 0) / 100, 1) * 5      // Upside potencial
-    ));
-
+    const isUpsideCalculable = upside !== null && upside !== undefined && upside > 0;
+    let scoreBruto = 0;
+    if (isUpsideCalculable) {
+        // CASO 1: Upside foi calculado. A fórmula original é usada.
+        // (Garantindo que upside negativo não subtraia pontos)
+        scoreBruto =
+            Math.min(roe || 0, 0.4) * 100 +
+            Math.min(margemEbitda || 0, 0.5) * 80 +
+            Math.max(0, (crescimentoReceitas || 0) + 0.2) * 50 +
+            Math.min(liquidezCorrente || 0, 3) * 5 +
+            (upside > 0 ? Math.min(upside / 100, 1) * 5 : 0); // Contribuição do upside
+    } else {
+        // CASO 2: Upside é incalculável. Calculamos sem ele e aplicamos o fator de escala.
+        const scoreSemUpside =
+            Math.min(roe || 0, 0.4) * 100 +
+            Math.min(margemEbitda || 0, 0.5) * 80 +
+            Math.max(0, (crescimentoReceitas || 0) + 0.2) * 50 +
+            Math.min(liquidezCorrente || 0, 3) * 5;
+    
+        // O peso do upside (5%) é redistribuído para os outros 95%
+        const fatorDeAjuste = 100 / 95; // ~1.0526
+        scoreBruto = scoreSemUpside * fatorDeAjuste;
+    }
+    let fcdQualityScore = Math.min(100, scoreBruto);
     if (fcdQualityScore > 100) fcdQualityScore = 100;
     
     const reasoning = `Análise FCD: Preço justo calculado em ${formatCurrency(fairValue)} vs atual ${formatCurrency(currentPrice)}. ${passedCriteria} de ${criteria.length} critérios Premium atendidos (Score FCD: ${fcdQualityScore.toFixed(1)}). ${

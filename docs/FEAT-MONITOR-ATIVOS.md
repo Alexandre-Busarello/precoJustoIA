@@ -126,3 +126,7 @@ O objetivo desta funcionalidade é permitir que usuários se inscrevam ("subscre
 6.  Após o processamento de `BBSE3`, o job atualiza o campo `lastCheckedAt` do ativo.
 7.  O job continua para o próximo ativo do lote até que o tempo de execução esteja próximo do limite.
 8.  O job é encerrado. Na próxima execução agendada, ele buscará o próximo lote de ativos que não foram verificados recentemente.
+
+---
+
+O calculo do SCORE dos relatorios ainda estão diferentes do score REAL na plataforma. Plataforma calcula 92 e o SNAPSHOT fica com 95

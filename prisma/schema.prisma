@@ -137,12 +137,15 @@ model Company {
   aiReports       AIReport[]
   userSubscriptions UserAssetSubscription[]
   snapshot        AssetSnapshot?
+  youtubeAnalyses YouTubeAnalysis[]
   lastCheckedAt   DateTime? @map("last_checked_at")
+  youtubeLastCheckedAt DateTime? @map("youtube_last_checked_at")
 
   @@index([sector])
   @@index([industry])
   @@index([sector, industry])
   @@index([lastCheckedAt])
+  @@index([youtubeLastCheckedAt])
   @@map("companies")
 }
 
@@ -947,4 +950,27 @@ model AssetSnapshot {
   @@index([companyId])
   @@index([updatedAt])
   @@map("asset_snapshots")
+}
+
+// ===== ANÁLISE DE VÍDEOS DO YOUTUBE =====
+
+// Análises de vídeos do YouTube por empresa
+model YouTubeAnalysis {
+  id              String   @id @default(cuid())
+  companyId       Int      @map("company_id")
+  score           Decimal  @db.Decimal(5, 2)  // Nota de 0 a 100
+  summary         String   // Resumo dos pontos-chave analisados
+  positivePoints  Json?    @map("positive_points")  // Array de pontos positivos
+  negativePoints  Json?    @map("negative_points")  // Array de pontos negativos
+  videoIds        Json     @map("video_ids")  // Array dos IDs dos vídeos analisados
+  isActive        Boolean  @default(true) @map("is_active")  // Se é a análise ativa
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId, isActive])
+  @@index([companyId, createdAt])
+  @@index([updatedAt])
+  @@map("youtube_analyses")
 }

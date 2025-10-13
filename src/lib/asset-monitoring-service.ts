@@ -107,14 +107,13 @@ export class AssetMonitoringService {
 
   /**
    * Busca próximo lote de empresas para processar
-   * Ordena por lastCheckedAt mais antigo (ou null primeiro)
+   * Prioriza empresas nunca verificadas (null) e depois as mais antigas
    */
   static async getNextBatchToProcess(batchSize: number = 20) {
-    return prisma.company.findMany({
+    // Primeiro busca empresas que nunca foram verificadas (lastCheckedAt null)
+    const unprocessed = await prisma.company.findMany({
+      where: { lastCheckedAt: null },
       take: batchSize,
-      orderBy: [
-        { lastCheckedAt: 'asc' }, // null values primeiro, depois os mais antigos
-      ],
       select: {
         id: true,
         ticker: true,
@@ -125,6 +124,30 @@ export class AssetMonitoringService {
         lastCheckedAt: true,
       },
     });
+
+    // Se já temos o batchSize completo, retorna
+    if (unprocessed.length >= batchSize) {
+      return unprocessed;
+    }
+
+    // Caso contrário, busca as mais antigas para completar o lote
+    const remaining = batchSize - unprocessed.length;
+    const oldest = await prisma.company.findMany({
+      where: { lastCheckedAt: { not: null } },
+      orderBy: { lastCheckedAt: 'asc' },
+      take: remaining,
+      select: {
+        id: true,
+        ticker: true,
+        name: true,
+        sector: true,
+        industry: true,
+        logoUrl: true,
+        lastCheckedAt: true,
+      },
+    });
+
+    return [...unprocessed, ...oldest];
   }
 
   /**

@@ -124,8 +124,11 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const marginOfSafety = params.marginOfSafety || 0.20;
     const results: RankBuilderResult[] = [];
 
+    // Filtrar empresas por overall_score > 50 (remover empresas ruins)
+    let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    
     // Filtrar empresas por tamanho se especificado
-    const filteredCompanies = this.filterCompaniesBySize(companies, params.companySize || 'all');
+    filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
 
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company)) continue;

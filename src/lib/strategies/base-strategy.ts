@@ -628,4 +628,31 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
 
     return parts.length > 0 ? parts.join(', ') : 'Dados técnicos não disponíveis';
   }
+
+  /**
+   * Filtra empresas com overall_score > 50 (empresas de qualidade)
+   * Remove automaticamente empresas ruins/problemáticas do ranking
+   * 
+   * @param companies Array de empresas a serem filtradas
+   * @param minScore Score mínimo aceitável (padrão: 50)
+   * @returns Array filtrado com apenas empresas de qualidade
+   */
+  protected filterCompaniesByOverallScore(companies: CompanyData[], minScore: number = 50): CompanyData[] {
+    const filteredCompanies = companies.filter(company => {
+      // Se não tem overall_score, incluir (benefício da dúvida)
+      if (company.overallScore === null || company.overallScore === undefined) {
+        return true;
+      }
+      
+      // Filtrar apenas empresas com score acima do mínimo
+      return company.overallScore > minScore;
+    });
+    
+    const removedCount = companies.length - filteredCompanies.length;
+    if (removedCount > 0) {
+      console.log(`🎯 Filtro de Qualidade: ${removedCount} empresas removidas por overall_score ≤ ${minScore}`);
+    }
+    
+    return filteredCompanies;
+  }
 }

@@ -85,7 +85,11 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     console.log(`🔍 [AI-STRATEGY] Preparando dados de ${companies.length} empresas para seleção IA`);
     
     // Aplicar filtros antes da seleção IA
-    let filteredCompanies = this.filterCompaniesBySize(companies, params.companySize || 'all');
+    // Filtrar empresas por overall_score > 50 (remover empresas ruins)
+    let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    console.log(`🎯 [AI-STRATEGY] Após filtro de qualidade (overall_score > 50): ${filteredCompanies.length} empresas`);
+    
+    filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
     console.log(`📊 [AI-STRATEGY] Após filtro de tamanho (${params.companySize || 'all'}): ${filteredCompanies.length} empresas`);
     
     // Filtrar empresas sem lucro

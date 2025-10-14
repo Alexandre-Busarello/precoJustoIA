@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { useState, useEffect, useRef, Suspense } from "react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
-import { QuickRanker } from "@/components/quick-ranker"
+import { QuickRanker, QuickRankerHandle } from "@/components/quick-ranker"
 import { RankingHistorySection } from "@/components/ranking-history-section"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -182,7 +182,14 @@ function RankingContent() {
   const rankingId = searchParams.get('id')
   const isLoggedIn = !!session
   const [showHistory, setShowHistory] = useState(true)
-  const quickRankerRef = useRef<HTMLDivElement>(null)
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)
+  const quickRankerRef = useRef<QuickRankerHandle>(null)
+  
+  // Callback para quando um novo ranking for gerado
+  const handleRankingGenerated = () => {
+    // Incrementar o trigger para forçar reload do histórico
+    setHistoryRefreshTrigger(prev => prev + 1)
+  }
 
   // Função para scrollar para o quick ranker e resetar estado
   const scrollToQuickRanker = () => {
@@ -194,12 +201,12 @@ function RankingContent() {
     // Forçar atualização do componente removendo o rankingId
     window.dispatchEvent(new PopStateEvent('popstate'))
     
+    // Chamar o método reset do QuickRanker para limpar todos os estados
+    quickRankerRef.current?.reset()
+    
     // Scroll para o QuickRanker
     setTimeout(() => {
-      quickRankerRef.current?.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
-      })
+      quickRankerRef.current?.scrollToTop()
     }, 100)
   }
 
@@ -371,13 +378,13 @@ function RankingContent() {
         {/* Histórico para Usuários Logados */}
         {isLoggedIn && showHistory && (
           <div className="mb-8">
-            <RankingHistorySection />
+            <RankingHistorySection refreshTrigger={historyRefreshTrigger} />
           </div>
         )}
 
         {/* Gerador de Ranking */}
-        <div ref={quickRankerRef} id="ranking-generator" className="mb-12">
-          <QuickRanker rankingId={rankingId} />
+        <div id="ranking-generator" className="mb-12">
+          <QuickRanker ref={quickRankerRef} rankingId={rankingId} onRankingGenerated={handleRankingGenerated} />
         </div>
 
         {/* Modelos Disponíveis - Oculto para Premium */}

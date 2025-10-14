@@ -118,7 +118,10 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
 
     const results: RankBuilderResult[] = [];
 
-    for (const company of companies) {
+    // Filtrar empresas por overall_score > 50 (remover empresas ruins)
+    const filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+
+    for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company)) continue;
       
       // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão

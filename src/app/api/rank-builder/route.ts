@@ -18,6 +18,7 @@ import {
   CompanyData,
   toNumber
 } from '@/lib/strategies';
+import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config';
 import { TechnicalIndicators, type PriceData } from '@/lib/technical-indicators';
 
 type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams | ScreeningParams;
@@ -84,6 +85,13 @@ async function getCompaniesData(): Promise<CompanyData[]> {
           },
           orderBy: { endDate: 'desc' },
           take: 7
+        },
+        // Incluir snapshot para filtrar por overall_score
+        snapshot: {
+          select: {
+            overallScore: true,
+            updatedAt: true
+          }
         }
       },
       where: {
@@ -189,7 +197,9 @@ async function getCompaniesData(): Promise<CompanyData[]> {
       // Incluir demonstrações financeiras para cálculo do Overall Score
       incomeStatements: company.incomeStatements?.length > 0 ? company.incomeStatements : undefined,
       balanceSheets: company.balanceSheets?.length > 0 ? company.balanceSheets : undefined,
-      cashflowStatements: company.cashflowStatements?.length > 0 ? company.cashflowStatements : undefined
+      cashflowStatements: company.cashflowStatements?.length > 0 ? company.cashflowStatements : undefined,
+      // Overall Score do snapshot mais recente
+      overallScore: company.snapshot ? toNumber(company.snapshot.overallScore) : null
     };
   });
 }
@@ -349,6 +359,120 @@ export async function POST(request: NextRequest) {
         );
     }
 
+    // Enriquecer resultados com múltiplos upsides (Graham, FCD, Gordon)
+    // Isso permite que o usuário veja diferentes perspectivas de valor justo
+    if (results.length > 0 && session?.user?.id) {
+      try {
+        // Buscar status Premium do usuário
+        const currentUser = await getCurrentUser();
+        const userIsPremium = currentUser?.isPremium || false;
+        
+        results = results.map(result => {
+          // Encontrar a empresa original
+          const company = companies.find(c => c.ticker === result.ticker);
+          if (!company) return result;
+          
+          const enrichedKeyMetrics = { ...(result.key_metrics || {}) };
+          let mainUpside = result.upside;
+          
+          // Para estratégias sem preço justo, calcular o maior upside entre Graham, FCD e Gordon
+          const strategiesWithFairValue = ['graham', 'fcd', 'gordon'];
+          if (!strategiesWithFairValue.includes(model) && (mainUpside === null || mainUpside === undefined)) {
+            const upsides: number[] = [];
+            
+            // Graham (sempre disponível)
+            try {
+              const grahamAnalysis = StrategyFactory.runGrahamAnalysis(company, STRATEGY_CONFIG.graham);
+              if (grahamAnalysis.upside !== null && grahamAnalysis.upside !== undefined) {
+                upsides.push(grahamAnalysis.upside);
+                enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
+              }
+            } catch (e) {
+              // Ignorar erro
+            }
+            
+            // FCD (se Premium)
+            if (userIsPremium) {
+              try {
+                const fcdAnalysis = StrategyFactory.runFCDAnalysis(company, STRATEGY_CONFIG.fcd);
+                if (fcdAnalysis.upside !== null && fcdAnalysis.upside !== undefined) {
+                  upsides.push(fcdAnalysis.upside);
+                  enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
+                }
+              } catch (e) {
+                // Ignorar erro
+              }
+            }
+            
+            // Gordon (se Premium)
+            if (userIsPremium) {
+              try {
+                const gordonAnalysis = StrategyFactory.runGordonAnalysis(company, STRATEGY_CONFIG.gordon);
+                if (gordonAnalysis.upside !== null && gordonAnalysis.upside !== undefined) {
+                  upsides.push(gordonAnalysis.upside);
+                  enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
+                }
+              } catch (e) {
+                // Ignorar erro
+              }
+            }
+            
+            // Usar o maior upside encontrado
+            if (upsides.length > 0) {
+              mainUpside = Math.max(...upsides);
+            }
+          } else {
+            // Para estratégias com preço justo, apenas enriquecer os upsides adicionais
+            
+            // Calcular upside de Graham se ainda não tiver (disponível para todos)
+            if (model !== 'graham' && (!enrichedKeyMetrics.grahamUpside || enrichedKeyMetrics.grahamUpside === null)) {
+              try {
+                const grahamAnalysis = StrategyFactory.runGrahamAnalysis(company, STRATEGY_CONFIG.graham);
+                if (grahamAnalysis.upside !== null && grahamAnalysis.upside !== undefined) {
+                  enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
+                }
+              } catch (e) {
+                // Silenciosamente ignorar erros
+              }
+            }
+            
+            // Calcular upside de FCD se Premium e ainda não tiver
+            if (model !== 'fcd' && userIsPremium && (!enrichedKeyMetrics.fcdUpside || enrichedKeyMetrics.fcdUpside === null)) {
+              try {
+                const fcdAnalysis = StrategyFactory.runFCDAnalysis(company, STRATEGY_CONFIG.fcd);
+                if (fcdAnalysis.upside !== null && fcdAnalysis.upside !== undefined) {
+                  enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
+                }
+              } catch (e) {
+                // Silenciosamente ignorar erros
+              }
+            }
+            
+            // Calcular upside de Gordon se Premium e ainda não tiver
+            if (model !== 'gordon' && userIsPremium && (!enrichedKeyMetrics.gordonUpside || enrichedKeyMetrics.gordonUpside === null)) {
+              try {
+                const gordonAnalysis = StrategyFactory.runGordonAnalysis(company, STRATEGY_CONFIG.gordon);
+                if (gordonAnalysis.upside !== null && gordonAnalysis.upside !== undefined) {
+                  enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
+                }
+              } catch (e) {
+                // Silenciosamente ignorar erros
+              }
+            }
+          }
+          
+          return {
+            ...result,
+            upside: mainUpside, // Atualizar upside principal se necessário
+            key_metrics: enrichedKeyMetrics
+          };
+        });
+      } catch (error) {
+        console.warn('Erro ao enriquecer resultados com múltiplos upsides:', error);
+        // Continuar com resultados originais se houver erro
+      }
+    }
+    
     // Gerar racional para o modelo usado
     const rational = generateRational(model, params);
 

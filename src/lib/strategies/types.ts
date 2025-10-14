@@ -195,6 +195,8 @@ export interface CompanyData {
   incomeStatements?: Record<string, unknown>[];
   balanceSheets?: Record<string, unknown>[];
   cashflowStatements?: Record<string, unknown>[];
+  // Overall Score do snapshot mais recente
+  overallScore?: number | null;
 }
 
 // Resultado de análise individual

@@ -33,11 +33,11 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Configurações
-    const BATCH_SIZE = parseInt(process.env.YOUTUBE_ANALYSIS_BATCH_SIZE || '10');
+    const BATCH_SIZE = parseInt(process.env.YOUTUBE_ANALYSIS_BATCH_SIZE || '30');
     const DELAY_BETWEEN_CALLS = parseInt(
       process.env.YOUTUBE_ANALYSIS_DELAY_MS || '2000'
     );
-    const MAX_EXECUTION_TIME = 270 * 1000; // 4.5 minutos em ms (deixar buffer de 30s)
+    const MAX_EXECUTION_TIME = 1270 * 1000; // 4.5 minutos em ms (deixar buffer de 30s)
 
     console.log(
       `📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, DELAY=${DELAY_BETWEEN_CALLS}ms`

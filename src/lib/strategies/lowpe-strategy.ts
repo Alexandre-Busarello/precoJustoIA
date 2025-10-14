@@ -78,7 +78,10 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     // const { maxPE, minROE = 0 } = params; // Não usado atualmente
     const results: RankBuilderResult[] = [];
 
-    for (const company of companies) {
+    // Filtrar empresas por overall_score > 50 (remover empresas ruins)
+    const filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+
+    for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company, params)) continue;
       
       // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão

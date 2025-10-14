@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from "react"
 import { useSession } from "next-auth/react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { Card, CardContent } from "@/components/ui/card"
@@ -37,7 +37,10 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Flame
+  Flame,
+  Filter,
+  ArrowUpDown,
+  X
 } from "lucide-react"
 import Link from "next/link"
 
@@ -106,6 +109,10 @@ interface RankingResult {
   marginOfSafety: number | null;
   rational: string;
   key_metrics?: Record<string, number | null>;
+  // Upsides específicos de cada estratégia (quando disponíveis)
+  grahamUpside?: number | null;
+  fcdUpside?: number | null;
+  gordonUpside?: number | null;
 }
 
 interface RankingResponse {
@@ -198,9 +205,17 @@ const models = [
 
 interface QuickRankerProps {
   rankingId?: string | null;
+  onRankingGenerated?: () => void; // Callback quando um novo ranking é gerado
 }
 
-export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
+// Interface para o ref handle
+export interface QuickRankerHandle {
+  reset: () => void;
+  scrollToTop: () => void;
+}
+
+const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
+  ({ rankingId, onRankingGenerated }, ref) => {
   const { data: session } = useSession()
   const [selectedModel, setSelectedModel] = useState<string>("")
   const [params, setParams] = useState<RankingParams>({})
@@ -214,7 +229,44 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
   const [aiProcessingStep, setAiProcessingStep] = useState(0) // Etapa atual do processamento
   const [isResultsExpanded, setIsResultsExpanded] = useState(false) // Estado do collapsible dos resultados
   const [showBatchBacktestModal, setShowBatchBacktestModal] = useState(false) // Modal de backtest em lote
+  
+  // Estados para filtros e ordenação
+  const [sortBy, setSortBy] = useState<string>("default") // default, upside, roe, margem_liquida, etc
+  const [filterROE, setFilterROE] = useState<number | null>(null) // Filtro mínimo de ROE
+  const [filterMargemLiquida, setFilterMargemLiquida] = useState<number | null>(null) // Filtro mínimo de Margem Líquida
+  const [filterROIC, setFilterROIC] = useState<number | null>(null) // Filtro mínimo de ROIC
+  const [filterDY, setFilterDY] = useState<number | null>(null) // Filtro mínimo de DY
+  const [showFilters, setShowFilters] = useState(false) // Mostrar/ocultar painel de filtros
+  
   const resultsRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const formRef = useRef<HTMLDivElement>(null)
+
+  // Expor métodos para o componente pai via ref
+  useImperativeHandle(ref, () => ({
+    reset: () => {
+      // Limpar todos os estados
+      setResults(null);
+      setSelectedModel("");
+      setParams({});
+      setError(null);
+      setIsViewingCached(false);
+      setCachedInfo(null);
+      setIsResultsExpanded(false);
+      setSortBy("default");
+      setFilterROE(null);
+      setFilterMargemLiquida(null);
+      setFilterROIC(null);
+      setFilterDY(null);
+      setShowFilters(false);
+    },
+    scrollToTop: () => {
+      formRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }
+  }));
 
   // Resetar estado quando rankingId é removido (novo ranking)
   useEffect(() => {
@@ -228,7 +280,8 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
       setCachedInfo(null)
       setIsResultsExpanded(false)
     }
-  }, [rankingId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankingId]) // CORREÇÃO: Removido 'results' das dependências para evitar loop de reset
 
   // Carregar ranking específico por ID ou verificar sessionStorage
   useEffect(() => {
@@ -318,10 +371,10 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
 
   // Scroll automático para os resultados quando forem carregados
   useEffect(() => {
-    if (results && results.results.length > 0 && resultsRef.current) {
+    if (results && results.results.length > 0 && headerRef.current) {
       // Pequeno delay para garantir que o DOM foi atualizado
       setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ 
+        headerRef.current?.scrollIntoView({ 
           behavior: 'smooth', 
           block: 'start' 
         })
@@ -552,6 +605,11 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
       const data: RankingResponse = await response.json()
       setResults(data)
       setIsResultsExpanded(true) // Expandir automaticamente quando novos resultados são gerados
+      
+      // Notificar que um novo ranking foi gerado (para atualizar o histórico)
+      if (onRankingGenerated) {
+        onRankingGenerated()
+      }
     } catch (err) {
       console.error("Erro ao gerar ranking:", err)
       setError("Erro ao gerar ranking. Tente novamente.")
@@ -668,6 +726,131 @@ export function QuickRanker({ rankingId }: QuickRankerProps = {}) {
     
     return translations[key] || key.replace(/([A-Z])/g, ' $1').trim();
   }
+
+  // Processar resultados com filtros e ordenação
+  const filteredAndSortedResults = useMemo(() => {
+    if (!results?.results) {
+      return [];
+    }
+    
+    let processed = [...results.results];
+    
+    // Aplicar filtros
+    // IMPORTANTE: Os valores vêm em decimal (0.09 = 9%), então dividimos o filtro por 100
+    if (filterROE !== null) {
+      processed = processed.filter(r => {
+        const roe = r.key_metrics?.roe;
+        return roe !== null && roe !== undefined && roe >= (filterROE / 100);
+      });
+    }
+    
+    if (filterMargemLiquida !== null) {
+      processed = processed.filter(r => {
+        const margem = r.key_metrics?.margemLiquida;
+        return margem !== null && margem !== undefined && margem >= (filterMargemLiquida / 100);
+      });
+    }
+    
+    if (filterROIC !== null) {
+      processed = processed.filter(r => {
+        const roic = r.key_metrics?.roic;
+        return roic !== null && roic !== undefined && roic >= (filterROIC / 100);
+      });
+    }
+    
+    if (filterDY !== null) {
+      processed = processed.filter(r => {
+        const dy = r.key_metrics?.dy;
+        return dy !== null && dy !== undefined && dy >= (filterDY / 100);
+      });
+    }
+    
+    // Aplicar ordenação
+    if (sortBy !== "default") {
+      processed.sort((a, b) => {
+        let aVal: number | null = null;
+        let bVal: number | null = null;
+        
+        switch (sortBy) {
+          case "upside":
+            // Upside já vem em % (ex: 25.5 = 25.5%)
+            // Calculado como: ((fairValue - currentPrice) / currentPrice) * 100
+            // Funciona para todas as estratégias (Graham, FCD, Gordon, etc)
+            aVal = a.upside;
+            bVal = b.upside;
+            break;
+          case "upside_graham":
+            // Ordenar especificamente por upside de Graham
+            aVal = a.grahamUpside ?? a.key_metrics?.grahamUpside ?? null;
+            bVal = b.grahamUpside ?? b.key_metrics?.grahamUpside ?? null;
+            break;
+          case "upside_fcd":
+            // Ordenar especificamente por upside de FCD
+            aVal = a.fcdUpside ?? a.key_metrics?.fcdUpside ?? null;
+            bVal = b.fcdUpside ?? b.key_metrics?.fcdUpside ?? null;
+            break;
+          case "upside_gordon":
+            // Ordenar especificamente por upside de Gordon
+            aVal = a.gordonUpside ?? a.key_metrics?.gordonUpside ?? null;
+            bVal = b.gordonUpside ?? b.key_metrics?.gordonUpside ?? null;
+            break;
+          case "roe":
+            // ROE vem em decimal (0.09 = 9%), mas não precisa converter aqui
+            // A comparação funciona igual em decimal
+            aVal = a.key_metrics?.roe ?? null;
+            bVal = b.key_metrics?.roe ?? null;
+            break;
+          case "roic":
+            // ROIC vem em decimal (0.12 = 12%)
+            aVal = a.key_metrics?.roic ?? null;
+            bVal = b.key_metrics?.roic ?? null;
+            break;
+          case "margem_liquida":
+            // Margem Líquida vem em decimal (0.15 = 15%)
+            aVal = a.key_metrics?.margemLiquida ?? null;
+            bVal = b.key_metrics?.margemLiquida ?? null;
+            break;
+          case "dy":
+            // DY vem em decimal (0.06 = 6%)
+            aVal = a.key_metrics?.dy ?? null;
+            bVal = b.key_metrics?.dy ?? null;
+            break;
+          case "price_asc":
+            aVal = a.currentPrice;
+            bVal = b.currentPrice;
+            // Ordem crescente
+            if (aVal === null || bVal === null) return 0;
+            return aVal - bVal;
+          case "price_desc":
+            aVal = a.currentPrice;
+            bVal = b.currentPrice;
+            break;
+        }
+        
+        // Valores nulos vão para o final
+        if (aVal === null && bVal === null) return 0;
+        if (aVal === null) return 1;
+        if (bVal === null) return -1;
+        
+        // Ordem decrescente (maior primeiro) exceto para price_asc
+        return bVal - aVal;
+      });
+    }
+    
+    return processed;
+  }, [results, sortBy, filterROE, filterMargemLiquida, filterROIC, filterDY]);
+  
+  // Resetar filtros quando trocar de ranking
+  useEffect(() => {
+    if (results) {
+      setSortBy("default");
+      setFilterROE(null);
+      setFilterMargemLiquida(null);
+      setFilterROIC(null);
+      setFilterDY(null);
+      setShowFilters(false);
+    }
+  }, [results]);
 
   // Componente helper para controle de análise técnica
   const TechnicalAnalysisControl = () => (
@@ -1129,7 +1312,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
         </div>
       )}
     
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div ref={formRef} className="max-w-6xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center space-y-4">
         <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-100 to-violet-100 dark:from-blue-900/30 dark:to-violet-900/30 rounded-full px-4 py-2">
@@ -1209,7 +1392,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
           {/* CTA Backtest do Ranking - Destaque */}
           {results.results.length > 0 && (
-            <Card className="border-0 bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 shadow-lg">
+            <Card ref={headerRef} className="border-0 bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 shadow-lg">
               <CardContent className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3 sm:gap-4 flex-1">
@@ -1250,10 +1433,234 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
             </Card>
           )}
 
-          {/* Results List */}
-          {results.results.length > 0 ? (
+          {/* Filtros e Ordenação */}
+          {results.results.length > 0 && (
+            <Card className="border-0 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-900/50 dark:to-gray-900/50">
+              <CardContent className="p-4 sm:p-6">
+                <div className="space-y-4">
+                  {/* Header com toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-5 h-5 text-blue-600" />
+                      <h3 className="font-semibold text-lg">Filtros e Ordenação</h3>
+                      {(filterROE !== null || filterMargemLiquida !== null || filterROIC !== null || filterDY !== null || sortBy !== "default") && (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                          {[filterROE, filterMargemLiquida, filterROIC, filterDY].filter(f => f !== null).length + (sortBy !== "default" ? 1 : 0)} ativos
+                        </Badge>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFilters(!showFilters)}
+                    >
+                      {showFilters ? (
+                        <>
+                          <ChevronUp className="w-4 h-4 mr-1" />
+                          Ocultar
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-4 h-4 mr-1" />
+                          Mostrar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {showFilters && (
+                    <div className="space-y-4 pt-2">
+                      {/* Ordenação */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium flex items-center gap-2">
+                          <ArrowUpDown className="w-4 h-4 text-blue-600" />
+                          Ordenar por
+                        </Label>
+                        <Select value={sortBy} onValueChange={setSortBy}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="default">Padrão (Ranking Original)</SelectItem>
+                            <SelectItem value="upside">Maior Upside</SelectItem>
+                            <SelectItem value="upside_graham">Maior Upside Graham</SelectItem>
+                            <SelectItem value="upside_fcd">Maior Upside FCD</SelectItem>
+                            <SelectItem value="upside_gordon">Maior Upside Gordon</SelectItem>
+                            <SelectItem value="roe">Maior ROE</SelectItem>
+                            <SelectItem value="roic">Maior ROIC</SelectItem>
+                            <SelectItem value="margem_liquida">Maior Margem Líquida</SelectItem>
+                            <SelectItem value="dy">Maior Dividend Yield</SelectItem>
+                            <SelectItem value="price_desc">Maior Preço</SelectItem>
+                            <SelectItem value="price_asc">Menor Preço</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Filtros */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
+                        {/* Filtro ROE */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">ROE Mínimo (%)</Label>
+                            {filterROE !== null && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setFilterROE(null)}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Slider
+                              value={[filterROE ?? 0]}
+                              onValueChange={(v) => setFilterROE(v[0] === 0 ? null : v[0])}
+                              min={0}
+                              max={50}
+                              step={1}
+                              className="flex-1"
+                            />
+                            <span className="text-sm font-medium min-w-[3rem] text-right">
+                              {filterROE ?? 0}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Filtro ROIC */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">ROIC Mínimo (%)</Label>
+                            {filterROIC !== null && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setFilterROIC(null)}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Slider
+                              value={[filterROIC ?? 0]}
+                              onValueChange={(v) => setFilterROIC(v[0] === 0 ? null : v[0])}
+                              min={0}
+                              max={50}
+                              step={1}
+                              className="flex-1"
+                            />
+                            <span className="text-sm font-medium min-w-[3rem] text-right">
+                              {filterROIC ?? 0}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Filtro Margem Líquida */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Margem Líquida Mín. (%)</Label>
+                            {filterMargemLiquida !== null && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setFilterMargemLiquida(null)}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Slider
+                              value={[filterMargemLiquida ?? 0]}
+                              onValueChange={(v) => setFilterMargemLiquida(v[0] === 0 ? null : v[0])}
+                              min={0}
+                              max={50}
+                              step={1}
+                              className="flex-1"
+                            />
+                            <span className="text-sm font-medium min-w-[3rem] text-right">
+                              {filterMargemLiquida ?? 0}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Filtro DY */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Dividend Yield Mín. (%)</Label>
+                            {filterDY !== null && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setFilterDY(null)}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Slider
+                              value={[filterDY ?? 0]}
+                              onValueChange={(v) => setFilterDY(v[0] === 0 ? null : v[0])}
+                              min={0}
+                              max={20}
+                              step={0.5}
+                              className="flex-1"
+                            />
+                            <span className="text-sm font-medium min-w-[3rem] text-right">
+                              {filterDY ?? 0}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botão Limpar Filtros */}
+                      {(filterROE !== null || filterMargemLiquida !== null || filterROIC !== null || filterDY !== null || sortBy !== "default") && (
+                        <div className="flex justify-end pt-2 border-t">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSortBy("default");
+                              setFilterROE(null);
+                              setFilterMargemLiquida(null);
+                              setFilterROIC(null);
+                              setFilterDY(null);
+                            }}
+                            className="gap-2"
+                          >
+                            <X className="w-4 h-4" />
+                            Limpar Filtros
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Contador de resultados filtrados */}
+                  <div className="flex items-center justify-between pt-2 border-t text-sm text-muted-foreground">
+                    <span>
+                      Exibindo {filteredAndSortedResults.length} de {results.results.length} empresas
+                    </span>
+                    {filteredAndSortedResults.length < results.results.length && (
+                      <Badge variant="outline" className="text-xs">
+                        {results.results.length - filteredAndSortedResults.length} filtradas
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {filteredAndSortedResults.length > 0 ? (
             <div ref={resultsRef} className="grid gap-3 sm:gap-4">
-              {results.results.map((result, index) => (
+              {filteredAndSortedResults.map((result, index) => (
                 <Card 
                   key={result.ticker} 
                   className="border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80"
@@ -1294,19 +1701,67 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                         </div>
                         
                         <div className="text-right sm:text-right shrink-0">
-                          <div className="flex items-center justify-end gap-2 mb-2">
+                          {/* Preço Atual */}
+                          <div className="flex items-center justify-end gap-2 mb-1">
                             <span className="text-xl sm:text-2xl font-bold">
                               {formatCurrency(result.currentPrice)}
                             </span>
                           </div>
-                          {result.upside !== null && (
-                            <div className="flex items-center justify-end gap-1">
-                              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
-                              <span className="text-xs sm:text-sm font-medium text-green-600">
-                                +{formatPercentage(result.upside)} potencial
+                          
+                          {/* Upside da estratégia principal */}
+                          {typeof result.upside === 'number' ? (
+                            <div className="flex items-center justify-end gap-1 mb-2">
+                              <TrendingUp className={`w-3 h-3 sm:w-4 sm:h-4 ${result.upside >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                              <span className={`text-xs sm:text-sm font-semibold ${result.upside >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {result.upside >= 0 ? '+' : ''}{formatPercentage(result.upside)} upside
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1 mb-2">
+                              <span className="text-xs text-muted-foreground">
+                                Upside não calculado
                               </span>
                             </div>
                           )}
+                          
+                          {/* Upsides adicionais (outras estratégias) */}
+                          {(() => {
+                            const grahamUp = result.grahamUpside ?? result.key_metrics?.grahamUpside;
+                            const fcdUp = result.fcdUpside ?? result.key_metrics?.fcdUpside;
+                            const gordonUp = result.gordonUpside ?? result.key_metrics?.gordonUpside;
+                            const hasAdditionalUpsides = typeof grahamUp === 'number' || typeof fcdUp === 'number' || typeof gordonUp === 'number';
+                            
+                            if (!hasAdditionalUpsides) return null;
+                            
+                            return (
+                              <div className="flex flex-col items-end gap-0.5 pt-1 border-t border-gray-200 dark:border-gray-700">
+                                <span className="text-[9px] sm:text-[10px] text-muted-foreground uppercase font-medium mb-0.5">
+                                  Outras visões:
+                                </span>
+                                {typeof grahamUp === 'number' && (
+                                  <span className="text-[10px] sm:text-xs text-muted-foreground">
+                                    Graham: <span className={`font-medium ${grahamUp >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                                      {grahamUp >= 0 ? '+' : ''}{formatPercentage(grahamUp)}
+                                    </span>
+                                  </span>
+                                )}
+                                {typeof fcdUp === 'number' && (
+                                  <span className="text-[10px] sm:text-xs text-muted-foreground">
+                                    FCD: <span className={`font-medium ${fcdUp >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                                      {fcdUp >= 0 ? '+' : ''}{formatPercentage(fcdUp)}
+                                    </span>
+                                  </span>
+                                )}
+                                {typeof gordonUp === 'number' && (
+                                  <span className="text-[10px] sm:text-xs text-muted-foreground">
+                                    Gordon: <span className={`font-medium ${gordonUp >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                                      {gordonUp >= 0 ? '+' : ''}{formatPercentage(gordonUp)}
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                       
@@ -1363,6 +1818,32 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                   </Card>
               ))}
             </div>
+          ) : results && results.results.length > 0 ? (
+            <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+                <CardContent className="p-6 text-center">
+                  <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Filter className="w-8 h-8 text-orange-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Nenhuma empresa passou pelos filtros</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Ajuste os filtros acima para ver mais resultados. Você tem {results.results.length} empresa(s) no ranking original.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSortBy("default");
+                    setFilterROE(null);
+                    setFilterMargemLiquida(null);
+                    setFilterROIC(null);
+                    setFilterDY(null);
+                  }}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Limpar Todos os Filtros
+                </Button>
+              </CardContent>
+            </Card>
           ) : (
             <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20">
               <CardContent className="p-6 text-center">
@@ -2661,4 +3142,8 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
     </div>
     </>
   )
-}
+});
+
+QuickRankerComponent.displayName = 'QuickRanker';
+
+export const QuickRanker = QuickRankerComponent;

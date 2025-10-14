@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -27,7 +27,7 @@ async function withRetry<T>(
   throw new Error('Todas as tentativas falharam');
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -50,25 +50,61 @@ export async function GET() {
       );
     }
 
+    // Extrair parâmetros de query
+    const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const model = searchParams.get('model');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '50', 10); // Máximo 50 itens (10 páginas de 5 itens)
+
+    // Construir where clause com filtros
+    const whereClause: any = {
+      userId: currentUser.id
+    };
+
+    // Filtro por data
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      if (startDate) {
+        whereClause.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        // Adicionar 23:59:59 ao endDate para incluir todo o dia
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        whereClause.createdAt.lte = endDateTime;
+      }
+    }
+
+    // Filtro por modelo
+    if (model && model !== 'all') {
+      whereClause.model = model;
+    }
+
     // Buscar histórico do usuário ordenado por data mais recente com retry
-    const history = await withRetry(() =>
-      prisma.rankingHistory.findMany({
-        where: {
-          userId: currentUser.id
-        },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        // Sem limite - retornar todos os rankings
-        select: {
-          id: true,
-          model: true,
-          params: true,
-          results: true, // Incluir resultados cached
-          resultCount: true,
-          createdAt: true,
-        }
-      })
+    const [history, totalCount] = await withRetry(() =>
+      Promise.all([
+        prisma.rankingHistory.findMany({
+          where: whereClause,
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: limit,
+          skip: (page - 1) * limit,
+          select: {
+            id: true,
+            model: true,
+            params: true,
+            results: true, // Incluir resultados cached
+            resultCount: true,
+            createdAt: true,
+          }
+        }),
+        prisma.rankingHistory.count({
+          where: whereClause
+        })
+      ])
     );
 
     // Transformar dados para melhor apresentação
@@ -85,12 +121,16 @@ export async function GET() {
 
     // Debug apenas quando necessário
     if (process.env.NODE_ENV === 'development') {
-      console.log('📊 /ranking-history: Retornando', formattedHistory.length, 'itens para', currentUser.email)
+      console.log('📊 /ranking-history: Retornando', formattedHistory.length, 'itens de', totalCount, 'total para', currentUser.email)
     }
 
     return NextResponse.json({
       history: formattedHistory,
-      count: history.length
+      count: history.length,
+      totalCount,
+      page,
+      totalPages: Math.ceil(totalCount / limit),
+      hasMore: totalCount > (page * limit)
     });
 
   } catch (error) {
@@ -99,7 +139,11 @@ export async function GET() {
     // Retornar histórico vazio em caso de erro
     return NextResponse.json({
       history: [],
-      count: 0
+      count: 0,
+      totalCount: 0,
+      page: 1,
+      totalPages: 0,
+      hasMore: false
     });
   }
 }

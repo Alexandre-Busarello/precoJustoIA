@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { Bell, BellOff, Loader2, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
 
 interface AssetSubscriptionButtonProps {
   ticker: string;
-  companyId: number;
+  companyId: number; // Mantido para uso futuro
   variant?: 'default' | 'outline' | 'ghost';
   size?: 'default' | 'sm' | 'lg' | 'icon';
   showLabel?: boolean;
@@ -17,7 +19,7 @@ interface AssetSubscriptionButtonProps {
 
 export default function AssetSubscriptionButton({
   ticker,
-  companyId,
+  companyId, // eslint-disable-line @typescript-eslint/no-unused-vars
   variant = 'outline',
   size = 'default',
   showLabel = true,
@@ -26,6 +28,7 @@ export default function AssetSubscriptionButton({
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const { data: session } = useSession();
+  const { isPremium, isLoading: isPremiumLoading } = usePremiumStatus();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -36,6 +39,7 @@ export default function AssetSubscriptionButton({
     } else {
       setIsChecking(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, ticker]);
 
   const checkSubscriptionStatus = async () => {
@@ -59,6 +63,17 @@ export default function AssetSubscriptionButton({
         variant: 'destructive',
       });
       router.push('/login');
+      return;
+    }
+
+    // Verificar Premium
+    if (!isPremium) {
+      toast({
+        title: '👑 Recurso Premium',
+        description: 'Assine o plano Premium para receber atualizações automáticas sobre seus ativos favoritos',
+        variant: 'destructive',
+      });
+      router.push('/planos');
       return;
     }
 
@@ -113,7 +128,7 @@ export default function AssetSubscriptionButton({
   };
 
   // Estado de carregamento inicial
-  if (isChecking) {
+  if (isChecking || isPremiumLoading) {
     return (
       <Button variant={variant} size={size} disabled>
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -122,16 +137,33 @@ export default function AssetSubscriptionButton({
     );
   }
 
-  // Não mostrar para usuários não autenticados (opcional, pode mostrar e redirecionar)
-  if (!session?.user) {
+  // Usuários não autenticados ou não-premium: mostrar com badge Premium
+  if (!session?.user || !isPremium) {
     return (
-      <Button variant={variant} size={size} onClick={handleToggleSubscription}>
-        <Bell className="h-4 w-4" />
-        {showLabel && <span className="ml-2">Receber Atualizações</span>}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button 
+          variant={variant} 
+          size={size} 
+          onClick={handleToggleSubscription}
+          className="relative"
+        >
+          <Bell className="h-4 w-4" />
+          {showLabel && <span className="ml-2">Receber Atualizações</span>}
+        </Button>
+        {session?.user && !isPremium && (
+          <Badge 
+            variant="default" 
+            className="bg-gradient-to-r from-amber-500 to-orange-600 whitespace-nowrap"
+          >
+            <Crown className="w-3 h-3 mr-1" />
+            Premium
+          </Badge>
+        )}
+      </div>
     );
   }
 
+  // Usuário Premium autenticado
   return (
     <Button
       variant={isSubscribed ? 'default' : variant}

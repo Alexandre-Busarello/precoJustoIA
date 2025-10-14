@@ -292,6 +292,7 @@ export class YouTubeAnalysisService {
       'investidor sardinha',
       'me poupe',
       'o primo rico',
+      'investidor raiz',
       'economista sincero',
       'eqi investimentos',
       'xp investimentos',

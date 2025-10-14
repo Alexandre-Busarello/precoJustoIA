@@ -215,22 +215,31 @@ export async function GET(request: NextRequest) {
 
         console.log(`📹 ${company.ticker}: ${videoIds.length} vídeo(s) encontrado(s)`);
 
-        // 7. Verificar se é a mesma análise
+        // 7. Verificar se há vídeos novos em relação à análise anterior
         const existingAnalysis = await YouTubeAnalysisService.getActiveAnalysis(
           company.id
         );
 
-        if (
-          existingAnalysis &&
-          YouTubeAnalysisService.areVideoIdsSame(existingAnalysis.videoIds, videoIds)
-        ) {
-          console.log(
-            `✅ ${company.ticker}: Mesmos vídeos da análise anterior, pulando...`
-          );
-          await YouTubeAnalysisService.updateLastChecked(company.id);
-          processedCount++;
-          skippedCount++;
-          continue;
+        if (existingAnalysis && existingAnalysis.videoIds && existingAnalysis.videoIds.length > 0) {
+          // Verificar se há vídeos novos (que não estavam na análise anterior)
+          const existingVideoIds = existingAnalysis.videoIds;
+          const newVideoIds = videoIds.filter(id => !existingVideoIds.includes(id));
+          
+          if (newVideoIds.length === 0) {
+            // Todos os vídeos encontrados já estavam na análise anterior
+            console.log(
+              `✅ ${company.ticker}: Nenhum vídeo novo encontrado, mantendo análise anterior`
+            );
+            await YouTubeAnalysisService.updateLastChecked(company.id);
+            processedCount++;
+            skippedCount++;
+            continue;
+          } else {
+            // Há vídeos novos! Refazer análise
+            console.log(
+              `🆕 ${company.ticker}: ${newVideoIds.length} vídeo(s) novo(s) encontrado(s), refazendo análise...`
+            );
+          }
         }
 
         // 8. Analisar vídeos

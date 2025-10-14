@@ -76,8 +76,6 @@ export async function GET(request: NextRequest) {
         );
 
         if (relatedAnalysis) {
-          console.log(`🔗 ${company.ticker}: Encontrada análise relacionada, copiando...`);
-          
           // Pegar ticker da empresa relacionada
           const relatedCompany = await prisma.company.findUnique({
             where: { id: relatedAnalysis.companyId },
@@ -85,6 +83,8 @@ export async function GET(request: NextRequest) {
           });
 
           if (relatedCompany) {
+            console.log(`✅ ${company.ticker}: Copiando análise de ${relatedCompany.ticker} (Score: ${relatedAnalysis.analysis.score}/100)`);
+            
             await YouTubeAnalysisService.copyAnalysisFromRelated(
               company.id,
               relatedAnalysis.analysis,
@@ -95,7 +95,11 @@ export async function GET(request: NextRequest) {
             await YouTubeAnalysisService.updateLastChecked(company.id);
             processedCount++;
             newAnalysesCount++;
+            
+            console.log(`✅ ${company.ticker}: Análise copiada com sucesso!`);
             continue;
+          } else {
+            console.log(`⚠️ ${company.ticker}: Empresa relacionada não encontrada, processando normalmente...`);
           }
         }
 

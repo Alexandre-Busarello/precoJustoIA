@@ -2726,7 +2726,7 @@ export function calculateOverallScore(strategies: {
       totalScore += gordonContribution;
       
       if (strategies.gordon.fairValue && strategies.gordon.upside && strategies.gordon.upside < 0) {
-        weaknesses.push('Preço acima do valor justo por dividendos');
+        weaknesses.push('Preço abaixo do valor justo por dividendos');
       }
     }
     totalWeight += gordonWeight;

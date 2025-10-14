@@ -763,8 +763,11 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
     analysis: SavedYouTubeAnalysis;
   } | null> {
     try {
-      // Extrair ticker base (remover números finais)
-      const tickerBase = ticker.replace(/[34]$/, '');
+      // Extrair ticker base (remover TODOS os números finais)
+      // Ex: PETR3 → PETR, PETR4 → PETR, ALUP11 → ALUP, ALUP3 → ALUP
+      const tickerBase = ticker.replace(/\d+$/, '');
+      
+      console.log(`🔗 ${ticker}: Buscando análises relacionadas (base: ${tickerBase})`);
       
       // Buscar empresas com ticker similar
       const relatedCompanies = await prisma.company.findMany({
@@ -785,17 +788,25 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
           }
         }
       });
+      
+      console.log(`🔗 ${ticker}: Encontradas ${relatedCompanies.length} empresas relacionadas:`, 
+        relatedCompanies.map(c => c.ticker).join(', '));
 
       // Procurar primeira empresa com análise válida (não vazia)
       for (const company of relatedCompanies) {
+        console.log(`🔗 ${ticker}: Verificando ${company.ticker}...`);
+        
         if (company.youtubeAnalyses && company.youtubeAnalyses.length > 0) {
           const analysis = company.youtubeAnalyses[0];
           
           // Verificar se não é análise vazia
-          const isEmptyAnalysis = Array.isArray(analysis.videoIds) && analysis.videoIds.length === 0;
+          const videoIds = analysis.videoIds as string[];
+          const isEmptyAnalysis = Array.isArray(videoIds) && videoIds.length === 0;
+          
+          console.log(`🔗 ${ticker}: ${company.ticker} tem análise com ${videoIds?.length || 0} vídeos (vazia: ${isEmptyAnalysis})`);
           
           if (!isEmptyAnalysis) {
-            console.log(`🔗 ${ticker}: Encontrada análise relacionada em ${company.ticker}`);
+            console.log(`✅ ${ticker}: Encontrada análise relacionada em ${company.ticker}, copiando...`);
             
             return {
               companyId: company.id,
@@ -812,10 +823,15 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
                 updatedAt: analysis.updatedAt
               }
             };
+          } else {
+            console.log(`⚠️ ${ticker}: Análise de ${company.ticker} está vazia, ignorando...`);
           }
+        } else {
+          console.log(`⚠️ ${ticker}: ${company.ticker} não tem análise ativa`);
         }
       }
 
+      console.log(`❌ ${ticker}: Nenhuma análise relacionada válida encontrada`);
       return null;
     } catch (error) {
       console.error(`❌ Erro ao buscar análise relacionada para ${ticker}:`, error);

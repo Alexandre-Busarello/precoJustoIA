@@ -350,7 +350,7 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       <div className={`container mx-auto px-4 py-8 max-w-5xl ${!userIsPremium ? 'relative' : ''}`}>
         {/* Header */}
         <div className="mb-8">
@@ -361,25 +361,25 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
             </Link>
           </Button>
 
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2 flex flex-wrap items-center gap-2">
                 Entendendo o Score
                 {!userIsPremium && (
-                  <Badge variant="default" className="bg-gradient-to-r from-amber-500 to-orange-600">
+                  <Badge variant="default" className="bg-gradient-to-r from-amber-500 to-orange-600 whitespace-nowrap">
                     <Crown className="w-3 h-3 mr-1" />
                     Premium
                   </Badge>
                 )}
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-sm sm:text-base break-words">
                 {company.name} ({ticker})
               </p>
             </div>
 
-            <div className="text-right">
+            <div className="text-left sm:text-right shrink-0">
               <div className="text-sm text-muted-foreground mb-1">Score Geral</div>
-              <div className="text-4xl font-bold">
+              <div className="text-3xl sm:text-4xl font-bold">
                 {breakdown.score.toFixed(1)}
               </div>
               <Badge variant="outline" className="mt-2">
@@ -392,11 +392,11 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
         {/* Overall Score Summary */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calculator className="w-5 h-5" />
-              Resumo da Avaliação
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <Calculator className="w-5 h-5 shrink-0" />
+              <span className="break-words">Resumo da Avaliação</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-sm break-words">
               Classificação: <strong>{breakdown.classification}</strong>
             </CardDescription>
           </CardHeader>
@@ -405,15 +405,15 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
               {/* Pontos Fortes */}
               {breakdown.strengths.length > 0 && (
                 <div>
-                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-green-600">
-                    <TrendingUp className="w-4 h-4" />
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-green-600 text-sm sm:text-base">
+                    <TrendingUp className="w-4 h-4 shrink-0" />
                     Pontos Fortes
                   </h3>
                   <ul className="space-y-2">
                     {breakdown.strengths.map((strength, index) => (
-                      <li key={index} className="text-sm flex items-start gap-2">
+                      <li key={index} className="text-xs sm:text-sm flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span>{strength}</span>
+                        <span className="break-words">{strength}</span>
                       </li>
                     ))}
                   </ul>
@@ -423,15 +423,15 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
               {/* Pontos Fracos */}
               {breakdown.weaknesses.length > 0 && (
                 <div>
-                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-red-600">
-                    <TrendingDown className="w-4 h-4" />
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-red-600 text-sm sm:text-base">
+                    <TrendingDown className="w-4 h-4 shrink-0" />
                     Pontos Fracos
                   </h3>
                   <ul className="space-y-2">
                     {breakdown.weaknesses.map((weakness, index) => (
-                      <li key={index} className="text-sm flex items-start gap-2">
+                      <li key={index} className="text-xs sm:text-sm flex items-start gap-2">
                         <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
-                        <span>{weakness}</span>
+                        <span className="break-words">{weakness}</span>
                       </li>
                     ))}
                   </ul>
@@ -444,8 +444,8 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
         {/* Contribution Breakdown */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Contribuição de Cada Critério</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-lg sm:text-xl break-words">Contribuição de Cada Critério</CardTitle>
+            <CardDescription className="text-sm break-words">
               Como cada estratégia e critério contribui para o score
             </CardDescription>
           </CardHeader>
@@ -459,28 +459,28 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                 return (
                   <div 
                     key={index}
-                    className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                    className="border rounded-lg p-3 sm:p-4 hover:bg-muted/50 transition-colors"
                   >
-                    <div className="flex items-start justify-between gap-4 mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Icon className={`w-4 h-4 ${color}`} />
-                          <h4 className="font-semibold">{contrib.name}</h4>
-                          <Badge variant="outline" className="text-xs">
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4 mb-2">
+                      <div className="flex-1 min-w-0 w-full">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <Icon className={`w-4 h-4 ${color} shrink-0`} />
+                          <h4 className="font-semibold text-sm sm:text-base break-words">{contrib.name}</h4>
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">
                             Peso: {percentage}%
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs sm:text-sm text-muted-foreground break-words">
                           {contrib.description}
                         </p>
                       </div>
                       
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Contribuição</div>
-                        <div className="text-2xl font-bold text-green-600">
+                      <div className="text-left sm:text-right shrink-0 w-full sm:w-auto">
+                        <div className="text-xs sm:text-sm text-muted-foreground">Contribuição</div>
+                        <div className="text-xl sm:text-2xl font-bold text-green-600">
                           +{contrib.points.toFixed(1)}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground break-words">
                           ({contrib.score.toFixed(0)}/100 × {percentage}%)
                         </div>
                       </div>
@@ -501,15 +501,15 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
 
               {/* Subtotal */}
               <div className="border-t-2 border-dashed pt-4">
-                <div className="flex items-center justify-between px-4">
-                  <div>
-                    <h4 className="font-semibold">Subtotal (Contribuições)</h4>
-                    <p className="text-sm text-muted-foreground">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-4">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-sm sm:text-base">Subtotal (Contribuições)</h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground break-words">
                       Soma de todas as contribuições positivas
                     </p>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-blue-600">
+                  <div className="text-left sm:text-right shrink-0">
+                    <div className="text-xl sm:text-2xl font-bold text-blue-600">
                       {breakdown.rawScore.toFixed(1)}
                     </div>
                     <div className="text-xs text-muted-foreground">
@@ -525,21 +525,21 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                   {breakdown.penalties.map((penalty, index) => (
                     <div 
                       key={index}
-                      className="border border-orange-200 dark:border-orange-800 rounded-lg p-4 bg-orange-50 dark:bg-orange-950"
+                      className="border border-orange-200 dark:border-orange-800 rounded-lg p-3 sm:p-4 bg-orange-50 dark:bg-orange-950"
                     >
-                      <div className="flex items-start justify-between gap-4 mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <AlertTriangle className="w-4 h-4 text-orange-600" />
-                            <h4 className="font-semibold text-orange-900 dark:text-orange-100">
+                      <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4 mb-3">
+                        <div className="flex-1 min-w-0 w-full">
+                          <div className="flex items-start gap-2 mb-1">
+                            <AlertTriangle className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
+                            <h4 className="font-semibold text-sm sm:text-base text-orange-900 dark:text-orange-100 break-words">
                               {penalty.reason}
                             </h4>
                           </div>
                         </div>
                         
-                        <div className="text-right">
-                          <div className="text-sm text-orange-600 dark:text-orange-400">Ajuste</div>
-                          <div className="text-2xl font-bold text-red-600">
+                        <div className="text-left sm:text-right shrink-0">
+                          <div className="text-xs sm:text-sm text-orange-600 dark:text-orange-400">Ajuste</div>
+                          <div className="text-xl sm:text-2xl font-bold text-red-600">
                             {penalty.amount.toFixed(1)}
                           </div>
                         </div>
@@ -548,13 +548,13 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                       {/* Detalhes das penalidades */}
                       {penalty.details && penalty.details.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
-                          <div className="space-y-1.5 text-sm">
+                          <div className="space-y-1.5 text-xs sm:text-sm">
                             {penalty.details.map((detail, detailIndex) => (
                               <div 
                                 key={detailIndex}
-                                className={`${
+                                className={`break-words ${
                                   detail.startsWith('   •') 
-                                    ? 'ml-6 text-orange-700 dark:text-orange-300' 
+                                    ? 'ml-4 sm:ml-6 text-orange-700 dark:text-orange-300' 
                                     : 'font-medium text-orange-800 dark:text-orange-200'
                                 }`}
                               >
@@ -570,16 +570,16 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
               )}
 
               {/* Score Final */}
-              <div className="border-t-4 border-primary pt-4 bg-muted/30 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-lg font-bold">Score Final</h4>
-                    <p className="text-sm text-muted-foreground">
+              <div className="border-t-4 border-primary pt-4 bg-muted/30 rounded-lg p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-base sm:text-lg font-bold">Score Final</h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground break-words">
                       {breakdown.classification}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <div className="text-4xl font-bold">
+                  <div className="text-left sm:text-right shrink-0">
+                    <div className="text-3xl sm:text-4xl font-bold">
                       {breakdown.score.toFixed(1)}
                     </div>
                     <Badge variant="outline" className="mt-1">
@@ -591,19 +591,19 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
             </div>
 
             {/* Info Box */}
-            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div className="mt-6 p-3 sm:p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-start gap-3">
                 <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                <div className="text-sm">
+                <div className="text-xs sm:text-sm">
                   <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
                     Como interpretar este detalhamento dos pontos
                   </p>
-                  <p className="text-blue-700 dark:text-blue-300 mb-2">
+                  <p className="text-blue-700 dark:text-blue-300 mb-2 break-words">
                     O score é calculado pela soma ponderada das contribuições de cada estratégia. Penalidades são 
                     aplicadas quando há contradições entre pontos fortes e fracos, ou quando a proporção de alertas 
                     é muito alta, garantindo uma avaliação conservadora e realista.
                   </p>
-                  <p className="text-blue-700 dark:text-blue-300">
+                  <p className="text-blue-700 dark:text-blue-300 break-words">
                     <strong>Fórmula:</strong> Score Final = Subtotal - Penalidades
                   </p>
                 </div>
@@ -621,58 +621,58 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
 
         {/* Overlay Premium para não-assinantes */}
         {!userIsPremium && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm">
-            <Card className="max-w-lg mx-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm p-4">
+            <Card className="max-w-lg w-full max-h-[90vh] overflow-y-auto">
               <CardHeader className="text-center pb-4">
                 <div className="flex justify-center mb-4">
-                  <div className="p-4 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full">
-                    <Lock className="w-8 h-8 text-white" />
+                  <div className="p-3 sm:p-4 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full">
+                    <Lock className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                   </div>
                 </div>
-                <CardTitle className="text-2xl">
+                <CardTitle className="text-xl sm:text-2xl break-words">
                   Entendimento Detalhado do Score
                 </CardTitle>
-                <CardDescription className="text-base mt-2">
+                <CardDescription className="text-sm sm:text-base mt-2 break-words">
                   Recurso exclusivo para assinantes Premium
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
+              <CardContent className="space-y-4 sm:space-y-6">
+                <div className="space-y-3 sm:space-y-4">
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-semibold">Breakdown Completo das Contribuições</p>
-                      <p className="text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm sm:text-base break-words">Breakdown Completo das Contribuições</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground break-words">
                         Veja exatamente como cada estratégia contribui para o score final
                       </p>
                     </div>
                   </div>
                   
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-semibold">Detalhamento de Penalidades</p>
-                      <p className="text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm sm:text-base break-words">Detalhamento de Penalidades</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground break-words">
                         Entenda todos os alertas críticos e riscos identificados
                       </p>
                     </div>
                   </div>
                   
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-semibold">Análise de Fundamentos</p>
-                      <p className="text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm sm:text-base break-words">Análise de Fundamentos</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground break-words">
                         Veja os motivos específicos da força fundamentalista da empresa
                       </p>
                     </div>
                   </div>
                   
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-semibold">Matemática Transparente</p>
-                      <p className="text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm sm:text-base break-words">Matemática Transparente</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground break-words">
                         Acompanhe o cálculo passo a passo: contribuições, penalidades e score final
                       </p>
                     </div>
@@ -680,22 +680,22 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                 </div>
 
                 <div className="pt-4 border-t">
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 rounded-lg p-4 mb-4">
-                    <p className="text-sm text-center font-medium">
-                      <Crown className="w-4 h-4 inline mr-1" />
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 rounded-lg p-3 sm:p-4 mb-4">
+                    <p className="text-xs sm:text-sm text-center font-medium break-words">
+                      <Crown className="w-3 h-3 sm:w-4 sm:h-4 inline mr-1" />
                       Acesso completo a <strong>todas as estratégias premium</strong> de análise fundamentalista
                     </p>
                   </div>
                   
                   <div className="flex flex-col gap-3">
-                    <Button asChild className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white">
+                    <Button asChild className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-sm sm:text-base">
                       <Link href="/planos">
                         <Crown className="w-4 h-4 mr-2" />
                         Assinar Premium
                       </Link>
                     </Button>
                     
-                    <Button asChild variant="outline" className="w-full">
+                    <Button asChild variant="outline" className="w-full text-sm sm:text-base">
                       <Link href={`/acao/${ticker.toLowerCase()}`}>
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Voltar para {ticker}

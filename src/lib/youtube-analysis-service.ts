@@ -359,6 +359,13 @@ Assista ao(s) vídeo(s) fornecido(s) sobre a empresa ${companyName} (${ticker}) 
 - Você deve avaliar se for fazer citação da datas no resumo, pontos positivos e/ou negativos, avalie se eles ainda são relevantes para a data atual (Ex: dividendos que ja foram pagos não são mais pontos positivos)
 - Você deve garantir que sua resposta esteja em Português Brasileiro
 
+**⚠️ CRÍTICO - FOCO EXCLUSIVO NA EMPRESA:**
+- Extraia informações APENAS sobre ${companyName} (${ticker})
+- Se o vídeo mencionar múltiplas empresas (ex: carteiras, comparações, rankings), IGNORE informações de outras empresas
+- NÃO inclua dados, métricas ou análises de PETR3, PETR4, VALE3, ITUB4, BBDC4, CXSE3 ou QUALQUER outro ticker que NÃO seja ${ticker}
+- Se o vídeo não tiver informações suficientes ESPECIFICAMENTE sobre ${ticker}, retorne score 50 com resumo indicando "Informações insuficientes sobre ${ticker} no vídeo"
+- VERIFICAÇÃO: Antes de adicionar qualquer ponto positivo ou negativo, confirme que ele se refere ESPECIFICAMENTE a ${ticker}, não a outras empresas mencionadas no vídeo
+
 **Sua análise deve incluir:**
 
 1. **Score Geral (0-100)**: Avalie o sentimento geral sobre a empresa baseado no conteúdo dos vídeos:
@@ -368,27 +375,31 @@ Assista ao(s) vídeo(s) fornecido(s) sobre a empresa ${companyName} (${ticker}) 
    - 71-85: Sentimento positivo (bons fundamentos, otimismo)
    - 86-100: Sentimento muito positivo (excelentes perspectivas, forte recomendação)
 
-2. **Resumo**: Descrição concisa (máximo 280 caracteres) dos pontos-chave discutidos nos vídeos
+2. **Resumo**: Descrição concisa (máximo 280 caracteres) dos pontos-chave discutidos nos vídeos SOBRE ${ticker}
    - Seja direto e objetivo
    - Foque no que é mais relevante para investidores
+   - Mencione APENAS ${ticker}, não outras empresas
 
-3. **Pontos Positivos**: Lista de aspectos favoráveis mencionados
+3. **Pontos Positivos**: Lista de aspectos favoráveis mencionados ESPECIFICAMENTE sobre ${ticker}
    - Máximo 4 pontos mais relevantes
    - Seja específico e factual
    - Priorize dados concretos (números, fatos)
+   - Cada ponto deve mencionar ${ticker} ou ser claramente sobre ${ticker}
 
-4. **Pontos Negativos**: Lista de preocupações ou riscos mencionados
+4. **Pontos Negativos**: Lista de preocupações ou riscos mencionados ESPECIFICAMENTE sobre ${ticker}
    - Máximo 4 pontos mais relevantes
    - Seja específico e factual
    - Priorize riscos reais e tangíveis
+   - Cada ponto deve mencionar ${ticker} ou ser claramente sobre ${ticker}
 
 **DIRETRIZES DE ANÁLISE:**
-- Baseie sua análise APENAS no conteúdo dos vídeos
+- Baseie sua análise APENAS no conteúdo dos vídeos E APENAS sobre ${ticker}
 - Seja objetivo e imparcial
 - Priorize informações fundamentalistas (resultados, dividendos, dívida, crescimento, margens)
 - Ignore ruídos, especulações sem fundamento e opiniões pessoais dos apresentadores
 - Se os vídeos mencionarem dados conflitantes, use o mais recente ou confiável
 - Evite jargões excessivos - use linguagem clara
+- NUNCA misture informações de outras empresas mencionadas no vídeo
 
 Formato da resposta (JSON válido):
 {

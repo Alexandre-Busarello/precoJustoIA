@@ -124,7 +124,34 @@ export async function GET(request: NextRequest) {
         }
 
         if (!videoSearchResult.videoIds || videoSearchResult.videoIds.length === 0) {
-          console.log(`⚠️ ${company.ticker}: Nenhum vídeo encontrado, buscando análise web...`);
+          console.log(`⚠️ ${company.ticker}: Nenhum vídeo encontrado`);
+          
+          // 6.1. Verificar se já existe análise anterior (web-only)
+          const existingAnalysis = await YouTubeAnalysisService.getActiveAnalysis(company.id);
+          
+          if (existingAnalysis && (!existingAnalysis.videoIds || existingAnalysis.videoIds.length === 0)) {
+            // Já existe análise web anterior - verificar se precisa atualizar
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            
+            const analysisDate = new Date(existingAnalysis.createdAt);
+            const needsUpdate = analysisDate < oneWeekAgo;
+            
+            if (!needsUpdate) {
+              // Análise ainda está fresca (menos de 1 semana)
+              console.log(`✅ ${company.ticker}: Mantendo análise web recente (criada há ${Math.floor((Date.now() - analysisDate.getTime()) / (1000 * 60 * 60 * 24))} dias)`);
+              await YouTubeAnalysisService.updateLastChecked(company.id);
+              processedCount++;
+              skippedCount++;
+              continue;
+            }
+            
+            // Análise tem mais de 1 semana - fazer nova análise e comparar
+            console.log(`🔄 ${company.ticker}: Análise web tem mais de 1 semana, atualizando...`);
+          }
+          
+          // 6.2. Não existe análise anterior OU análise tem mais de 1 semana OU análise anterior tinha vídeos
+          console.log(`🌐 ${company.ticker}: Buscando análise web...`);
           
           // Buscar análise web como alternativa
           try {
@@ -135,9 +162,10 @@ export async function GET(request: NextRequest) {
               company.industry || undefined
             );
 
-            // Se encontrou informações na web, salvar análise
+            // Se encontrou informações na web, salvar análise atualizada
             if (webAnalysis.score !== 50 || webAnalysis.positivePoints.length > 0 || webAnalysis.negativePoints.length > 0) {
-              console.log(`🌐 ${company.ticker}: Análise web bem-sucedida, salvando...`);
+              // Como a pesquisa web já foi feita e análise tem mais de 1 semana, salvar atualização
+              console.log(`🌐 ${company.ticker}: Salvando análise web atualizada...`);
               
               const webAnalysisResult: any = {
                 score: webAnalysis.score,
@@ -152,11 +180,16 @@ export async function GET(request: NextRequest) {
                 webAnalysisResult
               );
 
-              await YouTubeAnalysisService.updateLastChecked(company.id);
-              console.log(`✅ ${company.ticker}: Análise web salva (ID: ${analysisId})`);
+              console.log(`✅ ${company.ticker}: Análise web atualizada salva (ID: ${analysisId}, Score: ${webAnalysis.score}/100)`);
               
+              if (existingAnalysis) {
+                updatedAnalysesCount++;
+              } else {
+                newAnalysesCount++;
+              }
+              
+              await YouTubeAnalysisService.updateLastChecked(company.id);
               processedCount++;
-              newAnalysesCount++;
               continue;
             } else {
               // Sem informações relevantes na web também

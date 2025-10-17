@@ -12,9 +12,9 @@ import { PortfolioService } from '@/lib/portfolio-service';
 import { PortfolioMetricsService } from '@/lib/portfolio-metrics-service';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 /**

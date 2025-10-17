@@ -10,9 +10,9 @@ import { getCurrentUser } from '@/lib/user-service';
 import { PortfolioTransactionService } from '@/lib/portfolio-transaction-service';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 /**

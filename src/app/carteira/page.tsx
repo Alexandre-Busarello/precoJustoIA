@@ -4,6 +4,7 @@
  */
 
 import { Metadata } from 'next';
+import { Suspense } from 'react';
 import { PortfolioPageClient } from '@/components/portfolio-page-client';
 
 export const metadata: Metadata = {
@@ -12,6 +13,14 @@ export const metadata: Metadata = {
 };
 
 export default function CarteiraPage() {
-  return <PortfolioPageClient />;
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    }>
+      <PortfolioPageClient />
+    </Suspense>
+  );
 }
 

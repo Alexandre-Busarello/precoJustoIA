@@ -9,9 +9,9 @@ import { PortfolioTransactionService } from '@/lib/portfolio-transaction-service
 import { PortfolioService } from '@/lib/portfolio-service';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 /**

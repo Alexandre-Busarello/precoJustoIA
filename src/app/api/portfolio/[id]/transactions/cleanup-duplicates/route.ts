@@ -9,9 +9,9 @@ import { PortfolioService } from '@/lib/portfolio-service';
 import { prisma } from '@/lib/prisma';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function POST(request: NextRequest, { params }: RouteContext) {

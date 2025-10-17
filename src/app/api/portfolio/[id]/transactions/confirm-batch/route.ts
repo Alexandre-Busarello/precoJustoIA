@@ -39,6 +39,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       currentUser.id
     );
 
+    // CRITICAL: Recalculate cash balances after batch confirmation
+    await PortfolioTransactionService.recalculateCashBalances(resolvedParams.id);
+
     // Recalculate metrics once
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 

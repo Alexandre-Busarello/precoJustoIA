@@ -31,6 +31,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       currentUser.id
     );
 
+    // CRITICAL: Recalculate cash balances after reverting
+    await PortfolioTransactionService.recalculateCashBalances(resolvedParams.id);
+
     // Recalculate metrics since we're reverting a confirmed transaction
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 

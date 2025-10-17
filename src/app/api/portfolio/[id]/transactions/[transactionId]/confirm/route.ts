@@ -39,6 +39,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       Object.keys(updates).length > 0 ? updates : undefined
     );
 
+    // CRITICAL: Recalculate cash balances after confirmation
+    await PortfolioTransactionService.recalculateCashBalances(resolvedParams.id);
+
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 

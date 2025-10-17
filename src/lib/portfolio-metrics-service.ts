@@ -27,7 +27,7 @@ export interface PortfolioHolding {
   actualAllocation: number; // Current allocation
   targetAllocation: number; // Target allocation from config
   allocationDiff: number; // Difference between actual and target
-  needsRebalancing: boolean; // True if diff > 5%
+  needsRebalancing: boolean; // True if absolute diff > 5% OR relative deviation > 20%
 }
 
 export interface PortfolioMetricsData {
@@ -86,6 +86,15 @@ export class PortfolioMetricsService {
     const totalReturn = totalInvested > 0 
       ? (currentValue + cashBalance + totalWithdrawn - totalInvested) / totalInvested
       : 0;
+    
+    console.log('📊 [CALCULATE RETURN]', {
+      currentValue: currentValue.toFixed(2),
+      cashBalance: cashBalance.toFixed(2),
+      totalWithdrawn: totalWithdrawn.toFixed(2),
+      totalInvested: totalInvested.toFixed(2),
+      numerator: (currentValue + cashBalance + totalWithdrawn - totalInvested).toFixed(2),
+      totalReturn: (totalReturn * 100).toFixed(2) + '%'
+    });
     
     // Calculate monthly evolution
     const evolutionData = await this.calculateEvolutionData(portfolioId, transactions);
@@ -193,8 +202,29 @@ export class PortfolioMetricsService {
         current.quantity += Number(tx.quantity || 0);
         current.totalInvested += Number(tx.amount);
       } else if (tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
-        current.quantity -= Number(tx.quantity || 0);
-        current.totalInvested -= Number(tx.amount);
+        const quantitySold = Number(tx.quantity || 0);
+        const quantityBefore = current.quantity;
+        const investedBefore = current.totalInvested;
+        
+        // Calculate the average cost per share BEFORE the sale
+        const averageCost = quantityBefore > 0 
+          ? investedBefore / quantityBefore
+          : 0;
+        
+        // Reduce quantity and totalInvested by the COST of shares sold (not sale value)
+        // This maintains the correct cost basis for remaining shares
+        current.quantity -= quantitySold;
+        const costReduction = averageCost * quantitySold;
+        current.totalInvested -= costReduction;
+        
+        console.log(`📉 [SELL] ${tx.ticker}:`, {
+          quantitySold,
+          saleValue: Number(tx.amount).toFixed(2),
+          averageCost: averageCost.toFixed(2),
+          costReduction: costReduction.toFixed(2),
+          before: { quantity: quantityBefore, invested: investedBefore.toFixed(2) },
+          after: { quantity: current.quantity, invested: current.totalInvested.toFixed(2) }
+        });
       }
       
       holdingsMap.set(tx.ticker, current);
@@ -225,7 +255,15 @@ export class PortfolioMetricsService {
       const actualAllocation = totalValue > 0 ? (currentValue / totalValue) : 0;
       const targetAllocation = targetAllocations.get(ticker) || 0;
       const allocationDiff = actualAllocation - targetAllocation;
-      const needsRebalancing = Math.abs(allocationDiff) > 0.05; // >5% difference
+      
+      // Needs rebalancing if:
+      // 1. Absolute difference > 5 percentage points (e.g., 10% vs 5%), OR
+      // 2. Relative deviation > 20% of target (e.g., actual is 6% when target is 5%)
+      const absoluteDiff = Math.abs(allocationDiff);
+      const relativeDeviation = targetAllocation > 0 
+        ? Math.abs(allocationDiff / targetAllocation) 
+        : 0;
+      const needsRebalancing = absoluteDiff > 0.05 || relativeDeviation > 0.20;
       
       holdings.push({
         ticker,
@@ -293,6 +331,14 @@ export class PortfolioMetricsService {
     // Use cash credits as totalInvested if available, otherwise use purchase amounts
     // This handles cases where users create retroactive purchases without registering contributions
     const totalInvested = totalCashCredits > 0 ? totalCashCredits : totalPurchases;
+
+    console.log('💰 [CALCULATE TOTALS]', {
+      totalCashCredits: totalCashCredits.toFixed(2),
+      totalPurchases: totalPurchases.toFixed(2),
+      totalWithdrawn: totalWithdrawn.toFixed(2),
+      totalDividends: totalDividends.toFixed(2),
+      totalInvested: totalInvested.toFixed(2)
+    });
 
     return { totalInvested, totalWithdrawn, totalDividends };
   }

@@ -27,7 +27,10 @@ export function PortfolioNegativeCashAlert({
   const [recalculating, setRecalculating] = useState(false);
   const [recalcBalances, setRecalcBalances] = useState(false);
 
-  if (cashBalance >= 0) return null;
+  // Only show alert for significantly negative cash (more than R$ 0.10)
+  // Tiny negative balances (< R$ 0.10) are considered rounding errors
+  // Positive balances are now auto-corrected by automatic recalculation
+  if (cashBalance >= -0.10) return null;
 
   const amountNeeded = Math.abs(cashBalance);
 

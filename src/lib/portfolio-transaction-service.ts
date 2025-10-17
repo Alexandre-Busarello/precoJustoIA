@@ -351,7 +351,8 @@ export class PortfolioTransactionService {
     
     const currentAllocations = this.calculateCurrentAllocations(holdings, prices, portfolioValue);
     
-    // Check if rebalancing is needed (>5% deviation from target)
+    // Check if rebalancing is needed
+    // Criteria: >5 percentage points absolute OR >20% relative deviation
     const deviations: Array<{ ticker: string; current: number; target: number; diff: number }> = [];
     
     for (const asset of portfolio.assets) {
@@ -359,7 +360,11 @@ export class PortfolioTransactionService {
       const targetAlloc = Number(asset.targetAllocation);
       const diff = currentAlloc - targetAlloc;
       
-      if (Math.abs(diff) > 0.05) { // More than 5% deviation
+      const absoluteDiff = Math.abs(diff);
+      const relativeDeviation = targetAlloc > 0 ? Math.abs(diff / targetAlloc) : 0;
+      
+      // Needs rebalancing if absolute diff > 5% OR relative deviation > 20%
+      if (absoluteDiff > 0.05 || relativeDeviation > 0.20) {
         deviations.push({
           ticker: asset.ticker,
           current: currentAlloc,
@@ -524,6 +529,8 @@ export class PortfolioTransactionService {
         cashBalanceAfter += Number(tx.amount);
       }
 
+      console.log(`💵 [${tx.date.toISOString().split('T')[0]}] ${tx.type} ${tx.ticker || '-'}: R$ ${Number(tx.amount).toFixed(2)} | Before: R$ ${cashBalanceBefore.toFixed(2)} → After: R$ ${cashBalanceAfter.toFixed(2)}`);
+
       // Update transaction with corrected balances
       await prisma.portfolioTransaction.update({
         where: { id: tx.id },
@@ -536,7 +543,35 @@ export class PortfolioTransactionService {
       runningBalance = cashBalanceAfter;
     }
 
-    console.log(`✅ Recalculated ${transactions.length} transactions. Final balance: R$ ${runningBalance.toFixed(2)}`);
+    console.log(`\n✅ Recalculated ${transactions.length} transactions. Final balance: R$ ${runningBalance.toFixed(2)}`);
+    
+    // Summary by transaction type
+    const summary = {
+      CASH_CREDIT: 0,
+      BUY: 0,
+      BUY_REBALANCE: 0,
+      SELL_REBALANCE: 0,
+      SELL_WITHDRAWAL: 0,
+      DIVIDEND: 0
+    };
+    
+    for (const tx of transactions) {
+      if (tx.type === 'CASH_CREDIT') summary.CASH_CREDIT += Number(tx.amount);
+      else if (tx.type === 'BUY') summary.BUY += Number(tx.amount);
+      else if (tx.type === 'BUY_REBALANCE') summary.BUY_REBALANCE += Number(tx.amount);
+      else if (tx.type === 'SELL_REBALANCE') summary.SELL_REBALANCE += Number(tx.amount);
+      else if (tx.type === 'SELL_WITHDRAWAL') summary.SELL_WITHDRAWAL += Number(tx.amount);
+      else if (tx.type === 'DIVIDEND') summary.DIVIDEND += Number(tx.amount);
+    }
+    
+    console.log('📋 Transaction Summary:');
+    console.log(`   💰 Cash Credits: R$ ${summary.CASH_CREDIT.toFixed(2)}`);
+    console.log(`   📉 Purchases (BUY): R$ ${summary.BUY.toFixed(2)}`);
+    console.log(`   📉 Purchases (Rebalance): R$ ${summary.BUY_REBALANCE.toFixed(2)}`);
+    console.log(`   📈 Sales (Rebalance): R$ ${summary.SELL_REBALANCE.toFixed(2)}`);
+    console.log(`   📈 Sales (Withdrawal): R$ ${summary.SELL_WITHDRAWAL.toFixed(2)}`);
+    console.log(`   💵 Dividends: R$ ${summary.DIVIDEND.toFixed(2)}`);
+    console.log(`   = Final Cash: R$ ${runningBalance.toFixed(2)}\n`);
   }
 
   /**
@@ -719,8 +754,12 @@ export class PortfolioTransactionService {
         current.quantity += suggestion.quantity || 0;
         current.totalInvested += suggestion.amount;
       } else if (suggestion.type === 'SELL_REBALANCE' || suggestion.type === 'SELL_WITHDRAWAL') {
-        current.quantity -= suggestion.quantity || 0;
-        current.totalInvested -= suggestion.amount;
+        const quantitySold = suggestion.quantity || 0;
+        const averageCost = current.quantity > 0 ? current.totalInvested / current.quantity : 0;
+        
+        current.quantity -= quantitySold;
+        // Reduce by COST of shares sold, not sale value
+        current.totalInvested -= (averageCost * quantitySold);
       }
 
       holdings.set(suggestion.ticker, current);
@@ -1067,32 +1106,8 @@ export class PortfolioTransactionService {
       throw new Error('Portfolio not found');
     }
 
-    // Calculate cash balance
-    const currentCashBalance = await this.getCurrentCashBalance(portfolioId);
-    let cashBalanceAfter = currentCashBalance;
-
-    if (input.type === 'CASH_CREDIT' || input.type === 'DIVIDEND') {
-      cashBalanceAfter += input.amount;
-    } else if (input.type === 'CASH_DEBIT' || input.type === 'BUY' || input.type === 'BUY_REBALANCE') {
-      cashBalanceAfter -= input.amount;
-    } else if (input.type === 'SELL_REBALANCE' || input.type === 'SELL_WITHDRAWAL') {
-      cashBalanceAfter += input.amount;
-    }
-
-    // Validate: prevent negative cash balance
-    if (cashBalanceAfter < 0) {
-      const insufficientAmount = Math.abs(cashBalanceAfter);
-      const error: any = new Error('INSUFFICIENT_CASH');
-      error.code = 'INSUFFICIENT_CASH';
-      error.details = {
-        currentCashBalance,
-        transactionAmount: input.amount,
-        insufficientAmount,
-        message: `Saldo insuficiente. Você precisa de R$ ${insufficientAmount.toFixed(2)} adicionais em caixa.`
-      };
-      throw error;
-    }
-
+    // For retroactive or out-of-order transactions, we'll validate AFTER recalculation
+    // For now, just create with temporary balance values
     const transaction = await safeWrite(
       'create-manual-transaction',
       () => prisma.portfolioTransaction.create({
@@ -1104,8 +1119,8 @@ export class PortfolioTransactionService {
           amount: input.amount,
           price: input.price,
           quantity: input.quantity,
-          cashBalanceBefore: currentCashBalance,
-          cashBalanceAfter,
+          cashBalanceBefore: 0, // Will be recalculated
+          cashBalanceAfter: 0,  // Will be recalculated
           status: 'EXECUTED',
           isAutoSuggested: false,
           notes: input.notes
@@ -1116,6 +1131,36 @@ export class PortfolioTransactionService {
 
     // Update last transaction date
     await PortfolioService.updateLastTransactionDate(portfolioId, input.date);
+
+    // ALWAYS recalculate cash balances in chronological order
+    // This ensures correct balances even for retroactive transactions
+    await this.recalculateCashBalances(portfolioId);
+
+    // Now validate the final balance after recalculation
+    const finalBalance = await this.getCurrentCashBalance(portfolioId);
+    if (finalBalance < -0.01) { // Allow tiny rounding errors
+      // Rollback the transaction
+      await safeWrite(
+        'rollback-transaction',
+        () => prisma.portfolioTransaction.delete({
+          where: { id: transaction.id }
+        }),
+        ['portfolio_transactions']
+      );
+
+      // Recalculate again after rollback
+      await this.recalculateCashBalances(portfolioId);
+
+      const error: any = new Error('INSUFFICIENT_CASH');
+      error.code = 'INSUFFICIENT_CASH';
+      error.details = {
+        currentCashBalance: finalBalance,
+        transactionAmount: input.amount,
+        insufficientAmount: Math.abs(finalBalance),
+        message: `Saldo insuficiente. Você precisa de R$ ${Math.abs(finalBalance).toFixed(2)} adicionais em caixa.`
+      };
+      throw error;
+    }
 
     console.log(`✅ Manual transaction created: ${transaction.id}`);
     
@@ -1145,6 +1190,8 @@ export class PortfolioTransactionService {
       throw new Error('Cannot delete confirmed auto-suggested transactions. Revert to pending first.');
     }
 
+    const portfolioId = transaction.portfolioId;
+
     await safeWrite(
       'delete-transaction',
       () => prisma.portfolioTransaction.delete({
@@ -1152,6 +1199,9 @@ export class PortfolioTransactionService {
       }),
       ['portfolio_transactions']
     );
+
+    // ALWAYS recalculate cash balances after deletion
+    await this.recalculateCashBalances(portfolioId);
 
     console.log(`✅ Transaction deleted: ${transactionId}`);
   }
@@ -1180,6 +1230,19 @@ export class PortfolioTransactionService {
       throw new Error('Cannot edit confirmed auto-suggested transactions. Revert to pending first.');
     }
 
+    const portfolioId = transaction.portfolioId;
+
+    // Store original values for potential rollback
+    const originalValues = {
+      date: transaction.date,
+      type: transaction.type,
+      ticker: transaction.ticker,
+      amount: transaction.amount,
+      price: transaction.price,
+      quantity: transaction.quantity,
+      notes: transaction.notes
+    };
+
     await safeWrite(
       'update-transaction',
       () => prisma.portfolioTransaction.update({
@@ -1191,6 +1254,28 @@ export class PortfolioTransactionService {
       }),
       ['portfolio_transactions']
     );
+
+    // ALWAYS recalculate cash balances after update
+    await this.recalculateCashBalances(portfolioId);
+
+    // Validate the final balance after recalculation
+    const finalBalance = await this.getCurrentCashBalance(portfolioId);
+    if (finalBalance < -0.01) { // Allow tiny rounding errors
+      // Rollback to original values
+      await safeWrite(
+        'rollback-transaction-update',
+        () => prisma.portfolioTransaction.update({
+          where: { id: transactionId },
+          data: originalValues
+        }),
+        ['portfolio_transactions']
+      );
+
+      // Recalculate again after rollback
+      await this.recalculateCashBalances(portfolioId);
+
+      throw new Error(`Atualização resultaria em saldo de caixa negativo: R$ ${finalBalance.toFixed(2)}. Adicione mais fundos primeiro.`);
+    }
 
     console.log(`✅ Transaction updated: ${transactionId}`);
   }

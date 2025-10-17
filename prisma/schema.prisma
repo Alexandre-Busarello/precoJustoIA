@@ -67,6 +67,7 @@ model User {
   accounts         Account[]
   sessions         Session[]
   portfolios       Portfolio[]
+  portfolioConfigs PortfolioConfig[] @relation("UserPortfolioConfigs")
   rankingHistory   RankingHistory[]
   supportTickets   SupportTicket[]
   ticketMessages   TicketMessage[]
@@ -287,6 +288,160 @@ model PortfolioAsset {
   portfolio       Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@map("portfolio_assets")
+}
+
+// ===== PORTFOLIO (CARTEIRA) MODELS =====
+
+model PortfolioConfig {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  name                String
+  description         String?
+  
+  // Configuration
+  startDate           DateTime @map("start_date") @db.Date
+  monthlyContribution Decimal  @map("monthly_contribution") @db.Decimal(12, 2)
+  rebalanceFrequency  String   @default("monthly") // monthly, quarterly, yearly
+  
+  // Status tracking
+  lastTransactionDate DateTime? @map("last_transaction_date") @db.Date
+  isActive            Boolean  @default(true) @map("is_active")
+  trackingStarted     Boolean  @default(false) @map("tracking_started") // Start auto suggestions
+  
+  // Metadata
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  
+  // Source tracking
+  sourceBacktestId    String?  @map("source_backtest_id") // If created from backtest
+  
+  // Relationships
+  user                User     @relation("UserPortfolioConfigs", fields: [userId], references: [id], onDelete: Cascade)
+  assets              PortfolioConfigAsset[]
+  transactions        PortfolioTransaction[]
+  metrics             PortfolioMetrics?
+  
+  @@index([userId, createdAt])
+  @@index([userId, isActive])
+  @@map("portfolio_configs")
+}
+
+model PortfolioConfigAsset {
+  id                String   @id @default(cuid())
+  portfolioId       String   @map("portfolio_id")
+  ticker            String
+  targetAllocation  Decimal  @map("target_allocation") @db.Decimal(5, 4) // Ex: 0.2500 = 25%
+  
+  // Tracking
+  addedAt           DateTime @default(now()) @map("added_at")
+  removedAt         DateTime? @map("removed_at") @db.Date // Soft delete for history
+  isActive          Boolean  @default(true) @map("is_active")
+  
+  portfolio         PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  
+  @@index([portfolioId, isActive])
+  @@index([portfolioId, ticker])
+  @@map("portfolio_config_assets")
+}
+
+enum TransactionType {
+  CASH_CREDIT          // Monthly contribution to cash
+  CASH_DEBIT           // Manual cash withdrawal
+  BUY                  // Asset purchase (contribution)
+  SELL_REBALANCE       // Sale for rebalancing
+  BUY_REBALANCE        // Purchase from rebalance cash
+  SELL_WITHDRAWAL      // Sale without rebalancing (portfolio exit)
+  DIVIDEND             // Dividend received
+}
+
+enum TransactionStatus {
+  PENDING              // Suggested, awaiting confirmation
+  CONFIRMED            // User confirmed
+  EXECUTED             // Manually entered as executed
+  REJECTED             // User rejected the suggestion
+}
+
+model PortfolioTransaction {
+  id                  String   @id @default(cuid())
+  portfolioId         String   @map("portfolio_id")
+  
+  // Transaction details
+  date                DateTime @db.Date
+  type                TransactionType
+  status              TransactionStatus @default(PENDING)
+  ticker              String?  // Null for CASH_CREDIT/CASH_DEBIT
+  
+  // Financial data
+  amount              Decimal  @db.Decimal(12, 2)  // Transaction amount (BRL)
+  price               Decimal? @db.Decimal(10, 4)  // Asset price at transaction
+  quantity            Decimal? @db.Decimal(15, 6)  // Shares quantity
+  
+  // Context
+  cashBalanceBefore   Decimal  @map("cash_balance_before") @db.Decimal(12, 2)
+  cashBalanceAfter    Decimal  @map("cash_balance_after") @db.Decimal(12, 2)
+  portfolioValueAfter Decimal? @map("portfolio_value_after") @db.Decimal(15, 2)
+  
+  // Notes & tracking
+  notes               String?
+  rejectionReason     String?  @map("rejection_reason") // Why user rejected
+  
+  // Metadata
+  createdAt           DateTime @default(now()) @map("created_at")
+  confirmedAt         DateTime? @map("confirmed_at")
+  rejectedAt          DateTime? @map("rejected_at")
+  revertedAt          DateTime? @map("reverted_at")
+  
+  // Source tracking for auto-suggestions
+  isAutoSuggested     Boolean  @default(false) @map("is_auto_suggested")
+  
+  // Future: Automatic dividend tracking
+  dividendPaymentDate DateTime? @map("dividend_payment_date") @db.Date // For future auto-import
+  dividendSourceId    String?  @map("dividend_source_id") // External dividend ID for deduplication
+  
+  // Relationships
+  portfolio           PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  
+  @@index([portfolioId, date])
+  @@index([portfolioId, status])
+  @@index([portfolioId, type])
+  @@index([date])
+  @@index([ticker, dividendPaymentDate]) // For future dividend deduplication
+  @@map("portfolio_transactions")
+}
+
+model PortfolioMetrics {
+  id                    String   @id @default(cuid())
+  portfolioId           String   @unique @map("portfolio_id")
+  
+  // Current values
+  currentValue          Decimal  @map("current_value") @db.Decimal(15, 2)
+  cashBalance           Decimal  @map("cash_balance") @db.Decimal(12, 2)
+  totalInvested         Decimal  @map("total_invested") @db.Decimal(15, 2)
+  totalWithdrawn        Decimal  @map("total_withdrawn") @db.Decimal(15, 2) @default(0)
+  totalDividends        Decimal  @map("total_dividends") @db.Decimal(12, 2) @default(0)
+  
+  // Performance metrics
+  totalReturn           Decimal  @map("total_return") @db.Decimal(10, 4)
+  annualizedReturn      Decimal? @map("annualized_return") @db.Decimal(10, 4)
+  volatility            Decimal? @db.Decimal(10, 4)
+  sharpeRatio           Decimal? @map("sharpe_ratio") @db.Decimal(10, 4)
+  maxDrawdown           Decimal? @map("max_drawdown") @db.Decimal(10, 4)
+  
+  // Detailed data (JSON)
+  assetHoldings         Json     @map("asset_holdings")      // Current holdings per asset
+  monthlyReturns        Json?    @map("monthly_returns")     // Historical monthly returns
+  evolutionData         Json?    @map("evolution_data")      // Portfolio value evolution
+  sectorAllocation      Json?    @map("sector_allocation")   // Allocation by sector
+  industryAllocation    Json?    @map("industry_allocation") // Allocation by industry
+  
+  // Metadata
+  lastCalculatedAt      DateTime @default(now()) @map("last_calculated_at")
+  
+  // Relationships
+  portfolio             PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  
+  @@index([lastCalculatedAt])
+  @@map("portfolio_metrics")
 }
 
 model RankingHistory {

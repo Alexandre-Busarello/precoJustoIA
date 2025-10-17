@@ -51,10 +51,16 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   'keyStatistics': 'key_statistics',
   'valueAddedStatement': 'value_added_statements',
   
-  // Portfolio & Ranking
+  // Portfolio & Ranking (old)
   'portfolio': 'portfolios',
   'portfolioAsset': 'portfolio_assets',
   'rankingHistory': 'ranking_history',
+  
+  // Portfolio Carteira (new)
+  'portfolioConfig': 'portfolio_configs',
+  'portfolioConfigAsset': 'portfolio_config_assets',
+  'portfolioTransaction': 'portfolio_transactions',
+  'portfolioMetrics': 'portfolio_metrics',
   
   // Backtest
   'backtestConfig': 'backtest_configs',
@@ -97,9 +103,15 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'value_added_statements': ['companies', 'value_added_statements'],
   
   // Usuários e dados pessoais
-  'users': ['users', 'portfolios', 'portfolio_assets', 'ranking_history', 'backtest_configs', 'user_asset_subscriptions'],
+  'users': ['users', 'portfolios', 'portfolio_assets', 'portfolio_configs', 'ranking_history', 'backtest_configs', 'user_asset_subscriptions'],
   'portfolios': ['users', 'portfolios', 'portfolio_assets'],
   'portfolio_assets': ['portfolios', 'portfolio_assets'],
+  
+  // Portfolio Carteira (new)
+  'portfolio_configs': ['portfolio_configs', 'portfolio_config_assets', 'portfolio_transactions', 'portfolio_metrics'],
+  'portfolio_config_assets': ['portfolio_configs'],
+  'portfolio_transactions': ['portfolio_configs', 'portfolio_metrics'],
+  'portfolio_metrics': ['portfolio_configs'],
   
   // Sistema de ranking e backtest
   'ranking_history': ['users', 'ranking_history'],

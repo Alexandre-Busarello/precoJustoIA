@@ -67,3 +67,5 @@ Além das métricas já conhecidas do Backtest, a Carteira terá visualizações
 O usuario pode a qualquer momento alterar a quantidade de alocação dos ativos ou adicionar e remover ativos da configuração. O sistema deve conseguir gerenciar isso, caso um ativo seja excluido automaticamente deve ser sugerida uma transação de venda (se o usuario tiver ativos em custodia) para rebalancear a carteira. O mesmo vale para o % de alocações.
 
 Um usuario deve poder excluir transações e o sistema deve se auto gerenciado evitando transações que não façam sentido e avisando o porque, mas o usuário sempre deve ter como consertar algo nas suas transações, seja valores, quantidades dos ativos comprados, preço médio da operação, ou até mesmo removendo operações.
+
+VOCE DEVE AVALIAR BEM A FEATURE DE BACKTEST QUE TERÁ MUITO DELA NA FEATURE DA CARTEIRA

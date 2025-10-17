@@ -110,18 +110,22 @@ export async function GET(
     // Enriquecer resultados com múltiplos upsides se necessário
     let enrichedResults = ranking.results as unknown as RankBuilderResult[];
     
-    // Verificar se os resultados já têm os upsides enriquecidos
+    // Verificar se os resultados precisam de enriquecimento
+    // 1. Verificar se faltam upsides adicionais
+    // 2. Verificar se faltam dados fundamentais básicos (para rankings antigos de IA)
     const needsEnrichment = enrichedResults.length > 0 && enrichedResults.some(r => {
       const hasGraham = r.key_metrics?.grahamUpside !== undefined && r.key_metrics?.grahamUpside !== null;
       const hasFcd = r.key_metrics?.fcdUpside !== undefined && r.key_metrics?.fcdUpside !== null;
       const hasGordon = r.key_metrics?.gordonUpside !== undefined && r.key_metrics?.gordonUpside !== null;
-      // Se nenhum dos upsides adicionais existe, precisa enriquecer
-      return !hasGraham && !hasFcd && !hasGordon;
+      const hasBasicData = r.key_metrics?.roe !== undefined || r.key_metrics?.roic !== undefined;
+      
+      // Precisa enriquecer se não tem upsides adicionais OU não tem dados fundamentais básicos
+      return !hasGraham && !hasFcd && !hasGordon || !hasBasicData;
     });
 
     if (needsEnrichment) {
       try {
-        console.log(`🔄 Enriquecendo ranking ${ranking.id} com múltiplos upsides...`);
+        console.log(`🔄 Enriquecendo ranking ${ranking.id} com dados fundamentais e múltiplos upsides...`);
         
         // Buscar dados das empresas para calcular upsides
         const tickers = enrichedResults.map(r => r.ticker);
@@ -193,6 +197,47 @@ export async function GET(
           
           const enrichedKeyMetrics = { ...(result.key_metrics || {}) };
           let mainUpside = result.upside;
+          
+          // Enriquecer com dados fundamentais básicos se não existirem
+          // (Importante para rankings antigos de IA que não tinham esses dados)
+          if (!enrichedKeyMetrics.roe || !enrichedKeyMetrics.roic) {
+            const { financials } = company;
+            
+            // Função auxiliar para converter valores
+            const toNumber = (value: unknown): number | null => {
+              if (value === null || value === undefined) return null;
+              if (typeof value === 'number') return value;
+              if (typeof value === 'bigint') return Number(value);
+              if (typeof value === 'string') {
+                const parsed = parseFloat(value);
+                return isNaN(parsed) ? null : parsed;
+              }
+              // Para objetos Decimal do Prisma
+              if (typeof value === 'object' && 'toNumber' in (value as object)) {
+                return (value as { toNumber: () => number }).toNumber();
+              }
+              return null;
+            };
+            
+            // Adicionar dados fundamentais básicos se não existirem
+            if (enrichedKeyMetrics.pl === undefined) enrichedKeyMetrics.pl = toNumber(financials.pl);
+            if (enrichedKeyMetrics.pvp === undefined) enrichedKeyMetrics.pvp = toNumber(financials.pvp);
+            if (enrichedKeyMetrics.roe === undefined) enrichedKeyMetrics.roe = toNumber(financials.roe);
+            if (enrichedKeyMetrics.roic === undefined) enrichedKeyMetrics.roic = toNumber(financials.roic);
+            if (enrichedKeyMetrics.roa === undefined) enrichedKeyMetrics.roa = toNumber(financials.roa);
+            if (enrichedKeyMetrics.dy === undefined) enrichedKeyMetrics.dy = toNumber(financials.dy);
+            if (enrichedKeyMetrics.margemLiquida === undefined) enrichedKeyMetrics.margemLiquida = toNumber(financials.margemLiquida);
+            if (enrichedKeyMetrics.margemEbitda === undefined) enrichedKeyMetrics.margemEbitda = toNumber(financials.margemEbitda);
+            if (enrichedKeyMetrics.liquidezCorrente === undefined) enrichedKeyMetrics.liquidezCorrente = toNumber(financials.liquidezCorrente);
+            if (enrichedKeyMetrics.dividaLiquidaPl === undefined) enrichedKeyMetrics.dividaLiquidaPl = toNumber(financials.dividaLiquidaPl);
+            if (enrichedKeyMetrics.dividaLiquidaEbitda === undefined) enrichedKeyMetrics.dividaLiquidaEbitda = toNumber(financials.dividaLiquidaEbitda);
+            if (enrichedKeyMetrics.marketCap === undefined) enrichedKeyMetrics.marketCap = toNumber(financials.marketCap);
+            if (enrichedKeyMetrics.evEbitda === undefined) enrichedKeyMetrics.evEbitda = toNumber(financials.evEbitda);
+            if (enrichedKeyMetrics.payout === undefined) enrichedKeyMetrics.payout = toNumber(financials.payout);
+            if (enrichedKeyMetrics.earningsYield === undefined) enrichedKeyMetrics.earningsYield = toNumber(financials.earningsYield);
+            if (enrichedKeyMetrics.crescimentoLucros === undefined) enrichedKeyMetrics.crescimentoLucros = toNumber(financials.crescimentoLucros);
+            if (enrichedKeyMetrics.crescimentoReceitas === undefined) enrichedKeyMetrics.crescimentoReceitas = toNumber(financials.crescimentoReceitas);
+          }
           
           // Se o upside principal está null, calcular baseado no modelo
           if (mainUpside === null || mainUpside === undefined) {

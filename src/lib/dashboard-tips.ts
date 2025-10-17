@@ -123,7 +123,7 @@ export const DASHBOARD_TIPS: DashboardTip[] = [
     title: '🔥 Estratégias avançadas',
     description: 'Combine múltiplos modelos para criar sua própria metodologia de análise fundamentalista.',
     cta: 'Explorar Avançado',
-    ctaLink: '/metodologia',
+    ctaLink: '/screening-acoes',
     icon: '🔥',
     color: 'red',
     priority: 55,

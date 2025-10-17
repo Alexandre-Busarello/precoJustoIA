@@ -316,7 +316,8 @@ export class YouTubeAnalysisService {
       'felipe eduardo',
       'método de investimento',
       'market makers',
-      'clube dos dividendos'
+      'clube dos dividendos',
+      'louise e barsi dividendos '
     ];
     
     const channelLower = channel.toLowerCase();

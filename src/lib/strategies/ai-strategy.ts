@@ -692,6 +692,9 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
         if (companyData) {
           const eligibleStrategies = Object.values(companyData.strategies).filter((s: StrategyAnalysis) => s.isEligible).length;
           
+          // Incluir dados fundamentais básicos no key_metrics para que os filtros de ordenação funcionem
+          const { financials } = companyData.company;
+          
           results.push({
             ticker: result.ticker,
             name: companyData.company.name,
@@ -703,10 +706,30 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
             marginOfSafety: null,
             rational: result.reasoning || 'Análise gerada por IA',
             key_metrics: {
+              // Métricas específicas da IA
               compositeScore: result.score || 0,
               confidenceLevel: result.confidenceLevel || 0.5,
               eligibleStrategies: eligibleStrategies,
-              aiScore: result.score || 50
+              aiScore: result.score || 50,
+              
+              // Dados fundamentais básicos para filtros de ordenação
+              pl: toNumber(financials.pl),
+              pvp: toNumber(financials.pvp),
+              roe: toNumber(financials.roe),
+              roic: toNumber(financials.roic),
+              roa: toNumber(financials.roa),
+              dy: toNumber(financials.dy),
+              margemLiquida: toNumber(financials.margemLiquida),
+              margemEbitda: toNumber(financials.margemEbitda),
+              liquidezCorrente: toNumber(financials.liquidezCorrente),
+              dividaLiquidaPl: toNumber(financials.dividaLiquidaPl),
+              dividaLiquidaEbitda: toNumber(financials.dividaLiquidaEbitda),
+              marketCap: toNumber(financials.marketCap),
+              evEbitda: toNumber(financials.evEbitda),
+              payout: toNumber(financials.payout),
+              earningsYield: toNumber(financials.earningsYield),
+              crescimentoLucros: toNumber(financials.crescimentoLucros),
+              crescimentoReceitas: toNumber(financials.crescimentoReceitas)
             }
           });
         }

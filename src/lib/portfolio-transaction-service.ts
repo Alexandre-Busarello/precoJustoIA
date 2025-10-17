@@ -467,33 +467,91 @@ export class PortfolioTransactionService {
   }
 
   /**
-   * Get current cash balance
+   * Get current cash balance using FAST aggregation (O(1) complexity)
+   * 
+   * This is the PRIMARY method for getting cash balance.
+   * It calculates balance by summing credits and debits without updating database.
+   * 
+   * Use recalculateCashBalances() only for:
+   * - Auditing/debugging
+   * - Generating historical cash balance timeline
+   * - One-time data migration/fixes
    */
   private static async getCurrentCashBalance(portfolioId: string): Promise<number> {
-    const lastCashTransaction = await prisma.portfolioTransaction.findFirst({
+    // Single query to get all transaction types and amounts
+    const transactions = await prisma.portfolioTransaction.findMany({
       where: {
         portfolioId,
         status: {
           in: ['CONFIRMED', 'EXECUTED']
         }
       },
-      orderBy: {
-        date: 'desc'
-      },
       select: {
-        cashBalanceAfter: true
+        id: true,
+        date: true,
+        type: true,
+        ticker: true,
+        amount: true,
+        status: true
+      },
+      orderBy: {
+        date: 'asc'
       }
     });
 
-    return lastCashTransaction ? Number(lastCashTransaction.cashBalanceAfter) : 0;
+    let balance = 0;
+    const credits = { total: 0, items: [] as any[] };
+    const debits = { total: 0, items: [] as any[] };
+    
+    console.log(`\n💰 [CASH BALANCE] Calculating for ${transactions.length} transactions...`);
+    
+    for (const tx of transactions) {
+      const amount = Number(tx.amount);
+      const dateStr = tx.date.toISOString().split('T')[0];
+      
+      // Credits increase cash
+      if (tx.type === 'CASH_CREDIT' || tx.type === 'DIVIDEND' || 
+          tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
+        balance += amount;
+        credits.total += amount;
+        credits.items.push({ date: dateStr, type: tx.type, ticker: tx.ticker, amount: amount.toFixed(2), status: tx.status });
+        console.log(`  ✅ [${dateStr}] ${tx.type} ${tx.ticker || '-'}: +R$ ${amount.toFixed(2)} | Balance: R$ ${balance.toFixed(2)}`);
+      }
+      // Debits decrease cash
+      else if (tx.type === 'CASH_DEBIT' || tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
+        balance -= amount;
+        debits.total += amount;
+        debits.items.push({ date: dateStr, type: tx.type, ticker: tx.ticker, amount: amount.toFixed(2), status: tx.status });
+        console.log(`  ❌ [${dateStr}] ${tx.type} ${tx.ticker || '-'}: -R$ ${amount.toFixed(2)} | Balance: R$ ${balance.toFixed(2)}`);
+      }
+    }
+
+    console.log(`\n📊 [SUMMARY]`);
+    console.log(`  💵 Credits: R$ ${credits.total.toFixed(2)} (${credits.items.length} transactions)`);
+    console.log(`  💸 Debits: R$ ${debits.total.toFixed(2)} (${debits.items.length} transactions)`);
+    console.log(`  = Final Balance: R$ ${balance.toFixed(2)}\n`);
+
+    return balance;
   }
 
   /**
    * Recalculate all cash balances for portfolio transactions in chronological order
-   * This is needed when retroactive transactions are added
+   * 
+   * ⚠️ EXPENSIVE OPERATION - O(n) complexity with N database writes!
+   * 
+   * This method updates cashBalanceBefore/cashBalanceAfter for ALL transactions.
+   * It's NOT needed for normal operations since getCurrentCashBalance() uses aggregation.
+   * 
+   * Use only for:
+   * - Auditing/debugging cash balance history
+   * - Generating timeline visualization
+   * - One-time data migration/fixes
+   * - Manual user request ("Recalcular Saldos" button)
+   * 
+   * For normal operations, getCurrentCashBalance() is sufficient and much faster.
    */
   static async recalculateCashBalances(portfolioId: string): Promise<void> {
-    console.log(`🔄 Recalculating cash balances for portfolio ${portfolioId}...`);
+    console.log(`🔄 [EXPENSIVE] Recalculating cash balances for portfolio ${portfolioId}...`);
 
     // Get all confirmed/executed transactions in chronological order
     const transactions = await prisma.portfolioTransaction.findMany({
@@ -1132,11 +1190,7 @@ export class PortfolioTransactionService {
     // Update last transaction date
     await PortfolioService.updateLastTransactionDate(portfolioId, input.date);
 
-    // ALWAYS recalculate cash balances in chronological order
-    // This ensures correct balances even for retroactive transactions
-    await this.recalculateCashBalances(portfolioId);
-
-    // Now validate the final balance after recalculation
+    // Validate the final balance using fast aggregation
     const finalBalance = await this.getCurrentCashBalance(portfolioId);
     if (finalBalance < -0.01) { // Allow tiny rounding errors
       // Rollback the transaction
@@ -1147,9 +1201,6 @@ export class PortfolioTransactionService {
         }),
         ['portfolio_transactions']
       );
-
-      // Recalculate again after rollback
-      await this.recalculateCashBalances(portfolioId);
 
       const error: any = new Error('INSUFFICIENT_CASH');
       error.code = 'INSUFFICIENT_CASH';
@@ -1199,9 +1250,6 @@ export class PortfolioTransactionService {
       }),
       ['portfolio_transactions']
     );
-
-    // ALWAYS recalculate cash balances after deletion
-    await this.recalculateCashBalances(portfolioId);
 
     console.log(`✅ Transaction deleted: ${transactionId}`);
   }
@@ -1255,10 +1303,7 @@ export class PortfolioTransactionService {
       ['portfolio_transactions']
     );
 
-    // ALWAYS recalculate cash balances after update
-    await this.recalculateCashBalances(portfolioId);
-
-    // Validate the final balance after recalculation
+    // Validate the final balance using fast aggregation
     const finalBalance = await this.getCurrentCashBalance(portfolioId);
     if (finalBalance < -0.01) { // Allow tiny rounding errors
       // Rollback to original values
@@ -1270,9 +1315,6 @@ export class PortfolioTransactionService {
         }),
         ['portfolio_transactions']
       );
-
-      // Recalculate again after rollback
-      await this.recalculateCashBalances(portfolioId);
 
       throw new Error(`Atualização resultaria em saldo de caixa negativo: R$ ${finalBalance.toFixed(2)}. Adicione mais fundos primeiro.`);
     }

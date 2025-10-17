@@ -294,13 +294,36 @@ export class PortfolioMetricsService {
   }
 
   /**
-   * Calculate cash balance from transactions
+   * Calculate cash balance from transactions using FAST aggregation
+   * Same logic as PortfolioTransactionService.getCurrentCashBalance()
    */
   private static calculateCashBalance(transactions: any[]): number {
     if (transactions.length === 0) return 0;
     
-    const lastTransaction = transactions[transactions.length - 1];
-    return Number(lastTransaction.cashBalanceAfter);
+    let balance = 0;
+    
+    console.log(`\n💰 [METRICS - CASH BALANCE] Calculating for ${transactions.length} transactions...`);
+    
+    for (const tx of transactions) {
+      const amount = Number(tx.amount);
+      const dateStr = tx.date.toISOString().split('T')[0];
+      
+      // Credits increase cash
+      if (tx.type === 'CASH_CREDIT' || tx.type === 'DIVIDEND' || 
+          tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
+        balance += amount;
+        console.log(`  ✅ [${dateStr}] ${tx.type} ${tx.ticker || '-'}: +R$ ${amount.toFixed(2)} → R$ ${balance.toFixed(2)}`);
+      }
+      // Debits decrease cash
+      else if (tx.type === 'CASH_DEBIT' || tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
+        balance -= amount;
+        console.log(`  ❌ [${dateStr}] ${tx.type} ${tx.ticker || '-'}: -R$ ${amount.toFixed(2)} → R$ ${balance.toFixed(2)}`);
+      }
+    }
+
+    console.log(`💵 [METRICS] Final Cash Balance: R$ ${balance.toFixed(2)}\n`);
+    
+    return balance;
   }
 
   /**

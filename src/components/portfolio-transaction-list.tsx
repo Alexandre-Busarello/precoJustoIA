@@ -616,7 +616,7 @@ export function PortfolioTransactionList({
                 type="number"
                 step="0.01"
                 value={editForm.amount}
-                onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                onChange={(e) => setEditForm({ ...editForm, amount: e.target.value, price: (parseFloat(editForm.amount) / parseFloat(editForm.quantity || '0')).toFixed(2), quantity: (parseFloat(editForm.amount) / parseFloat(editForm.price || '0')).toFixed(2) })}
                 required
               />
             </div>
@@ -631,7 +631,7 @@ export function PortfolioTransactionList({
                       type="number"
                       step="0.01"
                       value={editForm.price}
-                      onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                      onChange={(e) => setEditForm({ ...editForm, price: e.target.value, amount: (parseFloat(editForm.quantity || '0') * parseFloat(e.target.value)).toFixed(2) })}
                     />
                   </div>
                   <div>
@@ -641,7 +641,7 @@ export function PortfolioTransactionList({
                       type="number"
                       step="1"
                       value={editForm.quantity}
-                      onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
+                      onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value, amount: (parseFloat(editForm.price || '0') * parseFloat(e.target.value)).toFixed(2) })}
                     />
                   </div>
                 </div>

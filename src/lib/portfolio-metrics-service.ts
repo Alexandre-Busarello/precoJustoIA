@@ -15,7 +15,7 @@ import { Prisma } from '@prisma/client';
 import { getLatestPrices as getQuotes, pricesToNumberMap } from './quote-service';
 import { HistoricalDataService } from './historical-data-service';
 import { AssetRegistrationService } from './asset-registration-service';
-import { PortfolioAnalyticsService } from './portfolio-analytics-service';
+import { PortfolioAnalytics, PortfolioAnalyticsService } from './portfolio-analytics-service';
 
 // Types
 export interface PortfolioHolding {
@@ -115,13 +115,13 @@ export class PortfolioMetricsService {
       numerator: (currentValue + cashBalance + totalWithdrawn - totalInvested).toFixed(2),
       totalReturn: (totalReturn * 100).toFixed(2) + '%'
     });
-    
+
     // Calculate monthly evolution usando o MESMO método do Analytics
-    const evolutionPoints = await PortfolioAnalyticsService.calculateEvolution(
+    const evolutionPoints = transactions && transactions.length > 0 ? await PortfolioAnalyticsService.calculateEvolution(
       portfolioId,
       transactions,
       portfolio.assets
-    );
+    ) : [];
     
     // Converter para formato do Metrics
     const evolutionData = evolutionPoints.map(point => ({

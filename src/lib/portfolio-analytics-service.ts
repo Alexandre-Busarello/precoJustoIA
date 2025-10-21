@@ -138,11 +138,12 @@ export class PortfolioAnalyticsService {
       { portfolioId }
     );
 
-    if (transactions.length === 0) {
+    if (!transactions || transactions.length === 0) {
       return this.getEmptyAnalytics();
     }
 
     // Calculate evolution
+    console.log('calculateEvolution', transactions)
     const evolution = await this.calculateEvolution(portfolioId, transactions, portfolio.assets);
     
     // Calculate benchmark comparison

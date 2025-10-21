@@ -1536,11 +1536,6 @@ export class PortfolioTransactionService {
       throw new Error('Transaction not found');
     }
 
-    // Only allow updating PENDING or EXECUTED (manual) transactions
-    if (transaction.status === 'CONFIRMED' && transaction.isAutoSuggested) {
-      throw new Error('Cannot edit confirmed auto-suggested transactions. Revert to pending first.');
-    }
-
     const portfolioId = transaction.portfolioId;
 
     // Store original values for potential rollback

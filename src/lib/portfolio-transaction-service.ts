@@ -13,6 +13,8 @@ import { TransactionType, TransactionStatus } from '@prisma/client';
 import { safeWrite } from '@/lib/prisma-wrapper';
 import { PortfolioService } from './portfolio-service';
 import { getLatestPrices as getQuotes, pricesToNumberMap } from './quote-service';
+import { DividendService } from './dividend-service';
+import { AssetRegistrationService } from './asset-registration-service';
 
 // Types
 export interface TransactionInput {
@@ -125,6 +127,27 @@ export class PortfolioTransactionService {
     console.log(`🚀 [SUGGESTIONS] Starting parallel data fetch...`);
     const startTime = Date.now();
 
+    // 🧹 AUTO-CLEANUP: Remove PENDING transactions from past months
+    // This ensures that when a new month starts, old suggestions are removed
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    const deletedOldPending = await prisma.portfolioTransaction.deleteMany({
+      where: {
+        portfolioId,
+        status: 'PENDING',
+        isAutoSuggested: true,
+        date: {
+          lt: startOfCurrentMonth // Delete PENDING transactions from before this month
+        }
+      }
+    });
+
+    if (deletedOldPending.count > 0) {
+      console.log(`🧹 [AUTO-CLEANUP] Removed ${deletedOldPending.count} outdated PENDING transactions from previous months`);
+    }
+
     // OPTIMIZATION: Parallelize independent operations
     const [holdings, prices, nextDates, existingPending] = await Promise.all([
       this.getCurrentHoldings(portfolioId),
@@ -194,6 +217,21 @@ export class PortfolioTransactionService {
       } else {
         console.log(`✅ [PORTFOLIO BALANCED] No rebalancing needed`);
       }
+    }
+
+    // DIVIDEND SUGGESTIONS: Check for pending dividends in current month
+    console.log(`💰 [DIVIDENDS] Checking for pending dividend payments...`);
+    const dividendSuggestions = await this.generateDividendSuggestions(
+      portfolioId,
+      holdings,
+      prices
+    );
+    
+    if (dividendSuggestions.length > 0) {
+      console.log(`💵 [DIVIDENDS] ${dividendSuggestions.length} dividend transactions suggested`);
+      suggestions.push(...dividendSuggestions);
+    } else {
+      console.log(`✅ [DIVIDENDS] No pending dividends for current month`);
     }
 
     // INTELLIGENCE: Filter out suggestions that already exist as PENDING
@@ -352,7 +390,7 @@ export class PortfolioTransactionService {
     const currentAllocations = this.calculateCurrentAllocations(holdings, prices, portfolioValue);
     
     // Check if rebalancing is needed
-    // Criteria: >5 percentage points absolute OR >20% relative deviation
+    // Criteria: >2 percentage points absolute OR >15% relative deviation
     const deviations: Array<{ ticker: string; current: number; target: number; diff: number }> = [];
     
     for (const asset of portfolio.assets) {
@@ -363,8 +401,8 @@ export class PortfolioTransactionService {
       const absoluteDiff = Math.abs(diff);
       const relativeDeviation = targetAlloc > 0 ? Math.abs(diff / targetAlloc) : 0;
       
-      // Needs rebalancing if absolute diff > 5% OR relative deviation > 20%
-      if (absoluteDiff > 0.05 || relativeDeviation > 0.20) {
+      // Needs rebalancing if absolute diff > 2% OR relative deviation > 15%
+      if (absoluteDiff > 0.02 || relativeDeviation > 0.15) {
         deviations.push({
           ticker: asset.ticker,
           current: currentAlloc,
@@ -671,7 +709,91 @@ export class PortfolioTransactionService {
   }
 
   /**
+   * Generate dividend suggestions for assets in custody
+   * Only suggests dividends that:
+   * 1. Are in the current month
+   * 2. Ex-date has already passed
+   * 3. User has position in custody
+   */
+  private static async generateDividendSuggestions(
+    portfolioId: string,
+    holdings: Map<string, { quantity: number; totalInvested: number }>,
+    prices: Map<string, number>
+  ): Promise<SuggestedTransaction[]> {
+    const suggestions: SuggestedTransaction[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get current portfolio cash balance
+    const latestTransaction = await prisma.portfolioTransaction.findFirst({
+      where: {
+        portfolioId,
+        status: { in: ['CONFIRMED', 'EXECUTED'] }
+      },
+      orderBy: {
+        date: 'desc'
+      },
+      select: {
+        cashBalanceAfter: true
+      }
+    });
+
+    let cashBalance = Number(latestTransaction?.cashBalanceAfter || 0);
+
+    // Check each asset in holdings for dividends
+    for (const [ticker, holding] of holdings) {
+      if (holding.quantity <= 0) continue; // Skip if no position
+
+      // First, ensure we have dividend data for this asset
+      // This will fetch from Yahoo if not present
+      try {
+        await DividendService.fetchAndSaveDividends(ticker);
+      } catch (error) {
+        console.log(`⚠️ [DIVIDEND] Error fetching dividends for ${ticker}:`, error);
+        continue;
+      }
+
+      // Get dividends in current month that have already been paid
+      const pendingDividends = await DividendService.getCurrentMonthDividends(ticker);
+      
+      for (const dividend of pendingDividends) {
+        // Only suggest if ex-date has passed
+        if (dividend.exDate > today) {
+          console.log(`⏰ [DIVIDEND SKIP] ${ticker}: Ex-date ${dividend.exDate.toISOString().split('T')[0]} hasn't passed yet`);
+          continue;
+        }
+
+        // Calculate total dividend amount for user's position
+        const totalDividendAmount = dividend.amount * holding.quantity;
+
+        if (totalDividendAmount <= 0) continue;
+
+        const dividendDate = dividend.paymentDate || dividend.exDate;
+
+        suggestions.push({
+          date: dividendDate,
+          type: 'DIVIDEND' as TransactionType,
+          ticker: ticker,
+          amount: totalDividendAmount,
+          quantity: holding.quantity, // Store quantity for reference
+          price: dividend.amount, // Store per-share dividend amount as price
+          reason: `Dividendo de ${ticker}: R$ ${dividend.amount.toFixed(4)}/ação × ${holding.quantity} ações = R$ ${totalDividendAmount.toFixed(2)}`,
+          cashBalanceBefore: cashBalance,
+          cashBalanceAfter: cashBalance + totalDividendAmount
+        });
+
+        cashBalance += totalDividendAmount; // Update for next iteration
+
+        console.log(`💵 [DIVIDEND FOUND] ${ticker}: ${holding.quantity} shares × R$ ${dividend.amount} = R$ ${totalDividendAmount.toFixed(2)}`);
+      }
+    }
+
+    return suggestions;
+  }
+
+  /**
    * Generate rebalancing transactions
+   * Prioritizes selling profitable assets first to avoid selling assets with negative returns
    */
   private static generateRebalanceTransactions(
     assets: any[],
@@ -685,23 +807,84 @@ export class PortfolioTransactionService {
     const suggestions: SuggestedTransaction[] = [];
     let cashBalance = availableCash;
 
-    // First, sell overallocated assets
-    for (const asset of assets) {
-      const currentAlloc = currentAllocations.get(asset.ticker) || 0;
-      const targetAlloc = Number(asset.targetAllocation);
+    // Calculate profitability for each holding
+    const profitability = new Map<string, number>();
+    for (const [ticker, holding] of holdings) {
+      const currentValue = holding.quantity * (prices.get(ticker) || 0);
+      const profit = currentValue - holding.totalInvested;
+      const profitPercent = holding.totalInvested > 0 ? profit / holding.totalInvested : 0;
+      profitability.set(ticker, profitPercent);
+    }
+
+    // Identify overallocated assets and sort by profitability (highest first)
+    // Using 2% threshold instead of 5% for more responsive rebalancing
+    const overallocatedAssets = assets
+      .map(asset => ({
+        ...asset,
+        currentAlloc: currentAllocations.get(asset.ticker) || 0,
+        targetAlloc: Number(asset.targetAllocation),
+        profitability: profitability.get(asset.ticker) || 0
+      }))
+      .filter(asset => asset.currentAlloc > asset.targetAlloc + 0.02)
+      .sort((a, b) => b.profitability - a.profitability); // Sort by profitability DESC
+
+    // Separate positive and negative profitability assets
+    const positiveAssets = overallocatedAssets.filter(a => a.profitability >= 0);
+    const negativeAssets = overallocatedAssets.filter(a => a.profitability < 0);
+
+    // Sell positive profitability assets first
+    for (const asset of positiveAssets) {
+      const price = prices.get(asset.ticker);
+      if (!price) continue;
+
+      const holding = holdings.get(asset.ticker);
+      if (!holding || holding.quantity === 0) continue;
+
+      const excessValue = (asset.currentAlloc - asset.targetAlloc) * portfolioValue;
+      const sharesToSell = Math.floor(excessValue / price);
       
-      if (currentAlloc > targetAlloc + 0.05) {
+      // Only sell if we can sell at least 1 share
+      if (sharesToSell >= 1) {
+        const actualSellAmount = sharesToSell * price;
+        const profitText = asset.profitability >= 0 
+          ? `+${(asset.profitability * 100).toFixed(1)}%` 
+          : `${(asset.profitability * 100).toFixed(1)}%`;
+        
+        suggestions.push({
+          date,
+          type: 'SELL_REBALANCE',
+          ticker: asset.ticker,
+          amount: actualSellAmount,
+          price,
+          quantity: sharesToSell,
+          reason: `Rebalanceamento: venda de ${sharesToSell} ações (alocação atual ${(asset.currentAlloc * 100).toFixed(1)}% > alvo ${(asset.targetAlloc * 100).toFixed(1)}%, rentabilidade: ${profitText})`,
+          cashBalanceBefore: cashBalance,
+          cashBalanceAfter: cashBalance + actualSellAmount
+        });
+        
+        cashBalance += actualSellAmount;
+      }
+    }
+
+    // Only sell negative profitability assets if no positive alternatives remain
+    // This avoids crystallizing losses unnecessarily
+    if (positiveAssets.length === 0 && negativeAssets.length > 0) {
+      console.warn('⚠️ REBALANCING: No profitable overallocated assets available. Selling negative profitability assets as last resort.');
+      
+      for (const asset of negativeAssets) {
         const price = prices.get(asset.ticker);
         if (!price) continue;
 
         const holding = holdings.get(asset.ticker);
         if (!holding || holding.quantity === 0) continue;
 
-        const excessValue = (currentAlloc - targetAlloc) * portfolioValue;
+        const excessValue = (asset.currentAlloc - asset.targetAlloc) * portfolioValue;
         const sharesToSell = Math.floor(excessValue / price);
         
-        if (sharesToSell > 0) {
+        // Only sell if we can sell at least 1 share
+        if (sharesToSell >= 1) {
           const actualSellAmount = sharesToSell * price;
+          const profitText = `${(asset.profitability * 100).toFixed(1)}%`;
           
           suggestions.push({
             date,
@@ -710,7 +893,7 @@ export class PortfolioTransactionService {
             amount: actualSellAmount,
             price,
             quantity: sharesToSell,
-            reason: `Rebalanceamento: venda de ${sharesToSell} ações (alocação atual ${(currentAlloc * 100).toFixed(1)}% > alvo ${(targetAlloc * 100).toFixed(1)}%)`,
+            reason: `Rebalanceamento: venda de ${sharesToSell} ações (alocação atual ${(asset.currentAlloc * 100).toFixed(1)}% > alvo ${(asset.targetAlloc * 100).toFixed(1)}%, rentabilidade: ${profitText})`,
             cashBalanceBefore: cashBalance,
             cashBalanceAfter: cashBalance + actualSellAmount
           });
@@ -721,18 +904,20 @@ export class PortfolioTransactionService {
     }
 
     // Then, buy underallocated assets
+    // Using 2% threshold instead of 5% for more responsive rebalancing
     for (const asset of assets) {
       const currentAlloc = currentAllocations.get(asset.ticker) || 0;
       const targetAlloc = Number(asset.targetAllocation);
       
-      if (currentAlloc < targetAlloc - 0.05 && cashBalance > 0) {
+      if (currentAlloc < targetAlloc - 0.02 && cashBalance > 0) {
         const price = prices.get(asset.ticker);
         if (!price) continue;
 
         const deficitValue = Math.min((targetAlloc - currentAlloc) * portfolioValue, cashBalance);
         const sharesToBuy = Math.floor(deficitValue / price);
         
-        if (sharesToBuy > 0) {
+        // Only buy if we can buy at least 1 share
+        if (sharesToBuy >= 1) {
           const actualBuyAmount = sharesToBuy * price;
           
           suggestions.push({
@@ -750,6 +935,27 @@ export class PortfolioTransactionService {
           cashBalance -= actualBuyAmount;
         }
       }
+    }
+
+    // Validate rebalancing transactions (sells should generate buys)
+    const sells = suggestions.filter(s => s.type === 'SELL_REBALANCE');
+    const buys = suggestions.filter(s => s.type === 'BUY_REBALANCE');
+    const totalSold = sells.reduce((sum, s) => sum + s.amount, 0);
+    const totalBought = buys.reduce((sum, s) => sum + s.amount, 0);
+
+    if (sells.length > 0 && buys.length === 0) {
+      console.warn('⚠️ REBALANCING: Generated sells without buys!', { 
+        totalSold, 
+        sellCount: sells.length,
+        availableCash: cashBalance
+      });
+    } else if (sells.length > 0 && buys.length > 0) {
+      console.log(`✅ REBALANCING: Paired transactions generated`, {
+        sells: sells.length,
+        buys: buys.length,
+        totalSold: totalSold.toFixed(2),
+        totalBought: totalBought.toFixed(2)
+      });
     }
 
     return suggestions;

@@ -27,6 +27,8 @@ import { ConvertBacktestModal } from '@/components/convert-backtest-modal';
 import { GenerateBacktestModal } from '@/components/generate-backtest-modal';
 import { PortfolioAssetManager } from '@/components/portfolio-asset-manager';
 import { PortfolioNegativeCashAlert } from '@/components/portfolio-negative-cash-alert';
+import { PortfolioAnalytics } from '@/components/portfolio-analytics';
+import { portfolioCache } from '@/lib/portfolio-cache';
 import {
   Dialog,
   DialogContent,
@@ -84,9 +86,13 @@ export function PortfolioPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, portfolios]);
 
-  const loadPortfolios = async () => {
+  const loadPortfolios = async (silent = false) => {
     try {
-      setLoading(true);
+      // Only show loading on initial load, not on updates
+      if (!silent) {
+        setLoading(true);
+      }
+      
       const response = await fetch('/api/portfolio');
       
       if (!response.ok) {
@@ -97,13 +103,17 @@ export function PortfolioPageClient() {
       setPortfolios(data.portfolios || []);
     } catch (error) {
       console.error('Erro ao carregar carteiras:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar suas carteiras',
-        variant: 'destructive'
-      });
+      if (!silent) {
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível carregar suas carteiras',
+          variant: 'destructive'
+        });
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -183,7 +193,7 @@ export function PortfolioPageClient() {
               mode="create"
               onSuccess={() => {
                 setShowCreateModal(false);
-                loadPortfolios();
+                loadPortfolios(true);
               }}
               onCancel={() => setShowCreateModal(false)}
             />
@@ -305,7 +315,7 @@ export function PortfolioPageClient() {
         {currentPortfolio ? (
           <PortfolioDetails 
             portfolio={currentPortfolio}
-            onUpdate={loadPortfolios}
+            onUpdate={() => loadPortfolios(true)}
           />
         ) : (
           <Card>
@@ -400,28 +410,27 @@ function PortfolioDetails({
 
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 gap-1">
-            <TabsTrigger value="overview" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
-              <TrendingUp className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Visão Geral</span>
-              <span className="sm:hidden">Visão</span>
-            </TabsTrigger>
-            <TabsTrigger value="transactions" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
-              <Receipt className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Transações</span>
-              <span className="sm:hidden">Trans.</span>
-            </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
-              <BarChart3 className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Análises</span>
-              <span className="sm:hidden">Análise</span>
-            </TabsTrigger>
-            <TabsTrigger value="config" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
-              <Settings className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Configuração</span>
-              <span className="sm:hidden">Config</span>
-            </TabsTrigger>
-          </TabsList>
+          {/* Mobile: Scroll horizontal | Desktop: Grid */}
+          <div className="w-full overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible">
+            <TabsList className="inline-flex md:grid w-auto md:w-full md:grid-cols-4 gap-1 min-w-full md:min-w-0">
+              <TabsTrigger value="overview" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+                <TrendingUp className="h-4 w-4 flex-shrink-0" />
+                <span>Visão Geral</span>
+              </TabsTrigger>
+              <TabsTrigger value="transactions" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+                <Receipt className="h-4 w-4 flex-shrink-0" />
+                <span>Transações</span>
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+                <BarChart3 className="h-4 w-4 flex-shrink-0" />
+                <span>Análises</span>
+              </TabsTrigger>
+              <TabsTrigger value="config" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+                <Settings className="h-4 w-4 flex-shrink-0" />
+                <span>Configuração</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="overview" className="space-y-4 mt-6">
             <PortfolioOverview 
@@ -441,7 +450,7 @@ function PortfolioDetails({
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-4 mt-6">
-            <PortfolioAnalytics />
+            <PortfolioAnalytics portfolioId={portfolio.id} />
           </TabsContent>
 
           <TabsContent value="config" className="space-y-4 mt-6">
@@ -473,18 +482,34 @@ function PortfolioOverview({
   const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showTransactionForm, setShowTransactionForm] = useState(false);
 
+  // Reactive update - only reloads local data without full page refresh
   const handleUpdate = () => {
     setRefreshKey(prev => prev + 1);
-    onUpdate();
+    loadMetrics(); // Reload only metrics
+    onUpdate(); // Notify parent to update portfolio selector badges
   };
 
-  const loadMetrics = async () => {
+  const loadMetrics = async (forceRefresh = false) => {
     try {
       setLoading(true);
+      
+      // Try cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cached = portfolioCache.metrics.get(portfolioId);
+        if (cached) {
+          setMetrics(cached);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Fetch from API
       const response = await fetch(`/api/portfolio/${portfolioId}/metrics`);
       if (response.ok) {
         const data = await response.json();
+        portfolioCache.metrics.set(portfolioId, data.metrics);
         setMetrics(data.metrics);
       }
     } catch (error) {
@@ -498,6 +523,14 @@ function PortfolioOverview({
     loadMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId]);
+
+  // Reload metrics when refreshKey changes
+  useEffect(() => {
+    if (refreshKey > 0) {
+      loadMetrics();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   return (
     <div className="space-y-6">
@@ -513,9 +546,20 @@ function PortfolioOverview({
       )}
       
       <div>
-        <h3 className="text-lg font-semibold mb-4">Transações Pendentes</h3>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <h3 className="text-lg font-semibold">Transações Pendentes</h3>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowTransactionForm(true)}
+            className="w-full sm:w-auto"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Transação
+          </Button>
+        </div>
         <PortfolioTransactionSuggestions
-          key={`overview-suggestions-${refreshKey}`}
+          key={`overview-suggestions-${portfolioId}-${refreshKey}`}
           portfolioId={portfolioId}
           trackingStarted={trackingStarted}
           onTrackingStart={handleUpdate}
@@ -526,10 +570,30 @@ function PortfolioOverview({
       <div>
         <h3 className="text-lg font-semibold mb-4">Posições Atuais</h3>
         <PortfolioHoldingsTable 
-          key={`overview-holdings-${refreshKey}`}
+          key={`overview-holdings-${portfolioId}-${refreshKey}`}
           portfolioId={portfolioId} 
         />
       </div>
+
+      {/* Transaction Form Modal */}
+      <Dialog open={showTransactionForm} onOpenChange={setShowTransactionForm}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Registrar Transação Manual</DialogTitle>
+            <DialogDescription>
+              Adicione uma transação manualmente à sua carteira
+            </DialogDescription>
+          </DialogHeader>
+          <PortfolioTransactionForm
+            portfolioId={portfolioId}
+            onSuccess={() => {
+              setShowTransactionForm(false);
+              handleUpdate();
+            }}
+            onCancel={() => setShowTransactionForm(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -546,10 +610,10 @@ function PortfolioTransactions({
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Callback to refresh transactions and metrics after changes
+  // Reactive update - only refreshes local components without full page reload
   const handleTransactionUpdate = async () => {
     setRefreshKey(prev => prev + 1);
-    onUpdate();
+    onUpdate(); // Notify parent to update portfolio selector badges only
   };
 
   return (
@@ -557,7 +621,7 @@ function PortfolioTransactions({
       <div>
         <h3 className="text-lg font-semibold mb-4">Transações Sugeridas</h3>
         <PortfolioTransactionSuggestions
-          key={`suggestions-${refreshKey}`}
+          key={`suggestions-${portfolioId}-${refreshKey}`}
           portfolioId={portfolioId}
           trackingStarted={trackingStarted}
           onTrackingStart={handleTransactionUpdate}
@@ -603,15 +667,6 @@ function PortfolioTransactions({
   );
 }
 
-function PortfolioAnalytics() {
-  return (
-    <div className="text-center py-8 text-muted-foreground">
-      <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-      <p>Gráficos de evolução e análises detalhadas</p>
-      <p className="text-sm mt-2">Em desenvolvimento</p>
-    </div>
-  );
-}
 
 function PortfolioConfiguration({ 
   portfolio,

@@ -104,6 +104,7 @@ model Company {
   id                Int                      @id @default(autoincrement())
   ticker            String                   @unique
   name              String
+  assetType         AssetType                @default(STOCK) @map("asset_type")
   sector            String?
   industry          String?
   cnpj              String?
@@ -125,6 +126,12 @@ model Company {
   sectorDisp        String?
   sectorKey         String?
   zip               String?
+  
+  // Dividend tracking (quick access)
+  ultimoDividendo     Decimal?  @map("ultimo_dividendo") @db.Decimal(15, 6)
+  dataUltimoDividendo DateTime? @map("data_ultimo_dividendo") @db.Date
+  
+  // Relations
   dailyQuotes       DailyQuote[]
   historicalPrices  HistoricalPrice[]
   financialData     FinancialData[]
@@ -139,14 +146,21 @@ model Company {
   userSubscriptions UserAssetSubscription[]
   snapshot        AssetSnapshot?
   youtubeAnalyses YouTubeAnalysis[]
+  etfData         EtfData?
+  fiiData         FiiData?
+  dividendHistory DividendHistory[]
   lastCheckedAt   DateTime? @map("last_checked_at")
   youtubeLastCheckedAt DateTime? @map("youtube_last_checked_at")
+  yahooLastUpdatedAt DateTime? @map("yahoo_last_updated_at")
 
   @@index([sector])
   @@index([industry])
   @@index([sector, industry])
+  @@index([assetType])
   @@index([lastCheckedAt])
   @@index([youtubeLastCheckedAt])
+  @@index([yahooLastUpdatedAt])
+  @@index([dataUltimoDividendo])
   @@map("companies")
 }
 
@@ -266,6 +280,30 @@ model HistoricalPrice {
   @@index([interval, date]) // Otimização para consultas por intervalo e período
   @@index([companyId, date]) // Otimização para consultas de ticker específico por período
   @@map("historical_prices")
+}
+
+// Histórico completo de dividendos pagos
+model DividendHistory {
+  id              Int      @id @default(autoincrement())
+  companyId       Int      @map("company_id")
+  exDate          DateTime @map("ex_date") @db.Date // Data ex-dividendo
+  paymentDate     DateTime? @map("payment_date") @db.Date // Data de pagamento (Yahoo Finance não fornece - sempre null)
+  amount          Decimal  @db.Decimal(15, 6) // Valor por ação
+  type            String?  // dividend, JCP, etc (se disponível)
+  currency        String?  @default("BRL") // Moeda
+  
+  // Metadata
+  source          String   @default("yahoo") // Fonte: yahoo, manual, etc
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@unique([companyId, exDate, amount]) // Evitar duplicatas
+  @@index([companyId, exDate])
+  @@index([exDate])
+  @@index([companyId, paymentDate])
+  @@map("dividend_history")
 }
 
 model Portfolio {
@@ -1128,4 +1166,53 @@ model YouTubeAnalysis {
   @@index([companyId, createdAt])
   @@index([updatedAt])
   @@map("youtube_analyses")
+}
+
+// ===== TIPOS DE ATIVOS =====
+
+enum AssetType {
+  STOCK      // Ação
+  ETF        // Exchange Traded Fund
+  FII        // Fundo Imobiliário
+  BDR        // Brazilian Depositary Receipt
+  INDEX      // Índice
+  OTHER      // Outros
+}
+
+// ===== DADOS ESPECÍFICOS POR TIPO DE ATIVO =====
+
+// Dados específicos de ETFs
+model EtfData {
+  id                Int      @id @default(autoincrement())
+  companyId         Int      @unique @map("company_id")
+  netAssets         Decimal? @map("net_assets") @db.Decimal(20, 2)
+  netExpenseRatio   Decimal? @map("net_expense_ratio") @db.Decimal(5, 4)
+  dividendYield     Decimal? @map("dividend_yield") @db.Decimal(15, 6)
+  ytdReturn         Decimal? @map("ytd_return") @db.Decimal(15, 6)
+  category          String?
+  totalAssets       Decimal? @map("total_assets") @db.Decimal(20, 2)
+  updatedAt         DateTime? @updatedAt
+  
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("etf_data")
+}
+
+// Dados específicos de FIIs (Fundos Imobiliários)
+model FiiData {
+  id                    Int      @id @default(autoincrement())
+  companyId             Int      @unique @map("company_id")
+  netAssets             Decimal? @map("net_assets") @db.Decimal(20, 2)
+  dividendYield         Decimal? @map("dividend_yield") @db.Decimal(15, 6)
+  lastDividendValue     Decimal? @map("last_dividend_value") @db.Decimal(15, 6)
+  lastDividendDate      DateTime? @map("last_dividend_date") @db.Date
+  patrimonioLiquido     Decimal? @map("patrimonio_liquido") @db.Decimal(20, 2)
+  valorPatrimonial      Decimal? @map("valor_patrimonial") @db.Decimal(15, 6)
+  updatedAt             DateTime? @updatedAt
+  
+  company               Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("fii_data")
 }

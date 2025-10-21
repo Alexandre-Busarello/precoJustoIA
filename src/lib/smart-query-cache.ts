@@ -41,6 +41,7 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   'financialData': 'financial_data',
   'dailyQuote': 'daily_quotes',
   'historicalPrice': 'historical_prices',
+  'dividendHistory': 'dividend_history',
   'priceOscillations': 'price_oscillations',
   
   // Financial Statements
@@ -81,6 +82,10 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   // YouTube Analysis
   'youTubeAnalysis': 'youtube_analyses',
   
+  // Asset Type Specific Data
+  'etfData': 'etf_data',
+  'fiiData': 'fii_data',
+  
   // Processing
   'tickerProcessingStatus': 'ticker_processing_status',
   'alfaWaitlist': 'alfa_waitlist'
@@ -90,9 +95,10 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
 // Quando uma tabela é modificada, invalida cache de tabelas relacionadas
 const TABLE_DEPENDENCIES: Record<string, string[]> = {
   // Empresas e dados relacionados
-  'companies': ['companies', 'financial_data', 'daily_quotes', 'key_statistics'],
+  'companies': ['companies', 'financial_data', 'daily_quotes', 'key_statistics', 'dividend_history'],
   'financial_data': ['companies', 'financial_data', 'key_statistics'],
   'daily_quotes': ['companies', 'daily_quotes', 'key_statistics'],
+  'dividend_history': ['companies', 'dividend_history'],
   'key_statistics': ['companies', 'key_statistics'],
   
   // Demonstrações financeiras
@@ -132,6 +138,10 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   
   // YouTube Analysis
   'youtube_analyses': ['companies', 'youtube_analyses', 'asset_snapshots'],
+  
+  // Asset Type Specific Data
+  'etf_data': ['companies', 'etf_data'],
+  'fii_data': ['companies', 'fii_data'],
   
   // Dados de mercado
   'historical_prices': ['companies', 'historical_prices'],

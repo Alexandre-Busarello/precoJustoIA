@@ -45,6 +45,7 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
   
   useEffect(() => {
     loadAssets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId]);
 
   const loadAssets = async () => {
@@ -81,32 +82,74 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
   const isValid = totalPercent >= 99.5 && totalPercent <= 100.5;
 
   const handleAddAsset = async () => {
-    if (!newTicker || !newAllocation) {
+    if (!newTicker) {
       toast({
-        title: 'Campos obrigatórios',
-        description: 'Preencha o ticker e a alocação',
+        title: 'Ticker obrigatório',
+        description: 'Preencha o ticker do ativo',
         variant: 'destructive'
       });
       return;
     }
 
     const ticker = newTicker.toUpperCase().trim();
-    const allocation = parseFloat(newAllocation) / 100;
-
-    if (isNaN(allocation) || allocation <= 0 || allocation > 1) {
+    
+    if (assets.some(a => a.ticker === ticker)) {
       toast({
-        title: 'Alocação inválida',
-        description: 'A alocação deve ser entre 0.1% e 100%',
+        title: 'Ativo já existe',
+        description: 'Este ativo já está na carteira',
         variant: 'destructive'
       });
       return;
     }
 
+    // Validate allocation if provided
+    let newAllocValue: number;
+    
+    if (newAllocation && newAllocation.trim() !== '') {
+      const parsedAlloc = parseFloat(newAllocation) / 100;
+      
+      if (isNaN(parsedAlloc) || parsedAlloc <= 0 || parsedAlloc > 1) {
+        toast({
+          title: 'Alocação inválida',
+          description: 'A alocação deve ser entre 0.1% e 100%',
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      newAllocValue = parsedAlloc;
+    } else {
+      // If no allocation provided, calculate equal distribution
+      // New asset gets same weight as existing assets
+      const totalAssets = assets.length + 1;
+      newAllocValue = 1 / totalAssets;
+      
+      toast({
+        title: 'Alocação automática',
+        description: `Sem % informado. Será distribuído igualmente: ${(newAllocValue * 100).toFixed(1)}% para cada ativo`,
+        variant: 'default'
+      });
+    }
+
     try {
+      setSaving(true);
+      
+      // Redistribute existing assets proportionally
+      const currentTotal = assets.reduce((sum, a) => sum + a.targetAllocation, 0);
+      const remainingAllocation = 1 - newAllocValue;
+      
+      const updatedAssets = assets.map(a => ({
+        ticker: a.ticker,
+        targetAllocation: currentTotal > 0 
+          ? (a.targetAllocation / currentTotal) * remainingAllocation 
+          : remainingAllocation / assets.length
+      }));
+
+      // Add new asset
       const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker, targetAllocation: allocation })
+        body: JSON.stringify({ ticker, targetAllocation: newAllocValue })
       });
 
       if (!response.ok) {
@@ -114,9 +157,22 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
         throw new Error(error.error || 'Erro ao adicionar ativo');
       }
 
+      // Update existing assets with new allocations
+      if (updatedAssets.length > 0) {
+        const updateResponse = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assets: updatedAssets })
+        });
+
+        if (!updateResponse.ok) {
+          console.error('Failed to update existing assets allocations');
+        }
+      }
+
       toast({
         title: 'Ativo adicionado!',
-        description: `${ticker} foi adicionado à carteira`
+        description: `${ticker} foi adicionado com ${(newAllocValue * 100).toFixed(1)}% e as demais alocações foram redistribuídas`
       });
 
       setNewTicker('');
@@ -131,6 +187,8 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
         description: error instanceof Error ? error.message : 'Erro ao adicionar ativo',
         variant: 'destructive'
       });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -140,6 +198,13 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
     }
 
     try {
+      setSaving(true);
+      
+      // Find the asset being removed
+      const removedAsset = assets.find(a => a.ticker === ticker);
+      if (!removedAsset) return;
+
+      // Remove the asset
       const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -151,9 +216,34 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
         throw new Error(error.error || 'Erro ao remover ativo');
       }
 
+      // Redistribute the removed allocation proportionally to remaining assets
+      const remainingAssets = assets.filter(a => a.ticker !== ticker);
+      if (remainingAssets.length > 0) {
+        const remainingTotal = remainingAssets.reduce((sum, a) => sum + a.targetAllocation, 0);
+        const removedAllocation = removedAsset.targetAllocation;
+        
+        const updatedAssets = remainingAssets.map(a => ({
+          ticker: a.ticker,
+          targetAllocation: remainingTotal > 0
+            ? a.targetAllocation + (a.targetAllocation / remainingTotal) * removedAllocation
+            : (1 / remainingAssets.length)
+        }));
+
+        // Update remaining assets with redistributed allocations
+        const updateResponse = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assets: updatedAssets })
+        });
+
+        if (!updateResponse.ok) {
+          console.error('Failed to update remaining assets allocations');
+        }
+      }
+
       toast({
         title: 'Ativo removido!',
-        description: `${ticker} foi removido da carteira`
+        description: `${ticker} foi removido e as demais alocações foram redistribuídas`
       });
 
       loadAssets();
@@ -165,6 +255,8 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
         description: error instanceof Error ? error.message : 'Erro ao remover ativo',
         variant: 'destructive'
       });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -181,15 +273,19 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
     try {
       setSaving(true);
 
-      const updates = assets.map(asset => ({
+      // Normalize allocations to sum exactly 100% if needed
+      const currentTotal = assets.reduce((sum, a) => sum + a.targetAllocation, 0);
+      const normalizedAssets = assets.map(asset => ({
         ticker: asset.ticker,
-        targetAllocation: asset.targetAllocation
+        targetAllocation: currentTotal !== 1 
+          ? asset.targetAllocation / currentTotal 
+          : asset.targetAllocation
       }));
 
       const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assets: updates })
+        body: JSON.stringify({ assets: normalizedAssets })
       });
 
       if (!response.ok) {
@@ -199,9 +295,12 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
 
       toast({
         title: 'Alocações salvas!',
-        description: 'As alterações foram aplicadas com sucesso'
+        description: currentTotal !== 1 
+          ? 'As alocações foram normalizadas para 100% e salvas com sucesso'
+          : 'As alterações foram aplicadas com sucesso'
       });
 
+      loadAssets(); // Reload to show normalized values
       onUpdate();
     } catch (error) {
       console.error('Erro ao salvar alocações:', error);
@@ -259,7 +358,7 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
                 <div className="space-y-3">
                   {assets.map((asset, index) => (
                     <div 
-                      key={asset.id}
+                      key={`asset-${asset.id}`}
                       className="flex items-center gap-4 p-3 border rounded-lg bg-card"
                     >
                       <div className="flex-1">
@@ -278,6 +377,7 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
                           value={(asset.targetAllocation * 100).toFixed(2)}
                           onChange={(e) => updateAllocation(index, e.target.value)}
                           className="mt-1"
+                          disabled={saving}
                         />
                       </div>
                       <Button
@@ -285,8 +385,14 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
                         size="sm"
                         onClick={() => handleRemoveAsset(asset.ticker)}
                         className="text-destructive hover:text-destructive"
+                        disabled={saving}
+                        title={saving ? 'Aguarde...' : 'Remover ativo'} 
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {saving ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-destructive"></div>
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   ))}
@@ -340,7 +446,7 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
       </Card>
 
       {/* Add Asset Modal */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+      <Dialog open={showAddModal} onOpenChange={(open) => !saving && setShowAddModal(open)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Adicionar Ativo</DialogTitle>
@@ -357,10 +463,11 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
                 onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
                 placeholder="Ex: PETR4"
                 className="uppercase"
+                disabled={saving}
               />
             </div>
             <div>
-              <Label htmlFor="newAllocation">Alocação (%) *</Label>
+              <Label htmlFor="newAllocation">Alocação (%) <span className="text-muted-foreground font-normal">(opcional)</span></Label>
               <Input
                 id="newAllocation"
                 type="number"
@@ -369,12 +476,26 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
                 max="100"
                 value={newAllocation}
                 onChange={(e) => setNewAllocation(e.target.value)}
-                placeholder="Ex: 10.5"
+                placeholder="Deixe vazio para distribuição automática"
+                disabled={saving}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Você pode ajustar as demais alocações depois
+                💡 Se não informar, o ativo será incluído com distribuição igualitária entre todos os ativos
               </p>
             </div>
+            
+            {saving && (
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-sm text-blue-900 dark:text-blue-100">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="font-medium">Processando alterações...</span>
+                </div>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1 ml-6">
+                  Adicionando ativo e redistribuindo alocações
+                </p>
+              </div>
+            )}
+            
             <div className="flex justify-end gap-2">
               <Button 
                 variant="outline" 
@@ -383,11 +504,19 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
                   setNewAllocation('');
                   setShowAddModal(false);
                 }}
+                disabled={saving}
               >
                 Cancelar
               </Button>
-              <Button onClick={handleAddAsset}>
-                Adicionar
+              <Button onClick={handleAddAsset} disabled={saving}>
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Adicionando...
+                  </>
+                ) : (
+                  'Adicionar'
+                )}
               </Button>
             </div>
           </div>

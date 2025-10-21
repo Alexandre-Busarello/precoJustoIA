@@ -13,6 +13,9 @@ import { safeWrite } from '@/lib/prisma-wrapper';
 import { PortfolioService } from './portfolio-service';
 import { Prisma } from '@prisma/client';
 import { getLatestPrices as getQuotes, pricesToNumberMap } from './quote-service';
+import { HistoricalDataService } from './historical-data-service';
+import { AssetRegistrationService } from './asset-registration-service';
+import { PortfolioAnalyticsService } from './portfolio-analytics-service';
 
 // Types
 export interface PortfolioHolding {
@@ -43,7 +46,7 @@ export interface PortfolioMetricsData {
   maxDrawdown: number | null;
   holdings: PortfolioHolding[];
   monthlyReturns: { date: string; return: number; portfolioValue: number }[];
-  evolutionData: { date: string; value: number; cashBalance: number }[];
+  evolutionData: { date: string; value: number; cashBalance: number; invested: number }[];
   sectorAllocation: { sector: string; value: number; percentage: number }[];
   industryAllocation: { industry: string; value: number; percentage: number }[];
 }
@@ -60,11 +63,25 @@ export class PortfolioMetricsService {
     portfolioId: string,
     userId: string
   ): Promise<PortfolioMetricsData> {
-    // Verify ownership
-    const portfolio = await PortfolioService.getPortfolioConfig(portfolioId, userId);
+    // Verify ownership and get assets
+    const portfolio = await prisma.portfolioConfig.findFirst({
+      where: {
+        id: portfolioId,
+        userId: userId
+      },
+      include: {
+        assets: {
+          where: { isActive: true }
+        }
+      }
+    });
+    
     if (!portfolio) {
       throw new Error('Portfolio not found');
     }
+
+    // NOVO: Garantir que todos os ativos da carteira estão cadastrados
+    await this.ensurePortfolioAssetsRegistered(portfolioId);
 
     // Get all confirmed/executed transactions
     const transactions = await this.getExecutedTransactions(portfolioId);
@@ -96,8 +113,22 @@ export class PortfolioMetricsService {
       totalReturn: (totalReturn * 100).toFixed(2) + '%'
     });
     
-    // Calculate monthly evolution
-    const evolutionData = await this.calculateEvolutionData(portfolioId, transactions);
+    // Calculate monthly evolution usando o MESMO método do Analytics
+    const evolutionPoints = await PortfolioAnalyticsService.calculateEvolution(
+      portfolioId,
+      transactions,
+      portfolio.assets
+    );
+    
+    // Converter para formato do Metrics
+    const evolutionData = evolutionPoints.map(point => ({
+      date: point.date.substring(0, 7), // YYYY-MM-DD -> YYYY-MM
+      value: point.value,
+      cashBalance: point.cashBalance,
+      invested: point.invested
+    }));
+    
+    console.log('📊 [METRICS EVOLUTION] Usando dados do Analytics:', evolutionData);
     
     // Calculate monthly returns
     const monthlyReturns = this.calculateMonthlyReturns(evolutionData);
@@ -106,7 +137,15 @@ export class PortfolioMetricsService {
     const volatility = this.calculateVolatility(monthlyReturns);
     const annualizedReturn = this.calculateAnnualizedReturn(totalReturn, evolutionData.length);
     const sharpeRatio = volatility && annualizedReturn ? this.calculateSharpeRatio(annualizedReturn, volatility) : null;
-    const maxDrawdown = this.calculateMaxDrawdown(evolutionData);
+    
+    // Calculate maxDrawdown usando o MESMO método do Analytics
+    const { drawdownHistory } = PortfolioAnalyticsService.calculateDrawdown(evolutionPoints);
+    const maxDrawdown = drawdownHistory.length > 0 
+      ? Math.abs(Math.min(...drawdownHistory.map(d => d.drawdown)) / 100)
+      : null;
+    
+    console.log('✅ [METRICS DRAWDOWN] Usando cálculo do Analytics:', 
+      maxDrawdown ? `${(maxDrawdown * 100).toFixed(2)}%` : 'N/A');
     
     // Calculate sector/industry allocations
     const sectorAllocation = await this.getSectorAllocation(holdings);
@@ -131,6 +170,75 @@ export class PortfolioMetricsService {
     };
 
     return metrics;
+  }
+
+  /**
+   * Garante que todos os ativos da carteira estão cadastrados
+   * e possuem dados históricos necessários
+   */
+  private static async ensurePortfolioAssetsRegistered(portfolioId: string): Promise<void> {
+    console.log(`\n🔍 [PORTFOLIO ASSETS] Verificando cadastro dos ativos da carteira ${portfolioId}...`);
+    
+    // Get all assets from portfolio config
+    const portfolioAssets = await prisma.portfolioConfigAsset.findMany({
+      where: {
+        portfolioId,
+        isActive: true
+      },
+      select: {
+        ticker: true
+      }
+    });
+
+    if (portfolioAssets.length === 0) {
+      console.log(`⚠️ [PORTFOLIO ASSETS] Carteira sem ativos configurados`);
+      return;
+    }
+
+    const tickers = portfolioAssets.map(a => a.ticker);
+    console.log(`📋 [PORTFOLIO ASSETS] Ativos na carteira: ${tickers.join(', ')}`);
+
+    // Check which assets are not registered in companies table
+    const existingCompanies = await prisma.company.findMany({
+      where: {
+        ticker: {
+          in: tickers
+        }
+      },
+      select: {
+        ticker: true
+      }
+    });
+
+    const existingTickers = new Set(existingCompanies.map(c => c.ticker));
+    const missingTickers = tickers.filter(t => !existingTickers.has(t));
+
+    if (missingTickers.length === 0) {
+      console.log(`✅ [PORTFOLIO ASSETS] Todos os ativos já estão cadastrados`);
+      return;
+    }
+
+    console.log(`📝 [PORTFOLIO ASSETS] Ativos não cadastrados: ${missingTickers.join(', ')}`);
+    console.log(`🔄 [PORTFOLIO ASSETS] Iniciando cadastro automático...`);
+
+    // Register missing assets
+    for (const ticker of missingTickers) {
+      try {
+        const result = await AssetRegistrationService.registerAsset(ticker);
+        if (result.success) {
+          console.log(`✅ [PORTFOLIO ASSETS] ${ticker} cadastrado com sucesso (${result.assetType})`);
+        } else {
+          console.error(`⚠️ [PORTFOLIO ASSETS] Erro ao cadastrar ${ticker}: ${result.message}`);
+        }
+      } catch (error) {
+        console.error(`❌ [PORTFOLIO ASSETS] Falha ao cadastrar ${ticker}:`, error);
+      }
+
+      // Add delay between registrations to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    console.log(`✅ [PORTFOLIO ASSETS] Verificação de cadastro concluída\n`);
   }
 
   /**
@@ -233,6 +341,13 @@ export class PortfolioMetricsService {
     // Get current prices
     const tickers = Array.from(holdingsMap.keys());
     const prices = await this.getLatestPrices(tickers);
+    
+    // Log prices for debugging
+    const pricesList: { [key: string]: number } = {};
+    for (const [ticker, price] of prices) {
+      pricesList[ticker] = price;
+    }
+    console.log('📊 [METRICS] Preços atuais:', pricesList);
     
     // Calculate total portfolio value for allocation percentages
     let totalValue = 0;
@@ -368,106 +483,10 @@ export class PortfolioMetricsService {
 
   /**
    * Calculate evolution data (monthly snapshots)
+   * Agora inclui o campo 'invested' para cálculo correto de drawdown
    */
-  private static async calculateEvolutionData(
-    portfolioId: string,
-    transactions: any[]
-  ): Promise<{ date: string; value: number; cashBalance: number }[]> {
-    const evolution: { date: string; value: number; cashBalance: number }[] = [];
-    
-    if (transactions.length === 0) return evolution;
-
-    // Group transactions by month
-    const monthlyTransactions = new Map<string, any[]>();
-    
-    for (const tx of transactions) {
-      const monthKey = tx.date.toISOString().substring(0, 7); // YYYY-MM
-      if (!monthlyTransactions.has(monthKey)) {
-        monthlyTransactions.set(monthKey, []);
-      }
-      monthlyTransactions.get(monthKey)!.push(tx);
-    }
-
-    // Calculate portfolio value at end of each month
-    const holdings = new Map<string, number>(); // ticker -> quantity
-    
-    for (const [monthKey, monthTxs] of Array.from(monthlyTransactions.entries()).sort()) {
-      // Update holdings with month's transactions
-      for (const tx of monthTxs) {
-        if (!tx.ticker) continue;
-        
-        const current = holdings.get(tx.ticker) || 0;
-        
-        if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
-          holdings.set(tx.ticker, current + Number(tx.quantity || 0));
-        } else if (tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
-          holdings.set(tx.ticker, current - Number(tx.quantity || 0));
-        }
-      }
-
-      // Get prices at end of month
-      const tickers = Array.from(holdings.keys());
-      const monthDate = new Date(monthKey + '-01');
-      const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-      
-      const prices = await this.getPricesAsOf(tickers, endOfMonth);
-      
-      // Calculate portfolio value
-      let value = 0;
-      for (const [ticker, quantity] of holdings) {
-        const price = prices.get(ticker) || 0;
-        value += quantity * price;
-      }
-
-      const lastTx = monthTxs[monthTxs.length - 1];
-      const cashBalance = Number(lastTx.cashBalanceAfter);
-      
-      evolution.push({
-        date: monthKey,
-        value: value + cashBalance,
-        cashBalance
-      });
-    }
-
-    return evolution;
-  }
-
-  /**
-   * Get prices as of a specific date
-   */
-  private static async getPricesAsOf(tickers: string[], date: Date): Promise<Map<string, number>> {
-    const prices = new Map<string, number>();
-
-    const quotes = await prisma.dailyQuote.findMany({
-      where: {
-        company: {
-          ticker: {
-            in: tickers
-          }
-        },
-        date: {
-          lte: date
-        }
-      },
-      distinct: ['companyId'],
-      orderBy: {
-        date: 'desc'
-      },
-      include: {
-        company: {
-          select: {
-            ticker: true
-          }
-        }
-      }
-    });
-
-    for (const quote of quotes) {
-      prices.set(quote.company.ticker, Number(quote.price));
-    }
-
-    return prices;
-  }
+  // ✅ Métodos calculateEvolutionData e getPricesAsOf REMOVIDOS
+  // Agora usamos PortfolioAnalyticsService.calculateEvolution() diretamente
 
   /**
    * Calculate monthly returns
@@ -494,7 +513,13 @@ export class PortfolioMetricsService {
   }
 
   /**
-   * Calculate volatility (annualized standard deviation)
+   * Calculate volatility ANUALIZADA (annualized standard deviation)
+   * 
+   * IMPORTANTE: Esta volatilidade é ANUALIZADA para fins de comparação com benchmarks
+   * e outras métricas de investimento que são tipicamente expressas em base anual.
+   * 
+   * A volatilidade em Analytics é MENSAL (não anualizada) para análise detalhada.
+   * Exemplo: Mensal = 0.10%, Anualizada = 0.10% * √12 ≈ 0.34%
    */
   private static calculateVolatility(
     monthlyReturns: { date: string; return: number; portfolioValue: number }[]
@@ -506,7 +531,7 @@ export class PortfolioMetricsService {
     const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
     const stdDev = Math.sqrt(variance);
     
-    // Annualize (monthly to yearly)
+    // Annualize (monthly to yearly) - Multiplica por √12 para anualizar
     return stdDev * Math.sqrt(12);
   }
 
@@ -528,30 +553,8 @@ export class PortfolioMetricsService {
     return (annualizedReturn - riskFreeRate) / volatility;
   }
 
-  /**
-   * Calculate maximum drawdown
-   */
-  private static calculateMaxDrawdown(
-    evolutionData: { date: string; value: number; cashBalance: number }[]
-  ): number | null {
-    if (evolutionData.length < 2) return null;
-
-    let maxDrawdown = 0;
-    let peak = evolutionData[0].value;
-
-    for (const point of evolutionData) {
-      if (point.value > peak) {
-        peak = point.value;
-      }
-      
-      const drawdown = (peak - point.value) / peak;
-      if (drawdown > maxDrawdown) {
-        maxDrawdown = drawdown;
-      }
-    }
-
-    return maxDrawdown;
-  }
+  // ✅ Método calculateMaxDrawdown REMOVIDO
+  // Agora usamos PortfolioAnalyticsService.calculateDrawdown() diretamente
 
   /**
    * Get sector allocation

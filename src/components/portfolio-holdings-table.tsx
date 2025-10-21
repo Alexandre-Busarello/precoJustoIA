@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { portfolioCache } from '@/lib/portfolio-cache';
 
 interface Holding {
   ticker: string;
@@ -44,10 +45,22 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     loadHoldings();
   }, [portfolioId]);
 
-  const loadHoldings = async () => {
+  const loadHoldings = async (forceRefresh = false) => {
     try {
       setLoading(true);
       
+      // Try cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cached = portfolioCache.holdings.get(portfolioId) as any;
+        if (cached) {
+          setHoldings(cached.holdings || []);
+          setTotalValue(cached.totalValue || 0);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Fetch from API
       const response = await fetch(`/api/portfolio/${portfolioId}/holdings`);
       
       if (!response.ok) {
@@ -55,6 +68,7 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       }
 
       const data = await response.json();
+      portfolioCache.holdings.set(portfolioId, data);
       setHoldings(data.holdings || []);
       setTotalValue(data.totalValue || 0);
     } catch (error) {

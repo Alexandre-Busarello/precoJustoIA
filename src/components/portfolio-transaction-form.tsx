@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { DollarSign, AlertTriangle, Plus } from 'lucide-react';
+import { invalidatePortfolioAnalyticsCache } from '@/components/portfolio-analytics';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -164,6 +165,9 @@ export function PortfolioTransactionForm({
         title: 'Sucesso!',
         description: responseData.message || 'Transação registrada com sucesso'
       });
+
+      // Invalidar cache de analytics
+      invalidatePortfolioAnalyticsCache(portfolioId);
 
       if (onSuccess) {
         onSuccess();

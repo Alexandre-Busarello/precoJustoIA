@@ -21,6 +21,9 @@
     },
     "src/app/api/cron/monitor-assets/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/update-portfolio-assets/route.ts": {
+      "maxDuration": 600
     }
   },
   "env": {

@@ -1,0 +1,822 @@
+[
+  {
+    "ticker": "PETR4.SA",
+    "type": "STOCK",
+    "timestamp": "2025-10-20T18:03:56.065Z",
+    "moduleSummary": {
+      "quote": {
+        "success": true,
+        "dataSize": 2451,
+        "hasData": true
+      },
+      "chart": {
+        "success": true,
+        "dataSize": 8310,
+        "hasData": true
+      },
+      "historical": {
+        "success": true,
+        "dataSize": 6482,
+        "hasData": true
+      },
+      "search": {
+        "success": true,
+        "dataSize": 2780,
+        "hasData": true
+      },
+      "quoteSummary-assetProfile": {
+        "success": true,
+        "dataSize": 3722,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistory": {
+        "success": true,
+        "dataSize": 267,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistoryQuarterly": {
+        "success": true,
+        "dataSize": 276,
+        "hasData": true
+      },
+      "quoteSummary-calendarEvents": {
+        "success": true,
+        "dataSize": 365,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistory": {
+        "success": true,
+        "dataSize": 367,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 374,
+        "hasData": true
+      },
+      "quoteSummary-defaultKeyStatistics": {
+        "success": true,
+        "dataSize": 883,
+        "hasData": true
+      },
+      "quoteSummary-earnings": {
+        "success": true,
+        "dataSize": 1561,
+        "hasData": true
+      },
+      "quoteSummary-earningsHistory": {
+        "success": true,
+        "dataSize": 721,
+        "hasData": true
+      },
+      "quoteSummary-earningsTrend": {
+        "success": true,
+        "dataSize": 2752,
+        "hasData": true
+      },
+      "quoteSummary-financialData": {
+        "success": true,
+        "dataSize": 720,
+        "hasData": true
+      },
+      "quoteSummary-fundOwnership": {
+        "success": true,
+        "dataSize": 49,
+        "hasData": true
+      },
+      "quoteSummary-fundPerformance": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-fundProfile": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-incomeStatementHistory": {
+        "success": true,
+        "dataSize": 2533,
+        "hasData": true
+      },
+      "quoteSummary-incomeStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 2540,
+        "hasData": true
+      },
+      "quoteSummary-indexTrend": {
+        "success": true,
+        "dataSize": 223,
+        "hasData": true
+      },
+      "quoteSummary-industryTrend": {
+        "success": true,
+        "dataSize": 59,
+        "hasData": true
+      },
+      "quoteSummary-insiderHolders": {
+        "success": true,
+        "dataSize": 44,
+        "hasData": true
+      },
+      "quoteSummary-insiderTransactions": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-institutionOwnership": {
+        "success": true,
+        "dataSize": 56,
+        "hasData": true
+      },
+      "quoteSummary-majorDirectHolders": {
+        "success": true,
+        "dataSize": 48,
+        "hasData": true
+      },
+      "quoteSummary-majorHoldersBreakdown": {
+        "success": true,
+        "dataSize": 165,
+        "hasData": true
+      },
+      "quoteSummary-netSharePurchaseActivity": {
+        "success": true,
+        "dataSize": 166,
+        "hasData": true
+      },
+      "quoteSummary-price": {
+        "success": true,
+        "dataSize": 766,
+        "hasData": true
+      },
+      "quoteSummary-quoteType": {
+        "success": true,
+        "dataSize": 430,
+        "hasData": true
+      },
+      "quoteSummary-recommendationTrend": {
+        "success": true,
+        "dataSize": 337,
+        "hasData": true
+      },
+      "quoteSummary-secFilings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-sectorTrend": {
+        "success": true,
+        "dataSize": 57,
+        "hasData": true
+      },
+      "quoteSummary-summaryDetail": {
+        "success": true,
+        "dataSize": 1032,
+        "hasData": true
+      },
+      "quoteSummary-summaryProfile": {
+        "success": true,
+        "dataSize": 1962,
+        "hasData": true
+      },
+      "quoteSummary-symbol": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-topHoldings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-upgradeDowngradeHistory": {
+        "success": false,
+        "hasData": false
+      },
+      "insights": {
+        "success": true,
+        "dataSize": 214,
+        "hasData": true
+      },
+      "recommendationsBySymbol": {
+        "success": true,
+        "dataSize": 239,
+        "hasData": true
+      },
+      "options": {
+        "success": true,
+        "dataSize": 2564,
+        "hasData": true
+      }
+    }
+  },
+  {
+    "ticker": "BOVA11.SA",
+    "type": "ETF",
+    "timestamp": "2025-10-20T18:04:29.079Z",
+    "moduleSummary": {
+      "quote": {
+        "success": true,
+        "dataSize": 1790,
+        "hasData": true
+      },
+      "chart": {
+        "success": true,
+        "dataSize": 7552,
+        "hasData": true
+      },
+      "historical": {
+        "success": true,
+        "dataSize": 6459,
+        "hasData": true
+      },
+      "search": {
+        "success": true,
+        "dataSize": 644,
+        "hasData": true
+      },
+      "quoteSummary-assetProfile": {
+        "success": true,
+        "dataSize": 778,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistory": {
+        "success": true,
+        "dataSize": 68,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistoryQuarterly": {
+        "success": true,
+        "dataSize": 77,
+        "hasData": true
+      },
+      "quoteSummary-calendarEvents": {
+        "success": true,
+        "dataSize": 84,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistory": {
+        "success": true,
+        "dataSize": 69,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 78,
+        "hasData": true
+      },
+      "quoteSummary-defaultKeyStatistics": {
+        "success": true,
+        "dataSize": 310,
+        "hasData": true
+      },
+      "quoteSummary-earnings": {
+        "success": true,
+        "dataSize": 158,
+        "hasData": true
+      },
+      "quoteSummary-earningsHistory": {
+        "success": true,
+        "dataSize": 49,
+        "hasData": true
+      },
+      "quoteSummary-earningsTrend": {
+        "success": true,
+        "dataSize": 2378,
+        "hasData": true
+      },
+      "quoteSummary-financialData": {
+        "success": true,
+        "dataSize": 182,
+        "hasData": true
+      },
+      "quoteSummary-fundOwnership": {
+        "success": true,
+        "dataSize": 49,
+        "hasData": true
+      },
+      "quoteSummary-fundPerformance": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-fundProfile": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-incomeStatementHistory": {
+        "success": true,
+        "dataSize": 71,
+        "hasData": true
+      },
+      "quoteSummary-incomeStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 80,
+        "hasData": true
+      },
+      "quoteSummary-indexTrend": {
+        "success": true,
+        "dataSize": 223,
+        "hasData": true
+      },
+      "quoteSummary-industryTrend": {
+        "success": true,
+        "dataSize": 59,
+        "hasData": true
+      },
+      "quoteSummary-insiderHolders": {
+        "success": true,
+        "dataSize": 44,
+        "hasData": true
+      },
+      "quoteSummary-insiderTransactions": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-institutionOwnership": {
+        "success": true,
+        "dataSize": 56,
+        "hasData": true
+      },
+      "quoteSummary-majorDirectHolders": {
+        "success": true,
+        "dataSize": 48,
+        "hasData": true
+      },
+      "quoteSummary-majorHoldersBreakdown": {
+        "success": true,
+        "dataSize": 167,
+        "hasData": true
+      },
+      "quoteSummary-netSharePurchaseActivity": {
+        "success": true,
+        "dataSize": 166,
+        "hasData": true
+      },
+      "quoteSummary-price": {
+        "success": true,
+        "dataSize": 726,
+        "hasData": true
+      },
+      "quoteSummary-quoteType": {
+        "success": true,
+        "dataSize": 417,
+        "hasData": true
+      },
+      "quoteSummary-recommendationTrend": {
+        "success": true,
+        "dataSize": 51,
+        "hasData": true
+      },
+      "quoteSummary-secFilings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-sectorTrend": {
+        "success": true,
+        "dataSize": 57,
+        "hasData": true
+      },
+      "quoteSummary-summaryDetail": {
+        "success": true,
+        "dataSize": 764,
+        "hasData": true
+      },
+      "quoteSummary-summaryProfile": {
+        "success": true,
+        "dataSize": 780,
+        "hasData": true
+      },
+      "quoteSummary-symbol": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-topHoldings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-upgradeDowngradeHistory": {
+        "success": false,
+        "hasData": false
+      },
+      "insights": {
+        "success": true,
+        "dataSize": 77,
+        "hasData": true
+      },
+      "recommendationsBySymbol": {
+        "success": true,
+        "dataSize": 241,
+        "hasData": true
+      },
+      "options": {
+        "success": true,
+        "dataSize": 1900,
+        "hasData": true
+      }
+    }
+  },
+  {
+    "ticker": "HGLG11.SA",
+    "type": "FII",
+    "timestamp": "2025-10-20T18:05:00.125Z",
+    "moduleSummary": {
+      "quote": {
+        "success": true,
+        "dataSize": 2009,
+        "hasData": true
+      },
+      "chart": {
+        "success": true,
+        "dataSize": 8978,
+        "hasData": true
+      },
+      "historical": {
+        "success": true,
+        "dataSize": 6167,
+        "hasData": true
+      },
+      "search": {
+        "success": true,
+        "dataSize": 782,
+        "hasData": true
+      },
+      "quoteSummary-assetProfile": {
+        "success": true,
+        "dataSize": 593,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistory": {
+        "success": true,
+        "dataSize": 167,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistoryQuarterly": {
+        "success": true,
+        "dataSize": 77,
+        "hasData": true
+      },
+      "quoteSummary-calendarEvents": {
+        "success": true,
+        "dataSize": 128,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistory": {
+        "success": true,
+        "dataSize": 203,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 78,
+        "hasData": true
+      },
+      "quoteSummary-defaultKeyStatistics": {
+        "success": true,
+        "dataSize": 801,
+        "hasData": true
+      },
+      "quoteSummary-earnings": {
+        "success": true,
+        "dataSize": 282,
+        "hasData": true
+      },
+      "quoteSummary-earningsHistory": {
+        "success": true,
+        "dataSize": 49,
+        "hasData": true
+      },
+      "quoteSummary-earningsTrend": {
+        "success": true,
+        "dataSize": 2378,
+        "hasData": true
+      },
+      "quoteSummary-financialData": {
+        "success": true,
+        "dataSize": 534,
+        "hasData": true
+      },
+      "quoteSummary-fundOwnership": {
+        "success": true,
+        "dataSize": 49,
+        "hasData": true
+      },
+      "quoteSummary-fundPerformance": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-fundProfile": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-incomeStatementHistory": {
+        "success": true,
+        "dataSize": 1279,
+        "hasData": true
+      },
+      "quoteSummary-incomeStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 80,
+        "hasData": true
+      },
+      "quoteSummary-indexTrend": {
+        "success": true,
+        "dataSize": 223,
+        "hasData": true
+      },
+      "quoteSummary-industryTrend": {
+        "success": true,
+        "dataSize": 59,
+        "hasData": true
+      },
+      "quoteSummary-insiderHolders": {
+        "success": true,
+        "dataSize": 44,
+        "hasData": true
+      },
+      "quoteSummary-insiderTransactions": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-institutionOwnership": {
+        "success": true,
+        "dataSize": 56,
+        "hasData": true
+      },
+      "quoteSummary-majorDirectHolders": {
+        "success": true,
+        "dataSize": 48,
+        "hasData": true
+      },
+      "quoteSummary-majorHoldersBreakdown": {
+        "success": true,
+        "dataSize": 154,
+        "hasData": true
+      },
+      "quoteSummary-netSharePurchaseActivity": {
+        "success": true,
+        "dataSize": 166,
+        "hasData": true
+      },
+      "quoteSummary-price": {
+        "success": true,
+        "dataSize": 769,
+        "hasData": true
+      },
+      "quoteSummary-quoteType": {
+        "success": true,
+        "dataSize": 441,
+        "hasData": true
+      },
+      "quoteSummary-recommendationTrend": {
+        "success": true,
+        "dataSize": 51,
+        "hasData": true
+      },
+      "quoteSummary-secFilings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-sectorTrend": {
+        "success": true,
+        "dataSize": 57,
+        "hasData": true
+      },
+      "quoteSummary-summaryDetail": {
+        "success": true,
+        "dataSize": 966,
+        "hasData": true
+      },
+      "quoteSummary-summaryProfile": {
+        "success": true,
+        "dataSize": 595,
+        "hasData": true
+      },
+      "quoteSummary-symbol": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-topHoldings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-upgradeDowngradeHistory": {
+        "success": false,
+        "hasData": false
+      },
+      "insights": {
+        "success": true,
+        "dataSize": 77,
+        "hasData": true
+      },
+      "recommendationsBySymbol": {
+        "success": true,
+        "dataSize": 243,
+        "hasData": true
+      },
+      "options": {
+        "success": true,
+        "dataSize": 2120,
+        "hasData": true
+      }
+    }
+  },
+  {
+    "ticker": "GOGL34.SA",
+    "type": "BDR",
+    "timestamp": "2025-10-20T18:05:31.456Z",
+    "moduleSummary": {
+      "quote": {
+        "success": true,
+        "dataSize": 2238,
+        "hasData": true
+      },
+      "chart": {
+        "success": true,
+        "dataSize": 7671,
+        "hasData": true
+      },
+      "historical": {
+        "success": true,
+        "dataSize": 6250,
+        "hasData": true
+      },
+      "search": {
+        "success": true,
+        "dataSize": 795,
+        "hasData": true
+      },
+      "quoteSummary-assetProfile": {
+        "success": true,
+        "dataSize": 3482,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistory": {
+        "success": true,
+        "dataSize": 267,
+        "hasData": true
+      },
+      "quoteSummary-balanceSheetHistoryQuarterly": {
+        "success": true,
+        "dataSize": 276,
+        "hasData": true
+      },
+      "quoteSummary-calendarEvents": {
+        "success": true,
+        "dataSize": 293,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistory": {
+        "success": true,
+        "dataSize": 365,
+        "hasData": true
+      },
+      "quoteSummary-cashflowStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 373,
+        "hasData": true
+      },
+      "quoteSummary-defaultKeyStatistics": {
+        "success": true,
+        "dataSize": 876,
+        "hasData": true
+      },
+      "quoteSummary-earnings": {
+        "success": true,
+        "dataSize": 940,
+        "hasData": true
+      },
+      "quoteSummary-earningsHistory": {
+        "success": true,
+        "dataSize": 49,
+        "hasData": true
+      },
+      "quoteSummary-earningsTrend": {
+        "success": true,
+        "dataSize": 2650,
+        "hasData": true
+      },
+      "quoteSummary-financialData": {
+        "success": true,
+        "dataSize": 605,
+        "hasData": true
+      },
+      "quoteSummary-fundOwnership": {
+        "success": true,
+        "dataSize": 49,
+        "hasData": true
+      },
+      "quoteSummary-fundPerformance": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-fundProfile": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-incomeStatementHistory": {
+        "success": true,
+        "dataSize": 2531,
+        "hasData": true
+      },
+      "quoteSummary-incomeStatementHistoryQuarterly": {
+        "success": true,
+        "dataSize": 2535,
+        "hasData": true
+      },
+      "quoteSummary-indexTrend": {
+        "success": true,
+        "dataSize": 223,
+        "hasData": true
+      },
+      "quoteSummary-industryTrend": {
+        "success": true,
+        "dataSize": 59,
+        "hasData": true
+      },
+      "quoteSummary-insiderHolders": {
+        "success": true,
+        "dataSize": 44,
+        "hasData": true
+      },
+      "quoteSummary-insiderTransactions": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-institutionOwnership": {
+        "success": true,
+        "dataSize": 56,
+        "hasData": true
+      },
+      "quoteSummary-majorDirectHolders": {
+        "success": true,
+        "dataSize": 48,
+        "hasData": true
+      },
+      "quoteSummary-majorHoldersBreakdown": {
+        "success": true,
+        "dataSize": 158,
+        "hasData": true
+      },
+      "quoteSummary-netSharePurchaseActivity": {
+        "success": true,
+        "dataSize": 166,
+        "hasData": true
+      },
+      "quoteSummary-price": {
+        "success": true,
+        "dataSize": 741,
+        "hasData": true
+      },
+      "quoteSummary-quoteType": {
+        "success": true,
+        "dataSize": 401,
+        "hasData": true
+      },
+      "quoteSummary-recommendationTrend": {
+        "success": true,
+        "dataSize": 51,
+        "hasData": true
+      },
+      "quoteSummary-secFilings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-sectorTrend": {
+        "success": true,
+        "dataSize": 57,
+        "hasData": true
+      },
+      "quoteSummary-summaryDetail": {
+        "success": true,
+        "dataSize": 988,
+        "hasData": true
+      },
+      "quoteSummary-summaryProfile": {
+        "success": true,
+        "dataSize": 1622,
+        "hasData": true
+      },
+      "quoteSummary-symbol": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-topHoldings": {
+        "success": false,
+        "hasData": false
+      },
+      "quoteSummary-upgradeDowngradeHistory": {
+        "success": false,
+        "hasData": false
+      },
+      "insights": {
+        "success": true,
+        "dataSize": 229,
+        "hasData": true
+      },
+      "recommendationsBySymbol": {
+        "success": true,
+        "dataSize": 244,
+        "hasData": true
+      },
+      "options": {
+        "success": true,
+        "dataSize": 2359,
+        "hasData": true
+      }
+    }
+  }
+]

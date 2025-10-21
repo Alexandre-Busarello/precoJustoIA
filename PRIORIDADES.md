@@ -1,29 +1,35 @@
 <!-- 1. Integação pagamento (mercado pago) e permitr o cancelamento da assinatura a qualquer momento na plataforma; -->
 <!-- 2. Criar Central de SUPORTE dentro da APP (controle de ticked) por interface e Chat IA; -->
 <!-- Resolve Historcio não carregando no backtest -->
-Usar o mesmo calculo centralizado usado para o email em @monitor-asset para as estrategias que usam o SCORE.
+Melhorar a analsie dos snapshot e disparo de relatorios de mundaça de SCORE. Precisamos manter o historico de snapshots em "asset_snapshots" para cada ativo. Ou seja, quando mudar o score e for gerado uma mudança devemos bater um novo snapshot e salvar como ultimo associado ao score. O relatório gerado para FUNDAMENTAL_CHANGE precisa ficar associado ao SNAPSHOT. Com isso a gente mantem a rastreabilidade de todos os relatorios gerados com as mudanças (o FK pode ser null para não quebrar os relatorios que já foram gerados sem o snapshot associado). O relatorio gerado pela IA deve ser menos prolixo e deve evitar falar de indicadores que praticamente não tiveram oscilações (muito proximo do valor original), deve dar o foco ao analisar realmente o que mudou e o que pode ter mudado o score. Talvez para fazer iss oseja interessante gravar tambem no SNAPSHOT a composição da nota (ver como a tela "/acao/itsa4/entendendo-score" calcula o SCORE). Com a composição da NOTA salva junto com o SNAPSHOT o relatorio conseguira indicar de forma mais clara e com exatidão qual foi o ponto chave que mudou e correlacionar os demais indicadores. O relatorio das mudanças também deve usar uma linguagem fácial e acessivel, pois não estaremos falando necessariamente com alguem técnico.
 
-Usuario Gratuito pode fazer backtest apenas com PETR4 e VALE3. A simulação não é salva no banco e fica disponivel apenas na interface, saiu da tela não volta mais
+Uma coluna extra para as posições atuais que mostre o Retorno c/ Dividendos (Que ira considerar o que o ativo pagou tambem de dividendos)
+Permitir incluir transações por linguagem natural:
+- Ex: cadastre uma compra de PETR4 no valor total de 1000 e 30 ações 
+> Resultado: transação de compra de ATIVO para PETR4 no valor de 1000, quantidade de 30 a um preço médio de 33,33 
+- Ex: cadastre dividendo sintetico com venda de opções de CALL para PETR4 no valor de 99  
+> Resultado: cadastro de transação de dividendo no valor de 99 para PETR4 com uma observação extraida para dividendos sintetico
+- Ex: saque de 5000 reais
+> Resultado: transação de saque do caixa de 5000 reais se houver dinheiro em caixa suficiente, se não houver não aceitar a trasação
+- Ex aporte de 2000 com observação de dinheiro de renda extra
+> Resultado: transação de aporte no valor de 2000, registrando a observação detalhada
+- Ex: venda de 50 PETR4 preço médio 30
+> Resultado: transação de venda de 50 PETR4 a um preço médio de 30 (o valor total será calculado)
+Pensar em N outras formas de realizar os cadastros com linguagem natural, deve ser usando o LLM do Gemini para cadastrar as transações a partir de linguagemn natural e o LLM deve se adaptar ao pedido e criar as devida transações
 
-Integrar Redis
+A edição das alocações na carteira não esta pratica, o input de numero só aceita o primeiro digito perdendo o foco. Ao incluir um novo ativo com o %, deve alocar o % do ativo e diluir o restante da alocação dos demais ativos proporcionalmente (ao que ja estava)
 
-Carteira:
-- Deve ser possível criar a partir de um backtest ou individualmente (adicionando os ativos via ranking ou pagina do ativo);
-- Deve ser possível criar um backtest a partir de uma carteira também;
-- Funcionamento da carteira:
-- Ela terá uma interface similar ao backtest, onde será definido os ativos que fazem parte da carteira bem com a alocação em cada um e qual é o aporte estimado por mês. A diferença principal para o Backtest é que ela será orientada pelas transações. No bnacktest as transações são calculadas historicamente, ja ná carteira as transações são sugeridas mês a mês. Conforme o usuario for entranda na plataforma, é visto a última vez que foi gerado uma transação e é sugerido todos os meses faltantes com base na data de inicio da carteira.
-Quai são as transações que podem ser recomendas?
-Similar ao backtest, teremos transações: 
-- Crédito Caixa, que será o crédito no caixa dos aportes;
-- Aporte, que são as compras dos ativos gerando débitos no Caixa;
-- Venda (Rebal.), são vendas para rebalanceamento que geram créditos em caixa;
-- Compra (Rebal.), são compras que precisam ser feitas quando tem as vendas de rebalanceamento;
-Todas essas transações serão sugeridas automaticamente pela plataforma com base na alocação fornecida, se a plataforma entender que precisa vender algo para rebalancear (sempre com base no ultimo preço disponivel do ativo em daily_quote) será sugerido já as transações e o usuario deve ir confirmando cada uma. Se o aporte por mês configurado for de 1000 por exemplo, todo mês será ja sugerido essa transação onde o usuario pode ir lá e confirma (indicando o valor do aporte). O usuario deve sempre poder lançar transações manualmente na carteira também. Algumas transações manuais do usuario: as mesmas automaticas mais: 
-- Venda (sem Rebalanceamento), é uma venda onde o usuário está realmente tirando o dinheiro da carteira
-- Dividendo, para registrar dividendos pago (inicialmente não iremos puxar automaticamente, a não ser que tenha um jeito facil de saber quando uma empresa pagou dividendos).
-Com base nas transações que é o coração da carteira todas as demais métricas (similar ao backtest) serão exibidas como, "Volatilidade", "Drawdown Máximo", "Performance por Ativo", "Evolução", "Analise de Risco" e todos os dados disponível em Visão Geral. 
-O que a carteira deve ter a mais?
-- Grafico de Pizza para ver disversificação da carteira por setor e industria
+Drawdown da carteira de ETF em 100% (errado), ver o motivo
+
+Carteira de FII calculou uma transação de rebalanceamento sem gerar um transação de compra de rebalanceamento (sempre deveriam andar juntos a sugestão de venda e compra para rebalancear):
+  Venda (Rebal.)
+  BTLG11
+  17/10/2025
+  R$ 620.82
+  6 ações
+  Rebalanceamento: venda de 6 ações (alocação atual 17.5% > alvo 12.5%)
+
+Ver alguma forma de pegar o pagamento dos dividendos dos FIIs e Ações online
 
 
 4.  Revisar Footer;

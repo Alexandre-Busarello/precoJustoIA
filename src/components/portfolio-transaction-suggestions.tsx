@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { portfolioCache } from '@/lib/portfolio-cache';
 import {
   CheckCircle2,
   XCircle,
@@ -12,7 +13,8 @@ import {
   ArrowUpCircle,
   DollarSign,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -53,7 +55,7 @@ export function PortfolioTransactionSuggestions({
   const [loading, setLoading] = useState(true);
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [startingTracking, setStartingTracking] = useState(false);
-  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   
   // Use ref for lock to survive re-renders (React StrictMode safe)
   const isCreatingSuggestionsRef = useRef(false);
@@ -74,6 +76,50 @@ export function PortfolioTransactionSuggestions({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId, trackingStarted]);
+
+  const handleRecalculateSuggestions = async () => {
+    try {
+      setRecalculating(true);
+      
+      // 1. Delete all pending transactions
+      const deleteResponse = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/pending`,
+        { method: 'DELETE' }
+      );
+
+      if (!deleteResponse.ok) {
+        throw new Error('Erro ao deletar transações pendentes');
+      }
+
+      const deleteData = await deleteResponse.json();
+      
+      // 2. Reset locks and reload suggestions
+      isCreatingSuggestionsRef.current = false;
+      hasLoadedOnceRef.current = false;
+      await loadSuggestions();
+      
+      toast({
+        title: 'Sugestões recalculadas',
+        description: `${deleteData.deletedCount} transações antigas foram removidas e novas sugestões foram geradas`
+      });
+
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
+
+      if (onTransactionsConfirmed) {
+        onTransactionsConfirmed();
+      }
+    } catch (error) {
+      console.error('Erro ao recalcular sugestões:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível recalcular as sugestões',
+        variant: 'destructive'
+      });
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   const handleStartTracking = async () => {
     try {
@@ -107,9 +153,19 @@ export function PortfolioTransactionSuggestions({
     }
   };
 
-  const loadSuggestions = async () => {
+  const loadSuggestions = async (forceRefresh = false) => {
     try {
       setLoading(true);
+      
+      // Try cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cached = portfolioCache.suggestions.get(portfolioId) as any;
+        if (cached) {
+          setSuggestions(cached);
+          setLoading(false);
+          return;
+        }
+      }
       
       // First, get pending transactions that are already in the database
       const pendingResponse = await fetch(
@@ -150,9 +206,11 @@ export function PortfolioTransactionSuggestions({
             
             if (reloadResponse.ok) {
               const reloadData = await reloadResponse.json();
+              portfolioCache.suggestions.set(portfolioId, reloadData.transactions || []);
               setSuggestions(reloadData.transactions || []);
             }
           } else {
+            portfolioCache.suggestions.set(portfolioId, pendingTx);
             setSuggestions(pendingTx);
           }
           
@@ -205,6 +263,7 @@ export function PortfolioTransactionSuggestions({
             
             if (reloadResponse.ok) {
               const reloadData = await reloadResponse.json();
+              portfolioCache.suggestions.set(portfolioId, reloadData.transactions || []);
               setSuggestions(reloadData.transactions || []);
               console.log(`✅ Loaded ${reloadData.transactions?.length || 0} PENDING transactions`);
             }
@@ -216,6 +275,7 @@ export function PortfolioTransactionSuggestions({
           console.log('🔓 Lock released');
         }
       } else if (newSuggestions.length === 0) {
+        portfolioCache.suggestions.set(portfolioId, []);
         setSuggestions([]);
       }
     } catch (error) {
@@ -245,6 +305,9 @@ export function PortfolioTransactionSuggestions({
         title: 'Sucesso',
         description: 'Transação confirmada'
       });
+
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
@@ -278,6 +341,9 @@ export function PortfolioTransactionSuggestions({
         title: 'Sucesso',
         description: 'Transação rejeitada'
       });
+
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
@@ -320,6 +386,9 @@ export function PortfolioTransactionSuggestions({
         description: `${suggestions.length} transações confirmadas`
       });
 
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
+
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
       loadSuggestions();
@@ -332,42 +401,6 @@ export function PortfolioTransactionSuggestions({
       });
     } finally {
       setConfirmingAll(false);
-    }
-  };
-
-  const handleCleanupDuplicates = async () => {
-    try {
-      setCleaningDuplicates(true);
-      
-      const response = await fetch(
-        `/api/portfolio/${portfolioId}/transactions/cleanup-duplicates`,
-        { method: 'POST' }
-      );
-
-      if (!response.ok) {
-        throw new Error('Erro ao limpar duplicatas');
-      }
-
-      const data = await response.json();
-      
-      toast({
-        title: 'Sucesso',
-        description: `${data.deletedCount} duplicatas removidas`
-      });
-
-      // Reset lock and reload
-      isCreatingSuggestionsRef.current = false;
-      hasLoadedOnceRef.current = false;
-      loadSuggestions();
-    } catch (error) {
-      console.error('Erro ao limpar duplicatas:', error);
-      toast({
-        title: 'Erro',
-        description: 'Erro ao limpar duplicatas',
-        variant: 'destructive'
-      });
-    } finally {
-      setCleaningDuplicates(false);
     }
   };
 
@@ -464,11 +497,22 @@ export function PortfolioTransactionSuggestions({
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-orange-600 flex-shrink-0" />
           <h3 className="font-semibold text-sm sm:text-base">
-            {suggestions.length} transação{suggestions.length !== 1 ? 'ões' : ''} pendente{suggestions.length !== 1 ? 's' : ''}
+            {suggestions.length} transaç{suggestions.length !== 1 ? 'ões' : 'ão'} pendente{suggestions.length !== 1 ? 's' : ''}
           </h3>
         </div>
         
         <div className="flex gap-2 w-full sm:w-auto">
+          <Button
+            onClick={handleRecalculateSuggestions}
+            disabled={recalculating}
+            size="sm"
+            variant="ghost"
+            title="Recalcular sugestões de transações"
+            className="text-xs flex-shrink-0"
+          >
+            <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
+            <span className="ml-2 hidden sm:inline">Recalcular</span>
+          </Button>
           {/* {suggestions.length > 10 && (
             <Button
               onClick={handleCleanupDuplicates}

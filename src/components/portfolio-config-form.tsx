@@ -59,7 +59,10 @@ export function PortfolioConfigForm({
 
   const totalAllocation = assets.reduce((sum, asset) => sum + asset.targetAllocation, 0);
   // Allow ±0.5% tolerance (between 99.5% and 100.5%)
-  const isValid = name && assets.length > 0 && totalAllocation >= 0.995 && totalAllocation <= 1.005;
+  // In edit mode, only validate basic fields (assets are managed separately)
+  const isValid = mode === 'create' 
+    ? (name && assets.length > 0 && totalAllocation >= 0.995 && totalAllocation <= 1.005)
+    : (name && monthlyContribution > 0);
 
   const handleAddAsset = () => {
     if (!newTicker || !newAllocation) {

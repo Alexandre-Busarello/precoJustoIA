@@ -10,11 +10,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/user-service';
 import { PortfolioService } from '@/lib/portfolio-service';
 import { PortfolioMetricsService } from '@/lib/portfolio-metrics-service';
+import { AssetRegistrationService } from '@/lib/asset-registration-service';
+import { prisma } from '@/lib/prisma';
 
 interface RouteContext {
   params: Promise<{
     id: string;
   }>;
+}
+
+/**
+ * Helper function to delete all pending transactions
+ */
+async function deletePendingTransactions(portfolioId: string): Promise<number> {
+  const result = await prisma.portfolioTransaction.deleteMany({
+    where: {
+      portfolioId,
+      status: 'PENDING'
+    }
+  });
+  return result.count;
 }
 
 /**
@@ -41,6 +56,17 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       );
     }
 
+    // NOVO: Registrar ativo se não existir
+    console.log(`📝 [PORTFOLIO ADD ASSET] Verificando cadastro de ${body.ticker}...`);
+    const registrationResult = await AssetRegistrationService.registerAsset(body.ticker);
+    
+    if (!registrationResult.success) {
+      return NextResponse.json(
+        { error: registrationResult.message || 'Erro ao cadastrar ativo' },
+        { status: 400 }
+      );
+    }
+
     const assetId = await PortfolioService.addAsset(
       resolvedParams.id,
       currentUser.id,
@@ -48,13 +74,19 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       Number(body.targetAllocation)
     );
 
+    // Delete all pending transactions as allocations have changed
+    const deletedCount = await deletePendingTransactions(resolvedParams.id);
+    
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 
     return NextResponse.json({
       success: true,
       assetId,
-      message: 'Ativo adicionado com sucesso'
+      deletedPendingTransactions: deletedCount,
+      message: deletedCount > 0 
+        ? `Ativo adicionado. ${deletedCount} transações pendentes foram removidas para recálculo.`
+        : 'Ativo adicionado com sucesso'
     });
 
   } catch (error) {
@@ -100,12 +132,18 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       );
     }
 
+    // Delete all pending transactions as allocations have changed
+    const deletedCount = await deletePendingTransactions(resolvedParams.id);
+    
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 
     return NextResponse.json({
       success: true,
-      message: 'Alocações atualizadas com sucesso'
+      deletedPendingTransactions: deletedCount,
+      message: deletedCount > 0
+        ? `Alocações atualizadas. ${deletedCount} transações pendentes foram removidas para recálculo.`
+        : 'Alocações atualizadas com sucesso'
     });
 
   } catch (error) {
@@ -148,12 +186,18 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       Number(body.targetAllocation)
     );
 
+    // Delete all pending transactions as allocations have changed
+    const deletedCount = await deletePendingTransactions(resolvedParams.id);
+    
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 
     return NextResponse.json({
       success: true,
-      message: 'Alocação atualizada com sucesso'
+      deletedPendingTransactions: deletedCount,
+      message: deletedCount > 0
+        ? `Alocação atualizada. ${deletedCount} transações pendentes foram removidas para recálculo.`
+        : 'Alocação atualizada com sucesso'
     });
 
   } catch (error) {
@@ -199,12 +243,18 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
 
     await PortfolioService.removeAsset(resolvedParams.id, currentUser.id, ticker);
 
+    // Delete all pending transactions as allocations have changed
+    const deletedCount = await deletePendingTransactions(resolvedParams.id);
+    
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 
     return NextResponse.json({
       success: true,
-      message: 'Ativo removido com sucesso'
+      deletedPendingTransactions: deletedCount,
+      message: deletedCount > 0
+        ? `Ativo removido. ${deletedCount} transações pendentes foram removidas para recálculo.`
+        : 'Ativo removido com sucesso'
     });
 
   } catch (error) {

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { portfolioCache } from '@/lib/portfolio-cache';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -117,7 +118,7 @@ export function PortfolioTransactionList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId, filterStatus, filterType]);
 
-  const loadTransactions = async () => {
+  const loadTransactions = async (forceRefresh = false) => {
     try {
       setLoading(true);
       
@@ -125,6 +126,21 @@ export function PortfolioTransactionList({
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (filterType !== 'all') params.append('type', filterType);
       
+      // Cache key includes filters
+      const cacheKey = `${portfolioId}_${filterStatus}_${filterType}`;
+      
+      // Try cache first (unless force refresh or filters applied)
+      if (!forceRefresh && filterStatus === 'all' && filterType === 'all') {
+        const cached = portfolioCache.transactions.get(portfolioId) as any;
+        if (cached) {
+          const sortedTransactions = sortAndGroupTransactions(cached);
+          setTransactions(sortedTransactions);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Fetch from API
       const response = await fetch(`/api/portfolio/${portfolioId}/transactions?${params}`);
       
       if (!response.ok) {
@@ -132,7 +148,14 @@ export function PortfolioTransactionList({
       }
 
       const data = await response.json();
-      setTransactions(data.transactions || []);
+      
+      // Only cache if no filters
+      if (filterStatus === 'all' && filterType === 'all') {
+        portfolioCache.transactions.set(portfolioId, data.transactions || []);
+      }
+      
+      const sortedTransactions = sortAndGroupTransactions(data.transactions || []);
+      setTransactions(sortedTransactions);
     } catch (error) {
       console.error('Erro ao carregar transações:', error);
       toast({
@@ -143,6 +166,45 @@ export function PortfolioTransactionList({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Sort transactions by date (DESC) and type priority
+  const sortAndGroupTransactions = (txs: Transaction[]): Transaction[] => {
+    // Type priority order (DESC - última transação aparece primeiro):
+    // Ordem cronológica: Aporte → Dividendo → Vendas → Compras → Saques
+    // Ordem na tela (DESC): Saques → Compras → Vendas → Dividendo → Aporte
+    const typePriority: Record<string, number> = {
+      'CASH_DEBIT': 1,           // Saque (última operação do dia)
+      'BUY_REBALANCE': 2,        // Compra de rebalanceamento
+      'BUY': 3,                  // Compra regular
+      'SELL_WITHDRAWAL': 4,      // Venda para saque
+      'SELL_REBALANCE': 5,       // Venda de rebalanceamento
+      'DIVIDEND': 6,             // Dividendo
+      'CASH_CREDIT': 7           // Aporte (primeira operação do dia, aparece por último na lista DESC)
+    };
+
+    const sorted = [...txs].sort((a, b) => {
+      // First, sort by date (newest first)
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (dateB !== dateA) {
+        return dateB - dateA;
+      }
+      
+      // Then, sort by type priority within the same date
+      const priorityA = typePriority[a.type] || 999;
+      const priorityB = typePriority[b.type] || 999;
+      return priorityA - priorityB;
+    });
+
+    console.log('🔄 Transações ordenadas:', sorted.map(t => ({
+      date: t.date.split('T')[0],
+      type: t.type,
+      ticker: t.ticker,
+      priority: typePriority[t.type]
+    })));
+
+    return sorted;
   };
 
   const handleEditClick = (transaction: Transaction) => {
@@ -195,6 +257,9 @@ export function PortfolioTransactionList({
         description: 'Transação atualizada com sucesso'
       });
 
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
+
       setShowEditModal(false);
       setEditingTransaction(null);
       loadTransactions();
@@ -236,6 +301,9 @@ export function PortfolioTransactionList({
         title: 'Sucesso',
         description: 'Transação excluída com sucesso'
       });
+
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
 
       setShowDeleteDialog(false);
       setDeletingTransaction(null);
@@ -393,6 +461,7 @@ export function PortfolioTransactionList({
             <SelectItem value="PENDING">Pendentes</SelectItem>
             <SelectItem value="CONFIRMED">Confirmadas</SelectItem>
             <SelectItem value="EXECUTED">Executadas</SelectItem>
+            <SelectItem value="CONFIRMED,EXECUTED">Confirmadas e Executadas</SelectItem>
             <SelectItem value="REJECTED">Rejeitadas</SelectItem>
           </SelectContent>
         </Select>

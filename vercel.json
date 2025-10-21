@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/fetch-ward",
       "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/monitor-assets",
-      "schedule": "0 3 * * *"
     }
   ],
   "functions": {
@@ -21,9 +17,6 @@
     },
     "src/app/api/cron/monitor-assets/route.ts": {
       "maxDuration": 300
-    },
-    "src/app/api/cron/update-portfolio-assets/route.ts": {
-      "maxDuration": 600
     }
   },
   "env": {

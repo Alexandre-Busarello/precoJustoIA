@@ -25,6 +25,9 @@ interface Holding {
   totalInvested: number;
   return: number;
   returnPercentage: number;
+  totalDividends: number;
+  returnWithDividends: number;
+  returnWithDividendsPercentage: number;
   targetAllocation: number;
   actualAllocation: number;
   allocationDiff: number;
@@ -151,6 +154,7 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
                 <TableHead className="text-right">Preço Atual</TableHead>
                 <TableHead className="text-right">Valor Atual</TableHead>
                 <TableHead className="text-right">Retorno</TableHead>
+                <TableHead className="text-right">Retorno c/ Dividendos</TableHead>
                 <TableHead className="text-right">Alocação</TableHead>
                 <TableHead className="text-center">Status</TableHead>
               </TableRow>
@@ -197,7 +201,27 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
                       </span>
                     </div>
                   </TableCell>
-                  
+
+                  <TableCell className="text-right">
+                    <div className={`flex flex-col items-end ${
+                      isPositive(holding.returnWithDividends) ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      <div className="flex items-center gap-1">
+                        {isPositive(holding.returnWithDividends) ? (
+                          <TrendingUp className="h-3 w-3" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3" />
+                        )}
+                        <span className="font-medium">
+                          {formatPercent(holding.returnWithDividendsPercentage)}
+                        </span>
+                      </div>
+                      <span className="text-xs">
+                        {formatCurrency(holding.returnWithDividends)}
+                      </span>
+                    </div>
+                  </TableCell>
+
                   <TableCell className="text-right">
                     <div className="flex flex-col items-end">
                       <div className="flex items-center gap-2">

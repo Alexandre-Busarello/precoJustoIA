@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/user-service';
 import { PortfolioTransactionService } from '@/lib/portfolio-transaction-service';
 import { PortfolioMetricsService } from '@/lib/portfolio-metrics-service';
+import { invalidateAllPortfolioCache } from '@/lib/portfolio-cache';
 
 interface RouteContext {
   params: Promise<{
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     // Recalculate metrics since we're reverting a confirmed transaction
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
+
+    // Invalidate frontend cache for this portfolio
+    invalidateAllPortfolioCache(resolvedParams.id);
 
     return NextResponse.json({
       success: true,

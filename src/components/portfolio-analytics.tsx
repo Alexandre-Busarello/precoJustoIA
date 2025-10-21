@@ -285,12 +285,23 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
 
       {/* Charts */}
       <Tabs defaultValue="evolution" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="evolution">Evolução</TabsTrigger>
-          <TabsTrigger value="benchmark">Benchmarks</TabsTrigger>
-          <TabsTrigger value="drawdown">Drawdown</TabsTrigger>
-          <TabsTrigger value="monthly">Retornos Mensais</TabsTrigger>
-        </TabsList>
+        {/* Mobile: Scroll horizontal | Desktop: Grid */}
+        <div className="w-full overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible">
+          <TabsList className="inline-flex md:grid w-auto md:w-full md:grid-cols-4 gap-1 min-w-full md:min-w-0">
+            <TabsTrigger value="evolution" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              Evolução
+            </TabsTrigger>
+            <TabsTrigger value="benchmark" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              Benchmarks
+            </TabsTrigger>
+            <TabsTrigger value="drawdown" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              Drawdown
+            </TabsTrigger>
+            <TabsTrigger value="monthly" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              Retornos Mensais
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="evolution" className="space-y-4">
           <Card>

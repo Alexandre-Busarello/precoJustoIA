@@ -98,7 +98,7 @@ export class DividendService {
 
       // Update Company with latest dividend info
       await safeWrite(
-        'update-company-latest-dividend',
+        'update-companies-latest-dividend',
         () => prisma.company.update({
           where: { id: company.id },
           data: {
@@ -216,7 +216,7 @@ export class DividendService {
       await Promise.all(
         dividends.map(dividend =>
           safeWrite(
-            'upsert-dividend-history',
+            'upsert-dividend_history',
             () => prisma.dividendHistory.upsert({
               where: {
                 companyId_exDate_amount: {

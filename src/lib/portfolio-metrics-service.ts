@@ -27,6 +27,9 @@ export interface PortfolioHolding {
   currentValue: number;
   return: number;
   returnPercentage: number;
+  totalDividends: number; // Total dividends received for this asset
+  returnWithDividends: number; // Return including dividends
+  returnWithDividendsPercentage: number; // Return percentage including dividends
   actualAllocation: number; // Current allocation
   targetAllocation: number; // Target allocation from config
   allocationDiff: number; // Difference between actual and target
@@ -260,6 +263,33 @@ export class PortfolioMetricsService {
   }
 
   /**
+   * Get total dividends received for each asset
+   */
+  private static async getDividendsByTicker(portfolioId: string): Promise<Map<string, number>> {
+    const dividendTransactions = await prisma.portfolioTransaction.findMany({
+      where: {
+        portfolioId,
+        type: 'DIVIDEND',
+        status: {
+          in: ['CONFIRMED', 'EXECUTED']
+        },
+        ticker: {
+          not: null
+        }
+      }
+    });
+
+    const dividendMap = new Map<string, number>();
+    for (const tx of dividendTransactions) {
+      if (!tx.ticker) continue;
+      const current = dividendMap.get(tx.ticker) || 0;
+      dividendMap.set(tx.ticker, current + Number(tx.amount));
+    }
+
+    return dividendMap;
+  }
+
+  /**
    * Calculate current holdings with prices
    */
   static async getCurrentHoldings(portfolioId: string): Promise<PortfolioHolding[]> {
@@ -282,6 +312,9 @@ export class PortfolioMetricsService {
     for (const asset of portfolio.assets) {
       targetAllocations.set(asset.ticker, Number(asset.targetAllocation));
     }
+
+    // Get dividends by ticker
+    const dividendsByTicker = await this.getDividendsByTicker(portfolioId);
 
     const transactions = await prisma.portfolioTransaction.findMany({
       where: {
@@ -358,28 +391,34 @@ export class PortfolioMetricsService {
 
     // Build holdings array
     const holdings: PortfolioHolding[] = [];
-    
+
     for (const [ticker, holding] of holdingsMap) {
       if (holding.quantity <= 0) continue; // Skip sold positions
-      
+
       const currentPrice = prices.get(ticker) || 0;
       const currentValue = holding.quantity * currentPrice;
       const averagePrice = holding.quantity > 0 ? holding.totalInvested / holding.quantity : 0;
       const returnValue = currentValue - holding.totalInvested;
       const returnPercentage = holding.totalInvested > 0 ? (returnValue / holding.totalInvested) : 0;
+
+      // Calculate dividend-adjusted return
+      const totalDividends = dividendsByTicker.get(ticker) || 0;
+      const returnWithDividends = returnValue + totalDividends;
+      const returnWithDividendsPercentage = holding.totalInvested > 0 ? (returnWithDividends / holding.totalInvested) : 0;
+
       const actualAllocation = totalValue > 0 ? (currentValue / totalValue) : 0;
       const targetAllocation = targetAllocations.get(ticker) || 0;
       const allocationDiff = actualAllocation - targetAllocation;
-      
+
       // Needs rebalancing if:
       // 1. Absolute difference > 5 percentage points (e.g., 10% vs 5%), OR
       // 2. Relative deviation > 20% of target (e.g., actual is 6% when target is 5%)
       const absoluteDiff = Math.abs(allocationDiff);
-      const relativeDeviation = targetAllocation > 0 
-        ? Math.abs(allocationDiff / targetAllocation) 
+      const relativeDeviation = targetAllocation > 0
+        ? Math.abs(allocationDiff / targetAllocation)
         : 0;
       const needsRebalancing = absoluteDiff > 0.05 || relativeDeviation > 0.20;
-      
+
       holdings.push({
         ticker,
         quantity: holding.quantity,
@@ -389,6 +428,9 @@ export class PortfolioMetricsService {
         currentValue,
         return: returnValue,
         returnPercentage,
+        totalDividends,
+        returnWithDividends,
+        returnWithDividendsPercentage,
         actualAllocation,
         targetAllocation,
         allocationDiff,

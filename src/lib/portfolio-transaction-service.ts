@@ -345,8 +345,54 @@ export class PortfolioTransactionService {
       if (!tx.ticker) continue;
 
       const current = holdings.get(tx.ticker) || { quantity: 0, totalInvested: 0 };
-      
+
       if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
+        current.quantity += Number(tx.quantity || 0);
+        current.totalInvested += Number(tx.amount);
+      } else if (tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
+        current.quantity -= Number(tx.quantity || 0);
+        current.totalInvested -= Number(tx.amount);
+      }
+
+      holdings.set(tx.ticker, current);
+    }
+
+    return holdings;
+  }
+
+  /**
+   * Get holdings as of a specific date (for dividend eligibility checks)
+   * Only includes BUY and SELL transactions, NOT rebalancing transactions
+   * This ensures dividends are only suggested for assets held in custody, not rebalancing purchases
+   */
+  private static async getHoldingsAsOfDate(portfolioId: string, asOfDate: Date): Promise<Map<string, { quantity: number; totalInvested: number }>> {
+    const transactions = await prisma.portfolioTransaction.findMany({
+      where: {
+        portfolioId,
+        status: {
+          in: ['CONFIRMED', 'EXECUTED']
+        },
+        ticker: {
+          not: null
+        },
+        date: {
+          lte: asOfDate
+        }
+      },
+      orderBy: {
+        date: 'asc'
+      }
+    });
+
+    const holdings = new Map<string, { quantity: number; totalInvested: number }>();
+
+    for (const tx of transactions) {
+      if (!tx.ticker) continue;
+
+      const current = holdings.get(tx.ticker) || { quantity: 0, totalInvested: 0 };
+
+      // Only count regular BUY/SELL transactions, not rebalancing
+      if (tx.type === 'BUY'  || tx.type === 'BUY_REBALANCE') {
         current.quantity += Number(tx.quantity || 0);
         current.totalInvested += Number(tx.amount);
       } else if (tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
@@ -713,7 +759,7 @@ export class PortfolioTransactionService {
    * Only suggests dividends that:
    * 1. Are in the current month
    * 2. Ex-date has already passed
-   * 3. User has position in custody
+   * 3. User had position in custody BEFORE the ex-date (not from rebalancing purchases)
    */
   private static async generateDividendSuggestions(
     portfolioId: string,
@@ -755,7 +801,7 @@ export class PortfolioTransactionService {
 
       // Get dividends in current month that have already been paid
       const pendingDividends = await DividendService.getCurrentMonthDividends(ticker);
-      
+
       for (const dividend of pendingDividends) {
         // Only suggest if ex-date has passed
         if (dividend.exDate > today) {
@@ -763,8 +809,19 @@ export class PortfolioTransactionService {
           continue;
         }
 
-        // Calculate total dividend amount for user's position
-        const totalDividendAmount = dividend.amount * holding.quantity;
+        // Check if user had position in custody BEFORE the ex-date
+        // This ensures dividends are only suggested for assets held in custody, not rebalancing purchases
+        const holdingsBeforeExDate = await this.getHoldingsAsOfDate(portfolioId, dividend.exDate);
+        const holdingBeforeExDate = holdingsBeforeExDate.get(ticker);
+
+        if (!holdingBeforeExDate || holdingBeforeExDate.quantity <= 0) {
+          console.log(`⏰ [DIVIDEND SKIP] ${ticker}: No position held on ex-date ${dividend.exDate.toISOString().split('T')[0]}`);
+          continue;
+        }
+
+        // Use the quantity held on ex-date for dividend calculation, not current quantity
+        const quantityOnExDate = holdingBeforeExDate.quantity;
+        const totalDividendAmount = dividend.amount * quantityOnExDate;
 
         if (totalDividendAmount <= 0) continue;
 
@@ -775,16 +832,16 @@ export class PortfolioTransactionService {
           type: 'DIVIDEND' as TransactionType,
           ticker: ticker,
           amount: totalDividendAmount,
-          quantity: holding.quantity, // Store quantity for reference
+          quantity: quantityOnExDate, // Store quantity held on ex-date
           price: dividend.amount, // Store per-share dividend amount as price
-          reason: `Dividendo de ${ticker}: R$ ${dividend.amount.toFixed(4)}/ação × ${holding.quantity} ações = R$ ${totalDividendAmount.toFixed(2)}`,
+          reason: `Dividendo de ${ticker}: R$ ${dividend.amount.toFixed(4)}/ação × ${quantityOnExDate} ações = R$ ${totalDividendAmount.toFixed(2)}`,
           cashBalanceBefore: cashBalance,
           cashBalanceAfter: cashBalance + totalDividendAmount
         });
 
         cashBalance += totalDividendAmount; // Update for next iteration
 
-        console.log(`💵 [DIVIDEND FOUND] ${ticker}: ${holding.quantity} shares × R$ ${dividend.amount} = R$ ${totalDividendAmount.toFixed(2)}`);
+        console.log(`💵 [DIVIDEND FOUND] ${ticker}: ${quantityOnExDate} shares × R$ ${dividend.amount} = R$ ${totalDividendAmount.toFixed(2)}`);
       }
     }
 

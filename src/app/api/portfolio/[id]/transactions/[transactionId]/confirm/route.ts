@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     // Note: This is expensive (O(n) with N writes) but keeps cashBalanceBefore/After accurate
     // The actual cash balance is calculated via fast aggregation in getCurrentCashBalance()
     // This can be removed if historical balance tracking is not needed
-    await PortfolioTransactionService.recalculateCashBalances(resolvedParams.id);
+    PortfolioTransactionService.recalculateCashBalances(resolvedParams.id);
 
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);

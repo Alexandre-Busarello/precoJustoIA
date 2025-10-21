@@ -130,9 +130,6 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <CardTitle className="text-lg sm:text-xl">Posições Atuais</CardTitle>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
-              Total: {formatCurrency(totalValue)}
-            </span>
             {hasRebalancingNeeded && (
               <Badge variant="outline" className="gap-1 text-xs flex-shrink-0">
                 <AlertTriangle className="h-3 w-3 flex-shrink-0" />

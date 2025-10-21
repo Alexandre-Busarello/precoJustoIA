@@ -14,7 +14,7 @@ import { safeWrite } from '@/lib/prisma-wrapper';
 import { PortfolioService } from './portfolio-service';
 import { getLatestPrices as getQuotes, pricesToNumberMap } from './quote-service';
 import { DividendService } from './dividend-service';
-import { AssetRegistrationService } from './asset-registration-service';
+// import { AssetRegistrationService } from './asset-registration-service'; // Not used currently
 
 // Types
 export interface TransactionInput {
@@ -149,21 +149,23 @@ export class PortfolioTransactionService {
     }
 
     // OPTIMIZATION: Parallelize independent operations
-    const [holdings, prices, nextDates, existingPending] = await Promise.all([
+    const [holdings, prices, nextDates, existingTransactions] = await Promise.all([
       this.getCurrentHoldings(portfolioId),
       this.getLatestPrices(portfolio.assets.map(a => a.ticker)),
       this.calculateNextTransactionDates(portfolioId),
-      // Get existing PENDING transactions to avoid duplicates
+      // Get existing transactions (PENDING, CONFIRMED, REJECTED) to avoid duplicates
       prisma.portfolioTransaction.findMany({
         where: {
           portfolioId,
-          status: 'PENDING',
+          status: { in: ['PENDING', 'CONFIRMED', 'REJECTED'] },
           isAutoSuggested: true
         },
         select: {
           date: true,
           type: true,
-          ticker: true
+          ticker: true,
+          status: true,
+          amount: true
         }
       })
     ]);
@@ -171,15 +173,28 @@ export class PortfolioTransactionService {
     const fetchTime = Date.now() - startTime;
     console.log(`⚡ [PERFORMANCE] Data fetched in ${fetchTime}ms (parallelized)`);
 
-    // Create a Set of existing PENDING transactions for fast lookup
-    const existingPendingKeys = new Set(
-      existingPending.map(tx => 
+    // Create a Set of existing transactions for fast lookup
+    // Include PENDING, CONFIRMED, and REJECTED to avoid re-suggesting
+    const existingTransactionKeys = new Set(
+      existingTransactions.map(tx => 
         `${tx.date.toISOString().split('T')[0]}_${tx.type}_${tx.ticker || 'null'}`
       )
     );
 
-    if (existingPendingKeys.size > 0) {
-      console.log(`🔍 [DEDUP CHECK] Found ${existingPendingKeys.size} existing PENDING transactions`);
+    // Create a Map for dividend amount checking (to avoid suggesting same dividend amount)
+    const existingDividendMap = new Map<string, { amount: number; status: string }>();
+    existingTransactions
+      .filter(tx => tx.type === 'DIVIDEND' && tx.ticker)
+      .forEach(tx => {
+        const key = `${tx.date.toISOString().split('T')[0]}_${tx.ticker}`;
+        existingDividendMap.set(key, { 
+          amount: Number(tx.amount), 
+          status: tx.status 
+        });
+      });
+
+    if (existingTransactionKeys.size > 0) {
+      console.log(`🔍 [DEDUP CHECK] Found ${existingTransactionKeys.size} existing transactions (PENDING/CONFIRMED/REJECTED)`);
     }
 
     const suggestions: SuggestedTransaction[] = [];
@@ -234,16 +249,33 @@ export class PortfolioTransactionService {
       console.log(`✅ [DIVIDENDS] No pending dividends for current month`);
     }
 
-    // INTELLIGENCE: Filter out suggestions that already exist as PENDING
+    // INTELLIGENCE: Filter out suggestions that already exist
     const filteredSuggestions = suggestions.filter(suggestion => {
       const key = `${suggestion.date.toISOString().split('T')[0]}_${suggestion.type}_${suggestion.ticker || 'null'}`;
-      const exists = existingPendingKeys.has(key);
       
-      if (exists) {
-        console.log(`⏩ [SKIP DUPLICATE] ${suggestion.type} ${suggestion.ticker || ''} on ${suggestion.date.toISOString().split('T')[0]} already exists as PENDING`);
+      // Check for exact match (any status)
+      if (existingTransactionKeys.has(key)) {
+        console.log(`⏩ [SKIP DUPLICATE] ${suggestion.type} ${suggestion.ticker || ''} on ${suggestion.date.toISOString().split('T')[0]} already exists`);
+        return false;
       }
       
-      return !exists;
+      // Special handling for dividends - check for similar amounts
+      if (suggestion.type === 'DIVIDEND' && suggestion.ticker) {
+        const dividendKey = `${suggestion.date.toISOString().split('T')[0]}_${suggestion.ticker}`;
+        const existingDividend = existingDividendMap.get(dividendKey);
+        
+        if (existingDividend) {
+          const amountDiff = Math.abs(existingDividend.amount - suggestion.amount);
+          const tolerance = Math.max(0.01, suggestion.amount * 0.05); // 5% tolerance or R$ 0.01 minimum
+          
+          if (amountDiff <= tolerance) {
+            console.log(`⏩ [SKIP SIMILAR DIVIDEND] ${suggestion.ticker} on ${suggestion.date.toISOString().split('T')[0]}: R$ ${suggestion.amount.toFixed(2)} vs existing R$ ${existingDividend.amount.toFixed(2)} (${existingDividend.status})`);
+            return false;
+          }
+        }
+      }
+      
+      return true;
     });
 
     const skippedCount = suggestions.length - filteredSuggestions.length;
@@ -293,7 +325,7 @@ export class PortfolioTransactionService {
     today.setHours(0, 0, 0, 0); // Start of today
     
     const startDate = lastTransaction?.date || portfolio.startDate;
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
     currentDate.setHours(0, 0, 0, 0);
     
     console.log(`📆 [DATE CALC] Last contribution: ${startDate.toISOString().split('T')[0]}, Today: ${today.toISOString().split('T')[0]}`);
@@ -511,7 +543,7 @@ export class PortfolioTransactionService {
       cashBalanceAfter: cashBalance + Number(portfolio.monthlyContribution)
     });
 
-    let currentCash = cashBalance + Number(portfolio.monthlyContribution);
+    const currentCash = cashBalance + Number(portfolio.monthlyContribution);
 
     // 2. Calculate portfolio value and current allocations
     const portfolioValue = this.calculatePortfolioValue(holdings, prices);
@@ -764,7 +796,7 @@ export class PortfolioTransactionService {
   private static async generateDividendSuggestions(
     portfolioId: string,
     holdings: Map<string, { quantity: number; totalInvested: number }>,
-    prices: Map<string, number>
+    _prices: Map<string, number> // Not used currently but kept for future enhancements
   ): Promise<SuggestedTransaction[]> {
     const suggestions: SuggestedTransaction[] = [];
     const today = new Date();
@@ -1088,6 +1120,61 @@ export class PortfolioTransactionService {
   }
 
   /**
+   * Check if a similar transaction already exists
+   * Special handling for dividends to avoid suggesting same dividend with similar amounts
+   */
+  private static async checkSimilarTransactionExists(
+    portfolioId: string,
+    suggestion: SuggestedTransaction
+  ): Promise<{ exists: boolean; existingTransaction?: any }> {
+    // For dividends, check for similar amounts in the same month
+    if (suggestion.type === 'DIVIDEND' && suggestion.ticker) {
+      const startOfMonth = new Date(suggestion.date.getFullYear(), suggestion.date.getMonth(), 1);
+      const endOfMonth = new Date(suggestion.date.getFullYear(), suggestion.date.getMonth() + 1, 0);
+      
+      const existingDividend = await prisma.portfolioTransaction.findFirst({
+        where: {
+          portfolioId,
+          type: 'DIVIDEND',
+          ticker: suggestion.ticker,
+          date: {
+            gte: startOfMonth,
+            lte: endOfMonth
+          },
+          status: { in: ['PENDING', 'CONFIRMED', 'REJECTED'] },
+          isAutoSuggested: true
+        }
+      });
+
+      if (existingDividend) {
+        const amountDiff = Math.abs(Number(existingDividend.amount) - suggestion.amount);
+        const tolerance = Math.max(0.01, suggestion.amount * 0.05); // 5% tolerance or R$ 0.01 minimum
+        
+        if (amountDiff <= tolerance) {
+          return { exists: true, existingTransaction: existingDividend };
+        }
+      }
+    }
+
+    // For other transaction types, check exact match
+    const existingTransaction = await prisma.portfolioTransaction.findFirst({
+      where: {
+        portfolioId,
+        date: suggestion.date,
+        type: suggestion.type,
+        ticker: suggestion.ticker,
+        status: { in: ['PENDING', 'CONFIRMED', 'REJECTED'] },
+        isAutoSuggested: true
+      }
+    });
+
+    return { 
+      exists: !!existingTransaction, 
+      existingTransaction 
+    };
+  }
+
+  /**
    * Create pending transactions from suggestions
    */
   static async createPendingTransactions(
@@ -1106,22 +1193,22 @@ export class PortfolioTransactionService {
     let skippedCount = 0;
 
     for (const suggestion of suggestions) {
-      // Check if a similar PENDING transaction already exists (deduplication)
-      const existingTransaction = await prisma.portfolioTransaction.findFirst({
-        where: {
-          portfolioId,
-          date: suggestion.date,
-          type: suggestion.type,
-          ticker: suggestion.ticker,
-          status: 'PENDING',
-          isAutoSuggested: true
-        }
-      });
+      // Check if a similar transaction already exists (with smart duplicate detection)
+      const { exists, existingTransaction } = await this.checkSimilarTransactionExists(portfolioId, suggestion);
 
-      if (existingTransaction) {
-        // Skip creating duplicate, but add to the list
-        console.log(`⏩ Skipping duplicate PENDING transaction: ${suggestion.type} ${suggestion.ticker || ''} on ${suggestion.date.toISOString().split('T')[0]}`);
-        transactionIds.push(existingTransaction.id);
+      if (exists && existingTransaction) {
+        // Skip creating duplicate
+        const reasonText = suggestion.type === 'DIVIDEND' ? 
+          `similar dividend amount (R$ ${Number(existingTransaction.amount).toFixed(2)} vs R$ ${suggestion.amount.toFixed(2)})` :
+          'exact match';
+          
+        console.log(`⏩ Skipping duplicate transaction: ${suggestion.type} ${suggestion.ticker || ''} on ${suggestion.date.toISOString().split('T')[0]} (status: ${existingTransaction.status}, reason: ${reasonText})`);
+        
+        // Only add to list if it's PENDING (user can still act on it)
+        if (existingTransaction.status === 'PENDING') {
+          transactionIds.push(existingTransaction.id);
+        }
+        
         skippedCount++;
         continue;
       }
@@ -1503,8 +1590,6 @@ export class PortfolioTransactionService {
     if (transaction.status === 'CONFIRMED' && transaction.isAutoSuggested) {
       throw new Error('Cannot delete confirmed auto-suggested transactions. Revert to pending first.');
     }
-
-    const portfolioId = transaction.portfolioId;
 
     await safeWrite(
       'delete-transaction',

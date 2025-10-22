@@ -453,7 +453,7 @@ export default function Dashboard() {
 
                         <div className="flex flex-col sm:flex-row gap-3 justify-center">
                           <Button asChild size="lg" className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700">
-                            <Link href="/carteira/nova" className="flex items-center gap-2">
+                            <Link href="/carteira" className="flex items-center gap-2">
                               <Sparkles className="w-5 h-5" />
                               Criar Primeira Carteira
                             </Link>

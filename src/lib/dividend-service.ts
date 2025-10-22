@@ -1,22 +1,23 @@
 /**
  * DIVIDEND SERVICE
- * 
+ *
  * Gerencia a extração, armazenamento e processamento de dividendos históricos
  * usando yahoo-finance2 para todos os tipos de ativos.
  */
 
-import { prisma } from '@/lib/prisma';
-import { safeWrite, safeQueryWithParams } from '@/lib/prisma-wrapper';
-import type { Prisma } from '@prisma/client';
+import { prisma } from "@/lib/prisma";
+import { safeWrite, safeQueryWithParams } from "@/lib/prisma-wrapper";
 
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
 
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
-    const module = await import('yahoo-finance2');
-    const YahooFinance = module.default;
-    yahooFinanceInstance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+    const yahooModule = await import("yahoo-finance2");
+    const YahooFinance = yahooModule.default;
+    yahooFinanceInstance = new YahooFinance({
+      suppressNotices: ["yahooSurvey", "ripHistorical"],
+    });
   }
   return yahooFinanceInstance;
 }
@@ -43,7 +44,6 @@ export interface DividendInfo extends DividendData {
  * Dividend Service
  */
 export class DividendService {
-  
   /**
    * Busca e salva o histórico completo de dividendos de um ativo
    * Atualiza também os campos ultimoDividendo e dataUltimoDividendo na Company
@@ -59,36 +59,33 @@ export class DividendService {
   }> {
     try {
       console.log(`📊 [DIVIDENDS] Buscando dividendos para ${ticker}...`);
-      
+
       // Get company from database
       const company = await prisma.company.findUnique({
-        where: { ticker }
+        where: { ticker },
       });
 
       if (!company) {
         return {
           success: false,
           dividendsCount: 0,
-          message: `Company ${ticker} not found`
+          message: `Company ${ticker} not found`,
         };
       }
 
       // Fetch dividends from Yahoo Finance
-      const dividends = await this.fetchDividendsFromYahoo(
-        ticker,
-        startDate
-      );
+      const dividends = await this.fetchDividendsFromYahoo(ticker, startDate);
 
       if (dividends.length === 0) {
         console.log(`⚠️ [DIVIDENDS] ${ticker}: Nenhum dividendo encontrado`);
         return {
           success: true,
           dividendsCount: 0,
-          message: 'No dividends found'
+          message: "No dividends found",
         };
       }
 
-      // Save all dividends to database
+      // Save only new dividends to database (avoid unnecessary writes)
       await this.saveDividendsToDatabase(company.id, dividends);
 
       // Find the latest dividend
@@ -98,19 +95,22 @@ export class DividendService {
 
       // Update Company with latest dividend info
       await safeWrite(
-        'update-companies-latest-dividend',
-        () => prisma.company.update({
-          where: { id: company.id },
-          data: {
-            ultimoDividendo: latestDividend.amount,
-            dataUltimoDividendo: latestDividend.date
-          }
-        }),
-        ['companies']
+        "update-companies-latest-dividend",
+        () =>
+          prisma.company.update({
+            where: { id: company.id },
+            data: {
+              ultimoDividendo: latestDividend.amount,
+              dataUltimoDividendo: latestDividend.date,
+            },
+          }),
+        ["companies"]
       );
 
-      console.log(`✅ [DIVIDENDS] ${ticker}: ${dividends.length} dividendos salvos`);
-      
+      console.log(
+        `✅ [DIVIDENDS] ${ticker}: ${dividends.length} dividendos salvos`
+      );
+
       return {
         success: true,
         dividendsCount: dividends.length,
@@ -118,16 +118,15 @@ export class DividendService {
           ticker,
           date: latestDividend.date,
           amount: latestDividend.amount,
-          exDate: latestDividend.date
-        }
+          exDate: latestDividend.date,
+        },
       };
-
     } catch (error) {
       console.error(`❌ [DIVIDENDS] Erro ao processar ${ticker}:`, error);
       return {
         success: false,
         dividendsCount: 0,
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -147,7 +146,7 @@ export class DividendService {
       // Default: buscar o máximo disponível (10 anos atrás)
       const defaultStartDate = new Date();
       defaultStartDate.setFullYear(defaultStartDate.getFullYear() - 10);
-      
+
       const period1 = startDate || defaultStartDate;
       const period2 = new Date(); // Até hoje
 
@@ -155,48 +154,54 @@ export class DividendService {
       const result = await yahooFinance.chart(yahooSymbol, {
         period1,
         period2,
-        interval: '1mo',
-        events: 'dividends', // Importante: solicitar eventos de dividendos
-        return: 'array'
+        interval: "1mo",
+        events: "dividends", // Importante: solicitar eventos de dividendos
+        return: "array",
       });
 
       // Extrair dividendos dos eventos
       const dividends: DividendData[] = [];
-      
+
       if (result && result.events && result.events.dividends) {
-        const yahooFinance2 = require('yahoo-finance2');
         const dividendEvents = result.events.dividends;
-        
+
         // Se for um array
         if (Array.isArray(dividendEvents)) {
           for (const div of dividendEvents) {
             if (div.date && div.amount && div.amount > 0) {
               dividends.push({
                 date: div.date instanceof Date ? div.date : new Date(div.date),
-                amount: Number(div.amount)
+                amount: Number(div.amount),
               });
             }
           }
         }
         // Se for um objeto (mapeado por timestamp)
-        else if (typeof dividendEvents === 'object') {
+        else if (typeof dividendEvents === "object") {
           for (const [timestamp, div] of Object.entries(dividendEvents)) {
             const divData = div as any;
             if (divData.amount && divData.amount > 0) {
               dividends.push({
-                date: divData.date instanceof Date ? divData.date : new Date(divData.date || Number(timestamp) * 1000),
-                amount: Number(divData.amount)
+                date:
+                  divData.date instanceof Date
+                    ? divData.date
+                    : new Date(divData.date || Number(timestamp) * 1000),
+                amount: Number(divData.amount),
               });
             }
           }
         }
       }
 
-      console.log(`📊 [YAHOO] ${ticker}: ${dividends.length} dividendos encontrados`);
+      console.log(
+        `📊 [YAHOO] ${ticker}: ${dividends.length} dividendos encontrados`
+      );
       return dividends.sort((a, b) => b.date.getTime() - a.date.getTime());
-
     } catch (error) {
-      console.error(`❌ [YAHOO] Erro ao buscar dividendos de ${ticker}:`, error);
+      console.error(
+        `❌ [YAHOO] Erro ao buscar dividendos de ${ticker}:`,
+        error
+      );
       return [];
     }
   }
@@ -212,38 +217,68 @@ export class DividendService {
     if (dividends.length === 0) return;
 
     try {
-      // Use transaction for better performance
+      // First, get existing dividends to avoid unnecessary writes
+      const existingDividends = await prisma.dividendHistory.findMany({
+        where: {
+          companyId: companyId,
+        },
+        select: {
+          exDate: true,
+          amount: true,
+        },
+      });
+
+      // Create a Set of existing dividend keys for fast lookup
+      const existingKeys = new Set(
+        existingDividends.map(
+          (div) =>
+            `${div.exDate.toISOString().split("T")[0]}_${Number(
+              div.amount
+            ).toFixed(6)}`
+        )
+      );
+
+      // Filter out dividends that already exist
+      const newDividends = dividends.filter((dividend) => {
+        const key = `${
+          dividend.date.toISOString().split("T")[0]
+        }_${dividend.amount.toFixed(6)}`;
+        return !existingKeys.has(key);
+      });
+
+      if (newDividends.length === 0) {
+        console.log(
+          `✅ [DB] Todos os ${dividends.length} dividendos já existem no banco`
+        );
+        return;
+      }
+
+      // Save only new dividends
       await Promise.all(
-        dividends.map(dividend =>
+        newDividends.map((dividend) =>
           safeWrite(
-            'upsert-dividend_history',
-            () => prisma.dividendHistory.upsert({
-              where: {
-                companyId_exDate_amount: {
+            "create-dividend_history",
+            () =>
+              prisma.dividendHistory.create({
+                data: {
                   companyId: companyId,
                   exDate: dividend.date,
-                  amount: dividend.amount
-                }
-              },
-              update: {
-                // Atualizar data de modificação
-                updatedAt: new Date()
-              },
-              create: {
-                companyId: companyId,
-                exDate: dividend.date,
-                amount: dividend.amount,
-                source: 'yahoo'
-              }
-            }),
-            ['dividend_history']
+                  amount: dividend.amount,
+                  source: "yahoo",
+                },
+              }),
+            ["dividend_history"]
           )
         )
       );
 
-      console.log(`✅ [DB] Salvos ${dividends.length} dividendos no banco`);
+      console.log(
+        `✅ [DB] Salvos ${newDividends.length} novos dividendos (${
+          dividends.length - newDividends.length
+        } já existiam)`
+      );
     } catch (error) {
-      console.error('❌ [DB] Erro ao salvar dividendos:', error);
+      console.error("❌ [DB] Erro ao salvar dividendos:", error);
       throw error;
     }
   }
@@ -263,27 +298,27 @@ export class DividendService {
           where: {
             exDate: {
               gte: startDate,
-              lte: endDate
-            }
+              lte: endDate,
+            },
           },
           orderBy: {
-            exDate: 'desc'
-          }
-        }
-      }
+            exDate: "desc",
+          },
+        },
+      },
     });
 
     if (!company) {
       return [];
     }
 
-    return company.dividendHistory.map(div => ({
+    return company.dividendHistory.map((div) => ({
       ticker,
       date: div.exDate,
       amount: Number(div.amount),
       exDate: div.exDate,
       paymentDate: div.paymentDate || undefined,
-      type: div.type || undefined
+      type: div.type || undefined,
     }));
   }
 
@@ -316,7 +351,7 @@ export class DividendService {
     const now = new Date();
 
     // Filtrar apenas dividendos cuja data ex já passou
-    return currentMonthDividends.filter(div => div.exDate <= now);
+    return currentMonthDividends.filter((div) => div.exDate <= now);
   }
 
   /**
@@ -324,36 +359,41 @@ export class DividendService {
    */
   static async getLatestDividend(ticker: string): Promise<DividendInfo | null> {
     const company = await safeQueryWithParams(
-      'get-latest-dividend-companies',
-      () => prisma.company.findUnique({
-        where: { ticker },
-        select: {
-          ultimoDividendo: true,
-          dataUltimoDividendo: true,
-          dividendHistory: {
-            orderBy: {
-              exDate: 'desc'
+      "get-latest-dividend-companies",
+      () =>
+        prisma.company.findUnique({
+          where: { ticker },
+          select: {
+            ultimoDividendo: true,
+            dataUltimoDividendo: true,
+            dividendHistory: {
+              orderBy: {
+                exDate: "desc",
+              },
+              take: 1,
             },
-            take: 1
-          }
-        }
-      }),
+          },
+        }),
       { ticker }
     );
 
-    if (!company || !company.dividendHistory || company.dividendHistory.length === 0) {
+    if (
+      !company ||
+      !company.dividendHistory ||
+      company.dividendHistory.length === 0
+    ) {
       return null;
     }
 
     const latestDiv = company.dividendHistory[0];
-    
+
     return {
       ticker,
       date: latestDiv.exDate,
       amount: Number(latestDiv.amount),
       exDate: latestDiv.exDate,
       paymentDate: latestDiv.paymentDate || undefined,
-      type: latestDiv.type || undefined
+      type: latestDiv.type || undefined,
     };
   }
 
@@ -369,7 +409,7 @@ export class DividendService {
     const now = new Date();
 
     const dividends = await this.getDividendsInPeriod(ticker, oneYearAgo, now);
-    
+
     if (dividends.length === 0 || currentPrice <= 0) {
       return null;
     }
@@ -378,4 +418,3 @@ export class DividendService {
     return totalDividends / currentPrice;
   }
 }
-

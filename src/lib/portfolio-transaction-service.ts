@@ -187,6 +187,7 @@ export class PortfolioTransactionService {
             ticker: true,
             status: true,
             amount: true,
+            quantity: true,
           },
         }),
       ]);
@@ -198,13 +199,22 @@ export class PortfolioTransactionService {
 
     // Create a Set of existing transactions for fast lookup
     // Include PENDING, CONFIRMED, and REJECTED to avoid re-suggesting
+    // Include amount/quantity in key to allow multiple transactions of same asset on same day
     const existingTransactionKeys = new Set(
-      existingTransactions.map(
-        (tx) =>
-          `${tx.date.toISOString().split("T")[0]}_${tx.type}_${
-            tx.ticker || "null"
-          }`
-      )
+      existingTransactions.map((tx) => {
+        const dateStr = tx.date.toISOString().split("T")[0];
+        const ticker = tx.ticker || "null";
+        const amount = Number(tx.amount).toFixed(2);
+        const quantity = tx.quantity ? Number(tx.quantity).toFixed(6) : "null";
+        
+        // For BUY/SELL transactions, include quantity in key to allow multiple purchases
+        // For other transactions (DEPOSIT, DIVIDEND), include amount
+        if (tx.type === "BUY" || tx.type === "SELL_REBALANCE" || tx.type === "BUY_REBALANCE" || tx.type === "SELL_WITHDRAWAL") {
+          return `${dateStr}_${tx.type}_${ticker}_${quantity}`;
+        } else {
+          return `${dateStr}_${tx.type}_${ticker}_${amount}`;
+        }
+      })
     );
 
     // Create a Map for dividend amount checking (to avoid suggesting same dividend amount)
@@ -302,16 +312,26 @@ export class PortfolioTransactionService {
 
     // INTELLIGENCE: Filter out suggestions that already exist
     const filteredSuggestions = suggestions.filter((suggestion) => {
-      const key = `${suggestion.date.toISOString().split("T")[0]}_${
-        suggestion.type
-      }_${suggestion.ticker || "null"}`;
+      const dateStr = suggestion.date.toISOString().split("T")[0];
+      const ticker = suggestion.ticker || "null";
+      const amount = suggestion.amount.toFixed(2);
+      const quantity = suggestion.quantity ? suggestion.quantity.toFixed(6) : "null";
+      
+      // Create key using same logic as existing transactions
+      let key: string;
+      if (suggestion.type === "BUY" || suggestion.type === "SELL_REBALANCE" || suggestion.type === "BUY_REBALANCE" || suggestion.type === "SELL_WITHDRAWAL") {
+        key = `${dateStr}_${suggestion.type}_${ticker}_${quantity}`;
+      } else {
+        key = `${dateStr}_${suggestion.type}_${ticker}_${amount}`;
+      }
 
       // Check for exact match (any status)
       if (existingTransactionKeys.has(key)) {
         console.log(
           `⏩ [SKIP DUPLICATE] ${suggestion.type} ${
             suggestion.ticker || ""
-          } on ${suggestion.date.toISOString().split("T")[0]} already exists`
+          } on ${dateStr} (${suggestion.type === "BUY" || suggestion.type === "SELL_REBALANCE" || suggestion.type === "BUY_REBALANCE" || suggestion.type === "SELL_WITHDRAWAL" ? 
+            `qty: ${quantity}` : `amt: R$ ${amount}`}) already exists`
         );
         return false;
       }
@@ -1646,16 +1666,30 @@ export class PortfolioTransactionService {
       }
     }
 
-    // For other transaction types, check exact match
+    // For other transaction types, check exact match including quantity/amount
+    // This allows multiple transactions of same asset on same day with different quantities
+    const whereCondition: any = {
+      portfolioId,
+      date: suggestion.date,
+      type: suggestion.type,
+      ticker: suggestion.ticker,
+      status: { in: ["PENDING", "CONFIRMED", "REJECTED"] },
+      isAutoSuggested: true,
+    };
+
+    // For BUY/SELL transactions, also match quantity to allow multiple purchases with different amounts
+    if (suggestion.type === "BUY" || suggestion.type === "SELL_REBALANCE" || 
+        suggestion.type === "BUY_REBALANCE" || suggestion.type === "SELL_WITHDRAWAL") {
+      if (suggestion.quantity !== undefined) {
+        whereCondition.quantity = suggestion.quantity;
+      }
+    } else {
+      // For other transactions (CASH_CREDIT, CASH_DEBIT), match amount
+      whereCondition.amount = suggestion.amount;
+    }
+
     const existingTransaction = await prisma.portfolioTransaction.findFirst({
-      where: {
-        portfolioId,
-        date: suggestion.date,
-        type: suggestion.type,
-        ticker: suggestion.ticker,
-        status: { in: ["PENDING", "CONFIRMED", "REJECTED"] },
-        isAutoSuggested: true,
-      },
+      where: whereCondition,
     });
 
     return {

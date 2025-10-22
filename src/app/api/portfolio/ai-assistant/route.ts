@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     // ETAPA 1: Analisar se precisa fazer screening ou se já tem lista de ativos
     const { sectors, industries } = await getSectorsAndIndustries();
 
-    const analysisPrompt = `Você é um especialista em análise de investimentos brasileiros.
+    const analysisPrompt = `Você é um especialista em análise de investimentos brasileiros. Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
 
 Analise a seguinte instrução do usuário e determine se precisa fazer screening de ações ou se já tem uma lista específica de ativos:
 
@@ -214,7 +214,7 @@ Analise a instrução e retorne APENAS o JSON:`;
     }
 
     // ETAPA 3: Montar a carteira com os dados disponíveis
-    const portfolioPrompt = `Você é um especialista em montagem de carteiras de investimento no mercado brasileiro (B3).
+    const portfolioPrompt = `Você é um especialista em montagem de carteiras de investimento no mercado brasileiro (B3). Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
 
 Sua tarefa é criar uma carteira com alocações específicas baseada nos dados fornecidos.
 

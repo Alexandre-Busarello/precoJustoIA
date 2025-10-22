@@ -80,6 +80,13 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
       show: !!session
+    },
+    {
+      title: "Carteiras",
+      href: "/carteira",
+      icon: <BarChart3 className="w-5 h-5" />,
+      show: !!session && isPremium,
+      isPremiumFeature: !isPremium
     }
   ]
 

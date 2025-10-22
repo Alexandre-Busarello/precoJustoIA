@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import Link from "next/link"
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
 import { ToolsDropdown } from "@/components/tools-dropdown"
 import { UserProfileDropdown } from "@/components/user-profile-dropdown"
-import { LayoutDashboard, Shield, Zap, Headphones } from "lucide-react"
+import { LayoutDashboard, Headphones, BarChart3 } from "lucide-react"
 import { GlobalSearchBar } from "@/components/global-search-bar"
 
 export default function Header() {
@@ -86,6 +86,20 @@ export default function Header() {
                     Dashboard
                   </Link>
                 </Button>
+
+                {/* Carteiras - Nova seção separada */}
+                {isPremium && (
+                  <Button 
+                    variant={pathname === "/carteira" ? "default" : "ghost"} 
+                    size="sm" 
+                    asChild
+                  >
+                    <Link href="/carteira" className="flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4" />
+                      Carteiras
+                    </Link>
+                  </Button>
+                )}
                 
                 {/* Dropdown de Ferramentas */}
                 <ToolsDropdown isPremium={isPremium} />

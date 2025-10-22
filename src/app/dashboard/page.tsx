@@ -392,23 +392,123 @@ export default function Dashboard() {
                 </Card>
               )}
 
-            {/* 4. MINHAS CARTEIRAS - Apenas para usuários Premium */}
+            {/* 4. CARTEIRAS - Para usuários Premium */}
             {isPremium && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-blue-600" />
-                    Minhas Carteiras
-                  </h2>
-                  <Button asChild variant="outline" size="sm">
-                    <Link href="/carteira" className="flex items-center gap-2">
-                      Ver Todas
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  </Button>
-                </div>
-                <DashboardPortfolios />
+                {portfolioCount > 0 ? (
+                  // Usuário tem carteiras - mostrar dashboard normal
+                  <>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5 text-blue-600" />
+                        Minhas Carteiras
+                      </h2>
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/carteira" className="flex items-center gap-2">
+                          Ver Todas
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
+                      </Button>
+                    </div>
+                    <DashboardPortfolios />
+                  </>
+                ) : (
+                  // Usuário Premium sem carteiras - chamada para criar primeira carteira
+                  <Card className="border-2 border-dashed border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-emerald-950/20 dark:via-background dark:to-teal-950/20 hover:shadow-xl transition-all duration-300">
+                    <CardContent className="p-8">
+                      <div className="text-center space-y-6">
+                        <div className="w-20 h-20 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center mx-auto shadow-xl">
+                          <BarChart3 className="w-10 h-10 text-white" />
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                            🚀 Crie Sua Primeira Carteira
+                          </h3>
+                          <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+                            Monte carteiras inteligentes com IA, acompanhe performance e receba sugestões automáticas de rebalanceamento
+                          </p>
+                        </div>
+
+                        <div className="bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg p-4 max-w-md mx-auto">
+                          <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                            <li className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-emerald-600" />
+                              <span>Assistente IA para configuração</span>
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-emerald-600" />
+                              <span>Acompanhamento de performance</span>
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-emerald-600" />
+                              <span>Sugestões de rebalanceamento</span>
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-emerald-600" />
+                              <span>Análise de transações</span>
+                            </li>
+                          </ul>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                          <Button asChild size="lg" className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700">
+                            <Link href="/carteira/nova" className="flex items-center gap-2">
+                              <Sparkles className="w-5 h-5" />
+                              Criar Primeira Carteira
+                            </Link>
+                          </Button>
+                          <Button asChild variant="outline" size="lg">
+                            <Link href="/carteira" className="flex items-center gap-2">
+                              <BarChart3 className="w-5 h-5" />
+                              Explorar Funcionalidades
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
+            )}
+
+            {/* 4.1. CARTEIRAS CTA - Para usuários Free */}
+            {!isPremium && (
+              <Card className="border-2 border-dashed border-violet-300 dark:border-violet-700 bg-gradient-to-br from-violet-50 via-white to-purple-50 dark:from-violet-950/20 dark:via-background dark:to-purple-950/20">
+                <CardContent className="p-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-r from-violet-500 to-purple-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <BarChart3 className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
+                        Carteiras Inteligentes Premium
+                      </h3>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                        Monte carteiras com IA, acompanhe performance em tempo real e receba sugestões automáticas de rebalanceamento
+                      </p>
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        <Badge variant="outline" className="text-xs">
+                          <Sparkles className="w-3 h-3 mr-1" />
+                          Assistente IA
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          Performance Real
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          Rebalanceamento
+                        </Badge>
+                      </div>
+                      <Button asChild className="bg-gradient-to-r from-violet-600 to-purple-600">
+                        <Link href="/checkout" className="flex items-center gap-2">
+                          <Shield className="w-4 h-4" />
+                          Fazer Upgrade Premium
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* 2. AÇÃO PRINCIPAL - Adaptativa baseada em experiência */}

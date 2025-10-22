@@ -128,17 +128,33 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (replaceAll) {
       console.log(`🤖 [AI PORTFOLIO UPDATE] Substituindo todos os ativos da carteira ${resolvedParams.id}`);
       
-      // 1. Remove all existing assets from portfolio
-      await prisma.portfolioAsset.deleteMany({
+      // 1. First, let's see what assets exist before deletion
+      const existingAssets = await prisma.portfolioConfigAsset.findMany({
         where: {
           portfolioId: resolvedParams.id,
           portfolio: {
             userId: currentUser.id
           }
+        },
+        select: {
+          id: true,
+          ticker: true,
+          targetAllocation: true
         }
       });
       
-      // 2. Register and add all new assets
+      console.log(`🗑️ [AI PORTFOLIO UPDATE] Assets existentes antes da deleção:`, existingAssets);
+      
+      // 2. Remove all existing assets from portfolio (simplified query)
+      const deleteResult = await prisma.portfolioConfigAsset.deleteMany({
+        where: {
+          portfolioId: resolvedParams.id
+        }
+      });
+      
+      console.log(`🗑️ [AI PORTFOLIO UPDATE] ${deleteResult.count} assets deletados de ${existingAssets.length} existentes`);
+      
+      // 3. Register and add all new assets
       let addedAssets = 0;
       for (const asset of body.assets) {
         // Register asset if it doesn't exist
@@ -157,6 +173,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
           asset.ticker,
           Number(asset.targetAllocation)
         );
+        console.log(`✅ [AI PORTFOLIO UPDATE] Adicionado ${asset.ticker} com ${(asset.targetAllocation * 100).toFixed(2)}%`);
         addedAssets++;
       }
       
@@ -165,6 +182,22 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       
       // Recalculate metrics
       await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
+
+      // 4. Verify final state
+      const finalAssets = await prisma.portfolioConfigAsset.findMany({
+        where: {
+          portfolioId: resolvedParams.id,
+          portfolio: {
+            userId: currentUser.id
+          }
+        },
+        select: {
+          ticker: true,
+          targetAllocation: true
+        }
+      });
+      
+      console.log(`✅ [AI PORTFOLIO UPDATE] Estado final da carteira:`, finalAssets);
 
       return NextResponse.json({
         success: true,

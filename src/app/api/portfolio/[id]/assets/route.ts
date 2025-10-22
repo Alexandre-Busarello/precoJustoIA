@@ -100,7 +100,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
 /**
  * PUT /api/portfolio/[id]/assets
- * Update multiple asset allocations
+ * Update multiple asset allocations or replace all assets (for AI integration)
  */
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
@@ -122,29 +122,89 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // Update each asset allocation
-    for (const asset of body.assets) {
-      await PortfolioService.updateAssetAllocation(
-        resolvedParams.id,
-        currentUser.id,
-        asset.ticker,
-        Number(asset.targetAllocation)
-      );
-    }
-
-    // Delete all pending transactions as allocations have changed
-    const deletedCount = await deletePendingTransactions(resolvedParams.id);
+    // Check if this is a "replace all" operation (for AI integration)
+    const replaceAll = body.replaceAll === true;
     
-    // Recalculate metrics
-    await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
+    if (replaceAll) {
+      console.log(`🤖 [AI PORTFOLIO UPDATE] Substituindo todos os ativos da carteira ${resolvedParams.id}`);
+      
+      // 1. Remove all existing assets from portfolio
+      await prisma.portfolioAsset.deleteMany({
+        where: {
+          portfolioId: resolvedParams.id,
+          portfolio: {
+            userId: currentUser.id
+          }
+        }
+      });
+      
+      // 2. Register and add all new assets
+      let addedAssets = 0;
+      for (const asset of body.assets) {
+        // Register asset if it doesn't exist
+        console.log(`📝 [AI PORTFOLIO UPDATE] Registrando ativo ${asset.ticker}...`);
+        const registrationResult = await AssetRegistrationService.registerAsset(asset.ticker);
+        
+        if (!registrationResult.success) {
+          console.warn(`⚠️ [AI PORTFOLIO UPDATE] Falha ao registrar ${asset.ticker}: ${registrationResult.message}`);
+          continue; // Skip this asset but continue with others
+        }
+        
+        // Add asset to portfolio
+        await PortfolioService.addAsset(
+          resolvedParams.id,
+          currentUser.id,
+          asset.ticker,
+          Number(asset.targetAllocation)
+        );
+        addedAssets++;
+      }
+      
+      // Delete all pending transactions as portfolio structure changed completely
+      const deletedCount = await deletePendingTransactions(resolvedParams.id);
+      
+      // Recalculate metrics
+      await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 
-    return NextResponse.json({
-      success: true,
-      deletedPendingTransactions: deletedCount,
-      message: deletedCount > 0
-        ? `Alocações atualizadas. ${deletedCount} transações pendentes foram removidas para recálculo.`
-        : 'Alocações atualizadas com sucesso'
-    });
+      return NextResponse.json({
+        success: true,
+        replacedAssets: true,
+        addedAssets,
+        totalAssets: body.assets.length,
+        deletedPendingTransactions: deletedCount,
+        message: `Carteira reconstruída pela IA: ${addedAssets} ativos configurados. ${deletedCount} transações pendentes foram removidas.`
+      });
+      
+    } else {
+      // Standard update operation (existing functionality)
+      console.log(`📝 [PORTFOLIO UPDATE] Atualizando alocações da carteira ${resolvedParams.id}`);
+      
+      // Update each asset allocation
+      for (const asset of body.assets) {
+        await PortfolioService.updateAssetAllocation(
+          resolvedParams.id,
+          currentUser.id,
+          asset.ticker,
+          Number(asset.targetAllocation)
+        );
+      }
+
+      // Delete all pending transactions as allocations have changed
+      const deletedCount = await deletePendingTransactions(resolvedParams.id);
+      
+      // Recalculate metrics
+      await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
+
+      return NextResponse.json({
+        success: true,
+        replacedAssets: false,
+        updatedAssets: body.assets.length,
+        deletedPendingTransactions: deletedCount,
+        message: deletedCount > 0
+          ? `Alocações atualizadas. ${deletedCount} transações pendentes foram removidas para recálculo.`
+          : 'Alocações atualizadas com sucesso'
+      });
+    }
 
   } catch (error) {
     console.error('Erro ao atualizar alocações:', error);

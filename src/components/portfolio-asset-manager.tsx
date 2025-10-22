@@ -6,13 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import {
   Plus,
   Trash2,
   Save,
   AlertTriangle,
-  TrendingUp
+  TrendingUp,
+  Bot,
+  FileText
 } from 'lucide-react';
 import {
   Dialog,
@@ -21,6 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { PortfolioAIAssistant } from '@/components/portfolio-ai-assistant';
+import { PortfolioBulkAssetInput } from '@/components/portfolio-bulk-asset-input';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
 
 interface Asset {
   id: string;
@@ -36,17 +42,47 @@ interface PortfolioAssetManagerProps {
 
 export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetManagerProps) {
   const { toast } = useToast();
+  const { isPremium } = usePremiumStatus();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTicker, setNewTicker] = useState('');
   const [newAllocation, setNewAllocation] = useState('');
+  const [activeReplaceTab, setActiveReplaceTab] = useState(() => {
+    // Detectar se deve abrir na aba IA baseado no hash
+    if (typeof window !== 'undefined' && window.location.hash === '#ai-assistant') {
+      return 'ai';
+    }
+    return 'bulk';
+  });
   
   useEffect(() => {
     loadAssets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId]);
+
+  // Detectar hash e fazer scroll quando dados carregarem
+  useEffect(() => {
+    if (!loading && typeof window !== 'undefined' && window.location.hash === '#ai-assistant') {
+      // Aguardar um pouco mais para garantir que a seção foi renderizada
+      setTimeout(() => {
+        const replaceSection = document.querySelector('[data-replace-section="true"]');
+        if (replaceSection) {
+          replaceSection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          
+          // Adicionar highlight temporário
+          replaceSection.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50', 'rounded-lg');
+          setTimeout(() => {
+            replaceSection.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'rounded-lg');
+          }, 2000);
+        }
+      }, 300);
+    }
+  }, [loading]);
 
   const loadAssets = async () => {
     try {
@@ -314,6 +350,76 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
     }
   };
 
+  const handleAssetsFromAI = async (generatedAssets: { ticker: string; targetAllocation: number }[]) => {
+    try {
+      setSaving(true);
+
+      // Replace all current assets with AI generated ones
+      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assets: generatedAssets })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao aplicar ativos da IA');
+      }
+
+      toast({
+        title: 'Ativos aplicados!',
+        description: `${generatedAssets.length} ativos foram configurados pela IA`,
+      });
+
+      loadAssets();
+      onUpdate();
+    } catch (error) {
+      console.error('Erro ao aplicar ativos da IA:', error);
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Erro ao aplicar ativos',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssetsFromBulk = async (bulkAssets: { ticker: string; targetAllocation: number }[]) => {
+    try {
+      setSaving(true);
+
+      // Replace all current assets with bulk input ones
+      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assets: bulkAssets })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao aplicar ativos em lote');
+      }
+
+      toast({
+        title: 'Ativos aplicados!',
+        description: `${bulkAssets.length} ativos foram adicionados`,
+      });
+
+      loadAssets();
+      onUpdate();
+    } catch (error) {
+      console.error('Erro ao aplicar ativos em lote:', error);
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Erro ao aplicar ativos',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -335,25 +441,66 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
               <TrendingUp className="h-5 w-5" />
               Gerenciamento de Ativos
             </CardTitle>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setShowAddModal(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Ativo
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowAddModal(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Ativo
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {assets.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <AlertTriangle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>Nenhum ativo configurado</p>
-                <p className="text-sm mt-1">Adicione ativos para começar</p>
+          <div className="space-y-6">
+            {/* Quick Actions for Adding Multiple Assets */}
+            {assets.length === 0 && (
+              <div className="space-y-4">
+                <Tabs defaultValue="manual" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="manual" className="flex items-center gap-2">
+                      <Plus className="h-4 w-4" />
+                      Manual
+                    </TabsTrigger>
+                    <TabsTrigger value="bulk" className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Lista
+                    </TabsTrigger>
+                    <TabsTrigger value="ai" className="flex items-center gap-2">
+                      <Bot className="h-4 w-4" />
+                      IA
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="manual" className="mt-6">
+                    <div className="text-center py-8 text-muted-foreground">
+                      <AlertTriangle className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>Nenhum ativo configurado</p>
+                      <p className="text-sm mt-1">Use o botão &quot;Adicionar Ativo&quot; acima</p>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="bulk" className="mt-6">
+                    <PortfolioBulkAssetInput onAssetsGenerated={handleAssetsFromBulk} />
+                  </TabsContent>
+
+                  <TabsContent value="ai" className="mt-6">
+                    <PortfolioAIAssistant 
+                      onAssetsGenerated={handleAssetsFromAI}
+                      disabled={!isPremium || saving}
+                      currentAssets={assets.map(a => ({
+                        ticker: a.ticker,
+                        targetAllocation: a.targetAllocation
+                      }))}
+                    />
+                  </TabsContent>
+                </Tabs>
               </div>
-            ) : (
+            )}
+
+            {assets.length > 0 && (
               <>
                 <div className="space-y-3">
                   {assets.map((asset, index) => (
@@ -438,6 +585,40 @@ export function PortfolioAssetManager({ portfolioId, onUpdate }: PortfolioAssetM
                       </p>
                     </div>
                   )}
+                </div>
+
+                {/* Quick Replace Options for Existing Assets */}
+                <div className="border-t pt-4" data-replace-section="true">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3">
+                    Substituir Todos os Ativos
+                  </h4>
+                  <Tabs value={activeReplaceTab} onValueChange={setActiveReplaceTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="bulk" className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Lista de Tickers
+                      </TabsTrigger>
+                      <TabsTrigger value="ai" className="flex items-center gap-2">
+                        <Bot className="h-4 w-4" />
+                        Assistente IA
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="bulk" className="mt-4">
+                      <PortfolioBulkAssetInput onAssetsGenerated={handleAssetsFromBulk} />
+                    </TabsContent>
+
+                    <TabsContent value="ai" className="mt-4">
+                      <PortfolioAIAssistant 
+                        onAssetsGenerated={handleAssetsFromAI}
+                        disabled={!isPremium || saving}
+                        currentAssets={assets.map(a => ({
+                          ticker: a.ticker,
+                          targetAllocation: a.targetAllocation
+                        }))}
+                      />
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </>
             )}

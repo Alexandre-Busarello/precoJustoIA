@@ -15,8 +15,12 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, TrendingUp, Bot, FileText } from 'lucide-react';
+import { PortfolioAIAssistant } from '@/components/portfolio-ai-assistant';
+import { PortfolioBulkAssetInput } from '@/components/portfolio-bulk-asset-input';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
 
 interface Asset {
   ticker: string;
@@ -46,6 +50,7 @@ export function PortfolioConfigForm({
 }: PortfolioConfigFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { isPremium } = usePremiumStatus();
   
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(initialData?.name || '');
@@ -103,6 +108,22 @@ export function PortfolioConfigForm({
 
   const handleRemoveAsset = (ticker: string) => {
     setAssets(assets.filter(a => a.ticker !== ticker));
+  };
+
+  const handleAssetsFromAI = (generatedAssets: Asset[]) => {
+    setAssets(generatedAssets);
+    toast({
+      title: 'Ativos aplicados!',
+      description: `${generatedAssets.length} ativos foram configurados pela IA`,
+    });
+  };
+
+  const handleAssetsFromBulk = (bulkAssets: Asset[]) => {
+    setAssets(bulkAssets);
+    toast({
+      title: 'Ativos aplicados!',
+      description: `${bulkAssets.length} ativos foram adicionados`,
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -279,38 +300,73 @@ export function PortfolioConfigForm({
               </Badge>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Add Asset Form */}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Ticker (ex: PETR4)"
-                value={newTicker}
-                onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-                className="flex-1"
-              />
-              <Input
-                type="number"
-                placeholder="% (ex: 25)"
-                value={newAllocation}
-                onChange={(e) => setNewAllocation(e.target.value)}
-                className="w-32"
-                step="0.1"
-                min="0"
-                max="100"
-              />
-              <Button type="button" onClick={handleAddAsset} variant="outline">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+          <CardContent className="space-y-6">
+            {/* Asset Input Methods */}
+            <Tabs defaultValue="manual" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="manual" className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Manual
+                </TabsTrigger>
+                <TabsTrigger value="bulk" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Lista
+                </TabsTrigger>
+                <TabsTrigger value="ai" className="flex items-center gap-2">
+                  <Bot className="h-4 w-4" />
+                  IA
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="manual" className="space-y-4 mt-6">
+                {/* Manual Add Asset Form */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Ticker (ex: PETR4)"
+                    value={newTicker}
+                    onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="% (ex: 25)"
+                    value={newAllocation}
+                    onChange={(e) => setNewAllocation(e.target.value)}
+                    className="w-32"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                  />
+                  <Button type="button" onClick={handleAddAsset} variant="outline">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="bulk" className="mt-6">
+                <PortfolioBulkAssetInput onAssetsGenerated={handleAssetsFromBulk} />
+              </TabsContent>
+
+              <TabsContent value="ai" className="mt-6">
+                <PortfolioAIAssistant 
+                  onAssetsGenerated={handleAssetsFromAI}
+                  disabled={!isPremium}
+                />
+              </TabsContent>
+            </Tabs>
 
             {/* Assets List */}
             {assets.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <TrendingUp className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p>Adicione ativos à sua carteira</p>
+                <p className="text-sm mt-1">Use uma das opções acima para começar</p>
               </div>
             ) : (
               <div className="space-y-2">
+                <h4 className="font-medium text-sm text-muted-foreground mb-3">
+                  Ativos Configurados ({assets.length})
+                </h4>
                 {assets.map(asset => (
                   <div
                     key={asset.ticker}

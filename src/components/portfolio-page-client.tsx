@@ -1,41 +1,44 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
-import { 
-  Briefcase, 
-  Plus, 
-  TrendingUp, 
-  Receipt, 
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Briefcase,
+  Plus,
+  TrendingUp,
+  Receipt,
   Settings,
   BarChart3,
-  Crown
-} from 'lucide-react';
-import { usePremiumStatus } from '@/hooks/use-premium-status';
-import { PortfolioMetricsCard } from '@/components/portfolio-metrics-card';
-import { PortfolioHoldingsTable } from '@/components/portfolio-holdings-table';
-import { PortfolioTransactionList } from '@/components/portfolio-transaction-list';
-import { PortfolioTransactionSuggestions } from '@/components/portfolio-transaction-suggestions';
-import { PortfolioConfigForm } from '@/components/portfolio-config-form';
-import { PortfolioTransactionForm } from '@/components/portfolio-transaction-form';
-import { ConvertBacktestModal } from '@/components/convert-backtest-modal';
-import { GenerateBacktestModal } from '@/components/generate-backtest-modal';
-import { PortfolioAssetManager } from '@/components/portfolio-asset-manager';
-import { PortfolioNegativeCashAlert } from '@/components/portfolio-negative-cash-alert';
-import { PortfolioAnalytics } from '@/components/portfolio-analytics';
-import { portfolioCache } from '@/lib/portfolio-cache';
+  Crown,
+} from "lucide-react";
+import { usePremiumStatus } from "@/hooks/use-premium-status";
+import { PortfolioMetricsCard } from "@/components/portfolio-metrics-card";
+import { PortfolioHoldingsTable } from "@/components/portfolio-holdings-table";
+import { PortfolioTransactionList } from "@/components/portfolio-transaction-list";
+import { PortfolioTransactionSuggestions } from "@/components/portfolio-transaction-suggestions";
+import { PortfolioConfigForm } from "@/components/portfolio-config-form";
+import { PortfolioTransactionForm } from "@/components/portfolio-transaction-form";
+import { ConvertBacktestModal } from "@/components/convert-backtest-modal";
+import { GenerateBacktestModal } from "@/components/generate-backtest-modal";
+import { PortfolioAssetManager } from "@/components/portfolio-asset-manager";
+import { PortfolioNegativeCashAlert } from "@/components/portfolio-negative-cash-alert";
+import { PortfolioAnalytics } from "@/components/portfolio-analytics";
+import { PortfolioAICTA } from "@/components/portfolio-ai-cta";
+import { PortfolioTransactionAI } from "@/components/portfolio-transaction-ai";
+import { PortfolioTransactionAICTA } from "@/components/portfolio-transaction-ai-cta";
+import { portfolioCache } from "@/lib/portfolio-cache";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 
 // Types
 interface Portfolio {
@@ -64,9 +67,11 @@ export function PortfolioPageClient() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { isPremium } = usePremiumStatus();
-  
+
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
-  const [selectedPortfolio, setSelectedPortfolio] = useState<string | null>(null);
+  const [selectedPortfolio, setSelectedPortfolio] = useState<string | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
 
   // Load portfolios on mount
@@ -77,8 +82,8 @@ export function PortfolioPageClient() {
 
   // Auto-select portfolio from URL or first one
   useEffect(() => {
-    const portfolioId = searchParams.get('id');
-    if (portfolioId && portfolios.some(p => p.id === portfolioId)) {
+    const portfolioId = searchParams.get("id");
+    if (portfolioId && portfolios.some((p) => p.id === portfolioId)) {
       setSelectedPortfolio(portfolioId);
     } else if (portfolios.length > 0 && !selectedPortfolio) {
       setSelectedPortfolio(portfolios[0].id);
@@ -92,22 +97,22 @@ export function PortfolioPageClient() {
       if (!silent) {
         setLoading(true);
       }
-      
-      const response = await fetch('/api/portfolio');
-      
+
+      const response = await fetch("/api/portfolio");
+
       if (!response.ok) {
-        throw new Error('Erro ao carregar carteiras');
+        throw new Error("Erro ao carregar carteiras");
       }
 
       const data = await response.json();
       setPortfolios(data.portfolios || []);
     } catch (error) {
-      console.error('Erro ao carregar carteiras:', error);
+      console.error("Erro ao carregar carteiras:", error);
       if (!silent) {
         toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar suas carteiras',
-          variant: 'destructive'
+          title: "Erro",
+          description: "Não foi possível carregar suas carteiras",
+          variant: "destructive",
         });
       }
     } finally {
@@ -118,17 +123,19 @@ export function PortfolioPageClient() {
   };
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showConvertBacktestModal, setShowConvertBacktestModal] = useState(false);
+  const [showConvertBacktestModal, setShowConvertBacktestModal] =
+    useState(false);
 
   const handleCreatePortfolio = async () => {
     // Check if user can create more portfolios
     if (!isPremium && portfolios.length >= 1) {
       toast({
-        title: 'Upgrade Necessário',
-        description: 'Usuários gratuitos estão limitados a 1 carteira. Faça upgrade para Premium.',
-        variant: 'destructive'
+        title: "Upgrade Necessário",
+        description:
+          "Usuários gratuitos estão limitados a 1 carteira. Faça upgrade para Premium.",
+        variant: "destructive",
       });
-      router.push('/planos');
+      router.push("/planos");
       return;
     }
 
@@ -161,17 +168,21 @@ export function PortfolioPageClient() {
                     <Plus className="mr-2 h-5 w-5" />
                     Criar Nova Carteira
                   </Button>
-                  <Button onClick={() => setShowConvertBacktestModal(true)} size="lg" variant="outline">
-                    <BarChart3 className="mr-2 h-5 w-5" />
-                    A partir de Backtest
+                  <Button
+                    onClick={() => setShowConvertBacktestModal(true)}
+                    size="lg"
+                    variant="outline"
+                  >
+                    <BarChart3 className="mr-2 h-5 w-5" />A partir de Backtest
                   </Button>
                 </div>
-                
+
                 {!isPremium && (
                   <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950 rounded-lg max-w-md">
                     <p className="text-sm text-amber-900 dark:text-amber-100">
-                      <strong>Nota:</strong> Usuários gratuitos podem criar 1 carteira.
-                      Faça upgrade para Premium para carteiras ilimitadas.
+                      <strong>Nota:</strong> Usuários gratuitos podem criar 1
+                      carteira. Faça upgrade para Premium para carteiras
+                      ilimitadas.
                     </p>
                   </div>
                 )}
@@ -201,12 +212,16 @@ export function PortfolioPageClient() {
         </Dialog>
 
         {/* Convert Backtest Modal */}
-        <Dialog open={showConvertBacktestModal} onOpenChange={setShowConvertBacktestModal}>
+        <Dialog
+          open={showConvertBacktestModal}
+          onOpenChange={setShowConvertBacktestModal}
+        >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Criar Carteira a partir de Backtest</DialogTitle>
               <DialogDescription>
-                Converta um backtest existente em uma carteira para acompanhamento real
+                Converta um backtest existente em uma carteira para
+                acompanhamento real
               </DialogDescription>
             </DialogHeader>
             <ConvertBacktestModal
@@ -236,7 +251,7 @@ export function PortfolioPageClient() {
     );
   }
 
-  const currentPortfolio = portfolios.find(p => p.id === selectedPortfolio);
+  const currentPortfolio = portfolios.find((p) => p.id === selectedPortfolio);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -252,7 +267,7 @@ export function PortfolioPageClient() {
               Gerencie seus investimentos com acompanhamento completo
             </p>
           </div>
-          
+
           <Button onClick={handleCreatePortfolio}>
             <Plus className="mr-2 h-4 w-4" />
             Nova Carteira
@@ -262,20 +277,19 @@ export function PortfolioPageClient() {
         {/* Portfolio Selector */}
         {portfolios.length > 1 && (
           <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
-            {portfolios.map(portfolio => (
+            {portfolios.map((portfolio) => (
               <Button
                 key={portfolio.id}
-                variant={selectedPortfolio === portfolio.id ? 'default' : 'outline'}
+                variant={
+                  selectedPortfolio === portfolio.id ? "default" : "outline"
+                }
                 onClick={() => handleSelectPortfolio(portfolio.id)}
                 className="flex-shrink-0"
               >
                 {portfolio.name}
                 {portfolio.metrics && (
-                  <Badge 
-                    variant="secondary" 
-                    className="ml-2"
-                  >
-                    {portfolio.metrics.totalReturn >= 0 ? '+' : ''}
+                  <Badge variant="secondary" className="ml-2">
+                    {portfolio.metrics.totalReturn >= 0 ? "+" : ""}
                     {(portfolio.metrics.totalReturn * 100).toFixed(1)}%
                   </Badge>
                 )}
@@ -300,8 +314,8 @@ export function PortfolioPageClient() {
                     </p>
                   </div>
                 </div>
-                <Button 
-                  onClick={() => router.push('/planos')}
+                <Button
+                  onClick={() => router.push("/planos")}
                   className="bg-amber-600 hover:bg-amber-700"
                 >
                   Fazer Upgrade
@@ -313,7 +327,7 @@ export function PortfolioPageClient() {
 
         {/* Portfolio Details */}
         {currentPortfolio ? (
-          <PortfolioDetails 
+          <PortfolioDetails
             portfolio={currentPortfolio}
             onUpdate={() => loadPortfolios(true)}
           />
@@ -349,12 +363,16 @@ export function PortfolioPageClient() {
       </Dialog>
 
       {/* Convert Backtest Modal */}
-      <Dialog open={showConvertBacktestModal} onOpenChange={setShowConvertBacktestModal}>
+      <Dialog
+        open={showConvertBacktestModal}
+        onOpenChange={setShowConvertBacktestModal}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Criar Carteira a partir de Backtest</DialogTitle>
             <DialogDescription>
-              Converta um backtest existente em uma carteira para acompanhamento real
+              Converta um backtest existente em uma carteira para acompanhamento
+              real
             </DialogDescription>
           </DialogHeader>
           <ConvertBacktestModal
@@ -374,35 +392,66 @@ export function PortfolioPageClient() {
 /**
  * Portfolio Details Component with Tabs
  */
-function PortfolioDetails({ 
-  portfolio, 
-  onUpdate 
-}: { 
-  portfolio: Portfolio; 
+function PortfolioDetails({
+  portfolio,
+  onUpdate,
+}: {
+  portfolio: Portfolio;
   onUpdate: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState('overview');
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get("tab");
+    const hashParam = typeof window !== "undefined" ? window.location.hash : "";
+
+    // Se tem hash #ai-assistant, vai para aba config
+    if (hashParam === "#ai-assistant") {
+      return "config";
+    }
+
+    // Se tem hash #transaction-ai, vai para aba transactions
+    if (hashParam === "#transaction-ai") {
+      return "transactions";
+    }
+
+    return tabParam &&
+      ["overview", "transactions", "analytics", "config"].includes(tabParam)
+      ? tabParam
+      : "overview";
+  });
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-xl sm:text-2xl">{portfolio.name}</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl">
+              {portfolio.name}
+            </CardTitle>
             {portfolio.description && (
               <p className="text-sm text-muted-foreground mt-1 break-words">
                 {portfolio.description}
               </p>
             )}
           </div>
-          
+
           <div className="flex gap-2 flex-wrap">
-            <Badge variant="outline" className="text-xs sm:text-sm flex-shrink-0">
-              {portfolio.assetCount} {portfolio.assetCount === 1 ? 'ativo' : 'ativos'}
+            <Badge
+              variant="outline"
+              className="text-xs sm:text-sm flex-shrink-0"
+            >
+              {portfolio.assetCount}{" "}
+              {portfolio.assetCount === 1 ? "ativo" : "ativos"}
             </Badge>
-            <Badge variant="outline" className="text-xs sm:text-sm flex-shrink-0">
-              {portfolio.rebalanceFrequency === 'monthly' ? 'Mensal' :
-               portfolio.rebalanceFrequency === 'quarterly' ? 'Trimestral' : 'Anual'}
+            <Badge
+              variant="outline"
+              className="text-xs sm:text-sm flex-shrink-0"
+            >
+              {portfolio.rebalanceFrequency === "monthly"
+                ? "Mensal"
+                : portfolio.rebalanceFrequency === "quarterly"
+                ? "Trimestral"
+                : "Anual"}
             </Badge>
           </div>
         </div>
@@ -413,19 +462,31 @@ function PortfolioDetails({
           {/* Mobile: Scroll horizontal | Desktop: Grid */}
           <div className="w-full overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible">
             <TabsList className="inline-flex md:grid w-auto md:w-full md:grid-cols-4 gap-1 min-w-full md:min-w-0">
-              <TabsTrigger value="overview" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              <TabsTrigger
+                value="overview"
+                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+              >
                 <TrendingUp className="h-4 w-4 flex-shrink-0" />
                 <span>Visão Geral</span>
               </TabsTrigger>
-              <TabsTrigger value="transactions" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              <TabsTrigger
+                value="transactions"
+                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+              >
                 <Receipt className="h-4 w-4 flex-shrink-0" />
                 <span>Transações</span>
               </TabsTrigger>
-              <TabsTrigger value="analytics" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              <TabsTrigger
+                value="analytics"
+                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+              >
                 <BarChart3 className="h-4 w-4 flex-shrink-0" />
                 <span>Análises</span>
               </TabsTrigger>
-              <TabsTrigger value="config" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+              <TabsTrigger
+                value="config"
+                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+              >
                 <Settings className="h-4 w-4 flex-shrink-0" />
                 <span>Configuração</span>
               </TabsTrigger>
@@ -433,17 +494,18 @@ function PortfolioDetails({
           </div>
 
           <TabsContent value="overview" className="space-y-4 mt-6">
-            <PortfolioOverview 
-              portfolioId={portfolio.id} 
+            <PortfolioOverview
+              portfolioId={portfolio.id}
               startDate={portfolio.startDate}
               trackingStarted={portfolio.trackingStarted}
               onUpdate={onUpdate}
+              setActiveTab={setActiveTab}
             />
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-4 mt-6">
-            <PortfolioTransactions 
-              portfolioId={portfolio.id} 
+            <PortfolioTransactions
+              portfolioId={portfolio.id}
               trackingStarted={portfolio.trackingStarted}
               onUpdate={onUpdate}
             />
@@ -454,10 +516,7 @@ function PortfolioDetails({
           </TabsContent>
 
           <TabsContent value="config" className="space-y-4 mt-6">
-            <PortfolioConfiguration 
-              portfolio={portfolio} 
-              onUpdate={onUpdate}
-            />
+            <PortfolioConfiguration portfolio={portfolio} onUpdate={onUpdate} />
           </TabsContent>
         </Tabs>
       </CardContent>
@@ -468,16 +527,18 @@ function PortfolioDetails({
 /**
  * Tab Content Components
  */
-function PortfolioOverview({ 
-  portfolioId, 
+function PortfolioOverview({
+  portfolioId,
   startDate,
   trackingStarted,
-  onUpdate 
-}: { 
+  onUpdate,
+  setActiveTab,
+}: {
   portfolioId: string;
   startDate: Date;
   trackingStarted: boolean;
   onUpdate: () => void;
+  setActiveTab: (tab: string) => void;
 }) {
   const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -486,7 +547,7 @@ function PortfolioOverview({
 
   // Reactive update - only reloads local data without full page refresh
   const handleUpdate = () => {
-    setRefreshKey(prev => prev + 1);
+    setRefreshKey((prev) => prev + 1);
     loadMetrics(); // Reload only metrics
     onUpdate(); // Notify parent to update portfolio selector badges
   };
@@ -494,7 +555,7 @@ function PortfolioOverview({
   const loadMetrics = async (forceRefresh = false) => {
     try {
       setLoading(true);
-      
+
       // Try cache first (unless force refresh)
       if (!forceRefresh) {
         const cached = portfolioCache.metrics.get(portfolioId);
@@ -504,7 +565,7 @@ function PortfolioOverview({
           return;
         }
       }
-      
+
       // Fetch from API
       const response = await fetch(`/api/portfolio/${portfolioId}/metrics`);
       if (response.ok) {
@@ -513,7 +574,7 @@ function PortfolioOverview({
         setMetrics(data.metrics);
       }
     } catch (error) {
-      console.error('Error loading metrics:', error);
+      console.error("Error loading metrics:", error);
     } finally {
       setLoading(false);
     }
@@ -534,8 +595,111 @@ function PortfolioOverview({
 
   return (
     <div className="space-y-6">
-      {metrics && <PortfolioMetricsCard metrics={metrics} loading={loading} startDate={startDate} />}
-      
+      {metrics && (
+        <PortfolioMetricsCard
+          metrics={metrics}
+          loading={loading}
+          startDate={startDate}
+        />
+      )}
+
+      {/* AI CTAs */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+        {/* Portfolio Optimization CTA */}
+        <PortfolioAICTA
+          portfolioId={portfolioId}
+          currentAssets={
+            metrics?.holdings?.map((h: any) => ({
+              ticker: h.ticker,
+              targetAllocation: h.targetAllocation || 0,
+            })) || []
+          }
+          onScrollToAI={() => {
+            // Navegar para a aba config
+            setActiveTab("config");
+
+            // Atualizar URL para incluir hash
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "config");
+            url.hash = "#ai-assistant";
+            window.history.replaceState({}, "", url.toString());
+
+            // Aguardar carregamento da aba e dados HTTP
+            setTimeout(() => {
+              const replaceSection = document.querySelector(
+                '[data-replace-section="true"]'
+              );
+              if (replaceSection) {
+                replaceSection.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+
+                // Adicionar highlight temporário
+                replaceSection.classList.add(
+                  "ring-2",
+                  "ring-blue-500",
+                  "ring-opacity-50",
+                  "rounded-lg"
+                );
+                setTimeout(() => {
+                  replaceSection.classList.remove(
+                    "ring-2",
+                    "ring-blue-500",
+                    "ring-opacity-50",
+                    "rounded-lg"
+                  );
+                }, 2000);
+              }
+            }, 500);
+          }}
+        />
+
+        {/* Transaction AI CTA */}
+        <PortfolioTransactionAICTA
+          portfolioId={portfolioId}
+          onScrollToTransactionAI={() => {
+            // Navegar para a aba transactions
+            setActiveTab("transactions");
+
+            // Atualizar URL para incluir hash
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "transactions");
+            url.hash = "#transaction-ai";
+            window.history.replaceState({}, "", url.toString());
+
+            // Aguardar carregamento da aba
+            setTimeout(() => {
+              const transactionAISection = document.querySelector(
+                '[data-transaction-ai-section="true"]'
+              );
+              if (transactionAISection) {
+                transactionAISection.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+
+                // Adicionar highlight temporário
+                transactionAISection.classList.add(
+                  "ring-2",
+                  "ring-green-500",
+                  "ring-opacity-50",
+                  "rounded-lg"
+                );
+                setTimeout(() => {
+                  transactionAISection.classList.remove(
+                    "ring-2",
+                    "ring-green-500",
+                    "ring-opacity-50",
+                    "rounded-lg"
+                  );
+                }, 2000);
+              }
+            }, 500);
+          }}
+        />
+      </div>
+
       {/* Negative Cash Alert */}
       {metrics && metrics.cashBalance < 0 && (
         <PortfolioNegativeCashAlert
@@ -544,13 +708,13 @@ function PortfolioOverview({
           onFixed={handleUpdate}
         />
       )}
-      
+
       <div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <h3 className="text-lg font-semibold">Transações Pendentes</h3>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setShowTransactionForm(true)}
             className="w-full sm:w-auto"
           >
@@ -569,9 +733,9 @@ function PortfolioOverview({
 
       <div>
         <h3 className="text-lg font-semibold mb-4">Posições Atuais</h3>
-        <PortfolioHoldingsTable 
+        <PortfolioHoldingsTable
           key={`overview-holdings-${portfolioId}-${refreshKey}`}
-          portfolioId={portfolioId} 
+          portfolioId={portfolioId}
         />
       </div>
 
@@ -598,23 +762,69 @@ function PortfolioOverview({
   );
 }
 
-function PortfolioTransactions({ 
+function PortfolioTransactions({
   portfolioId,
   trackingStarted,
-  onUpdate
-}: { 
+  onUpdate,
+}: {
   portfolioId: string;
   trackingStarted: boolean;
   onUpdate: () => void;
 }) {
+  const { isPremium } = usePremiumStatus();
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [metrics, setMetrics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   // Reactive update - only refreshes local components without full page reload
   const handleTransactionUpdate = async () => {
-    setRefreshKey(prev => prev + 1);
+    setRefreshKey((prev) => prev + 1);
+    loadMetrics(); // Reload metrics to get updated cash balance
     onUpdate(); // Notify parent to update portfolio selector badges only
   };
+
+  const loadMetrics = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/portfolio/${portfolioId}/metrics`);
+      if (response.ok) {
+        const data = await response.json();
+        setMetrics(data.metrics);
+      }
+    } catch (error) {
+      console.error("Error loading metrics:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolioId]);
+
+  // Detectar hash e fazer scroll quando dados carregarem
+  useEffect(() => {
+    if (!loading && typeof window !== 'undefined' && window.location.hash === '#transaction-ai') {
+      // Aguardar um pouco mais para garantir que a seção foi renderizada
+      setTimeout(() => {
+        const transactionAISection = document.querySelector('[data-transaction-ai-section="true"]');
+        if (transactionAISection) {
+          transactionAISection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          
+          // Adicionar highlight temporário
+          transactionAISection.classList.add('ring-2', 'ring-green-500', 'ring-opacity-50', 'rounded-lg');
+          setTimeout(() => {
+            transactionAISection.classList.remove('ring-2', 'ring-green-500', 'ring-opacity-50', 'rounded-lg');
+          }, 2000);
+        }
+      }, 300);
+    }
+  }, [loading]);
 
   return (
     <div className="space-y-6">
@@ -629,10 +839,29 @@ function PortfolioTransactions({
         />
       </div>
 
+      {/* AI Transaction Assistant */}
+      <div data-transaction-ai-section="true">
+        <h3 className="text-lg font-semibold mb-4">Cadastro Inteligente de Transações</h3>
+        <PortfolioTransactionAI
+          portfolioId={portfolioId}
+          onTransactionsGenerated={(transactions) => {
+            // TODO: Implementar aplicação das transações
+            console.log('Transações geradas:', transactions);
+            handleTransactionUpdate();
+          }}
+          disabled={!isPremium}
+          currentCashBalance={metrics?.cashBalance || 0}
+        />
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Histórico de Transações</h3>
-          <Button variant="outline" size="sm" onClick={() => setShowTransactionForm(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTransactionForm(true)}
+          >
             <Plus className="h-4 w-4 mr-2" />
             Nova Transação
           </Button>
@@ -667,16 +896,16 @@ function PortfolioTransactions({
   );
 }
 
-
-function PortfolioConfiguration({ 
+function PortfolioConfiguration({
   portfolio,
-  onUpdate 
-}: { 
-  portfolio: Portfolio; 
+  onUpdate,
+}: {
+  portfolio: Portfolio;
   onUpdate: () => void;
 }) {
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showGenerateBacktestModal, setShowGenerateBacktestModal] = useState(false);
+  const [showGenerateBacktestModal, setShowGenerateBacktestModal] =
+    useState(false);
 
   return (
     <div className="space-y-6">
@@ -685,11 +914,19 @@ function PortfolioConfiguration({
           <div className="flex items-center justify-between">
             <CardTitle>Informações da Carteira</CardTitle>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowGenerateBacktestModal(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowGenerateBacktestModal(true)}
+              >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Gerar Backtest
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowEditModal(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEditModal(true)}
+              >
                 <Settings className="h-4 w-4 mr-2" />
                 Editar
               </Button>
@@ -711,7 +948,7 @@ function PortfolioConfiguration({
             <div>
               <p className="text-sm text-muted-foreground">Data de Início</p>
               <p className="font-medium">
-                {new Date(portfolio.startDate).toLocaleDateString('pt-BR')}
+                {new Date(portfolio.startDate).toLocaleDateString("pt-BR")}
               </p>
             </div>
             <div>
@@ -723,9 +960,9 @@ function PortfolioConfiguration({
             <div>
               <p className="text-sm text-muted-foreground">Rebalanceamento</p>
               <p className="font-medium capitalize">
-                {portfolio.rebalanceFrequency === 'monthly' && 'Mensal'}
-                {portfolio.rebalanceFrequency === 'quarterly' && 'Trimestral'}
-                {portfolio.rebalanceFrequency === 'yearly' && 'Anual'}
+                {portfolio.rebalanceFrequency === "monthly" && "Mensal"}
+                {portfolio.rebalanceFrequency === "quarterly" && "Trimestral"}
+                {portfolio.rebalanceFrequency === "yearly" && "Anual"}
               </p>
             </div>
           </div>
@@ -733,10 +970,7 @@ function PortfolioConfiguration({
       </Card>
 
       {/* Asset Management */}
-      <PortfolioAssetManager 
-        portfolioId={portfolio.id}
-        onUpdate={onUpdate}
-      />
+      <PortfolioAssetManager portfolioId={portfolio.id} onUpdate={onUpdate} />
 
       {/* Edit Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
@@ -753,10 +987,12 @@ function PortfolioConfiguration({
               id: portfolio.id,
               name: portfolio.name,
               description: portfolio.description,
-              startDate: new Date(portfolio.startDate).toISOString().split('T')[0],
+              startDate: new Date(portfolio.startDate)
+                .toISOString()
+                .split("T")[0],
               monthlyContribution: portfolio.monthlyContribution,
               rebalanceFrequency: portfolio.rebalanceFrequency,
-              assets: []
+              assets: [],
             }}
             onSuccess={() => {
               setShowEditModal(false);
@@ -768,7 +1004,10 @@ function PortfolioConfiguration({
       </Dialog>
 
       {/* Generate Backtest Modal */}
-      <Dialog open={showGenerateBacktestModal} onOpenChange={setShowGenerateBacktestModal}>
+      <Dialog
+        open={showGenerateBacktestModal}
+        onOpenChange={setShowGenerateBacktestModal}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Gerar Backtest da Carteira</DialogTitle>
@@ -789,4 +1028,3 @@ function PortfolioConfiguration({
     </div>
   );
 }
-

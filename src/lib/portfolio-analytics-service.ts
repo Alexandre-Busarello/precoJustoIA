@@ -143,7 +143,6 @@ export class PortfolioAnalyticsService {
     }
 
     // Calculate evolution
-    console.log('calculateEvolution', transactions)
     const evolution = await this.calculateEvolution(portfolioId, transactions, portfolio.assets);
     
     // Calculate benchmark comparison
@@ -289,12 +288,14 @@ export class PortfolioAnalyticsService {
         // Process this transaction
         if (tx.type === 'CASH_CREDIT') {
           cashBalance += Number(tx.amount);
-          totalInvested += Number(tx.amount);
+          totalInvested += Number(tx.amount); // Acumula aportes
         } else if (tx.type === 'DIVIDEND') {
           cashBalance += Number(tx.amount);
           // Dividends are returns, not investments
         } else if (tx.type === 'CASH_DEBIT') {
           cashBalance -= Number(tx.amount);
+          // CASH_DEBIT é saque real, não afeta totalInvested aqui
+          // (será usado no cálculo de netInvested depois)
         } else if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
           cashBalance -= Number(tx.amount);
           const quantity = Number(tx.quantity || 0);
@@ -303,10 +304,9 @@ export class PortfolioAnalyticsService {
           cashBalance += Number(tx.amount);
           const quantity = Number(tx.quantity || 0);
           holdings.set(tx.ticker!, (holdings.get(tx.ticker!) || 0) - quantity);
-          
-          if (tx.type === 'SELL_WITHDRAWAL') {
-            totalInvested -= Number(tx.amount);
-          }
+          // 🔧 CORREÇÃO: SELL_WITHDRAWAL não reduz totalInvested
+          // totalInvested é apenas a soma de CASH_CREDIT (aportes)
+          // Vendas apenas movem dinheiro para caixa
         }
 
         lastProcessedTxIndex++;
@@ -324,10 +324,20 @@ export class PortfolioAnalyticsService {
 
       const totalValue = assetsValue + cashBalance;
       
-      // Calculate total withdrawals (to add back to return calculation)
+      // 🔧 CORREÇÃO CRÍTICA: Cálculo correto do retorno
+      // 
+      // Retorno = (Valor Atual - Capital Líquido Investido) / Capital Líquido Investido
+      //
+      // Onde:
+      // - Valor Atual = Valor dos Ativos + Caixa
+      // - Capital Líquido Investido = Aportes - Saques
+      //
+      // IMPORTANTE: Caixa FAZ PARTE do valor atual (não é lucro, é capital disponível)
+      
+      // Calculate total withdrawals (CASH_DEBIT only - money that left the portfolio)
       const totalWithdrawals = transactions
         .slice(0, lastProcessedTxIndex)
-        .filter(tx => tx.type === 'CASH_DEBIT' || tx.type === 'SELL_WITHDRAWAL')
+        .filter(tx => tx.type === 'CASH_DEBIT')
         .reduce((sum, tx) => sum + Number(tx.amount), 0);
       
       // Calculate total dividends received (for debugging)
@@ -336,10 +346,12 @@ export class PortfolioAnalyticsService {
         .filter(tx => tx.type === 'DIVIDEND')
         .reduce((sum, tx) => sum + Number(tx.amount), 0);
       
-      // Total return = (current value + withdrawals) - invested
-      // Dividends are already included in cashBalance (if not withdrawn)
-      const returnAmount = totalValue + totalWithdrawals - totalInvested;
-      const returnPercent = totalInvested > 0 ? (returnAmount / totalInvested) : 0;
+      // Net invested = Total invested - Withdrawals
+      const netInvested = totalInvested - totalWithdrawals;
+      
+      // Return = (Current Value - Net Invested) / Net Invested
+      const returnAmount = totalValue - netInvested;
+      const returnPercent = netInvested > 0 ? (returnAmount / netInvested) * 100 : 0;
       
       // Debug log para o último ponto
       if (isToday) {
@@ -359,9 +371,10 @@ export class PortfolioAnalyticsService {
           totalValue: totalValue.toFixed(2),
           totalInvested: totalInvested.toFixed(2),
           totalWithdrawals: totalWithdrawals.toFixed(2),
+          netInvested: netInvested.toFixed(2),
           totalDividends: totalDividends.toFixed(2),
           returnAmount: returnAmount.toFixed(2),
-          returnPercent: (returnPercent * 100).toFixed(2) + '%'
+          returnPercent: returnPercent.toFixed(2) + '%'
         });
       }
 
@@ -372,9 +385,9 @@ export class PortfolioAnalyticsService {
         evolution.push({
           date: this.formatDateUTC(date),
           value: totalValue,
-          invested: totalInvested,
+          invested: totalInvested, // 🔧 Total de aportes acumulados (para exibição)
           cashBalance,
-          return: returnPercent * 100,
+          return: returnPercent, // 🔧 Retorno calculado com netInvested
           returnAmount
         });
       }
@@ -716,6 +729,9 @@ export class PortfolioAnalyticsService {
   /**
    * Calcula histórico de drawdown e períodos
    * Método público para ser reutilizado por PortfolioMetricsService
+   * 
+   * CORREÇÃO: Drawdown deve ser baseado no RETORNO da carteira, não apenas no valor absoluto
+   * Uma carteira com retorno negativo SEMPRE está em drawdown, independente do valor absoluto
    */
   public static calculateDrawdown(
     evolution: EvolutionPoint[]
@@ -727,37 +743,41 @@ export class PortfolioAnalyticsService {
       return { drawdownHistory, drawdownPeriods };
     }
 
-    let peak = evolution[0].value;
+    // Usar o RETORNO como base para drawdown, não o valor absoluto
+    let peakReturn = evolution[0].return;
     let peakDate = evolution[0].date;
+    let peakValue = evolution[0].value;
     let currentDrawdownPeriod: DrawdownPeriod | null = null;
     let maxDrawdownInPeriod = 0;
 
     console.log(`📉 [DRAWDOWN] Calculando drawdown para ${evolution.length} pontos`);
-    console.log(`📉 [DRAWDOWN] Evolution values:`, evolution.map(e => `${e.date}: R$ ${e.value.toFixed(2)}`).join(', '));
-    console.log(`📉 [DRAWDOWN] Pico inicial: R$ ${peak.toFixed(2)} em ${peakDate}`);
+    console.log(`📉 [DRAWDOWN] Evolution returns:`, evolution.map(e => `${e.date}: ${e.return.toFixed(2)}% (R$ ${e.value.toFixed(2)})`).join(', '));
+    console.log(`📉 [DRAWDOWN] Pico inicial: ${peakReturn.toFixed(2)}% em ${peakDate}`);
 
     for (let i = 0; i < evolution.length; i++) {
       const point = evolution[i];
       
-      // Update peak if we have a new high
-      if (point.value > peak) {
+      // Update peak if we have a new high RETURN (não apenas valor)
+      if (point.return > peakReturn) {
         // End current drawdown period if recovering
         if (currentDrawdownPeriod && !currentDrawdownPeriod.recovered) {
           currentDrawdownPeriod.endDate = point.date;
           currentDrawdownPeriod.duration = i - evolution.findIndex(p => p.date === currentDrawdownPeriod!.startDate);
           currentDrawdownPeriod.recovered = true;
-          console.log(`✅ [DRAWDOWN] Recuperação em ${point.date} após ${currentDrawdownPeriod.duration} meses`);
+          console.log(`✅ [DRAWDOWN] Recuperação em ${point.date} após ${currentDrawdownPeriod.duration} meses (retorno: ${point.return.toFixed(2)}%)`);
         }
         
-        peak = point.value;
+        peakReturn = point.return;
+        peakValue = point.value;
         peakDate = point.date;
         currentDrawdownPeriod = null;
         maxDrawdownInPeriod = 0;
       }
       
-      // Calculate current drawdown
-      const drawdown = peak > 0 ? ((peak - point.value) / peak) * 100 : 0;
-      const isInDrawdown = drawdown > 0.01; // Considera drawdown se > 0.01%
+      // Calculate current drawdown baseado no RETORNO
+      // Drawdown = queda desde o pico de retorno
+      const drawdown = peakReturn - point.return; // Diferença em pontos percentuais
+      const isInDrawdown = drawdown > 0.01 || point.return < 0; // Em drawdown se caiu do pico OU se retorno é negativo
       
       // Start new drawdown period if entering drawdown
       if (isInDrawdown && !currentDrawdownPeriod) {
@@ -770,7 +790,7 @@ export class PortfolioAnalyticsService {
         };
         maxDrawdownInPeriod = drawdown;
         drawdownPeriods.push(currentDrawdownPeriod);
-        console.log(`📉 [DRAWDOWN] Início do drawdown em ${point.date}: -${drawdown.toFixed(2)}%`);
+        console.log(`📉 [DRAWDOWN] Início do drawdown em ${point.date}: -${drawdown.toFixed(2)}pp (retorno atual: ${point.return.toFixed(2)}%, pico: ${peakReturn.toFixed(2)}%)`);
       }
       
       // Update drawdown period depth
@@ -781,9 +801,9 @@ export class PortfolioAnalyticsService {
       
       drawdownHistory.push({
         date: point.date,
-        drawdown: -drawdown, // Negativo para o gráfico
+        drawdown: -drawdown, // Negativo para o gráfico (mostra queda)
         isInDrawdown,
-        peak,
+        peak: peakValue, // Valor do pico (para referência)
         value: point.value
       });
     }
@@ -791,7 +811,7 @@ export class PortfolioAnalyticsService {
     // If still in drawdown at the end, update duration
     if (currentDrawdownPeriod && !currentDrawdownPeriod.recovered) {
       currentDrawdownPeriod.duration = evolution.length - evolution.findIndex(p => p.date === currentDrawdownPeriod!.startDate);
-      console.log(`⚠️ [DRAWDOWN] Ainda em drawdown: ${currentDrawdownPeriod.duration} meses, profundidade: -${currentDrawdownPeriod.depth.toFixed(2)}%`);
+      console.log(`⚠️ [DRAWDOWN] Ainda em drawdown: ${currentDrawdownPeriod.duration} meses, profundidade: -${currentDrawdownPeriod.depth.toFixed(2)}pp`);
     }
 
     console.log(`📊 [DRAWDOWN] Total de ${drawdownPeriods.length} períodos de drawdown identificados`);

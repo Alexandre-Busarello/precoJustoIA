@@ -1,4 +1,8 @@
 
+Permitir excluir carteira
+Adicionar a feature das carteiras na Dashboard e na dashboard tips
+Modais de edição de transação da carteira ficando sem scroll e cortando o botão quando usar no mobile com celular e teclado
+
 Melhorar a analsie dos snapshot e disparo de relatorios de mundaça de SCORE. Precisamos manter o historico de snapshots em "asset_snapshots" para cada ativo. Ou seja, quando mudar o score e for gerado uma mudança devemos bater um novo snapshot e salvar como ultimo associado ao score. O relatório gerado para FUNDAMENTAL_CHANGE precisa ficar associado ao SNAPSHOT. Com isso a gente mantem a rastreabilidade de todos os relatorios gerados com as mudanças (o FK pode ser null para não quebrar os relatorios que já foram gerados sem o snapshot associado). O relatorio gerado pela IA deve ser menos prolixo e deve evitar falar de indicadores que praticamente não tiveram oscilações (muito proximo do valor original), deve dar o foco ao analisar realmente o que mudou e o que pode ter mudado o score. Talvez para fazer iss oseja interessante gravar tambem no SNAPSHOT a composição da nota (ver como a tela "/acao/itsa4/entendendo-score" calcula o SCORE). Com a composição da NOTA salva junto com o SNAPSHOT o relatorio conseguira indicar de forma mais clara e com exatidão qual foi o ponto chave que mudou e correlacionar os demais indicadores. O relatorio das mudanças também deve usar uma linguagem fácial e acessivel, pois não estaremos falando necessariamente com alguem técnico.
 
 Uma coluna extra para as posições atuais que mostre o Retorno c/ Dividendos (Que ira considerar o que o ativo pagou tambem de dividendos)

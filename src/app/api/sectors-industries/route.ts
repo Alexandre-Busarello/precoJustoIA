@@ -1,27 +1,13 @@
 import { NextResponse } from 'next/server';
+import { getSectorsAndIndustries } from '@/lib/screening-ai-service';
 import { prisma } from '@/lib/prisma-wrapper';
 
 export async function GET() {
   try {
-    // Buscar todos os setores únicos
-    const sectorsResult = await prisma.company.findMany({
-      where: {
-        sector: {
-          not: null
-        }
-      },
-      select: {
-        sector: true
-      },
-      distinct: ['sector']
-    });
+    // Usar o serviço para buscar setores e indústrias
+    const { sectors, industries } = await getSectorsAndIndustries();
 
-    const sectors = sectorsResult
-      .map(c => c.sector)
-      .filter((sector): sector is string => sector !== null)
-      .sort();
-
-    // Buscar todas as indústrias agrupadas por setor
+    // Buscar indústrias agrupadas por setor (funcionalidade adicional da API)
     const companiesWithIndustry = await prisma.company.findMany({
       where: {
         AND: [
@@ -55,7 +41,8 @@ export async function GET() {
 
     return NextResponse.json({
       sectors,
-      industriesBySector
+      industries, // Lista simples de todas as indústrias
+      industriesBySector // Indústrias agrupadas por setor
     });
   } catch (error) {
     console.error('Erro ao buscar setores e indústrias:', error);

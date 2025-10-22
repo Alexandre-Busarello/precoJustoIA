@@ -1,8 +1,14 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState, useEffect, useCallback } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   LineChart,
   Line,
@@ -15,12 +21,25 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
-} from 'recharts';
-import { TrendingUp, TrendingDown, BarChart3, Award, AlertTriangle } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { portfolioCache } from '@/lib/portfolio-cache';
+  ResponsiveContainer,
+} from "recharts";
+import {
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+  Award,
+  AlertTriangle,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { portfolioCache } from "@/lib/portfolio-cache";
 
 interface PortfolioAnalyticsProps {
   portfolioId: string;
@@ -90,7 +109,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
   // Helper para formatar datas em UTC (evita problemas de timezone)
   const formatDateUTC = (dateString: string) => {
     // Parse da string YYYY-MM-DD diretamente
-    const [year, month, day] = dateString.split('-').map(Number);
+    const [year, month, day] = dateString.split("-").map(Number);
     return { year, month, day };
   };
 
@@ -101,59 +120,89 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
 
   const formatMonthYear = (dateString: string) => {
     const { year, month } = formatDateUTC(dateString);
-    const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const monthNames = [
+      "Jan",
+      "Fev",
+      "Mar",
+      "Abr",
+      "Mai",
+      "Jun",
+      "Jul",
+      "Ago",
+      "Set",
+      "Out",
+      "Nov",
+      "Dez",
+    ];
     return `${monthNames[month - 1]} ${year}`;
   };
 
   const formatMonthYearLong = (dateString: string) => {
     const { year, month } = formatDateUTC(dateString);
-    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const monthNames = [
+      "Janeiro",
+      "Fevereiro",
+      "Março",
+      "Abril",
+      "Maio",
+      "Junho",
+      "Julho",
+      "Agosto",
+      "Setembro",
+      "Outubro",
+      "Novembro",
+      "Dezembro",
+    ];
     const result = `${monthNames[month - 1]} ${year}`;
     // console.log(`📅 formatMonthYearLong: ${dateString} -> month=${month}, result=${result}`);
     return result;
   };
 
-  const fetchAnalytics = useCallback(async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-      setError(null);
+  const fetchAnalytics = useCallback(
+    async (forceRefresh = false) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      // Try cache first (unless force refresh)
-      if (!forceRefresh) {
-        const cached = portfolioCache.analytics.get(portfolioId) as AnalyticsData | null;
-        if (cached) {
-          setAnalytics(cached);
-          setLoading(false);
-          return;
+        // Try cache first (unless force refresh)
+        if (!forceRefresh) {
+          const cached = portfolioCache.analytics.get(
+            portfolioId
+          ) as AnalyticsData | null;
+          if (cached) {
+            setAnalytics(cached);
+            setLoading(false);
+            return;
+          }
         }
-      }
 
-      // Fetch from API
-      console.log('🌐 [API] Buscando analytics do servidor...');
-      const response = await fetch(`/api/portfolio/${portfolioId}/analytics`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch analytics');
-      }
+        // Fetch from API
+        console.log("🌐 [API] Buscando analytics do servidor...");
+        const response = await fetch(`/api/portfolio/${portfolioId}/analytics`);
 
-      const data = await response.json();
-      console.log('📊 [FRONTEND] Analytics data received:', {
-        evolutionCount: data.evolution?.length,
-        monthlyReturnsCount: data.monthlyReturns?.length,
-        drawdownPeriodsCount: data.drawdownPeriods?.length
-      });
-      
-      // Save to cache
-      portfolioCache.analytics.set(portfolioId, data);
-      setAnalytics(data);
-    } catch (err) {
-      console.error('Error fetching analytics:', err);
-      setError('Erro ao carregar análises');
-    } finally {
-      setLoading(false);
-    }
-  }, [portfolioId]);
+        if (!response.ok) {
+          throw new Error("Failed to fetch analytics");
+        }
+
+        const data = await response.json();
+        console.log("📊 [FRONTEND] Analytics data received:", {
+          evolutionCount: data.evolution?.length,
+          monthlyReturnsCount: data.monthlyReturns?.length,
+          drawdownPeriodsCount: data.drawdownPeriods?.length,
+        });
+
+        // Save to cache
+        portfolioCache.analytics.set(portfolioId, data);
+        setAnalytics(data);
+      } catch (err) {
+        console.error("Error fetching analytics:", err);
+        setError("Erro ao carregar análises");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [portfolioId]
+  );
 
   useEffect(() => {
     fetchAnalytics();
@@ -190,7 +239,9 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
           <div className="text-center text-muted-foreground">
             <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>Não há dados suficientes para gerar análises</p>
-            <p className="text-sm mt-2">Adicione transações à carteira para ver as análises</p>
+            <p className="text-sm mt-2">
+              Adicione transações à carteira para ver as análises
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -200,7 +251,8 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
   const { summary } = analytics;
 
   // Altura responsiva para gráficos
-  const chartHeight = typeof window !== 'undefined' && window.innerWidth < 768 ? 250 : 350;
+  const chartHeight =
+    typeof window !== "undefined" && window.innerWidth < 768 ? 250 : 350;
 
   return (
     <div className="space-y-6">
@@ -235,7 +287,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
           <CardContent>
             <div className="space-y-1">
               <div className="text-2xl font-bold">
-                {summary.outperformanceCDI > 0 ? '+' : ''}
+                {summary.outperformanceCDI > 0 ? "+" : ""}
                 {summary.outperformanceCDI.toFixed(2)}%
               </div>
               <div className="text-xs text-muted-foreground">
@@ -254,7 +306,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
           <CardContent>
             <div className="space-y-1">
               <div className="text-2xl font-bold">
-                {summary.outperformanceIbovespa > 0 ? '+' : ''}
+                {summary.outperformanceIbovespa > 0 ? "+" : ""}
                 {summary.outperformanceIbovespa.toFixed(2)}%
               </div>
               <div className="text-xs text-muted-foreground">
@@ -288,16 +340,28 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
         {/* Mobile: Scroll horizontal | Desktop: Grid */}
         <div className="w-full overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible">
           <TabsList className="inline-flex md:grid w-auto md:w-full md:grid-cols-4 gap-1 min-w-full md:min-w-0">
-            <TabsTrigger value="evolution" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+            <TabsTrigger
+              value="evolution"
+              className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+            >
               Evolução
             </TabsTrigger>
-            <TabsTrigger value="benchmark" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+            <TabsTrigger
+              value="benchmark"
+              className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+            >
               Benchmarks
             </TabsTrigger>
-            <TabsTrigger value="drawdown" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+            <TabsTrigger
+              value="drawdown"
+              className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+            >
               Drawdown
             </TabsTrigger>
-            <TabsTrigger value="monthly" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0">
+            <TabsTrigger
+              value="monthly"
+              className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+            >
               Retornos Mensais
             </TabsTrigger>
           </TabsList>
@@ -313,48 +377,59 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
             </CardHeader>
             <CardContent className="px-2 md:px-6">
               <ResponsiveContainer width="100%" height={chartHeight}>
-                <AreaChart data={analytics.evolution} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <AreaChart
+                  data={analytics.evolution}
+                  margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                >
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
                     </linearGradient>
-                    <linearGradient id="colorInvested" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#82ca9d" stopOpacity={0}/>
+                    <linearGradient
+                      id="colorInvested"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     tickFormatter={formatDateShort}
                     tick={{ fontSize: 11 }}
                   />
-                  <YAxis 
-                    tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                  <YAxis
+                    tickFormatter={(value) =>
+                      `R$ ${(value / 1000).toFixed(0)}k`
+                    }
                     tick={{ fontSize: 11 }}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: any) => `R$ ${Number(value).toFixed(2)}`}
                     labelFormatter={formatMonthYear}
-                    contentStyle={{ fontSize: '12px' }}
+                    contentStyle={{ fontSize: "12px" }}
                   />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Area 
-                    type="monotone" 
-                    dataKey="value" 
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
                     name="Valor Total"
-                    stroke="#8884d8" 
-                    fillOpacity={1} 
-                    fill="url(#colorValue)" 
+                    stroke="#8884d8"
+                    fillOpacity={1}
+                    fill="url(#colorValue)"
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="invested" 
+                  <Area
+                    type="monotone"
+                    dataKey="invested"
                     name="Investido"
-                    stroke="#82ca9d" 
-                    fillOpacity={1} 
-                    fill="url(#colorInvested)" 
+                    stroke="#82ca9d"
+                    fillOpacity={1}
+                    fill="url(#colorInvested)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -372,43 +447,46 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
             </CardHeader>
             <CardContent className="px-2 md:px-6">
               <ResponsiveContainer width="100%" height={chartHeight}>
-                <LineChart data={analytics.benchmarkComparison} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <LineChart
+                  data={analytics.benchmarkComparison}
+                  margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     tickFormatter={formatDateShort}
                     tick={{ fontSize: 11 }}
                   />
-                  <YAxis 
+                  <YAxis
                     tickFormatter={(value) => `${value.toFixed(0)}%`}
                     tick={{ fontSize: 11 }}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: any) => `${Number(value).toFixed(2)}%`}
                     labelFormatter={formatMonthYear}
-                    contentStyle={{ fontSize: '12px' }}
+                    contentStyle={{ fontSize: "12px" }}
                   />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="portfolio" 
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Line
+                    type="monotone"
+                    dataKey="portfolio"
                     name="Carteira"
-                    stroke="#8884d8" 
+                    stroke="#8884d8"
                     strokeWidth={2}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="cdi" 
+                  <Line
+                    type="monotone"
+                    dataKey="cdi"
                     name="CDI"
-                    stroke="#82ca9d" 
+                    stroke="#82ca9d"
                     strokeWidth={2}
                     strokeDasharray="5 5"
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="ibovespa" 
+                  <Line
+                    type="monotone"
+                    dataKey="ibovespa"
                     name="Ibovespa"
-                    stroke="#ffc658" 
+                    stroke="#ffc658"
                     strokeWidth={2}
                     strokeDasharray="5 5"
                   />
@@ -476,6 +554,37 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
         </TabsContent>
 
         <TabsContent value="drawdown" className="space-y-4">
+          {/* Educational Disclaimer */}
+          <Card className="border-blue-200 bg-blue-50/50">
+            <CardContent className="pt-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mt-0.5">
+                  <span className="text-blue-600 text-sm font-semibold">?</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium text-blue-900">
+                    📊 O que é Drawdown?
+                  </p>
+                  <p className="text-blue-800 leading-relaxed">
+                    <strong>Drawdown</strong> mede quanto sua carteira caiu
+                    desde o melhor momento (pico de retorno). Por exemplo: se
+                    sua carteira estava com{" "}
+                    <span className="font-semibold">+5% de lucro</span> e agora
+                    está com{" "}
+                    <span className="font-semibold">-2% de prejuízo</span>, o
+                    drawdown é de <span className="font-semibold">7%</span> (a
+                    diferença entre +5% e -2%).
+                  </p>
+                  <p className="text-blue-700 text-xs">
+                    💡 <strong>Dica:</strong> Drawdowns são normais no
+                    investimento. Eles ajudam a medir o risco e entender os
+                    períodos difíceis da carteira.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Histórico de Drawdown</CardTitle>
@@ -485,35 +594,44 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
             </CardHeader>
             <CardContent className="px-2 md:px-6">
               <ResponsiveContainer width="100%" height={chartHeight}>
-                <AreaChart data={analytics.drawdownHistory} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <AreaChart
+                  data={analytics.drawdownHistory}
+                  margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                >
                   <defs>
-                    <linearGradient id="colorDrawdown" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                    <linearGradient
+                      id="colorDrawdown"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     tickFormatter={formatDateShort}
                     tick={{ fontSize: 11 }}
                   />
-                  <YAxis 
+                  <YAxis
                     tickFormatter={(value) => `${value.toFixed(1)}%`}
                     tick={{ fontSize: 11 }}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: any) => `${Number(value).toFixed(2)}%`}
                     labelFormatter={formatMonthYear}
-                    contentStyle={{ fontSize: '12px' }}
+                    contentStyle={{ fontSize: "12px" }}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="drawdown" 
+                  <Area
+                    type="monotone"
+                    dataKey="drawdown"
                     name="Drawdown"
-                    stroke="#ef4444" 
-                    fillOpacity={1} 
-                    fill="url(#colorDrawdown)" 
+                    stroke="#ef4444"
+                    fillOpacity={1}
+                    fill="url(#colorDrawdown)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -528,10 +646,12 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">
-                  {summary.currentDrawdown > 0 ? `-${summary.currentDrawdown.toFixed(2)}%` : '0%'}
+                  {summary.currentDrawdown > 0
+                    ? `-${summary.currentDrawdown.toFixed(2)}%`
+                    : "0%"}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {summary.currentDrawdown > 0 ? 'Em drawdown' : 'Sem drawdown'}
+                  {summary.currentDrawdown > 0 ? "Em drawdown" : "Sem drawdown"}
                 </div>
               </CardContent>
             </Card>
@@ -556,7 +676,9 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {summary.averageRecoveryTime > 0 ? `${summary.averageRecoveryTime.toFixed(0)} meses` : '-'}
+                  {summary.averageRecoveryTime > 0
+                    ? `${summary.averageRecoveryTime.toFixed(0)} meses`
+                    : "-"}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Média de {summary.drawdownCount} períodos
@@ -593,17 +715,22 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                             {formatMonthYearLong(period.startDate)}
                           </td>
                           <td className="py-2 px-2 text-sm">
-                            {period.endDate ? formatMonthYearLong(period.endDate) : '-'}
+                            {period.endDate
+                              ? formatMonthYearLong(period.endDate)
+                              : "-"}
                           </td>
                           <td className="py-2 px-2 text-sm text-right text-red-600 font-semibold">
                             -{period.depth.toFixed(2)}%
                           </td>
                           <td className="py-2 px-2 text-sm text-right">
-                            {period.duration} {period.duration === 1 ? 'mês' : 'meses'}
+                            {period.duration}{" "}
+                            {period.duration === 1 ? "mês" : "meses"}
                           </td>
                           <td className="py-2 px-2 text-center">
                             {period.recovered ? (
-                              <Badge variant="default" className="bg-green-600">Recuperado</Badge>
+                              <Badge variant="default" className="bg-green-600">
+                                Recuperado
+                              </Badge>
                             ) : (
                               <Badge variant="destructive">Em curso</Badge>
                             )}
@@ -622,9 +749,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
           <Card>
             <CardHeader>
               <CardTitle>Retornos Mensais</CardTitle>
-              <CardDescription>
-                Performance mensal da carteira
-              </CardDescription>
+              <CardDescription>Performance mensal da carteira</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="mb-4 flex items-center gap-4">
@@ -635,27 +760,33 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                   </span>
                 </div>
               </div>
-              
+
               <div className="px-2 md:px-6">
                 <ResponsiveContainer width="100%" height={chartHeight}>
-                  <BarChart data={analytics.monthlyReturns} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis 
-                      dataKey="date" 
+                  <BarChart
+                    data={analytics.monthlyReturns}
+                    margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="opacity-30"
+                    />
+                    <XAxis
+                      dataKey="date"
                       tickFormatter={formatDateShort}
                       tick={{ fontSize: 11 }}
                     />
-                    <YAxis 
+                    <YAxis
                       tickFormatter={(value) => `${value.toFixed(0)}%`}
                       tick={{ fontSize: 11 }}
                     />
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value: any) => `${Number(value).toFixed(2)}%`}
                       labelFormatter={formatMonthYearLong}
-                      contentStyle={{ fontSize: '12px' }}
+                      contentStyle={{ fontSize: "12px" }}
                     />
-                    <Bar 
-                      dataKey="return" 
+                    <Bar
+                      dataKey="return"
                       name="Retorno"
                       fill="#8884d8"
                       radius={[4, 4, 0, 0]}
@@ -681,7 +812,9 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                     <TableRow>
                       <TableHead>Mês</TableHead>
                       <TableHead className="text-right">Retorno</TableHead>
-                      <TableHead className="text-center">Classificação</TableHead>
+                      <TableHead className="text-center">
+                        Classificação
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -690,8 +823,13 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                         <TableCell className="font-medium">
                           {formatMonthYearLong(item.date)}
                         </TableCell>
-                        <TableCell className={`text-right font-semibold ${item.return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {item.return >= 0 ? '+' : ''}{item.return.toFixed(2)}%
+                        <TableCell
+                          className={`text-right font-semibold ${
+                            item.return >= 0 ? "text-green-600" : "text-red-600"
+                          }`}
+                        >
+                          {item.return >= 0 ? "+" : ""}
+                          {item.return.toFixed(2)}%
                         </TableCell>
                         <TableCell className="text-center">
                           {item.return >= 0 ? (
@@ -716,10 +854,9 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
 /**
  * Função utilitária para invalidar TODOS os caches de uma carteira
  * Deve ser chamada quando qualquer escrita acontecer (criar, editar, deletar transações, etc)
- * 
+ *
  * @deprecated Use portfolioCache.invalidateAll() diretamente do @/lib/portfolio-cache
  */
 export function invalidatePortfolioAnalyticsCache(portfolioId: string) {
   portfolioCache.invalidateAll(portfolioId);
 }
-

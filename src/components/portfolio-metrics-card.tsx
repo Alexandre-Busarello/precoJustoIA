@@ -100,6 +100,9 @@ export function PortfolioMetricsCard({ metrics, loading, startDate }: PortfolioM
           <p className="text-xs text-muted-foreground mt-1">
             Caixa: {formatCurrency(metrics.cashBalance)}
           </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Alocado: {formatCurrency(metrics.currentValue - metrics.cashBalance)}
+          </p>
         </CardContent>
       </Card>
 

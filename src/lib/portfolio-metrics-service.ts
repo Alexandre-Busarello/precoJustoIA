@@ -98,21 +98,37 @@ export class PortfolioMetricsService {
     // Calculate total invested and withdrawn
     const { totalInvested, totalWithdrawn, totalDividends } = this.calculateTotals(transactions);
     
-    // Calculate current portfolio value
-    const currentValue = holdings.reduce((sum, h) => sum + h.currentValue, 0);
+    // Calculate current portfolio value (holdings only, NOT including cash)
+    const holdingsValue = holdings.reduce((sum, h) => sum + h.currentValue, 0);
     
-    // Calculate total return
-    // Total Return = (Current Value + Cash + Withdrawn - Invested) / Invested
-    const totalReturn = totalInvested > 0 
-      ? (currentValue + cashBalance + totalWithdrawn - totalInvested) / totalInvested
+    // 🔧 CORREÇÃO CRÍTICA: Cálculo SIMPLES e CORRETO do retorno total
+    // 
+    // Retorno = (Valor Atual - Capital Investido) / Capital Investido
+    // 
+    // Onde:
+    // - Valor Atual = Valor de mercado dos ativos + Caixa disponível
+    // - Capital Investido = Total de aportes (CASH_CREDIT)
+    //
+    // IMPORTANTE: 
+    // - Caixa FAZ PARTE do valor atual (é capital disponível)
+    // - Saques (CASH_DEBIT) reduzem o capital investido
+    // - Dividendos já estão no caixa, não precisam ser contados separadamente
+    
+    const currentTotalValue = holdingsValue + cashBalance;
+    const netInvested = totalInvested - totalWithdrawn; // Capital líquido investido
+    
+    const totalReturn = netInvested > 0 
+      ? (currentTotalValue - netInvested) / netInvested
       : 0;
     
     console.log('📊 [CALCULATE RETURN]', {
-      currentValue: currentValue.toFixed(2),
+      holdingsValue: holdingsValue.toFixed(2),
       cashBalance: cashBalance.toFixed(2),
-      totalWithdrawn: totalWithdrawn.toFixed(2),
+      currentTotalValue: currentTotalValue.toFixed(2),
       totalInvested: totalInvested.toFixed(2),
-      numerator: (currentValue + cashBalance + totalWithdrawn - totalInvested).toFixed(2),
+      totalWithdrawn: totalWithdrawn.toFixed(2),
+      netInvested: netInvested.toFixed(2),
+      gain: (currentTotalValue - netInvested).toFixed(2),
       totalReturn: (totalReturn * 100).toFixed(2) + '%'
     });
 
@@ -153,6 +169,9 @@ export class PortfolioMetricsService {
     // Calculate sector/industry allocations
     const sectorAllocation = await this.getSectorAllocation(holdings);
     const industryAllocation = await this.getIndustryAllocation(holdings);
+    
+    // 💰 Valor total do portfólio = holdings + caixa (para exibição)
+    const currentValue = currentTotalValue; // Já calculado acima
     
     const metrics: PortfolioMetricsData = {
       currentValue,
@@ -485,6 +504,13 @@ export class PortfolioMetricsService {
 
   /**
    * Calculate total invested, withdrawn, and dividends
+   * 
+   * 🔧 CORREÇÃO CRÍTICA: Conceito correto de saque
+   * - CASH_DEBIT: Único tipo que representa saque REAL (dinheiro sai da carteira)
+   * - SELL_REBALANCE: Venda para rebalancear (dinheiro fica em caixa, NÃO é saque)
+   * - SELL_WITHDRAWAL: Venda para gerar caixa (dinheiro fica em caixa, NÃO é saque)
+   * 
+   * O saque só acontece quando há um CASH_DEBIT explícito!
    */
   private static calculateTotals(transactions: any[]): {
     totalInvested: number;
@@ -501,11 +527,14 @@ export class PortfolioMetricsService {
         totalCashCredits += Number(tx.amount);
       } else if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
         totalPurchases += Number(tx.amount);
-      } else if (tx.type === 'CASH_DEBIT' || tx.type === 'SELL_WITHDRAWAL') {
+      } else if (tx.type === 'CASH_DEBIT') {
+        // 🔧 CORREÇÃO: Apenas CASH_DEBIT é saque real (dinheiro sai da carteira)
+        // SELL_WITHDRAWAL e SELL_REBALANCE apenas movem dinheiro para caixa
         totalWithdrawn += Number(tx.amount);
       } else if (tx.type === 'DIVIDEND') {
         totalDividends += Number(tx.amount);
       }
+      // SELL_REBALANCE e SELL_WITHDRAWAL não são saques (dinheiro fica em caixa)
     }
 
     // Use cash credits as totalInvested if available, otherwise use purchase amounts
@@ -517,7 +546,8 @@ export class PortfolioMetricsService {
       totalPurchases: totalPurchases.toFixed(2),
       totalWithdrawn: totalWithdrawn.toFixed(2),
       totalDividends: totalDividends.toFixed(2),
-      totalInvested: totalInvested.toFixed(2)
+      totalInvested: totalInvested.toFixed(2),
+      note: 'Apenas CASH_DEBIT é saque real'
     });
 
     return { totalInvested, totalWithdrawn, totalDividends };

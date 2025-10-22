@@ -67,8 +67,10 @@ export async function POST(request: NextRequest) {
     // ETAPA 1: Analisar se precisa fazer screening ou se já tem lista de ativos
     const { sectors, industries } = await getSectorsAndIndustries();
 
-    const analysisPrompt = `Você é um especialista em análise de investimentos brasileiros. Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
-
+    const analysisPrompt = `Você é um especialista em análise de investimentos brasileiros. 
+    Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
+    Se necessário consulte na internet com a ferramente de busca para garantir que os TICKERs são válidos.
+    
 Analise a seguinte instrução do usuário e determine se precisa fazer screening de ações ou se já tem uma lista específica de ativos:
 
 **INSTRUÇÃO DO USUÁRIO**: "${userPrompt}"
@@ -166,6 +168,19 @@ Analise a instrução e retorne APENAS o JSON:`;
 
     const model = "gemini-2.5-flash-lite";
 
+    const tools = [
+      {
+        googleSearch: {},
+      },
+    ];
+
+    const config = {
+      thinkingConfig: {
+        thinkingBudget: -1,
+      },
+      tools,
+    };
+
     // Primeira chamada: Análise da necessidade de screening
     const analysisResponse = await ai.models.generateContentStream({
       model,
@@ -175,6 +190,7 @@ Analise a instrução e retorne APENAS o JSON:`;
           parts: [{ text: analysisPrompt }],
         },
       ],
+      config
     });
 
     let analysisResult = "";
@@ -214,7 +230,9 @@ Analise a instrução e retorne APENAS o JSON:`;
     }
 
     // ETAPA 3: Montar a carteira com os dados disponíveis
-    const portfolioPrompt = `Você é um especialista em montagem de carteiras de investimento no mercado brasileiro (B3). Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
+    const portfolioPrompt = `Você é um especialista em montagem de carteiras de investimento no mercado brasileiro (B3). 
+    Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
+    Se necessário consulte na internet com a ferramente de busca para garantir que os TICKERs são válidos.
 
 Sua tarefa é criar uma carteira com alocações específicas baseada nos dados fornecidos.
 
@@ -323,6 +341,7 @@ Analise os dados e retorne APENAS o JSON da carteira:`;
           parts: [{ text: portfolioPrompt }],
         },
       ],
+      config
     });
 
     let portfolioResult = "";

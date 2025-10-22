@@ -206,10 +206,15 @@ export class PortfolioTransactionService {
         const ticker = tx.ticker || "null";
         const amount = Number(tx.amount).toFixed(2);
         const quantity = tx.quantity ? Number(tx.quantity).toFixed(6) : "null";
-        
+
         // For BUY/SELL transactions, include quantity in key to allow multiple purchases
         // For other transactions (DEPOSIT, DIVIDEND), include amount
-        if (tx.type === "BUY" || tx.type === "SELL_REBALANCE" || tx.type === "BUY_REBALANCE" || tx.type === "SELL_WITHDRAWAL") {
+        if (
+          tx.type === "BUY" ||
+          tx.type === "SELL_REBALANCE" ||
+          tx.type === "BUY_REBALANCE" ||
+          tx.type === "SELL_WITHDRAWAL"
+        ) {
           return `${dateStr}_${tx.type}_${ticker}_${quantity}`;
         } else {
           return `${dateStr}_${tx.type}_${ticker}_${amount}`;
@@ -264,17 +269,26 @@ export class PortfolioTransactionService {
       console.log(
         `📊 [NO PENDING MONTHS] Checking if rebalancing is needed...`
       );
-      
+
       console.log(`🔍 [DEBUG] Portfolio data:`, {
         portfolioId: portfolio.id,
         assetsCount: portfolio.assets?.length || 0,
-        assets: portfolio.assets?.map((a: any) => `${a.ticker}: ${(Number(a.targetAllocation) * 100).toFixed(1)}%`) || [],
+        assets:
+          portfolio.assets?.map(
+            (a: any) =>
+              `${a.ticker}: ${(Number(a.targetAllocation) * 100).toFixed(1)}%`
+          ) || [],
         holdingsCount: holdings.size,
-        holdings: Array.from(holdings.entries()).map(([ticker, holding]) => 
-          `${ticker}: ${holding.quantity} shares (R$ ${holding.totalInvested.toFixed(2)} invested)`
+        holdings: Array.from(holdings.entries()).map(
+          ([ticker, holding]) =>
+            `${ticker}: ${
+              holding.quantity
+            } shares (R$ ${holding.totalInvested.toFixed(2)} invested)`
         ),
         pricesCount: prices.size,
-        prices: Array.from(prices.entries()).map(([ticker, price]) => `${ticker}: R$ ${price.toFixed(2)}`)
+        prices: Array.from(prices.entries()).map(
+          ([ticker, price]) => `${ticker}: R$ ${price.toFixed(2)}`
+        ),
       });
 
       const rebalancingSuggestions = await this.generateRebalancingSuggestions(
@@ -315,11 +329,18 @@ export class PortfolioTransactionService {
       const dateStr = suggestion.date.toISOString().split("T")[0];
       const ticker = suggestion.ticker || "null";
       const amount = suggestion.amount.toFixed(2);
-      const quantity = suggestion.quantity ? suggestion.quantity.toFixed(6) : "null";
-      
+      const quantity = suggestion.quantity
+        ? suggestion.quantity.toFixed(6)
+        : "null";
+
       // Create key using same logic as existing transactions
       let key: string;
-      if (suggestion.type === "BUY" || suggestion.type === "SELL_REBALANCE" || suggestion.type === "BUY_REBALANCE" || suggestion.type === "SELL_WITHDRAWAL") {
+      if (
+        suggestion.type === "BUY" ||
+        suggestion.type === "SELL_REBALANCE" ||
+        suggestion.type === "BUY_REBALANCE" ||
+        suggestion.type === "SELL_WITHDRAWAL"
+      ) {
         key = `${dateStr}_${suggestion.type}_${ticker}_${quantity}`;
       } else {
         key = `${dateStr}_${suggestion.type}_${ticker}_${amount}`;
@@ -330,8 +351,14 @@ export class PortfolioTransactionService {
         console.log(
           `⏩ [SKIP DUPLICATE] ${suggestion.type} ${
             suggestion.ticker || ""
-          } on ${dateStr} (${suggestion.type === "BUY" || suggestion.type === "SELL_REBALANCE" || suggestion.type === "BUY_REBALANCE" || suggestion.type === "SELL_WITHDRAWAL" ? 
-            `qty: ${quantity}` : `amt: R$ ${amount}`}) already exists`
+          } on ${dateStr} (${
+            suggestion.type === "BUY" ||
+            suggestion.type === "SELL_REBALANCE" ||
+            suggestion.type === "BUY_REBALANCE" ||
+            suggestion.type === "SELL_WITHDRAWAL"
+              ? `qty: ${quantity}`
+              : `amt: R$ ${amount}`
+          }) already exists`
         );
         return false;
       }
@@ -484,7 +511,9 @@ export class PortfolioTransactionService {
       },
     });
 
-    console.log(`\n📊 [GET HOLDINGS] Processing ${transactions.length} transactions...`);
+    console.log(
+      `\n📊 [GET HOLDINGS] Processing ${transactions.length} transactions...`
+    );
 
     const holdings = new Map<
       string,
@@ -511,19 +540,34 @@ export class PortfolioTransactionService {
         const quantitySold = Number(tx.quantity || 0);
         const quantityBefore = current.quantity;
         const investedBefore = current.totalInvested;
-        
+
         // Calculate average cost per share BEFORE the sale
-        const averageCost = quantityBefore > 0 ? investedBefore / quantityBefore : 0;
-        
+        const averageCost =
+          quantityBefore > 0 ? investedBefore / quantityBefore : 0;
+
         // Reduce quantity and totalInvested by the COST of shares sold (not sale value)
         current.quantity -= quantitySold;
         const costReduction = averageCost * quantitySold;
         current.totalInvested -= costReduction;
-        
-        console.log(`  📉 [SELL] ${tx.ticker}: Sold ${quantitySold} shares, cost reduction: R$ ${costReduction.toFixed(2)}`);
+
+        console.log(
+          `  📉 [SELL] ${
+            tx.ticker
+          }: Sold ${quantitySold} shares, cost reduction: R$ ${costReduction.toFixed(
+            2
+          )}`
+        );
       }
 
-      console.log(`  ${tx.type === 'BUY' || tx.type === 'BUY_REBALANCE' ? '📈' : '📉'} [${tx.date.toISOString().split('T')[0]}] ${tx.type} ${tx.ticker}: ${before.quantity} → ${current.quantity} shares, R$ ${before.totalInvested.toFixed(2)} → R$ ${current.totalInvested.toFixed(2)}`);
+      console.log(
+        `  ${tx.type === "BUY" || tx.type === "BUY_REBALANCE" ? "📈" : "📉"} [${
+          tx.date.toISOString().split("T")[0]
+        }] ${tx.type} ${tx.ticker}: ${before.quantity} → ${
+          current.quantity
+        } shares, R$ ${before.totalInvested.toFixed(
+          2
+        )} → R$ ${current.totalInvested.toFixed(2)}`
+      );
 
       holdings.set(tx.ticker, current);
     }
@@ -531,10 +575,14 @@ export class PortfolioTransactionService {
     console.log(`\n✅ [HOLDINGS SUMMARY]:`);
     for (const [ticker, holding] of holdings) {
       if (holding.quantity > 0) {
-        console.log(`  ${ticker}: ${holding.quantity} shares, R$ ${holding.totalInvested.toFixed(2)} invested`);
+        console.log(
+          `  ${ticker}: ${
+            holding.quantity
+          } shares, R$ ${holding.totalInvested.toFixed(2)} invested`
+        );
       }
     }
-    console.log('');
+    console.log("");
 
     return holdings;
   }
@@ -616,16 +664,15 @@ export class PortfolioTransactionService {
     prices: Map<string, number>
   ): number {
     let totalValue = 0;
-    
+
     for (const [ticker, holding] of holdings) {
       const price = prices.get(ticker) || 0;
       const currentValue = holding.quantity * price;
       totalValue += currentValue;
     }
-    
+
     return totalValue;
   }
-
 
   /**
    * Generate immediate rebalancing suggestions (if portfolio is unbalanced)
@@ -636,25 +683,27 @@ export class PortfolioTransactionService {
     prices: Map<string, number>
   ): Promise<SuggestedTransaction[]> {
     console.log(`🔄 [REBALANCING] Starting rebalancing analysis...`);
-    
+
     const suggestions: SuggestedTransaction[] = [];
 
     // 💰 Calcular valores do portfólio
     const currentCash = await this.getCurrentCashBalance(portfolio.id);
     const holdingsValue = this.calculatePortfolioValue(holdings, prices);
-    
+
     // 🔧 CORREÇÃO: Considera tambem o saldo em caixa para rebalancear
     const portfolioValueForAllocation = holdingsValue + currentCash;
-    
+
     console.log(`💰 [REBALANCING] Portfolio breakdown:`, {
       holdingsValue: holdingsValue.toFixed(2),
       currentCash: currentCash.toFixed(2),
       totalValue: (holdingsValue + currentCash).toFixed(2),
-      note: 'Alocações calculadas sobre holdings apenas (sem caixa)'
+      note: "Alocações calculadas sobre holdings apenas (sem caixa)",
     });
 
     if (portfolioValueForAllocation === 0) {
-      console.log("⚠️ [REBALANCING] Portfolio value is 0, no rebalancing needed");
+      console.log(
+        "⚠️ [REBALANCING] Portfolio value is 0, no rebalancing needed"
+      );
       return [];
     }
 
@@ -682,19 +731,45 @@ export class PortfolioTransactionService {
       const relativeDeviation =
         targetAlloc > 0 ? Math.abs(diff / targetAlloc) : 0;
 
-      // Needs rebalancing if absolute diff > 2% OR relative deviation > 15%
-      if (absoluteDiff > 0.02 || relativeDeviation > 0.15) {
+      // 🔧 CORREÇÃO: Thresholds adaptativos baseados no tamanho da alocação
+      // Para alocações pequenas, usar threshold relativo; para grandes, usar absoluto
+      const adaptiveAbsoluteThreshold = Math.max(0.02, targetAlloc * 0.3); // Mínimo 2%, máximo 30% da alocação
+      const relativeThreshold = 0.25; // 25% de desvio relativo
+      
+      const needsRebalancing = absoluteDiff > adaptiveAbsoluteThreshold || relativeDeviation > relativeThreshold;
+
+      console.log(`🔍 [DEVIATION ANALYSIS] ${asset.ticker}:`, {
+        current: `${(currentAlloc * 100).toFixed(2)}%`,
+        target: `${(targetAlloc * 100).toFixed(2)}%`,
+        diff: `${diff > 0 ? "+" : ""}${(diff * 100).toFixed(2)}%`,
+        absoluteDiff: `${(absoluteDiff * 100).toFixed(2)}%`,
+        relativeDeviation: `${(relativeDeviation * 100).toFixed(1)}%`,
+        adaptiveThreshold: `${(adaptiveAbsoluteThreshold * 100).toFixed(2)}%`,
+        needsRebalancing,
+      });
+
+      if (needsRebalancing) {
         deviations.push({
           ticker: asset.ticker,
           current: currentAlloc,
           target: targetAlloc,
           diff,
         });
+
+        console.log(
+          `⚖️ [NEEDS REBALANCING] ${asset.ticker}: ${(
+            currentAlloc * 100
+          ).toFixed(2)}% → ${(targetAlloc * 100).toFixed(2)}%`
+        );
+      } else {
+        console.log(`✅ [BALANCED] ${asset.ticker}: Within acceptable range`);
       }
     }
 
     // 🚨 CRÍTICO: Detectar ativos NÃO CONFIGURADOS na alocação
-    const configuredTickers = new Set(portfolio.assets.map((asset: any) => asset.ticker));
+    const configuredTickers = new Set(
+      portfolio.assets.map((asset: any) => asset.ticker)
+    );
     const unconfiguredAssets: Array<{
       ticker: string;
       current: number;
@@ -704,25 +779,40 @@ export class PortfolioTransactionService {
     for (const [ticker, holding] of holdings) {
       if (!configuredTickers.has(ticker) && holding.quantity > 0) {
         const currentValue = holding.quantity * (prices.get(ticker) || 0);
-        const currentAlloc = portfolioValueForAllocation > 0 ? currentValue / portfolioValueForAllocation : 0;
-        
+        const currentAlloc =
+          portfolioValueForAllocation > 0
+            ? currentValue / portfolioValueForAllocation
+            : 0;
+
         unconfiguredAssets.push({
           ticker,
           current: currentAlloc,
-          shouldSell: true
+          shouldSell: true,
         });
-        
-        console.log(`🚨 [UNCONFIGURED ASSET] ${ticker}: ${(currentAlloc * 100).toFixed(2)}% (R$ ${currentValue.toFixed(2)}) - NOT in allocation config`);
+
+        console.log(
+          `🚨 [UNCONFIGURED ASSET] ${ticker}: ${(currentAlloc * 100).toFixed(
+            2
+          )}% (R$ ${currentValue.toFixed(2)}) - NOT in allocation config`
+        );
       }
     }
 
     const totalPortfolioValue = holdingsValue + currentCash;
-    const cashPercentage = totalPortfolioValue > 0 ? currentCash / totalPortfolioValue : 0;
-    
-    console.log(`💰 [CASH ANALYSIS] Available cash: R$ ${currentCash.toFixed(2)} (${(cashPercentage * 100).toFixed(1)}% of portfolio)`);
+    const cashPercentage =
+      totalPortfolioValue > 0 ? currentCash / totalPortfolioValue : 0;
+
+    console.log(
+      `💰 [CASH ANALYSIS] Available cash: R$ ${currentCash.toFixed(2)} (${(
+        cashPercentage * 100
+      ).toFixed(1)}% of portfolio)`
+    );
 
     // Determinar se precisa de rebalanceamento
-    const needsRebalancing = deviations.length > 0 || unconfiguredAssets.length > 0 || cashPercentage > 0.05;
+    const needsRebalancing =
+      deviations.length > 0 ||
+      unconfiguredAssets.length > 0 ||
+      cashPercentage > 0.05;
 
     if (!needsRebalancing) {
       console.log("✅ Portfolio is balanced, no rebalancing needed");
@@ -730,26 +820,34 @@ export class PortfolioTransactionService {
     }
 
     console.log("⚖️ Portfolio needs rebalancing:");
-    
+
     if (deviations.length > 0) {
-      console.log("📊 Configured assets deviations:", deviations.map(
-        (d) =>
-          `${d.ticker}: ${(d.current * 100).toFixed(2)}% vs ${(
-            d.target * 100
-          ).toFixed(2)}% (${d.diff > 0 ? "+" : ""}${(d.diff * 100).toFixed(
-            2
-          )}%)`
-      ));
+      console.log(
+        "📊 Configured assets deviations:",
+        deviations.map(
+          (d) =>
+            `${d.ticker}: ${(d.current * 100).toFixed(2)}% vs ${(
+              d.target * 100
+            ).toFixed(2)}% (${d.diff > 0 ? "+" : ""}${(d.diff * 100).toFixed(
+              2
+            )}%)`
+        )
+      );
     }
-    
+
     if (unconfiguredAssets.length > 0) {
-      console.log("🚨 Unconfigured assets to sell:", unconfiguredAssets.map(
-        (a) => `${a.ticker}: ${(a.current * 100).toFixed(2)}%`
-      ));
+      console.log(
+        "🚨 Unconfigured assets to sell:",
+        unconfiguredAssets.map(
+          (a) => `${a.ticker}: ${(a.current * 100).toFixed(2)}%`
+        )
+      );
     }
-    
+
     if (cashPercentage > 0.05) {
-      console.log(`💰 Significant cash to invest: ${(cashPercentage * 100).toFixed(1)}%`);
+      console.log(
+        `💰 Significant cash to invest: ${(cashPercentage * 100).toFixed(1)}%`
+      );
     }
 
     const today = new Date();
@@ -759,24 +857,32 @@ export class PortfolioTransactionService {
     for (const unconfiguredAsset of unconfiguredAssets) {
       const holding = holdings.get(unconfiguredAsset.ticker);
       const price = prices.get(unconfiguredAsset.ticker);
-      
+
       if (holding && price && holding.quantity > 0) {
         const sellValue = holding.quantity * price;
-        
+
         suggestions.push({
           date: today,
-          type: 'SELL_WITHDRAWAL',
+          type: "SELL_WITHDRAWAL",
           ticker: unconfiguredAsset.ticker,
           amount: sellValue,
           price: price,
           quantity: holding.quantity,
-          reason: `Venda de ${unconfiguredAsset.ticker}: ativo não está configurado na alocação da carteira (${(unconfiguredAsset.current * 100).toFixed(1)}% atual)`,
+          reason: `Venda de ${
+            unconfiguredAsset.ticker
+          }: ativo não está configurado na alocação da carteira (${(
+            unconfiguredAsset.current * 100
+          ).toFixed(1)}% atual)`,
           cashBalanceBefore: availableCash,
-          cashBalanceAfter: availableCash + sellValue
+          cashBalanceAfter: availableCash + sellValue,
         });
-        
+
         availableCash += sellValue;
-        console.log(`💸 [SELL UNCONFIGURED] ${unconfiguredAsset.ticker}: ${holding.quantity} shares × R$ ${price.toFixed(2)} = R$ ${sellValue.toFixed(2)}`);
+        console.log(
+          `💸 [SELL UNCONFIGURED] ${unconfiguredAsset.ticker}: ${
+            holding.quantity
+          } shares × R$ ${price.toFixed(2)} = R$ ${sellValue.toFixed(2)}`
+        );
       }
     }
 
@@ -787,9 +893,9 @@ export class PortfolioTransactionService {
         availableCash: availableCash.toFixed(2),
         portfolioValueForAllocation: portfolioValueForAllocation.toFixed(2),
         deviationsCount: deviations.length,
-        assetsCount: portfolio.assets.length
+        assetsCount: portfolio.assets.length,
       });
-      
+
       const rebalanceSuggestions = this.generateRebalanceTransactions(
         portfolio.assets,
         holdings,
@@ -800,7 +906,9 @@ export class PortfolioTransactionService {
         today
       );
 
-      console.log(`✅ [REBALANCING] Generated ${rebalanceSuggestions.length} suggestions`);
+      console.log(
+        `✅ [REBALANCING] Generated ${rebalanceSuggestions.length} suggestions`
+      );
       suggestions.push(...rebalanceSuggestions);
     }
 
@@ -1139,13 +1247,43 @@ export class PortfolioTransactionService {
   ): Map<string, number> {
     const allocations = new Map<string, number>();
 
-    if (portfolioValue === 0) return allocations;
+    if (portfolioValue === 0) {
+      console.log(
+        "⚠️ [ALLOCATION] Portfolio value is 0, returning empty allocations"
+      );
+      return allocations;
+    }
+
+    console.log(
+      `📊 [ALLOCATION CALCULATION] Portfolio value: R$ ${portfolioValue.toFixed(
+        2
+      )}`
+    );
 
     for (const [ticker, holding] of holdings) {
       const price = prices.get(ticker) || 0;
       const value = holding.quantity * price;
-      allocations.set(ticker, value / portfolioValue);
+      const allocation = value / portfolioValue;
+
+      allocations.set(ticker, allocation);
+
+      console.log(
+        `  ${ticker}: ${holding.quantity} shares × R$ ${price.toFixed(
+          2
+        )} = R$ ${value.toFixed(2)} (${(allocation * 100).toFixed(2)}%)`
+      );
     }
+
+    // Verificar se as alocações somam 100%
+    const totalAllocation = Array.from(allocations.values()).reduce(
+      (sum, alloc) => sum + alloc,
+      0
+    );
+    console.log(
+      `📊 [ALLOCATION TOTAL] ${(totalAllocation * 100).toFixed(
+        2
+      )}% (should be ≤ 100%)`
+    );
 
     return allocations;
   }
@@ -1295,7 +1433,7 @@ export class PortfolioTransactionService {
     }
 
     // Identify overallocated assets and sort by profitability (highest first)
-    // Using 2% threshold instead of 5% for more responsive rebalancing
+    // 🔧 CORREÇÃO: Usando threshold de 5% para evitar rebalanceamentos desnecessários
     const overallocatedAssets = assets
       .map((asset) => ({
         ...asset,
@@ -1303,7 +1441,11 @@ export class PortfolioTransactionService {
         targetAlloc: Number(asset.targetAllocation),
         profitability: profitability.get(asset.ticker) || 0,
       }))
-      .filter((asset) => asset.currentAlloc > asset.targetAlloc + 0.02)
+      .filter((asset) => {
+        // 🔧 CORREÇÃO: Usar threshold adaptativo também aqui
+        const adaptiveThreshold = Math.max(0.02, asset.targetAlloc * 0.3);
+        return asset.currentAlloc > asset.targetAlloc + adaptiveThreshold;
+      })
       .sort((a, b) => b.profitability - a.profitability); // Sort by profitability DESC
 
     // Separate positive and negative profitability assets
@@ -1405,29 +1547,29 @@ export class PortfolioTransactionService {
       console.log(`💰 [REBALANCING - BUY] Starting buy phase:`, {
         availableCash: cashBalance.toFixed(2),
         portfolioValue: portfolioValue.toFixed(2),
-        assetsCount: assets.length
+        assetsCount: assets.length,
       });
-      
+
       // 🔧 ESTRATÉGIA: Distribuir o caixa disponível conforme alocação target
       // Isso funciona tanto para rebalanceamento quanto para investimento inicial
       const initialCash = cashBalance;
-      
+
       for (const asset of assets) {
         if (cashBalance <= 0) break; // No more cash available
-        
+
         const currentAlloc = currentAllocations.get(asset.ticker) || 0;
         const targetAlloc = Number(asset.targetAllocation);
         const price = prices.get(asset.ticker);
-        
+
         if (!price) {
           console.log(`⚠️ [SKIP] ${asset.ticker}: No price available`);
           continue;
         }
 
         console.log(`🔍 [ANALYZING] ${asset.ticker}:`, {
-          currentAlloc: (currentAlloc * 100).toFixed(2) + '%',
-          targetAlloc: (targetAlloc * 100).toFixed(2) + '%',
-          price: price.toFixed(2)
+          currentAlloc: (currentAlloc * 100).toFixed(2) + "%",
+          targetAlloc: (targetAlloc * 100).toFixed(2) + "%",
+          price: price.toFixed(2),
         });
 
         // 🔧 CORREÇÃO: Sempre comprar se há caixa disponível
@@ -1438,7 +1580,7 @@ export class PortfolioTransactionService {
         console.log(`💡 [CALCULATION] ${asset.ticker}:`, {
           targetAmount: targetAmount.toFixed(2),
           sharesToBuy,
-          wouldCost: (sharesToBuy * price).toFixed(2)
+          wouldCost: (sharesToBuy * price).toFixed(2),
         });
 
         // Only buy if we can buy at least 1 share
@@ -1460,15 +1602,29 @@ export class PortfolioTransactionService {
           });
 
           cashBalance -= actualBuyAmount;
-          
-          console.log(`✅ [BUY REBALANCE] ${asset.ticker}: ${sharesToBuy} shares × R$ ${price.toFixed(2)} = R$ ${actualBuyAmount.toFixed(2)}`);
+
+          console.log(
+            `✅ [BUY REBALANCE] ${
+              asset.ticker
+            }: ${sharesToBuy} shares × R$ ${price.toFixed(
+              2
+            )} = R$ ${actualBuyAmount.toFixed(2)}`
+          );
         } else {
-          console.log(`⏩ [SKIP] ${asset.ticker}: Not enough cash for 1 share (need R$ ${price.toFixed(2)})`);
+          console.log(
+            `⏩ [SKIP] ${
+              asset.ticker
+            }: Not enough cash for 1 share (need R$ ${price.toFixed(2)})`
+          );
         }
       }
-      
+
       if (cashBalance > 0) {
-        console.log(`💵 [REMAINING CASH] R$ ${cashBalance.toFixed(2)} (not enough for 1 share of any asset)`);
+        console.log(
+          `💵 [REMAINING CASH] R$ ${cashBalance.toFixed(
+            2
+          )} (not enough for 1 share of any asset)`
+        );
       }
     } else {
       console.log(`⚠️ [NO CASH] No cash available for buying`);
@@ -1678,8 +1834,12 @@ export class PortfolioTransactionService {
     };
 
     // For BUY/SELL transactions, also match quantity to allow multiple purchases with different amounts
-    if (suggestion.type === "BUY" || suggestion.type === "SELL_REBALANCE" || 
-        suggestion.type === "BUY_REBALANCE" || suggestion.type === "SELL_WITHDRAWAL") {
+    if (
+      suggestion.type === "BUY" ||
+      suggestion.type === "SELL_REBALANCE" ||
+      suggestion.type === "BUY_REBALANCE" ||
+      suggestion.type === "SELL_WITHDRAWAL"
+    ) {
       if (suggestion.quantity !== undefined) {
         whereCondition.quantity = suggestion.quantity;
       }

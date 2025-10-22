@@ -458,12 +458,6 @@ export default function Dashboard() {
                               Criar Primeira Carteira
                             </Link>
                           </Button>
-                          <Button asChild variant="outline" size="lg">
-                            <Link href="/carteira" className="flex items-center gap-2">
-                              <BarChart3 className="w-5 h-5" />
-                              Explorar Funcionalidades
-                            </Link>
-                          </Button>
                         </div>
                       </div>
                     </CardContent>

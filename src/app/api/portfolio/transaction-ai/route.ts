@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { GoogleGenAI } from "@google/genai";
+import { getCurrentUser } from "@/lib/user-service";
 
 interface TransactionAIRequest {
   portfolioId: string;
@@ -27,14 +28,14 @@ interface TransactionAIResult {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const user = await getCurrentUser();
 
-    if (!session?.user?.email) {
+    if (!user?.email) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
     // Verificar se é Premium
-    const isPremium = session.user.subscriptionTier === "PREMIUM";
+    const isPremium = user.isPremium;
     if (!isPremium) {
       return NextResponse.json(
         { error: "Recurso exclusivo Premium" },

@@ -5,6 +5,7 @@ import { PortfolioTransactionService } from "@/lib/portfolio-transaction-service
 import { PortfolioMetricsService } from "@/lib/portfolio-metrics-service";
 import { TransactionType } from "@prisma/client";
 import { revalidateTag } from "next/cache";
+import { getCurrentUser } from "@/lib/user-service";
 
 interface Transaction {
   type: string;
@@ -23,17 +24,17 @@ interface ApplyTransactionsRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const user = await getCurrentUser();
     
-    if (!session?.user?.email) {
+    if (!user?.email) {
       return NextResponse.json(
         { error: "Não autorizado" },
         { status: 401 }
       );
     }
-
+    
     // Verificar se é Premium
-    const isPremium = session.user.subscriptionTier === "PREMIUM";
+    const isPremium = user.isPremium;
     if (!isPremium) {
       return NextResponse.json(
         { error: "Recurso exclusivo Premium" },

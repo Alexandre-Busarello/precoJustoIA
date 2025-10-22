@@ -84,7 +84,7 @@ export async function GET() {
     const hasUsedBacktest = backtestCount > 0;
 
     // Contar modelos disponíveis baseado na subscription
-    const isPremium = session.user.subscriptionTier === 'PREMIUM';
+    const isPremium = currentUser.isPremium;
     const availableModels = isPremium ? 7 : 1; // Premium: 7 modelos, Free: 1 modelo
 
     return NextResponse.json({

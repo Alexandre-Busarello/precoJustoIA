@@ -10,11 +10,10 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { Metadata } from "next"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { PaymentSuccessHandler } from "@/components/payment-success-handler"
+import { getCurrentUser } from "@/lib/user-service"
 
 export const metadata: Metadata = {
   title: "Pagamento Confirmado - Preço Justo AI | Premium Ativado",
@@ -26,22 +25,23 @@ export const metadata: Metadata = {
 }
 
 export default async function SuccessPage() {
-  const session = await getServerSession(authOptions)
+  const currentUser = await getCurrentUser()
   
-  if (!session) {
+  if (!currentUser) {
     redirect('/login')
   }
 
   // Buscar dados atualizados do usuário
   const user = await prisma.user.findUnique({
-    where: { email: session.user.email! },
+    where: { email: currentUser.email! },
   })
 
   if (!user) {
     redirect('/login')
   }
 
-  const isPremium = user.subscriptionTier === 'PREMIUM'
+  const isPremium = currentUser.isPremium || false
+  
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 via-white to-blue-50 dark:from-green-950/20 dark:via-background dark:to-blue-950/20">

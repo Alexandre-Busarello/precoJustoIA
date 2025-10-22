@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { portfolioCache } from '@/lib/portfolio-cache';
+import { invalidateDashboardPortfoliosCache } from './dashboard-portfolios';
 import {
   CheckCircle2,
   XCircle,

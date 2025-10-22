@@ -20,6 +20,8 @@ export interface DashboardTipContext {
   isPremium: boolean
   daysSinceLastRanking?: number
   hasCreatedPortfolio: boolean
+  portfolioCount: number
+  hasRecentPortfolioActivity: boolean
 }
 
 export const DASHBOARD_TIPS: DashboardTip[] = [
@@ -128,6 +130,30 @@ export const DASHBOARD_TIPS: DashboardTip[] = [
     color: 'red',
     priority: 55,
     condition: (ctx) => ctx.totalRankings >= 20 && ctx.isPremium
+  },
+
+  // CARTEIRAS
+  {
+    id: 'create-portfolio',
+    title: '📊 Acompanhe suas carteiras',
+    description: 'Crie carteiras personalizadas e monitore a evolução dos seus investimentos com métricas detalhadas.',
+    cta: 'Criar Carteira',
+    ctaLink: '/carteira',
+    icon: '📊',
+    color: 'blue',
+    priority: 75,
+    condition: (ctx) => ctx.totalRankings >= 3 && ctx.portfolioCount === 0 && ctx.isPremium
+  },
+  {
+    id: 'portfolio-analytics',
+    title: '📈 Analise sua performance',
+    description: 'Compare suas carteiras com benchmarks e descubra insights sobre seus investimentos.',
+    cta: 'Ver Análises',
+    ctaLink: '/carteira',
+    icon: '📈',
+    color: 'emerald',
+    priority: 50,
+    condition: (ctx) => ctx.portfolioCount > 0 && !ctx.hasRecentPortfolioActivity
   },
 
   // USUÁRIOS INATIVOS

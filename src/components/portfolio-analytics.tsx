@@ -158,6 +158,21 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
     return result;
   };
 
+  // Helper para formatar label do tooltip (mostra "Atual" para o último ponto)
+  const formatTooltipLabel = (dateString: string, dataArray: any[]) => {
+    if (!dataArray || dataArray.length === 0) return formatMonthYear(dateString);
+    
+    // Verifica se é o último ponto
+    const lastDate = dataArray[dataArray.length - 1]?.date;
+    const isLastPoint = dateString === lastDate;
+    
+    if (isLastPoint) {
+      return `📍 Atual (${formatMonthYear(dateString)})`;
+    }
+    
+    return formatMonthYear(dateString);
+  };
+
   const fetchAnalytics = useCallback(
     async (forceRefresh = false) => {
       try {
@@ -411,7 +426,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                   />
                   <Tooltip
                     formatter={(value: any) => `R$ ${Number(value).toFixed(2)}`}
-                    labelFormatter={formatMonthYear}
+                    labelFormatter={(label) => formatTooltipLabel(label, analytics.evolution)}
                     contentStyle={{ fontSize: "12px" }}
                   />
                   <Legend wrapperStyle={{ fontSize: "12px" }} />
@@ -463,7 +478,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                   />
                   <Tooltip
                     formatter={(value: any) => `${Number(value).toFixed(2)}%`}
-                    labelFormatter={formatMonthYear}
+                    labelFormatter={(label) => formatTooltipLabel(label, analytics.benchmarkComparison)}
                     contentStyle={{ fontSize: "12px" }}
                   />
                   <Legend wrapperStyle={{ fontSize: "12px" }} />
@@ -622,7 +637,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                   />
                   <Tooltip
                     formatter={(value: any) => `${Number(value).toFixed(2)}%`}
-                    labelFormatter={formatMonthYear}
+                    labelFormatter={(label) => formatTooltipLabel(label, analytics.drawdownHistory)}
                     contentStyle={{ fontSize: "12px" }}
                   />
                   <Area
@@ -782,7 +797,13 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                     />
                     <Tooltip
                       formatter={(value: any) => `${Number(value).toFixed(2)}%`}
-                      labelFormatter={formatMonthYearLong}
+                      labelFormatter={(label) => {
+                        // Para o gráfico de barras, usar formatMonthYearLong mas com "Atual" para último ponto
+                        if (!analytics.monthlyReturns || analytics.monthlyReturns.length === 0) return formatMonthYearLong(label);
+                        const lastDate = analytics.monthlyReturns[analytics.monthlyReturns.length - 1]?.date;
+                        const isLastPoint = label === lastDate;
+                        return isLastPoint ? `📍 Atual (${formatMonthYearLong(label)})` : formatMonthYearLong(label);
+                      }}
                       contentStyle={{ fontSize: "12px" }}
                     />
                     <Bar

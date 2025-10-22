@@ -15,6 +15,7 @@ import {
   Settings,
   BarChart3,
   Crown,
+  Trash2,
 } from "lucide-react";
 import { usePremiumStatus } from "@/hooks/use-premium-status";
 import { PortfolioMetricsCard } from "@/components/portfolio-metrics-card";
@@ -31,6 +32,8 @@ import { PortfolioAnalytics } from "@/components/portfolio-analytics";
 import { PortfolioAICTA } from "@/components/portfolio-ai-cta";
 import { PortfolioTransactionAI } from "@/components/portfolio-transaction-ai";
 import { PortfolioTransactionAICTA } from "@/components/portfolio-transaction-ai-cta";
+import { DeletePortfolioDialog } from "@/components/delete-portfolio-dialog";
+import { invalidateDashboardPortfoliosCache } from "@/components/dashboard-portfolios";
 import { portfolioCache } from "@/lib/portfolio-cache";
 import {
   Dialog,
@@ -193,21 +196,23 @@ export function PortfolioPageClient() {
 
         {/* Create Portfolio Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Criar Nova Carteira</DialogTitle>
               <DialogDescription>
                 Configure sua carteira de investimentos
               </DialogDescription>
             </DialogHeader>
-            <PortfolioConfigForm
-              mode="create"
-              onSuccess={() => {
-                setShowCreateModal(false);
-                loadPortfolios(true);
-              }}
-              onCancel={() => setShowCreateModal(false)}
-            />
+            <div className="flex-1 overflow-y-auto px-1">
+              <PortfolioConfigForm
+                mode="create"
+                onSuccess={() => {
+                  setShowCreateModal(false);
+                  loadPortfolios(true);
+                }}
+                onCancel={() => setShowCreateModal(false)}
+              />
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -216,22 +221,24 @@ export function PortfolioPageClient() {
           open={showConvertBacktestModal}
           onOpenChange={setShowConvertBacktestModal}
         >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Criar Carteira a partir de Backtest</DialogTitle>
               <DialogDescription>
                 Converta um backtest existente em uma carteira para
                 acompanhamento real
               </DialogDescription>
             </DialogHeader>
-            <ConvertBacktestModal
-              onSuccess={(portfolioId) => {
-                setShowConvertBacktestModal(false);
-                loadPortfolios();
-                router.push(`/carteira?id=${portfolioId}`);
-              }}
-              onCancel={() => setShowConvertBacktestModal(false)}
-            />
+            <div className="flex-1 overflow-y-auto px-1">
+              <ConvertBacktestModal
+                onSuccess={(portfolioId) => {
+                  setShowConvertBacktestModal(false);
+                  loadPortfolios();
+                  router.push(`/carteira?id=${portfolioId}`);
+                }}
+                onCancel={() => setShowConvertBacktestModal(false)}
+              />
+            </div>
           </DialogContent>
         </Dialog>
       </>
@@ -550,6 +557,7 @@ function PortfolioOverview({
     setRefreshKey((prev) => prev + 1);
     loadMetrics(); // Reload only metrics
     onUpdate(); // Notify parent to update portfolio selector badges
+    invalidateDashboardPortfoliosCache(); // Invalidate dashboard cache
   };
 
   const loadMetrics = async (forceRefresh = false) => {
@@ -741,21 +749,23 @@ function PortfolioOverview({
 
       {/* Transaction Form Modal */}
       <Dialog open={showTransactionForm} onOpenChange={setShowTransactionForm}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Registrar Transação Manual</DialogTitle>
             <DialogDescription>
               Adicione uma transação manualmente à sua carteira
             </DialogDescription>
           </DialogHeader>
-          <PortfolioTransactionForm
-            portfolioId={portfolioId}
-            onSuccess={() => {
-              setShowTransactionForm(false);
-              handleUpdate();
-            }}
-            onCancel={() => setShowTransactionForm(false)}
-          />
+          <div className="flex-1 overflow-y-auto px-1">
+            <PortfolioTransactionForm
+              portfolioId={portfolioId}
+              onSuccess={() => {
+                setShowTransactionForm(false);
+                handleUpdate();
+              }}
+              onCancel={() => setShowTransactionForm(false)}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -782,6 +792,7 @@ function PortfolioTransactions({
     setRefreshKey((prev) => prev + 1);
     loadMetrics(); // Reload metrics to get updated cash balance
     onUpdate(); // Notify parent to update portfolio selector badges only
+    invalidateDashboardPortfoliosCache(); // Invalidate dashboard cache
   };
 
   const loadMetrics = async () => {
@@ -906,6 +917,7 @@ function PortfolioConfiguration({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showGenerateBacktestModal, setShowGenerateBacktestModal] =
     useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -913,7 +925,7 @@ function PortfolioConfiguration({
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Informações da Carteira</CardTitle>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
@@ -929,6 +941,14 @@ function PortfolioConfiguration({
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Editar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
               </Button>
             </div>
           </div>
@@ -974,32 +994,34 @@ function PortfolioConfiguration({
 
       {/* Edit Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Editar Carteira</DialogTitle>
             <DialogDescription>
               Atualize as configurações da sua carteira
             </DialogDescription>
           </DialogHeader>
-          <PortfolioConfigForm
-            mode="edit"
-            initialData={{
-              id: portfolio.id,
-              name: portfolio.name,
-              description: portfolio.description,
-              startDate: new Date(portfolio.startDate)
-                .toISOString()
-                .split("T")[0],
-              monthlyContribution: portfolio.monthlyContribution,
-              rebalanceFrequency: portfolio.rebalanceFrequency,
-              assets: [],
-            }}
-            onSuccess={() => {
-              setShowEditModal(false);
-              onUpdate();
-            }}
-            onCancel={() => setShowEditModal(false)}
-          />
+          <div className="flex-1 overflow-y-auto px-1">
+            <PortfolioConfigForm
+              mode="edit"
+              initialData={{
+                id: portfolio.id,
+                name: portfolio.name,
+                description: portfolio.description,
+                startDate: new Date(portfolio.startDate)
+                  .toISOString()
+                  .split("T")[0],
+                monthlyContribution: portfolio.monthlyContribution,
+                rebalanceFrequency: portfolio.rebalanceFrequency,
+                assets: [],
+              }}
+              onSuccess={() => {
+                setShowEditModal(false);
+                onUpdate();
+              }}
+              onCancel={() => setShowEditModal(false)}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1008,23 +1030,33 @@ function PortfolioConfiguration({
         open={showGenerateBacktestModal}
         onOpenChange={setShowGenerateBacktestModal}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Gerar Backtest da Carteira</DialogTitle>
             <DialogDescription>
               Crie um backtest com a composição atual da sua carteira
             </DialogDescription>
           </DialogHeader>
-          <GenerateBacktestModal
-            portfolioId={portfolio.id}
-            portfolioName={portfolio.name}
-            onSuccess={() => {
-              setShowGenerateBacktestModal(false);
-            }}
-            onCancel={() => setShowGenerateBacktestModal(false)}
-          />
+          <div className="flex-1 overflow-y-auto px-1">
+            <GenerateBacktestModal
+              portfolioId={portfolio.id}
+              portfolioName={portfolio.name}
+              onSuccess={() => {
+                setShowGenerateBacktestModal(false);
+              }}
+              onCancel={() => setShowGenerateBacktestModal(false)}
+            />
+          </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Portfolio Dialog */}
+      <DeletePortfolioDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        portfolioId={portfolio.id}
+        portfolioName={portfolio.name}
+      />
     </div>
   );
 }

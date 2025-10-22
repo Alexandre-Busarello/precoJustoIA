@@ -15,6 +15,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { DollarSign, AlertTriangle, Plus } from 'lucide-react';
 import { invalidatePortfolioAnalyticsCache } from '@/components/portfolio-analytics';
+import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -166,8 +167,9 @@ export function PortfolioTransactionForm({
         description: responseData.message || 'Transação registrada com sucesso'
       });
 
-      // Invalidar cache de analytics
+      // Invalidar cache de analytics e dashboard
       invalidatePortfolioAnalyticsCache(portfolioId);
+      invalidateDashboardPortfoliosCache();
 
       if (onSuccess) {
         onSuccess();
@@ -211,6 +213,9 @@ export function PortfolioTransactionForm({
         title: 'Sucesso!',
         description: responseData.message || 'Aporte e compra criados com sucesso'
       });
+
+      // Invalidar cache de dashboard também
+      invalidateDashboardPortfoliosCache();
 
       if (onSuccess) {
         onSuccess();

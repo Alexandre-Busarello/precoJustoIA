@@ -21,6 +21,7 @@ import { Plus, Trash2, TrendingUp, Bot, FileText } from 'lucide-react';
 import { PortfolioAIAssistant } from '@/components/portfolio-ai-assistant';
 import { PortfolioBulkAssetInput } from '@/components/portfolio-bulk-asset-input';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
+import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
 
 interface Asset {
   ticker: string;
@@ -167,6 +168,9 @@ export function PortfolioConfigForm({
           description: 'Carteira criada com sucesso'
         });
 
+        // Invalidate dashboard cache
+        invalidateDashboardPortfoliosCache();
+
         if (onSuccess) {
           onSuccess();
         } else {
@@ -198,6 +202,9 @@ export function PortfolioConfigForm({
           title: 'Sucesso!',
           description: 'Carteira atualizada com sucesso'
         });
+
+        // Invalidate dashboard cache
+        invalidateDashboardPortfoliosCache();
 
         if (onSuccess) {
           onSuccess();

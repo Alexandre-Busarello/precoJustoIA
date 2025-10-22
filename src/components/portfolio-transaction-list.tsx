@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { portfolioCache } from '@/lib/portfolio-cache';
+import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -257,8 +258,9 @@ export function PortfolioTransactionList({
         description: 'Transação atualizada com sucesso'
       });
 
-      // Invalidar todos os caches da carteira
+      // Invalidar todos os caches da carteira e dashboard
       portfolioCache.invalidateAll(portfolioId);
+      invalidateDashboardPortfoliosCache();
 
       setShowEditModal(false);
       setEditingTransaction(null);
@@ -302,8 +304,9 @@ export function PortfolioTransactionList({
         description: 'Transação excluída com sucesso'
       });
 
-      // Invalidar todos os caches da carteira
+      // Invalidar todos os caches da carteira e dashboard
       portfolioCache.invalidateAll(portfolioId);
+      invalidateDashboardPortfoliosCache();
 
       setShowDeleteDialog(false);
       setDeletingTransaction(null);
@@ -337,6 +340,9 @@ export function PortfolioTransactionList({
         description: 'Transação confirmada'
       });
 
+      // Invalidar cache do dashboard
+      invalidateDashboardPortfoliosCache();
+      
       loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
     } catch {
@@ -368,6 +374,9 @@ export function PortfolioTransactionList({
         description: 'Transação rejeitada'
       });
 
+      // Invalidar cache do dashboard
+      invalidateDashboardPortfoliosCache();
+      
       loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
     } catch {
@@ -395,6 +404,9 @@ export function PortfolioTransactionList({
         description: 'Transação revertida para pendente'
       });
 
+      // Invalidar cache do dashboard
+      invalidateDashboardPortfoliosCache();
+      
       loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
     } catch {

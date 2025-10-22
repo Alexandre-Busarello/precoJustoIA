@@ -20,6 +20,7 @@ import {
   FileText
 } from 'lucide-react';
 import { portfolioCache } from '@/lib/portfolio-cache';
+import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
 
 
 interface Transaction {
@@ -151,6 +152,7 @@ export function PortfolioTransactionAI({
 
       // Sucesso - invalidar cache para atualizar interface
       portfolioCache.invalidateAll(portfolioId);
+      invalidateDashboardPortfoliosCache();
       
       onTransactionsGenerated(result.transactions);
       setShowResults(false);

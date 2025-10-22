@@ -105,7 +105,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
 /**
  * DELETE /api/portfolio/[id]
- * Soft delete portfolio
+ * Permanently delete portfolio and all associated data
+ * ⚠️ THIS ACTION IS IRREVERSIBLE
  */
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
@@ -121,11 +122,12 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    await PortfolioService.deletePortfolio(resolvedParams.id, currentUser.id);
+    // Use permanent deletion (hard delete)
+    await PortfolioService.deletePortfolioPermanently(resolvedParams.id, currentUser.id);
 
     return NextResponse.json({
       success: true,
-      message: 'Carteira excluída com sucesso'
+      message: 'Carteira excluída permanentemente com sucesso'
     });
 
   } catch (error) {

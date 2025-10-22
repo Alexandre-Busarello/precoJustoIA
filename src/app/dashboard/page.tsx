@@ -1,21 +1,22 @@
-"use client"
+"use client";
 
-import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { usePremiumStatus } from "@/hooks/use-premium-status"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { RankingHistorySection } from "@/components/ranking-history-section"
-import { Footer } from "@/components/footer"
-import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner"
-import { CompanyLogo } from "@/components/company-logo"
-import { useAlfa } from "@/contexts/alfa-context"
-import { getBestTip, type DashboardTipContext } from "@/lib/dashboard-tips"
-import { 
-  BarChart3, 
-  TrendingUp, 
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePremiumStatus } from "@/hooks/use-premium-status";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { RankingHistorySection } from "@/components/ranking-history-section";
+import { Footer } from "@/components/footer";
+import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner";
+import { CompanyLogo } from "@/components/company-logo";
+import { useAlfa } from "@/contexts/alfa-context";
+import { getBestTip, type DashboardTipContext } from "@/lib/dashboard-tips";
+import { DashboardPortfolios } from "@/components/dashboard-portfolios";
+import {
+  BarChart3,
+  TrendingUp,
   Activity,
   Shield,
   ArrowRight,
@@ -25,9 +26,9 @@ import {
   Lightbulb,
   RefreshCw,
   ChevronRight,
-  Bell
-} from "lucide-react"
-import Link from "next/link"
+  Bell,
+} from "lucide-react";
+import Link from "next/link";
 
 interface DashboardStats {
   rankingsToday: number;
@@ -54,132 +55,183 @@ interface CachedTopCompaniesData {
 }
 
 export default function Dashboard() {
-  const { data: session, status } = useSession()
-  const { isPremium, subscriptionTier } = usePremiumStatus()
-  const router = useRouter()
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [statsLoading, setStatsLoading] = useState(true)
-  const { stats: alfaStats, isLoading: alfaLoading } = useAlfa()
-  const [hasJoinedWhatsApp, setHasJoinedWhatsApp] = useState(false)
-  const [topCompanies, setTopCompanies] = useState<TopCompany[]>([])
-  const [companiesLoading, setCompaniesLoading] = useState(true)
-  const [companiesFromCache, setCompaniesFromCache] = useState(false)
-  const [hasUsedComparator, setHasUsedComparator] = useState(false)
+  const { data: session, status } = useSession();
+  const { isPremium, subscriptionTier } = usePremiumStatus();
+  const router = useRouter();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const { stats: alfaStats, isLoading: alfaLoading } = useAlfa();
+  const [hasJoinedWhatsApp, setHasJoinedWhatsApp] = useState(false);
+  const [topCompanies, setTopCompanies] = useState<TopCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
+  const [companiesFromCache, setCompaniesFromCache] = useState(false);
+  const [hasUsedComparator, setHasUsedComparator] = useState(false);
+  const [portfolioCount, setPortfolioCount] = useState(0);
 
   useEffect(() => {
-    if (status === "loading") return
+    if (status === "loading") return;
     if (!session) {
-      router.push("/login")
+      router.push("/login");
     }
-  }, [session, status, router])
+  }, [session, status, router]);
 
   useEffect(() => {
     if (session) {
-      fetchStats()
-      fetchTopCompanies()
+      fetchStats();
+      fetchTopCompanies();
+      fetchPortfolioCount();
     }
-  }, [session])
+  }, [session]);
 
   // Verificar se usuário já clicou no grupo WhatsApp
   useEffect(() => {
-    const joined = localStorage.getItem('whatsapp_group_joined')
-    setHasJoinedWhatsApp(joined === 'true')
-  }, [])
+    const joined = localStorage.getItem("whatsapp_group_joined");
+    setHasJoinedWhatsApp(joined === "true");
+  }, []);
 
   // Verificar se usuário já usou o Comparador (tracking via localStorage)
   useEffect(() => {
-    const used = localStorage.getItem('has_used_comparator')
-    setHasUsedComparator(used === 'true')
-  }, [])
+    const used = localStorage.getItem("has_used_comparator");
+    setHasUsedComparator(used === "true");
+  }, []);
 
   const fetchStats = async () => {
     try {
-      setStatsLoading(true)
-      const response = await fetch('/api/dashboard-stats')
+      setStatsLoading(true);
+      const response = await fetch("/api/dashboard-stats");
       if (response.ok) {
-        const data = await response.json()
-        setStats(data)
+        const data = await response.json();
+        setStats(data);
       }
     } catch (error) {
-      console.error('Erro ao buscar estatísticas:', error)
+      console.error("Erro ao buscar estatísticas:", error);
     } finally {
-      setStatsLoading(false)
+      setStatsLoading(false);
     }
-  }
+  };
 
   const fetchTopCompanies = async (forceRefresh: boolean = false) => {
     try {
-      setCompaniesLoading(true)
-      setCompaniesFromCache(false)
-      
+      setCompaniesLoading(true);
+      setCompaniesFromCache(false);
+
       // ✅ CACHE DE 1 DIA NO LOCALSTORAGE
-      const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
-      const cacheKey = 'dashboard_top_companies'
-      
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const cacheKey = "dashboard_top_companies";
+
       // Verificar se há cache válido (mesmo dia) e se não forçou refresh
       if (!forceRefresh) {
-        const cachedData = localStorage.getItem(cacheKey)
+        const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
           try {
-            const parsed: CachedTopCompaniesData = JSON.parse(cachedData)
-            
+            const parsed: CachedTopCompaniesData = JSON.parse(cachedData);
+
             // Se a data do cache é hoje, usar dados cacheados
-            if (parsed.date === today && Array.isArray(parsed.companies) && parsed.companies.length > 0) {
-              console.log('📦 Usando empresas do cache (localStorage) - mesmo dia')
-              setTopCompanies(parsed.companies)
-              setCompaniesFromCache(true) // Indicar que veio do cache
-              setCompaniesLoading(false)
-              return
+            if (
+              parsed.date === today &&
+              Array.isArray(parsed.companies) &&
+              parsed.companies.length > 0
+            ) {
+              console.log(
+                "📦 Usando empresas do cache (localStorage) - mesmo dia"
+              );
+              setTopCompanies(parsed.companies);
+              setCompaniesFromCache(true); // Indicar que veio do cache
+              setCompaniesLoading(false);
+              return;
             } else {
-              console.log('🔄 Cache expirado ou inválido, buscando novos dados...')
+              console.log(
+                "🔄 Cache expirado ou inválido, buscando novos dados..."
+              );
             }
           } catch (e) {
-            console.warn('Cache inválido, ignorando:', e)
+            console.warn("Cache inválido, ignorando:", e);
           }
         }
       } else {
-        console.log('🔄 Refresh forçado, limpando cache e buscando novos dados...')
-        localStorage.removeItem(cacheKey)
+        console.log(
+          "🔄 Refresh forçado, limpando cache e buscando novos dados..."
+        );
+        localStorage.removeItem(cacheKey);
       }
-      
+
       // Buscar do servidor
-      const response = await fetch('/api/top-companies?limit=3&minScore=80')
+      const response = await fetch("/api/top-companies?limit=3&minScore=80");
       if (response.ok) {
-        const data = await response.json()
-        const companies = data.companies || []
-        setTopCompanies(companies)
-        setCompaniesFromCache(false) // Dados frescos
-        
+        const data = await response.json();
+        const companies = data.companies || [];
+        setTopCompanies(companies);
+        setCompaniesFromCache(false); // Dados frescos
+
         // Salvar no cache com a data de hoje
         const cacheData: CachedTopCompaniesData = {
           companies,
-          date: today
-        }
-        localStorage.setItem(cacheKey, JSON.stringify(cacheData))
-        console.log('💾 Empresas salvas no cache (localStorage)')
+          date: today,
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        console.log("💾 Empresas salvas no cache (localStorage)");
       }
     } catch (error) {
-      console.error('Erro ao buscar top empresas:', error)
+      console.error("Erro ao buscar top empresas:", error);
     } finally {
-      setCompaniesLoading(false)
+      setCompaniesLoading(false);
     }
-  }
+  };
+
+  const fetchPortfolioCount = async () => {
+    try {
+      // Tentar usar cache primeiro
+      const cacheKey = "dashboard_portfolios";
+      const cachedData = localStorage.getItem(cacheKey);
+
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+
+          // Verificar se o cache é válido (tem expiresAt e não expirou)
+          if (parsed.expiresAt && new Date().getTime() < parsed.expiresAt) {
+            console.log(
+              "📦 Usando count de portfolios do cache (localStorage)"
+            );
+            setPortfolioCount(parsed.portfolios?.length || 0);
+            return; // Usar cache válido, não fazer fetch
+          } else {
+            console.log(
+              "🔄 Cache de portfolios expirado, buscando do servidor..."
+            );
+          }
+        } catch (e) {
+          console.warn("Cache de portfolios inválido, ignorando:", e);
+        }
+      }
+
+      // Se não há cache válido, buscar do servidor
+      const response = await fetch("/api/portfolio");
+      if (response.ok) {
+        const data = await response.json();
+        setPortfolioCount(data.portfolios?.length || 0);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar carteiras:", error);
+      setPortfolioCount(0); // Fallback seguro
+    }
+  };
 
   const handleWhatsAppClick = () => {
-    localStorage.setItem('whatsapp_group_joined', 'true')
-    setHasJoinedWhatsApp(true)
-  }
+    localStorage.setItem("whatsapp_group_joined", "true");
+    setHasJoinedWhatsApp(true);
+  };
 
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
-    )
+    );
   }
 
   if (!session) {
-    return null
+    return null;
   }
 
   // Contexto para dicas dinâmicas
@@ -188,17 +240,19 @@ export default function Dashboard() {
     hasUsedBacktest: stats?.hasUsedBacktest || false, // ✅ Tracking via banco (BacktestConfig)
     hasUsedComparator: hasUsedComparator, // ✅ Tracking via localStorage
     isPremium,
-    hasCreatedPortfolio: false // TODO: implementar quando houver carteiras
-  }
-  
-  const currentTip = getBestTip(tipContext)
+    hasCreatedPortfolio: portfolioCount > 0,
+    portfolioCount,
+    hasRecentPortfolioActivity: false, // TODO: implementar se necessário
+  };
+
+  const currentTip = getBestTip(tipContext);
 
   // Determinar se usuário é novo ou experiente
-  const isNewUser = (stats?.totalRankings || 0) === 0
+  const isNewUser = (stats?.totalRankings || 0) === 0;
 
   // Verificar se a dica do dia já cobre alguma funcionalidade (para evitar redundância)
-  const tipCoversBacktest = currentTip.ctaLink.includes('/backtest')
-  const tipCoversComparator = currentTip.ctaLink.includes('/comparador')
+  const tipCoversBacktest = currentTip.ctaLink.includes("/backtest");
+  const tipCoversComparator = currentTip.ctaLink.includes("/comparador");
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
@@ -208,15 +262,18 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-2">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold">
-                Olá, {session.user?.name || session.user?.email?.split('@')[0]}! 👋
-                </h1>
+                Olá, {session.user?.name || session.user?.email?.split("@")[0]}!
+                👋
+              </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 Pronto para analisar ações hoje?
               </p>
             </div>
-            <Badge 
+            <Badge
               variant={isPremium ? "default" : "secondary"}
-              className={`text-xs sm:text-sm px-3 py-1 ${isPremium ? 'bg-gradient-to-r from-violet-600 to-pink-600' : ''}`}
+              className={`text-xs sm:text-sm px-3 py-1 ${
+                isPremium ? "bg-gradient-to-r from-violet-600 to-pink-600" : ""
+              }`}
             >
               {isPremium ? "✨ Premium" : "Gratuito"}
             </Badge>
@@ -224,7 +281,9 @@ export default function Dashboard() {
         </div>
 
         {/* Early Adopter Banner - Conversão ALFA */}
-        {subscriptionTier === 'FREE' && <EarlyAdopterDashboardBanner className="mb-6" />}
+        {subscriptionTier === "FREE" && (
+          <EarlyAdopterDashboardBanner className="mb-6" />
+        )}
 
         {/* 💡 DICA DINÂMICA INTELIGENTE - Design Profissional */}
         <Card className="bg-gradient-to-r from-blue-50 to-slate-50 dark:from-blue-950/20 dark:to-slate-950/20 border border-blue-200 dark:border-blue-800 hover:shadow-lg transition-all duration-300 mb-6">
@@ -240,11 +299,14 @@ export default function Dashboard() {
                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
                   {currentTip.description}
                 </p>
-                <Button 
-                  asChild 
+                <Button
+                  asChild
                   className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
                 >
-                  <Link href={currentTip.ctaLink} className="flex items-center gap-2">
+                  <Link
+                    href={currentTip.ctaLink}
+                    className="flex items-center gap-2"
+                  >
                     {currentTip.cta}
                     <ArrowRight className="w-4 h-4" />
                   </Link>
@@ -258,97 +320,120 @@ export default function Dashboard() {
         <div className="space-y-6">
           {/* COLUNA PRINCIPAL (Mobile: 100% | Desktop: 66%) */}
           <div className="lg:col-span-2 space-y-6">
-            
             {/* 1. GRUPO WHATSAPP ALFA - Prioridade máxima se Alfa e não clicou */}
-            {!alfaLoading && alfaStats?.phase === 'ALFA' && !hasJoinedWhatsApp && (
-              <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border-2 border-green-400 dark:border-green-600 hover:shadow-2xl transition-all duration-300 relative overflow-hidden">
-                <div className="absolute top-2 right-2 z-10">
-                  <Badge className="bg-gradient-to-r from-green-600 to-emerald-600 text-white text-xs px-3 py-1 shadow-lg animate-pulse">
-                    🎯 FASE ALFA
-                  </Badge>
-                </div>
-                
-                <div className="absolute inset-0 bg-gradient-to-r from-green-600/5 via-emerald-600/5 to-teal-600/5 opacity-0 hover:opacity-100 transition-opacity duration-500"></div>
-                
-                <CardContent className="p-6 relative z-10">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
-                    <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl shadow-xl">
-                      <MessageCircle className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-xl text-green-800 dark:text-green-200 mb-1">
-                        Entre no Grupo WhatsApp Exclusivo
-                      </h3>
-                      <p className="text-sm text-green-700 dark:text-green-300">
-                        Participe ativamente para garantir <strong>3 anos de acesso Premium gratuito</strong>!
-                      </p>
-                    </div>
+            {!alfaLoading &&
+              alfaStats?.phase === "ALFA" &&
+              !hasJoinedWhatsApp && (
+                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border-2 border-green-400 dark:border-green-600 hover:shadow-2xl transition-all duration-300 relative overflow-hidden">
+                  <div className="absolute top-2 right-2 z-10">
+                    <Badge className="bg-gradient-to-r from-green-600 to-emerald-600 text-white text-xs px-3 py-1 shadow-lg animate-pulse">
+                      🎯 FASE ALFA
+                    </Badge>
                   </div>
-                  
-                  <div className="bg-white/60 dark:bg-white/5 rounded-lg p-4 mb-4 border border-green-300 dark:border-green-700">
-                    <div className="flex items-start gap-3 mb-3">
-                      <Sparkles className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-sm">
-                        <p className="text-green-800 dark:text-green-200 font-medium mb-1">
-                          Por que participar?
+
+                  <div className="absolute inset-0 bg-gradient-to-r from-green-600/5 via-emerald-600/5 to-teal-600/5 opacity-0 hover:opacity-100 transition-opacity duration-500"></div>
+
+                  <CardContent className="p-6 relative z-10">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
+                      <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl shadow-xl">
+                        <MessageCircle className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-xl text-green-800 dark:text-green-200 mb-1">
+                          Entre no Grupo WhatsApp Exclusivo
+                        </h3>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Participe ativamente para garantir{" "}
+                          <strong>3 anos de acesso Premium gratuito</strong>!
                         </p>
-                        <ul className="text-green-700 dark:text-green-300 space-y-1 text-xs">
-                          <li>• Dê feedbacks e molde o produto</li>
-                          <li>• Interaja diretamente com o CEO</li>
-                          <li>• Seja reconhecido como pioneiro</li>
-                          <li>• Ganhe 3 anos de acesso Premium gratuito</li>
-                        </ul>
                       </div>
                     </div>
-                  </div>
-                  
-                  <Button 
-                    asChild 
-                    size="lg" 
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold shadow-xl hover:shadow-2xl transition-all text-base"
-                  >
-                    <Link 
-                      href="https://chat.whatsapp.com/DM9xmkTiuaWAKseVluTqOh?mode=ems_copy_t" 
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2"
-                      onClick={handleWhatsAppClick}
+
+                    <div className="bg-white/60 dark:bg-white/5 rounded-lg p-4 mb-4 border border-green-300 dark:border-green-700">
+                      <div className="flex items-start gap-3 mb-3">
+                        <Sparkles className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm">
+                          <p className="text-green-800 dark:text-green-200 font-medium mb-1">
+                            Por que participar?
+                          </p>
+                          <ul className="text-green-700 dark:text-green-300 space-y-1 text-xs">
+                            <li>• Dê feedbacks e molde o produto</li>
+                            <li>• Interaja diretamente com o CEO</li>
+                            <li>• Seja reconhecido como pioneiro</li>
+                            <li>• Ganhe 3 anos de acesso Premium gratuito</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      asChild
+                      size="lg"
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold shadow-xl hover:shadow-2xl transition-all text-base"
                     >
-                      <MessageCircle className="w-5 h-5" />
-                      Entrar no Grupo Agora
-                      <ArrowRight className="w-5 h-5" />
+                      <Link
+                        href="https://chat.whatsapp.com/DM9xmkTiuaWAKseVluTqOh?mode=ems_copy_t"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2"
+                        onClick={handleWhatsAppClick}
+                      >
+                        <MessageCircle className="w-5 h-5" />
+                        Entrar no Grupo Agora
+                        <ArrowRight className="w-5 h-5" />
+                      </Link>
+                    </Button>
+
+                    <p className="text-xs text-center text-green-600 dark:text-green-400 mt-3 font-medium">
+                      🔐 Grupo privado • Apenas {alfaStats.spotsAvailable}/
+                      {alfaStats.userLimit} vagas Alfa
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* 4. MINHAS CARTEIRAS - Apenas para usuários Premium */}
+            {isPremium && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                    Minhas Carteiras
+                  </h2>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/carteira" className="flex items-center gap-2">
+                      Ver Todas
+                      <ArrowRight className="w-4 h-4" />
                     </Link>
                   </Button>
-                  
-                  <p className="text-xs text-center text-green-600 dark:text-green-400 mt-3 font-medium">
-                    🔐 Grupo privado • Apenas {alfaStats.spotsAvailable}/{alfaStats.userLimit} vagas Alfa
-                  </p>
-                </CardContent>
-              </Card>
+                </div>
+                <DashboardPortfolios />
+              </div>
             )}
 
             {/* 2. AÇÃO PRINCIPAL - Adaptativa baseada em experiência */}
             {isNewUser ? (
               // USUÁRIO NOVO - Card grande focado em criar primeiro ranking
-                  <Link href="/ranking">
+              <Link href="/ranking">
                 <Card className="group cursor-pointer border-2 border-dashed border-blue-400 hover:border-blue-600 hover:shadow-2xl transition-all duration-300 bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/30 dark:via-background dark:to-violet-950/30 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-200/20 to-violet-200/20 rounded-full -translate-y-16 translate-x-16 group-hover:scale-150 transition-transform duration-500"></div>
-                  
+
                   <CardContent className="p-6 sm:p-8 relative z-10">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
                       <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-r from-blue-500 to-violet-500 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-xl">
                         <BarChart3 className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-                        </div>
+                      </div>
                       <div className="flex-1">
                         <h3 className="font-bold text-xl sm:text-2xl mb-2 group-hover:text-blue-600 transition-colors">
                           🚀 Criar Seu Primeiro Ranking
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          Comece sua jornada analisando empresas da B3 com a Fórmula de Graham
+                          Comece sua jornada analisando empresas da B3 com a
+                          Fórmula de Graham
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="bg-blue-50/50 dark:bg-blue-900/10 rounded-lg p-3 mb-4">
                       <ul className="space-y-1 text-xs text-muted-foreground">
                         <li className="flex items-center gap-2">
@@ -365,14 +450,14 @@ export default function Dashboard() {
                         </li>
                       </ul>
                     </div>
-                    
+
                     <div className="flex items-center justify-center gap-2 text-blue-600 group-hover:text-blue-700 font-semibold">
                       <span className="text-sm">Começar agora</span>
                       <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
             ) : (
               // USUÁRIO ATIVO - Grid com histórico + novo ranking
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -391,8 +476,16 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground mb-3">
                       Continue de onde parou ou revise rankings anteriores
                     </p>
-                    <Button asChild size="sm" variant="outline" className="w-full">
-                      <Link href="#rankings" className="flex items-center justify-center gap-2">
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                    >
+                      <Link
+                        href="#rankings"
+                        className="flex items-center justify-center gap-2"
+                      >
                         Ver Histórico Completo
                         <ArrowRight className="w-4 h-4" />
                       </Link>
@@ -411,7 +504,8 @@ export default function Dashboard() {
                         📊 Nova Análise
                       </h3>
                       <p className="text-xs text-muted-foreground text-center mb-3">
-                        Explore {isPremium ? '8 modelos' : 'novos modelos'} de valuation
+                        Explore {isPremium ? "8 modelos" : "novos modelos"} de
+                        valuation
                       </p>
                       <div className="flex items-center justify-center gap-2 text-blue-600 group-hover:text-blue-700 font-semibold text-sm">
                         <span>Explorar Ranking</span>
@@ -420,16 +514,18 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 </Link>
-                </div>
+              </div>
             )}
 
             {/* 3. FERRAMENTAS RÁPIDAS - Grid dinâmico (esconde se já está na dica) */}
             {(!tipCoversBacktest || !tipCoversComparator) && (
-              <div className={`grid gap-4 ${
-                tipCoversBacktest || tipCoversComparator 
-                  ? 'grid-cols-1' // Se uma está na dica, mostrar apenas 1 coluna
-                  : 'grid-cols-1 sm:grid-cols-2' // Se nenhuma está na dica, 2 colunas
-              }`}>
+              <div
+                className={`grid gap-4 ${
+                  tipCoversBacktest || tipCoversComparator
+                    ? "grid-cols-1" // Se uma está na dica, mostrar apenas 1 coluna
+                    : "grid-cols-1 sm:grid-cols-2" // Se nenhuma está na dica, 2 colunas
+                }`}
+              >
                 {/* Backtest - Só mostrar se NÃO estiver na dica */}
                 {!tipCoversBacktest && (
                   <Link href="/backtest">
@@ -440,7 +536,9 @@ export default function Dashboard() {
                             <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">Backtesting</h3>
+                            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                              Backtesting
+                            </h3>
                             <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 text-xs px-2 py-0.5 font-semibold">
                               NOVO
                             </Badge>
@@ -468,10 +566,14 @@ export default function Dashboard() {
                             <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">Comparador</h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Até 6 ações</p>
+                            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                              Comparador
+                            </h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Até 6 ações
+                            </p>
                           </div>
-                      </div>
+                        </div>
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
                           Compare ações lado a lado com análise setorial
                         </p>
@@ -496,7 +598,10 @@ export default function Dashboard() {
                         <TrendingUp className="w-5 h-5 text-blue-600" />
                         Boas Empresas para Analisar
                         {companiesFromCache && (
-                          <Badge variant="outline" className="ml-2 text-xs bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 font-normal">
+                          <Badge
+                            variant="outline"
+                            className="ml-2 text-xs bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 font-normal"
+                          >
                             Cache
                           </Badge>
                         )}
@@ -505,31 +610,35 @@ export default function Dashboard() {
                         Empresas com score geral acima de 80 pontos
                       </p>
                     </div>
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => fetchTopCompanies(true)}
                       disabled={companiesLoading}
                       title="Atualizar análises (limpar cache)"
                       className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50"
                     >
-                      <RefreshCw className={`w-4 h-4 ${companiesLoading ? 'animate-spin' : ''}`} />
+                      <RefreshCw
+                        className={`w-4 h-4 ${
+                          companiesLoading ? "animate-spin" : ""
+                        }`}
+                      />
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="divide-y divide-slate-100 dark:divide-slate-800">
                     {topCompanies.map((company) => (
-                      <Link 
-                        key={company.ticker} 
+                      <Link
+                        key={company.ticker}
                         href={`/acao/${company.ticker}`}
                         className="block hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                       >
                         <div className="p-4 group">
                           {/* Header: Logo + Ticker + Score */}
                           <div className="flex items-start gap-3 mb-3">
-                            <CompanyLogo 
-                              logoUrl={company.logoUrl} 
+                            <CompanyLogo
+                              logoUrl={company.logoUrl}
                               companyName={company.companyName}
                               ticker={company.ticker}
                               size={48}
@@ -556,21 +665,31 @@ export default function Dashboard() {
                           <div className="grid grid-cols-2 gap-3 pl-[60px]">
                             {/* Setor */}
                             <div>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Setor</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">
+                                Setor
+                              </p>
                               <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                {company.sector || 'Diversos'}
+                                {company.sector || "Diversos"}
                               </p>
                             </div>
 
                             {/* Recomendação */}
                             <div className="text-right">
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Classificação</p>
-                              <p className={`text-sm font-bold ${
-                                company.recommendation === 'Empresa Excelente' ? 'text-green-600 dark:text-green-400' :
-                                company.recommendation === 'Empresa Boa' ? 'text-green-500 dark:text-green-400' :
-                                company.recommendation === 'Empresa Regular' ? 'text-yellow-600 dark:text-yellow-400' :
-                                'text-red-500 dark:text-red-400'
-                              }`}>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">
+                                Classificação
+                              </p>
+                              <p
+                                className={`text-sm font-bold ${
+                                  company.recommendation === "Empresa Excelente"
+                                    ? "text-green-600 dark:text-green-400"
+                                    : company.recommendation === "Empresa Boa"
+                                    ? "text-green-500 dark:text-green-400"
+                                    : company.recommendation ===
+                                      "Empresa Regular"
+                                    ? "text-yellow-600 dark:text-yellow-400"
+                                    : "text-red-500 dark:text-red-400"
+                                }`}
+                              >
                                 {company.recommendation}
                               </p>
                             </div>
@@ -597,58 +716,60 @@ export default function Dashboard() {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                     <span className="text-sm">Carregando análises...</span>
                   </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
             )}
 
-            {/* 4. HISTÓRICO DE RANKINGS */}
+            {/* 5. HISTÓRICO DE RANKINGS */}
             <div id="rankings">
-            <RankingHistorySection />
+              <RankingHistorySection />
             </div>
           </div>
 
           {/* COLUNA LATERAL (Mobile: 100% | Desktop: 33%) */}
           <div className="space-y-4">
-            
             {/* 5. GRUPO WHATSAPP - Versão compacta (já clicou) */}
-            {!alfaLoading && alfaStats?.phase === 'ALFA' && hasJoinedWhatsApp && (
-              <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border border-green-200 dark:border-green-700">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
-                      <Check className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-sm text-green-900 dark:text-green-100 mb-1 flex items-center gap-2">
-                        Grupo WhatsApp
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-xs px-2 py-0">
-                          Conectado
-                        </Badge>
-                      </h4>
-                      <p className="text-xs text-green-700 dark:text-green-300 mb-2">
-                        Continue ativo para garantir 3 anos de acesso gratuito!
-                      </p>
-                      <Button 
-                        asChild 
-                        size="sm" 
-                        variant="outline" 
-                        className="w-full text-xs border-green-300 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-900/20"
-                      >
-                        <Link 
-                          href="https://chat.whatsapp.com/DM9xmkTiuaWAKseVluTqOh?mode=ems_copy_t" 
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2"
+            {!alfaLoading &&
+              alfaStats?.phase === "ALFA" &&
+              hasJoinedWhatsApp && (
+                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border border-green-200 dark:border-green-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
+                        <Check className="w-4 h-4 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-sm text-green-900 dark:text-green-100 mb-1 flex items-center gap-2">
+                          Grupo WhatsApp
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-xs px-2 py-0">
+                            Conectado
+                          </Badge>
+                        </h4>
+                        <p className="text-xs text-green-700 dark:text-green-300 mb-2">
+                          Continue ativo para garantir 3 anos de acesso
+                          gratuito!
+                        </p>
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className="w-full text-xs border-green-300 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-900/20"
                         >
-                          <MessageCircle className="w-3 h-3" />
-                          Abrir Grupo
-                        </Link>
-                      </Button>
+                          <Link
+                            href="https://chat.whatsapp.com/DM9xmkTiuaWAKseVluTqOh?mode=ems_copy_t"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-2"
+                          >
+                            <MessageCircle className="w-3 h-3" />
+                            Abrir Grupo
+                          </Link>
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-              </CardContent>
-            </Card>
-            )}
+                  </CardContent>
+                </Card>
+              )}
 
             {/* 6. INFO DA CONTA - Resumida */}
             <Card>
@@ -669,36 +790,41 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Plano</span>
-                  <Badge 
+                  <Badge
                     variant={isPremium ? "default" : "secondary"}
-                    className={`text-xs ${isPremium ? 'bg-gradient-to-r from-violet-600 to-pink-600' : ''}`}
+                    className={`text-xs ${
+                      isPremium
+                        ? "bg-gradient-to-r from-violet-600 to-pink-600"
+                        : ""
+                    }`}
                   >
                     {isPremium ? "Premium" : "Gratuito"}
                   </Badge>
                 </div>
                 <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="outline"
                     className="w-full text-xs"
                     asChild
                   >
-                    <Link href="/dashboard/subscriptions" className="flex items-center justify-center gap-2">
+                    <Link
+                      href="/dashboard/subscriptions"
+                      className="flex items-center justify-center gap-2"
+                    >
                       <Bell className="w-3 h-3" />
                       Minhas Inscrições
                     </Link>
                   </Button>
                 </div>
                 {!isPremium && (
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     className="w-full bg-gradient-to-r from-violet-600 to-pink-600 text-xs"
                     asChild
                   >
-                    <Link href="/checkout">
-                      Fazer Upgrade
-                  </Link>
-                </Button>
+                    <Link href="/checkout">Fazer Upgrade</Link>
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -716,17 +842,16 @@ export default function Dashboard() {
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Rankings</span>
                     <span className="font-semibold">
-                      {statsLoading ? '-' : stats?.totalRankings || 0}
+                      {statsLoading ? "-" : stats?.totalRankings || 0}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Carteiras</span>
-                    <span className="font-semibold">0</span>
+                    <span className="font-semibold">{portfolioCount}</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
-
           </div>
         </div>
       </div>
@@ -734,5 +859,5 @@ export default function Dashboard() {
       {/* Footer */}
       <Footer />
     </div>
-  )
+  );
 }

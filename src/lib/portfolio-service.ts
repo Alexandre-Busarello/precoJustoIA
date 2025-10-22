@@ -290,6 +290,51 @@ export class PortfolioService {
   }
 
   /**
+   * Delete portfolio permanently (hard delete)
+   * Deletes all associated data: transactions, metrics, assets
+   * ⚠️ THIS ACTION IS IRREVERSIBLE
+   */
+  static async deletePortfolioPermanently(portfolioId: string, userId: string): Promise<void> {
+    // Verify ownership
+    const portfolio = await this.getPortfolioConfig(portfolioId, userId);
+    if (!portfolio) {
+      throw new Error('Portfolio not found');
+    }
+
+    console.log(`🗑️ [HARD DELETE] Starting permanent deletion of portfolio: ${portfolioId}`);
+
+    // Delete in order (respecting foreign key constraints)
+    // 1. Delete transactions
+    const deletedTransactions = await prisma.portfolioTransaction.deleteMany({
+      where: { portfolioId }
+    });
+    console.log(`  ✅ Deleted ${deletedTransactions.count} transactions`);
+
+    // 2. Delete metrics
+    const deletedMetrics = await prisma.portfolioMetrics.deleteMany({
+      where: { portfolioId }
+    });
+    console.log(`  ✅ Deleted ${deletedMetrics.count} metrics records`);
+
+    // 3. Delete assets
+    const deletedAssets = await prisma.portfolioConfigAsset.deleteMany({
+      where: { portfolioId }
+    });
+    console.log(`  ✅ Deleted ${deletedAssets.count} assets`);
+
+    // 4. Finally, delete the portfolio config
+    await prisma.portfolioConfig.delete({
+      where: { id: portfolioId }
+    });
+    console.log(`  ✅ Deleted portfolio config`);
+
+    // 5. Invalidate dashboard cache (client-side will handle this)
+    console.log(`  🗑️ Dashboard cache should be invalidated on client`);
+
+    console.log(`🗑️ [HARD DELETE] Portfolio ${portfolioId} permanently deleted`);
+  }
+
+  /**
    * Add asset to portfolio
    */
   static async addAsset(

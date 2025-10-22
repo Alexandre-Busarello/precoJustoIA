@@ -406,8 +406,9 @@ export function PortfolioTransactionList({
 
       // Invalidar cache do dashboard
       invalidateDashboardPortfoliosCache();
+      portfolioCache.invalidateAll(portfolioId);
       
-      loadTransactions();
+      await loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
     } catch {
       toast({

@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const userId = session.user.id;
+    const userId = user.id;
     const createdTransactions: string[] = [];
     const errors: string[] = [];
 

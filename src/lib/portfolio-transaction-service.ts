@@ -623,12 +623,8 @@ export class PortfolioTransactionService {
     const currentCash = await this.getCurrentCashBalance(portfolio.id);
     const holdingsValue = this.calculatePortfolioValue(holdings, prices);
     
-    // 🔧 CORREÇÃO: Para cálculo de alocações, usar APENAS o valor dos ativos (holdings)
-    // O caixa não deve ser considerado na alocação porque:
-    // 1. Não é um ativo alocado
-    // 2. Distorce as porcentagens de alocação
-    // 3. Causa sugestões incorretas de rebalanceamento
-    const portfolioValueForAllocation = holdingsValue;
+    // 🔧 CORREÇÃO: Considera tambem o saldo em caixa para rebalancear
+    const portfolioValueForAllocation = holdingsValue + currentCash;
     
     console.log(`💰 [REBALANCING] Portfolio breakdown:`, {
       holdingsValue: holdingsValue.toFixed(2),

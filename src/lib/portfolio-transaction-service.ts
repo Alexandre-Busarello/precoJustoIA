@@ -2151,6 +2151,18 @@ export class PortfolioTransactionService {
       throw new Error("Portfolio not found");
     }
 
+    // Validate ticker if provided (for BUY, SELL, DIVIDEND transactions)
+    if (input.ticker && (input.type === 'BUY' || input.type === 'BUY_REBALANCE' || 
+        input.type === 'SELL_REBALANCE' || input.type === 'SELL_WITHDRAWAL' || 
+        input.type === 'DIVIDEND')) {
+      try {
+        const { validateTicker } = await import('./quote-service');
+        await validateTicker(input.ticker);
+      } catch (error) {
+        throw new Error(`Invalid ticker: ${input.ticker} not found`);
+      }
+    }
+
     // Get current cash balance
     const currentCashBalance = await this.getCurrentCashBalance(portfolioId);
 
@@ -2234,6 +2246,18 @@ export class PortfolioTransactionService {
     );
     if (!portfolio) {
       throw new Error("Portfolio not found");
+    }
+
+    // Validate ticker if provided (for BUY, SELL, DIVIDEND transactions)
+    if (input.ticker && (input.type === 'BUY' || input.type === 'BUY_REBALANCE' || 
+        input.type === 'SELL_REBALANCE' || input.type === 'SELL_WITHDRAWAL' || 
+        input.type === 'DIVIDEND')) {
+      try {
+        const { validateTicker } = await import('./quote-service');
+        await validateTicker(input.ticker);
+      } catch (error) {
+        throw new Error(`Invalid ticker: ${input.ticker} not found`);
+      }
     }
 
     // For retroactive or out-of-order transactions, we'll validate AFTER recalculation

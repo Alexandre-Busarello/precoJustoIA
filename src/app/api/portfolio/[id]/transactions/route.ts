@@ -168,6 +168,17 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       );
     }
     
+    // Handle invalid ticker error
+    if (error.message && error.message.includes('Invalid ticker')) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: 'INVALID_TICKER'
+        },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Erro ao criar transação' },
       { status: 500 }

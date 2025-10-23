@@ -81,7 +81,10 @@ async function processTransactionsWithAI(
     });
 
     const prompt = `
-Você é um assistente especializado em processar transações financeiras de carteiras de investimento.
+Você é um assistente especializado em processar transações financeiras de carteiras de investimento. 
+Você deve transformar tickers do mercado fracionario (finais F) em tickers de lote padrão quando necessário. 
+Você deve ignorar TICKERS WDO e WIN que são do mercado de futuros.
+Você deve ignorar TICKERS de opções como GRNDV530, BBSEK344 e etc.
 
 CONTEXTO:
 - Saldo atual em caixa: R$ ${currentCashBalance.toFixed(2)}
@@ -316,20 +319,30 @@ Processe a entrada do usuário e retorne o JSON:`;
           transaction.price = transaction.amount / transaction.quantity;
           if (transaction.price <= 0) {
             validatedResult.errors.push(
-              `Transação de compra de ${transaction.ticker}: preço calculado inválido (R$ ${transaction.price.toFixed(2)})`
+              `Transação de compra de ${
+                transaction.ticker
+              }: preço calculado inválido (R$ ${transaction.price.toFixed(2)})`
             );
             continue;
           }
         }
 
         // Se tem quantidade e preço, calcular e validar valor
-        if (hasQuantity && hasPrice && transaction.amount !== hasQuantity * hasPrice) {
+        if (
+          hasQuantity &&
+          hasPrice &&
+          transaction.amount !== hasQuantity * hasPrice
+        ) {
           const calculatedAmount = transaction.quantity * transaction.price;
           transaction.amount = calculatedAmount;
         }
 
         // Validação final: deve ter todos os três valores
-        if (!transaction.price || !transaction.quantity || !transaction.amount) {
+        if (
+          !transaction.price ||
+          !transaction.quantity ||
+          !transaction.amount
+        ) {
           validatedResult.errors.push(
             `Transação de compra de ${transaction.ticker}: dados insuficientes. Informe valor total + quantidade OU quantidade + preço por ação.`
           );
@@ -366,7 +379,10 @@ Processe a entrada do usuário e retorne o JSON:`;
     }
 
     // Processar transações casadas automaticamente
-    const finalResult = processAutomaticCashCredits(validatedResult, currentCashBalance);
+    const finalResult = processAutomaticCashCredits(
+      validatedResult,
+      currentCashBalance
+    );
 
     return finalResult;
   } catch (error) {
@@ -400,40 +416,42 @@ function processAutomaticCashCredits(
 
   for (const transaction of sortedTransactions) {
     // Atualizar saldo com aportes e dividendos
-    if (transaction.type === 'CASH_CREDIT' || transaction.type === 'DIVIDEND') {
+    if (transaction.type === "CASH_CREDIT" || transaction.type === "DIVIDEND") {
       currentBalance += transaction.amount;
       processedTransactions.push(transaction);
       continue;
     }
 
     // Processar saques
-    if (transaction.type === 'CASH_DEBIT') {
+    if (transaction.type === "CASH_DEBIT") {
       currentBalance -= transaction.amount;
       processedTransactions.push(transaction);
       continue;
     }
 
     // Processar compras - verificar se precisa de aporte
-    if (transaction.type === 'BUY') {
+    if (transaction.type === "BUY") {
       const needsAmount = transaction.amount - currentBalance;
-      
+
       if (needsAmount > 0) {
         // Criar aporte automático com mesma precisão decimal da compra
         const autoCredit = {
-          type: 'CASH_CREDIT',
+          type: "CASH_CREDIT",
           ticker: undefined,
           amount: Number(needsAmount.toFixed(2)), // Manter mesma precisão decimal
           price: undefined,
           quantity: undefined,
           date: transaction.date,
-          notes: `Aporte automático para compra de ${transaction.ticker}`
+          notes: `Aporte automático para compra de ${transaction.ticker}`,
         };
 
         processedTransactions.push(autoCredit);
         currentBalance += autoCredit.amount;
-        
+
         warnings.push(
-          `Aporte automático de R$ ${autoCredit.amount.toFixed(2)} criado para cobrir a compra de ${transaction.ticker}`
+          `Aporte automático de R$ ${autoCredit.amount.toFixed(
+            2
+          )} criado para cobrir a compra de ${transaction.ticker}`
         );
       }
 
@@ -444,7 +462,7 @@ function processAutomaticCashCredits(
     }
 
     // Outras transações (vendas)
-    if (transaction.type === 'SELL_WITHDRAWAL') {
+    if (transaction.type === "SELL_WITHDRAWAL") {
       currentBalance += transaction.amount;
       processedTransactions.push(transaction);
       continue;
@@ -457,7 +475,7 @@ function processAutomaticCashCredits(
   return {
     transactions: processedTransactions,
     errors: result.errors,
-    warnings: warnings
+    warnings: warnings,
   };
 }
 

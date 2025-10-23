@@ -14,8 +14,8 @@ let yahooFinanceInstance: any = null;
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
     // Dynamic import to avoid module issues
-    const module = await import('yahoo-finance2');
-    const YahooFinance = module.default;
+    const yahooModule = await import('yahoo-finance2');
+    const YahooFinance = yahooModule.default;
     
     // Instantiate with new keyword and suppress notices
     yahooFinanceInstance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
@@ -130,6 +130,58 @@ export async function getTickerPrice(ticker: string): Promise<StockPrice | null>
 
   console.warn(`  ⚠️ ${ticker}: No price found (Yahoo Finance + Database)`);
   return null;
+}
+
+/**
+ * Validate if a ticker exists and can be found
+ * Throws error if ticker is invalid
+ */
+export async function validateTicker(ticker: string): Promise<void> {
+  console.log(`🔍 [TICKER VALIDATION] Validating ticker: ${ticker}`);
+  
+  try {
+    const yahooSymbol = `${ticker}.SA`; // Brazilian stocks suffix
+    
+    // Get yahoo-finance2 instance
+    const yahooFinance = await getYahooFinance();
+    
+    // Try to get quote from Yahoo Finance
+    const quote = await yahooFinance.quote(yahooSymbol);
+
+    if (quote?.regularMarketPrice) {
+      console.log(`  ✅ [TICKER VALID] ${ticker}: Found on Yahoo Finance`);
+      return; // Ticker is valid
+    }
+    
+    // If no regularMarketPrice, check if we got any data at all
+    if (quote && (quote.symbol || quote.shortName || quote.longName)) {
+      console.log(`  ✅ [TICKER VALID] ${ticker}: Found on Yahoo Finance (no current price)`);
+      return; // Ticker exists but might not have current price
+    }
+    
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.log(`  ⚠️ [TICKER VALIDATION] ${ticker}: Yahoo Finance error - ${errorMsg}`);
+  }
+
+  // Fallback: Check if ticker exists in our database
+  try {
+    const company = await prisma.company.findUnique({
+      where: { ticker: ticker.toUpperCase() },
+      select: { ticker: true }
+    });
+
+    if (company) {
+      console.log(`  ✅ [TICKER VALID] ${ticker}: Found in database`);
+      return; // Ticker exists in our database
+    }
+  } catch (error) {
+    console.error(`  ❌ [TICKER VALIDATION] ${ticker}: Database query failed:`, error);
+  }
+
+  // If we reach here, ticker was not found anywhere
+  console.error(`  ❌ [TICKER INVALID] ${ticker}: Not found in Yahoo Finance or database`);
+  throw new Error(`Invalid ticker: ${ticker} not found`);
 }
 
 /**

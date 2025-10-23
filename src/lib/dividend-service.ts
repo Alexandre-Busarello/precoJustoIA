@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { safeWrite, safeQueryWithParams } from "@/lib/prisma-wrapper";
+import { cache } from "@/lib/cache-service";
 
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
@@ -47,6 +48,8 @@ export class DividendService {
   /**
    * Busca e salva o histórico completo de dividendos de um ativo
    * Atualiza também os campos ultimoDividendo e dataUltimoDividendo na Company
+   * 
+   * CACHE: TTL de 4 horas para evitar buscas repetidas do mesmo ativo
    */
   static async fetchAndSaveDividends(
     ticker: string,
@@ -57,7 +60,18 @@ export class DividendService {
     latestDividend?: DividendInfo;
     message?: string;
   }> {
+    // Generate cache key based on ticker and startDate
+    const startDateStr = startDate ? startDate.toISOString().split('T')[0] : 'all';
+    const cacheKey = `dividends:fetch:${ticker}:${startDateStr}`;
+    
     try {
+      // Check cache first (TTL: 4 hours = 14400 seconds)
+      const cachedResult = await cache.get(cacheKey);
+      if (cachedResult) {
+        console.log(`📦 [DIVIDENDS CACHE HIT] ${ticker}: Retornando resultado em cache`);
+        return cachedResult;
+      }
+
       console.log(`📊 [DIVIDENDS] Buscando dividendos para ${ticker}...`);
 
       // Get company from database
@@ -66,11 +80,15 @@ export class DividendService {
       });
 
       if (!company) {
-        return {
+        const errorResult = {
           success: false,
           dividendsCount: 0,
           message: `Company ${ticker} not found`,
         };
+        
+        // Cache error result for shorter time (1 hour) to avoid repeated failed lookups
+        await cache.set(cacheKey, errorResult, { ttl: 3600 });
+        return errorResult;
       }
 
       // Fetch dividends from Yahoo Finance
@@ -78,11 +96,15 @@ export class DividendService {
 
       if (dividends.length === 0) {
         console.log(`⚠️ [DIVIDENDS] ${ticker}: Nenhum dividendo encontrado`);
-        return {
+        const noDataResult = {
           success: true,
           dividendsCount: 0,
           message: "No dividends found",
         };
+        
+        // Cache "no dividends" result for 4 hours
+        await cache.set(cacheKey, noDataResult, { ttl: 14400 });
+        return noDataResult;
       }
 
       // Save only new dividends to database (avoid unnecessary writes)
@@ -111,7 +133,7 @@ export class DividendService {
         `✅ [DIVIDENDS] ${ticker}: ${dividends.length} dividendos salvos`
       );
 
-      return {
+      const result = {
         success: true,
         dividendsCount: dividends.length,
         latestDividend: {
@@ -121,13 +143,23 @@ export class DividendService {
           exDate: latestDividend.date,
         },
       };
+
+      // Cache successful result for 4 hours (14400 seconds)
+      await cache.set(cacheKey, result, { ttl: 14400 });
+      console.log(`💾 [DIVIDENDS CACHE SET] ${ticker}: Resultado cacheado por 4 horas`);
+
+      return result;
     } catch (error) {
       console.error(`❌ [DIVIDENDS] Erro ao processar ${ticker}:`, error);
-      return {
+      const errorResult = {
         success: false,
         dividendsCount: 0,
         message: error instanceof Error ? error.message : "Unknown error",
       };
+      
+      // Cache error result for shorter time (30 minutes) to allow retry sooner
+      await cache.set(cacheKey, errorResult, { ttl: 1800 });
+      return errorResult;
     }
   }
 
@@ -416,5 +448,53 @@ export class DividendService {
 
     const totalDividends = dividends.reduce((sum, div) => sum + div.amount, 0);
     return totalDividends / currentPrice;
+  }
+
+  /**
+   * Limpar cache de dividendos para um ticker específico
+   * Útil quando há atualizações manuais ou correções de dados
+   */
+  static async clearDividendCache(ticker: string): Promise<number> {
+    const pattern = `analisador-acoes:dividends:fetch:${ticker}:*`;
+    const deletedKeys = await cache.clearByPattern(pattern);
+    
+    if (deletedKeys > 0) {
+      console.log(`🧹 [DIVIDENDS CACHE] Limpo cache de ${ticker}: ${deletedKeys} chaves removidas`);
+    }
+    
+    return deletedKeys;
+  }
+
+  /**
+   * Limpar todo o cache de dividendos
+   * Útil para manutenção ou quando há problemas com dados em cache
+   */
+  static async clearAllDividendCache(): Promise<number> {
+    const pattern = `analisador-acoes:dividends:fetch:*`;
+    const deletedKeys = await cache.clearByPattern(pattern);
+    
+    if (deletedKeys > 0) {
+      console.log(`🧹 [DIVIDENDS CACHE] Limpo todo cache de dividendos: ${deletedKeys} chaves removidas`);
+    }
+    
+    return deletedKeys;
+  }
+
+  /**
+   * Obter informações sobre o cache de dividendos
+   */
+  static async getDividendCacheInfo(): Promise<{
+    totalKeys: number;
+    keys: string[];
+    redisConnected: boolean;
+  }> {
+    const pattern = `analisador-acoes:dividends:fetch:*`;
+    const keys = await cache.getKeysByPattern(pattern);
+    
+    return {
+      totalKeys: keys.length,
+      keys: keys.sort(),
+      redisConnected: cache.isRedisConnected(),
+    };
   }
 }

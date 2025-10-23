@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper';
+import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
 
 /**
  * Serviço de Monitoramento de Ativos
@@ -9,43 +10,90 @@ import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper';
  */
 export class AssetMonitoringService {
   /**
-   * Cria ou atualiza o snapshot de um ativo
+   * Cria um novo snapshot (mantém histórico)
    */
-  static async createOrUpdateSnapshot(
+  static async createSnapshot(
     companyId: number,
     snapshotData: Record<string, any>,
-    overallScore: number
-  ): Promise<void> {
+    overallScore: number,
+    scoreComposition?: ScoreComposition
+  ): Promise<string> {
+    // Primeiro, marca todos os snapshots existentes como não sendo os mais recentes
     await safeWrite(
-      'asset-snapshot-upsert',
-      () => prisma.assetSnapshot.upsert({
-        where: { companyId },
-        create: {
+      'asset-snapshot-mark-old',
+      () => prisma.assetSnapshot.updateMany({
+        where: { companyId, isLatest: true },
+        data: { isLatest: false },
+      }),
+      ['asset_snapshots']
+    );
+
+    // Cria o novo snapshot
+    const snapshot = await safeWrite(
+      'asset-snapshot-create',
+      () => prisma.assetSnapshot.create({
+        data: {
           companyId,
           snapshotData: snapshotData as any,
           overallScore,
-        },
-        update: {
-          snapshotData: snapshotData as any,
-          overallScore,
-          updatedAt: new Date(),
+          scoreComposition: scoreComposition as any,
+          isLatest: true,
         },
       }),
       ['asset_snapshots']
     );
+
+    return (snapshot as any).id;
   }
 
   /**
-   * Busca o snapshot existente de um ativo
+   * Busca o snapshot mais recente de um ativo
    */
-  static async getSnapshot(companyId: number) {
+  static async getLatestSnapshot(companyId: number) {
     return await safeQueryWithParams(
-      'asset_snapshots-by-company',
-      () => prisma.assetSnapshot.findUnique({
-        where: { companyId },
+      'asset_snapshots-latest-by-company',
+      () => prisma.assetSnapshot.findFirst({
+        where: { companyId, isLatest: true },
+        orderBy: { createdAt: 'desc' },
       }),
       { companyId }
     );
+  }
+
+  /**
+   * Busca o snapshot anterior ao mais recente (para comparação)
+   */
+  static async getPreviousSnapshot(companyId: number) {
+    return await safeQueryWithParams(
+      'asset_snapshots-previous-by-company',
+      () => prisma.assetSnapshot.findFirst({
+        where: { companyId, isLatest: false },
+        orderBy: { createdAt: 'desc' },
+      }),
+      { companyId }
+    );
+  }
+
+  /**
+   * Busca histórico de snapshots de um ativo
+   */
+  static async getSnapshotHistory(companyId: number, limit: number = 10) {
+    return await safeQueryWithParams(
+      'asset_snapshots-history-by-company',
+      () => prisma.assetSnapshot.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      { companyId, limit }
+    );
+  }
+
+  /**
+   * Método legado - busca o snapshot mais recente (para compatibilidade)
+   */
+  static async getSnapshot(companyId: number) {
+    return this.getLatestSnapshot(companyId);
   }
 
   /**

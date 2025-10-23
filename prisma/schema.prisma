@@ -144,7 +144,7 @@ model Company {
   quarterlyFinancials QuarterlyFinancials[]
   aiReports       AIReport[]
   userSubscriptions UserAssetSubscription[]
-  snapshot        AssetSnapshot?
+  snapshots       AssetSnapshot[]
   youtubeAnalyses YouTubeAnalysis[]
   etfData         EtfData?
   fiiData         FiiData?
@@ -914,6 +914,7 @@ model QuarterlyFinancials {
 model AIReport {
   id                String             @id @default(cuid())
   companyId         Int                @map("company_id")
+  snapshotId        String?            @map("snapshot_id") // FK para o snapshot associado
   content           String             // Conteúdo markdown do relatório
   strategicAnalyses Json?              // Análises estratégicas aplicadas
   metadata          Json?              // Metadados adicionais (preço na época, etc)
@@ -930,12 +931,14 @@ model AIReport {
   updatedAt         DateTime           @updatedAt @map("updated_at")
   
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  snapshot          AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id], onDelete: SetNull)
   feedbacks         AIReportFeedback[]
 
   @@index([companyId, isActive])
   @@index([companyId, createdAt])
   @@index([companyId, status])
   @@index([companyId, type])
+  @@index([snapshotId])
   @@index([createdAt])
   @@map("ai_reports")
 }
@@ -1129,18 +1132,22 @@ model UserAssetSubscription {
   @@map("user_asset_subscriptions")
 }
 
-// Snapshots dos ativos
+// Snapshots dos ativos (histórico completo)
 model AssetSnapshot {
   id            String   @id @default(cuid())
-  companyId     Int      @unique @map("company_id")
+  companyId     Int      @map("company_id")
   snapshotData  Json     @map("snapshot_data") // Dados completos do ativo
   overallScore  Decimal  @map("overall_score") @db.Decimal(5, 2)
+  scoreComposition Json? @map("score_composition") // Composição detalhada da nota
+  isLatest      Boolean  @default(true) @map("is_latest") // Se é o snapshot mais recente
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   
   company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  aiReports     AIReport[] @relation("SnapshotReports")
   
-  @@index([companyId])
+  @@index([companyId, isLatest])
+  @@index([companyId, createdAt])
   @@index([updatedAt])
   @@map("asset_snapshots")
 }

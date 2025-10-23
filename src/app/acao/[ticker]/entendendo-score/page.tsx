@@ -1,17 +1,23 @@
-import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import Link from 'next/link';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { getCurrentUser } from '@/lib/user-service';
-import { prisma } from '@/lib/prisma';
-import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { 
-  ArrowLeft, 
-  TrendingUp, 
+import { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/user-service";
+import { prisma } from "@/lib/prisma";
+import { getScoreBreakdown } from "@/lib/score-breakdown-service";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  ArrowLeft,
+  TrendingUp,
   TrendingDown,
   Calculator,
   CheckCircle2,
@@ -19,20 +25,24 @@ import {
   Info,
   AlertTriangle,
   Lock,
-  Crown
-} from 'lucide-react';
+  Crown,
+} from "lucide-react";
 
-export async function generateMetadata({ params }: { params: { ticker: string } }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: { ticker: string };
+}): Promise<Metadata> {
   const ticker = params.ticker.toUpperCase();
-  
+
   const company = await prisma.company.findUnique({
     where: { ticker },
-    select: { name: true }
+    select: { name: true },
   });
 
   if (!company) {
     return {
-      title: 'Empresa não encontrada',
+      title: "Empresa não encontrada",
     };
   }
 
@@ -42,265 +52,15 @@ export async function generateMetadata({ params }: { params: { ticker: string } 
   };
 }
 
-interface OverallScoreBreakdown {
-  score: number;
-  grade: string;
-  classification: string;
-  strengths: string[];
-  weaknesses: string[];
-  recommendation: string;
-  contributions: {
-    name: string;
-    score: number;
-    weight: number;
-    points: number;
-    eligible: boolean;
-    description: string;
-  }[];
-  penalties?: {
-    reason: string;
-    amount: number;
-    details?: string[]; // Detalhes específicos (red flags, contradições, etc)
-  }[];
-  rawScore: number; // Score antes das penalidades
-}
+// Interface movida para score-breakdown-service.ts
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function getScoreBreakdown(ticker: string, _isPremium: boolean, _isLoggedIn: boolean): Promise<OverallScoreBreakdown | null> {
-  try {
-    // SEMPRE buscar dados completos (mesmo para não-premium) para mostrar a página
-    // A proteção será feita no overlay visual, não no fetch de dados
-    // Os parâmetros isPremium/isLoggedIn são recebidos mas não usados (prefixados com _)
-    const analysisResult = await calculateCompanyOverallScore(ticker, {
-      isPremium: true, // ← Sempre buscar dados completos
-      isLoggedIn: true,
-      includeStatements: true, // ← Sempre incluir statements
-      includeStrategies: true
-    });
+// Função movida para score-breakdown-service.ts para evitar duplicação
 
-    if (!analysisResult || !analysisResult.overallScore) {
-      return null;
-    }
-
-    // Buscar análise do YouTube separadamente (se disponível)
-    const company = await prisma.company.findUnique({
-      where: { ticker: ticker.toUpperCase() },
-      include: {
-        youtubeAnalyses: {
-          where: { isActive: true },
-          orderBy: { createdAt: 'desc' },
-          take: 1
-        }
-      }
-    });
-
-    const youtubeAnalysis = company?.youtubeAnalyses[0] ? {
-      score: typeof company.youtubeAnalyses[0].score === 'object' 
-        ? (company.youtubeAnalyses[0].score as any).toNumber() 
-        : Number(company.youtubeAnalyses[0].score)
-    } : null;
-
-    const data = {
-      overallScore: analysisResult.overallScore,
-      strategies: analysisResult.strategies
-    };
-
-    // Calcular contribuições (mesma lógica do cálculo original)
-    const hasYouTubeAnalysis = !!youtubeAnalysis;
-    const baseMultiplier = hasYouTubeAnalysis ? 0.90 : 1.00;
-    
-    const weights = {
-      graham: { weight: 0.08 * baseMultiplier, label: 'Graham (Valor Intrínseco)' },
-      dividendYield: { weight: 0.08 * baseMultiplier, label: 'Dividend Yield' },
-      lowPE: { weight: 0.15 * baseMultiplier, label: 'Low P/E' },
-      magicFormula: { weight: 0.13 * baseMultiplier, label: 'Fórmula Mágica' },
-      fcd: { weight: 0.15 * baseMultiplier, label: 'Fluxo de Caixa Descontado' },
-      gordon: { weight: 0.01 * baseMultiplier, label: 'Gordon (Dividendos)' },
-      fundamentalist: { weight: 0.20 * baseMultiplier, label: 'Fundamentalista 3+1' },
-      statements: { weight: 0.20 * baseMultiplier, label: 'Demonstrações Financeiras' },
-      youtube: { weight: hasYouTubeAnalysis ? 0.10 : 0, label: 'Sentimento de Mercado' }
-    };
-
-    const contributions = [];
-    let rawScore = 0;
-
-    // Adicionar contribuições de estratégias (se disponíveis na resposta)
-    if (data.strategies) {
-      const strategyKeys = ['graham', 'dividendYield', 'lowPE', 'magicFormula', 'fcd', 'gordon', 'fundamentalist'] as const;
-      
-      strategyKeys.forEach((key) => {
-        const strategy = data.strategies?.[key];
-        const config = weights[key];
-        
-        if (strategy && config) {
-          const points = strategy.score * config.weight;
-          rawScore += points;
-          
-          contributions.push({
-            name: config.label,
-            score: strategy.score,
-            weight: config.weight,
-            points,
-            eligible: strategy.isEligible || false,
-            description: getStrategyDescription(key)
-          });
-        }
-      });
-    }
-
-    // Adicionar Demonstrações Financeiras
-    if (data.overallScore.statementsAnalysis) {
-      const statementsScore = data.overallScore.statementsAnalysis.score;
-      const points = statementsScore * weights.statements.weight;
-      rawScore += points;
-      
-      contributions.push({
-        name: weights.statements.label,
-        score: statementsScore,
-        weight: weights.statements.weight,
-        points,
-        eligible: statementsScore >= 60,
-        description: 'Análise profunda dos balanços, DRE e demonstrações de fluxo de caixa'
-      });
-    }
-
-    // Adicionar YouTube se disponível
-    if (hasYouTubeAnalysis && youtubeAnalysis) {
-      const youtubeScore = youtubeAnalysis.score;
-      const points = youtubeScore * weights.youtube.weight;
-      rawScore += points;
-      
-      contributions.push({
-        name: weights.youtube.label,
-        score: youtubeScore,
-        weight: weights.youtube.weight,
-        points,
-        eligible: youtubeScore >= 70,
-        description: 'Sentimento agregado de múltiplas fontes especializadas de mercado'
-      });
-    }
-
-    // Ordenar por contribuição
-    contributions.sort((a, b) => b.points - a.points);
-
-    // Calcular penalidades e extrair detalhes
-    const penalties = [];
-    const finalScore = data.overallScore.score;
-    const penaltyAmount = rawScore - finalScore;
-
-    if (penaltyAmount > 0.5) {
-      // Coletar detalhes das penalidades
-      const penaltyDetails: string[] = [];
-      
-      // Red flags das demonstrações financeiras
-      if (data.overallScore.statementsAnalysis?.redFlags) {
-        const redFlags = data.overallScore.statementsAnalysis.redFlags;
-        if (redFlags.length > 0) {
-          penaltyDetails.push(`🚩 ${redFlags.length} alerta(s) crítico(s) identificado(s):`);
-          redFlags.forEach(flag => {
-            penaltyDetails.push(`   • ${flag}`);
-          });
-        }
-      }
-
-      // Weaknesses do overall score
-      if (data.overallScore.weaknesses && data.overallScore.weaknesses.length > 0) {
-        const weaknessCount = data.overallScore.weaknesses.length;
-        const strengthCount = data.overallScore.strengths?.length || 0;
-        
-        if (weaknessCount > strengthCount) {
-          penaltyDetails.push(`⚠️ Proporção desfavorável: ${weaknessCount} pontos fracos vs ${strengthCount} pontos fortes`);
-        }
-      }
-
-      // Nível de risco
-      if (data.overallScore.statementsAnalysis?.riskLevel) {
-        const riskLevel = data.overallScore.statementsAnalysis.riskLevel;
-        if (riskLevel === 'HIGH' || riskLevel === 'CRITICAL') {
-          penaltyDetails.push(`⚠️ Nível de risco: ${riskLevel === 'HIGH' ? 'ALTO' : 'CRÍTICO'}`);
-        }
-      }
-
-      // Força da empresa com detalhamento
-      if (data.overallScore.statementsAnalysis?.companyStrength) {
-        const strength = data.overallScore.statementsAnalysis.companyStrength;
-        const contextualFactors = data.overallScore.statementsAnalysis.contextualFactors || [];
-        
-        // Debug: log dos contextual factors
-        console.log(`[DEBUG] Company Strength: ${strength}`);
-        console.log(`[DEBUG] Contextual Factors (${contextualFactors.length}):`, contextualFactors);
-        
-        if (strength === 'WEAK' || strength === 'MODERATE') {
-          penaltyDetails.push('');
-          penaltyDetails.push(`⚠️ Força Fundamentalista: ${strength === 'WEAK' ? 'FRACA' : 'MODERADA'}`);
-          
-          // Adicionar TODOS os fatores contextuais disponíveis
-          if (contextualFactors.length > 0) {
-            penaltyDetails.push('Análise detalhada dos fundamentos:');
-            // Mostrar todos os fatores sem filtro
-            contextualFactors.forEach(factor => {
-              penaltyDetails.push(`   • ${factor}`);
-            });
-          } else {
-            // Se não há contextualFactors, adicionar análise baseada nos dados brutos
-            penaltyDetails.push('Análise dos fundamentos:');
-            
-            // Extrair weaknesses do overallScore
-            if (data.overallScore.weaknesses && data.overallScore.weaknesses.length > 0) {
-              data.overallScore.weaknesses.slice(0, 5).forEach(weakness => {
-                penaltyDetails.push(`   • ${weakness}`);
-              });
-            } else {
-              penaltyDetails.push('   • Indicadores fundamentalistas abaixo do esperado');
-              penaltyDetails.push('   • Empresa não atende critérios de qualidade mínima');
-            }
-          }
-        }
-      }
-
-      // Se não há detalhes específicos, adicionar mensagem genérica
-      if (penaltyDetails.length === 0) {
-        penaltyDetails.push('Ajustes conservadores baseados na análise qualitativa');
-      }
-
-      penalties.push({
-        reason: 'Penalidades por Qualidade e Riscos Identificados',
-        amount: -penaltyAmount,
-        details: penaltyDetails
-      });
-    }
-
-    return {
-      score: finalScore,
-      grade: data.overallScore.grade,
-      classification: data.overallScore.classification,
-      strengths: data.overallScore.strengths || [],
-      weaknesses: data.overallScore.weaknesses || [],
-      recommendation: data.overallScore.recommendation,
-      contributions,
-      penalties: penalties.length > 0 ? penalties : undefined,
-      rawScore
-    };
-  } catch (error) {
-    console.error('Erro ao buscar breakdown do score:', error);
-    return null;
-  }
-}
-
-function getStrategyDescription(key: string): string {
-  const descriptions: Record<string, string> = {
-    graham: 'Avalia se a ação está sendo negociada abaixo do seu valor intrínseco calculado',
-    dividendYield: 'Analisa a qualidade e sustentabilidade dos dividendos pagos',
-    lowPE: 'Verifica se o P/L está abaixo da média do setor indicando subavaliação',
-    magicFormula: 'Combina ROE elevado com P/L baixo para identificar boas empresas baratas',
-    fcd: 'Calcula o valor presente dos fluxos de caixa futuros da empresa',
-    gordon: 'Valuation baseado no crescimento perpétuo de dividendos',
-    fundamentalist: 'Análise completa de qualidade, preço, endividamento e dividendos'
-  };
-  return descriptions[key] || '';
-}
-
-export default async function EntendendoScorePage({ params }: { params: { ticker: string } }) {
+export default async function EntendendoScorePage({
+  params,
+}: {
+  params: { ticker: string };
+}) {
   const ticker = params.ticker.toUpperCase();
 
   // Verificar sessão e status Premium
@@ -317,7 +77,7 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
   // Buscar empresa básica
   const company = await prisma.company.findUnique({
     where: { ticker },
-    select: { name: true }
+    select: { name: true },
   });
 
   if (!company) {
@@ -340,7 +100,8 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
           <Card>
             <CardContent className="p-8 text-center">
               <p className="text-muted-foreground">
-                Não foi possível carregar o breakdown do score. Tente novamente mais tarde.
+                Não foi possível carregar o breakdown do score. Tente novamente
+                mais tarde.
               </p>
             </CardContent>
           </Card>
@@ -351,7 +112,11 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
 
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
-      <div className={`container mx-auto px-4 py-8 max-w-5xl ${!userIsPremium ? 'relative' : ''}`}>
+      <div
+        className={`container mx-auto px-4 py-8 max-w-5xl ${
+          !userIsPremium ? "relative" : ""
+        }`}
+      >
         {/* Header */}
         <div className="mb-8">
           <Button variant="ghost" asChild className="mb-4">
@@ -366,7 +131,10 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
               <h1 className="text-2xl sm:text-3xl font-bold mb-2 flex flex-wrap items-center gap-2">
                 Entendendo o Score
                 {!userIsPremium && (
-                  <Badge variant="default" className="bg-gradient-to-r from-amber-500 to-orange-600 whitespace-nowrap">
+                  <Badge
+                    variant="default"
+                    className="bg-gradient-to-r from-amber-500 to-orange-600 whitespace-nowrap"
+                  >
                     <Crown className="w-3 h-3 mr-1" />
                     Premium
                   </Badge>
@@ -378,7 +146,9 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
             </div>
 
             <div className="text-left sm:text-right shrink-0">
-              <div className="text-sm text-muted-foreground mb-1">Score Geral</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Score Geral
+              </div>
               <div className="text-3xl sm:text-4xl font-bold">
                 {breakdown.score.toFixed(1)}
               </div>
@@ -411,7 +181,10 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                   </h3>
                   <ul className="space-y-2">
                     {breakdown.strengths.map((strength, index) => (
-                      <li key={index} className="text-xs sm:text-sm flex items-start gap-2">
+                      <li
+                        key={index}
+                        className="text-xs sm:text-sm flex items-start gap-2"
+                      >
                         <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
                         <span className="break-words">{strength}</span>
                       </li>
@@ -429,7 +202,10 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                   </h3>
                   <ul className="space-y-2">
                     {breakdown.weaknesses.map((weakness, index) => (
-                      <li key={index} className="text-xs sm:text-sm flex items-start gap-2">
+                      <li
+                        key={index}
+                        className="text-xs sm:text-sm flex items-start gap-2"
+                      >
                         <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
                         <span className="break-words">{weakness}</span>
                       </li>
@@ -444,7 +220,9 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
         {/* Contribution Breakdown */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="text-lg sm:text-xl break-words">Contribuição de Cada Critério</CardTitle>
+            <CardTitle className="text-lg sm:text-xl break-words">
+              Contribuição de Cada Critério
+            </CardTitle>
             <CardDescription className="text-sm break-words">
               Como cada estratégia e critério contribui para o score
             </CardDescription>
@@ -453,11 +231,13 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
             <div className="space-y-4">
               {breakdown.contributions.map((contrib, index) => {
                 const Icon = contrib.eligible ? CheckCircle2 : XCircle;
-                const color = contrib.eligible ? 'text-green-600' : 'text-red-600';
+                const color = contrib.eligible
+                  ? "text-green-600"
+                  : "text-red-600";
                 const percentage = (contrib.weight * 100).toFixed(1);
-                
+
                 return (
-                  <div 
+                  <div
                     key={index}
                     className="border rounded-lg p-3 sm:p-4 hover:bg-muted/50 transition-colors"
                   >
@@ -465,8 +245,13 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                       <div className="flex-1 min-w-0 w-full">
                         <div className="flex flex-wrap items-center gap-2 mb-2">
                           <Icon className={`w-4 h-4 ${color} shrink-0`} />
-                          <h4 className="font-semibold text-sm sm:text-base break-words">{contrib.name}</h4>
-                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                          <h4 className="font-semibold text-sm sm:text-base break-words">
+                            {contrib.name}
+                          </h4>
+                          <Badge
+                            variant="outline"
+                            className="text-xs whitespace-nowrap"
+                          >
                             Peso: {percentage}%
                           </Badge>
                         </div>
@@ -474,9 +259,11 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                           {contrib.description}
                         </p>
                       </div>
-                      
+
                       <div className="text-left sm:text-right shrink-0 w-full sm:w-auto">
-                        <div className="text-xs sm:text-sm text-muted-foreground">Contribuição</div>
+                        <div className="text-xs sm:text-sm text-muted-foreground">
+                          Contribuição
+                        </div>
                         <div className="text-xl sm:text-2xl font-bold text-green-600">
                           +{contrib.points.toFixed(1)}
                         </div>
@@ -488,9 +275,9 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
 
                     {/* Progress bar */}
                     <div className="w-full h-2 bg-muted rounded-full overflow-hidden mt-3">
-                      <div 
+                      <div
                         className={`h-full transition-all ${
-                          contrib.eligible ? 'bg-green-500' : 'bg-red-500'
+                          contrib.eligible ? "bg-green-500" : "bg-red-500"
                         }`}
                         style={{ width: `${contrib.score}%` }}
                       />
@@ -503,7 +290,9 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
               <div className="border-t-2 border-dashed pt-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-4">
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-sm sm:text-base">Subtotal (Contribuições)</h4>
+                    <h4 className="font-semibold text-sm sm:text-base">
+                      Subtotal (Contribuições)
+                    </h4>
                     <p className="text-xs sm:text-sm text-muted-foreground break-words">
                       Soma de todas as contribuições positivas
                     </p>
@@ -512,9 +301,7 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                     <div className="text-xl sm:text-2xl font-bold text-blue-600">
                       {breakdown.rawScore.toFixed(1)}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Pontos
-                    </div>
+                    <div className="text-xs text-muted-foreground">Pontos</div>
                   </div>
                 </div>
               </div>
@@ -523,7 +310,7 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
               {breakdown.penalties && breakdown.penalties.length > 0 && (
                 <>
                   {breakdown.penalties.map((penalty, index) => (
-                    <div 
+                    <div
                       key={index}
                       className="border border-orange-200 dark:border-orange-800 rounded-lg p-3 sm:p-4 bg-orange-50 dark:bg-orange-950"
                     >
@@ -536,9 +323,11 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                             </h4>
                           </div>
                         </div>
-                        
+
                         <div className="text-left sm:text-right shrink-0">
-                          <div className="text-xs sm:text-sm text-orange-600 dark:text-orange-400">Ajuste</div>
+                          <div className="text-xs sm:text-sm text-orange-600 dark:text-orange-400">
+                            Ajuste
+                          </div>
                           <div className="text-xl sm:text-2xl font-bold text-red-600">
                             {penalty.amount.toFixed(1)}
                           </div>
@@ -550,12 +339,12 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                         <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
                           <div className="space-y-1.5 text-xs sm:text-sm">
                             {penalty.details.map((detail, detailIndex) => (
-                              <div 
+                              <div
                                 key={detailIndex}
                                 className={`break-words ${
-                                  detail.startsWith('   •') 
-                                    ? 'ml-4 sm:ml-6 text-orange-700 dark:text-orange-300' 
-                                    : 'font-medium text-orange-800 dark:text-orange-200'
+                                  detail.startsWith("   •")
+                                    ? "ml-4 sm:ml-6 text-orange-700 dark:text-orange-300"
+                                    : "font-medium text-orange-800 dark:text-orange-200"
                                 }`}
                               >
                                 {detail}
@@ -573,7 +362,9 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
               <div className="border-t-4 border-primary pt-4 bg-muted/30 rounded-lg p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-base sm:text-lg font-bold">Score Final</h4>
+                    <h4 className="text-base sm:text-lg font-bold">
+                      Score Final
+                    </h4>
                     <p className="text-xs sm:text-sm text-muted-foreground break-words">
                       {breakdown.classification}
                     </p>
@@ -599,12 +390,15 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                     Como interpretar este detalhamento dos pontos
                   </p>
                   <p className="text-blue-700 dark:text-blue-300 mb-2 break-words">
-                    O score é calculado pela soma ponderada das contribuições de cada estratégia. Penalidades são 
-                    aplicadas quando há contradições entre pontos fortes e fracos, ou quando a proporção de alertas 
-                    é muito alta, garantindo uma avaliação conservadora e realista.
+                    O score é calculado pela soma ponderada das contribuições de
+                    cada estratégia. Penalidades são aplicadas quando há
+                    contradições entre pontos fortes e fracos, ou quando a
+                    proporção de alertas é muito alta, garantindo uma avaliação
+                    conservadora e realista.
                   </p>
                   <p className="text-blue-700 dark:text-blue-300 break-words">
-                    <strong>Fórmula:</strong> Score Final = Subtotal - Penalidades
+                    <strong>Fórmula:</strong> Score Final = Subtotal -
+                    Penalidades
                   </p>
                 </div>
               </div>
@@ -614,9 +408,7 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-muted-foreground">
-          <p>
-            Score calculado em {new Date().toLocaleDateString('pt-BR')}
-          </p>
+          <p>Score calculado em {new Date().toLocaleDateString("pt-BR")}</p>
         </div>
 
         {/* Overlay Premium para não-assinantes */}
@@ -641,39 +433,50 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm sm:text-base break-words">Breakdown Completo das Contribuições</p>
+                      <p className="font-semibold text-sm sm:text-base break-words">
+                        Breakdown Completo das Contribuições
+                      </p>
                       <p className="text-xs sm:text-sm text-muted-foreground break-words">
-                        Veja exatamente como cada estratégia contribui para o score final
+                        Veja exatamente como cada estratégia contribui para o
+                        score final
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm sm:text-base break-words">Detalhamento de Penalidades</p>
+                      <p className="font-semibold text-sm sm:text-base break-words">
+                        Detalhamento de Penalidades
+                      </p>
                       <p className="text-xs sm:text-sm text-muted-foreground break-words">
                         Entenda todos os alertas críticos e riscos identificados
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm sm:text-base break-words">Análise de Fundamentos</p>
+                      <p className="font-semibold text-sm sm:text-base break-words">
+                        Análise de Fundamentos
+                      </p>
                       <p className="text-xs sm:text-sm text-muted-foreground break-words">
-                        Veja os motivos específicos da força fundamentalista da empresa
+                        Veja os motivos específicos da força fundamentalista da
+                        empresa
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm sm:text-base break-words">Matemática Transparente</p>
+                      <p className="font-semibold text-sm sm:text-base break-words">
+                        Matemática Transparente
+                      </p>
                       <p className="text-xs sm:text-sm text-muted-foreground break-words">
-                        Acompanhe o cálculo passo a passo: contribuições, penalidades e score final
+                        Acompanhe o cálculo passo a passo: contribuições,
+                        penalidades e score final
                       </p>
                     </div>
                   </div>
@@ -683,19 +486,28 @@ export default async function EntendendoScorePage({ params }: { params: { ticker
                   <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 rounded-lg p-3 sm:p-4 mb-4">
                     <p className="text-xs sm:text-sm text-center font-medium break-words">
                       <Crown className="w-3 h-3 sm:w-4 sm:h-4 inline mr-1" />
-                      Acesso completo a <strong>todas as estratégias premium</strong> de análise fundamentalista
+                      Acesso completo a{" "}
+                      <strong>todas as estratégias premium</strong> de análise
+                      fundamentalista
                     </p>
                   </div>
-                  
+
                   <div className="flex flex-col gap-3">
-                    <Button asChild className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-sm sm:text-base">
+                    <Button
+                      asChild
+                      className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-sm sm:text-base"
+                    >
                       <Link href="/planos">
                         <Crown className="w-4 h-4 mr-2" />
                         Assinar Premium
                       </Link>
                     </Button>
-                    
-                    <Button asChild variant="outline" className="w-full text-sm sm:text-base">
+
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="w-full text-sm sm:text-base"
+                    >
                       <Link href={`/acao/${ticker.toLowerCase()}`}>
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Voltar para {ticker}

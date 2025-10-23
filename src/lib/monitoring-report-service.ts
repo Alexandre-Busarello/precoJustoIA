@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { safeWrite } from '@/lib/prisma-wrapper';
 import { GoogleGenAI } from '@google/genai';
+import { ScoreComposition, compareScoreCompositions } from '@/lib/score-composition-service';
 
 /**
  * Serviço de Relatórios de Monitoramento
@@ -20,6 +21,8 @@ export class MonitoringReportService {
     previousScore: number;
     currentScore: number;
     changeDirection: 'positive' | 'negative';
+    previousScoreComposition?: ScoreComposition;
+    currentScoreComposition?: ScoreComposition;
   }): Promise<string> {
     const {
       ticker,
@@ -29,6 +32,8 @@ export class MonitoringReportService {
       previousScore,
       currentScore,
       changeDirection,
+      previousScoreComposition,
+      currentScoreComposition,
     } = params;
 
     const prompt = this.buildComparisonPrompt({
@@ -39,6 +44,8 @@ export class MonitoringReportService {
       previousScore,
       currentScore,
       changeDirection,
+      previousScoreComposition,
+      currentScoreComposition,
     });
 
     try {
@@ -61,6 +68,8 @@ export class MonitoringReportService {
     previousScore: number;
     currentScore: number;
     changeDirection: 'positive' | 'negative';
+    previousScoreComposition?: ScoreComposition;
+    currentScoreComposition?: ScoreComposition;
   }): string {
     const {
       ticker,
@@ -70,59 +79,108 @@ export class MonitoringReportService {
       previousScore,
       currentScore,
       changeDirection,
+      previousScoreComposition,
+      currentScoreComposition,
     } = params;
 
     const changeTerm = changeDirection === 'positive' ? 'melhora' : 'piora';
     const scoreDelta = Math.abs(currentScore - previousScore).toFixed(1);
 
-    return `Você é um analista fundamentalista especializado em ações brasileiras.
+    // Analisar mudanças na composição do score se disponível
+    let scoreAnalysis = '';
+    if (previousScoreComposition && currentScoreComposition) {
+      const comparison = compareScoreCompositions(previousScoreComposition, currentScoreComposition, 1);
+      
+      if (comparison.significantChanges.length > 0) {
+        scoreAnalysis = `
 
-Compare os dados anteriores com os dados atuais da empresa ${name} (${ticker}) e explique de forma clara e objetiva as principais mudanças que causaram a **${changeTerm}** no Score Geral de **${previousScore.toFixed(1)}** para **${currentScore.toFixed(1)}** (variação de ${scoreDelta} pontos).
+**ANÁLISE DETALHADA DAS MUDANÇAS NO SCORE:**
 
-**DADOS DO SNAPSHOT ANTERIOR:**
+As principais mudanças que impactaram o score foram:
+${comparison.significantChanges.slice(0, 5).map(change => 
+  `- **${change.component}**: ${change.previousScore.toFixed(1)} → ${change.currentScore.toFixed(1)} pontos (impacto: ${change.impact > 0 ? '+' : ''}${change.impact.toFixed(1)} pontos)`
+).join('\n')}
+
+**Mudanças por categoria:**
+${Object.entries(comparison.categoryChanges)
+  .filter(([, change]) => Math.abs(change) >= 0.5)
+  .map(([category, change]) => `- ${category}: ${change > 0 ? '+' : ''}${change.toFixed(1)} pontos`)
+  .join('\n')}
+
+${comparison.penaltyChanges ? `
+**Mudança nas penalidades:**
+- Penalidade anterior: ${comparison.penaltyChanges.previousPenalty.toFixed(1)} pontos
+- Penalidade atual: ${comparison.penaltyChanges.currentPenalty.toFixed(1)} pontos
+- Diferença: ${comparison.penaltyChanges.penaltyDiff > 0 ? '+' : ''}${comparison.penaltyChanges.penaltyDiff.toFixed(1)} pontos
+` : ''}`;
+      }
+    }
+
+    return `Você é um analista fundamentalista que escreve para investidores iniciantes e intermediários.
+
+A empresa ${name} (${ticker}) teve uma **${changeTerm}** no seu Score Geral de **${previousScore.toFixed(1)}** para **${currentScore.toFixed(1)}** pontos (variação de ${scoreDelta} pontos).
+
+Escreva um relatório claro e acessível explicando o que aconteceu.${scoreAnalysis}
+
+**DADOS FINANCEIROS ANTERIORES:**
 \`\`\`json
-${JSON.stringify(previousData, null, 2)}
+${JSON.stringify(this.extractRelevantData(previousData), null, 2)}
 \`\`\`
 
-**DADOS ATUAIS:**
+**DADOS FINANCEIROS ATUAIS:**
 \`\`\`json
-${JSON.stringify(currentData, null, 2)}
+${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
 \`\`\`
 
-**INSTRUÇÕES PARA A ANÁLISE:**
+**INSTRUÇÕES PARA O RELATÓRIO:**
 
-1. **Resumo Executivo** (2-3 parágrafos)
-   - Contextualize a mudança no Score Geral
-   - Destaque o que mudou de forma mais significativa
-   - Indique se é uma mudança pontual ou tendência
+1. **O que aconteceu?** (1-2 parágrafos)
+   - Explique de forma simples o que causou a mudança no score
+   - Foque nos 2-3 indicadores que mais mudaram
+   - Use linguagem acessível (evite jargões técnicos)
 
-2. **Principais Mudanças Identificadas** (liste os 3-5 fatores mais importantes)
-   - Para cada fator, compare o valor anterior com o atual
-   - Explique o impacto de cada mudança no valuation/qualidade
-   - Use **negrito** para destacar indicadores-chave
+2. **Por que isso importa?** (1-2 parágrafos)
+   - Explique o impacto prático dessas mudanças
+   - Como isso afeta o valor da empresa
+   - Se a empresa ficou mais ou menos atrativa
 
-3. **Impacto no Valuation e Análise das Estratégias**
-   - Como as mudanças afetam o preço justo estimado
-   - Quais estratégias de investimento foram mais impactadas
-   - Se a empresa ficou mais ou menos atrativa para investimento
+3. **O que observar daqui para frente?** (1 parágrafo)
+   - Pontos de atenção para os próximos trimestres
+   - Se é uma mudança pontual ou tendência
 
-4. **Recomendação**
-   - Com base nas mudanças, qual a perspectiva para a empresa
-   - Pontos de atenção para os investidores
-   - Se mantém, fortalece ou enfraquece a tese de investimento
+**REGRAS IMPORTANTES:**
+- Seja conciso: máximo 400 palavras
+- Use linguagem simples e direta
+- NÃO mencione "snapshots", "dados internos" ou processos técnicos
+- Foque apenas em mudanças significativas (>10% de variação)
+- Se um indicador mudou pouco (<5%), não o mencione
+- Use **negrito** apenas para números importantes
+- Explique siglas na primeira vez (ex: ROE - Retorno sobre Patrimônio)
+- Mantenha tom neutro e informativo`;
+  }
 
-**FORMATO:**
-- Use Markdown para formatação
-- Seja objetivo e direto
-- Use bullet points quando apropriado
-- Inclua números e percentuais relevantes
-- Foque nas mudanças mais significativas (não liste tudo)
-
-**IMPORTANTE:**
-- NÃO invente dados que não estão nos JSONs fornecidos
-- Se um dado não mudou significativamente, não o mencione
-- Priorize qualidade sobre quantidade de informações
-- Mantenha tom profissional mas acessível`;
+  /**
+   * Extrai apenas os dados financeiros relevantes para o relatório
+   */
+  private static extractRelevantData(data: Record<string, unknown>): Record<string, unknown> {
+    const financials = (data as any).financials || {};
+    
+    return {
+      pl: financials.pl,
+      pvp: financials.pvp,
+      roe: financials.roe,
+      roic: financials.roic,
+      margemLiquida: financials.margemLiquida,
+      margemEbitda: financials.margemEbitda,
+      dy: financials.dy,
+      evEbitda: financials.evEbitda,
+      liquidezCorrente: financials.liquidezCorrente,
+      debtToEquity: financials.debtToEquity,
+      crescimentoReceitas: financials.crescimentoReceitas,
+      crescimentoLucros: financials.crescimentoLucros,
+      marketCap: financials.marketCap,
+      currentPrice: (data as any).currentPrice,
+    };
   }
 
   /**
@@ -184,13 +242,14 @@ ${JSON.stringify(currentData, null, 2)}
    */
   static async saveReport(params: {
     companyId: number;
+    snapshotId?: string;
     content: string;
     previousScore: number;
     currentScore: number;
     changeDirection: 'positive' | 'negative';
     snapshotData: Record<string, unknown>;
   }): Promise<string> {
-    const { companyId, content, previousScore, currentScore, changeDirection, snapshotData } =
+    const { companyId, snapshotId, content, previousScore, currentScore, changeDirection, snapshotData } =
       params;
 
     const report = await safeWrite(
@@ -199,6 +258,7 @@ ${JSON.stringify(currentData, null, 2)}
         prisma.aIReport.create({
           data: {
             companyId,
+            snapshotId,
             content,
             type: 'FUNDAMENTAL_CHANGE',
             changeDirection,
@@ -211,7 +271,7 @@ ${JSON.stringify(currentData, null, 2)}
               scoreDelta: currentScore - previousScore,
               snapshotData,
             } as any,
-          },
+          } as any,
         }),
       ['ai_reports']
     );

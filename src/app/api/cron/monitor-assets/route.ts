@@ -3,6 +3,7 @@ import { AssetMonitoringService } from '@/lib/asset-monitoring-service';
 import { MonitoringReportService } from '@/lib/monitoring-report-service';
 import { sendAssetChangeEmail } from '@/lib/email-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
+import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
 import { toNumber } from '@/lib/strategies';
 import { prisma } from '@/lib/prisma';
 
@@ -123,8 +124,11 @@ export async function GET(request: NextRequest) {
           negativePoints: companyWithData.youtubeAnalyses[0].negativePoints as string[] | null,
         } : null;
 
-        // 7. Verificar se existe snapshot
-        const existingSnapshot = await AssetMonitoringService.getSnapshot(company.id);
+        // 7. Calcular composição do score usando função centralizada
+        const scoreComposition = await calculateScoreComposition(company.ticker);
+
+        // 8. Verificar se existe snapshot
+        const existingSnapshot = await AssetMonitoringService.getLatestSnapshot(company.id);
 
         if (!existingSnapshot) {
           // Criar primeiro snapshot
@@ -140,10 +144,11 @@ export async function GET(request: NextRequest) {
             timestamp: new Date().toISOString(),
           };
 
-          await AssetMonitoringService.createOrUpdateSnapshot(
+          await AssetMonitoringService.createSnapshot(
             company.id,
             snapshotData,
-            currentScore
+            currentScore,
+            scoreComposition
           );
 
           console.log(`✅ ${company.ticker}: Primeiro snapshot criado`);
@@ -171,7 +176,7 @@ export async function GET(request: NextRequest) {
             if (!hasSubscribers) {
               console.log(`⚠️ ${company.ticker}: Sem inscritos, pulando geração de relatório`);
               
-              // Atualizar snapshot mesmo sem inscritos (para evitar detectar a mesma mudança novamente)
+              // Criar snapshot mesmo sem inscritos (para evitar detectar a mesma mudança novamente)
               const snapshotData = {
                 ticker: company.ticker,
                 name: company.name,
@@ -184,12 +189,35 @@ export async function GET(request: NextRequest) {
                 timestamp: new Date().toISOString(),
               };
 
-              await AssetMonitoringService.createOrUpdateSnapshot(
+              await AssetMonitoringService.createSnapshot(
                 company.id,
                 snapshotData,
-                currentScore
+                currentScore,
+                scoreComposition
               );
             } else {
+              // Criar novo snapshot primeiro
+              const snapshotData = {
+                ticker: company.ticker,
+                name: company.name,
+                sector: company.sector,
+                currentPrice,
+                strategies,
+                overallScore: overallScoreResult,
+                financials: latestFinancials,
+                youtubeAnalysis: youtubeAnalysisData,
+                timestamp: new Date().toISOString(),
+              };
+
+              const snapshotId = await AssetMonitoringService.createSnapshot(
+                company.id,
+                snapshotData,
+                currentScore,
+                scoreComposition
+              );
+
+              console.log(`📸 ${company.ticker}: Novo snapshot criado (ID: ${snapshotId})`);
+
               // Gerar relatório com IA
               const currentData = {
                 ticker: company.ticker,
@@ -201,6 +229,9 @@ export async function GET(request: NextRequest) {
               };
 
               try {
+                // Buscar composição do score anterior se disponível
+                const previousScoreComposition = (existingSnapshot as any).scoreComposition as ScoreComposition | undefined;
+
                 const reportContent = await MonitoringReportService.generateChangeReport({
                   ticker: company.ticker,
                   name: company.name || company.ticker,
@@ -209,13 +240,16 @@ export async function GET(request: NextRequest) {
                   previousScore,
                   currentScore,
                   changeDirection: comparison.direction,
+                  previousScoreComposition,
+                  currentScoreComposition: scoreComposition,
                 });
 
                 console.log(`📝 ${company.ticker}: Relatório gerado (${reportContent.length} chars)`);
 
-                // Salvar relatório
+                // Salvar relatório associado ao snapshot
                 const reportId = await MonitoringReportService.saveReport({
                   companyId: company.id,
+                  snapshotId,
                   content: reportContent,
                   previousScore,
                   currentScore,
@@ -225,25 +259,6 @@ export async function GET(request: NextRequest) {
 
                 console.log(`💾 ${company.ticker}: Relatório salvo (ID: ${reportId})`);
                 reportsGenerated++;
-
-                // Atualizar snapshot
-                const snapshotData = {
-                  ticker: company.ticker,
-                  name: company.name,
-                  sector: company.sector,
-                  currentPrice,
-                  strategies,
-                  overallScore: overallScoreResult,
-                  financials: latestFinancials,
-                  youtubeAnalysis: youtubeAnalysisData,
-                  timestamp: new Date().toISOString(),
-                };
-
-                await AssetMonitoringService.createOrUpdateSnapshot(
-                  company.id,
-                  snapshotData,
-                  currentScore
-                );
 
                 // Buscar inscritos e enviar emails
                 const subscribers = await AssetMonitoringService.getSubscribersForCompany(

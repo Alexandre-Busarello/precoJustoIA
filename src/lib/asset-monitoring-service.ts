@@ -16,7 +16,7 @@ export class AssetMonitoringService {
     companyId: number,
     snapshotData: Record<string, any>,
     overallScore: number,
-    scoreComposition?: ScoreComposition
+    scoreComposition: ScoreComposition | null
   ): Promise<string> {
     // Primeiro, marca todos os snapshots existentes como não sendo os mais recentes
     await safeWrite(

@@ -86,12 +86,14 @@ async function getCompaniesData(): Promise<CompanyData[]> {
           orderBy: { endDate: 'desc' },
           take: 7
         },
-        // Incluir snapshot para filtrar por overall_score
-        snapshot: {
+        // Incluir snapshots para filtrar por overall_score
+        snapshots: {
           select: {
             overallScore: true,
             updatedAt: true
-          }
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 1
         }
       },
       where: {
@@ -133,7 +135,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
       );
 
       if (validHistoricalData.length >= 20) {
-        const priceData: PriceData[] = validHistoricalData.map(data => ({
+        const priceData: PriceData[] = validHistoricalData.map((data: any) => ({
           date: data.date,
           open: Number(data.open),
           high: Number(data.high),
@@ -161,7 +163,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
     }
 
     // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
-    const historicalFinancials = company.financialData.slice(1).map(data => ({
+    const historicalFinancials = company.financialData.slice(1).map((data: any) => ({
       year: data.year,
       roe: data.roe,
       roic: data.roic,
@@ -199,7 +201,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
       balanceSheets: company.balanceSheets?.length > 0 ? company.balanceSheets : undefined,
       cashflowStatements: company.cashflowStatements?.length > 0 ? company.cashflowStatements : undefined,
       // Overall Score do snapshot mais recente
-      overallScore: company.snapshot ? toNumber(company.snapshot.overallScore) : null
+      overallScore: company.snapshots && company.snapshots.length > 0 ? toNumber(company.snapshots[0].overallScore) : null
     };
   });
 }
@@ -387,7 +389,7 @@ export async function POST(request: NextRequest) {
                 upsides.push(grahamAnalysis.upside);
                 enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
               }
-            } catch (e) {
+            } catch (_) {
               // Ignorar erro
             }
             
@@ -399,7 +401,7 @@ export async function POST(request: NextRequest) {
                   upsides.push(fcdAnalysis.upside);
                   enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
                 }
-              } catch (e) {
+              } catch (_) {
                 // Ignorar erro
               }
             }
@@ -412,7 +414,7 @@ export async function POST(request: NextRequest) {
                   upsides.push(gordonAnalysis.upside);
                   enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
                 }
-              } catch (e) {
+              } catch (_) {
                 // Ignorar erro
               }
             }
@@ -431,7 +433,7 @@ export async function POST(request: NextRequest) {
                 if (grahamAnalysis.upside !== null && grahamAnalysis.upside !== undefined) {
                   enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
                 }
-              } catch (e) {
+              } catch (_) {
                 // Silenciosamente ignorar erros
               }
             }
@@ -443,7 +445,7 @@ export async function POST(request: NextRequest) {
                 if (fcdAnalysis.upside !== null && fcdAnalysis.upside !== undefined) {
                   enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
                 }
-              } catch (e) {
+              } catch (_) {
                 // Silenciosamente ignorar erros
               }
             }
@@ -455,7 +457,7 @@ export async function POST(request: NextRequest) {
                 if (gordonAnalysis.upside !== null && gordonAnalysis.upside !== undefined) {
                   enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
                 }
-              } catch (e) {
+              } catch (_) {
                 // Silenciosamente ignorar erros
               }
             }

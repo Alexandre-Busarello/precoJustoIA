@@ -62,12 +62,14 @@ export async function getCompaniesData(): Promise<CompanyData[]> {
           orderBy: { endDate: 'desc' },
           take: 7
         },
-        // Incluir snapshot para filtrar por overall_score
-        snapshot: {
+        // Incluir snapshots para filtrar por overall_score
+        snapshots: {
           select: {
             overallScore: true,
             updatedAt: true
-          }
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 1
         }
       },
       where: {
@@ -109,7 +111,7 @@ export async function getCompaniesData(): Promise<CompanyData[]> {
       );
 
       if (validHistoricalData.length >= 20) {
-        const priceData: PriceData[] = validHistoricalData.map(data => ({
+        const priceData: PriceData[] = validHistoricalData.map((data: any) => ({
           date: data.date,
           open: Number(data.open),
           high: Number(data.high),
@@ -137,7 +139,7 @@ export async function getCompaniesData(): Promise<CompanyData[]> {
     }
 
     // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
-    const historicalFinancials = company.financialData.slice(1).map(data => ({
+    const historicalFinancials = company.financialData.slice(1).map((data: any) => ({
       year: data.year,
       roe: data.roe,
       roic: data.roic,
@@ -175,7 +177,7 @@ export async function getCompaniesData(): Promise<CompanyData[]> {
       balanceSheets: company.balanceSheets?.length > 0 ? company.balanceSheets : undefined,
       cashflowStatements: company.cashflowStatements?.length > 0 ? company.cashflowStatements : undefined,
       // Overall Score do snapshot mais recente
-      overallScore: company.snapshot ? toNumber(company.snapshot.overallScore) : null
+      overallScore: company.snapshots && company.snapshots.length > 0 ? toNumber(company.snapshots[0].overallScore) : null
     };
   });
 }

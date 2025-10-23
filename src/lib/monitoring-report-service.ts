@@ -22,7 +22,7 @@ export class MonitoringReportService {
     currentScore: number;
     changeDirection: 'positive' | 'negative';
     previousScoreComposition?: ScoreComposition;
-    currentScoreComposition?: ScoreComposition;
+    currentScoreComposition?: ScoreComposition | null;
   }): Promise<string> {
     const {
       ticker,
@@ -69,7 +69,7 @@ export class MonitoringReportService {
     currentScore: number;
     changeDirection: 'positive' | 'negative';
     previousScoreComposition?: ScoreComposition;
-    currentScoreComposition?: ScoreComposition;
+    currentScoreComposition?: ScoreComposition | null;
   }): string {
     const {
       ticker,

@@ -1424,7 +1424,7 @@ export function ScreeningConfigurator({
                 ))}
               </div>
               
-              <Select value="" onValueChange={(value) => {
+              <Select value={undefined} onValueChange={(value) => {
                 if (value && !params.selectedSectors?.includes(value)) {
                   setParams({ 
                     ...params, 
@@ -1436,7 +1436,7 @@ export function ScreeningConfigurator({
                   <SelectValue placeholder="Selecione um setor..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {sectors.filter(s => !params.selectedSectors?.includes(s)).map(sector => (
+                  {sectors.filter(s => s && s.trim() && !params.selectedSectors?.includes(s)).map(sector => (
                     <SelectItem key={sector} value={sector}>{sector}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1482,7 +1482,7 @@ export function ScreeningConfigurator({
                 ))}
               </div>
               
-              <Select value="" onValueChange={(value) => {
+              <Select value={undefined} onValueChange={(value) => {
                 if (value && !validSelectedIndustries.includes(value)) {
                   setParams({ 
                     ...params, 
@@ -1494,7 +1494,7 @@ export function ScreeningConfigurator({
                   <SelectValue placeholder="Selecione uma indústria..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableIndustries.filter(i => !validSelectedIndustries.includes(i)).map(industry => (
+                  {availableIndustries.filter(i => i && i.trim() && !validSelectedIndustries.includes(i)).map(industry => (
                     <SelectItem key={industry} value={industry}>{industry}</SelectItem>
                   ))}
                 </SelectContent>

@@ -71,6 +71,10 @@ export async function POST(request: NextRequest) {
     Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
     Se necessário consulte na internet com a ferramente de busca para garantir que os TICKERs são válidos. 
     - Exemplos de TICKERs inválidos: "SABESP4", "CESP6" (Ticker não existe mais) e etc...
+      - ETF: geralmente o ticker termina em 11;
+      - FII: geralmente o ticker termina em 11;
+      - BDR: geralmente o ticker termina em 34 para BDRs Não Patrocinados e 32 ou 33 para BDRs Patrocinados;
+      - Ações: geralmente ordinárias (ON) terminam em 3, enquanto ações preferenciais (PN) terminam em 4. Já 5, 6, 7, 8: Diferentes classes de ações preferenciais (classe A, B, etc.) e 11: Utilizado para units (pacotes que combinam ações ON e PN), fundos imobiliários (FIIs) e BDRs (Brazilian Depositary Receipts);
 
 Analise a seguinte instrução do usuário e determine se precisa fazer screening de ações ou se já tem uma lista específica de ativos:
 
@@ -235,6 +239,10 @@ Analise a instrução e retorne APENAS o JSON:`;
     Você deve escolher apenas TICKERs válidos que são listados na B3 (ETFs, FIIs, Ações ou BDR), não escolha ativos de outras bolsas ou que não sejam da B3.
     Se necessário consulte na internet com a ferramente de busca para garantir que os TICKERs são válidos. 
     - Exemplos de TICKERs inválidos: "SABESP4", "CESP6" (Ticker não existe mais) e etc...
+      - ETF: geralmente o ticker termina em 11;
+      - FII: geralmente o ticker termina em 11;
+      - BDR: geralmente o ticker termina em 34 para BDRs Não Patrocinados e 32 ou 33 para BDRs Patrocinados;
+      - Ações: geralmente ordinárias (ON) terminam em 3, enquanto ações preferenciais (PN) terminam em 4. Já 5, 6, 7, 8: Diferentes classes de ações preferenciais (classe A, B, etc.) e 11: Utilizado para units (pacotes que combinam ações ON e PN), fundos imobiliários (FIIs) e BDRs (Brazilian Depositary Receipts);
 
 Sua tarefa é criar uma carteira com alocações específicas baseada nos dados fornecidos.
 

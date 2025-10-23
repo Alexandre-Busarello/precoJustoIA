@@ -79,4 +79,10 @@ company.financialData.slice(1).map((data: any) => ({...}))
 - Proper handling of snapshots data with latest record selection
 
 ## Database Schema Alignment
-The fix ensures the API correctly uses the `snapshots` table (plural) instead of trying to access a non-existent `snapshot` property. This aligns with the actual Prisma schema where companies have multiple snapshots over time, and we want the most recent one for the overall score.
+The fix ensures both the API route and service correctly use the `snapshots` table (plural) instead of trying to access a non-existent `snapshot` property. This aligns with the actual Prisma schema where companies have multiple snapshots over time, and we want the most recent one for the overall score.
+
+## Impact
+- Both rank-builder API and service now compile without TypeScript errors
+- Consistent data access pattern across the codebase
+- Proper handling of company snapshots with latest overall score
+- Maintains all existing functionality while fixing type safety issues

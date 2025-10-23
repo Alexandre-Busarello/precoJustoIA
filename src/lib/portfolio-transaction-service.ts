@@ -1407,8 +1407,8 @@ export class PortfolioTransactionService {
   }
 
   /**
-   * Generate rebalancing transactions
-   * Prioritizes selling profitable assets first to avoid selling assets with negative returns
+   * Generate rebalancing transactions using NET POSITION calculation
+   * Avoids selling and buying the same asset by calculating net changes needed
    */
   private static generateRebalanceTransactions(
     assets: any[],
@@ -1422,7 +1422,22 @@ export class PortfolioTransactionService {
     const suggestions: SuggestedTransaction[] = [];
     let cashBalance = availableCash;
 
-    // Calculate profitability for each holding
+    console.log(`🔄 [NET REBALANCING] Starting net position calculation...`);
+
+    // 🔧 ESTRATÉGIA HÍBRIDA: 
+    // 1. Calcular targets baseado no valor atual (para identificar sobrealocados)
+    // 2. Considerar caixa disponível para investir em subalocados
+    const currentPortfolioValue = portfolioValue;
+    const totalValueWithCash = portfolioValue + availableCash;
+
+    console.log(`💰 [REBALANCING VALUES]:`, {
+      currentPortfolioValue: currentPortfolioValue.toFixed(2),
+      availableCash: availableCash.toFixed(2),
+      totalValueWithCash: totalValueWithCash.toFixed(2),
+      strategy: "Hybrid: current value for sells, total value for buys",
+    });
+
+    // Calculate profitability for prioritizing sells
     const profitability = new Map<string, number>();
     for (const [ticker, holding] of holdings) {
       const currentValue = holding.quantity * (prices.get(ticker) || 0);
@@ -1432,223 +1447,250 @@ export class PortfolioTransactionService {
       profitability.set(ticker, profitPercent);
     }
 
-    // Identify overallocated assets and sort by profitability (highest first)
-    // 🔧 CORREÇÃO: Usando threshold de 5% para evitar rebalanceamentos desnecessários
-    const overallocatedAssets = assets
-      .map((asset) => ({
-        ...asset,
-        currentAlloc: currentAllocations.get(asset.ticker) || 0,
-        targetAlloc: Number(asset.targetAllocation),
-        profitability: profitability.get(asset.ticker) || 0,
-      }))
-      .filter((asset) => {
-        // 🔧 CORREÇÃO: Usar threshold adaptativo também aqui
-        const adaptiveThreshold = Math.max(0.02, asset.targetAlloc * 0.3);
-        return asset.currentAlloc > asset.targetAlloc + adaptiveThreshold;
-      })
-      .sort((a, b) => b.profitability - a.profitability); // Sort by profitability DESC
+    // Calculate net position changes needed for each asset
+    const netChanges: Array<{
+      ticker: string;
+      currentQuantity: number;
+      targetQuantity: number;
+      netQuantityChange: number;
+      netValueChange: number;
+      price: number;
+      profitability: number;
+      targetAlloc: number;
+      currentAlloc: number;
+    }> = [];
 
-    // Separate positive and negative profitability assets
-    const positiveAssets = overallocatedAssets.filter(
-      (a) => a.profitability >= 0
-    );
-    const negativeAssets = overallocatedAssets.filter(
-      (a) => a.profitability < 0
-    );
-
-    // Sell positive profitability assets first
-    for (const asset of positiveAssets) {
+    for (const asset of assets) {
       const price = prices.get(asset.ticker);
-      if (!price) continue;
-
-      const holding = holdings.get(asset.ticker);
-      if (!holding || holding.quantity === 0) continue;
-
-      const excessValue =
-        (asset.currentAlloc - asset.targetAlloc) * portfolioValue;
-      const sharesToSell = Math.floor(excessValue / price);
-
-      // Only sell if we can sell at least 1 share
-      if (sharesToSell >= 1) {
-        const actualSellAmount = sharesToSell * price;
-        const profitText =
-          asset.profitability >= 0
-            ? `+${(asset.profitability * 100).toFixed(1)}%`
-            : `${(asset.profitability * 100).toFixed(1)}%`;
-
-        suggestions.push({
-          date,
-          type: "SELL_REBALANCE",
-          ticker: asset.ticker,
-          amount: actualSellAmount,
-          price,
-          quantity: sharesToSell,
-          reason: `Rebalanceamento: venda de ${sharesToSell} ações (alocação atual ${(
-            asset.currentAlloc * 100
-          ).toFixed(1)}% > alvo ${(asset.targetAlloc * 100).toFixed(
-            1
-          )}%, rentabilidade: ${profitText})`,
-          cashBalanceBefore: cashBalance,
-          cashBalanceAfter: cashBalance + actualSellAmount,
-        });
-
-        cashBalance += actualSellAmount;
+      if (!price) {
+        console.log(`⚠️ [SKIP] ${asset.ticker}: No price available`);
+        continue;
       }
-    }
 
-    // Only sell negative profitability assets if no positive alternatives remain
-    // This avoids crystallizing losses unnecessarily
-    if (positiveAssets.length === 0 && negativeAssets.length > 0) {
-      console.warn(
-        "⚠️ REBALANCING: No profitable overallocated assets available. Selling negative profitability assets as last resort."
-      );
+      const currentHolding = holdings.get(asset.ticker) || { quantity: 0, totalInvested: 0 };
+      const currentQuantity = currentHolding.quantity;
+      const targetAlloc = Number(asset.targetAllocation);
+      const currentAlloc = currentAllocations.get(asset.ticker) || 0;
 
-      for (const asset of negativeAssets) {
-        const price = prices.get(asset.ticker);
-        if (!price) continue;
+      // 🔧 ESTRATÉGIA HÍBRIDA: Calcular target baseado no contexto
+      // Para identificar sobrealocados: usar valor atual do portfólio
+      // Para investir caixa: considerar valor total (portfólio + caixa)
+      const currentTargetValue = currentPortfolioValue * targetAlloc;
+      
+      // Se ativo está sobrealocado, usar target atual (para venda)
+      // Se ativo está subalocado, considerar caixa disponível (para compra)
+      const isOverallocated = currentAlloc > targetAlloc;
+      const targetValue = isOverallocated ? currentTargetValue : totalValueWithCash * targetAlloc;
+      const targetQuantity = Math.floor(targetValue / price);
+      
+      const netQuantityChange = targetQuantity - currentQuantity;
+      const netValueChange = netQuantityChange * price;
 
-        const holding = holdings.get(asset.ticker);
-        if (!holding || holding.quantity === 0) continue;
-
-        const excessValue =
-          (asset.currentAlloc - asset.targetAlloc) * portfolioValue;
-        const sharesToSell = Math.floor(excessValue / price);
-
-        // Only sell if we can sell at least 1 share
-        if (sharesToSell >= 1) {
-          const actualSellAmount = sharesToSell * price;
-          const profitText = `${(asset.profitability * 100).toFixed(1)}%`;
-
-          suggestions.push({
-            date,
-            type: "SELL_REBALANCE",
-            ticker: asset.ticker,
-            amount: actualSellAmount,
-            price,
-            quantity: sharesToSell,
-            reason: `Rebalanceamento: venda de ${sharesToSell} ações (alocação atual ${(
-              asset.currentAlloc * 100
-            ).toFixed(1)}% > alvo ${(asset.targetAlloc * 100).toFixed(
-              1
-            )}%, rentabilidade: ${profitText})`,
-            cashBalanceBefore: cashBalance,
-            cashBalanceAfter: cashBalance + actualSellAmount,
-          });
-
-          cashBalance += actualSellAmount;
-        }
-      }
-    }
-
-    // Then, buy underallocated assets
-    // 🔧 CORREÇÃO: Usar caixa disponível para comprar ativos conforme alocação target
-    // Se há caixa disponível, devemos investir conforme a alocação target
-    if (cashBalance > 0) {
-      console.log(`💰 [REBALANCING - BUY] Starting buy phase:`, {
-        availableCash: cashBalance.toFixed(2),
-        portfolioValue: portfolioValue.toFixed(2),
-        assetsCount: assets.length,
+      netChanges.push({
+        ticker: asset.ticker,
+        currentQuantity,
+        targetQuantity,
+        netQuantityChange,
+        netValueChange,
+        price,
+        profitability: profitability.get(asset.ticker) || 0,
+        targetAlloc,
+        currentAlloc,
       });
 
-      // 🔧 ESTRATÉGIA: Distribuir o caixa disponível conforme alocação target
-      // Isso funciona tanto para rebalanceamento quanto para investimento inicial
-      const initialCash = cashBalance;
-
-      for (const asset of assets) {
-        if (cashBalance <= 0) break; // No more cash available
-
-        const currentAlloc = currentAllocations.get(asset.ticker) || 0;
-        const targetAlloc = Number(asset.targetAllocation);
-        const price = prices.get(asset.ticker);
-
-        if (!price) {
-          console.log(`⚠️ [SKIP] ${asset.ticker}: No price available`);
-          continue;
-        }
-
-        console.log(`🔍 [ANALYZING] ${asset.ticker}:`, {
-          currentAlloc: (currentAlloc * 100).toFixed(2) + "%",
-          targetAlloc: (targetAlloc * 100).toFixed(2) + "%",
-          price: price.toFixed(2),
-        });
-
-        // 🔧 CORREÇÃO: Sempre comprar se há caixa disponível
-        // Distribuir o caixa inicial conforme a alocação target
-        const targetAmount = initialCash * targetAlloc;
-        const sharesToBuy = Math.floor(targetAmount / price);
-
-        console.log(`💡 [CALCULATION] ${asset.ticker}:`, {
-          targetAmount: targetAmount.toFixed(2),
-          sharesToBuy,
-          wouldCost: (sharesToBuy * price).toFixed(2),
-        });
-
-        // Only buy if we can buy at least 1 share
-        if (sharesToBuy >= 1) {
-          const actualBuyAmount = sharesToBuy * price;
-
-          suggestions.push({
-            date,
-            type: "BUY_REBALANCE",
-            ticker: asset.ticker,
-            amount: actualBuyAmount,
-            price,
-            quantity: sharesToBuy,
-            reason: `Rebalanceamento: compra de ${sharesToBuy} ações (alocação atual ${(
-              currentAlloc * 100
-            ).toFixed(1)}% → alvo ${(targetAlloc * 100).toFixed(1)}%)`,
-            cashBalanceBefore: cashBalance,
-            cashBalanceAfter: cashBalance - actualBuyAmount,
-          });
-
-          cashBalance -= actualBuyAmount;
-
-          console.log(
-            `✅ [BUY REBALANCE] ${
-              asset.ticker
-            }: ${sharesToBuy} shares × R$ ${price.toFixed(
-              2
-            )} = R$ ${actualBuyAmount.toFixed(2)}`
-          );
-        } else {
-          console.log(
-            `⏩ [SKIP] ${
-              asset.ticker
-            }: Not enough cash for 1 share (need R$ ${price.toFixed(2)})`
-          );
-        }
-      }
-
-      if (cashBalance > 0) {
-        console.log(
-          `💵 [REMAINING CASH] R$ ${cashBalance.toFixed(
-            2
-          )} (not enough for 1 share of any asset)`
-        );
-      }
-    } else {
-      console.log(`⚠️ [NO CASH] No cash available for buying`);
+      console.log(`📊 [NET CALC] ${asset.ticker}:`, {
+        current: `${currentQuantity} shares (${(currentAlloc * 100).toFixed(1)}%)`,
+        target: `${targetQuantity} shares (${(targetAlloc * 100).toFixed(1)}%)`,
+        netChange: `${netQuantityChange > 0 ? '+' : ''}${netQuantityChange} shares`,
+        netValue: `${netValueChange > 0 ? '+' : ''}R$ ${netValueChange.toFixed(2)}`,
+        profitability: `${((profitability.get(asset.ticker) || 0) * 100).toFixed(1)}%`,
+        targetValue: `R$ ${targetValue.toFixed(2)}`,
+        currentValue: `R$ ${(currentQuantity * price).toFixed(2)}`,
+        action: netQuantityChange > 0 ? 'BUY' : netQuantityChange < 0 ? 'SELL' : 'HOLD',
+        strategy: isOverallocated ? 'SELL_BASED_ON_CURRENT' : 'BUY_WITH_CASH',
+      });
     }
 
-    // Validate rebalancing transactions (sells should generate buys)
+    // Separate sells and buys, prioritizing profitable sells
+    const sellChanges = netChanges
+      .filter(change => change.netQuantityChange < 0)
+      .sort((a, b) => b.profitability - a.profitability); // Most profitable first
+
+    const buyChanges = netChanges
+      .filter(change => change.netQuantityChange > 0);
+
+    console.log(`🔍 [REBALANCING ANALYSIS]:`, {
+      totalAssets: netChanges.length,
+      sellCandidates: sellChanges.length,
+      buyCandidates: buyChanges.length,
+      sellTickers: sellChanges.map(c => `${c.ticker}(${c.netQuantityChange})`),
+      buyTickers: buyChanges.map(c => `${c.ticker}(+${c.netQuantityChange})`),
+    });
+
+    // Process sells first (generate cash)
+    for (const change of sellChanges) {
+      const sharesToSell = Math.abs(change.netQuantityChange);
+      const sellValue = sharesToSell * change.price;
+      const profitText = change.profitability >= 0 
+        ? `+${(change.profitability * 100).toFixed(1)}%`
+        : `${(change.profitability * 100).toFixed(1)}%`;
+
+      suggestions.push({
+        date,
+        type: "SELL_REBALANCE",
+        ticker: change.ticker,
+        amount: sellValue,
+        price: change.price,
+        quantity: sharesToSell,
+        reason: `Rebalanceamento: venda de ${sharesToSell} ações (alocação atual ${(
+          change.currentAlloc * 100
+        ).toFixed(1)}% → alvo ${(change.targetAlloc * 100).toFixed(
+          1
+        )}%, rentabilidade: ${profitText})`,
+        cashBalanceBefore: cashBalance,
+        cashBalanceAfter: cashBalance + sellValue,
+      });
+
+      cashBalance += sellValue;
+
+      console.log(
+        `📉 [SELL NET] ${change.ticker}: ${sharesToSell} shares × R$ ${change.price.toFixed(
+          2
+        )} = R$ ${sellValue.toFixed(2)} (profit: ${profitText})`
+      );
+    }
+
+    // Process buys (use available cash)
+    for (const change of buyChanges) {
+      const sharesToBuy = change.netQuantityChange;
+      const buyValue = sharesToBuy * change.price;
+
+      // Check if we have enough cash
+      if (buyValue <= cashBalance) {
+        suggestions.push({
+          date,
+          type: "BUY_REBALANCE",
+          ticker: change.ticker,
+          amount: buyValue,
+          price: change.price,
+          quantity: sharesToBuy,
+          reason: `Rebalanceamento: compra de ${sharesToBuy} ações (alocação atual ${(
+            change.currentAlloc * 100
+          ).toFixed(1)}% → alvo ${(change.targetAlloc * 100).toFixed(1)}%)`,
+          cashBalanceBefore: cashBalance,
+          cashBalanceAfter: cashBalance - buyValue,
+        });
+
+        cashBalance -= buyValue;
+
+        console.log(
+          `📈 [BUY NET] ${change.ticker}: ${sharesToBuy} shares × R$ ${change.price.toFixed(
+            2
+          )} = R$ ${buyValue.toFixed(2)}`
+        );
+      } else {
+        console.log(
+          `⚠️ [INSUFFICIENT CASH] ${change.ticker}: Need R$ ${buyValue.toFixed(
+            2
+          )} but only R$ ${cashBalance.toFixed(2)} available`
+        );
+      }
+    }
+
+    // 💰 INVESTIR CAIXA RESTANTE: Se ainda há caixa significativo, consolidar com transações existentes
+    if (cashBalance > 100) { // Só se houver mais de R$ 100 restantes
+      console.log(`💵 [REMAINING CASH INVESTMENT] Distributing remaining R$ ${cashBalance.toFixed(2)}`);
+      
+      // Encontrar ativos que ainda podem receber investimento adicional
+      const assetsForAdditionalInvestment = assets.filter(asset => {
+        const currentAlloc = currentAllocations.get(asset.ticker) || 0;
+        const targetAlloc = Number(asset.targetAllocation);
+        return currentAlloc < targetAlloc; // Ainda subalocados
+      });
+
+      if (assetsForAdditionalInvestment.length > 0) {
+        // Distribuir caixa restante proporcionalmente entre ativos subalocados
+        for (const asset of assetsForAdditionalInvestment) {
+          if (cashBalance <= 0) break;
+          
+          const price = prices.get(asset.ticker);
+          if (!price) continue;
+          
+          const targetAlloc = Number(asset.targetAllocation);
+          const proportionalCash = cashBalance * (targetAlloc / assetsForAdditionalInvestment.reduce((sum, a) => sum + Number(a.targetAllocation), 0));
+          const additionalShares = Math.floor(proportionalCash / price);
+          
+          if (additionalShares >= 1) {
+            const additionalValue = additionalShares * price;
+            
+            // 🔧 CONSOLIDAR: Verificar se já existe uma transação de compra para este ativo
+            const existingBuyIndex = suggestions.findIndex(s => 
+              s.type === "BUY_REBALANCE" && s.ticker === asset.ticker
+            );
+            
+            if (existingBuyIndex >= 0) {
+              // Consolidar com transação existente
+              const existingSuggestion = suggestions[existingBuyIndex];
+              const newQuantity = (existingSuggestion.quantity || 0) + additionalShares;
+              const newAmount = (existingSuggestion.amount || 0) + additionalValue;
+              
+              suggestions[existingBuyIndex] = {
+                ...existingSuggestion,
+                amount: newAmount,
+                quantity: newQuantity,
+                reason: `Rebalanceamento: compra de ${newQuantity} ações (alocação atual ${(currentAllocations.get(asset.ticker) || 0) * 100}% → alvo ${targetAlloc * 100}%, inclui investimento de caixa restante)`,
+                cashBalanceAfter: cashBalance - additionalValue,
+              };
+              
+              console.log(`🔄 [CONSOLIDATED] ${asset.ticker}: Updated existing buy from ${existingSuggestion.quantity || 0} to ${newQuantity} shares (+${additionalShares} from remaining cash)`);
+            } else {
+              // Criar nova transação se não existir
+              suggestions.push({
+                date,
+                type: "BUY_REBALANCE",
+                ticker: asset.ticker,
+                amount: additionalValue,
+                price: price,
+                quantity: additionalShares,
+                reason: `Investimento de caixa restante: compra de ${additionalShares} ações adicionais`,
+                cashBalanceBefore: cashBalance,
+                cashBalanceAfter: cashBalance - additionalValue,
+              });
+              
+              console.log(`💰 [ADDITIONAL INVESTMENT] ${asset.ticker}: +${additionalShares} shares (R$ ${additionalValue.toFixed(2)})`);
+            }
+            
+            cashBalance -= additionalValue;
+          }
+        }
+      }
+    }
+
+    // Summary
     const sells = suggestions.filter((s) => s.type === "SELL_REBALANCE");
     const buys = suggestions.filter((s) => s.type === "BUY_REBALANCE");
     const totalSold = sells.reduce((sum, s) => sum + s.amount, 0);
     const totalBought = buys.reduce((sum, s) => sum + s.amount, 0);
 
-    if (sells.length > 0 && buys.length === 0) {
-      console.warn("⚠️ REBALANCING: Generated sells without buys!", {
-        totalSold,
-        sellCount: sells.length,
-        availableCash: cashBalance,
-      });
-    } else if (sells.length > 0 && buys.length > 0) {
-      console.log(`✅ REBALANCING: Paired transactions generated`, {
-        sells: sells.length,
-        buys: buys.length,
-        totalSold: totalSold.toFixed(2),
-        totalBought: totalBought.toFixed(2),
-      });
+    console.log(`✅ [NET REBALANCING SUMMARY]:`, {
+      sells: sells.length,
+      buys: buys.length,
+      totalSold: totalSold.toFixed(2),
+      totalBought: totalBought.toFixed(2),
+      remainingCash: cashBalance.toFixed(2),
+      netCashChange: (totalSold - totalBought).toFixed(2),
+      cashUtilization: `${(((availableCash - cashBalance) / availableCash) * 100).toFixed(1)}%`,
+    });
+
+    // Validate: no asset should appear in both sell and buy
+    const sellTickers = new Set(sells.map(s => s.ticker));
+    const buyTickers = new Set(buys.map(s => s.ticker));
+    const overlap = [...sellTickers].filter(ticker => buyTickers.has(ticker));
+    
+    if (overlap.length > 0) {
+      console.error(`🚨 [LOGIC ERROR] Assets appear in both sell and buy:`, overlap);
+    } else {
+      console.log(`✅ [VALIDATION] No asset appears in both sell and buy operations`);
     }
 
     return suggestions;

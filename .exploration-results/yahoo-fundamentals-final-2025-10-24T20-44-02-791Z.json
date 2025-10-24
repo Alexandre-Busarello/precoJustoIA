@@ -1,0 +1,107 @@
+{
+  "timestamp": "2025-10-24T20:44:02.791Z",
+  "totalTests": 8,
+  "successfulTests": 0,
+  "failedTests": 8,
+  "testedTickers": [
+    "PETR4.SA"
+  ],
+  "testedModules": [
+    "balance-sheet",
+    "financials",
+    "cash-flow",
+    "all"
+  ],
+  "testedPeriodTypes": [
+    "annual",
+    "quarterly",
+    "trailing"
+  ],
+  "results": [
+    {
+      "ticker": "PETR4.SA",
+      "module": "balance-sheet",
+      "type": "annual",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:43:52.320Z",
+      "error": "Failed Yahoo Schema validation"
+    },
+    {
+      "ticker": "PETR4.SA",
+      "module": "balance-sheet",
+      "type": "quarterly",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:43:53.287Z",
+      "error": "Failed Yahoo Schema validation"
+    },
+    {
+      "ticker": "PETR4.SA",
+      "module": "financials",
+      "type": "annual",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:43:54.313Z",
+      "error": "Failed Yahoo Schema validation"
+    },
+    {
+      "ticker": "PETR4.SA",
+      "module": "financials",
+      "type": "quarterly",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:43:55.423Z",
+      "error": "Failed Yahoo Schema validation"
+    },
+    {
+      "ticker": "PETR4.SA",
+      "module": "cash-flow",
+      "type": "annual",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:43:56.345Z",
+      "error": "Failed Yahoo Schema validation"
+    },
+    {
+      "ticker": "PETR4.SA",
+      "module": "cash-flow",
+      "type": "quarterly",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:43:57.328Z",
+      "error": "Failed Yahoo Schema validation"
+    },
+    {
+      "ticker": "PETR4.SA",
+      "module": "all",
+      "type": "annual",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:43:58.306Z",
+      "error": "Failed Yahoo Schema validation"
+    },
+    {
+      "ticker": "PETR4.SA",
+      "module": "all",
+      "type": "quarterly",
+      "period": "2020-01-01",
+      "success": false,
+      "dataCount": 0,
+      "timestamp": "2025-10-24T20:44:00.055Z",
+      "error": "Failed Yahoo Schema validation"
+    }
+  ],
+  "recommendations": {
+    "usable": false,
+    "bestModules": [],
+    "bestTypes": []
+  }
+}

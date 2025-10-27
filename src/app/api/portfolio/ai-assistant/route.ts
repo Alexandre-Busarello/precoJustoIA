@@ -244,7 +244,7 @@ Analise a instrução e retorne APENAS o JSON:`;
       - BDR: geralmente o ticker termina em 34 para BDRs Não Patrocinados e 32 ou 33 para BDRs Patrocinados;
       - Ações: geralmente ordinárias (ON) terminam em 3, enquanto ações preferenciais (PN) terminam em 4. Já 5, 6, 7, 8: Diferentes classes de ações preferenciais (classe A, B, etc.) e 11: Utilizado para units (pacotes que combinam ações ON e PN), fundos imobiliários (FIIs) e BDRs (Brazilian Depositary Receipts);
 
-Sua tarefa é criar uma carteira com alocações específicas baseada nos dados fornecidos.
+Sua tarefa é criar uma carteira com alocações específicas baseada nos dados fornecidos e EXPLICAR DETALHADAMENTE suas decisões.
 
 **INSTRUÇÃO ORIGINAL**: "${userPrompt}"
 
@@ -291,8 +291,15 @@ Você deve retornar APENAS um objeto JSON válido (sem markdown, sem explicaçõ
       "targetAllocation": 0.25
     }
   ],
-  "reasoning": "Breve explicação da estratégia (máximo 150 caracteres)",
-  "dataSource": "screening|specific|general"
+  "reasoning": "Explicação detalhada das decisões tomadas, especialmente modificações em relação à carteira atual",
+  "dataSource": "screening|specific|general",
+  "modifications": [
+    {
+      "action": "added|removed|replaced|rebalanced",
+      "ticker": "TICKER1",
+      "reason": "Motivo específico da modificação"
+    }
+  ]
 }
 
 **REGRAS CRÍTICAS**:
@@ -303,6 +310,11 @@ ${analysis.isIteration ? `
 - **Adicionar**: Inclua novos ativos redistribuindo as alocações proporcionalmente
 - **Remover**: Exclua ativos mencionados e redistribua para os restantes
 - **Rebalancear**: Ajuste apenas as alocações sem trocar ativos
+
+**OBRIGATÓRIO para iterações**: 
+- No "reasoning": COMPARE a carteira atual com a nova e EXPLIQUE cada mudança
+- No "modifications": LISTE CADA ativo modificado com ação específica e motivo detalhado
+- JUSTIFIQUE por que cada substituição/adição/remoção foi feita
 
 **Exemplos de iteração**:
 - "Troque SMAL11 por BOVA11" → Substitua apenas esse ativo
@@ -337,8 +349,10 @@ ${analysis.isIteration ? `
 - NÃO use tickers inventados
 - PRIORIZE os dados fornecidos pelo screening quando disponíveis
 - Para carteiras mistas (ações + FIIs), use proporção adequada
-- Mantenha o "reasoning" conciso e objetivo
+- No "reasoning": EXPLIQUE DETALHADAMENTE suas decisões, especialmente quando há carteira atual
+- No "modifications": LISTE CADA MODIFICAÇÃO com ação específica e motivo
 - Priorize carteira com pelo MENOS 10 ativos (se não for informado um valor exato)
+- Quando há carteira atual, COMPARE e EXPLIQUE as mudanças feitas
 
 Analise os dados e retorne APENAS o JSON da carteira:`;
 
@@ -413,6 +427,7 @@ Analise os dados e retorne APENAS o JSON da carteira:`;
       success: true,
       assets: result.assets,
       reasoning: result.reasoning || "Carteira gerada pela IA",
+      modifications: result.modifications || [],
       dataSource:
         result.dataSource ||
         (screeningResults.length > 0 ? "screening" : "general"),

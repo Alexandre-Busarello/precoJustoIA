@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Bot, 
@@ -12,7 +13,9 @@ import {
   Loader2, 
   CheckCircle, 
   AlertCircle,
-  Lightbulb
+  Lightbulb,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 
 interface Asset {
@@ -32,6 +35,14 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
   const [loading, setLoading] = useState(false);
   const [generatedAssets, setGeneratedAssets] = useState<Asset[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [aiReasoning, setAiReasoning] = useState<string>('');
+  const [dataSource, setDataSource] = useState<string>('');
+  const [modifications, setModifications] = useState<Array<{
+    action: string;
+    ticker: string;
+    reason: string;
+  }>>([]);
+  const [isReasoningOpen, setIsReasoningOpen] = useState(false);
 
   const examplePrompts = currentAssets.length > 0 ? [
     // Exemplos para iteração (quando há carteira atual)
@@ -86,6 +97,9 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
       }
 
       setGeneratedAssets(data.assets);
+      setAiReasoning(data.reasoning || 'Carteira configurada pela IA');
+      setDataSource(data.dataSource || 'general');
+      setModifications(data.modifications || []);
       setShowResults(true);
 
       const screeningInfo = data.screeningUsed 
@@ -114,6 +128,10 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
     setShowResults(false);
     setPrompt('');
     setGeneratedAssets([]);
+    setAiReasoning('');
+    setDataSource('');
+    setModifications([]);
+    setIsReasoningOpen(false);
     
     toast({
       title: 'Ativos aplicados!',
@@ -248,6 +266,102 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
                 <h4 className="font-semibold">Carteira Gerada pela IA</h4>
               </div>
 
+              {/* AI Reasoning Section - Collapsible */}
+              {aiReasoning && (
+                <Collapsible open={isReasoningOpen} onOpenChange={setIsReasoningOpen}>
+                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-between p-4 h-auto hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Bot className="h-4 w-4 text-blue-600" />
+                          <div className="flex flex-col items-start">
+                            <span className="font-medium text-blue-900 dark:text-blue-100 text-sm">
+                              {isReasoningOpen ? 'Racional da IA' : 'Ver Racional da IA'}
+                            </span>
+                            {!isReasoningOpen && (
+                              <span className="text-xs text-blue-700 dark:text-blue-300">
+                                Clique para ver a explicação detalhada
+                              </span>
+                            )}
+                          </div>
+                          {modifications.length > 0 && currentAssets.length > 0 && (
+                            <Badge variant="outline" className="text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
+                              {modifications.length} modificações
+                            </Badge>
+                          )}
+                        </div>
+                        {isReasoningOpen ? (
+                          <ChevronDown className="h-4 w-4 text-blue-600" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-blue-600" />
+                        )}
+                      </Button>
+                    </CollapsibleTrigger>
+                    
+                    <CollapsibleContent className="px-4 pb-4">
+                      <div className="space-y-3 pt-2 border-t border-blue-200 dark:border-blue-800">
+                        <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
+                          {aiReasoning}
+                        </p>
+                        
+                        {/* Detailed Modifications */}
+                        {modifications.length > 0 && currentAssets.length > 0 && (
+                          <div className="space-y-2">
+                            <h6 className="font-medium text-blue-900 dark:text-blue-100 text-xs">
+                              Modificações Realizadas:
+                            </h6>
+                            <div className="space-y-1">
+                              {modifications.map((mod, index) => (
+                                <div key={index} className="flex items-start gap-2 text-xs">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs flex-shrink-0 ${
+                                      mod.action === 'added' ? 'border-green-300 text-green-700 dark:border-green-700 dark:text-green-300' :
+                                      mod.action === 'removed' ? 'border-red-300 text-red-700 dark:border-red-700 dark:text-red-300' :
+                                      mod.action === 'replaced' ? 'border-orange-300 text-orange-700 dark:border-orange-700 dark:text-orange-300' :
+                                      'border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300'
+                                    }`}
+                                  >
+                                    {mod.action === 'added' && '+ Adicionado'}
+                                    {mod.action === 'removed' && '- Removido'}
+                                    {mod.action === 'replaced' && '↔ Substituído'}
+                                    {mod.action === 'rebalanced' && '⚖ Rebalanceado'}
+                                  </Badge>
+                                  <div className="flex-1">
+                                    <span className="font-medium text-blue-900 dark:text-blue-100">
+                                      {mod.ticker}
+                                    </span>
+                                    <span className="text-blue-700 dark:text-blue-300 ml-1">
+                                      - {mod.reason}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {dataSource && (
+                          <div className="flex items-center gap-1 mt-2">
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300"
+                            >
+                              {dataSource === 'screening' && 'Baseado em screening fundamentalista'}
+                              {dataSource === 'specific' && 'Baseado em ativos específicos'}
+                              {dataSource === 'general' && 'Baseado em conhecimento geral'}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              )}
+
               <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border">
                 <div className="space-y-3">
                   {generatedAssets.map((asset, index) => (
@@ -299,6 +413,10 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
                   onClick={() => {
                     setShowResults(false);
                     setGeneratedAssets([]);
+                    setAiReasoning('');
+                    setDataSource('');
+                    setModifications([]);
+                    setIsReasoningOpen(false);
                   }}
                 >
                   Gerar Novamente

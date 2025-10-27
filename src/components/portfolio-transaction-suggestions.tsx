@@ -4,9 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { portfolioCache } from '@/lib/portfolio-cache';
-import { invalidateDashboardPortfoliosCache } from './dashboard-portfolios';
 import {
   CheckCircle2,
   XCircle,
@@ -15,7 +15,9 @@ import {
   DollarSign,
   Calendar,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -57,6 +59,9 @@ export function PortfolioTransactionSuggestions({
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [startingTracking, setStartingTracking] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [confirmingMonth, setConfirmingMonth] = useState<string | null>(null);
+  const [rejectingMonth, setRejectingMonth] = useState<string | null>(null);
   
   // Use ref for lock to survive re-renders (React StrictMode safe)
   const isCreatingSuggestionsRef = useRef(false);
@@ -97,6 +102,7 @@ export function PortfolioTransactionSuggestions({
       // 2. Reset locks and reload suggestions
       isCreatingSuggestionsRef.current = false;
       hasLoadedOnceRef.current = false;
+      hasAutoExpandedRef.current = false; // Reset auto-expand flag
       await loadSuggestions();
       
       toast({
@@ -312,6 +318,7 @@ export function PortfolioTransactionSuggestions({
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
+      hasAutoExpandedRef.current = false; // Reset auto-expand flag
       loadSuggestions();
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
@@ -348,6 +355,7 @@ export function PortfolioTransactionSuggestions({
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
+      hasAutoExpandedRef.current = false; // Reset auto-expand flag
       loadSuggestions();
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
@@ -392,6 +400,7 @@ export function PortfolioTransactionSuggestions({
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
+      hasAutoExpandedRef.current = false; // Reset auto-expand flag
       loadSuggestions();
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
@@ -428,6 +437,114 @@ export function PortfolioTransactionSuggestions({
     return labels[type] || type;
   };
 
+  const toggleMonth = (month: string) => {
+    const newExpanded = new Set(expandedMonths);
+    if (newExpanded.has(month)) {
+      newExpanded.delete(month);
+    } else {
+      newExpanded.add(month);
+    }
+    setExpandedMonths(newExpanded);
+  };
+
+  const handleConfirmMonth = async (month: string, transactions: SuggestedTransaction[]) => {
+    if (!confirm(`Confirmar todas as ${transactions.length} transações de ${month}?`)) {
+      return;
+    }
+
+    try {
+      setConfirmingMonth(month);
+      
+      const transactionIds = transactions.map(tx => tx.id);
+      
+      const response = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/confirm-batch`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionIds })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao confirmar transações');
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: `${transactions.length} transações de ${month} confirmadas`
+      });
+
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
+
+      // Reset lock before reloading
+      isCreatingSuggestionsRef.current = false;
+      hasAutoExpandedRef.current = false; // Reset auto-expand flag
+      loadSuggestions();
+      if (onTransactionsConfirmed) onTransactionsConfirmed();
+    } catch {
+      toast({
+        title: 'Erro',
+        description: `Erro ao confirmar transações de ${month}`,
+        variant: 'destructive'
+      });
+    } finally {
+      setConfirmingMonth(null);
+    }
+  };
+
+  const handleRejectMonth = async (month: string, transactions: SuggestedTransaction[]) => {
+    if (!confirm(`Rejeitar todas as ${transactions.length} transações de ${month}?`)) {
+      return;
+    }
+
+    try {
+      setRejectingMonth(month);
+      
+      // Reject each transaction individually
+      const rejectPromises = transactions.map(tx =>
+        fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: `Rejeitado em lote - ${month}` })
+        })
+      );
+
+      const results = await Promise.allSettled(rejectPromises);
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+
+      if (successCount > 0) {
+        toast({
+          title: 'Sucesso',
+          description: `${successCount} transações de ${month} rejeitadas${failCount > 0 ? ` (${failCount} falharam)` : ''}`
+        });
+      }
+
+      if (failCount > 0 && successCount === 0) {
+        throw new Error('Todas as rejeições falharam');
+      }
+
+      // Invalidar todos os caches da carteira
+      portfolioCache.invalidateAll(portfolioId);
+
+      // Reset lock before reloading
+      isCreatingSuggestionsRef.current = false;
+      hasAutoExpandedRef.current = false; // Reset auto-expand flag
+      loadSuggestions();
+      if (onTransactionsConfirmed) onTransactionsConfirmed();
+    } catch {
+      toast({
+        title: 'Erro',
+        description: `Erro ao rejeitar transações de ${month}`,
+        variant: 'destructive'
+      });
+    } finally {
+      setRejectingMonth(null);
+    }
+  };
+
   const groupByMonth = () => {
     const groups: Record<string, SuggestedTransaction[]> = {};
     
@@ -441,6 +558,29 @@ export function PortfolioTransactionSuggestions({
 
     return groups;
   };
+
+  // Auto-expand first month on initial load only
+  const hasAutoExpandedRef = useRef(false);
+  
+  useEffect(() => {
+    if (suggestions.length > 0 && !hasAutoExpandedRef.current) {
+      const groups: Record<string, SuggestedTransaction[]> = {};
+      
+      suggestions.forEach(tx => {
+        const monthKey = format(parseLocalDate(tx.date), 'MMMM yyyy', { locale: ptBR });
+        if (!groups[monthKey]) {
+          groups[monthKey] = [];
+        }
+        groups[monthKey].push(tx);
+      });
+      
+      const firstMonth = Object.keys(groups)[0];
+      if (firstMonth) {
+        setExpandedMonths(new Set([firstMonth]));
+        hasAutoExpandedRef.current = true; // Mark as auto-expanded to prevent future auto-expansions
+      }
+    }
+  }, [suggestions]);
 
   if (loading) {
     return (
@@ -509,7 +649,7 @@ export function PortfolioTransactionSuggestions({
             size="sm"
             variant="ghost"
             title="Recalcular sugestões de transações"
-            className="text-xs flex-shrink-0"
+            className="text-xs flex-shrink-0 cursor-pointer hover:no-underline"
           >
             <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
             <span className="ml-2 hidden sm:inline">Recalcular</span>
@@ -533,7 +673,7 @@ export function PortfolioTransactionSuggestions({
               onClick={handleConfirmAll}
               disabled={confirmingAll}
               size="sm"
-              className="flex-1 sm:flex-none text-xs sm:text-sm"
+              className="flex-1 sm:flex-none text-xs sm:text-sm cursor-pointer hover:no-underline"
             >
               {confirmingAll ? 'Confirmando...' : 'Confirmar Todas'}
             </Button>
@@ -542,84 +682,160 @@ export function PortfolioTransactionSuggestions({
       </div>
 
       {/* Transactions grouped by month */}
-      {Object.entries(monthGroups).map(([month, transactions]) => (
-        <Card key={month}>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base capitalize">{month}</CardTitle>
-              <Badge variant="outline">{transactions.length}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {transactions.map(tx => (
-                <div
-                  key={tx.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3"
-                >
-                  <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0 mt-0.5">
-                      {getTypeIcon(tx.type)}
+      {Object.entries(monthGroups).map(([month, transactions]) => {
+        const isExpanded = expandedMonths.has(month);
+        const isConfirmingThisMonth = confirmingMonth === month;
+        const isRejectingThisMonth = rejectingMonth === month;
+        
+        return (
+          <Card key={month}>
+            <Collapsible open={isExpanded} onOpenChange={() => toggleMonth(month)}>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="pb-3 cursor-pointer hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-base capitalize">{month}</CardTitle>
+                      <Badge variant="outline">{transactions.length}</Badge>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">
-                          {getTypeLabel(tx.type)}
-                        </span>
-                        {tx.ticker && (
-                          <Badge variant="secondary" className="text-xs flex-shrink-0">
-                            {tx.ticker}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-xs text-muted-foreground">
-                        <span className="flex-shrink-0">
-                          {format(parseLocalDate(tx.date), 'dd/MM/yyyy')}
-                        </span>
-                        <span className="font-medium flex-shrink-0">
-                          R$ {tx.amount.toFixed(2)}
-                        </span>
-                        {tx.quantity && (
-                          <span className="flex-shrink-0">
-                            {tx.quantity.toFixed(0)} ações
-                          </span>
-                        )}
-                      </div>
-                      {tx.notes && (
-                        <p className="text-xs text-muted-foreground mt-1 break-words">
-                          {tx.notes}
-                        </p>
+                    <div className="flex items-center gap-2">
+                      {/* Month Actions - Only show when expanded */}
+                      {isExpanded && (
+                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConfirmMonth(month, transactions);
+                            }}
+                            disabled={isConfirmingThisMonth || isRejectingThisMonth}
+                            className="text-xs px-2 py-1 h-7 cursor-pointer hover:no-underline"
+                          >
+                            {isConfirmingThisMonth ? (
+                              <>
+                                <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1" />
+                                <span className="hidden sm:inline">Confirmando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-3 w-3 text-green-600 mr-1" />
+                                <span className="hidden sm:inline">Confirmar Todas</span>
+                                <span className="sm:hidden">Confirmar</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRejectMonth(month, transactions);
+                            }}
+                            disabled={isConfirmingThisMonth || isRejectingThisMonth}
+                            className="text-xs px-2 py-1 h-7 cursor-pointer hover:no-underline"
+                          >
+                            {isRejectingThisMonth ? (
+                              <>
+                                <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1" />
+                                <span className="hidden sm:inline">Rejeitando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="h-3 w-3 text-red-600 mr-1" />
+                                <span className="hidden sm:inline">Rejeitar Todas</span>
+                                <span className="sm:hidden">Rejeitar</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                      {/* Expand/Collapse Icon */}
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
                     </div>
                   </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              
+              <CollapsibleContent>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    {transactions.map(tx => (
+                      <div
+                        key={tx.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3"
+                      >
+                        <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div className="flex-shrink-0 mt-0.5">
+                            {getTypeIcon(tx.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-sm">
+                                {getTypeLabel(tx.type)}
+                              </span>
+                              {tx.ticker && (
+                                <Badge variant="secondary" className="text-xs flex-shrink-0">
+                                  {tx.ticker}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-xs text-muted-foreground">
+                              <span className="flex-shrink-0">
+                                {format(parseLocalDate(tx.date), 'dd/MM/yyyy')}
+                              </span>
+                              <span className="font-medium flex-shrink-0">
+                                R$ {tx.amount.toFixed(2)}
+                              </span>
+                              {tx.quantity && (
+                                <span className="flex-shrink-0">
+                                  {tx.quantity.toFixed(0)} ações
+                                </span>
+                              )}
+                            </div>
+                            {tx.notes && (
+                              <p className="text-xs text-muted-foreground mt-1 break-words">
+                                {tx.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
 
-                  <div className="flex gap-1 sm:flex-shrink-0 justify-end sm:justify-start">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleConfirmSingle(tx.id)}
-                      title="Confirmar"
-                      className="h-8 w-8 sm:h-9 sm:w-9 p-0"
-                    >
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRejectSingle(tx.id)}
-                      title="Rejeitar"
-                      className="h-8 w-8 sm:h-9 sm:w-9 p-0"
-                    >
-                      <XCircle className="h-4 w-4 text-red-600" />
-                    </Button>
+                        <div className="flex gap-1 sm:flex-shrink-0 justify-end sm:justify-start">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleConfirmSingle(tx.id)}
+                            title="Confirmar"
+                            className="h-8 w-8 sm:h-9 sm:w-9 p-0 cursor-pointer hover:no-underline"
+                            disabled={isConfirmingThisMonth || isRejectingThisMonth}
+                          >
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRejectSingle(tx.id)}
+                            title="Rejeitar"
+                            className="h-8 w-8 sm:h-9 sm:w-9 p-0 cursor-pointer hover:no-underline"
+                            disabled={isConfirmingThisMonth || isRejectingThisMonth}
+                          >
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </Card>
+        );
+      })}
     </div>
   );
 }

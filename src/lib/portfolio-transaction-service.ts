@@ -1290,10 +1290,13 @@ export class PortfolioTransactionService {
 
   /**
    * Generate dividend suggestions for assets in custody
-   * Only suggests dividends that:
-   * 1. Are in the current month
-   * 2. Ex-date has already passed
-   * 3. User had position in custody BEFORE the ex-date (not from rebalancing purchases)
+   * 
+   * INTELLIGENT CRITERIA:
+   * 1. Asset must be in current holdings (quantity > 0)
+   * 2. Only suggest dividends from the first transaction date of each asset onwards
+   * 3. Don't suggest if same dividend amount already exists for the same month (any status)
+   * 4. Don't suggest if user previously rejected the same dividend (REJECTED status)
+   * 5. User had position in custody BEFORE the ex-date (not from rebalancing purchases)
    */
   private static async generateDividendSuggestions(
     portfolioId: string,
@@ -1320,14 +1323,96 @@ export class PortfolioTransactionService {
 
     let cashBalance = Number(latestTransaction?.cashBalanceAfter || 0);
 
+    // Get first transaction date for each asset to determine dividend eligibility period
+    const firstTransactionDates = await this.getFirstTransactionDates(portfolioId);
+
+    // Get existing dividend transactions to avoid duplicates and respect rejections
+    const existingDividendTransactions = await prisma.portfolioTransaction.findMany({
+      where: {
+        portfolioId,
+        type: "DIVIDEND",
+        ticker: { not: null },
+      },
+      select: {
+        ticker: true,
+        date: true,
+        amount: true,
+        status: true,
+        price: true, // Per-share dividend amount
+      },
+    });
+
+    // Create maps for quick lookup - handle both automatic and manual dividend entries
+    // Manual entries may not have per-share amount (price field), so we need to check both ways
+    const existingDividendsByMonth = new Map<string, Array<{
+      amount: number;
+      status: string;
+      perShareAmount: number;
+      date: Date;
+      isManual: boolean;
+    }>>();
+
+    existingDividendTransactions.forEach(tx => {
+      if (!tx.ticker) return;
+      
+      const perShareAmount = Number(tx.price || 0);
+      const totalAmount = Number(tx.amount);
+      const isManual = perShareAmount === 0; // Manual entries typically don't have per-share amount
+      
+      // Group by ticker and month for comparison
+      const monthKey = `${tx.ticker}_${tx.date.getFullYear()}_${tx.date.getMonth()}`;
+      
+      if (!existingDividendsByMonth.has(monthKey)) {
+        existingDividendsByMonth.set(monthKey, []);
+      }
+      
+      existingDividendsByMonth.get(monthKey)!.push({
+        amount: totalAmount,
+        status: tx.status,
+        perShareAmount: perShareAmount,
+        date: tx.date,
+        isManual: isManual,
+      });
+    });
+
+    console.log(`🔍 [DIVIDEND DEDUP] Loaded ${existingDividendTransactions.length} existing dividend transactions for deduplication`);
+    if (existingDividendTransactions.length > 0) {
+      const tickerCounts = new Map<string, number>();
+      let manualCount = 0;
+      let autoCount = 0;
+      
+      existingDividendTransactions.forEach(tx => {
+        if (tx.ticker) {
+          tickerCounts.set(tx.ticker, (tickerCounts.get(tx.ticker) || 0) + 1);
+          if (Number(tx.price || 0) === 0) {
+            manualCount++;
+          } else {
+            autoCount++;
+          }
+        }
+      });
+      
+      console.log(`📊 [DIVIDEND SUMMARY] ${manualCount} manual + ${autoCount} auto transactions by ticker:`, 
+        Array.from(tickerCounts.entries()).map(([ticker, count]) => `${ticker}: ${count}`).join(', ')
+      );
+    }
+
     // Check each asset in holdings for dividends
     for (const [ticker, holding] of holdings) {
       if (holding.quantity <= 0) continue; // Skip if no position
 
+      // Get first transaction date for this asset
+      const firstTransactionDate = firstTransactionDates.get(ticker);
+      if (!firstTransactionDate) {
+        console.log(`⚠️ [DIVIDEND SKIP] ${ticker}: No transaction history found`);
+        continue;
+      }
+
+      console.log(`📅 [DIVIDEND] ${ticker}: First transaction on ${firstTransactionDate.toISOString().split('T')[0]}`);
+
       // First, ensure we have dividend data for this asset
-      // This will fetch from Yahoo if not present
       try {
-        await DividendService.fetchAndSaveDividends(ticker);
+        await DividendService.fetchAndSaveDividends(ticker, firstTransactionDate);
       } catch (error) {
         console.log(
           `⚠️ [DIVIDEND] Error fetching dividends for ${ticker}:`,
@@ -1336,12 +1421,14 @@ export class PortfolioTransactionService {
         continue;
       }
 
-      // Get dividends in current month that have already been paid
-      const pendingDividends = await DividendService.getCurrentMonthDividends(
-        ticker
+      // Get all dividends from first transaction date until today
+      const eligibleDividends = await DividendService.getDividendsInPeriod(
+        ticker,
+        firstTransactionDate,
+        today
       );
 
-      for (const dividend of pendingDividends) {
+      for (const dividend of eligibleDividends) {
         // Only suggest if ex-date has passed
         if (dividend.exDate > today) {
           console.log(
@@ -1353,7 +1440,6 @@ export class PortfolioTransactionService {
         }
 
         // Check if user had position in custody BEFORE the ex-date
-        // This ensures dividends are only suggested for assets held in custody, not rebalancing purchases
         const holdingsBeforeExDate = await this.getHoldingsAsOfDate(
           portfolioId,
           dividend.exDate
@@ -1369,13 +1455,68 @@ export class PortfolioTransactionService {
           continue;
         }
 
-        // Use the quantity held on ex-date for dividend calculation, not current quantity
+        // Use the quantity held on ex-date for dividend calculation
         const quantityOnExDate = holdingBeforeExDate.quantity;
         const totalDividendAmount = dividend.amount * quantityOnExDate;
 
         if (totalDividendAmount <= 0) continue;
 
+        // Check for existing dividend transactions in the same month
         const dividendDate = dividend.paymentDate || dividend.exDate;
+        const monthKey = `${ticker}_${dividendDate.getFullYear()}_${dividendDate.getMonth()}`;
+        const existingDividendsInMonth = existingDividendsByMonth.get(monthKey) || [];
+
+        // Check if this dividend already exists (compare both per-share and total amounts)
+        let shouldSkip = false;
+        let skipReason = '';
+        let matchedTransaction = null;
+
+        for (const existing of existingDividendsInMonth) {
+          let isMatch = false;
+          
+          if (existing.isManual) {
+            // Manual transaction: compare total amounts with tolerance
+            const totalAmountDiff = Math.abs(existing.amount - totalDividendAmount);
+            const tolerance = Math.max(0.01, totalDividendAmount * 0.02); // 2% tolerance or R$ 0.01 minimum
+            
+            if (totalAmountDiff <= tolerance) {
+              isMatch = true;
+              console.log(`🔍 [DIVIDEND MATCH] Manual transaction found: R$ ${existing.amount.toFixed(2)} vs suggested R$ ${totalDividendAmount.toFixed(2)} (diff: R$ ${totalAmountDiff.toFixed(2)})`);
+            }
+          } else {
+            // Automatic transaction: compare per-share amounts with high precision
+            const perShareDiff = Math.abs(existing.perShareAmount - dividend.amount);
+            const tolerance = Math.max(0.0001, dividend.amount * 0.01); // 1% tolerance or R$ 0.0001 minimum
+            
+            if (perShareDiff <= tolerance) {
+              isMatch = true;
+              console.log(`🔍 [DIVIDEND MATCH] Auto transaction found: R$ ${existing.perShareAmount.toFixed(4)}/share vs suggested R$ ${dividend.amount.toFixed(4)}/share (diff: R$ ${perShareDiff.toFixed(4)})`);
+            }
+          }
+
+          if (isMatch) {
+            matchedTransaction = existing;
+            
+            if (existing.status === 'REJECTED') {
+              shouldSkip = true;
+              skipReason = `Previously rejected by user`;
+            } else if (existing.status === 'CONFIRMED' || existing.status === 'EXECUTED') {
+              shouldSkip = true;
+              skipReason = `Already processed (${existing.status})`;
+            } else if (existing.status === 'PENDING') {
+              shouldSkip = true;
+              skipReason = `Already pending`;
+            }
+            break;
+          }
+        }
+
+        if (shouldSkip && matchedTransaction) {
+          console.log(
+            `⏩ [DIVIDEND SKIP] ${ticker} ${dividendDate.toISOString().split('T')[0]}: ${skipReason} - ${matchedTransaction.isManual ? 'Manual' : 'Auto'} entry (${matchedTransaction.isManual ? `R$ ${matchedTransaction.amount.toFixed(2)} total` : `R$ ${matchedTransaction.perShareAmount.toFixed(4)}/share`})`
+          );
+          continue;
+        }
 
         suggestions.push({
           date: dividendDate,
@@ -1388,7 +1529,7 @@ export class PortfolioTransactionService {
             4
           )}/ação × ${quantityOnExDate} ações = R$ ${totalDividendAmount.toFixed(
             2
-          )}`,
+          )} (Ex-date: ${dividend.exDate.toISOString().split('T')[0]})`,
           cashBalanceBefore: cashBalance,
           cashBalanceAfter: cashBalance + totalDividendAmount,
         });
@@ -1396,14 +1537,50 @@ export class PortfolioTransactionService {
         cashBalance += totalDividendAmount; // Update for next iteration
 
         console.log(
-          `💵 [DIVIDEND FOUND] ${ticker}: ${quantityOnExDate} shares × R$ ${
-            dividend.amount
-          } = R$ ${totalDividendAmount.toFixed(2)}`
+          `💵 [DIVIDEND SUGGESTED] ${ticker}: ${quantityOnExDate} shares × R$ ${
+            dividend.amount.toFixed(4)
+          } = R$ ${totalDividendAmount.toFixed(2)} (Ex-date: ${dividend.exDate.toISOString().split('T')[0]}, Payment: ${dividendDate.toISOString().split('T')[0]})`
         );
       }
     }
 
     return suggestions;
+  }
+
+  /**
+   * Get the first transaction date for each asset in the portfolio
+   * This determines from when we should start suggesting dividends
+   */
+  private static async getFirstTransactionDates(
+    portfolioId: string
+  ): Promise<Map<string, Date>> {
+    const firstTransactions = await prisma.portfolioTransaction.findMany({
+      where: {
+        portfolioId,
+        status: { in: ["CONFIRMED", "EXECUTED"] },
+        ticker: { not: null },
+        type: { in: ["BUY", "BUY_REBALANCE"] }, // Only consider buy transactions
+      },
+      select: {
+        ticker: true,
+        date: true,
+      },
+      orderBy: {
+        date: "asc",
+      },
+    });
+
+    const firstDates = new Map<string, Date>();
+    
+    for (const tx of firstTransactions) {
+      if (!tx.ticker) continue;
+      
+      if (!firstDates.has(tx.ticker)) {
+        firstDates.set(tx.ticker, tx.date);
+      }
+    }
+
+    return firstDates;
   }
 
   /**

@@ -733,10 +733,14 @@ export class PortfolioTransactionService {
 
       // 🔧 CORREÇÃO: Thresholds adaptativos baseados no tamanho da alocação
       // Para alocações pequenas, usar threshold relativo; para grandes, usar absoluto
+      // ESPECIAL: Se meta é 0%, qualquer posição precisa ser vendida
       const adaptiveAbsoluteThreshold = Math.max(0.02, targetAlloc * 0.3); // Mínimo 2%, máximo 30% da alocação
       const relativeThreshold = 0.25; // 25% de desvio relativo
       
-      const needsRebalancing = absoluteDiff > adaptiveAbsoluteThreshold || relativeDeviation > relativeThreshold;
+      // Special case: if target is 0% and we have any position, always needs rebalancing
+      const needsRebalancing = targetAlloc === 0 
+        ? currentAlloc > 0 
+        : (absoluteDiff > adaptiveAbsoluteThreshold || relativeDeviation > relativeThreshold);
 
       console.log(`🔍 [DEVIATION ANALYSIS] ${asset.ticker}:`, {
         current: `${(currentAlloc * 100).toFixed(2)}%`,

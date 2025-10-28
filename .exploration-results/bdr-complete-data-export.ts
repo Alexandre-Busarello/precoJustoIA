@@ -25,7 +25,7 @@ async function exportBDRCompleteData() {
       const tickerResult = {
         ticker,
         timestamp: new Date().toISOString(),
-        quote: null,
+        quote: null as any,
         quoteSummary: {},
         fundamentalsTimeSeries: null,
         summary: {

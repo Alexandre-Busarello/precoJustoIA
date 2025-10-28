@@ -430,13 +430,18 @@ export class PortfolioMetricsService {
       const allocationDiff = actualAllocation - targetAllocation;
 
       // Needs rebalancing if:
-      // 1. Absolute difference > 5 percentage points (e.g., 10% vs 5%), OR
-      // 2. Relative deviation > 20% of target (e.g., actual is 6% when target is 5%)
+      // 1. Target allocation is 0% and we have any position (should always sell), OR
+      // 2. Absolute difference > 5 percentage points (e.g., 10% vs 5%), OR
+      // 3. Relative deviation > 20% of target (e.g., actual is 6% when target is 5%)
       const absoluteDiff = Math.abs(allocationDiff);
       const relativeDeviation = targetAllocation > 0
         ? Math.abs(allocationDiff / targetAllocation)
         : 0;
-      const needsRebalancing = absoluteDiff > 0.05 || relativeDeviation > 0.20;
+      
+      // Special case: if target is 0% and we have any position, always needs rebalancing
+      const needsRebalancing = targetAllocation === 0 
+        ? actualAllocation > 0 
+        : (absoluteDiff > 0.05 || relativeDeviation > 0.20);
 
       holdings.push({
         ticker,

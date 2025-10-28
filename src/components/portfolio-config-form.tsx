@@ -252,9 +252,9 @@ export function PortfolioConfigForm({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="startDate">Data de Início *</Label>
+              <Label htmlFor="startDate" className="text-sm font-medium">Data de Início *</Label>
               <Input
                 id="startDate"
                 type="date"
@@ -262,11 +262,12 @@ export function PortfolioConfigForm({
                 onChange={(e) => setStartDate(e.target.value)}
                 disabled={mode === 'edit'}
                 required
+                className="mt-1"
               />
             </div>
 
             <div>
-              <Label htmlFor="monthlyContribution">Aporte Mensal (R$) *</Label>
+              <Label htmlFor="monthlyContribution" className="text-sm font-medium">Aporte Mensal (R$) *</Label>
               <Input
                 id="monthlyContribution"
                 type="number"
@@ -276,6 +277,7 @@ export function PortfolioConfigForm({
                 onChange={(e) => setMonthlyContribution(parseFloat(e.target.value))}
                 placeholder="1000"
                 required
+                className="mt-1"
               />
             </div>
           </div>
@@ -327,26 +329,29 @@ export function PortfolioConfigForm({
 
               <TabsContent value="manual" className="space-y-4 mt-6">
                 {/* Manual Add Asset Form */}
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     placeholder="Ticker (ex: PETR4)"
                     value={newTicker}
                     onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
                     className="flex-1"
                   />
-                  <Input
-                    type="number"
-                    placeholder="% (ex: 25)"
-                    value={newAllocation}
-                    onChange={(e) => setNewAllocation(e.target.value)}
-                    className="w-32"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                  />
-                  <Button type="button" onClick={handleAddAsset} variant="outline">
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="% (ex: 25)"
+                      value={newAllocation}
+                      onChange={(e) => setNewAllocation(e.target.value)}
+                      className="w-24 sm:w-32"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                    />
+                    <Button type="button" onClick={handleAddAsset} variant="outline" className="flex-shrink-0">
+                      <Plus className="h-4 w-4" />
+                      <span className="ml-1 sm:hidden">Adicionar</span>
+                    </Button>
+                  </div>
                 </div>
               </TabsContent>
 
@@ -414,13 +419,13 @@ export function PortfolioConfigForm({
       )}
 
       {/* Actions */}
-      <div className="flex gap-2 justify-end">
+      <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
         {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading} className="w-full sm:w-auto">
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={!isValid || loading}>
+        <Button type="submit" disabled={!isValid || loading} className="w-full sm:w-auto">
           {loading ? 'Salvando...' : mode === 'create' ? 'Criar Carteira' : 'Salvar Alterações'}
         </Button>
       </div>

@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -8,13 +8,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
-import { portfolioCache } from '@/lib/portfolio-cache';
+} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
+import { portfolioCache } from "@/lib/portfolio-cache";
 
 interface Holding {
   ticker: string;
@@ -38,7 +38,9 @@ interface PortfolioHoldingsTableProps {
   portfolioId: string;
 }
 
-export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTableProps) {
+export function PortfolioHoldingsTable({
+  portfolioId,
+}: PortfolioHoldingsTableProps) {
   const { toast } = useToast();
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
   const loadHoldings = async (forceRefresh = false) => {
     try {
       setLoading(true);
-      
+
       // Try cache first (unless force refresh)
       if (!forceRefresh) {
         const cached = portfolioCache.holdings.get(portfolioId) as any;
@@ -62,12 +64,12 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
           return;
         }
       }
-      
+
       // Fetch from API
       const response = await fetch(`/api/portfolio/${portfolioId}/holdings`);
-      
+
       if (!response.ok) {
-        throw new Error('Erro ao carregar posições');
+        throw new Error("Erro ao carregar posições");
       }
 
       const data = await response.json();
@@ -75,11 +77,11 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       setHoldings(data.holdings || []);
       setTotalValue(data.totalValue || 0);
     } catch (error) {
-      console.error('Erro ao carregar posições:', error);
+      console.error("Erro ao carregar posições:", error);
       toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar as posições',
-        variant: 'destructive'
+        title: "Erro",
+        description: "Não foi possível carregar as posições",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -87,9 +89,9 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
     }).format(value);
   };
 
@@ -122,7 +124,28 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     );
   }
 
-  const hasRebalancingNeeded = holdings.some(h => h.needsRebalancing);
+  const hasRebalancingNeeded = holdings.some((h) => h.needsRebalancing);
+
+  // Função para determinar a prioridade de ordenação por status
+  const getStatusPriority = (holding: Holding) => {
+    if (!holding.needsRebalancing) return 2; // OK - prioridade média
+    if (holding.allocationDiff > 0) return 1; // Sobrepeso - prioridade alta
+    return 3; // Subpeso - prioridade baixa
+  };
+
+  // Ordenar holdings por status: Sobrepeso (1) -> OK (2) -> Subpeso (3)
+  // Em caso de empate, ordenar por valor atual (maior primeiro)
+  const sortedHoldings = [...holdings].sort((a, b) => {
+    const priorityA = getStatusPriority(a);
+    const priorityB = getStatusPriority(b);
+
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+
+    // Se mesmo status, ordenar por valor atual (maior primeiro)
+    return b.currentValue - a.currentValue;
+  });
 
   return (
     <Card>
@@ -133,7 +156,9 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
             {hasRebalancingNeeded && (
               <Badge variant="outline" className="gap-1 text-xs flex-shrink-0">
                 <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                <span className="hidden sm:inline">Rebalanceamento sugerido</span>
+                <span className="hidden sm:inline">
+                  Rebalanceamento sugerido
+                </span>
                 <span className="sm:hidden">Rebalancear</span>
               </Badge>
             )}
@@ -151,38 +176,44 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
                 <TableHead className="text-right">Preço Atual</TableHead>
                 <TableHead className="text-right">Valor Atual</TableHead>
                 <TableHead className="text-right">Retorno</TableHead>
-                <TableHead className="text-right">Retorno c/ Dividendos</TableHead>
+                <TableHead className="text-right">
+                  Retorno c/ Dividendos
+                </TableHead>
                 <TableHead className="text-right">Alocação</TableHead>
                 <TableHead className="text-center">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {holdings.map(holding => (
+              {sortedHoldings.map((holding) => (
                 <TableRow key={holding.ticker}>
                   <TableCell className="font-medium">
                     {holding.ticker}
                   </TableCell>
-                  
+
                   <TableCell className="text-right">
                     {holding.quantity.toFixed(0)}
                   </TableCell>
-                  
+
                   <TableCell className="text-right">
                     {formatCurrency(holding.averagePrice)}
                   </TableCell>
-                  
+
                   <TableCell className="text-right">
                     {formatCurrency(holding.currentPrice)}
                   </TableCell>
-                  
+
                   <TableCell className="text-right font-medium">
                     {formatCurrency(holding.currentValue)}
                   </TableCell>
-                  
+
                   <TableCell className="text-right">
-                    <div className={`flex flex-col items-end ${
-                      isPositive(holding.return) ? 'text-green-600' : 'text-red-600'
-                    }`}>
+                    <div
+                      className={`flex flex-col items-end ${
+                        isPositive(holding.return)
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
                       <div className="flex items-center gap-1">
                         {isPositive(holding.return) ? (
                           <TrendingUp className="h-3 w-3" />
@@ -200,9 +231,13 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
                   </TableCell>
 
                   <TableCell className="text-right">
-                    <div className={`flex flex-col items-end ${
-                      isPositive(holding.returnWithDividends) ? 'text-green-600' : 'text-red-600'
-                    }`}>
+                    <div
+                      className={`flex flex-col items-end ${
+                        isPositive(holding.returnWithDividends)
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
                       <div className="flex items-center gap-1">
                         {isPositive(holding.returnWithDividends) ? (
                           <TrendingUp className="h-3 w-3" />
@@ -234,11 +269,11 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
                       </span>
                     </div>
                   </TableCell>
-                  
+
                   <TableCell className="text-center">
                     {holding.needsRebalancing ? (
                       <Badge variant="outline" className="text-xs">
-                        {holding.allocationDiff > 0 ? 'Sobrepeso' : 'Subpeso'}
+                        {holding.allocationDiff > 0 ? "Sobrepeso" : "Subpeso"}
                       </Badge>
                     ) : (
                       <Badge variant="secondary" className="text-xs">
@@ -261,12 +296,10 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
                   Rebalanceamento Recomendado
                 </p>
                 <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
-                  Alguns ativos estão fora da alocação alvo. Considere rebalancear sua carteira.
+                  Alguns ativos estão fora da alocação alvo. Considere
+                  rebalancear sua carteira.
                 </p>
               </div>
-              <Button size="sm" variant="outline" className="w-full sm:w-auto flex-shrink-0 text-xs sm:text-sm">
-                Rebalancear
-              </Button>
             </div>
           </div>
         )}
@@ -274,4 +307,3 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     </Card>
   );
 }
-

@@ -261,21 +261,21 @@ export function PortfolioPageClient() {
   const currentPortfolio = portfolios.find((p) => p.id === selectedPortfolio);
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Briefcase className="h-8 w-8" />
-              Minhas Carteiras
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+              <Briefcase className="h-6 w-6 sm:h-8 sm:w-8 flex-shrink-0" />
+              <span className="truncate">Minhas Carteiras</span>
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
               Gerencie seus investimentos com acompanhamento completo
             </p>
           </div>
 
-          <Button onClick={handleCreatePortfolio}>
+          <Button onClick={handleCreatePortfolio} className="w-full sm:w-auto flex-shrink-0">
             <Plus className="mr-2 h-4 w-4" />
             Nova Carteira
           </Button>
@@ -283,7 +283,7 @@ export function PortfolioPageClient() {
 
         {/* Portfolio Selector */}
         {portfolios.length > 1 && (
-          <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
+          <div className="mb-6 flex gap-2 overflow-x-auto pb-2 -mx-2 px-2">
             {portfolios.map((portfolio) => (
               <Button
                 key={portfolio.id}
@@ -291,11 +291,13 @@ export function PortfolioPageClient() {
                   selectedPortfolio === portfolio.id ? "default" : "outline"
                 }
                 onClick={() => handleSelectPortfolio(portfolio.id)}
-                className="flex-shrink-0"
+                className="flex-shrink-0 text-xs sm:text-sm"
               >
-                {portfolio.name}
+                <span className="truncate max-w-[120px] sm:max-w-none">
+                  {portfolio.name}
+                </span>
                 {portfolio.metrics && (
-                  <Badge variant="secondary" className="ml-2">
+                  <Badge variant="secondary" className="ml-2 text-xs">
                     {portfolio.metrics.totalReturn >= 0 ? "+" : ""}
                     {(portfolio.metrics.totalReturn * 100).toFixed(1)}%
                   </Badge>
@@ -467,32 +469,32 @@ function PortfolioDetails({
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           {/* Mobile: Scroll horizontal | Desktop: Grid */}
-          <div className="w-full overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible">
-            <TabsList className="inline-flex md:grid w-auto md:w-full md:grid-cols-4 gap-1 min-w-full md:min-w-0">
+          <div className="w-full overflow-x-auto pb-2">
+            <TabsList className="inline-flex sm:grid w-max sm:w-full sm:grid-cols-4 gap-1">
               <TabsTrigger
                 value="overview"
-                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+                className="flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0 px-3 sm:px-4"
               >
                 <TrendingUp className="h-4 w-4 flex-shrink-0" />
                 <span>Visão Geral</span>
               </TabsTrigger>
               <TabsTrigger
                 value="transactions"
-                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+                className="flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0 px-3 sm:px-4"
               >
                 <Receipt className="h-4 w-4 flex-shrink-0" />
                 <span>Transações</span>
               </TabsTrigger>
               <TabsTrigger
                 value="analytics"
-                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+                className="flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0 px-3 sm:px-4"
               >
                 <BarChart3 className="h-4 w-4 flex-shrink-0" />
                 <span>Análises</span>
               </TabsTrigger>
               <TabsTrigger
                 value="config"
-                className="flex items-center gap-1 md:gap-2 text-xs md:text-sm whitespace-nowrap flex-shrink-0"
+                className="flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0 px-3 sm:px-4"
               >
                 <Settings className="h-4 w-4 flex-shrink-0" />
                 <span>Configuração</span>
@@ -923,13 +925,14 @@ function PortfolioConfiguration({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <CardTitle>Informações da Carteira</CardTitle>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowGenerateBacktestModal(true)}
+                className="w-full sm:w-auto"
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Gerar Backtest
@@ -938,6 +941,7 @@ function PortfolioConfiguration({
                 variant="outline"
                 size="sm"
                 onClick={() => setShowEditModal(true)}
+                className="w-full sm:w-auto"
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Editar
@@ -946,6 +950,7 @@ function PortfolioConfiguration({
                 variant="destructive"
                 size="sm"
                 onClick={() => setShowDeleteDialog(true)}
+                className="w-full sm:w-auto"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Excluir
@@ -954,30 +959,33 @@ function PortfolioConfiguration({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <p className="text-sm text-muted-foreground">Nome</p>
-            <p className="font-medium">{portfolio.name}</p>
-          </div>
-          {portfolio.description && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <p className="text-sm text-muted-foreground">Descrição</p>
-              <p className="font-medium">{portfolio.description}</p>
+              <p className="text-sm text-muted-foreground">Nome</p>
+              <p className="font-medium break-words">{portfolio.name}</p>
             </div>
-          )}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
+            {portfolio.description && (
+              <div className="sm:col-span-2">
+                <p className="text-sm text-muted-foreground">Descrição</p>
+                <p className="font-medium break-words">{portfolio.description}</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t">
+            <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Data de Início</p>
               <p className="font-medium">
                 {new Date(portfolio.startDate).toLocaleDateString("pt-BR")}
               </p>
             </div>
-            <div>
+            <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Aporte Mensal</p>
               <p className="font-medium">
                 R$ {portfolio.monthlyContribution.toFixed(2)}
               </p>
             </div>
-            <div>
+            <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Rebalanceamento</p>
               <p className="font-medium capitalize">
                 {portfolio.rebalanceFrequency === "monthly" && "Mensal"}

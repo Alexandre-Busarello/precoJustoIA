@@ -511,21 +511,20 @@ export function PortfolioAssetManager({
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
               Gerenciamento de Ativos
             </CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddModal(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Ativo
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddModal(true)}
+              className="w-full sm:w-auto"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Ativo
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -591,12 +590,12 @@ export function PortfolioAssetManager({
                   {assets.map((asset, index) => (
                     <div
                       key={`asset-${asset.id}`}
-                      className="flex items-center gap-4 p-3 border rounded-lg bg-card"
+                      className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 border rounded-lg bg-card"
                     >
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <p className="font-semibold">{asset.ticker}</p>
                       </div>
-                      <div className="w-32">
+                      <div className="w-full sm:w-32">
                         <Label
                           htmlFor={`allocation-${index}`}
                           className="text-xs"
@@ -621,7 +620,7 @@ export function PortfolioAssetManager({
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveAsset(asset.ticker)}
-                        className="text-destructive hover:text-destructive"
+                        className="text-destructive hover:text-destructive flex-shrink-0 self-start sm:self-center"
                         disabled={saving}
                         title={saving ? "Aguarde..." : "Remover ativo"}
                       >
@@ -636,12 +635,12 @@ export function PortfolioAssetManager({
                 </div>
 
                 <div className="border-t pt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                    <div className="flex-1">
                       <p className="text-sm text-muted-foreground">
                         Total Alocado
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p
                           className={`text-2xl font-bold ${
                             isValid ? "text-green-600" : "text-destructive"
@@ -665,7 +664,7 @@ export function PortfolioAssetManager({
                     <Button
                       onClick={handleSaveAllocations}
                       disabled={!isValid || saving}
-                      className="gap-2"
+                      className="gap-2 w-full sm:w-auto flex-shrink-0"
                     >
                       <Save className="h-4 w-4" />
                       {saving ? "Salvando..." : "Salvar Alocações"}
@@ -794,7 +793,7 @@ export function PortfolioAssetManager({
               </div>
             )}
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col sm:flex-row justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -803,10 +802,11 @@ export function PortfolioAssetManager({
                   setShowAddModal(false);
                 }}
                 disabled={saving}
+                className="w-full sm:w-auto"
               >
                 Cancelar
               </Button>
-              <Button onClick={handleAddAsset} disabled={saving}>
+              <Button onClick={handleAddAsset} disabled={saving} className="w-full sm:w-auto">
                 {saving ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

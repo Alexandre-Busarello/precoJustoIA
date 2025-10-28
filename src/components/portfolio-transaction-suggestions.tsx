@@ -634,7 +634,7 @@ export function PortfolioTransactionSuggestions({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-orange-600 flex-shrink-0" />
           <h3 className="font-semibold text-sm sm:text-base">
@@ -642,7 +642,7 @@ export function PortfolioTransactionSuggestions({
           </h3>
         </div>
         
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           <Button
             onClick={handleRecalculateSuggestions}
             disabled={recalculating}
@@ -654,26 +654,13 @@ export function PortfolioTransactionSuggestions({
             <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
             <span className="ml-2 hidden sm:inline">Recalcular</span>
           </Button>
-          {/* {suggestions.length > 10 && (
-            <Button
-              onClick={handleCleanupDuplicates}
-              disabled={cleaningDuplicates}
-              size="sm"
-              variant="outline"
-              title="Remover transações duplicadas"
-              className="flex-1 sm:flex-none text-xs sm:text-sm"
-            >
-              <span className="hidden md:inline">{cleaningDuplicates ? '🧹 Limpando...' : '🧹 Limpar Duplicatas'}</span>
-              <span className="md:hidden">{cleaningDuplicates ? 'Limpando...' : '🧹 Limpar'}</span>
-            </Button>
-          )} */}
           
           {suggestions.length > 1 && (
             <Button
               onClick={handleConfirmAll}
               disabled={confirmingAll}
               size="sm"
-              className="flex-1 sm:flex-none text-xs sm:text-sm cursor-pointer hover:no-underline"
+              className="flex-shrink-0 text-xs sm:text-sm cursor-pointer hover:no-underline"
             >
               {confirmingAll ? 'Confirmando...' : 'Confirmar Todas'}
             </Button>
@@ -692,13 +679,13 @@ export function PortfolioTransactionSuggestions({
             <Collapsible open={isExpanded} onOpenChange={() => toggleMonth(month)}>
               <CollapsibleTrigger asChild>
                 <CardHeader className="pb-3 cursor-pointer hover:bg-accent/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <CardTitle className="text-base capitalize">{month}</CardTitle>
-                      <Badge variant="outline">{transactions.length}</Badge>
+                  <div className="flex items-center justify-between min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <CardTitle className="text-base capitalize truncate">{month}</CardTitle>
+                      <Badge variant="outline" className="flex-shrink-0">{transactions.length}</Badge>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {/* Month Actions - Only show when expanded */}
                       {isExpanded && (
                         <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
@@ -710,19 +697,12 @@ export function PortfolioTransactionSuggestions({
                               handleConfirmMonth(month, transactions);
                             }}
                             disabled={isConfirmingThisMonth || isRejectingThisMonth}
-                            className="text-xs px-2 py-1 h-7 cursor-pointer hover:no-underline"
+                            className="text-xs px-1.5 py-1 h-7 min-w-0 cursor-pointer hover:no-underline"
                           >
                             {isConfirmingThisMonth ? (
-                              <>
-                                <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1" />
-                                <span className="hidden sm:inline">Confirmando...</span>
-                              </>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b border-current" />
                             ) : (
-                              <>
-                                <CheckCircle2 className="h-3 w-3 text-green-600 mr-1" />
-                                <span className="hidden sm:inline">Confirmar Todas</span>
-                                <span className="sm:hidden">Confirmar</span>
-                              </>
+                              <CheckCircle2 className="h-3 w-3 text-green-600" />
                             )}
                           </Button>
                           <Button
@@ -733,19 +713,12 @@ export function PortfolioTransactionSuggestions({
                               handleRejectMonth(month, transactions);
                             }}
                             disabled={isConfirmingThisMonth || isRejectingThisMonth}
-                            className="text-xs px-2 py-1 h-7 cursor-pointer hover:no-underline"
+                            className="text-xs px-1.5 py-1 h-7 min-w-0 cursor-pointer hover:no-underline"
                           >
                             {isRejectingThisMonth ? (
-                              <>
-                                <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1" />
-                                <span className="hidden sm:inline">Rejeitando...</span>
-                              </>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b border-current" />
                             ) : (
-                              <>
-                                <XCircle className="h-3 w-3 text-red-600 mr-1" />
-                                <span className="hidden sm:inline">Rejeitar Todas</span>
-                                <span className="sm:hidden">Rejeitar</span>
-                              </>
+                              <XCircle className="h-3 w-3 text-red-600" />
                             )}
                           </Button>
                         </div>

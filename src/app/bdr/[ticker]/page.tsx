@@ -36,7 +36,8 @@ import {
   GitCompare,
   ChevronDown,
   Info,
-  FileText
+  FileText,
+  Globe
 } from 'lucide-react'
 
 interface PageProps {
@@ -52,323 +53,6 @@ interface CompetitorData {
   logoUrl?: string | null;
   marketCap?: any;
 }
-
-
-// Funções de formatação definidas mais abaixo
-
-
-// Função para extrair prefixo do ticker (remove números finais)
-function getTickerPrefix(ticker: string): string {
-  return ticker.replace(/\d+$/, '') // Remove números no final
-}
-
-// Função para determinar o tamanho da empresa (reutiliza lógica do filterCompaniesBySize)
-function getCompanySize(marketCap: number | null): 'small_caps' | 'mid_caps' | 'blue_chips' | null {
-  if (!marketCap) return null;
-  
-  // Valores em bilhões de reais
-  const marketCapBillions = marketCap / 1_000_000_000;
-  
-  if (marketCapBillions < 2) {
-    return 'small_caps'; // Menos de R$ 2 bilhões
-  } else if (marketCapBillions >= 2 && marketCapBillions < 10) {
-    return 'mid_caps'; // R$ 2-10 bilhões
-  } else {
-    return 'blue_chips'; // Mais de R$ 10 bilhões
-  }
-}
-
-// Cache agora usa Redis com fallback para memória
-const COMPETITORS_CACHE_TTL = 1440 * 60 // 1 dia em segundos
-const METADATA_CACHE_TTL = 60 * 60 // 60 minutos em segundos
-
-// Função mista: combina empresas inteligentes (premium) + básicas para SEO
-async function getMixedRelatedCompanies(
-  currentTicker: string, 
-  sector: string | null, 
-  intelligentCompetitors: CompetitorData[], 
-  limit: number = 6
-): Promise<CompetitorData[]> {
-  if (!sector) return []
-  
-  try {
-    // Pegar 2-3 empresas do comparador inteligente (as melhores)
-    const intelligentPick = intelligentCompetitors.slice(0, 3)
-    const intelligentTickers = intelligentPick.map(c => c.ticker)
-    
-    // Completar com empresas básicas do setor (excluindo as já selecionadas)
-    const remainingSlots = limit - intelligentPick.length
-    const basicCompanies = await getBasicRelatedCompanies(
-      currentTicker, 
-      sector, 
-      remainingSlots + 3, // Buscar mais para ter opções
-      [...intelligentTickers, currentTicker] // Excluir empresas já selecionadas
-    )
-    
-    // Combinar e limitar ao total desejado
-    const mixed = [...intelligentPick, ...basicCompanies.slice(0, remainingSlots)]
-    return mixed.slice(0, limit)
-    
-  } catch (error) {
-    console.error('❌ Erro ao buscar empresas relacionadas mistas:', error)
-    return []
-  }
-}
-
-// Função básica para empresas relacionadas (SEO) - sem inteligência premium
-async function getBasicRelatedCompanies(
-  currentTicker: string, 
-  sector: string | null, 
-  limit: number = 6, 
-  excludeTickers: string[] = []
-): Promise<CompetitorData[]> {
-  if (!sector) return []
-  
-  try {
-    // Busca simples por setor, ordenada por market cap (sem inteligência premium)
-    const companies = await prisma.company.findMany({
-      where: {
-        sector: sector,
-        ticker: { 
-          notIn: excludeTickers.length > 0 ? excludeTickers : [currentTicker]
-        },
-        // Apenas empresas com dados financeiros básicos
-        financialData: {
-          some: {
-            marketCap: { not: null }
-          }
-        }
-      },
-      select: {
-        ticker: true,
-        name: true,
-        sector: true,
-        logoUrl: true,
-        financialData: {
-          select: {
-            marketCap: true,
-          },
-          orderBy: { year: 'desc' },
-          take: 1
-        }
-      },
-      orderBy: {
-        financialData: {
-          _count: 'desc' // Priorizar empresas com mais dados
-        }
-      },
-      take: limit
-    })
-
-    return companies.map(company => ({
-      ticker: company.ticker,
-      name: company.name,
-      sector: company.sector,
-      logoUrl: company.logoUrl,
-      marketCap: company.financialData[0]?.marketCap || null
-    } as CompetitorData))
-
-  } catch (error) {
-    console.error('❌ Erro ao buscar empresas relacionadas:', error)
-    return []
-  }
-}
-
-// Função para buscar concorrentes do mesmo setor com priorização de subsetor (otimizada)
-async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, currentMarketCap: number | null = null, limit: number = 5): Promise<CompetitorData[]> {
-  if (!sector) return []
-  
-  try {
-    // Determinar o tamanho da empresa atual
-    const currentCompanySize = getCompanySize(currentMarketCap)
-    
-    // Verificar cache primeiro (incluir tamanho na chave do cache)
-    const cacheKey = `competitors-${currentTicker}-${sector}-${industry}-${currentCompanySize}-${limit}-v2`
-    const cached = await cache.get<{ ticker: string; name: string; sector: string | null }[]>(cacheKey, {
-      prefix: 'companies',
-      ttl: COMPETITORS_CACHE_TTL
-    })
-    
-    if (cached) {
-      console.log('📋 Usando concorrentes do cache para', currentTicker)
-      return cached
-    }
-
-    const currentPrefix = getTickerPrefix(currentTicker)
-    const currentYear = new Date().getFullYear()
-    
-    // Sempre incluir dados financeiros para filtrar por tamanho e lucro
-    // Para Large Caps, incluir dados financiais para filtrar por market cap
-    
-    const allCompetitors = await prisma.company.findMany({
-      where: {
-        OR: [
-          { industry: industry || undefined },
-          { sector: sector }
-        ],
-        ticker: { not: currentTicker },
-        // Filtrar empresas com dados financeiros recentes e com lucro positivo
-        financialData: {
-          some: {
-            year: { gte: currentYear - 1 },
-            // Excluir empresas com prejuízo (lucro líquido negativo ou nulo)
-            lucroLiquido: {
-              gt: 0
-            }
-          }
-        }
-      },
-      select: {
-        ticker: true,
-        name: true,
-        sector: true,
-        industry: true,
-        logoUrl: true,
-        // Incluir dados financiais apenas se for blue chip
-        financialData: {
-          select: {
-            marketCap: true,
-            lucroLiquido: true,
-            year: true
-          },
-          where: {
-            year: { gte: currentYear - 1 },
-            lucroLiquido: {
-              gt: 0
-            }
-          },
-          orderBy: { year: 'desc' },
-          take: 1
-        }
-      },
-      orderBy: [
-        { industry: industry ? 'asc' : 'desc' }, // Priorizar industry se especificado
-        { ticker: 'asc' }
-      ],
-      take: limit * 10 // Buscar mais para ter opções após filtrar prefixos, tamanho e lucro
-    })
-
-    // Filtrar empresas com mesmo prefixo e priorizar por industry
-    const seenPrefixes = new Set([currentPrefix])
-    const competitors: { ticker: string; name: string; sector: string | null }[] = []
-    
-    // Função auxiliar para verificar se a empresa atende aos critérios
-    const isValidCompetitor = (company: any, allowDifferentSizes: boolean = false): boolean => {
-      const companyPrefix = getTickerPrefix(company.ticker)
-      if (seenPrefixes.has(companyPrefix)) return false
-      
-      // Verificar se tem dados financeiros válidos
-      const financialData = company.financialData?.[0]
-      if (!financialData) return false
-      
-      // Verificar se tem lucro positivo (já filtrado na query, mas double check)
-      const lucroLiquido = toNumber(financialData.lucroLiquido)
-      if (!lucroLiquido || lucroLiquido <= 0) return false
-      
-      // Filtrar por tamanho de empresa (comparar com empresa atual)
-      if (currentCompanySize && !allowDifferentSizes) {
-        const competitorMarketCap = toNumber(financialData.marketCap)
-        if (competitorMarketCap) {
-          const competitorSize = getCompanySize(competitorMarketCap)
-          // Só incluir empresas do mesmo tamanho
-          if (competitorSize !== currentCompanySize) return false
-        } else {
-          return false // Se não tem market cap, não incluir
-        }
-      } else if (currentCompanySize && allowDifferentSizes) {
-        // No modo fallback, ainda precisamos de market cap válido
-        const competitorMarketCap = toNumber(financialData.marketCap)
-        if (!competitorMarketCap) return false
-      }
-      
-      return true
-    }
-    
-    // Função auxiliar para processar empresas com critério específico
-    const processCompanies = (companies: any[], filterFn: (company: any) => boolean, allowDifferentSizes: boolean = false) => {
-      for (const company of companies) {
-        if (competitors.length >= limit) break
-        if (filterFn(company) && isValidCompetitor(company, allowDifferentSizes)) {
-          const companyPrefix = getTickerPrefix(company.ticker)
-          seenPrefixes.add(companyPrefix)
-          competitors.push({
-            ticker: company.ticker,
-            name: company.name,
-            sector: company.sector,
-            logoUrl: company.logoUrl,
-            marketCap: company.financialData[0]?.marketCap || null
-          } as CompetitorData)
-        }
-      }
-    }
-
-    // PASSADA 1: Empresas do mesmo tamanho
-    // Primeiro: empresas do mesmo industry e mesmo tamanho
-    if (industry) {
-      processCompanies(
-        allCompetitors,
-        (company) => company.industry === industry,
-        false // Só mesmo tamanho
-      )
-    }
-    
-    // Depois: empresas do mesmo setor e mesmo tamanho (se ainda precisar)
-    if (competitors.length < limit) {
-      processCompanies(
-        allCompetitors,
-        (company) => company.sector === sector,
-        false // Só mesmo tamanho
-      )
-    }
-
-    // PASSADA 2: Fallback para outros tamanhos (se ainda não temos 6 empresas)
-    if (competitors.length < limit) {
-      console.log(`🔄 Fallback: apenas ${competitors.length} empresas do mesmo tamanho encontradas, buscando outros tamanhos...`)
-      
-      // Primeiro: empresas do mesmo industry (qualquer tamanho)
-      if (industry) {
-        processCompanies(
-          allCompetitors,
-          (company) => company.industry === industry,
-          true // Permitir tamanhos diferentes
-        )
-      }
-      
-      // Depois: empresas do mesmo setor (qualquer tamanho)
-      if (competitors.length < limit) {
-        processCompanies(
-          allCompetitors,
-          (company) => company.sector === sector,
-          true // Permitir tamanhos diferentes
-        )
-      }
-    }
-
-    // Log para debug
-    const sameSize = competitors.filter(comp => {
-      const financialData = allCompetitors.find(c => c.ticker === comp.ticker)?.financialData?.[0]
-      if (!financialData) return false
-      const competitorMarketCap = toNumber(financialData.marketCap)
-      const competitorSize = getCompanySize(competitorMarketCap)
-      return competitorSize === currentCompanySize
-    }).length
-    
-    console.log(`🔍 Empresa ${currentTicker} (${currentCompanySize}): encontrados ${competitors.length} concorrentes válidos (${sameSize} do mesmo tamanho, ${competitors.length - sameSize} de outros tamanhos)`)
-
-    // Armazenar no cache
-    await cache.set(cacheKey, competitors, {
-      prefix: 'companies',
-      ttl: COMPETITORS_CACHE_TTL
-    })
-    
-    return competitors
-  } catch (error) {
-    console.error('Erro ao buscar concorrentes:', error)
-    return []
-  }
-}
-
-// Componente IndicatorCard definido abaixo (após os componentes inline)
 
 // Tipo para valores do Prisma que podem ser Decimal
 type PrismaDecimal = { toNumber: () => number } | number | string | null | undefined
@@ -394,19 +78,17 @@ function formatCurrency(value: number | null): string {
   }).format(value)
 }
 
-
-
-
-
+// Cache
+const METADATA_CACHE_TTL = 60 * 60 // 60 minutos em segundos
 
 // Gerar metadata dinâmico para SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const resolvedParams = await params
-  const tickerParam = resolvedParams.ticker // Manter ticker original da URL
-  const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
+  const tickerParam = resolvedParams.ticker
+  const ticker = tickerParam.toUpperCase()
   
   // Verificar cache primeiro
-  const cacheKey = `metadata-${ticker}`
+  const cacheKey = `metadata-bdr-${ticker}`
   const cached = await cache.get<any>(cacheKey, {
     prefix: 'companies',
     ttl: METADATA_CACHE_TTL
@@ -421,6 +103,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       where: { ticker },
       select: {
         name: true,
+        assetType: true,
         sector: true,
         description: true,
         logoUrl: true,
@@ -453,34 +136,41 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     if (!company) {
       return {
-        title: `${ticker} - Ticker Não Encontrado | Análise Fácil`,
-        description: `O ticker ${ticker} não foi encontrado em nossa base de dados de análise de ações.`
+        title: `${ticker} - BDR Não Encontrado | Análise Fácil`,
+        description: `O BDR ${ticker} não foi encontrado em nossa base de dados de análise de Brazilian Depositary Receipts.`
+      }
+    }
+
+    // Verificar se é realmente um BDR, senão redirecionar
+    if (company.assetType !== 'BDR') {
+      return {
+        title: `${ticker} - Redirecionando...`,
+        description: `Redirecionando para a página correta do ativo ${ticker}.`
       }
     }
 
     const latestFinancials = company.financialData[0]
     const currentPrice = toNumber(company.dailyQuotes[0]?.price) || 0
     
-    const title = `${ticker} - ${company.name} | Análise Completa - Preço Justo AI`
+    const title = `${ticker} - ${company.name} | Análise Completa de BDR - Preço Justo AI`
     
-    // Incluir descrição da empresa no SEO quando disponível
-    const baseDescription = `Análise fundamentalista completa da ação ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
+    const baseDescription = `Análise completa do BDR ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
     
     const companyInfo = company.description 
       ? ` ${company.description.substring(0, 100)}...` 
       : ''
     
-    const description = `${baseDescription}${companyInfo} Análise com IA, indicadores financeiros e estratégias de investimento.`
+    const description = `${baseDescription}${companyInfo} Análise com IA, indicadores financeiros e estratégias de investimento em BDRs.`
 
     const metadata = {
       title,
       description,
-      keywords: `${ticker}, ${company.name}, análise fundamentalista, ação ${ticker}, ações, B3, bovespa, investimentos, ${company.sector}, análise de ações, valuation, indicadores financeiros`,
+      keywords: `${ticker}, ${company.name}, BDR, Brazilian Depositary Receipt, análise BDR, ${ticker} BDR, ações internacionais, B3, bovespa, investimentos, ${company.sector}, análise de BDRs, valuation BDR`,
       openGraph: {
         title,
         description,
         type: 'article',
-        url: `/acao/${tickerParam.toLowerCase()}`,
+        url: `/bdr/${tickerParam.toLowerCase()}`,
         siteName: 'Preço Justo AI',
         images: company.logoUrl ? [{ 
           url: company.logoUrl, 
@@ -498,7 +188,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         site: '@PrecoJustoAI'
       },
       alternates: {
-        canonical: `/acao/${tickerParam.toLowerCase()}`,
+        canonical: `/bdr/${tickerParam.toLowerCase()}`,
       },
       robots: {
         index: true,
@@ -512,8 +202,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         },
       },
       other: {
-        'article:section': 'Análise de Ações',
-        'article:tag': `${ticker}, ${company.name}, ${company.sector}, análise fundamentalista`,
+        'article:section': 'Análise de BDRs',
+        'article:tag': `${ticker}, ${company.name}, BDR, Brazilian Depositary Receipt, análise BDR`,
         'article:author': 'Preço Justo AI',
         'article:publisher': 'Preço Justo AI',
       }
@@ -528,38 +218,37 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return metadata
   } catch {
     return {
-      title: `${ticker} - Análise de Ação | Preço Justo AI`,
-      description: `Análise fundamentalista completa da ação ${ticker} com indicadores financeiros, valuation e estratégias de investimento. Descubra se ${ticker} está subvalorizada ou sobrevalorizada.`,
+      title: `${ticker} - Análise de BDR | Preço Justo AI`,
+      description: `Análise completa do BDR ${ticker} com indicadores financeiros, valuation e estratégias de investimento em Brazilian Depositary Receipts.`,
       alternates: {
-        canonical: `/acao/${tickerParam.toLowerCase()}`,
+        canonical: `/bdr/${tickerParam.toLowerCase()}`,
       }
     }
   }
 }
 
-export default async function TickerPage({ params }: PageProps) {
+export default async function BdrPage({ params }: PageProps) {
   const resolvedParams = await params
-  const tickerParam = resolvedParams.ticker // Manter ticker original da URL
-  const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
+  const tickerParam = resolvedParams.ticker
+  const ticker = tickerParam.toUpperCase()
 
   // Verificar sessão do usuário para recursos premium
   const session = await getServerSession(authOptions)
   let userIsPremium = false
 
-  // Verificar se é Premium - ÚNICA FONTE DA VERDADE
   if (session?.user?.id) {
     const user = await getCurrentUser()
     userIsPremium = user?.isPremium || false
   }
 
-  // Buscar dados da empresa e dados financeiros completos em paralelo (incluindo dados históricos)
+  // Buscar dados da empresa
   const [companyData, comprehensiveData, reportsCount, youtubeAnalysis] = await Promise.all([
     prisma.company.findUnique({
       where: { ticker },
       include: {
         financialData: {
           orderBy: { year: 'desc' },
-          take: 8 // Dados atuais + até 7 anos históricos para médias
+          take: 8
         },
         dailyQuotes: {
           orderBy: { date: 'desc' },
@@ -568,7 +257,6 @@ export default async function TickerPage({ params }: PageProps) {
       }
     }),
     getComprehensiveFinancialData(ticker, 'YEARLY', 7),
-    // Contar relatórios de mudança fundamental
     prisma.aIReport.count({
       where: {
         company: {
@@ -577,7 +265,6 @@ export default async function TickerPage({ params }: PageProps) {
         type: 'FUNDAMENTAL_CHANGE'
       }
     }),
-    // Buscar análise do YouTube
     prisma.youTubeAnalysis.findFirst({
       where: {
         company: {
@@ -598,17 +285,16 @@ export default async function TickerPage({ params }: PageProps) {
     })
   ])
 
-
   if (!companyData) {
     notFound()
   }
 
-  // Verificar se é realmente uma ação (STOCK), senão fazer redirect 301 para a URL correta
-  if (companyData.assetType !== 'STOCK') {
-    const correctPath = companyData.assetType === 'FII' ? `/fii/${tickerParam.toLowerCase()}` :
-                       companyData.assetType === 'BDR' ? `/bdr/${tickerParam.toLowerCase()}` :
+  // Verificar se é realmente um BDR, senão redirecionar
+  if (companyData.assetType !== 'BDR') {
+    const correctPath = companyData.assetType === 'STOCK' ? `/acao/${tickerParam.toLowerCase()}` :
+                       companyData.assetType === 'FII' ? `/fii/${tickerParam.toLowerCase()}` :
                        companyData.assetType === 'ETF' ? `/etf/${tickerParam.toLowerCase()}` :
-                       `/acao/${tickerParam.toLowerCase()}` // fallback para STOCK
+                       `/acao/${tickerParam.toLowerCase()}`
     redirect(correctPath)
   }
 
@@ -616,35 +302,14 @@ export default async function TickerPage({ params }: PageProps) {
   const latestQuote = companyData.dailyQuotes[0]
   const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
 
-  // Buscar concorrentes inteligentes para comparador premium
-  const currentMarketCap = toNumber(latestFinancials?.marketCap)
-  const competitors = companyData.sector 
-    ? await getSectorCompetitors(ticker, companyData.sector, companyData.industry, currentMarketCap, 5)
-    : []
-  
-  // Buscar empresas relacionadas mesclando inteligentes + básicas para SEO
-  const relatedCompanies = companyData.sector 
-    ? await getMixedRelatedCompanies(ticker, companyData.sector, competitors, 6)
-    : []
-  
-  
-  // Criar URL do comparador inteligente
-  const smartComparatorUrl = competitors.length > 0 
-    ? `/compara-acoes/${ticker}/${competitors.map(c => c.ticker).join('/')}`
-    : null
-
-  // As análises estratégicas agora são feitas no componente cliente
-
-  // Converter dados financeiros para números (evitar erro Decimal do Prisma)
+  // Converter dados financeiros para números
   const serializedFinancials = latestFinancials ? Object.fromEntries(
     Object.entries(latestFinancials).map(([key, value]) => [
       key,
-      // Converter Decimals para números, manter Dates e outros tipos
       value && typeof value === 'object' && 'toNumber' in value 
         ? value.toNumber() 
         : value
     ])
-   
   ) as any : null
 
   // Converter dados da análise do YouTube
@@ -658,30 +323,9 @@ export default async function TickerPage({ params }: PageProps) {
 
   return (
     <>
-      {/* Barra de Busca no Topo */}
-      {/* <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto py-4 px-4">
-          <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
-              <h2 className="text-base sm:text-lg font-semibold truncate">Análise de Ações</h2>
-              <div className="hidden md:block text-sm text-muted-foreground truncate">
-                {companyData.name} ({ticker})
-              </div>
-            </div>
-            <div className="w-full sm:w-auto sm:max-w-md">
-              <CompanySearch 
-                placeholder="Buscar outras empresas..."
-                className="w-full"
-              />
-            </div>
-          </div>
-        </div>
-      </div> */}
-
       <div className="container mx-auto py-8 px-4">
         {/* Layout Responsivo: 2 Cards Separados */}
         <div className="mb-8">
-          {/* Desktop: Cards lado a lado */}
           <div className="lg:flex lg:space-x-6 space-y-6 lg:space-y-0">
             
             {/* Card do Header da Empresa */}
@@ -707,6 +351,10 @@ export default async function TickerPage({ params }: PageProps) {
                         <h1 className="text-2xl sm:text-3xl font-bold truncate">{ticker}</h1>
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="secondary" className="text-sm w-fit">
+                            <Globe className="w-3 h-3 mr-1" />
+                            BDR
+                          </Badge>
+                          <Badge variant="outline" className="text-sm w-fit">
                             {companyData.sector || 'N/A'}
                           </Badge>
                           <CompanySizeBadge 
@@ -716,7 +364,7 @@ export default async function TickerPage({ params }: PageProps) {
                         </div>
                       </div>
                       
-                      {/* Preço - Mobile: abaixo do ticker, Desktop: ao lado direito */}
+                      {/* Preço */}
                       <div className="lg:text-right lg:flex-shrink-0">
                         <p className="text-sm text-muted-foreground">Preço Atual</p>
                         <p className="text-xl sm:text-2xl font-bold text-green-600">
@@ -729,8 +377,22 @@ export default async function TickerPage({ params }: PageProps) {
                     </div>
                     
                     <h2 className="text-lg sm:text-xl text-muted-foreground mb-4 truncate">
-                      Análise da Ação {companyData.name}
+                      Análise do BDR {companyData.name}
                     </h2>
+
+                    {/* Informação sobre BDR */}
+                    <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Globe className="w-4 h-4 text-purple-600" />
+                        <h3 className="font-semibold text-purple-900 dark:text-purple-100">
+                          Brazilian Depositary Receipt (BDR)
+                        </h3>
+                      </div>
+                      <p className="text-sm text-purple-700 dark:text-purple-300">
+                        BDRs são certificados de depósito que representam ações de empresas estrangeiras 
+                        negociadas na B3. Permitem investir em empresas internacionais através da bolsa brasileira.
+                      </p>
+                    </div>
 
                     {/* Descrição da Empresa - Collapsible para SEO */}
                     {companyData.description && (
@@ -756,15 +418,6 @@ export default async function TickerPage({ params }: PageProps) {
 
                     {/* Botões de Ação */}
                     <div className="mb-4 flex flex-wrap gap-2">
-                      {smartComparatorUrl && (
-                        <Button asChild>
-                          <Link href={smartComparatorUrl}>
-                            <GitCompare className="w-4 h-4 mr-2" />
-                            Comparador Inteligente
-                          </Link>
-                        </Button>
-                      )}
-                      
                       <AddToBacktestButton
                         asset={{
                           ticker: companyData.ticker,
@@ -777,17 +430,17 @@ export default async function TickerPage({ params }: PageProps) {
                         showLabel={true}
                       />
 
-                      <AssetSubscriptionButton
+                      {/* <AssetSubscriptionButton
                         ticker={ticker}
                         companyId={companyData.id}
                         variant="outline"
                         size="default"
                         showLabel={true}
-                      />
+                      /> */}
 
                       {reportsCount > 0 && (
                         <Button asChild variant="outline" size="default">
-                          <Link href={`/acao/${ticker.toLowerCase()}/relatorios`}>
+                          <Link href={`/bdr/${ticker.toLowerCase()}/relatorios`}>
                             <FileText className="w-4 h-4 mr-2" />
                             Relatórios ({reportsCount})
                           </Link>
@@ -839,12 +492,11 @@ export default async function TickerPage({ params }: PageProps) {
             </Card>
 
             {/* Card do Score - Separado */}
-            <div className="lg:flex-shrink-0">
+            {/* <div className="lg:flex-shrink-0">
               <HeaderScoreWrapper ticker={ticker} />
-            </div>
+            </div> */}
           </div>
         </div>
-
 
         {latestFinancials && (
           <>
@@ -865,7 +517,7 @@ export default async function TickerPage({ params }: PageProps) {
               userIsPremium={userIsPremium}
             />
 
-            {/* Análise Técnica - Logo após as análises fundamentalistas */}
+            {/* Análise Técnica */}
             <TechnicalAnalysisSection 
               ticker={ticker} 
               userIsPremium={userIsPremium}
@@ -923,26 +575,6 @@ export default async function TickerPage({ params }: PageProps) {
         )}
       </div>
 
-      {/* Seção de Empresas Relacionadas - SEO Links Internos */}
-      {relatedCompanies.length > 0 && (
-        <div className="container mx-auto px-4 pb-8">
-          <RelatedCompanies
-            companies={relatedCompanies.map(comp => ({
-              ticker: comp.ticker,
-              name: comp.name,
-              sector: comp.sector,
-              logoUrl: comp.logoUrl || null,
-              marketCap: comp.marketCap || null,
-              assetType: 'STOCK' // Empresas relacionadas são sempre ações na página de ações
-            }))}
-            currentTicker={ticker}
-            currentSector={companyData.sector}
-            currentIndustry={companyData.industry}
-            currentAssetType="STOCK"
-          />
-        </div>
-      )}
-
       {/* Footer para usuários não logados - SEO */}
       {!session && (
         <Footer />
@@ -958,8 +590,8 @@ export default async function TickerPage({ params }: PageProps) {
               "@type": "Corporation",
               "name": companyData.name,
               "alternateName": ticker,
-              "description": companyData.description || `Análise fundamentalista completa de ${companyData.name} (${ticker}) com indicadores financeiros, valuation e estratégias de investimento. Descubra se a ação está subvalorizada.`,
-              "url": `https://precojusto.ai/acao/${ticker.toLowerCase()}`,
+              "description": companyData.description || `Análise completa do BDR ${companyData.name} (${ticker}) com indicadores financeiros, valuation e estratégias de investimento em Brazilian Depositary Receipts.`,
+              "url": `https://precojusto.ai/bdr/${ticker.toLowerCase()}`,
               "logo": companyData.logoUrl || undefined,
               "sameAs": companyData.website ? [companyData.website] : undefined,
               "address": companyData.address ? {
@@ -989,6 +621,7 @@ export default async function TickerPage({ params }: PageProps) {
               "pbRatio": toNumber(latestFinancials.pvp),
               "roe": toNumber(latestFinancials.roe),
               "roa": toNumber(latestFinancials.roa),
+              "additionalType": "BDR - Brazilian Depositary Receipt",
               "lastUpdated": latestFinancials.updatedAt?.toISOString()
             })
           }}

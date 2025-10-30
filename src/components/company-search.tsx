@@ -15,6 +15,7 @@ interface Company {
   name: string;
   sector: string | null;
   logoUrl: string | null;
+  assetType: string;
 }
 
 interface CompanySearchResponse {
@@ -76,11 +77,26 @@ export default function CompanySearch({
     setQuery(e.target.value);
   };
 
+  const getAssetUrl = (ticker: string, assetType: string) => {
+    const lowerTicker = ticker.toLowerCase();
+    switch (assetType) {
+      case 'FII':
+        return `/fii/${lowerTicker}`;
+      case 'BDR':
+        return `/bdr/${lowerTicker}`;
+      case 'ETF':
+        return `/etf/${lowerTicker}`;
+      case 'STOCK':
+      default:
+        return `/acao/${lowerTicker}`;
+    }
+  };
+
   const handleCompanySelect = (company: Company) => {
     setQuery('');
     setShowResults(false);
     setSelectedIndex(-1);
-    router.push(`/acao/${company.ticker}`);
+    router.push(getAssetUrl(company.ticker, company.assetType));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -196,6 +212,21 @@ export default function CompanySearch({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2 mb-1">
                           <span className="font-bold text-sm">{company.ticker}</span>
+                          {/* Badge do tipo de ativo */}
+                          <Badge 
+                            variant={
+                              company.assetType === 'STOCK' ? 'default' :
+                              company.assetType === 'FII' ? 'secondary' :
+                              company.assetType === 'BDR' ? 'outline' :
+                              company.assetType === 'ETF' ? 'destructive' : 'default'
+                            } 
+                            className="text-xs"
+                          >
+                            {company.assetType === 'STOCK' ? 'Ação' :
+                             company.assetType === 'FII' ? 'FII' :
+                             company.assetType === 'BDR' ? 'BDR' :
+                             company.assetType === 'ETF' ? 'ETF' : company.assetType}
+                          </Badge>
                           {company.sector && (
                             <Badge variant="secondary" className="text-xs">
                               {company.sector}

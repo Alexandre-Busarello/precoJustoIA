@@ -5,10 +5,11 @@ export async function GET() {
   const baseUrl = 'https://precojusto.ai'
   
   try {
-    // Buscar todas as empresas
+    // Buscar todas as empresas com tipo de ativo
     const companies = await prisma.company.findMany({
       select: {
         ticker: true,
+        assetType: true,
         updatedAt: true,
       },
       orderBy: {
@@ -16,11 +17,27 @@ export async function GET() {
       }
     })
 
+    // Função para determinar a URL correta baseada no tipo de ativo
+    const getAssetUrl = (ticker: string, assetType: string) => {
+      const lowerTicker = ticker.toLowerCase()
+      switch (assetType) {
+        case 'FII':
+          return `${baseUrl}/fii/${lowerTicker}`
+        case 'BDR':
+          return `${baseUrl}/bdr/${lowerTicker}`
+        case 'ETF':
+          return `${baseUrl}/etf/${lowerTicker}`
+        case 'STOCK':
+        default:
+          return `${baseUrl}/acao/${lowerTicker}`
+      }
+    }
+
     // Gerar XML do sitemap de empresas
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${companies.map(company => `  <url>
-    <loc>${baseUrl}/acao/${company.ticker.toLowerCase()}</loc>
+    <loc>${getAssetUrl(company.ticker, company.assetType)}</loc>
     <lastmod>${(company.updatedAt || new Date('2025-09-01')).toISOString().split('T')[0]}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

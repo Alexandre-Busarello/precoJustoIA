@@ -97,6 +97,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
         }
       },
       where: {
+        assetType: 'STOCK', // Filtrar apenas ações para o ranking
         financialData: {
           some: {
             // Filtros básicos para ter dados mínimos necessários

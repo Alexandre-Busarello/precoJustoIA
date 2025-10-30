@@ -16,6 +16,7 @@ interface RelatedCompany {
   sector: string | null;
   logoUrl?: string | null;
   marketCap?: number | null;
+  assetType?: string;
 }
 
 interface RelatedCompaniesProps {
@@ -23,16 +24,37 @@ interface RelatedCompaniesProps {
   currentTicker: string;
   currentSector?: string | null;
   currentIndustry?: string | null;
+  currentAssetType?: string;
 }
 
 export function RelatedCompanies({ 
   companies, 
   currentTicker, 
-  currentSector 
+  currentSector,
+  currentAssetType = 'STOCK'
 }: RelatedCompaniesProps) {
   if (!companies || companies.length === 0) {
     return null;
   }
+
+  const getAssetUrl = (ticker: string, assetType?: string) => {
+    const lowerTicker = ticker.toLowerCase();
+    switch (assetType) {
+      case 'FII':
+        return `/fii/${lowerTicker}`;
+      case 'BDR':
+        return `/bdr/${lowerTicker}`;
+      case 'ETF':
+        return `/etf/${lowerTicker}`;
+      case 'STOCK':
+      default:
+        return `/acao/${lowerTicker}`;
+    }
+  };
+
+  const getCurrentAssetUrl = (ticker: string) => {
+    return getAssetUrl(ticker, currentAssetType);
+  };
 
   return (
     <Card className="mt-8">
@@ -55,7 +77,7 @@ export function RelatedCompanies({
           {companies.map((company) => (
             <Link
               key={company.ticker}
-              href={`/acao/${company.ticker}`}
+              href={getAssetUrl(company.ticker, company.assetType)}
               className="group block"
             >
               <div className="border rounded-lg p-4 hover:shadow-md hover:border-blue-200 transition-all duration-200 group-hover:bg-blue-50/50">
@@ -99,8 +121,8 @@ export function RelatedCompanies({
           ))}
         </div>
 
-        {/* Link para comparação básica */}
-        {companies.length >= 2 && (
+        {/* Link para comparação básica - apenas para ações */}
+        {companies.length >= 2 && currentAssetType === 'STOCK' && (
           <div className="mt-6 pt-4 border-t">
             <Link
               href={`/compara-acoes/${currentTicker}/${companies.slice(0, 3).map(c => c.ticker).join('/')}`}

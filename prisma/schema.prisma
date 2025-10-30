@@ -131,6 +131,9 @@ model Company {
   ultimoDividendo     Decimal?  @map("ultimo_dividendo") @db.Decimal(15, 6)
   dataUltimoDividendo DateTime? @map("data_ultimo_dividendo") @db.Date
   
+  // BDR tracking (Yahoo Finance updates)
+  yahooLastBdrUpdatedAt DateTime? @map("yahoo_last_bdr_updated_at")
+  
   // Relations
   dailyQuotes       DailyQuote[]
   historicalPrices  HistoricalPrice[]

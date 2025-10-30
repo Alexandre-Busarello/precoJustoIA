@@ -60,6 +60,14 @@ export async function GET(request: NextRequest) {
         summary = await PortfolioAssetUpdateService.updateDividendsOnly();
         break;
       
+      case 'bdr':
+        summary = await PortfolioAssetUpdateService.updateBDRsOnly();
+        break;
+      
+      case 'bdr-complete':
+        summary = await PortfolioAssetUpdateService.updateBDRsComplete();
+        break;
+      
       case 'full':
       default:
         summary = await PortfolioAssetUpdateService.updateAllPortfolioAssets();

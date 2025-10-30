@@ -23,6 +23,12 @@
     "update:profiles": "tsx scripts/update-company-profiles.ts",
     "update:profiles:dry": "tsx scripts/update-company-profiles.ts --dry-run",
     "update:financial-data": "tsx scripts/update-financial-data-brapi.ts",
+    "update:bdr": "node scripts/run-update-bdr-assets.js",
+    "update:bdr:prod": "node scripts/run-update-bdr-assets.js --production",
+    "update:bdr:basic": "node scripts/run-update-bdr-basic.js",
+    "update:bdr:complete": "node scripts/run-update-bdr-complete.js",
+    "test:bdr": "tsx scripts/test-bdr-integration.ts",
+    "test:bdr:fixes": "tsx scripts/test-bdr-fixes.ts",
     "monitor:run": "node scripts/run-monitor-assets.js",
     "monitor:test": "tsx scripts/test-asset-monitoring.ts",
     "debug:api": "curl -s http://localhost:3000/api/debug-ranking-history | jq ."

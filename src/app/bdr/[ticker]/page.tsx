@@ -149,12 +149,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     }
 
-    const latestFinancials = company.financialData[0]
-    const currentPrice = toNumber(company.dailyQuotes[0]?.price) || 0
+    const latestFinancials = company.financialData?.[0]
+    const currentPrice = toNumber(company.dailyQuotes?.[0]?.price) ?? 0
     
     const title = `${ticker} - ${company.name} | Análise Completa de BDR - Preço Justo AI`
     
-    const baseDescription = `Análise completa do BDR ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
+    const baseDescription = `Análise completa do BDR ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? (toNumber(latestFinancials.pl) ?? 0).toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? ((toNumber(latestFinancials.roe) ?? 0) * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
     
     const companyInfo = company.description 
       ? ` ${company.description.substring(0, 100)}...` 
@@ -298,9 +298,9 @@ export default async function BdrPage({ params }: PageProps) {
     redirect(correctPath)
   }
 
-  const latestFinancials = companyData.financialData[0]
-  const latestQuote = companyData.dailyQuotes[0]
-  const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+  const latestFinancials = companyData.financialData?.[0]
+  const latestQuote = companyData.dailyQuotes?.[0]
+  const currentPrice = toNumber(latestQuote?.price) ?? toNumber(latestFinancials?.lpa) ?? 0
 
   // Converter dados financeiros para números
   const serializedFinancials = latestFinancials ? Object.fromEntries(
@@ -314,7 +314,7 @@ export default async function BdrPage({ params }: PageProps) {
 
   // Converter dados da análise do YouTube
   const serializedYoutubeAnalysis = youtubeAnalysis ? {
-    score: toNumber(youtubeAnalysis.score) || 0,
+    score: toNumber(youtubeAnalysis.score) ?? 0,
     summary: youtubeAnalysis.summary,
     positivePoints: youtubeAnalysis.positivePoints as string[] | null,
     negativePoints: youtubeAnalysis.negativePoints as string[] | null,

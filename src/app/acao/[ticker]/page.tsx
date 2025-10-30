@@ -165,7 +165,7 @@ async function getBasicRelatedCompanies(
       name: company.name,
       sector: company.sector,
       logoUrl: company.logoUrl,
-      marketCap: company.financialData[0]?.marketCap || null
+      marketCap: company.financialData?.[0]?.marketCap || null
     } as CompetitorData))
 
   } catch (error) {

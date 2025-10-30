@@ -160,10 +160,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     }
 
-    const latestFinancials = company.financialData[0]
-    const currentPrice = toNumber(company.dailyQuotes[0]?.price) || 0
-    const expenseRatio = company.etfData?.netExpenseRatio ? toNumber(company.etfData.netExpenseRatio) * 100 : null
-    const ytdReturn = company.etfData?.ytdReturn ? toNumber(company.etfData.ytdReturn) * 100 : null
+    const latestFinancials = company.financialData?.[0]
+    const currentPrice = toNumber(company.dailyQuotes?.[0]?.price) ?? 0
+    const expenseRatio = company.etfData?.netExpenseRatio ? (toNumber(company.etfData.netExpenseRatio) ?? 0) * 100 : null
+    const ytdReturn = company.etfData?.ytdReturn ? (toNumber(company.etfData.ytdReturn) ?? 0) * 100 : null
     
     const title = `${ticker} - ${company.name} | Análise Completa de ETF - Preço Justo AI`
     
@@ -312,9 +312,9 @@ export default async function EtfPage({ params }: PageProps) {
     redirect(correctPath)
   }
 
-  const latestFinancials = companyData.financialData[0]
-  const latestQuote = companyData.dailyQuotes[0]
-  const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+  const latestFinancials = companyData.financialData?.[0]
+  const latestQuote = companyData.dailyQuotes?.[0]
+  const currentPrice = toNumber(latestQuote?.price) ?? toNumber(latestFinancials?.lpa) ?? 0
 
   // Converter dados financeiros para números
   const serializedFinancials = latestFinancials ? Object.fromEntries(

@@ -158,9 +158,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     }
 
-    const latestFinancials = company.financialData[0]
-    const currentPrice = toNumber(company.dailyQuotes[0]?.price) || 0
-    const dividendYield = company.fiiData?.dividendYield ? toNumber(company.fiiData.dividendYield) * 100 : null
+    const latestFinancials = company.financialData?.[0]
+    const currentPrice = toNumber(company.dailyQuotes?.[0]?.price) ?? 0
+    const dividendYield = company.fiiData?.dividendYield ? (toNumber(company.fiiData.dividendYield) ?? 0) * 100 : null
     
     const title = `${ticker} - ${company.name} | Análise Completa de FII - Preço Justo AI`
     
@@ -309,9 +309,9 @@ export default async function FiiPage({ params }: PageProps) {
     redirect(correctPath)
   }
 
-  const latestFinancials = companyData.financialData[0]
-  const latestQuote = companyData.dailyQuotes[0]
-  const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+  const latestFinancials = companyData.financialData?.[0]
+  const latestQuote = companyData.dailyQuotes?.[0]
+  const currentPrice = toNumber(latestQuote?.price) ?? toNumber(latestFinancials?.lpa) ?? 0
 
   // Converter dados financeiros para números
   const serializedFinancials = latestFinancials ? Object.fromEntries(
@@ -325,7 +325,7 @@ export default async function FiiPage({ params }: PageProps) {
 
   // Converter dados da análise do YouTube
   const serializedYoutubeAnalysis = youtubeAnalysis ? {
-    score: toNumber(youtubeAnalysis.score) || 0,
+    score: toNumber(youtubeAnalysis.score) ?? 0,
     summary: youtubeAnalysis.summary,
     positivePoints: youtubeAnalysis.positivePoints as string[] | null,
     negativePoints: youtubeAnalysis.negativePoints as string[] | null,

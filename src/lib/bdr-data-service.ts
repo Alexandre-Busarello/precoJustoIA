@@ -762,7 +762,7 @@ export class BDRDataService {
           keyStats?.priceToBook ||
           (summaryDetail as any)?.priceToBook
       ),
-      dy: this.calculateDividendYield(quote, keyStats, summaryDetail),
+      dy: (this.calculateDividendYield(quote, keyStats, summaryDetail) || 0) / 100,
       evEbitda: convertValue(keyStats?.enterpriseToEbitda),
       evEbit: evEbit,
       evRevenue: convertValue(keyStats?.enterpriseToRevenue),

@@ -9,121 +9,163 @@ import { prisma } from "@/lib/prisma";
 
 // Lista dos principais BDRs da B3
 export const MAIN_BDRS = [
-  // Tecnologia
-  "AMZO34.SA", // Amazon
-  "AAPL34.SA", // Apple
-  "MSFT34.SA", // Microsoft
-  "GOGL34.SA", // Google/Alphabet
-  "META34.SA", // Meta (Facebook)
-  "NVDC34.SA", // NVIDIA
-  "NFLX34.SA", // Netflix
-  "TSLA34.SA", // Tesla
-  "ADBE34.SA", // Adobe
-  "CRM34.SA", // Salesforce
-  "ORCL34.SA", // Oracle
-  "PYPL34.SA", // PayPal
-  "Z1OM34.SA", // Zoom
-  "SQ34.SA", // Block (Square)
-  "SHOP34.SA", // Shopify
-  "ROKU34.SA", // Roku
-
-  // Financeiro
-  "JPMC34.SA", // JPMorgan Chase
-  "BAC34.SA", // Bank of America
-  "WFC34.SA", // Wells Fargo
-  "GS34.SA", // Goldman Sachs
-  "MSBR34.SA", // Morgan Stanley
-  "VISA34.SA", // Visa
-  "MSCD34.SA", // Mastercard
-  "AXPB34.SA", // American Express
-  "BERK34.SA", // Berkshire Hathaway
-  "C34.SA", // Citigroup
-
-  // Saúde e Farmacêutico
-  "JNJ34.SA", // Johnson & Johnson
-  "PFE34.SA", // Pfizer
-  "UNH34.SA", // UnitedHealth
-  "ABBV34.SA", // AbbVie
-  "MRK34.SA", // Merck
-  "BMY34.SA", // Bristol Myers Squibb
-  "LLY34.SA", // Eli Lilly
-  "GILD34.SA", // Gilead Sciences
-  "AMGN34.SA", // Amgen
-  "BIIB34.SA", // Biogen
-
-  // Consumo
-  "KO34.SA", // Coca-Cola
-  "PEP34.SA", // PepsiCo
-  "WMT34.SA", // Walmart
-  "MCD34.SA", // McDonald's
-  "SBUX34.SA", // Starbucks
-  "NKE34.SA", // Nike
-  "DIS34.SA", // Disney
-  "HD34.SA", // Home Depot
-  "LOW34.SA", // Lowe's
-  "TGT34.SA", // Target
-  "COST34.SA", // Costco
-  "PG34.SA", // Procter & Gamble
-  "UL34.SA", // Unilever
-  "CL34.SA", // Colgate-Palmolive
-
-  // Energia e Commodities
-  "XOM34.SA", // ExxonMobil
-  "CVX34.SA", // Chevron
-  "COP34.SA", // ConocoPhillips
-  "SLB34.SA", // Schlumberger
-  "HAL34.SA", // Halliburton
-  "FCX34.SA", // Freeport-McMoRan
-  "NEM34.SA", // Newmont
-  "GOLD34.SA", // Barrick Gold
-
-  // Industriais
-  "BA34.SA", // Boeing
-  "CAT34.SA", // Caterpillar
-  "GE34.SA", // General Electric
-  "MMM34.SA", // 3M
-  "HON34.SA", // Honeywell
-  "UPS34.SA", // UPS
-  "FDX34.SA", // FedEx
-  "LMT34.SA", // Lockheed Martin
-  "RTX34.SA", // Raytheon Technologies
-  "NOC34.SA", // Northrop Grumman
-
-  // Telecomunicações
-  "T34.SA", // AT&T
-  "VZ34.SA", // Verizon
-  "TMUS34.SA", // T-Mobile
-  "CMCSA34.SA", // Comcast
-
-  // Utilidades
-  "NEE34.SA", // NextEra Energy
-  "DUK34.SA", // Duke Energy
-  "SO34.SA", // Southern Company
-  "D34.SA", // Dominion Energy
-
-  // REITs e Imobiliário
-  "AMT34.SA", // American Tower
-  "PLD34.SA", // Prologis
-  "CCI34.SA", // Crown Castle
-  "EQIX34.SA", // Equinix
-  "SPG34.SA", // Simon Property Group
-
-  // Outros setores importantes
-  "INTC34.SA", // Intel
-  "AMD34.SA", // AMD
-  "QCOM34.SA", // Qualcomm
-  "CSCO34.SA", // Cisco
-  "IBM34.SA", // IBM
-  "AVGO34.SA", // Broadcom
-  "TXN34.SA", // Texas Instruments
-  "MU34.SA", // Micron Technology
-  "AMAT34.SA", // Applied Materials
-  "LRCX34.SA", // Lam Research
-
-  // ETFs populares
-  "IVVB11.SA", // iShares S&P 500
-  "SPXI11.SA", // SPDR S&P 500
-  "BOVA11.SA", // iShares Bovespa (para comparação)
+  "AMZO34.SA",
+  "AAPL34.SA",
+  "MSFT34.SA",
+  "GOGL34.SA",
+  "M1TA34.SA",
+  "NVDC34.SA",
+  "NFLX34.SA",
+  "TSLA34.SA",
+  "ADBE34.SA",
+  "SSFO34.SA",
+  "ORCL34.SA",
+  "PYPL34.SA",
+  "Z1OM34.SA",
+  "S2QU34.SA",
+  "S2HO34.SA",
+  "R1OK34.SA",
+  "MELI34.SA",
+  "BABA34.SA",
+  "TSMC34.SA",
+  "P2LT34.SA",
+  "C2OI34.SA",
+  "STOC34.SA",
+  "AIRB34.SA",
+  "BKNG34.SA",
+  "U1BE34.SA",
+  "S1PO34.SA",
+  "S2NW34.SA",
+  "D2OG34.SA",
+  "N2ET34.SA",
+  "R2BL34.SA",
+  "P1IN34.SA",
+  "T1TW34.SA",
+  "ATVI34.SA",
+  "EAIN34.SA",
+  "JDCO34.SA",
+  "PDD34.SA",
+  "BIDU34.SA",
+  "JPMC34.SA",
+  "BOAC34.SA",
+  "WFCO34.SA",
+  "GSGI34.SA",
+  "MSCO34.SA",
+  "VISA34.SA",
+  "MSCD34.SA",
+  "AXPB34.SA",
+  "BERK34.SA",
+  "CTGP34.SA",
+  "ROXO34.SA",
+  "BLAK34.SA",
+  "CMEB34.SA",
+  "I1CE34.SA",
+  "SCHW34.SA",
+  "MCOR34.SA",
+  "SPGI34.SA",
+  "AIGB34.SA",
+  "JNJB34.SA",
+  "PFIZ34.SA",
+  "UNHH34.SA",
+  "ABBV34.SA",
+  "MRCK34.SA",
+  "BMYB34.SA",
+  "LILY34.SA",
+  "GILD34.SA",
+  "AMGN34.SA",
+  "BIIB34.SA",
+  "ABTT34.SA",
+  "CVSH34.SA",
+  "TMOS34.SA",
+  "ISRG34.SA",
+  "M2RN34.SA",
+  "DHER34.SA",
+  "VRTX34.SA",
+  "REGN34.SA",
+  "Z1TS34.SA",
+  "COCA34.SA",
+  "PEPB34.SA",
+  "WMTB34.SA",
+  "MCDC34.SA",
+  "SBUB34.SA",
+  "NIKE34.SA",
+  "DISB34.SA",
+  "HOME34.SA",
+  "LOWC34.SA",
+  "TGTB34.SA",
+  "COWC34.SA",
+  "PGCO34.SA",
+  "ULEV34.SA",
+  "COLG34.SA",
+  "ABUD34.SA",
+  "LVMH34.SA",
+  "MDLZ34.SA",
+  "PHMO34.SA",
+  "FDMO34.SA",
+  "GMCO34.SA",
+  "TMCO34.SA",
+  "HDBI34.SA",
+  "STLA34.SA",
+  "RACE34.SA",
+  "KHCB34.SA",
+  "ELCI34.SA",
+  "YUMR34.SA",
+  "TJXC34.SA",
+  "W1BD34.SA",
+  "XOMM34.SA",
+  "CHVX34.SA",
+  "COPH34.SA",
+  "SLBG34.SA",
+  "HALI34.SA",
+  "FCXO34.SA",
+  "BHPG34.SA",
+  "RIOB34.SA",
+  "BPXB34.SA",
+  "SHEL34.SA",
+  "TTEB34.SA",
+  "GLEN34.SA",
+  "VALE34.SA",
+  "N1EM34.SA",
+  "BOEI34.SA",
+  "CATP34.SA",
+  "GEOO34.SA",
+  "MMMC34.SA",
+  "H1ON34.SA",
+  "UPSS34.SA",
+  "FDXB34.SA",
+  "LMTB34.SA",
+  "RYTT34.SA",
+  "N1OC34.SA",
+  "ACNB34.SA",
+  "DEEC34.SA",
+  "UPAC34.SA",
+  "W1MC34.SA",
+  "ATTB34.SA",
+  "VERZ34.SA",
+  "T1MU34.SA",
+  "CMCS34.SA",
+  "NEXT34.SA",
+  "DUKB34.SA",
+  "T1SO34.SA",
+  "D1OM34.SA",
+  "T1OW34.SA",
+  "P1LD34.SA",
+  "C1CI34.SA",
+  "EQIX34.SA",
+  "SIMN34.SA",
+  "ITLC34.SA",
+  "A1MD34.SA",
+  "QCOM34.SA",
+  "CSCO34.SA",
+  "IBMB34.SA",
+  "AVGO34.SA",
+  "TEXA34.SA",
+  "MUTC34.SA",
+  "A1MT34.SA",
+  "L1RC34.SA",
+  "ASML34.SA",
+  "SAPP34.SA",
+  "SNEC34.SA"
 ];
 
 // Interface para dados do Yahoo Finance (baseada no JSON de exploração)

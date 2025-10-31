@@ -492,9 +492,9 @@ export default async function BdrPage({ params }: PageProps) {
             </Card>
 
             {/* Card do Score - Separado */}
-            {/* <div className="lg:flex-shrink-0">
+            <div className="lg:flex-shrink-0">
               <HeaderScoreWrapper ticker={ticker} />
-            </div> */}
+            </div>
           </div>
         </div>
 

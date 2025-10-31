@@ -41,7 +41,7 @@ import { AlfaVitalicioConditions } from "@/components/alfa-vitalicio-conditions"
 
 export const metadata: Metadata = {
   title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI - Investimentos Bovespa",
-  description: "🚀 Análise fundamentalista automatizada de ações da B3/Bovespa com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 8 modelos de valuation. Rankings gratuitos, comparador de ações e preço justo. +350 empresas analisadas. Comece grátis!",
+  description: "Análise fundamentalista gratuita de ações B3 com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 5 modelos. Rankings de +350 empresas. Comece grátis!",
   keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, valuation ações, como investir em ações, melhores ações B3, análise de ações grátis, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações, comparador ações bovespa, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
   authors: [{ name: "Alexandre Busarello", url: "https://precojusto.ai/fundador" }],
   creator: "Alexandre Busarello",
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI",
-    description: "🚀 Análise fundamentalista automatizada de ações da B3/Bovespa com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 8 modelos de valuation. +350 empresas analisadas. Comece grátis!",
+    description: "Análise fundamentalista gratuita de ações B3 com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 5 modelos. Rankings de +350 empresas. Comece grátis!",
     type: "website",
     url: "https://precojusto.ai",
     siteName: "Preço Justo AI",
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI",
-    description: "🚀 Análise fundamentalista automatizada de ações da B3/Bovespa com IA. Fórmula de Graham, Dividend Yield + 8 modelos. Comece grátis!",
+    description: "Análise fundamentalista gratuita de ações B3 com IA. Fórmula de Graham, Dividend Yield + 5 modelos. Comece grátis!",
     creator: "@precojustoai",
     images: ["https://precojusto.ai/og-image.jpg"],
   },
@@ -1069,9 +1069,9 @@ export default async function Home() {
                   Preciso pagar para usar?
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Não! Oferecemos acesso gratuito aos rankings e análises básicas. 
-                  Os recursos premium (análise com IA, comparações avançadas) custam 
-                  apenas R$ 47,00/mês, sem fidelidade.
+                  Temos um plano gratuito completo com rankings e análises básicas. 
+                  Para recursos avançados (IA, comparações, backtesting), oferecemos 
+                  o plano premium por R$ 47,00/mês, sem fidelidade.
                 </p>
               </CardContent>
             </Card>
@@ -1557,7 +1557,7 @@ export default async function Home() {
                   "name": "Preciso pagar para usar?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Não! Oferecemos acesso gratuito aos rankings e análises básicas. Os recursos premium (análise com IA, comparações avançadas) custam apenas R$ 47,00/mês, sem fidelidade."
+                    "text": "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 47,00/mês, sem fidelidade."
                   }
                 }
               ]

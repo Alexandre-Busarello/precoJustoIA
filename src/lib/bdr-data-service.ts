@@ -22,11 +22,7 @@ export const MAIN_BDRS = [
   "CRM34.SA", // Salesforce
   "ORCL34.SA", // Oracle
   "PYPL34.SA", // PayPal
-  "UBER34.SA", // Uber
-  "SPOT34.SA", // Spotify
-  "TWTR34.SA", // Twitter (X)
-  "SNAP34.SA", // Snapchat
-  "ZOOM34.SA", // Zoom
+  "Z1OM34.SA", // Zoom
   "SQ34.SA", // Block (Square)
   "SHOP34.SA", // Shopify
   "ROKU34.SA", // Roku
@@ -36,11 +32,11 @@ export const MAIN_BDRS = [
   "BAC34.SA", // Bank of America
   "WFC34.SA", // Wells Fargo
   "GS34.SA", // Goldman Sachs
-  "MS34.SA", // Morgan Stanley
-  "V34.SA", // Visa
-  "MA34.SA", // Mastercard
-  "AXP34.SA", // American Express
-  "BRK34.SA", // Berkshire Hathaway
+  "MSBR34.SA", // Morgan Stanley
+  "VISA34.SA", // Visa
+  "MSCD34.SA", // Mastercard
+  "AXPB34.SA", // American Express
+  "BERK34.SA", // Berkshire Hathaway
   "C34.SA", // Citigroup
 
   // Saúde e Farmacêutico

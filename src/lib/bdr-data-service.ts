@@ -165,7 +165,7 @@ export const MAIN_BDRS = [
   "L1RC34.SA",
   "ASML34.SA",
   "SAPP34.SA",
-  "SNEC34.SA"
+  "SNEC34.SA",
 ];
 
 // Interface para dados do Yahoo Finance (baseada no JSON de exploração)
@@ -762,7 +762,9 @@ export class BDRDataService {
           keyStats?.priceToBook ||
           (summaryDetail as any)?.priceToBook
       ),
-      dy: (this.calculateDividendYield(quote, keyStats, summaryDetail) || 0) / 100,
+      dy:
+        (this.calculateDividendYield(quote, keyStats, summaryDetail) || 0) /
+        100,
       evEbitda: convertValue(keyStats?.enterpriseToEbitda),
       evEbit: evEbit,
       evRevenue: convertValue(keyStats?.enterpriseToRevenue),
@@ -2100,6 +2102,10 @@ export class BDRDataService {
     console.log(
       `📊 [BDR] Processando FundamentalsTimeSeries para ${ticker}...`
     );
+    console.log(
+      "fundamentalsTimeSeries2->",
+      JSON.stringify(fundamentalsTimeSeries)
+    );
     let processedYears = 0;
 
     try {
@@ -2116,22 +2122,37 @@ export class BDRDataService {
           const dataByYear: { [year: number]: any } = {};
 
           for (const dataPoint of configData) {
-            if (dataPoint.asOfDate) {
-              const year = new Date(dataPoint.asOfDate).getFullYear();
+            // Verificar tanto 'date' quanto 'asOfDate' para compatibilidade
+            const dateField = dataPoint.date || dataPoint.asOfDate;
+            if (dateField) {
+              const year = new Date(dateField).getFullYear();
               if (!dataByYear[year]) {
                 dataByYear[year] = {};
               }
 
               // Extrair todas as métricas disponíveis do dataPoint
+              let extractedCount = 0;
               for (const [metricName, metricValue] of Object.entries(
                 dataPoint
               )) {
-                if (metricName !== "asOfDate" && metricName !== "periodType") {
+                if (
+                  metricName !== "date" &&
+                  metricName !== "asOfDate" &&
+                  metricName !== "periodType" &&
+                  metricName !== "TYPE"
+                ) {
                   const value = this.extractMetricValue(metricValue);
                   if (value !== null) {
                     dataByYear[year][metricName] = value;
+                    extractedCount++;
                   }
                 }
+              }
+
+              if (extractedCount > 0) {
+                console.log(
+                  `      📊 Ano ${year}: ${extractedCount} métricas extraídas`
+                );
               }
             }
           }
@@ -2141,6 +2162,11 @@ export class BDRDataService {
             const year = parseInt(yearStr);
             if (year && year > 2000 && year <= new Date().getFullYear()) {
               try {
+                const rawFieldCount = Object.keys(yearData).length;
+                console.log(
+                  `    📅 Processando ano ${year}: ${rawFieldCount} campos brutos`
+                );
+
                 // Mapear métricas do Yahoo Finance para campos do schema
                 const mappedData = this.mapFundamentalsToSchema(
                   yearData,
@@ -2148,14 +2174,19 @@ export class BDRDataService {
                   configKey
                 );
 
-                if (Object.keys(mappedData).length > 2) {
-                  // Mais que apenas ano e dataSource
+                const mappedFieldCount = Object.keys(mappedData).length - 2; // Excluir year e dataSource
+                if (mappedFieldCount > 0) {
+                  console.log(
+                    `      ✅ ${mappedFieldCount} campos mapeados para o schema`
+                  );
                   await this.saveBDRFinancialData(
                     companyId,
                     ticker,
                     mappedData
                   );
                   processedYears++;
+                } else {
+                  console.log(`      ⚠️ Nenhum campo válido após mapeamento`);
                 }
               } catch (error: any) {
                 console.warn(
@@ -2179,16 +2210,20 @@ export class BDRDataService {
             if (Array.isArray(errorData)) {
               // Processar da mesma forma que dados normais
               for (const dataPoint of errorData) {
-                if (dataPoint.asOfDate) {
-                  const year = new Date(dataPoint.asOfDate).getFullYear();
+                // Verificar tanto 'date' quanto 'asOfDate' para compatibilidade
+                const dateField = dataPoint.date || dataPoint.asOfDate;
+                if (dateField) {
+                  const year = new Date(dateField).getFullYear();
                   const yearData: any = {};
 
                   for (const [metricName, metricValue] of Object.entries(
                     dataPoint
                   )) {
                     if (
+                      metricName !== "date" &&
                       metricName !== "asOfDate" &&
-                      metricName !== "periodType"
+                      metricName !== "periodType" &&
+                      metricName !== "TYPE"
                     ) {
                       const value = this.extractMetricValue(metricValue);
                       if (value !== null) {
@@ -2198,18 +2233,32 @@ export class BDRDataService {
                   }
 
                   if (Object.keys(yearData).length > 0) {
+                    const rawFieldCount = Object.keys(yearData).length;
+                    console.log(
+                      `    📅 Processando ano ${year} (erro validação): ${rawFieldCount} campos brutos`
+                    );
+
                     const mappedData = this.mapFundamentalsToSchema(
                       yearData,
                       year,
                       configKey
                     );
-                    if (Object.keys(mappedData).length > 2) {
+
+                    const mappedFieldCount = Object.keys(mappedData).length - 2; // Excluir year e dataSource
+                    if (mappedFieldCount > 0) {
+                      console.log(
+                        `      ✅ ${mappedFieldCount} campos mapeados para o schema`
+                      );
                       await this.saveBDRFinancialData(
                         companyId,
                         ticker,
                         mappedData
                       );
                       processedYears++;
+                    } else {
+                      console.log(
+                        `      ⚠️ Nenhum campo válido após mapeamento`
+                      );
                     }
                   }
                 }
@@ -2308,25 +2357,9 @@ export class BDRDataService {
       }
     }
 
-    const operatingIncomeFields = [
-      "OperatingIncome",
-      "operatingIncome",
-      "OperatingRevenue",
-    ];
-    for (const field of operatingIncomeFields) {
-      if (yearData[field] !== undefined) {
-        mapped.lucroOperacional = yearData[field];
-        break;
-      }
-    }
+    // Nota: lucroOperacional não existe no schema FinancialData, removido
 
-    const grossProfitFields = ["GrossProfit", "grossProfit"];
-    for (const field of grossProfitFields) {
-      if (yearData[field] !== undefined) {
-        mapped.lucroBruto = yearData[field];
-        break;
-      }
-    }
+    // Nota: lucroBruto não existe no schema FinancialData, removido
 
     // Mapear ativos (múltiplos formatos possíveis)
     const totalAssetsFields = ["TotalAssets", "totalAssets"];
@@ -2405,30 +2438,15 @@ export class BDRDataService {
     }
 
     // Mapear campos adicionais específicos do FundamentalsTimeSeries
+    // Apenas campos que existem no schema FinancialData
     const additionalMappings = {
-      // Custos e despesas
-      CostOfRevenue: "custoProdutos",
-      costOfRevenue: "custoProdutos",
-      SellingGeneralAndAdministration: "despesasAdministrativas",
-      ResearchAndDevelopment: "despesasPesquisaDesenvolvimento",
-
-      // Impostos
-      TaxProvision: "impostoRenda",
-      taxProvision: "impostoRenda",
-
-      // Juros
-      InterestExpense: "despesasFinanceiras",
-      interestExpense: "despesasFinanceiras",
-      InterestIncome: "receitasFinanceiras",
-      interestIncome: "receitasFinanceiras",
-
       // Caixa
-      CashAndCashEquivalents: "caixaEquivalentes",
-      cashAndCashEquivalents: "caixaEquivalentes",
+      CashAndCashEquivalents: "caixa",
+      cashAndCashEquivalents: "caixa",
 
       // Dívidas
-      TotalDebt: "dividaTotal",
-      totalDebt: "dividaTotal",
+      TotalDebt: "totalDivida",
+      totalDebt: "totalDivida",
       LongTermDebt: "dividaLongoPrazo",
       longTermDebt: "dividaLongoPrazo",
     };
@@ -2446,12 +2464,14 @@ export class BDRDataService {
       if (mapped.lucroLiquido !== undefined) {
         mapped.margemLiquida = mapped.lucroLiquido / mapped.receitaTotal;
       }
-      // margemOperacional removido - não existe no schema
-      if (mapped.lucroBruto !== undefined) {
-        mapped.margemBruta = mapped.lucroBruto / mapped.receitaTotal;
-      }
       if (mapped.ebitda !== undefined) {
         mapped.margemEbitda = mapped.ebitda / mapped.receitaTotal;
+      }
+
+      // Calcular margem bruta se temos gross profit nos dados brutos
+      const grossProfit = yearData.grossProfit || yearData.GrossProfit;
+      if (grossProfit !== undefined) {
+        mapped.margemBruta = grossProfit / mapped.receitaTotal;
       }
     }
 
@@ -2492,11 +2512,26 @@ export class BDRDataService {
     console.log(`🏦 PROCESSANDO BALANCE SHEETS:`);
 
     try {
-      // Procurar dados de balanço em diferentes configurações (incluindo erros de validação)
-      const balanceConfigs = ["annual_all", "annual_balance-sheet"];
+      // Procurar dados de balanço em TODAS as configurações disponíveis
+      const allConfigs = Object.keys(fundamentalsTimeSeries);
+      console.log(`  📋 Configurações disponíveis: ${allConfigs.join(', ')}`);
+      
+      const balanceConfigs = [
+        "annual_all", 
+        "annual_balance-sheet", 
+        "annual_all_validation_error",
+        "annual_balance-sheet_validation_error"
+      ];
+
+      let totalProcessed = 0;
 
       for (const configKey of balanceConfigs) {
         let configData = fundamentalsTimeSeries[configKey];
+        
+        if (!configData) {
+          console.log(`  ⚠️ ${configKey}: não encontrado`);
+          continue;
+        }
 
         // Se for um erro de validação, extrair os dados do campo 'data'
         if (
@@ -2505,6 +2540,7 @@ export class BDRDataService {
           configData.data &&
           Array.isArray(configData.data)
         ) {
+          console.log(`  🔧 ${configKey}: extraindo dados de erro de validação`);
           configData = configData.data;
         }
 
@@ -2512,13 +2548,29 @@ export class BDRDataService {
           console.log(`  📊 ${configKey}: ${configData.length} registros`);
 
           for (const dataPoint of configData) {
-            if (dataPoint.date && this.hasBalanceSheetData(dataPoint)) {
-              // Converter timestamp Unix para data válida
-              const timestamp = dataPoint.date;
-              const endDate =
-                timestamp > 2000000000
-                  ? new Date(timestamp)
-                  : new Date(timestamp * 1000);
+            // Verificar tanto 'date' quanto 'asOfDate' para compatibilidade
+            const dateField = dataPoint.date || dataPoint.asOfDate;
+            const hasBalanceData = this.hasBalanceSheetData(dataPoint);
+            
+            console.log(`    🔍 Data: ${dateField}, hasBalanceData: ${hasBalanceData}`);
+            if (hasBalanceData) {
+              console.log(`      📊 Campos de balanço encontrados: ${Object.keys(dataPoint).filter(k => 
+                ['totalAssets', 'stockholdersEquity', 'currentAssets', 'currentLiabilities', 'cashAndCashEquivalents'].includes(k)
+              ).join(', ')}`);
+            }
+            
+            if (dateField && hasBalanceData) {
+              // Converter timestamp Unix ou string para data válida
+              let endDate: Date;
+              if (typeof dateField === "string") {
+                endDate = new Date(dateField);
+              } else {
+                const timestamp = dateField;
+                endDate =
+                  timestamp > 2000000000
+                    ? new Date(timestamp)
+                    : new Date(timestamp * 1000);
+              }
 
               const year = endDate.getFullYear();
 
@@ -2556,56 +2608,69 @@ export class BDRDataService {
                   companyId,
                   period: "YEARLY" as const,
                   endDate,
+                  // Ativos
                   totalAssets: this.convertValue(dataPoint.totalAssets),
                   totalCurrentAssets: this.convertValue(
-                    dataPoint.currentAssets
+                    dataPoint.currentAssets || dataPoint.totalCurrentAssets
                   ),
                   cash: this.convertValue(
                     dataPoint.cashAndCashEquivalents || dataPoint.cash
                   ),
+                  shortTermInvestments: this.convertValue(
+                    dataPoint.shortTermInvestments || dataPoint.otherShortTermInvestments
+                  ),
+
+                  // inventory: this.convertValue(dataPoint.inventory), // inventory doesn't exist in schema
+                  otherAssets: this.convertValue(
+                    dataPoint.otherCurrentAssets || dataPoint.otherAssets || dataPoint.otherNonCurrentAssets
+                  ),
+                  // totalNonCurrentAssets: this.convertValue( // doesn't exist in schema
+                  //   dataPoint.totalNonCurrentAssets
+                  // ),
+                  longTermInvestments: this.convertValue(
+                    dataPoint.longTermInvestments || dataPoint.investmentsAndAdvances
+                  ),
+                  // propertyPlantEquipment: this.convertValue( // doesn't exist in schema
+                  //   dataPoint.netPPE || dataPoint.propertyPlantEquipment
+                  // ),
+                  goodWill: this.convertValue(dataPoint.goodwill),
+                  // intangibleAssets: this.convertValue( // doesn't exist in schema
+                  //   dataPoint.otherIntangibleAssets || dataPoint.intangibleAssets
+                  // ),
+                  
+                  // Passivos
                   totalCurrentLiabilities: this.convertValue(
-                    dataPoint.currentLiabilities
+                    dataPoint.currentLiabilities || dataPoint.totalCurrentLiabilities
                   ),
                   totalLiab: this.convertValue(
-                    dataPoint.totalLiabilitiesNetMinorityInterest
+                    dataPoint.totalLiabilitiesNetMinorityInterest || dataPoint.totalLiab
                   ),
+                  // longTermDebt: this.convertValue(dataPoint.longTermDebt), // doesn't exist in schema
+                  // shortLongTermDebt: this.convertValue( // doesn't exist in schema
+                  //   dataPoint.longTermDebtAndCapitalLeaseObligation || dataPoint.totalDebt
+                  // ),
+                  // otherCurrentLiab: this.convertValue( // doesn't exist in schema
+                  //   dataPoint.otherCurrentLiabilities
+                  // ),
+                  // totalNonCurrentLiabilities: this.convertValue( // doesn't exist in schema
+                  //   dataPoint.totalNonCurrentLiabilitiesNetMinorityInterest || dataPoint.totalNonCurrentLiabilities
+                  // ),
+                  
+                  // Patrimônio Líquido
                   totalStockholderEquity: this.convertValue(
                     dataPoint.stockholdersEquity ||
-                      dataPoint.totalStockholderEquity
+                    dataPoint.totalStockholderEquity ||
+                    dataPoint.commonStockEquity
                   ),
-                  commonStock: this.convertValue(dataPoint.commonStock),
-                  inventory: this.convertValue(dataPoint.inventory),
-                  netReceivables: this.convertValue(
-                    dataPoint.accountsReceivable || dataPoint.receivables
-                  ),
-                  propertyPlantEquipment: this.convertValue(
-                    dataPoint.netPPE || dataPoint.propertyPlantEquipment
-                  ),
-                  goodWill: this.convertValue(dataPoint.goodwill),
-                  intangibleAssets: this.convertValue(
-                    dataPoint.otherIntangibleAssets
-                  ),
-                  longTermDebt: this.convertValue(dataPoint.longTermDebt),
-                  shortLongTermDebt: this.convertValue(
-                    dataPoint.longTermDebtAndCapitalLeaseObligation
-                  ),
-                  otherCurrentAssets: this.convertValue(
-                    dataPoint.otherCurrentAssets
-                  ),
-                  otherCurrentLiab: this.convertValue(
-                    dataPoint.otherCurrentLiabilities
-                  ),
-                  totalNonCurrentAssets: this.convertValue(
-                    dataPoint.totalNonCurrentAssets
-                  ),
-                  totalNonCurrentLiabilities: this.convertValue(
-                    dataPoint.totalNonCurrentLiabilitiesNetMinorityInterest
-                  ),
-                  workingCapital: this.convertValue(dataPoint.workingCapital),
-                  investedCapital: this.convertValue(dataPoint.investedCapital),
-                  tangibleBookValue: this.convertValue(
-                    dataPoint.tangibleBookValue
-                  ),
+                  commonStock: this.convertValue(dataPoint.commonStock || dataPoint.capitalStock),
+                  treasuryStock: this.convertValue(dataPoint.treasuryStock),
+                  
+                  // Campos calculados que existem no schema
+                  // workingCapital: this.convertValue(dataPoint.workingCapital), // doesn't exist in schema
+                  // investedCapital: this.convertValue(dataPoint.investedCapital), // doesn't exist in schema
+                  // tangibleBookValue: this.convertValue( // doesn't exist in schema
+                  //   dataPoint.tangibleBookValue
+                  // ),
                   netTangibleAssets: this.convertValue(
                     dataPoint.netTangibleAssets
                   ),
@@ -2635,6 +2700,7 @@ export class BDRDataService {
                 console.log(
                   `      ✅ Balance Sheet ${year} salvo com ${nonNullFields} campos`
                 );
+                totalProcessed++;
               } catch (error: any) {
                 console.warn(
                   `    ⚠️ Erro ao salvar Balance Sheet ${year}:`,
@@ -2643,8 +2709,12 @@ export class BDRDataService {
               }
             }
           }
+        } else {
+          console.log(`  ⚠️ ${configKey}: não é um array ou está vazio`);
         }
       }
+      
+      console.log(`🏦 RESULTADO: ${totalProcessed} Balance Sheets processados para ${ticker}`);
     } catch (error: any) {
       console.error(
         `❌ [BDR] Erro ao processar Balance Sheets do FundamentalsTimeSeries:`,
@@ -2665,11 +2735,26 @@ export class BDRDataService {
     console.log(`💰 PROCESSANDO CASHFLOW STATEMENTS:`);
 
     try {
-      // Procurar dados de fluxo de caixa em diferentes configurações (incluindo erros de validação)
-      const cashflowConfigs = ["annual_cash-flow", "annual_all"];
+      // Procurar dados de fluxo de caixa em TODAS as configurações disponíveis
+      const allConfigs = Object.keys(fundamentalsTimeSeries);
+      console.log(`  📋 Configurações disponíveis: ${allConfigs.join(', ')}`);
+      
+      const cashflowConfigs = [
+        "annual_cash-flow", 
+        "annual_all",
+        "annual_cash-flow_validation_error",
+        "annual_all_validation_error"
+      ];
+
+      let totalProcessed = 0;
 
       for (const configKey of cashflowConfigs) {
         let configData = fundamentalsTimeSeries[configKey];
+        
+        if (!configData) {
+          console.log(`  ⚠️ ${configKey}: não encontrado`);
+          continue;
+        }
 
         // Se for um erro de validação, extrair os dados do campo 'data'
         if (
@@ -2678,6 +2763,7 @@ export class BDRDataService {
           configData.data &&
           Array.isArray(configData.data)
         ) {
+          console.log(`  🔧 ${configKey}: extraindo dados de erro de validação`);
           configData = configData.data;
         }
 
@@ -2685,13 +2771,29 @@ export class BDRDataService {
           console.log(`  💸 ${configKey}: ${configData.length} registros`);
 
           for (const dataPoint of configData) {
-            if (dataPoint.date && this.hasCashflowData(dataPoint)) {
-              // Converter timestamp Unix para data válida
-              const timestamp = dataPoint.date;
-              const endDate =
-                timestamp > 2000000000
-                  ? new Date(timestamp)
-                  : new Date(timestamp * 1000);
+            // Verificar tanto 'date' quanto 'asOfDate' para compatibilidade
+            const dateField = dataPoint.date || dataPoint.asOfDate;
+            const hasCashflowData = this.hasCashflowData(dataPoint);
+            
+            console.log(`    🔍 Data: ${dateField}, hasCashflowData: ${hasCashflowData}`);
+            if (hasCashflowData) {
+              console.log(`      💸 Campos de cashflow encontrados: ${Object.keys(dataPoint).filter(k => 
+                ['operatingCashFlow', 'investingCashFlow', 'financingCashFlow', 'freeCashFlow'].includes(k)
+              ).join(', ')}`);
+            }
+            
+            if (dateField && hasCashflowData) {
+              // Converter timestamp Unix ou string para data válida
+              let endDate: Date;
+              if (typeof dateField === "string") {
+                endDate = new Date(dateField);
+              } else {
+                const timestamp = dateField;
+                endDate =
+                  timestamp > 2000000000
+                    ? new Date(timestamp)
+                    : new Date(timestamp * 1000);
+              }
 
               const year = endDate.getFullYear();
 
@@ -2708,44 +2810,57 @@ export class BDRDataService {
                   companyId,
                   period: "YEARLY" as const,
                   endDate,
+                  
+                  // Fluxo de Caixa Operacional
                   operatingCashFlow: this.convertValue(
                     dataPoint.operatingCashFlow ||
-                      dataPoint.totalCashFromOperatingActivities
-                  ),
-                  investmentCashFlow: this.convertValue(
-                    dataPoint.investingCashFlow ||
-                      dataPoint.totalCashflowsFromInvestingActivities
-                  ),
-                  financingCashFlow: this.convertValue(
-                    dataPoint.financingCashFlow ||
-                      dataPoint.totalCashFromFinancingActivities
+                    dataPoint.totalCashFromOperatingActivities ||
+                    dataPoint.cashFlowFromContinuingOperatingActivities
                   ),
                   incomeFromOperations: this.convertValue(
-                    dataPoint.incomeFromOperations
+                    dataPoint.incomeFromOperations || dataPoint.netIncome
                   ),
                   netIncomeBeforeTaxes: this.convertValue(
-                    dataPoint.netIncomeBeforeTaxes
+                    dataPoint.netIncomeBeforeTaxes || dataPoint.pretaxIncome
                   ),
                   adjustmentsToProfitOrLoss: this.convertValue(
-                    dataPoint.adjustmentsToProfitOrLoss
+                    dataPoint.adjustmentsToProfitOrLoss || dataPoint.stockBasedCompensation
                   ),
                   changesInAssetsAndLiabilities: this.convertValue(
-                    dataPoint.changesInAssetsAndLiabilities
+                    dataPoint.changesInAssetsAndLiabilities || dataPoint.changeInWorkingCapital
                   ),
                   otherOperatingActivities: this.convertValue(
-                    dataPoint.otherOperatingActivities
-                  ),
-                  increaseOrDecreaseInCash: this.convertValue(
-                    dataPoint.increaseOrDecreaseInCash || dataPoint.changeInCash
-                  ),
-                  initialCashBalance: this.convertValue(
-                    dataPoint.initialCashBalance
-                  ),
-                  finalCashBalance: this.convertValue(
-                    dataPoint.finalCashBalance
+                    dataPoint.otherOperatingActivities || dataPoint.otherNonCashItems
                   ),
                   cashGeneratedInOperations: this.convertValue(
-                    dataPoint.cashGeneratedInOperations
+                    dataPoint.cashGeneratedInOperations || dataPoint.operatingCashFlow
+                  ),
+                  
+                  // Fluxo de Caixa de Investimento
+                  investmentCashFlow: this.convertValue(
+                    dataPoint.investingCashFlow ||
+                    dataPoint.totalCashflowsFromInvestingActivities ||
+                    dataPoint.cashFlowFromContinuingInvestingActivities
+                  ),
+                  
+                  // Fluxo de Caixa de Financiamento
+                  financingCashFlow: this.convertValue(
+                    dataPoint.financingCashFlow ||
+                    dataPoint.totalCashFromFinancingActivities ||
+                    dataPoint.cashFlowFromContinuingFinancingActivities
+                  ),
+                  
+                  // Variação de Caixa
+                  increaseOrDecreaseInCash: this.convertValue(
+                    dataPoint.increaseOrDecreaseInCash || 
+                    dataPoint.changeInCash ||
+                    dataPoint.changesInCash
+                  ),
+                  initialCashBalance: this.convertValue(
+                    dataPoint.initialCashBalance || dataPoint.beginningCashPosition
+                  ),
+                  finalCashBalance: this.convertValue(
+                    dataPoint.finalCashBalance || dataPoint.endCashPosition
                   ),
                 };
 
@@ -2758,14 +2873,6 @@ export class BDRDataService {
                     value !== null
                 ).length;
 
-                console.log(`    📅 Processando ano ${year}:`);
-                console.log(
-                  `      ✅ Cashflow Statement ${year} salvo com ${nonNullFields} campos`
-                );
-                console.log(
-                  `      📊 Dados: operatingCF=${dataPoint.operatingCashFlow}, investmentCF=${dataPoint.investingCashFlow}`
-                );
-
                 await prisma.cashflowStatement.upsert({
                   where: {
                     companyId_endDate_period: {
@@ -2777,6 +2884,15 @@ export class BDRDataService {
                   update: cashflowData,
                   create: cashflowData,
                 });
+
+                console.log(`    📅 Processando ano ${year}:`);
+                console.log(
+                  `      ✅ Cashflow Statement ${year} salvo com ${nonNullFields} campos`
+                );
+                console.log(
+                  `      📊 Dados: operatingCF=${dataPoint.operatingCashFlow}, investmentCF=${dataPoint.investingCashFlow}`
+                );
+                totalProcessed++;
               } catch (error: any) {
                 console.warn(
                   `    ⚠️ Erro ao salvar Cashflow Statement ${year}:`,
@@ -2785,8 +2901,12 @@ export class BDRDataService {
               }
             }
           }
+        } else {
+          console.log(`  ⚠️ ${configKey}: não é um array ou está vazio`);
         }
       }
+      
+      console.log(`💰 RESULTADO: ${totalProcessed} Cashflow Statements processados para ${ticker}`);
     } catch (error: any) {
       console.error(
         `❌ [BDR] Erro ao processar Cashflow Statements do FundamentalsTimeSeries:`,
@@ -2802,10 +2922,27 @@ export class BDRDataService {
     return !!(
       dataPoint.totalAssets ||
       dataPoint.stockholdersEquity ||
+      dataPoint.totalStockholderEquity ||
+      dataPoint.commonStockEquity ||
       dataPoint.currentAssets ||
       dataPoint.currentLiabilities ||
       dataPoint.cashAndCashEquivalents ||
-      dataPoint.totalLiabilitiesNetMinorityInterest
+      dataPoint.cash ||
+      dataPoint.totalLiabilitiesNetMinorityInterest ||
+      dataPoint.totalLiab ||
+      dataPoint.longTermDebt ||
+      dataPoint.commonStock ||
+      dataPoint.inventory ||
+      dataPoint.accountsReceivable ||
+      dataPoint.receivables ||
+      dataPoint.netPPE ||
+      dataPoint.propertyPlantEquipment ||
+      dataPoint.goodwill ||
+      dataPoint.otherIntangibleAssets ||
+      dataPoint.workingCapital ||
+      dataPoint.investedCapital ||
+      dataPoint.tangibleBookValue ||
+      dataPoint.netTangibleAssets
     );
   }
 
@@ -2816,12 +2953,32 @@ export class BDRDataService {
     return !!(
       dataPoint.operatingCashFlow ||
       dataPoint.totalCashFromOperatingActivities ||
+      dataPoint.cashFlowFromContinuingOperatingActivities ||
       dataPoint.investingCashFlow ||
       dataPoint.totalCashflowsFromInvestingActivities ||
+      dataPoint.cashFlowFromContinuingInvestingActivities ||
       dataPoint.financingCashFlow ||
       dataPoint.totalCashFromFinancingActivities ||
+      dataPoint.cashFlowFromContinuingFinancingActivities ||
       dataPoint.freeCashFlow ||
-      dataPoint.capitalExpenditures
+      dataPoint.capitalExpenditures ||
+      dataPoint.capitalExpenditure ||
+      dataPoint.purchaseOfPPE ||
+      dataPoint.netInvestmentPurchaseAndSale ||
+      dataPoint.netCommonStockIssuance ||
+      dataPoint.commonStockPayments ||
+      dataPoint.repurchaseOfCapitalStock ||
+      dataPoint.issuanceOfDebt ||
+      dataPoint.repaymentOfDebt ||
+      dataPoint.longTermDebtIssuance ||
+      dataPoint.longTermDebtPayments ||
+      dataPoint.changesInCash ||
+      dataPoint.changeInCash ||
+      dataPoint.increaseOrDecreaseInCash ||
+      dataPoint.beginningCashPosition ||
+      dataPoint.endCashPosition ||
+      dataPoint.initialCashBalance ||
+      dataPoint.finalCashBalance
     );
   }
 

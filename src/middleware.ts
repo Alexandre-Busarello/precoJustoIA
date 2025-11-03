@@ -53,25 +53,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   
-  // Atualizar último login para usuários autenticados (apenas em rotas da aplicação)
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/acao') || pathname.startsWith('/compara-acoes')) {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
-    
-    if (token?.sub) {
-      // Fazer uma chamada assíncrona para atualizar o último login
-      // Não aguardamos para não impactar a performance
-      fetch(`${request.nextUrl.origin}/api/auth/update-last-login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.CRON_SECRET || 'internal'}`
-        },
-        body: JSON.stringify({ userId: token.sub })
-      }).catch(() => {
-        // Ignorar erros silenciosamente
-      })
-    }
-  }
+
   
   // Proteger rotas administrativas
   if (pathname.startsWith('/admin')) {
@@ -114,7 +96,6 @@ export const config = {
     '/upgrade',
     '/upgrade/:path*',
     '/webhooks/stripe',
-    '/dashboard/:path*',
     '/acao/:path*',
     '/compara-acoes/:path*'
   ]

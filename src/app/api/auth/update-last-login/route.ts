@@ -1,40 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateLastLogin } from '@/lib/alfa-service'
+import { prisma } from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/user-service';
 
-/**
- * API para atualizar o último login do usuário
- * Chamada pelo middleware para rastrear atividade
- */
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autorização (chamada interna)
-    const authHeader = request.headers.get('authorization')
-    const expectedAuth = `Bearer ${process.env.CRON_SECRET || 'internal'}`
-    
-    if (authHeader !== expectedAuth) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { error: 'Não autorizado' },
-        { status: 401 }
-      )
+        { error: 'Usuário não encontrado' },
+        { status: 404 }
+      );
     }
     
-    const { userId } = await request.json()
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId é obrigatório' },
-        { status: 400 }
-      )
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
-    await updateLastLogin(userId)
-    
+
+    // Atualizar o último login do usuário
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() }
+    })
+
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Erro ao atualizar último login:', error)
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
+    console.error('Error updating last login:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

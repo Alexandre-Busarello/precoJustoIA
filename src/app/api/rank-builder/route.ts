@@ -452,50 +452,50 @@ export async function POST(request: NextRequest) {
     );
 
     // OTIMIZAÇÃO BARSI: Buscar dividendos sequencialmente para empresas que precisam
-    if (model === 'barsi') {
-      // Identificar empresas que precisam de dados de dividendos
-      const companiesNeedingDividends: string[] = [];
+    // if (model === 'barsi') {
+    //   // Identificar empresas que precisam de dados de dividendos
+    //   const companiesNeedingDividends: string[] = [];
       
-      for (const company of companies) {
-        const hasUltimoDividendo = company.financials.ultimoDividendo && Number(company.financials.ultimoDividendo) > 0;
-        // Para verificar dividendHistory, preciso acessar os dados brutos do Prisma
-        // Como estou trabalhando com CompanyData já processado, vou usar uma abordagem diferente
+    //   for (const company of companies) {
+    //     const hasUltimoDividendo = company.financials.ultimoDividendo && Number(company.financials.ultimoDividendo) > 0;
+    //     // Para verificar dividendHistory, preciso acessar os dados brutos do Prisma
+    //     // Como estou trabalhando com CompanyData já processado, vou usar uma abordagem diferente
         
-        if (!hasUltimoDividendo) {
-          companiesNeedingDividends.push(company.ticker);
-        }
-      }
+    //     if (!hasUltimoDividendo) {
+    //       companiesNeedingDividends.push(company.ticker);
+    //     }
+    //   }
       
-      if (companiesNeedingDividends.length > 0) {
-        console.log(`📊 [BARSI OPTIMIZATION] ${companiesNeedingDividends.length} empresas precisam de dados de dividendos`);
-        console.log(`📊 [BARSI OPTIMIZATION] Iniciando busca sequencial: ${companiesNeedingDividends.join(', ')}`);
+    //   if (companiesNeedingDividends.length > 0) {
+    //     console.log(`📊 [BARSI OPTIMIZATION] ${companiesNeedingDividends.length} empresas precisam de dados de dividendos`);
+    //     console.log(`📊 [BARSI OPTIMIZATION] Iniciando busca sequencial: ${companiesNeedingDividends.join(', ')}`);
         
-        // Buscar dividendos sequencialmente para evitar sobrecarga
-        // IMPORTANTE: Este método também SALVA os dividendos no banco (Company + FinancialData)
-        const dividendResults = await DividendService.fetchLatestDividendsSequential(
-          companiesNeedingDividends,
-          400 // 400ms entre cada busca
-        );
+    //     // Buscar dividendos sequencialmente para evitar sobrecarga
+    //     // IMPORTANTE: Este método também SALVA os dividendos no banco (Company + FinancialData)
+    //     const dividendResults = await DividendService.fetchLatestDividendsSequential(
+    //       companiesNeedingDividends,
+    //       400 // 400ms entre cada busca
+    //     );
         
-        const successCount = Array.from(dividendResults.values()).filter(r => r.success).length;
-        console.log(`✅ [BARSI OPTIMIZATION] Busca concluída: ${successCount}/${companiesNeedingDividends.length} sucessos`);
+    //     const successCount = Array.from(dividendResults.values()).filter(r => r.success).length;
+    //     console.log(`✅ [BARSI OPTIMIZATION] Busca concluída: ${successCount}/${companiesNeedingDividends.length} sucessos`);
         
-        // Enriquecer dados das empresas com dividendos encontrados
-        for (const company of companies) {
-          if (dividendResults.has(company.ticker)) {
-            const dividendResult = dividendResults.get(company.ticker);
-            if (dividendResult?.success && dividendResult.latestDividend) {
-              // Adicionar o dividendo encontrado aos dados financeiros da empresa
-              company.financials.ultimoDividendo = dividendResult.latestDividend.amount;
-              company.financials.dataUltimoDividendo = dividendResult.latestDividend.date;
-              console.log(`📊 [BARSI] Enriquecido ${company.ticker} com dividendo: R$ ${dividendResult.latestDividend.amount}`);
-            }
-          }
-        }
-      } else {
-        console.log(`✅ [BARSI OPTIMIZATION] Todas as empresas já possuem dados de dividendos`);
-      }
-    }
+    //     // Enriquecer dados das empresas com dividendos encontrados
+    //     for (const company of companies) {
+    //       if (dividendResults.has(company.ticker)) {
+    //         const dividendResult = dividendResults.get(company.ticker);
+    //         if (dividendResult?.success && dividendResult.latestDividend) {
+    //           // Adicionar o dividendo encontrado aos dados financeiros da empresa
+    //           company.financials.ultimoDividendo = dividendResult.latestDividend.amount;
+    //           company.financials.dataUltimoDividendo = dividendResult.latestDividend.date;
+    //           console.log(`📊 [BARSI] Enriquecido ${company.ticker} com dividendo: R$ ${dividendResult.latestDividend.amount}`);
+    //         }
+    //       }
+    //     }
+    //   } else {
+    //     console.log(`✅ [BARSI OPTIMIZATION] Todas as empresas já possuem dados de dividendos`);
+    //   }
+    // }
 
     let results: RankBuilderResult[] = [];
 

@@ -15,15 +15,16 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     'Água e Saneamento',
     'Energia',
     'Serviços Financeiros',
-    'Utilities'
+    'Utilities',
+    'Utilidade Pública'
   ];
 
   validateCompanyData(companyData: CompanyData): boolean {
-    const { financials } = companyData;
+    const { ultimoDividendo, financials } = companyData;
     // Dados essenciais para o método Barsi
     return !!(
       financials.dy && toNumber(financials.dy)! > 0 &&
-      financials.ultimoDividendo && toNumber(financials.ultimoDividendo)! > 0 &&
+      financials.ultimoDividendo && toNumber(ultimoDividendo || financials.ultimoDividendo)! > 0 &&
       companyData.currentPrice > 0
     );
   }
@@ -95,7 +96,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     
     // Métricas principais
     const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
-    const ultimoDividendo = toNumber(financials.ultimoDividendo);
+    const ultimoDividendo = toNumber(companyData.ultimoDividendo || financials.ultimoDividendo);
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
@@ -240,7 +241,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     const {
       targetDividendYield,
       maxPriceToPayMultiplier = 1.0,
-      minConsecutiveDividends = 5,
+      minConsecutiveDividends = 3,
       maxDebtToEquity = 1.0,
       minROE = 0.10,
       focusOnBEST = true
@@ -268,7 +269,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
 
       // Métricas essenciais
       const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
-      const ultimoDividendo = toNumber(financials.ultimoDividendo);
+      const ultimoDividendo = toNumber(company.ultimoDividendo || financials.ultimoDividendo);
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
       const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
       const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);

@@ -195,6 +195,8 @@ export interface CompanyData {
   name: string;
   sector: string | null;
   industry?: string | null;
+  ultimoDividendo?: number;
+  dataUltimoDividendo?: string;
   currentPrice: number;
   logoUrl?: string | null;
   financials: CompanyFinancialData;

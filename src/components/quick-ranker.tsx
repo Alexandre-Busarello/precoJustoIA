@@ -491,9 +491,9 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         break
         case "barsi":
           setParams({
-            targetDividendYield: 0.06,      // Meta de 6% de dividend yield
+            targetDividendYield: 0.05,      // Meta de 5% de dividend yield
             maxPriceToPayMultiplier: 1.0,   // Preço teto exato
-            minConsecutiveDividends: 5,     // 5 anos consecutivos
+            minConsecutiveDividends: 3,     // 3 anos consecutivos
             maxDebtToEquity: 1.0,           // Máximo 100% Dívida/PL
             minROE: 0.10,                   // ROE mínimo 10%
             focusOnBEST: true,              // Focar nos setores B.E.S.T.

@@ -552,7 +552,7 @@ export async function POST(request: NextRequest) {
         );
         break;
       case "barsi":
-        results = StrategyFactory.runBarsiRanking(
+        results = await StrategyFactory.runBarsiRanking(
           companies,
           params as BarsiParams
         );

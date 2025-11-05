@@ -7,6 +7,7 @@ import { GordonStrategy } from './gordon-strategy';
 import { FundamentalistStrategy } from './fundamentalist-strategy';
 import { AIStrategy } from './ai-strategy';
 import { ScreeningStrategy } from './screening-strategy';
+import { BarsiStrategy } from './barsi-strategy';
 import { 
   StrategyParams, 
   StrategyAnalysis, 
@@ -19,11 +20,12 @@ import {
   MagicFormulaParams,
   GordonParams,
   AIParams,
-  ScreeningParams
+  ScreeningParams,
+  BarsiParams
 } from './types';
 import { FundamentalistParams } from './fundamentalist-strategy';
 
-type StrategyType = 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'fundamentalist' | 'ai' | 'screening';
+type StrategyType = 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'fundamentalist' | 'ai' | 'screening' | 'barsi';
 
 export class StrategyFactory {
   static createStrategy(type: StrategyType) {
@@ -46,6 +48,8 @@ export class StrategyFactory {
         return new AIStrategy();
       case 'screening':
         return new ScreeningStrategy();
+      case 'barsi':
+        return new BarsiStrategy();
       default:
         throw new Error(`Unknown strategy type: ${type}`);
     }
@@ -57,7 +61,7 @@ export class StrategyFactory {
     params: StrategyParams
   ): StrategyAnalysis {
     const strategy = this.createStrategy(type);
-    return strategy.runAnalysis(companyData, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams);
+    return strategy.runAnalysis(companyData, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams & BarsiParams);
   }
 
   static runRanking(
@@ -66,7 +70,7 @@ export class StrategyFactory {
     params: StrategyParams
   ): RankBuilderResult[] | Promise<RankBuilderResult[]> {
     const strategy = this.createStrategy(type);
-    return strategy.runRanking(companies, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams);
+    return strategy.runRanking(companies, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams  & BarsiParams);
   }
 
 
@@ -103,6 +107,10 @@ export class StrategyFactory {
     return this.runAnalysis('screening', companyData, params);
   }
 
+  static runBarsiAnalysis(companyData: CompanyData, params: BarsiParams): StrategyAnalysis {
+    return this.runAnalysis('barsi', companyData, params);
+  }
+
   static runGrahamRanking(companies: CompanyData[], params: GrahamParams): RankBuilderResult[] {
     return this.runRanking('graham', companies, params) as RankBuilderResult[];
   }
@@ -135,13 +143,17 @@ export class StrategyFactory {
     return this.runRanking('screening', companies, params) as RankBuilderResult[];
   }
 
+  static runBarsiRanking(companies: CompanyData[], params: BarsiParams): RankBuilderResult[] {
+    return this.runRanking('barsi', companies, params) as RankBuilderResult[];
+  }
+
   static async runAIRanking(companies: CompanyData[], params: AIParams): Promise<RankBuilderResult[]> {
     const strategy = new AIStrategy();
     return await strategy.runRanking(companies, params);
   }
 
-  static generateRational(type: StrategyType, params: GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams | ScreeningParams): string {
+  static generateRational(type: StrategyType, params: GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams | ScreeningParams | BarsiParams): string {
     const strategy = this.createStrategy(type);
-    return strategy.generateRational(params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & AIParams & ScreeningParams);
+    return strategy.generateRational(params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & AIParams & ScreeningParams & BarsiParams);
   }
 }

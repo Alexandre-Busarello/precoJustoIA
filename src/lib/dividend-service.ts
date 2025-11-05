@@ -322,6 +322,207 @@ export class DividendService {
   }
 
   /**
+   * Busca apenas o último dividendo de uma empresa sem salvar no banco
+   * Método otimizado para uso durante rankings para evitar sobrecarga
+   */
+  static async fetchLatestDividendOnly(ticker: string): Promise<{
+    success: boolean;
+    latestDividend?: DividendInfo;
+    error?: string;
+  }> {
+    try {
+      console.log(
+        `📊 [DIVIDEND LIGHT] Buscando último dividendo para ${ticker}`
+      );
+
+      // Buscar dividendos do Yahoo Finance
+      const dividends = await this.fetchDividendsFromYahoo(ticker);
+
+      if (!dividends || dividends.length === 0) {
+        return {
+          success: false,
+          error: "Nenhum dividendo encontrado",
+        };
+      }
+
+      // Retornar apenas o mais recente
+      const latestDividend = dividends[0];
+
+      console.log(
+        `✅ [DIVIDEND LIGHT] Último dividendo ${ticker}: R$ ${latestDividend.amount} (${latestDividend.date})`
+      );
+
+      return {
+        success: true,
+        latestDividend: {
+          ticker,
+          date: latestDividend.date,
+          amount: latestDividend.amount,
+          exDate: latestDividend.date,
+          paymentDate: undefined,
+          type: undefined,
+        },
+      };
+    } catch (error) {
+      console.error(
+        `❌ [DIVIDEND LIGHT] Erro ao buscar dividendo para ${ticker}:`,
+        error
+      );
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Erro desconhecido",
+      };
+    }
+  }
+
+  /**
+   * Processa dividendos para múltiplas empresas de forma SEQUENCIAL
+   * Evita sobrecarga do pool de conexões processando uma por vez
+   */
+  static async fetchLatestDividendsSequential(
+    tickers: string[],
+    delayMs: number = 500
+  ): Promise<
+    Map<
+      string,
+      { success: boolean; latestDividend?: DividendInfo; error?: string }
+    >
+  > {
+    const results = new Map<
+      string,
+      { success: boolean; latestDividend?: DividendInfo; error?: string }
+    >();
+
+    console.log(
+      `📊 [DIVIDENDS SEQUENTIAL] Iniciando processamento sequencial de ${tickers.length} empresas`
+    );
+
+    for (let i = 0; i < tickers.length; i++) {
+      const ticker = tickers[i];
+
+      console.log(
+        `📊 [DIVIDENDS SEQUENTIAL] Processando ${i + 1}/${
+          tickers.length
+        }: ${ticker}`
+      );
+
+      try {
+        const result = await this.fetchLatestDividendOnly(ticker);
+        
+        if (result.success && result.latestDividend) {
+          // Salvar no banco de dados
+          await this.saveLatestDividendToDatabase(ticker, result.latestDividend);
+          console.log(
+            `✅ [DIVIDENDS SEQUENTIAL] ${ticker}: R$ ${result.latestDividend.amount} (salvo no banco)`
+          );
+        } else {
+          console.log(`⚠️ [DIVIDENDS SEQUENTIAL] ${ticker}: ${result.error}`);
+        }
+        
+        results.set(ticker, result);
+      } catch (error) {
+        console.error(
+          `❌ [DIVIDENDS SEQUENTIAL] Erro ao processar ${ticker}:`,
+          error
+        );
+        results.set(ticker, {
+          success: false,
+          error: error instanceof Error ? error.message : "Erro desconhecido",
+        });
+      }
+
+      // Delay entre processamentos para não sobrecarregar
+      if (i < tickers.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    const successCount = Array.from(results.values()).filter(
+      (r) => r.success
+    ).length;
+    console.log(
+      `✅ [DIVIDENDS SEQUENTIAL] Processamento concluído: ${successCount}/${tickers.length} sucessos`
+    );
+
+    return results;
+  }
+
+  /**
+   * Salva o último dividendo encontrado no banco de dados
+   * Atualiza tanto a tabela Company quanto FinancialData (ano atual)
+   */
+  static async saveLatestDividendToDatabase(
+    ticker: string,
+    dividendInfo: DividendInfo
+  ): Promise<void> {
+    try {
+      console.log(`💾 [SAVE DIVIDEND] Salvando último dividendo para ${ticker}: R$ ${dividendInfo.amount}`);
+      
+      // Buscar a empresa
+      const company = await prisma.company.findUnique({
+        where: { ticker },
+        select: { id: true }
+      });
+      
+      if (!company) {
+        console.warn(`⚠️ [SAVE DIVIDEND] Empresa ${ticker} não encontrada`);
+        return;
+      }
+      
+      const currentYear = new Date().getFullYear();
+      
+      // Atualizar Company com último dividendo
+      await safeWrite(
+        "update-company-dividend",
+        () => prisma.company.update({
+          where: { id: company.id },
+          data: {
+            ultimoDividendo: dividendInfo.amount,
+            dataUltimoDividendo: dividendInfo.date
+          }
+        }),
+        ["companies"]
+      );
+      
+      // Atualizar FinancialData do ano atual (se existir)
+      const currentYearFinancialData = await prisma.financialData.findUnique({
+        where: {
+          companyId_year: {
+            companyId: company.id,
+            year: currentYear
+          }
+        }
+      });
+      
+      if (currentYearFinancialData) {
+        await safeWrite(
+          "update-financial-data-dividend",
+          () => prisma.financialData.update({
+            where: {
+              companyId_year: {
+                companyId: company.id,
+                year: currentYear
+              }
+            },
+            data: {
+              ultimoDividendo: dividendInfo.amount,
+              dataUltimoDividendo: dividendInfo.date
+            }
+          }),
+          ["financial_data"]
+        );
+        console.log(`✅ [SAVE DIVIDEND] ${ticker}: Atualizado Company e FinancialData ${currentYear}`);
+      } else {
+        console.log(`✅ [SAVE DIVIDEND] ${ticker}: Atualizado Company (FinancialData ${currentYear} não existe)`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ [SAVE DIVIDEND] Erro ao salvar dividendo para ${ticker}:`, error);
+      // Não propagar o erro para não quebrar o processamento sequencial
+    }
+  }
+
+  /**
    * Busca dividendos de um ativo em um período específico
    */
   static async getDividendsInPeriod(

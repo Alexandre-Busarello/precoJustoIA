@@ -54,6 +54,7 @@ export interface CompanyAnalysisResult {
     fcd: StrategyAnalysis | null;
     gordon: StrategyAnalysis | null;
     fundamentalist: StrategyAnalysis | null;
+    barsi: StrategyAnalysis | null;
   };
 }
 
@@ -277,7 +278,8 @@ export async function executeCompanyAnalysis(
     magicFormula: isPremium ? StrategyFactory.runMagicFormulaAnalysis(companyData, STRATEGY_CONFIG.magicFormula) : null,
     fcd: isPremium ? StrategyFactory.runFCDAnalysis(companyData, STRATEGY_CONFIG.fcd) : null,
     gordon: isPremium ? StrategyFactory.runGordonAnalysis(companyData, STRATEGY_CONFIG.gordon) : null,
-    fundamentalist: isPremium ? StrategyFactory.runFundamentalistAnalysis(companyData, STRATEGY_CONFIG.fundamentalist) : null
+    fundamentalist: isPremium ? StrategyFactory.runFundamentalistAnalysis(companyData, STRATEGY_CONFIG.fundamentalist) : null,
+    barsi: isPremium ? StrategyFactory.runBarsiAnalysis(companyData, STRATEGY_CONFIG.barsi) : null
   };
 
   // Converter dados financeiros para o tipo esperado

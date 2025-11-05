@@ -95,7 +95,16 @@ export interface ScreeningParams extends StrategyParams {
   selectedIndustries?: string[]; // Array de indústrias selecionadas (filtradas pelo setor)
 }
 
-export type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | AIParams | ScreeningParams;
+export interface BarsiParams extends StrategyParams {
+  targetDividendYield: number; // Meta de DY desejada (ex: 0.06 para 6%)
+  maxPriceToPayMultiplier?: number; // Multiplicador do preço teto (padrão: 1.0)
+  minConsecutiveDividends?: number; // Mínimo de anos consecutivos pagando dividendos (padrão: 5)
+  maxDebtToEquity?: number; // Máximo Dívida/PL aceitável (padrão: 1.0 = 100%)
+  minROE?: number; // ROE mínimo para qualidade (padrão: 0.10 = 10%)
+  focusOnBEST?: boolean; // Focar apenas nos setores B.E.S.T. (padrão: true)
+}
+
+export type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | AIParams | ScreeningParams | BarsiParams;
 
 // Dados financeiros padronizados (aceita qualquer tipo que será convertido por toNumber)
 export interface CompanyFinancialData {

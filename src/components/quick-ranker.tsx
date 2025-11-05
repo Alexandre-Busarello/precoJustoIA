@@ -96,6 +96,12 @@ interface RankingParams {
   liquidezCorrenteFilter?: ScreeningFilter;
   dividaLiquidaEbitdaFilter?: ScreeningFilter;
   marketCapFilter?: ScreeningFilter;
+  // Parâmetros Barsi
+  targetDividendYield?: number;
+  maxPriceToPayMultiplier?: number;
+  minConsecutiveDividends?: number;
+  maxDebtToEquity?: number;
+  focusOnBEST?: boolean;
 }
 
 interface RankingResult {
@@ -184,6 +190,15 @@ const models = [
     icon: <PieChart className="w-4 h-4" />,
     free: false,
     badge: "Premium"
+  },
+  { 
+    id: "barsi", 
+    name: "Método Barsi", 
+    description: "Buy-and-hold de dividendos em setores perenes com preço teto baseado em dividend yield",
+    icon: <DollarSign className="w-4 h-4" />,
+    free: false,
+    badge: "HOT",
+    hot: true
   },
   { 
     id: "dividendYield", 
@@ -474,6 +489,19 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
           useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
+        case "barsi":
+          setParams({
+            targetDividendYield: 0.06,      // Meta de 6% de dividend yield
+            maxPriceToPayMultiplier: 1.0,   // Preço teto exato
+            minConsecutiveDividends: 5,     // 5 anos consecutivos
+            maxDebtToEquity: 1.0,           // Máximo 100% Dívida/PL
+            minROE: 0.10,                   // ROE mínimo 10%
+            focusOnBEST: true,              // Focar nos setores B.E.S.T.
+            companySize: 'all',             // Todas as empresas
+            limit: 10,                      // 10 resultados
+            useTechnicalAnalysis: true      // Análise técnica ativada por padrão
+          })
+          break
         case "fundamentalist":
           setParams({
             minROE: 0.15,             // 15% ROE mínimo
@@ -1046,6 +1074,60 @@ ${sectoralAdjustment ? `
 **Ideal Para**: Investidores focados em renda passiva com crescimento sustentável dos dividendos.
 
 **Resultado**: Empresas com dividendos atrativos e sustentáveis, ordenadas por potencial de valorização + qualidade dos pagamentos.`;
+
+      case 'barsi':
+        const targetDY = ((params.targetDividendYield || 0.06) * 100).toFixed(1);
+        const multiplier = params.maxPriceToPayMultiplier || 1.0;
+        const minYears = params.minConsecutiveDividends || 5;
+        const maxDebt = ((params.maxDebtToEquity || 1.0) * 100).toFixed(0);
+        const minROEBarsi = ((params.minROE || 0.10) * 100).toFixed(0);
+        const focusBEST = params.focusOnBEST !== false;
+        
+        return `# MÉTODO BARSI - BUY AND HOLD DE DIVIDENDOS
+
+**Filosofia**: Baseado na estratégia de Luiz Barsi para construção de patrimônio através de dividendos em setores "perenes".
+
+**Estratégia**: Comprar empresas de setores essenciais quando o preço estiver abaixo do "preço teto" calculado pela meta de Dividend Yield.
+
+## Os 5 Passos do Método Barsi
+
+### 1. Setores Perenes (B.E.S.T.)
+${focusBEST ? '✅ ATIVO' : '⚠️ OPCIONAL'} - Foco em setores essenciais:
+- **B**ancos
+- **E**nergia Elétrica  
+- **S**aneamento e **S**eguros
+- **T**elecomunicações
+- **Gás** (adicional)
+
+### 2. Qualidade da Empresa
+- ROE ≥ ${minROEBarsi}% (lucro consistente)
+- Dívida/PL ≤ ${maxDebt}% (baixo endividamento)
+- Margem Líquida positiva (empresa lucrativa)
+- Histórico de ${minYears} anos pagando dividendos
+
+### 3. Preço Teto (Conceito Central)
+**Fórmula**: Preço Teto = Dividendo por Ação ÷ DY Meta (${targetDY}%)
+- Multiplicador: ${multiplier}x
+- **Só compra se Preço Atual ≤ Preço Teto**
+
+### 4. Disciplina de Aporte
+- Aporte mensal constante
+- Aproveitar crises para comprar mais barato
+- Foco em empresas abaixo do preço teto
+
+### 5. Reinvestimento 100%
+- Todos os dividendos reinvestidos em mais ações
+- Efeito "bola de neve" dos juros compostos
+- **Nunca vender** (exceto se perder fundamentos)
+
+**Score Barsi**:
+- 40% Desconto do Preço Teto (oportunidade de compra)
+- 35% Qualidade dos Dividendos (DY + consistência histórica)  
+- 25% Saúde Financeira (ROE, liquidez, margem)
+
+**Ordenação**: Por Score Barsi (melhor oportunidade de compra + qualidade)${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (timing de entrada)' : ''}.
+
+**Objetivo**: Independência financeira através de renda passiva crescente e sustentável${params.useTechnicalAnalysis ? '. Com análise técnica ativa, otimizamos o timing de entrada nos ativos selecionados' : ''}.`;
 
       case 'fundamentalist':
         const minROEFund = ((params.minROE || 0.15) * 100).toFixed(0);
@@ -2924,6 +3006,208 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                             <p>• Analisa: Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Gordon</p>
                             <p>• Considera: Consistência entre estratégias, contexto macroeconômico</p>
                             <p>• Gera: Score preditivo, análise de riscos e oportunidades</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Configuração Barsi */}
+                {selectedModel === "barsi" && (
+                  <div className="space-y-6">
+                    {/* Filtro de Tamanho */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+                      <Select 
+                        value={params.companySize || 'all'} 
+                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o tamanho das empresas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Filtre empresas por valor de mercado para focar em segmentos específicos
+                      </p>
+                    </div>
+
+                    {/* Análise Técnica */}
+                    <TechnicalAnalysisControl />
+
+                    {/* Primeira linha - Meta de DY e Multiplicador */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Meta de Dividend Yield</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.targetDividendYield || 0.06) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.targetDividendYield ? params.targetDividendYield * 100 : 6]}
+                          onValueChange={(value) => setParams({ ...params, targetDividendYield: value[0] / 100 })}
+                          max={12}
+                          min={3}
+                          step={0.5}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>3%</span>
+                          <span>12%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Meta de dividend yield para calcular o preço teto (conceito central do Barsi)
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Multiplicador do Preço Teto</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {(params.maxPriceToPayMultiplier || 1.0).toFixed(1)}x
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.maxPriceToPayMultiplier ? params.maxPriceToPayMultiplier * 10 : 10]}
+                          onValueChange={(value) => setParams({ ...params, maxPriceToPayMultiplier: value[0] / 10 })}
+                          max={15}
+                          min={8}
+                          step={1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>0.8x</span>
+                          <span>1.5x</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Ajuste fino do preço teto (1.0x = exato, &lt;1.0x = mais conservador)
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Segunda linha - Critérios de Qualidade */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Anos Consecutivos Dividendos</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {params.minConsecutiveDividends || 5} anos
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.minConsecutiveDividends || 5]}
+                          onValueChange={(value) => setParams({ ...params, minConsecutiveDividends: value[0] })}
+                          max={10}
+                          min={3}
+                          step={1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>3 anos</span>
+                          <span>10 anos</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Histórico mínimo de pagamento consistente de dividendos
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Dívida/PL Máxima</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.maxDebtToEquity || 1.0) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.maxDebtToEquity ? params.maxDebtToEquity * 100 : 100]}
+                          onValueChange={(value) => setParams({ ...params, maxDebtToEquity: value[0] / 100 })}
+                          max={200}
+                          min={50}
+                          step={10}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>50%</span>
+                          <span>200%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Nível máximo de endividamento aceitável (baixo endividamento é essencial)
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Terceira linha - ROE e Setores B.E.S.T. */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">ROE Mínimo</Label>
+                          <Badge variant="outline" className="font-mono">
+                            {formatPercentage((params.minROE || 0.10) * 100)}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={[params.minROE ? params.minROE * 100 : 10]}
+                          onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
+                          max={20}
+                          min={5}
+                          step={1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>5%</span>
+                          <span>20%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Rentabilidade mínima sobre patrimônio líquido (lucro consistente)
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Focar Setores B.E.S.T.</Label>
+                          <Badge variant={params.focusOnBEST !== false ? "default" : "outline"} className="text-xs">
+                            {params.focusOnBEST !== false ? "Ativado" : "Desativado"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="focusOnBEST"
+                            checked={params.focusOnBEST !== false}
+                            onChange={(e) => setParams({ ...params, focusOnBEST: e.target.checked })}
+                            className="rounded border-gray-300 w-4 h-4"
+                          />
+                          <label htmlFor="focusOnBEST" className="text-sm text-muted-foreground cursor-pointer">
+                            Apenas setores &quot;perenes&quot; (Bancos, Energia, Saneamento, Seguros, Telecom)
+                          </label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Setores essenciais que as pessoas sempre precisarão (filosofia Barsi)
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Explicação da Metodologia */}
+                    <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                      <div className="flex items-start space-x-3">
+                        <DollarSign className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-green-900 dark:text-green-100">
+                            💰 Os 5 Passos do Método Barsi
+                          </h4>
+                          <div className="text-xs text-green-700 dark:text-green-300 space-y-1">
+                            <p><strong>1. Setores Perenes:</strong> B.E.S.T. (Bancos, Energia, Saneamento, Seguros, Telecom)</p>
+                            <p><strong>2. Qualidade:</strong> ROE alto, baixo endividamento, dividendos consistentes</p>
+                            <p><strong>3. Preço Teto:</strong> Dividendo ÷ DY Meta = Preço máximo a pagar</p>
+                            <p><strong>4. Disciplina:</strong> Aporte mensal, aproveitar crises</p>
+                            <p><strong>5. Reinvestimento:</strong> 100% dos dividendos em mais ações (bola de neve)</p>
                           </div>
                         </div>
                       </div>

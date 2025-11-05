@@ -35,6 +35,7 @@ export interface CompanyScoreResult {
     fcd: StrategyAnalysis | null;
     gordon: StrategyAnalysis | null;
     fundamentalist: StrategyAnalysis | null;
+    barsi: StrategyAnalysis | null;
   };
 }
 

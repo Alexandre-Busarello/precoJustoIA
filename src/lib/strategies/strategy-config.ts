@@ -94,6 +94,19 @@ export const STRATEGY_CONFIG = {
     liquidezCorrenteFilter: { enabled: false, min: undefined, max: undefined },
     dividaLiquidaEbitdaFilter: { enabled: false, min: undefined, max: undefined },
     marketCapFilter: { enabled: false, min: undefined, max: undefined }
+  },
+  
+  // Método Barsi - Buy and Hold de Dividendos
+  barsi: {
+    targetDividendYield: 0.05,      // Meta de 6% de dividend yield
+    maxPriceToPayMultiplier: 1.0,   // Preço teto exato (sem margem adicional)
+    minConsecutiveDividends: 3,     // Mínimo 5 anos consecutivos pagando dividendos
+    maxDebtToEquity: 1.0,           // Máximo 100% de Dívida/PL
+    minROE: 0.10,                   // ROE mínimo de 10%
+    focusOnBEST: true,              // Focar apenas nos setores B.E.S.T.
+    companySize: 'all',             // Filtro de tamanho: todas as empresas
+    useTechnicalAnalysis: true,     // Análise técnica ativada por padrão
+    use7YearAverages: true          // Médias de 7 anos habilitadas por padrão
   }
 } as const;
 

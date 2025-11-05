@@ -9,4 +9,5 @@ export * from './gordon-strategy';
 export * from './fundamentalist-strategy';
 export * from './ai-strategy';
 export * from './screening-strategy';
+export * from './barsi-strategy';
 export * from './strategy-factory';

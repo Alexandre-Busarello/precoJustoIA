@@ -20,6 +20,7 @@ interface CompanyAnalysisResponse {
     fcd: StrategyAnalysis;
     gordon: StrategyAnalysis;
     fundamentalist: StrategyAnalysis;
+    barsi: StrategyAnalysis;
   };
 }
 
@@ -121,6 +122,14 @@ export async function GET(
           fairValue: null,
           upside: null,
           reasoning: isPremium ? 'Dados insuficientes para análise Fundamentalista 3+1' : 'Premium necessário para análise Fundamentalista 3+1',
+          criteria: [],
+        },
+        barsi: (isPremium && resultStrategies?.barsi) ? resultStrategies.barsi : {
+          isEligible: false,
+          score: 0,
+          fairValue: null,
+          upside: null,
+          reasoning: isPremium ? 'Dados insuficientes para análise Método Barsi' : 'Premium necessário para análise Método Barsi',
           criteria: [],
         }
       }

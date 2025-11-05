@@ -83,6 +83,7 @@ interface CompanyAnalysisResponse {
     fcd: StrategyAnalysis;
     gordon: StrategyAnalysis;
     fundamentalist: StrategyAnalysis;
+    barsi: StrategyAnalysis;
   };
 }
 
@@ -926,6 +927,189 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                 </Collapsible>
               </Card>
             )}
+
+            {/* Barsi Analysis - Preview + Paywall para não-Premium */}
+            {!isPremium ? (
+              <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                      <span className="text-lg font-semibold">Método Barsi (Buy-and-Hold Dividendos)</span>
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                        Premium
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Estratégia de Luiz Barsi para construção de patrimônio através de dividendos em setores perenes
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Preview do que o usuário veria */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 opacity-60">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Dividend Yield</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatPercent(latestFinancials.dy)}
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Preço Teto Barsi</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-green-600 blur-sm">R$ XX,XX</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Desconto do Teto</p>
+                      <div className="relative">
+                        <p className="text-2xl font-bold text-blue-600 blur-sm">+X,X%</p>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Crown className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CTA de Conversão */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-6 rounded-lg border border-green-200 text-center">
+                    <DollarSign className="w-12 h-12 text-green-600 mx-auto mb-3" />
+                    <h4 className="text-lg font-semibold text-green-900 dark:text-green-100 mb-2">
+                      Desbloqueie o Método Barsi
+                    </h4>
+                    <p className="text-sm text-green-700 dark:text-green-200 mb-4">
+                      Estratégia completa dos 5 passos de Luiz Barsi para independência financeira através de dividendos
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <Button asChild className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
+                        <Link href="/planos">
+                          <Crown className="w-4 h-4 mr-2" />
+                          Assinar Premium
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline">
+                        <Link href="/planos">
+                          Ver os 5 passos do Barsi
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+                <Card className={
+                  isPremium && strategies.barsi?.score
+                    ? !strategies.barsi?.isEligible
+                      ? "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
+                      : strategies.barsi.score >= 80 
+                      ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
+                      : strategies.barsi.score >= 60
+                      ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
+                      : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
+                    : "border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20"
+                }>
+                  <Collapsible>
+                    <CollapsibleTrigger className="w-full p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <DollarSign className={`w-5 h-5 ${
+                            isPremium && strategies.barsi?.score
+                              ? !strategies.barsi?.isEligible
+                                ? "text-yellow-700 dark:text-yellow-400"
+                                : strategies.barsi.score >= 80
+                                ? "text-green-700 dark:text-green-400" 
+                                : strategies.barsi.score >= 60
+                                ? "text-yellow-700 dark:text-yellow-400" 
+                                : "text-red-700 dark:text-red-400"
+                              : "text-green-600"
+                          }`} />
+                          <span className={`text-lg font-semibold ${
+                            isPremium && strategies.barsi?.score
+                              ? !strategies.barsi?.isEligible
+                                ? "text-yellow-900 dark:text-yellow-100"
+                                : strategies.barsi.score >= 80
+                                ? "text-green-900 dark:text-green-100" 
+                                : strategies.barsi.score >= 60
+                                ? "text-yellow-900 dark:text-yellow-100" 
+                                : "text-red-900 dark:text-red-100"
+                              : ""
+                          }`}>Método Barsi (Buy-and-Hold Dividendos)</span>
+                          <Badge variant={strategies.barsi?.isEligible ? "default" : "secondary"}>
+                            {strategies.barsi?.score?.toFixed(0) || 0}% dos critérios
+                          </Badge>
+                        </div>
+                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <CardContent className="pt-0">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground mb-1">Preço Atual</p>
+                            <p className="text-2xl font-bold">{formatCurrency(currentPrice)}</p>
+                          </div>
+                          
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground mb-1">Preço Teto Barsi</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              {strategies.barsi?.fairValue ? 
+                                formatCurrency(strategies.barsi.fairValue) : 'N/A'
+                              }
+                            </p>
+                          </div>
+                          
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground mb-1">Desconto do Teto</p>
+                            <div className="flex items-center justify-center space-x-2">
+                              {strategies.barsi?.upside && strategies.barsi.upside > 0 ? (
+                                <TrendingUp className="w-5 h-5 text-green-500" />
+                              ) : (
+                                <TrendingDown className="w-5 h-5 text-red-500" />
+                              )}
+                              <p className={`text-2xl font-bold ${
+                                strategies.barsi?.upside && strategies.barsi.upside > 0 ? 
+                                'text-green-600' : 'text-red-600'
+                              }`}>
+                                {strategies.barsi?.upside ? 
+                                  `${strategies.barsi.upside.toFixed(1)}%` : 'N/A'
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-muted p-4 rounded-lg mb-4">
+                          <MarkdownRenderer content={strategies.barsi?.reasoning || ''} />
+                        </div>
+
+                        <div className="space-y-2">
+                          <h4 className="font-medium">Critérios dos 5 Passos do Barsi:</h4>
+                          {strategies.barsi?.criteria?.map((criterion, index) => (
+                            <div key={index} className="flex items-center justify-between py-2 px-3 bg-background rounded">
+                              <div className="flex items-center space-x-2">
+                                {criterion.value ? (
+                                  <CheckCircle className="w-4 h-4 text-green-500" />
+                                ) : (
+                                  <XCircle className="w-4 h-4 text-red-500" />
+                                )}
+                                <span className="text-sm">{criterion.label}</span>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {criterion.description}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                  </CollapsibleContent>
+                </Collapsible>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
@@ -1547,6 +1731,109 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   </CollapsibleContent>
                 </Collapsible>
               </Card>
+
+              {/* Barsi Analysis */}
+              <Card className={
+                isPremium && strategies.barsi?.score
+                  ? strategies.barsi.score >= 80 
+                    ? "bg-green-100 border-green-200 dark:bg-green-950/30 dark:border-green-800" 
+                    : strategies.barsi.score >= 60
+                    ? "bg-yellow-100 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" 
+                    : "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
+                  : ""
+              }>
+                <Collapsible>
+                  <CollapsibleTrigger className="w-full p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <DollarSign className={`w-5 h-5 ${
+                          isPremium && strategies.barsi?.score
+                            ? strategies.barsi.score >= 80
+                              ? "text-green-700 dark:text-green-400" 
+                              : strategies.barsi.score >= 60
+                              ? "text-yellow-700 dark:text-yellow-400" 
+                              : "text-red-700 dark:text-red-400"
+                            : ""
+                        }`} />
+                        <span className={`text-lg font-semibold ${
+                          isPremium && strategies.barsi?.score
+                            ? strategies.barsi.score >= 80
+                              ? "text-green-900 dark:text-green-100" 
+                              : strategies.barsi.score >= 60
+                              ? "text-yellow-900 dark:text-yellow-100" 
+                              : "text-red-900 dark:text-red-100"
+                            : ""
+                        }`}>Método Barsi</span>
+                        <Badge variant={strategies.barsi?.isEligible ? "default" : "secondary"}>
+                          {strategies.barsi?.score?.toFixed(0) || 0}% dos critérios
+                        </Badge>
+                      </div>
+                      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground mb-1">Dividend Yield</p>
+                          <p className="text-2xl font-bold text-green-600">
+                            {formatPercent(latestFinancials.dy)}
+                          </p>
+                        </div>
+                        
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground mb-1">Preço Teto</p>
+                          <p className="text-2xl font-bold text-green-600">
+                            {strategies.barsi?.fairValue ? 
+                              formatCurrency(strategies.barsi.fairValue) : 'N/A'
+                            }
+                          </p>
+                        </div>
+                        
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground mb-1">Score Barsi</p>
+                          <div className="flex items-center justify-center space-x-2">
+                            {strategies.barsi?.isEligible ? (
+                              <CheckCircle className="w-5 h-5 text-green-500" />
+                            ) : (
+                              <XCircle className="w-5 h-5 text-red-500" />
+                            )}
+                            <p className={`text-lg font-bold ${
+                              strategies.barsi?.isEligible ? 
+                              'text-green-600' : 'text-red-600'
+                            }`}>
+                              {strategies.barsi?.key_metrics?.barsiScore || 'N/A'}/100
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-muted p-4 rounded-lg mb-4">
+                        <MarkdownRenderer content={strategies.barsi?.reasoning || ''} />
+                      </div>
+
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Os 5 Passos do Barsi:</h4>
+                        {strategies.barsi?.criteria?.map((criterion, index) => (
+                          <div key={index} className="flex items-center justify-between py-2 px-3 bg-background rounded">
+                            <div className="flex items-center space-x-2">
+                              {criterion.value ? (
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-500" />
+                              )}
+                              <span className="text-sm">{criterion.label}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {criterion.description}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Collapsible>
+              </Card>
             </div>
           )}
         </TabsContent>
@@ -1733,6 +2020,20 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     <span className="text-lg font-bold text-orange-600">
                       {isPremium && strategies.gordon?.fairValue 
                         ? formatCurrency(strategies.gordon.fairValue)
+                        : !isPremium ? '🔒 Premium' : 'N/A'
+                      }
+                    </span>
+                  </div>
+
+                  {/* Barsi */}
+                  <div className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
+                    <div>
+                      <span className="font-medium">Método Barsi (Preço Teto)</span>
+                      {!isPremium && <Crown className="w-3 h-3 ml-1 inline text-yellow-500" />}
+                    </div>
+                    <span className="text-lg font-bold text-green-600">
+                      {isPremium && strategies.barsi?.fairValue 
+                        ? formatCurrency(strategies.barsi.fairValue)
                         : !isPremium ? '🔒 Premium' : 'N/A'
                       }
                     </span>

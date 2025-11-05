@@ -279,7 +279,7 @@ export async function executeCompanyAnalysis(
     fcd: isPremium ? StrategyFactory.runFCDAnalysis(companyData, STRATEGY_CONFIG.fcd) : null,
     gordon: isPremium ? StrategyFactory.runGordonAnalysis(companyData, STRATEGY_CONFIG.gordon) : null,
     fundamentalist: isPremium ? StrategyFactory.runFundamentalistAnalysis(companyData, STRATEGY_CONFIG.fundamentalist) : null,
-    barsi: isPremium ? StrategyFactory.runBarsiAnalysis(companyData, STRATEGY_CONFIG.barsi) : null
+    barsi: isPremium ? await StrategyFactory.runBarsiAnalysis(companyData, STRATEGY_CONFIG.barsi) : null
   };
 
   // Converter dados financeiros para o tipo esperado

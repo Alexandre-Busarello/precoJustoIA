@@ -1,5 +1,6 @@
 import { AbstractStrategy, toNumber, formatCurrency, formatPercent } from './base-strategy';
 import { BarsiParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
+import { prisma } from '@/lib/prisma';
 
 export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
   readonly name = 'barsi';
@@ -18,6 +19,68 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     'Utilities',
     'Utilidade Pública'
   ];
+
+  /**
+   * Calcula a média de dividendos pagos nos últimos 5-6 anos
+   * usando o histórico de dividendos da empresa
+   */
+  private async calculateAverageDividend(ticker: string): Promise<number | null> {
+    try {
+      // Buscar empresa pelo ticker
+      const company = await prisma.company.findUnique({
+        where: { ticker },
+        include: {
+          dividendHistory: {
+            orderBy: { exDate: 'desc' }
+          }
+        }
+      });
+
+      if (!company || !company.dividendHistory || company.dividendHistory.length === 0) {
+        return null;
+      }
+
+      // Definir o período de análise (5-6 anos atrás)
+      const currentDate = new Date();
+      const yearsToLookBack = 6;
+      const cutoffDate = new Date(currentDate);
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - yearsToLookBack);
+
+      // Filtrar dividendos dos últimos 5-6 anos
+      const recentDividends = company.dividendHistory.filter((div: { exDate: Date }) => 
+        div.exDate >= cutoffDate
+      );
+
+      if (recentDividends.length === 0) {
+        return null;
+      }
+
+      // Agrupar dividendos por ano e somar
+      const dividendsByYear = new Map<number, number>();
+      
+      for (const dividend of recentDividends) {
+        const year = dividend.exDate.getFullYear();
+        const amount = toNumber(dividend.amount) || 0;
+        
+        const currentSum = dividendsByYear.get(year) || 0;
+        dividendsByYear.set(year, currentSum + amount);
+      }
+
+      // Se temos menos de 2 anos de dados, não é confiável
+      if (dividendsByYear.size < 2) {
+        return null;
+      }
+
+      // Calcular a média anual
+      const yearlyTotals = Array.from(dividendsByYear.values());
+      const averageDividend = yearlyTotals.reduce((sum, total) => sum + total, 0) / yearlyTotals.length;
+
+      return averageDividend;
+    } catch (error) {
+      console.error(`Erro ao calcular média de dividendos para ${ticker}:`, error);
+      return null;
+    }
+  }
 
   validateCompanyData(companyData: CompanyData): boolean {
     const { ultimoDividendo, financials } = companyData;
@@ -81,8 +144,8 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     return recentYears.length >= Math.floor(minYears * 0.8); // 80% dos anos
   }
 
-  runAnalysis(companyData: CompanyData, params: BarsiParams): StrategyAnalysis {
-    const { financials, currentPrice, sector, historicalFinancials } = companyData;
+  async runAnalysis(companyData: CompanyData, params: BarsiParams): Promise<StrategyAnalysis> {
+    const { financials, currentPrice, sector, historicalFinancials, ticker } = companyData;
     const {
       targetDividendYield,
       maxPriceToPayMultiplier = 1.0,
@@ -96,7 +159,15 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     
     // Métricas principais
     const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
-    const ultimoDividendo = toNumber(companyData.ultimoDividendo || financials.ultimoDividendo);
+    
+    // Calcular média de dividendos dos últimos 5-6 anos
+    let averageDividend = await this.calculateAverageDividend(ticker);
+    
+    // Se não conseguir calcular pela média histórica, usar ultimoDividendo como fallback
+    if (!averageDividend) {
+      averageDividend = toNumber(companyData.ultimoDividendo || financials.ultimoDividendo) || null;
+    }
+    
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
@@ -104,9 +175,9 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     const payout = toNumber(financials.payout);
     const marketCap = toNumber(financials.marketCap);
 
-    // Calcular preço teto baseado no método Barsi
-    const ceilingPrice = ultimoDividendo ? 
-      this.calculateCeilingPrice(ultimoDividendo, targetDividendYield, maxPriceToPayMultiplier) : null;
+    // Calcular preço teto baseado no método Barsi usando a média de dividendos
+    const ceilingPrice = averageDividend ? 
+      this.calculateCeilingPrice(averageDividend, targetDividendYield, maxPriceToPayMultiplier) : null;
     
     const isUnderCeiling = ceilingPrice ? currentPrice <= ceilingPrice : false;
     const discountFromCeiling = ceilingPrice ? ((ceilingPrice - currentPrice) / ceilingPrice) * 100 : null;
@@ -230,14 +301,14 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
         discountFromCeiling: discountFromCeiling,
         barsiScore: Number(barsiScore.toFixed(1)),
         dividendYield: dy,
-        ultimoDividendo: ultimoDividendo,
+        averageDividend: averageDividend,
         roe: roe,
         payout: payout
       }
     };
   }
 
-  runRanking(companies: CompanyData[], params: BarsiParams): RankBuilderResult[] {
+  async runRanking(companies: CompanyData[], params: BarsiParams): Promise<RankBuilderResult[]> {
     const {
       targetDividendYield,
       maxPriceToPayMultiplier = 1.0,
@@ -261,7 +332,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
       // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
       if (this.shouldExcludeCompany(company)) continue;
 
-      const { financials, currentPrice, sector, historicalFinancials } = company;
+      const { financials, currentPrice, sector, historicalFinancials, ticker } = company;
       const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
       
       // Verificar se está em setor perene (se obrigatório)
@@ -269,7 +340,15 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
 
       // Métricas essenciais
       const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
-      const ultimoDividendo = toNumber(company.ultimoDividendo || financials.ultimoDividendo);
+      
+      // Calcular média de dividendos dos últimos 5-6 anos
+      let averageDividend = await this.calculateAverageDividend(ticker);
+      
+      // Se não conseguir calcular pela média histórica, usar ultimoDividendo como fallback
+      if (!averageDividend) {
+        averageDividend = toNumber(company.ultimoDividendo || financials.ultimoDividendo) || null;
+      }
+      
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
       const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
       const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
@@ -277,14 +356,14 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
       const marketCap = toNumber(financials.marketCap);
 
       // Filtros obrigatórios para o ranking
-      if (!ultimoDividendo || ultimoDividendo <= 0) continue;
+      if (!averageDividend || averageDividend <= 0) continue;
       if (!roe || roe < minROE) continue;
       if (dividaLiquidaPl && dividaLiquidaPl > maxDebtToEquity) continue;
       if (!this.hasConsistentDividendHistory(company, minConsecutiveDividends)) continue;
       if (marketCap && marketCap < 1000000000) continue; // Mínimo R$ 1B
 
-      // Calcular preço teto
-      const ceilingPrice = this.calculateCeilingPrice(ultimoDividendo, targetDividendYield, maxPriceToPayMultiplier);
+      // Calcular preço teto usando a média de dividendos
+      const ceilingPrice = this.calculateCeilingPrice(averageDividend, targetDividendYield, maxPriceToPayMultiplier);
       
       // Só incluir se preço atual estiver abaixo do teto
       if (currentPrice > ceilingPrice) continue;
@@ -321,13 +400,13 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
         fairValue: Number(ceilingPrice.toFixed(2)),
         upside: Number(discountFromCeiling.toFixed(2)),
         marginOfSafety: Number(discountFromCeiling.toFixed(2)),
-        rational: `Aprovada no Método Barsi! Setor perene ${sector}. Preço ${formatCurrency(currentPrice)} está ${discountFromCeiling.toFixed(1)}% abaixo do teto ${formatCurrency(ceilingPrice)} (DY meta ${(targetDividendYield * 100).toFixed(1)}%). Dividendos consistentes, ROE ${(roe * 100).toFixed(1)}%, baixo endividamento. Score Barsi: ${barsiScore.toFixed(1)}/100. Ideal para buy-and-hold com reinvestimento.`,
+        rational: `Aprovada no Método Barsi! Setor perene ${sector}. Preço ${formatCurrency(currentPrice)} está ${discountFromCeiling.toFixed(1)}% abaixo do teto ${formatCurrency(ceilingPrice)} (DY meta ${(targetDividendYield * 100).toFixed(1)}%). Média de dividendos 5-6 anos: ${formatCurrency(averageDividend)}. Dividendos consistentes, ROE ${(roe * 100).toFixed(1)}%, baixo endividamento. Score Barsi: ${barsiScore.toFixed(1)}/100. Ideal para buy-and-hold com reinvestimento.`,
         key_metrics: {
           ceilingPrice: Number(ceilingPrice.toFixed(2)),
           discountFromCeiling: Number(discountFromCeiling.toFixed(2)),
           barsiScore: Number(barsiScore.toFixed(1)),
           dividendYield: dy,
-          ultimoDividendo: ultimoDividendo,
+          averageDividend: averageDividend,
           roe: roe,
           dividaLiquidaPl: dividaLiquidaPl,
           liquidezCorrente: liquidezCorrente,

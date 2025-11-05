@@ -60,7 +60,7 @@ const exemploEmpresaBarsi: CompanyData = {
 };
 
 // Exemplo de uso da estratégia
-function exemploUsoBarsi() {
+async function exemploUsoBarsi() {
   const strategy = new BarsiStrategy();
   
   console.log('=== MÉTODO BARSI - EXEMPLO DE USO ===\n');
@@ -72,7 +72,7 @@ function exemploUsoBarsi() {
   
   // 2. Analisar empresa individual
   console.log('2. ANÁLISE INDIVIDUAL - TAEE11:');
-  const analysis = strategy.runAnalysis(exemploEmpresaBarsi, barsiParams);
+  const analysis = await strategy.runAnalysis(exemploEmpresaBarsi, barsiParams);
   
   console.log(`Empresa: ${exemploEmpresaBarsi.name} (${exemploEmpresaBarsi.ticker})`);
   console.log(`Setor: ${exemploEmpresaBarsi.sector}`);
@@ -95,7 +95,7 @@ function exemploUsoBarsi() {
     console.log(`- Desconto do Teto: ${analysis.key_metrics.discountFromCeiling?.toFixed(1)}%`);
     console.log(`- Score Barsi: ${analysis.key_metrics.barsiScore}/100`);
     console.log(`- Dividend Yield: ${(analysis.key_metrics.dividendYield! * 100).toFixed(1)}%`);
-    console.log(`- Último Dividendo: R$ ${analysis.key_metrics.ultimoDividendo?.toFixed(2)}`);
+    console.log(`- Média Dividendo 5-6 anos: R$ ${analysis.key_metrics.averageDividend?.toFixed(2)}`);
     console.log(`- ROE: ${(analysis.key_metrics.roe! * 100).toFixed(1)}%`);
   }
   
@@ -143,7 +143,7 @@ function exemploUsoBarsi() {
 
 // Executar exemplo
 if (require.main === module) {
-  exemploUsoBarsi();
+  exemploUsoBarsi().catch(console.error);
 }
 
 export { exemploUsoBarsi, barsiParams, exemploEmpresaBarsi };

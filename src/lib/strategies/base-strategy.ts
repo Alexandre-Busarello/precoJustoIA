@@ -140,7 +140,7 @@ export function applyHistoricalAverageIfEnabled(
 export abstract class AbstractStrategy<T extends StrategyParams> implements BaseStrategy<T> {
   abstract readonly name: string;
   
-  abstract runAnalysis(companyData: CompanyData, params: T): StrategyAnalysis;
+  abstract runAnalysis(companyData: CompanyData, params: T): StrategyAnalysis | Promise<StrategyAnalysis>;
   abstract runRanking(companies: CompanyData[], params: T): RankBuilderResult[] | Promise<RankBuilderResult[]>;
   abstract generateRational(params: T): string;
   abstract validateCompanyData(companyData: CompanyData, params: T): boolean;

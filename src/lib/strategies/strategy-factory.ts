@@ -59,7 +59,7 @@ export class StrategyFactory {
     type: StrategyType,
     companyData: CompanyData,
     params: StrategyParams
-  ): StrategyAnalysis {
+  ): StrategyAnalysis | Promise<StrategyAnalysis> {
     const strategy = this.createStrategy(type);
     return strategy.runAnalysis(companyData, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams & BarsiParams);
   }
@@ -76,39 +76,39 @@ export class StrategyFactory {
 
   // Métodos tipados para cada estratégia
   static runGrahamAnalysis(companyData: CompanyData, params: GrahamParams): StrategyAnalysis {
-    return this.runAnalysis('graham', companyData, params);
+    return this.runAnalysis('graham', companyData, params) as StrategyAnalysis;
   }
 
   static runFCDAnalysis(companyData: CompanyData, params: FCDParams): StrategyAnalysis {
-    return this.runAnalysis('fcd', companyData, params);
+    return this.runAnalysis('fcd', companyData, params) as StrategyAnalysis;
   }
 
   static runDividendYieldAnalysis(companyData: CompanyData, params: DividendYieldParams): StrategyAnalysis {
-    return this.runAnalysis('dividendYield', companyData, params);
+    return this.runAnalysis('dividendYield', companyData, params) as StrategyAnalysis;
   }
 
   static runLowPEAnalysis(companyData: CompanyData, params: LowPEParams): StrategyAnalysis {
-    return this.runAnalysis('lowPE', companyData, params);
+    return this.runAnalysis('lowPE', companyData, params) as StrategyAnalysis;
   }
 
   static runMagicFormulaAnalysis(companyData: CompanyData, params: MagicFormulaParams): StrategyAnalysis {
-    return this.runAnalysis('magicFormula', companyData, params);
+    return this.runAnalysis('magicFormula', companyData, params) as StrategyAnalysis;
   }
 
   static runGordonAnalysis(companyData: CompanyData, params: GordonParams): StrategyAnalysis {
-    return this.runAnalysis('gordon', companyData, params);
+    return this.runAnalysis('gordon', companyData, params) as StrategyAnalysis;
   }
 
   static runFundamentalistAnalysis(companyData: CompanyData, params: FundamentalistParams): StrategyAnalysis {
-    return this.runAnalysis('fundamentalist', companyData, params);
+    return this.runAnalysis('fundamentalist', companyData, params) as StrategyAnalysis;
   }
 
   static runScreeningAnalysis(companyData: CompanyData, params: ScreeningParams): StrategyAnalysis {
-    return this.runAnalysis('screening', companyData, params);
+    return this.runAnalysis('screening', companyData, params) as StrategyAnalysis;
   }
 
-  static runBarsiAnalysis(companyData: CompanyData, params: BarsiParams): StrategyAnalysis {
-    return this.runAnalysis('barsi', companyData, params);
+  static runBarsiAnalysis(companyData: CompanyData, params: BarsiParams): Promise<StrategyAnalysis> {
+    return this.runAnalysis('barsi', companyData, params) as Promise<StrategyAnalysis>;
   }
 
   static runGrahamRanking(companies: CompanyData[], params: GrahamParams): RankBuilderResult[] {
@@ -143,8 +143,9 @@ export class StrategyFactory {
     return this.runRanking('screening', companies, params) as RankBuilderResult[];
   }
 
-  static runBarsiRanking(companies: CompanyData[], params: BarsiParams): RankBuilderResult[] {
-    return this.runRanking('barsi', companies, params) as RankBuilderResult[];
+  static async runBarsiRanking(companies: CompanyData[], params: BarsiParams): Promise<RankBuilderResult[]> {
+    const strategy = new BarsiStrategy();
+    return await strategy.runRanking(companies, params);
   }
 
   static async runAIRanking(companies: CompanyData[], params: AIParams): Promise<RankBuilderResult[]> {

@@ -239,8 +239,8 @@ export interface RankBuilderResult {
 export interface BaseStrategy<T extends StrategyParams> {
   name: string;
   
-  // Para análise individual de empresa
-  runAnalysis(companyData: CompanyData, params: T): StrategyAnalysis;
+  // Para análise individual de empresa (pode ser assíncrono)
+  runAnalysis(companyData: CompanyData, params: T): StrategyAnalysis | Promise<StrategyAnalysis>;
   
   // Para ranking de múltiplas empresas (pode ser assíncrono para IA)
   runRanking(companies: CompanyData[], params: T): RankBuilderResult[] | Promise<RankBuilderResult[]>;

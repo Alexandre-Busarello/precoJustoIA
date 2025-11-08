@@ -150,9 +150,9 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
       targetDividendYield,
       maxPriceToPayMultiplier = 1.0,
       minConsecutiveDividends = 5,
-      maxDebtToEquity = 1.0,
+      maxDebtToEquity = 2.0,
       minROE = 0.10,
-      focusOnBEST = true
+      focusOnBEST = false
     } = params;
 
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;

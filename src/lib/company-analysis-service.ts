@@ -287,7 +287,9 @@ export async function executeCompanyAnalysis(
     roe: toNumber(companyData.financials.roe),
     liquidezCorrente: toNumber(companyData.financials.liquidezCorrente),
     dividaLiquidaPl: toNumber(companyData.financials.dividaLiquidaPl),
-    margemLiquida: toNumber(companyData.financials.margemLiquida)
+    margemLiquida: toNumber(companyData.financials.margemLiquida),
+    payout: toNumber(companyData.financials.payout),
+    lpa: toNumber(companyData.financials.lpa) // Lucro por ação para verificar se empresa tem lucro positivo
   };
 
   // Buscar dados das demonstrações financeiras se solicitado

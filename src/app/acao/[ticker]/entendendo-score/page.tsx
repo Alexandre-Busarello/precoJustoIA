@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   Lock,
   Crown,
+  Activity,
 } from "lucide-react";
 
 export async function generateMetadata({
@@ -74,10 +75,20 @@ export default async function EntendendoScorePage({
     userIsPremium = user?.isPremium || false;
   }
 
-  // Buscar empresa básica
+  // Buscar empresa básica e dados financeiros
   const company = await prisma.company.findUnique({
     where: { ticker },
-    select: { name: true },
+    select: { 
+      name: true,
+      financialData: {
+        orderBy: { year: 'desc' },
+        take: 1,
+        select: {
+          payout: true,
+          lpa: true
+        }
+      }
+    },
   });
 
   if (!company) {
@@ -86,6 +97,23 @@ export default async function EntendendoScorePage({
 
   // Buscar breakdown do score (mesma fonte que a API)
   const breakdown = await getScoreBreakdown(ticker, userIsPremium, isLoggedIn);
+  
+  // Verificar se empresa está reinvestindo
+  const latestFinancials = company.financialData[0];
+  const payout = latestFinancials?.payout ? 
+    (typeof latestFinancials.payout === 'object' && 'toNumber' in latestFinancials.payout 
+      ? latestFinancials.payout.toNumber() 
+      : Number(latestFinancials.payout)) : null;
+  const lpa = latestFinancials?.lpa ? 
+    (typeof latestFinancials.lpa === 'object' && 'toNumber' in latestFinancials.lpa 
+      ? latestFinancials.lpa.toNumber() 
+      : Number(latestFinancials.lpa)) : null;
+  const hasPositiveProfit = lpa !== null && lpa > 0;
+  const hasLowPayout = payout !== null && payout <= 0.30;
+  const isReinvesting = hasPositiveProfit && hasLowPayout;
+  
+  // Mostrar indicador se empresa está reinvestindo (lucro positivo mas payout baixo)
+  const shouldShowReinvestmentIndicator = isReinvesting;
 
   if (!breakdown) {
     return (
@@ -229,6 +257,34 @@ export default async function EntendendoScorePage({
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {/* Indicador de Reinvestimento - Mostrar antes das contribuições se empresa está reinvestindo */}
+              {shouldShowReinvestmentIndicator && (
+                <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-full shrink-0">
+                        <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <h4 className="font-semibold text-sm sm:text-base text-blue-900 dark:text-blue-100">
+                            Empresa em Crescimento
+                          </h4>
+                          <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900 dark:text-blue-300 dark:border-blue-700 text-xs">
+                            Reinvestimento
+                          </Badge>
+                        </div>
+                        <p className="text-xs sm:text-sm text-blue-800 dark:text-blue-200 leading-relaxed break-words">
+                          Esta empresa tem <strong>lucro positivo</strong> mas <strong>payout baixo ({payout ? (payout * 100).toFixed(0) : 'N/A'}%)</strong>, 
+                          indicando que ela <strong>reinveste seus lucros no próprio negócio</strong> para crescimento. 
+                          Por isso, as estratégias focadas em dividendos (Dividend Yield, Método Barsi e Gordon) não são aplicadas aqui, e a empresa <strong>não é penalizada</strong> por não pagar dividendos altos.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
               {breakdown.contributions.map((contrib, index) => {
                 const Icon = contrib.eligible ? CheckCircle2 : XCircle;
                 const color = contrib.eligible

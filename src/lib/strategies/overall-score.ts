@@ -29,6 +29,8 @@ export interface FinancialData {
   liquidezCorrente?: number | null;
   dividaLiquidaPl?: number | null;
   margemLiquida?: number | null;
+  payout?: number | null;
+  lpa?: number | null; // Lucro por ação (para verificar se empresa tem lucro positivo)
   youtubeAnalysis?: {
     score: number;
     summary: string;
@@ -3933,6 +3935,7 @@ export function calculateOverallScore(
     fcd: StrategyAnalysis | null;
     gordon: StrategyAnalysis | null;
     fundamentalist: StrategyAnalysis | null;
+    barsi: StrategyAnalysis | null;
   },
   financialData: FinancialData,
   currentPrice: number,
@@ -3944,15 +3947,57 @@ export function calculateOverallScore(
   // Se há YouTube, redistribuir pesos: 10% YouTube + 90% distribuído proporcionalmente
   const baseMultiplier = hasYouTubeAnalysis ? 0.9 : 1.0;
 
+  // Verificar condições para estratégias de dividendos
+  const payout = financialData.payout ?? null;
+  const lpa = financialData.lpa ?? null;
+  const hasPositiveProfit = lpa !== null && lpa > 0;
+  const hasRelevantPayout = payout !== null && payout > 0.30; // > 30%
+  
+  // Lógica condicional: considerar estratégias de dividendos apenas se:
+  // - Empresa tem lucro positivo E payout relevante (> 30%)
+  // Se não tem lucro OU não tem payout relevante, significa problemas financeiros e deve penalizar
+  const shouldConsiderDividendStrategies = hasPositiveProfit && hasRelevantPayout;
+  
+  // Se empresa tem lucro positivo mas payout < 30%, é sinal que reinveste (não penalizar, mas não considerar estratégias de dividendos)
+  const isReinvesting = hasPositiveProfit && payout !== null && payout <= 0.30;
+
+  // Distribuir peso das estratégias de dividendos entre dividendYield, barsi e gordon
+  // Gordon deve ter menor peso
+  // Total de peso para dividendos: 0.08 (dividendYield original) + 0.01 (gordon original) = 0.09
+  // Nova distribuição: dividendYield: 4%, barsi: 4%, gordon: 1% = 9% total
+  const dividendStrategiesTotalWeight = 0.09 * baseMultiplier;
+  const dividendYieldWeight = shouldConsiderDividendStrategies ? 0.04 * baseMultiplier : 0;
+  const barsiWeight = shouldConsiderDividendStrategies ? 0.04 * baseMultiplier : 0;
+  const gordonWeight = shouldConsiderDividendStrategies ? 0.01 * baseMultiplier : 0;
+  
+  // Redistribuir o peso não usado das estratégias de dividendos para outras estratégias
+  // Se não considerar estratégias de dividendos, redistribuir o peso proporcionalmente
+  const unusedDividendWeight = shouldConsiderDividendStrategies ? 0 : dividendStrategiesTotalWeight;
+  // Peso total das outras estratégias (sem dividendos e sem YouTube)
+  // FCD agora é 0.10 ao invés de 0.15
+  const otherStrategiesWeight = 0.08 + 0.15 + 0.13 + 0.10 + 0.20 + 0.20; // graham + lowPE + magicFormula + fcd (0.10) + fundamentalist + statements
+  const redistributionFactor = unusedDividendWeight > 0 ? 1.0 + (unusedDividendWeight / otherStrategiesWeight) : 1.0;
+
+  // FCD reduzido para 10% máximo (9% com YouTube)
+  // Redistribuir os 5% (4.5% com YouTube) que sobraram proporcionalmente
+  // Peso original do FCD: 0.15, novo peso: 0.10
+  // Diferença: 0.05 (ou 0.045 com YouTube)
+  const fcdReduction = 0.05 * baseMultiplier;
+  // Redistribuir proporcionalmente entre as estratégias principais (exceto dividendos e YouTube)
+  // Peso total das estratégias que receberão redistribuição: graham + lowPE + magicFormula + fundamentalist + statements
+  const redistributionBase = 0.08 + 0.15 + 0.13 + 0.20 + 0.20; // 0.76
+  const redistributionPerStrategy = fcdReduction / redistributionBase; // Proporção adicional por estratégia
+  
   const weights = {
-    graham: 0.08 * baseMultiplier, // 7.2% (ou 8% sem YouTube)
-    dividendYield: 0.08 * baseMultiplier, // 7.2% (ou 8% sem YouTube)
-    lowPE: 0.15 * baseMultiplier, // 13.5% (ou 15% sem YouTube)
-    magicFormula: 0.13 * baseMultiplier, // 11.7% (ou 13% sem YouTube)
-    fcd: 0.15 * baseMultiplier, // 13.5% (ou 15% sem YouTube)
-    gordon: 0.01 * baseMultiplier, // 0.9% (ou 1% sem YouTube)
-    fundamentalist: 0.2 * baseMultiplier, // 18% (ou 20% sem YouTube)
-    statements: 0.2 * baseMultiplier, // 18% (ou 20% sem YouTube)
+    graham: (0.08 + 0.08 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, // ~8.5% (ou ~9.4% sem YouTube)
+    dividendYield: dividendYieldWeight,
+    lowPE: (0.15 + 0.15 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, // ~15.9% (ou ~17.6% sem YouTube)
+    magicFormula: (0.13 + 0.13 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, // ~13.8% (ou ~15.3% sem YouTube)
+    fcd: 0.10 * baseMultiplier * redistributionFactor, // 9% (ou 10% sem YouTube) - MÁXIMO 10%
+    gordon: gordonWeight,
+    barsi: barsiWeight,
+    fundamentalist: (0.20 + 0.20 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, // ~21.2% (ou ~23.5% sem YouTube)
+    statements: (0.20 + 0.20 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, // ~21.2% (ou ~23.5% sem YouTube)
     youtube: hasYouTubeAnalysis ? 0.1 : 0, // 10% se disponível, 0% caso contrário
   };
 
@@ -4012,8 +4057,8 @@ export function calculateOverallScore(
     totalWeight += grahamWeight;
   }
 
-  // Dividend Yield Analysis (não tem fairValue, sempre considera)
-  if (strategies.dividendYield) {
+  // Dividend Yield Analysis - Condicional baseado em payout e lucro
+  if (strategies.dividendYield && shouldConsiderDividendStrategies) {
     const dyWeight = weights.dividendYield;
     const dyContribution = strategies.dividendYield.score * dyWeight;
     totalScore += dyContribution;
@@ -4026,6 +4071,14 @@ export function calculateOverallScore(
       strengths.push("Dividendos sustentáveis");
     } else if (strategies.dividendYield.score < 60) {
       weaknesses.push("Dividendos em risco");
+    }
+  } else if (!shouldConsiderDividendStrategies && !isReinvesting) {
+    // Se não tem lucro OU não tem payout relevante, significa problemas financeiros
+    // Aplicar penalização pelos indicadores de dividendos
+    if (!hasPositiveProfit) {
+      weaknesses.push("Empresa sem lucro - indicadores de dividendos não aplicáveis");
+    } else if (!hasRelevantPayout) {
+      weaknesses.push("Payout muito baixo - empresa pode ter problemas financeiros");
     }
   }
 
@@ -4102,8 +4155,8 @@ export function calculateOverallScore(
     totalWeight += fcdWeight;
   }
 
-  // Gordon Analysis
-  if (strategies.gordon) {
+  // Gordon Analysis - Condicional baseado em payout e lucro
+  if (strategies.gordon && shouldConsiderDividendStrategies) {
     const gordonWeight = weights.gordon;
     const isPriceCompatible = isPriceCompatibleWithFairValue(
       strategies.gordon.fairValue,
@@ -4140,6 +4193,46 @@ export function calculateOverallScore(
       }
     }
     totalWeight += gordonWeight;
+  }
+
+  // Barsi Analysis - Condicional baseado em payout e lucro
+  if (strategies.barsi && shouldConsiderDividendStrategies) {
+    const barsiWeight = weights.barsi;
+    const isPriceCompatible = isPriceCompatibleWithFairValue(
+      strategies.barsi.fairValue,
+      strategies.barsi.upside
+    );
+
+    // Sempre inclui o peso, mas penaliza se incompatível
+    if (isPriceCompatible) {
+      const barsiContribution = strategies.barsi.score * barsiWeight;
+      totalScore += barsiContribution;
+
+      if (strategies.barsi.isEligible && strategies.barsi.score >= 80) {
+        strengths.push("Aprovada no Método Barsi");
+      } else if (strategies.barsi.score < 60) {
+        weaknesses.push("Não atende critérios do Método Barsi");
+      }
+    } else if (strategies.barsi.fairValue) {
+      // Penaliza com score baixo se preço incompatível
+      const penalizedScore =
+        strategies.barsi.fairValue &&
+        strategies.barsi.upside &&
+        strategies.barsi.upside < 10
+          ? 20
+          : strategies.barsi.score;
+      const barsiContribution = penalizedScore * barsiWeight;
+      totalScore += barsiContribution;
+
+      if (
+        strategies.barsi.fairValue &&
+        strategies.barsi.upside &&
+        strategies.barsi.upside < 0
+      ) {
+        weaknesses.push("Preço acima do teto do Método Barsi");
+      }
+    }
+    totalWeight += barsiWeight;
   }
 
   // Fundamentalist Analysis (não tem fairValue, sempre considera)

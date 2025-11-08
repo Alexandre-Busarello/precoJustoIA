@@ -5,6 +5,7 @@
 
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 import { prisma } from '@/lib/prisma';
+import { toNumber } from '@/lib/strategies';
 
 export interface OverallScoreBreakdown {
   score: number;
@@ -76,15 +77,58 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
     const hasYouTubeAnalysis = !!youtubeAnalysis;
     const baseMultiplier = hasYouTubeAnalysis ? 0.90 : 1.00;
     
+    // Buscar dados financeiros da empresa para verificar payout e lpa
+    const companyFinancialData = await prisma.company.findUnique({
+      where: { ticker: ticker.toUpperCase() },
+      select: {
+        financialData: {
+          orderBy: { year: 'desc' },
+          take: 1,
+          select: {
+            payout: true,
+            lpa: true
+          }
+        }
+      }
+    });
+    
+    // Verificar condições para estratégias de dividendos (mesma lógica do overall-score.ts)
+    const latestFinancials = companyFinancialData?.financialData[0];
+    const payout = toNumber(latestFinancials?.payout);
+    const lpa = toNumber(latestFinancials?.lpa);
+    const hasPositiveProfit = lpa !== null && lpa > 0;
+    const hasRelevantPayout = payout !== null && payout > 0.30; // > 30%
+    const shouldConsiderDividendStrategies = hasPositiveProfit && hasRelevantPayout;
+    
+    // Distribuir peso das estratégias de dividendos
+    const dividendStrategiesTotalWeight = 0.09 * baseMultiplier;
+    const dividendYieldWeight = shouldConsiderDividendStrategies ? 0.04 * baseMultiplier : 0;
+    const barsiWeight = shouldConsiderDividendStrategies ? 0.04 * baseMultiplier : 0;
+    const gordonWeight = shouldConsiderDividendStrategies ? 0.01 * baseMultiplier : 0;
+    
+    // Redistribuir o peso não usado das estratégias de dividendos
+    const unusedDividendWeight = shouldConsiderDividendStrategies ? 0 : dividendStrategiesTotalWeight;
+    // Peso total das outras estratégias (sem dividendos e sem YouTube)
+    // FCD agora é 0.10 ao invés de 0.15
+    const otherStrategiesWeight = 0.08 + 0.15 + 0.13 + 0.10 + 0.20 + 0.20; // graham + lowPE + magicFormula + fcd (0.10) + fundamentalist + statements
+    const redistributionFactor = unusedDividendWeight > 0 ? 1.0 + (unusedDividendWeight / otherStrategiesWeight) : 1.0;
+
+    // FCD reduzido para 10% máximo (9% com YouTube)
+    // Redistribuir os 5% (4.5% com YouTube) que sobraram proporcionalmente
+    const fcdReduction = 0.05 * baseMultiplier;
+    const redistributionBase = 0.08 + 0.15 + 0.13 + 0.20 + 0.20; // 0.76
+    const redistributionPerStrategy = fcdReduction / redistributionBase;
+    
     const weights = {
-      graham: { weight: 0.08 * baseMultiplier, label: 'Graham (Valor Intrínseco)' },
-      dividendYield: { weight: 0.08 * baseMultiplier, label: 'Dividend Yield' },
-      lowPE: { weight: 0.15 * baseMultiplier, label: 'Low P/E' },
-      magicFormula: { weight: 0.13 * baseMultiplier, label: 'Fórmula Mágica' },
-      fcd: { weight: 0.15 * baseMultiplier, label: 'Fluxo de Caixa Descontado' },
-      gordon: { weight: 0.01 * baseMultiplier, label: 'Gordon (Dividendos)' },
-      fundamentalist: { weight: 0.20 * baseMultiplier, label: 'Fundamentalista 3+1' },
-      statements: { weight: 0.20 * baseMultiplier, label: 'Demonstrações Financeiras' },
+      graham: { weight: (0.08 + 0.08 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, label: 'Graham (Valor Intrínseco)' },
+      dividendYield: { weight: dividendYieldWeight, label: 'Dividend Yield' },
+      lowPE: { weight: (0.15 + 0.15 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, label: 'Low P/E' },
+      magicFormula: { weight: (0.13 + 0.13 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, label: 'Fórmula Mágica' },
+      fcd: { weight: 0.10 * baseMultiplier * redistributionFactor, label: 'Fluxo de Caixa Descontado' },
+      gordon: { weight: gordonWeight, label: 'Gordon (Dividendos)' },
+      barsi: { weight: barsiWeight, label: 'Método Barsi' },
+      fundamentalist: { weight: (0.20 + 0.20 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, label: 'Fundamentalista 3+1' },
+      statements: { weight: (0.20 + 0.20 * redistributionPerStrategy) * baseMultiplier * redistributionFactor, label: 'Demonstrações Financeiras' },
       youtube: { weight: hasYouTubeAnalysis ? 0.10 : 0, label: 'Sentimento de Mercado' }
     };
 
@@ -93,13 +137,20 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
 
     // Adicionar contribuições de estratégias (se disponíveis na resposta)
     if (data.strategies) {
-      const strategyKeys = ['graham', 'dividendYield', 'lowPE', 'magicFormula', 'fcd', 'gordon', 'fundamentalist'] as const;
+      const strategyKeys = ['graham', 'dividendYield', 'lowPE', 'magicFormula', 'fcd', 'gordon', 'barsi', 'fundamentalist'] as const;
       
       strategyKeys.forEach((key) => {
         const strategy = data.strategies?.[key];
         const config = weights[key];
         
-        if (strategy && config) {
+        // Para estratégias de dividendos, só incluir se shouldConsiderDividendStrategies
+        if (key === 'dividendYield' || key === 'gordon' || key === 'barsi') {
+          if (!shouldConsiderDividendStrategies) {
+            return; // Não incluir se não deve considerar estratégias de dividendos
+          }
+        }
+        
+        if (strategy && config && config.weight > 0) {
           const points = strategy.score * config.weight;
           rawScore += points;
           
@@ -262,6 +313,7 @@ function getStrategyDescription(key: string): string {
     magicFormula: 'Combina ROE elevado com P/L baixo para identificar boas empresas baratas',
     fcd: 'Calcula o valor presente dos fluxos de caixa futuros da empresa',
     gordon: 'Valuation baseado no crescimento perpétuo de dividendos',
+    barsi: 'Método Barsi: Buy and Hold de dividendos em setores perenes com preço teto',
     fundamentalist: 'Análise completa de qualidade, preço, endividamento e dividendos'
   };
   return descriptions[key] || '';

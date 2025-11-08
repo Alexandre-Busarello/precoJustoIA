@@ -401,6 +401,13 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
 
   const { strategies } = analysisData;
 
+  // Verificar se empresa está reinvestindo (para mostrar indicador global)
+  const payout = latestFinancials.payout ? parseFloat(latestFinancials.payout.toString()) : null;
+  const lpa = latestFinancials.lpa ? parseFloat(latestFinancials.lpa.toString()) : null;
+  const hasPositiveProfit = lpa !== null && lpa > 0;
+  const hasLowPayout = payout !== null && payout <= 0.30;
+  const isReinvesting = hasPositiveProfit && hasLowPayout;
+
   return (
     <div className="mb-8">
       <div className="mb-6 space-y-2">
@@ -415,6 +422,34 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
           <span className="md:hidden">7a</span>
         </Badge>
       </div>
+
+      {/* Indicador de Reinvestimento - Global para todas as abas */}
+      {isReinvesting && (
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800 mb-6">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-full shrink-0">
+                <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <h4 className="font-semibold text-sm sm:text-base text-blue-900 dark:text-blue-100">
+                    Empresa em Crescimento
+                  </h4>
+                  <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900 dark:text-blue-300 dark:border-blue-700 text-xs">
+                    Reinvestimento
+                  </Badge>
+                </div>
+                <p className="text-xs sm:text-sm text-blue-800 dark:text-blue-200 leading-relaxed break-words">
+                  Esta empresa tem <strong>lucro positivo</strong> mas <strong>payout baixo ({payout ? (payout * 100).toFixed(0) : 'N/A'}%)</strong>, 
+                  indicando que ela <strong>reinveste seus lucros no próprio negócio</strong> para crescimento. 
+                  Por isso, as estratégias focadas em dividendos (Dividend Yield, Método Barsi e Gordon) não são aplicadas aqui, e a empresa <strong>não é penalizada</strong> por não pagar dividendos altos.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="fair-value" className="w-full">
         <TabsList className="grid w-full grid-cols-4">

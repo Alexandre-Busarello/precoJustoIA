@@ -77,7 +77,7 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
     const hasYouTubeAnalysis = !!youtubeAnalysis;
     const baseMultiplier = hasYouTubeAnalysis ? 0.90 : 1.00;
     
-    // Buscar dados financeiros da empresa para verificar payout e lpa
+    // Buscar dados financeiros da empresa para verificar payout, lpa e dy
     const companyFinancialData = await prisma.company.findUnique({
       where: { ticker: ticker.toUpperCase() },
       select: {
@@ -86,7 +86,8 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
           take: 1,
           select: {
             payout: true,
-            lpa: true
+            lpa: true,
+            dy: true
           }
         }
       }
@@ -96,9 +97,16 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
     const latestFinancials = companyFinancialData?.financialData[0];
     const payout = toNumber(latestFinancials?.payout);
     const lpa = toNumber(latestFinancials?.lpa);
+    const dy = toNumber(latestFinancials?.dy);
     const hasPositiveProfit = lpa !== null && lpa > 0;
     const hasRelevantPayout = payout !== null && payout > 0.30; // > 30%
     const shouldConsiderDividendStrategies = hasPositiveProfit && hasRelevantPayout;
+    
+    // Verificar se empresa está reinvestindo (payout zero OU dividend yield zero são equivalentes)
+    const hasZeroPayout = payout === 0;
+    const hasZeroDividendYield = dy !== null && dy === 0;
+    const hasLowPayout = payout !== null && payout > 0 && payout <= 0.30;
+    const isReinvesting = hasPositiveProfit && (hasLowPayout || hasZeroPayout || hasZeroDividendYield);
     
     // Distribuir peso das estratégias de dividendos
     const dividendStrategiesTotalWeight = 0.09 * baseMultiplier;

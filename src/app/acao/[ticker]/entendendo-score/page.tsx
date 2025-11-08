@@ -85,7 +85,8 @@ export default async function EntendendoScorePage({
         take: 1,
         select: {
           payout: true,
-          lpa: true
+          lpa: true,
+          dy: true
         }
       }
     },
@@ -108,11 +109,18 @@ export default async function EntendendoScorePage({
     (typeof latestFinancials.lpa === 'object' && 'toNumber' in latestFinancials.lpa 
       ? latestFinancials.lpa.toNumber() 
       : Number(latestFinancials.lpa)) : null;
+  const dy = latestFinancials?.dy ? 
+    (typeof latestFinancials.dy === 'object' && 'toNumber' in latestFinancials.dy 
+      ? latestFinancials.dy.toNumber() 
+      : Number(latestFinancials.dy)) : null;
   const hasPositiveProfit = lpa !== null && lpa > 0;
-  const hasLowPayout = payout !== null && payout <= 0.30;
-  const isReinvesting = hasPositiveProfit && hasLowPayout;
+  const hasZeroPayout = payout === 0;
+  const hasZeroDividendYield = dy !== null && dy === 0;
+  const hasLowPayout = payout !== null && payout > 0 && payout <= 0.30;
+  // Se payout for zero OU dividend yield for zero (são equivalentes quando payout é zero), considerar como reinvestimento
+  const isReinvesting = hasPositiveProfit && (hasLowPayout || hasZeroPayout || hasZeroDividendYield);
   
-  // Mostrar indicador se empresa está reinvestindo (lucro positivo mas payout baixo)
+  // Mostrar indicador se empresa está reinvestindo (lucro positivo mas payout baixo ou payout/dividend yield zero)
   const shouldShowReinvestmentIndicator = isReinvesting;
 
   if (!breakdown) {

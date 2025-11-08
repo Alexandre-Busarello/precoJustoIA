@@ -31,6 +31,7 @@ export interface FinancialData {
   margemLiquida?: number | null;
   payout?: number | null;
   lpa?: number | null; // Lucro por ação (para verificar se empresa tem lucro positivo)
+  dy?: number | null; // Dividend yield (para verificar reinvestimento quando payout é zero)
   youtubeAnalysis?: {
     score: number;
     summary: string;
@@ -3950,6 +3951,7 @@ export function calculateOverallScore(
   // Verificar condições para estratégias de dividendos
   const payout = financialData.payout ?? null;
   const lpa = financialData.lpa ?? null;
+  const dy = financialData.dy ?? null; // Dividend yield
   const hasPositiveProfit = lpa !== null && lpa > 0;
   const hasRelevantPayout = payout !== null && payout > 0.30; // > 30%
   
@@ -3959,7 +3961,11 @@ export function calculateOverallScore(
   const shouldConsiderDividendStrategies = hasPositiveProfit && hasRelevantPayout;
   
   // Se empresa tem lucro positivo mas payout < 30%, é sinal que reinveste (não penalizar, mas não considerar estratégias de dividendos)
-  const isReinvesting = hasPositiveProfit && payout !== null && payout <= 0.30;
+  // Também considerar reinvestimento se payout for zero OU dividend yield for zero (são equivalentes quando payout é zero)
+  const hasZeroPayout = payout === 0;
+  const hasZeroDividendYield = dy !== null && dy === 0;
+  const hasLowPayout = payout !== null && payout > 0 && payout <= 0.30;
+  const isReinvesting = hasPositiveProfit && (hasLowPayout || hasZeroPayout || hasZeroDividendYield);
 
   // Distribuir peso das estratégias de dividendos entre dividendYield, barsi e gordon
   // Gordon deve ter menor peso

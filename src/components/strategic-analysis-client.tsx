@@ -404,9 +404,13 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
   // Verificar se empresa está reinvestindo (para mostrar indicador global)
   const payout = latestFinancials.payout ? parseFloat(latestFinancials.payout.toString()) : null;
   const lpa = latestFinancials.lpa ? parseFloat(latestFinancials.lpa.toString()) : null;
+  const dy = latestFinancials.dy ? parseFloat(latestFinancials.dy.toString()) : null;
   const hasPositiveProfit = lpa !== null && lpa > 0;
-  const hasLowPayout = payout !== null && payout <= 0.30;
-  const isReinvesting = hasPositiveProfit && hasLowPayout;
+  const hasZeroPayout = payout === 0;
+  const hasZeroDividendYield = dy !== null && dy === 0;
+  const hasLowPayout = payout !== null && payout > 0 && payout <= 0.30;
+  // Se payout for zero OU dividend yield for zero (são equivalentes quando payout é zero), considerar como reinvestimento
+  const isReinvesting = hasPositiveProfit && (hasLowPayout || hasZeroPayout || hasZeroDividendYield);
 
   return (
     <div className="mb-8">

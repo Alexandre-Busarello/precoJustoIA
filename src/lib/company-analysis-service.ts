@@ -289,7 +289,8 @@ export async function executeCompanyAnalysis(
     dividaLiquidaPl: toNumber(companyData.financials.dividaLiquidaPl),
     margemLiquida: toNumber(companyData.financials.margemLiquida),
     payout: toNumber(companyData.financials.payout),
-    lpa: toNumber(companyData.financials.lpa) // Lucro por ação para verificar se empresa tem lucro positivo
+    lpa: toNumber(companyData.financials.lpa), // Lucro por ação para verificar se empresa tem lucro positivo
+    dy: toNumber((companyData.financials as any).dy) // Dividend yield para verificar reinvestimento quando payout é zero
   };
 
   // Buscar dados das demonstrações financeiras se solicitado

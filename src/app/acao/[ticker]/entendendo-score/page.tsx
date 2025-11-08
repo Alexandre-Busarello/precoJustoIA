@@ -283,7 +283,7 @@ export default async function EntendendoScorePage({
                           </Badge>
                         </div>
                         <p className="text-xs sm:text-sm text-blue-800 dark:text-blue-200 leading-relaxed break-words">
-                          Esta empresa tem <strong>lucro positivo</strong> mas <strong>payout baixo ({payout ? (payout * 100).toFixed(0) : 'N/A'}%)</strong>, 
+                          Esta empresa tem <strong>lucro positivo</strong> mas <strong>payout baixo ({payout ? (payout * 100).toFixed(0) : '0'}%)</strong>, 
                           indicando que ela <strong>reinveste seus lucros no próprio negócio</strong> para crescimento. 
                           Por isso, as estratégias focadas em dividendos (Dividend Yield, Método Barsi e Gordon) não são aplicadas aqui, e a empresa <strong>não é penalizada</strong> por não pagar dividendos altos.
                         </p>

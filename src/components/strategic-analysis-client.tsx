@@ -405,12 +405,21 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
   const payout = latestFinancials.payout ? parseFloat(latestFinancials.payout.toString()) : null;
   const lpa = latestFinancials.lpa ? parseFloat(latestFinancials.lpa.toString()) : null;
   const dy = latestFinancials.dy ? parseFloat(latestFinancials.dy.toString()) : null;
+  console.log('payout', payout);
+  console.log('lpa', lpa);
+  console.log('dy', dy);
   const hasPositiveProfit = lpa !== null && lpa > 0;
-  const hasZeroPayout = payout === 0;
-  const hasZeroDividendYield = dy !== null && dy === 0;
+  const hasZeroPayout = payout === 0 || payout === null;
+  const hasZeroDividendYield = dy !== null && dy === 0 || dy === null;
   const hasLowPayout = payout !== null && payout > 0 && payout <= 0.30;
   // Se payout for zero OU dividend yield for zero (são equivalentes quando payout é zero), considerar como reinvestimento
+  console.log('hasZeroPayout', hasZeroPayout);
+  console.log('hasZeroDividendYield', hasZeroDividendYield);
+  console.log('hasLowPayout', hasLowPayout);
+  console.log('hasPositiveProfit', hasPositiveProfit);
+  
   const isReinvesting = hasPositiveProfit && (hasLowPayout || hasZeroPayout || hasZeroDividendYield);
+  console.log('isReinvesting', isReinvesting);
 
   return (
     <div className="mb-8">
@@ -445,7 +454,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   </Badge>
                 </div>
                 <p className="text-xs sm:text-sm text-blue-800 dark:text-blue-200 leading-relaxed break-words">
-                  Esta empresa tem <strong>lucro positivo</strong> mas <strong>payout baixo ({payout ? (payout * 100).toFixed(0) : 'N/A'}%)</strong>, 
+                  Esta empresa tem <strong>lucro positivo</strong> mas <strong>payout baixo ({payout ? (payout * 100).toFixed(0) : '0'}%)</strong>, 
                   indicando que ela <strong>reinveste seus lucros no próprio negócio</strong> para crescimento. 
                   Por isso, as estratégias focadas em dividendos (Dividend Yield, Método Barsi e Gordon) não são aplicadas aqui, e a empresa <strong>não é penalizada</strong> por não pagar dividendos altos.
                 </p>

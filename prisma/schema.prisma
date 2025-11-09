@@ -1226,3 +1226,47 @@ model FiiData {
   @@index([companyId])
   @@map("fii_data")
 }
+
+// ===== FILA DE ENVIO DE EMAILS =====
+
+// Fila de emails para envio assíncrono
+model EmailQueue {
+  id                String        @id @default(cuid())
+  email             String        // Email do destinatário
+  emailType         EmailType     @map("email_type") // Tipo de email
+  recipientName     String?       @map("recipient_name") // Nome do destinatário
+  
+  // Dados do email (JSON para flexibilidade)
+  emailData         Json          @map("email_data") // Dados específicos do tipo de email
+  
+  // Status
+  status            EmailStatus   @default(PENDING) // PENDING, SENT, FAILED
+  attempts          Int           @default(0) // Número de tentativas de envio
+  lastAttemptAt     DateTime?     @map("last_attempt_at") // Última tentativa
+  errorMessage      String?       @map("error_message") // Mensagem de erro se falhou
+  
+  // Datas
+  createdAt         DateTime      @default(now()) @map("created_at") // Data de criação da intenção
+  sentAt            DateTime?     @map("sent_at") // Data do envio do email (quando foi enviado)
+  
+  // Metadata
+  priority          Int           @default(0) // Prioridade (0=normal, 1=high, 2=urgent)
+  metadata          Json?         // Metadados adicionais
+  
+  @@index([status, createdAt]) // Para buscar emails pendentes ordenados por data
+  @@index([emailType, status])
+  @@index([createdAt])
+  @@index([sentAt])
+  @@map("email_queue")
+}
+
+enum EmailType {
+  ASSET_CHANGE          // Mudança fundamental de ativo
+  MONTHLY_REPORT        // Relatório mensal
+}
+
+enum EmailStatus {
+  PENDING               // Aguardando envio
+  SENT                  // Enviado com sucesso
+  FAILED                // Falhou após múltiplas tentativas
+}

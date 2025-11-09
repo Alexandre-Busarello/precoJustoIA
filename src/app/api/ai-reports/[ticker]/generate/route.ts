@@ -8,7 +8,6 @@ import { reviewAnalysisInternal } from '@/app/api/review-analysis/route'
 import { prisma } from '@/lib/prisma'
 import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service'
-import { sendAssetChangeEmail, sendMonthlyReportEmail } from '@/lib/email-service'
 
 // Validar se a API key do Gemini está configurada
 function validateGeminiConfig() {
@@ -17,154 +16,8 @@ function validateGeminiConfig() {
   }
 }
 
-/**
- * Envia emails para subscribers em background (não bloqueia)
- * Para relatórios de mudança fundamental
- */
-async function sendEmailsToSubscribersInBackground(params: {
-  companyId: number
-  ticker: string
-  companyName: string
-  companyLogoUrl: string | null
-  reportId: string
-  reportContent: string
-  reportType: string
-  changeDirection?: 'positive' | 'negative'
-  previousScore?: number
-  currentScore?: number
-}) {
-  const {
-    companyId,
-    ticker,
-    companyName,
-    companyLogoUrl,
-    reportId,
-    reportContent,
-    changeDirection,
-    previousScore,
-    currentScore,
-  } = params
-
-  try {
-    // Buscar subscribers
-    const subscribers = await AssetMonitoringService.getSubscribersForCompany(companyId)
-    
-    if (subscribers.length === 0) {
-      console.log(`📧 ${ticker}: Nenhum subscriber encontrado`)
-      return
-    }
-
-    console.log(`📧 ${ticker}: Enviando emails para ${subscribers.length} subscribers`)
-
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai'
-    const reportUrl = `${baseUrl}/acao/${ticker.toLowerCase()}/relatorios/${reportId}`
-
-    // Extrair resumo do relatório (primeiros 500 caracteres)
-    const reportSummary = reportContent
-      .replace(/[#*`]/g, '')
-      .substring(0, 500)
-      .trim() + '...'
-
-    // Enviar emails para cada subscriber
-    let emailsSent = 0
-    for (const subscriber of subscribers) {
-      try {
-        // Só enviar se tiver todas as informações necessárias
-        if (changeDirection && previousScore !== undefined && currentScore !== undefined) {
-          await sendAssetChangeEmail({
-            email: subscriber.email,
-            userName: subscriber.name || 'Investidor',
-            ticker,
-            companyName,
-            companyLogoUrl,
-            changeDirection,
-            previousScore,
-            currentScore,
-            reportSummary,
-            reportUrl,
-          })
-          emailsSent++
-        }
-      } catch (emailError) {
-        console.error(`❌ Erro ao enviar email para ${subscriber.email}:`, emailError)
-        // Continuar enviando para outros subscribers
-      }
-    }
-
-    console.log(`✅ ${ticker}: ${emailsSent} emails enviados com sucesso`)
-  } catch (error) {
-    console.error(`❌ Erro ao processar envio de emails para ${ticker}:`, error)
-    throw error
-  }
-}
-
-/**
- * Envia emails para subscribers em background (não bloqueia)
- * Para relatórios mensais (MONTHLY_OVERVIEW)
- */
-async function sendMonthlyReportEmailsInBackground(params: {
-  companyId: number
-  ticker: string
-  companyName: string
-  companyLogoUrl: string | null
-  reportId: string
-  reportContent: string
-}) {
-  const {
-    companyId,
-    ticker,
-    companyName,
-    companyLogoUrl,
-    reportId,
-    reportContent,
-  } = params
-
-  try {
-    // Buscar subscribers
-    const subscribers = await AssetMonitoringService.getSubscribersForCompany(companyId)
-    
-    if (subscribers.length === 0) {
-      console.log(`📧 ${ticker}: Nenhum subscriber encontrado`)
-      return
-    }
-
-    console.log(`📧 ${ticker}: Enviando notificações de relatório mensal para ${subscribers.length} subscribers`)
-
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai'
-    const reportUrl = `${baseUrl}/acao/${ticker.toLowerCase()}/relatorios/${reportId}`
-
-    // Extrair resumo do relatório (primeiros 500 caracteres)
-    const reportSummary = reportContent
-      .replace(/[#*`]/g, '')
-      .substring(0, 500)
-      .trim() + '...'
-
-    // Enviar emails usando o template específico para relatórios mensais
-    let emailsSent = 0
-    for (const subscriber of subscribers) {
-      try {
-        await sendMonthlyReportEmail({
-          email: subscriber.email,
-          userName: subscriber.name || 'Investidor',
-          ticker,
-          companyName,
-          companyLogoUrl,
-          reportSummary,
-          reportUrl,
-        })
-        emailsSent++
-      } catch (emailError) {
-        console.error(`❌ Erro ao enviar email para ${subscriber.email}:`, emailError)
-        // Continuar enviando para outros subscribers
-      }
-    }
-
-    console.log(`✅ ${ticker}: ${emailsSent} notificações de relatório mensal enviadas`)
-  } catch (error) {
-    console.error(`❌ Erro ao processar envio de emails para ${ticker}:`, error)
-    throw error
-  }
-}
+// Funções antigas de envio de emails removidas - agora usando fila de emails (EmailQueue)
+// Os emails são adicionados à fila e processados pelo CRON job em /api/cron/send-emails
 
 export async function POST(
   request: NextRequest,
@@ -391,7 +244,7 @@ export async function POST(
         throw completeError
       }
 
-      // PASSO 5: Enviar emails para subscribers em background (não bloqueia a resposta)
+      // PASSO 5: Criar registros na fila de emails para envio assíncrono
       // Buscar empresa completa com logoUrl
       const companyForEmail = await safeQueryWithParams(
         'company-by-ticker-for-email',
@@ -405,38 +258,98 @@ export async function POST(
         { ticker }
       ) as { id: number; logoUrl: string | null } | null
 
+      // Buscar subscribers para criar registros na fila
+      let subscribers: Array<{ email: string; name: string | null }> = []
       if (companyForEmail) {
-        if (type === 'FUNDAMENTAL_CHANGE') {
-          // Para relatórios de mudança fundamental, enviar emails com informações de score
-          sendEmailsToSubscribersInBackground({
-            companyId: companyForEmail.id,
-            ticker,
-            companyName: name,
-            companyLogoUrl: companyForEmail.logoUrl || null,
-            reportId: completedReport.id,
-            reportContent: finalAnalysis,
-            reportType: type,
-            changeDirection: (completedReport as any).changeDirection,
-            previousScore: (completedReport as any).previousScore ? Number((completedReport as any).previousScore) : undefined,
-            currentScore: (completedReport as any).currentScore ? Number((completedReport as any).currentScore) : undefined,
-          }).catch((error) => {
-            console.error(`❌ Erro ao enviar emails em background para ${ticker}:`, error)
-            // Não falhar o processo por causa de erro de email
-          })
-        } else if (type === 'MONTHLY_OVERVIEW') {
-          // Para relatórios mensais, enviar notificação simples
-          sendMonthlyReportEmailsInBackground({
-            companyId: companyForEmail.id,
-            ticker,
-            companyName: name,
-            companyLogoUrl: companyForEmail.logoUrl || null,
-            reportId: completedReport.id,
-            reportContent: finalAnalysis,
-          }).catch((error) => {
-            console.error(`❌ Erro ao enviar emails em background para ${ticker}:`, error)
-            // Não falhar o processo por causa de erro de email
-          })
+        try {
+          console.log(`📧 ${ticker}: Buscando subscribers para adicionar à fila de emails...`)
+          subscribers = await AssetMonitoringService.getSubscribersForCompany(companyForEmail.id)
+          console.log(`📧 ${ticker}: ${subscribers.length} subscribers encontrados`)
+        } catch (subscriberError) {
+          console.error(`❌ Erro ao buscar subscribers para ${ticker}:`, subscriberError)
+          subscribers = []
         }
+      }
+
+      // Criar registros na fila de emails para cada subscriber
+      if (companyForEmail && subscribers.length > 0) {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai'
+        const reportUrl = `${baseUrl}/acao/${ticker.toLowerCase()}/relatorios/${completedReport.id}`
+        const reportSummary = finalAnalysis
+          .replace(/[#*`]/g, '')
+          .substring(0, 500)
+          .trim() + '...'
+
+        let emailsQueued = 0
+
+        for (const subscriber of subscribers) {
+          try {
+            let emailData: any
+            let emailType: 'ASSET_CHANGE' | 'MONTHLY_REPORT'
+
+            if (type === 'FUNDAMENTAL_CHANGE') {
+              const changeDirection = (completedReport as any).changeDirection
+              const previousScore = (completedReport as any).previousScore ? Number((completedReport as any).previousScore) : undefined
+              const currentScore = (completedReport as any).currentScore ? Number((completedReport as any).currentScore) : undefined
+              
+              // Só criar registro se tiver todas as informações necessárias
+              if (changeDirection && previousScore !== undefined && currentScore !== undefined) {
+                emailType = 'ASSET_CHANGE'
+                emailData = {
+                  ticker,
+                  companyName: name,
+                  companyLogoUrl: companyForEmail.logoUrl || null,
+                  changeDirection,
+                  previousScore,
+                  currentScore,
+                  reportSummary,
+                  reportUrl,
+                }
+              } else {
+                console.log(`⏭️ Pulando subscriber ${subscriber.email}: informações de score incompletas`)
+                continue
+              }
+            } else if (type === 'MONTHLY_OVERVIEW') {
+              emailType = 'MONTHLY_REPORT'
+              emailData = {
+                ticker,
+                companyName: name,
+                companyLogoUrl: companyForEmail.logoUrl || null,
+                reportSummary,
+                reportUrl,
+              }
+            } else {
+              console.log(`⏭️ Pulando subscriber ${subscriber.email}: tipo de relatório desconhecido`)
+              continue
+            }
+
+            // Criar registro na fila de emails
+            await prisma.emailQueue.create({
+              data: {
+                email: subscriber.email,
+                emailType,
+                recipientName: subscriber.name || null,
+                emailData,
+                status: 'PENDING',
+                priority: 0, // Prioridade normal
+                metadata: {
+                  reportId: completedReport.id,
+                  companyId: companyForEmail.id,
+                  ticker,
+                }
+              }
+            })
+
+            emailsQueued++
+          } catch (queueError) {
+            console.error(`❌ Erro ao adicionar email à fila para ${subscriber.email}:`, queueError)
+            // Continuar adicionando outros emails à fila
+          }
+        }
+
+        console.log(`✅ ${ticker}: ${emailsQueued} emails adicionados à fila de envio`)
+      } else {
+        console.log(`📧 ${ticker}: Nenhum subscriber encontrado, pulando criação de fila de emails`)
       }
 
       return NextResponse.json({

@@ -22,7 +22,6 @@ export const MAIN_BDRS = [
   "ORCL34.SA",
   "PYPL34.SA",
   "Z1OM34.SA",
-  "S2QU34.SA",
   "S2HO34.SA",
   "R1OK34.SA",
   "MELI34.SA",
@@ -166,6 +165,7 @@ export const MAIN_BDRS = [
   "ASML34.SA",
   "SAPP34.SA",
   "SNEC34.SA",
+  "CAFR31.SA"
 ];
 
 // Interface para dados do Yahoo Finance (baseada no JSON de exploração)

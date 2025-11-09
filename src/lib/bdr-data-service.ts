@@ -3596,7 +3596,10 @@ export class BDRDataService {
 
   /**
    * Obtém lista única de BDRs das carteiras + lista principal
-   * Ordenada por prioridade: NULL primeiro, depois mais antigos
+   * Ordenada por prioridade:
+   * 1. MAIN_BDRS não cadastrados no banco (prioridade máxima)
+   * 2. MAIN_BDRS cadastrados ordenados por yahoo_last_bdr_updated_at (mais antigos primeiro)
+   * 3. BDRs de carteiras ordenados por yahoo_last_bdr_updated_at (mais antigos primeiro)
    */
   static async getUniqueBDRList(): Promise<string[]> {
     try {
@@ -3617,6 +3620,11 @@ export class BDRDataService {
       const portfolioTickers = portfolioBDRs
         .map((asset) => asset.ticker.toUpperCase())
         .filter((ticker) => this.isBDR(ticker)); // Filtrar apenas BDRs
+
+      // Converter MAIN_BDRS para formato limpo (sem .SA) para comparação
+      const mainBDRsClean = MAIN_BDRS.map((ticker) =>
+        this.cleanTickerForDB(ticker)
+      );
 
       // Combinar com lista principal e remover duplicatas
       const allBDRTickersWithSA = [
@@ -3645,18 +3653,36 @@ export class BDRDataService {
         },
       });
 
-      // Criar mapa de última atualização
+      // Criar mapa de última atualização e verificar quais existem no banco
       const updateMap = new Map<string, Date | null>();
+      const existsInDB = new Set<string>();
       companiesWithUpdateInfo.forEach((company) => {
-        updateMap.set(company.ticker, company.yahooLastBdrUpdatedAt);
+        const tickerUpper = company.ticker.toUpperCase();
+        updateMap.set(tickerUpper, company.yahooLastBdrUpdatedAt);
+        existsInDB.add(tickerUpper);
       });
 
-      // Ordenar por prioridade: NULL primeiro (nunca processados), depois mais antigos
-      const sortedBDRs = allBDRsClean.sort((a, b) => {
+      // Separar MAIN_BDRS em duas categorias:
+      // 1. MAIN_BDRS não cadastrados no banco (prioridade máxima)
+      // 2. MAIN_BDRS já cadastrados no banco
+      const mainBDRsNotInDB = mainBDRsClean.filter(
+        (ticker) => !existsInDB.has(ticker.toUpperCase())
+      );
+      const mainBDRsInDB = mainBDRsClean.filter((ticker) =>
+        existsInDB.has(ticker.toUpperCase())
+      );
+
+      // BDRs de carteiras que não são MAIN_BDRS
+      const portfolioBDRsClean = allBDRsClean.filter(
+        (ticker) => !mainBDRsClean.includes(ticker)
+      );
+
+      // Ordenar MAIN_BDRS cadastrados por data de atualização (mais antigos primeiro)
+      const sortedMainBDRsInDB = mainBDRsInDB.sort((a, b) => {
         const dateA = updateMap.get(a.toUpperCase());
         const dateB = updateMap.get(b.toUpperCase());
 
-        // Se A é NULL e B não é, A tem prioridade
+        // Se A é NULL e B não é, A tem prioridade (nunca atualizado)
         if (dateA === null && dateB !== null) return -1;
         // Se B é NULL e A não é, B tem prioridade
         if (dateB === null && dateA !== null) return 1;
@@ -3668,24 +3694,39 @@ export class BDRDataService {
         return 0;
       });
 
+      // Ordenar BDRs de carteiras por data de atualização (mais antigos primeiro)
+      const sortedPortfolioBDRs = portfolioBDRsClean.sort((a, b) => {
+        const dateA = updateMap.get(a.toUpperCase());
+        const dateB = updateMap.get(b.toUpperCase());
+
+        // Se A é NULL e B não é, A tem prioridade (nunca atualizado)
+        if (dateA === null && dateB !== null) return -1;
+        // Se B é NULL e A não é, B tem prioridade
+        if (dateB === null && dateA !== null) return 1;
+        // Se ambos são NULL, manter ordem alfabética
+        if (dateA === null && dateB === null) return a.localeCompare(b);
+        // Se ambos têm data, mais antigo primeiro
+        if (dateA && dateB) return dateA.getTime() - dateB.getTime();
+
+        return 0;
+      });
+
+      // Ordenar final: MAIN_BDRS não cadastrados primeiro, depois MAIN_BDRS cadastrados ordenados por data, depois carteiras ordenadas por data
+      const sortedBDRs = [
+        ...mainBDRsNotInDB,
+        ...sortedMainBDRsInDB,
+        ...sortedPortfolioBDRs,
+      ];
+
       console.log(`🔄 [BDR] Lista ordenada por prioridade:`);
       console.log(
-        `   - Nunca processados: ${
-          sortedBDRs.filter(
-            (t) =>
-              !updateMap.has(t.toUpperCase()) ||
-              updateMap.get(t.toUpperCase()) === null
-          ).length
-        }`
+        `   - MAIN_BDRS não cadastrados: ${mainBDRsNotInDB.length}`
       );
       console.log(
-        `   - Já processados: ${
-          sortedBDRs.filter(
-            (t) =>
-              updateMap.has(t.toUpperCase()) &&
-              updateMap.get(t.toUpperCase()) !== null
-          ).length
-        }`
+        `   - MAIN_BDRS cadastrados: ${sortedMainBDRsInDB.length}`
+      );
+      console.log(
+        `   - BDRs de carteiras: ${sortedPortfolioBDRs.length}`
       );
 
       // Retornar com sufixo .SA para compatibilidade com Yahoo Finance

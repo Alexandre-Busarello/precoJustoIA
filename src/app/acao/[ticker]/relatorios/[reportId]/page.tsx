@@ -22,7 +22,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   
   const report = await prisma.aIReport.findUnique({
     where: { id: reportId },
-    include: {
+    select: {
+      type: true,
+      changeDirection: true,
+      previousScore: true,
+      currentScore: true,
       company: {
         select: {
           ticker: true,
@@ -38,9 +42,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
-  const changeText = report.changeDirection === 'positive' ? 'Melhora' : 'Piora';
+  const isMonthlyReport = report.type === 'MONTHLY_OVERVIEW';
   const isPremium = await isCurrentUserPremium();
   
+  if (isMonthlyReport) {
+    return {
+      title: `Relatório Mensal: ${report.company.name} (${report.company.ticker}) | Preço Justo AI`,
+      description: `Análise mensal completa com Inteligência Artificial de ${report.company.name}.`,
+    };
+  }
+  
+  const changeText = report.changeDirection === 'positive' ? 'Melhora' : 'Piora';
   return {
     title: `${changeText} Fundamental: ${report.company.name} (${report.company.ticker}) | Preço Justo AI`,
     description: isPremium 
@@ -54,7 +66,16 @@ export default async function ReportDetailPage({ params }: PageProps) {
 
   const report = await prisma.aIReport.findUnique({
     where: { id: reportId },
-    include: {
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      changeDirection: true,
+      previousScore: true,
+      currentScore: true,
+      likeCount: true,
+      dislikeCount: true,
+      createdAt: true,
       company: {
         select: {
           ticker: true,
@@ -71,6 +92,7 @@ export default async function ReportDetailPage({ params }: PageProps) {
   }
 
   const isPremium = await isCurrentUserPremium();
+  const isMonthlyReport = report.type === 'MONTHLY_OVERVIEW';
   const isPositive = report.changeDirection === 'positive';
   const scoreDelta = report.currentScore && report.previousScore 
     ? Number(report.currentScore) - Number(report.previousScore)
@@ -115,7 +137,7 @@ export default async function ReportDetailPage({ params }: PageProps) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">
-              Análise de Mudança Fundamental
+              {isMonthlyReport ? 'Relatório Mensal' : 'Análise de Mudança Fundamental'}
             </h1>
             <p className="text-muted-foreground">
               {report.company.name} ({report.company.ticker})
@@ -134,12 +156,12 @@ export default async function ReportDetailPage({ params }: PageProps) {
 
       {/* Metadata Card */}
       <Card className="p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className={`grid grid-cols-1 ${isMonthlyReport ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
           {/* Data */}
           <div>
             <div className="flex items-center text-sm text-muted-foreground mb-1">
               <Calendar className="h-4 w-4 mr-2" />
-              Data da Análise
+              {isMonthlyReport ? 'Data do Relatório' : 'Data da Análise'}
             </div>
             <div className="text-lg font-semibold">
               {new Date(report.createdAt).toLocaleDateString('pt-BR', {
@@ -150,52 +172,68 @@ export default async function ReportDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Mudança */}
-          <div>
-            <div className="text-sm text-muted-foreground mb-1">
-              Direção da Mudança
+          {/* Mudança - apenas para FUNDAMENTAL_CHANGE */}
+          {!isMonthlyReport && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Direção da Mudança
+              </div>
+              <Badge 
+                variant={isPositive ? 'default' : 'destructive'}
+                className="text-base py-1.5 px-3"
+              >
+                {isPositive ? (
+                  <>
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Positiva
+                  </>
+                ) : (
+                  <>
+                    <TrendingDown className="h-4 w-4 mr-2" />
+                    Negativa
+                  </>
+                )}
+              </Badge>
             </div>
-            <Badge 
-              variant={isPositive ? 'default' : 'destructive'}
-              className="text-base py-1.5 px-3"
-            >
-              {isPositive ? (
-                <>
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Positiva
-                </>
-              ) : (
-                <>
-                  <TrendingDown className="h-4 w-4 mr-2" />
-                  Negativa
-                </>
-              )}
-            </Badge>
-          </div>
+          )}
 
-          {/* Score */}
-          <div>
-            <div className="text-sm text-muted-foreground mb-1">
-              Overall Score
+          {/* Score - apenas para FUNDAMENTAL_CHANGE */}
+          {!isMonthlyReport && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Overall Score
+              </div>
+              {isPremium ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-medium">{Number(report.previousScore).toFixed(1)}</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className={`text-lg font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                    {Number(report.currentScore).toFixed(1)}
+                  </span>
+                  <Badge variant="outline" className="ml-2">
+                    {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}
+                  </Badge>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Lock className="h-4 w-4" />
+                  <span className="text-sm">Disponível apenas para Premium</span>
+                </div>
+              )}
             </div>
-            {isPremium ? (
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-medium">{Number(report.previousScore).toFixed(1)}</span>
-                <span className="text-muted-foreground">→</span>
-                <span className={`text-lg font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                  {Number(report.currentScore).toFixed(1)}
-                </span>
-                <Badge variant="outline" className="ml-2">
-                  {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}
-                </Badge>
+          )}
+
+          {/* Badge de tipo para relatórios mensais */}
+          {isMonthlyReport && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Tipo de Relatório
               </div>
-            ) : (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Lock className="h-4 w-4" />
-                <span className="text-sm">Disponível apenas para Premium</span>
-              </div>
-            )}
-          </div>
+              <Badge variant="secondary" className="text-base py-1.5 px-3">
+                🤖 Análise Mensal com IA
+              </Badge>
+            </div>
+          )}
         </div>
       </Card>
 

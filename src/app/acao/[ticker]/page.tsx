@@ -568,13 +568,13 @@ export default async function TickerPage({ params }: PageProps) {
       }
     }),
     getComprehensiveFinancialData(ticker, 'YEARLY', 7),
-    // Contar relatórios de mudança fundamental
+    // Contar todos os relatórios (mensais e mudanças fundamentais)
     prisma.aIReport.count({
       where: {
         company: {
           ticker: ticker
         },
-        type: 'FUNDAMENTAL_CHANGE'
+        status: 'COMPLETED'
       }
     }),
     // Buscar análise do YouTube

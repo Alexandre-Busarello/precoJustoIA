@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,20 +52,38 @@ export default function AIAnalysisDual({
   currentPrice, 
   financials,
   userIsPremium = false,
-  companyId: _companyId
+  companyId: _companyId // eslint-disable-line @typescript-eslint/no-unused-vars
 }: AIAnalysisDualProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [monthlyReport, setMonthlyReport] = useState<AIReport | null>(null)
   const [changeReports, setChangeReports] = useState<AIReport[]>([])
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'monthly' | 'changes'>('monthly')
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false)
+  
+  // Ref para evitar múltiplas chamadas simultâneas
+  const isGeneratingRef = useRef(false)
+  const hasLoadedRef = useRef(false)
 
   // Carregar relatórios ao montar o componente
   useEffect(() => {
+    // Evitar múltiplas chamadas no StrictMode do React
+    if (hasLoadedRef.current) return
+    hasLoadedRef.current = true
+    
     loadReports()
   }, [ticker]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadReports = async () => {
+  // Verifica se um relatório precisa ser regenerado (mais de 30 dias)
+  const needsRegeneration = (report: AIReport): boolean => {
+    if (!report || !report.createdAt) return true
+    const now = new Date()
+    const reportDate = new Date(report.createdAt)
+    const daysDiff = Math.floor((now.getTime() - reportDate.getTime()) / (1000 * 60 * 60 * 24))
+    return daysDiff >= 30
+  }
+
+  const loadReports = async (skipAutoGenerate = false) => {
     try {
       setIsLoading(true)
       
@@ -74,7 +92,36 @@ export default function AIAnalysisDual({
       if (monthlyResponse.ok) {
         const monthlyData = await monthlyResponse.json()
         if (monthlyData.success && monthlyData.report) {
-          setMonthlyReport(monthlyData.report)
+          const report = monthlyData.report
+          setMonthlyReport(report)
+          
+          // Verificar se precisa gerar automaticamente (mais de 30 dias ou primeiro relatório)
+          // Só gerar automaticamente se não estiver já gerando e se for Premium
+          if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current && needsRegeneration(report)) {
+            console.log('🤖 Relatório mensal tem mais de 30 dias. Gerando automaticamente...')
+            setIsAutoGenerating(true)
+            isGeneratingRef.current = true
+            await generateMonthlyReport()
+            return // generateMonthlyReport já recarrega os relatórios
+          }
+        } else {
+          // Não há relatório mensal - gerar automaticamente se for Premium
+          if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current) {
+            console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
+            setIsAutoGenerating(true)
+            isGeneratingRef.current = true
+            await generateMonthlyReport()
+            return
+          }
+        }
+      } else if (monthlyResponse.status === 404) {
+        // Relatório não encontrado - gerar automaticamente se for Premium
+        if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current) {
+          console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
+          setIsAutoGenerating(true)
+          isGeneratingRef.current = true
+          await generateMonthlyReport()
+          return
         }
       }
 
@@ -98,11 +145,20 @@ export default function AIAnalysisDual({
   const generateMonthlyReport = async () => {
     if (!userIsPremium) {
       setError('Análise por IA disponível apenas para usuários Premium')
+      isGeneratingRef.current = false
+      setIsAutoGenerating(false)
+      return
+    }
+
+    // Proteção contra múltiplas chamadas simultâneas
+    if (isGeneratingRef.current) {
+      console.log('⚠️ Geração já em andamento. Ignorando chamada duplicada.')
       return
     }
 
     setIsLoading(true)
     setError(null)
+    isGeneratingRef.current = true
 
     try {
       const response = await fetch(`/api/ai-reports/${ticker}/generate`, {
@@ -120,19 +176,60 @@ export default function AIAnalysisDual({
       })
 
       if (!response.ok) {
-        throw new Error('Erro ao gerar análise')
+        const errorData = await response.json().catch(() => ({}))
+        // Se já está sendo gerado, aguardar e recarregar
+        if (errorData.generating) {
+          console.log('🤖 Relatório já está sendo gerado. Aguardando...')
+          setIsLoading(true)
+          setTimeout(() => {
+            loadReports(true) // skipAutoGenerate = true para evitar loop
+          }, 3000)
+          return
+        }
+        // Se for erro de duplicado, apenas recarregar os relatórios
+        if (errorData.duplicate || response.status === 409) {
+          console.log('⏸️ Relatório duplicado detectado. Recarregando relatórios...')
+          setIsLoading(false)
+          isGeneratingRef.current = false
+          setIsAutoGenerating(false)
+          setTimeout(() => {
+            loadReports(true) // skipAutoGenerate = true para evitar loop
+          }, 1000)
+          return
+        }
+        throw new Error(errorData.error || 'Erro ao gerar análise')
       }
 
       const data = await response.json()
       if (data.success && data.report) {
         setMonthlyReport(data.report)
+        setIsAutoGenerating(false)
+        setIsLoading(false)
+        isGeneratingRef.current = false
+        // Recarregar relatórios para garantir dados atualizados
+        setTimeout(() => {
+          loadReports(true) // skipAutoGenerate = true para evitar loop
+        }, 1000)
+      } else if (data.generating) {
+        // Relatório está sendo gerado em background
+        console.log('🤖 Relatório está sendo gerado em background. Aguardando...')
+        isGeneratingRef.current = false
+        setIsAutoGenerating(false)
+        setIsLoading(true)
+        setTimeout(() => {
+          loadReports(true) // skipAutoGenerate = true para evitar loop
+        }, 3000)
+      } else {
+        setIsAutoGenerating(false)
+        setIsLoading(false)
       }
 
     } catch (err) {
       console.error('Erro ao gerar análise:', err)
       setError(err instanceof Error ? err.message : 'Erro desconhecido')
-    } finally {
+      setIsAutoGenerating(false)
       setIsLoading(false)
+      isGeneratingRef.current = false
     }
   }
 
@@ -250,20 +347,23 @@ export default function AIAnalysisDual({
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'monthly' | 'changes')}>
-          <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="monthly" className="flex items-center gap-2">
-              <Brain className="w-4 h-4" />
-              Análise Mensal
-              {monthlyReport && <Badge variant="secondary" className="ml-1 text-xs">1</Badge>}
-            </TabsTrigger>
-            <TabsTrigger value="changes" className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Mudanças Fundamentais
-              {changeReports.length > 0 && (
-                <Badge variant="secondary" className="ml-1 text-xs">{changeReports.length}</Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
+          {/* Mobile: Scroll horizontal | Desktop: Grid */}
+          <div className="w-full overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible mb-6">
+            <TabsList className="inline-flex md:grid w-auto md:w-full md:grid-cols-2 gap-1 min-w-full md:min-w-0">
+              <TabsTrigger value="monthly" className="flex items-center gap-2 whitespace-nowrap flex-shrink-0">
+                <Brain className="w-4 h-4" />
+                Análise Mensal
+                {monthlyReport && <Badge variant="secondary" className="ml-1 text-xs">1</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="changes" className="flex items-center gap-2 whitespace-nowrap flex-shrink-0">
+                <TrendingUp className="w-4 h-4" />
+                Mudanças Fundamentais
+                {changeReports.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-xs">{changeReports.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Tab: Análise Mensal */}
           <TabsContent value="monthly">

@@ -6,6 +6,7 @@ export interface AIReportData {
   id: string
   companyId: number
   content: string
+  type?: 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE'
   strategicAnalyses?: Record<string, any>
   metadata?: Record<string, any>
   version: number
@@ -70,9 +71,13 @@ export class AIReportsService {
 
   /**
    * Inicia a geração de um relatório (cria registro com status GENERATING)
+   * Proteção contra race conditions: verifica se já existe relatório no mesmo dia
    */
   static async startGeneration(ticker: string, metadata?: Record<string, any>): Promise<string | null> {
     try {
+      // Adicionar pequeno delay para evitar race conditions em chamadas simultâneas
+      await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200))
+
       // Buscar empresa pelo ticker
       const company = await safeQueryWithParams(
         'companies-by-ticker-start-generation',
@@ -86,16 +91,91 @@ export class AIReportsService {
         throw new Error('Empresa não encontrada')
       }
 
+      const reportType = metadata?.type || 'MONTHLY_OVERVIEW'
+
       // Verificar se já está gerando
       const isAlreadyGenerating = await this.isGenerating(ticker)
       if (isAlreadyGenerating) {
+        console.log(`⏸️ Relatório ${reportType} já está sendo gerado para ${ticker}`)
         return null // Já está sendo gerado
       }
 
-      // Desativar relatórios anteriores da mesma empresa
-      await safeWrite(
-        'deactivate-previous-ai_reports',
-        () => prisma.aIReport.updateMany({
+      // Para relatórios mensais, verificar se já existe um relatório criado no mesmo dia
+      if (reportType === 'MONTHLY_OVERVIEW') {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+
+        const existingTodayReport = await safeQueryWithParams(
+          'ai_reports-check-same-day',
+          () => prisma.aIReport.findFirst({
+            where: {
+              companyId: company.id,
+              type: 'MONTHLY_OVERVIEW',
+              status: 'COMPLETED',
+              createdAt: {
+                gte: today,
+                lt: tomorrow
+              }
+            },
+            select: {
+              id: true,
+              createdAt: true
+            }
+          }),
+          { companyId: company.id, today: today.toISOString() }
+        ) as { id: string; createdAt: Date } | null
+
+        if (existingTodayReport) {
+          console.log(`⏸️ Relatório mensal já existe para ${ticker} hoje (${existingTodayReport.createdAt.toISOString()}). Ignorando criação duplicada.`)
+          return null // Já existe relatório no mesmo dia
+        }
+      }
+
+      // Usar transação para garantir atomicidade
+      const result = await prisma.$transaction(async (tx) => {
+        // Verificar novamente dentro da transação (double-check)
+        const isAlreadyGeneratingInTx = await tx.aIReport.findFirst({
+          where: {
+            companyId: company.id,
+            status: 'GENERATING',
+            type: reportType
+          }
+        })
+
+        if (isAlreadyGeneratingInTx) {
+          console.log(`⏸️ Relatório ${reportType} já está sendo gerado (verificação na transação) para ${ticker}`)
+          return null
+        }
+
+        // Para relatórios mensais, verificar novamente dentro da transação
+        if (reportType === 'MONTHLY_OVERVIEW') {
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const tomorrow = new Date(today)
+          tomorrow.setDate(tomorrow.getDate() + 1)
+
+          const existingTodayReportInTx = await tx.aIReport.findFirst({
+            where: {
+              companyId: company.id,
+              type: 'MONTHLY_OVERVIEW',
+              status: 'COMPLETED',
+              createdAt: {
+                gte: today,
+                lt: tomorrow
+              }
+            }
+          })
+
+          if (existingTodayReportInTx) {
+            console.log(`⏸️ Relatório mensal já existe para ${ticker} hoje (verificação na transação). Ignorando criação duplicada.`)
+            return null
+          }
+        }
+
+        // Desativar relatórios anteriores da mesma empresa
+        await tx.aIReport.updateMany({
           where: {
             companyId: company.id,
             isActive: true
@@ -103,35 +183,46 @@ export class AIReportsService {
           data: {
             isActive: false
           }
-        }),
-        ['ai_reports']
-      )
+        })
 
-      // Criar registro de geração
-      const generatingReport = await safeWrite(
-        'create-ai_reports-generating',
-        () => prisma.aIReport.create({
+        // Criar registro de geração
+        const generatingReport = await tx.aIReport.create({
           data: {
             companyId: company.id,
             content: '', // Será preenchido quando completar
+            type: reportType,
             metadata,
             version: 1,
             isActive: true,
             status: 'GENERATING'
           }
-        }),
-        ['ai_reports']
-      ) as any
+        })
 
-      return generatingReport.id
+        return generatingReport.id
+      }, {
+        timeout: 10000, // 10 segundos de timeout
+        isolationLevel: 'Serializable' // Nível mais alto de isolamento para evitar race conditions
+      })
+
+      return result
     } catch (error) {
       console.error('Erro ao iniciar geração:', error)
+      // Se for erro de concorrência, retornar null em vez de lançar erro
+      if (error instanceof Error && (
+        error.message.includes('Unique constraint') ||
+        error.message.includes('P2034') || // Prisma transaction conflict
+        error.message.includes('timeout')
+      )) {
+        console.log(`⚠️ Concorrência detectada ao criar relatório para ${ticker}. Ignorando.`)
+        return null
+      }
       throw error
     }
   }
 
   /**
    * Completa a geração de um relatório
+   * Proteção adicional: verifica se já existe relatório completo no mesmo dia antes de completar
    */
   static async completeGeneration(
     reportId: string, 
@@ -139,6 +230,67 @@ export class AIReportsService {
     strategicAnalyses?: Record<string, any>
   ): Promise<AIReportData> {
     try {
+      // Buscar o relatório que está sendo completado
+      const generatingReport = await safeQueryWithParams(
+        'ai_reports-get-generating',
+        () => prisma.aIReport.findUnique({
+          where: { id: reportId },
+          select: {
+            id: true,
+            companyId: true,
+            type: true,
+            createdAt: true
+          }
+        }),
+        { reportId }
+      ) as { id: string; companyId: number; type: string; createdAt: Date } | null
+
+      if (!generatingReport) {
+        throw new Error('Relatório não encontrado')
+      }
+
+      // Para relatórios mensais, verificar se já existe um relatório completo no mesmo dia
+      if (generatingReport.type === 'MONTHLY_OVERVIEW') {
+        const reportDate = new Date(generatingReport.createdAt)
+        reportDate.setHours(0, 0, 0, 0)
+        const nextDay = new Date(reportDate)
+        nextDay.setDate(nextDay.getDate() + 1)
+
+        const existingTodayReport = await safeQueryWithParams(
+          'ai_reports-check-complete-same-day',
+          () => prisma.aIReport.findFirst({
+            where: {
+              companyId: generatingReport.companyId,
+              type: 'MONTHLY_OVERVIEW',
+              status: 'COMPLETED',
+              id: { not: reportId }, // Excluir o próprio relatório
+              createdAt: {
+                gte: reportDate,
+                lt: nextDay
+              }
+            },
+            select: {
+              id: true,
+              createdAt: true
+            }
+          }),
+          { companyId: generatingReport.companyId, reportDate: reportDate.toISOString(), reportId }
+        ) as { id: string; createdAt: Date } | null
+
+        if (existingTodayReport) {
+          console.log(`⏸️ Relatório mensal já existe completo para empresa ${generatingReport.companyId} hoje. Cancelando conclusão do relatório ${reportId}.`)
+          // Deletar o relatório que estava sendo gerado, pois já existe um completo
+          await safeWrite(
+            'delete-duplicate-ai-report',
+            () => prisma.aIReport.delete({
+              where: { id: reportId }
+            }),
+            ['ai_reports']
+          )
+          throw new Error('Relatório duplicado detectado. Já existe um relatório completo no mesmo dia.')
+        }
+      }
+
       const report = await safeWrite(
         'complete-ai-report-generation',
         () => prisma.aIReport.update({
@@ -242,6 +394,7 @@ export class AIReportsService {
         id: report.id,
         companyId: report.companyId,
         content: report.content,
+        type: report.type as 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE' | undefined,
         strategicAnalyses: report.strategicAnalyses as Record<string, any> || undefined,
         metadata: report.metadata as Record<string, any> || undefined,
         version: report.version,

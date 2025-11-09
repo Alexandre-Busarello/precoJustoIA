@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, TrendingUp, TrendingDown, Calendar, FileText, Crown, Lock } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Calendar, FileText, Crown, Lock, Brain } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,8 +32,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   return {
-    title: `Relatórios de Mudanças: ${company.name} (${company.ticker}) | Preço Justo AI`,
-    description: `Histórico completo de análises de mudanças fundamentais em ${company.name}. Acompanhe a evolução do ativo ao longo do tempo.`,
+    title: `Relatórios: ${company.name} (${company.ticker}) | Preço Justo AI`,
+    description: `Histórico completo de relatórios e análises de ${company.name}. Acompanhe a evolução do ativo ao longo do tempo.`,
   };
 }
 
@@ -60,16 +60,27 @@ export default async function ReportsListPage({ params }: PageProps) {
   const reports = await prisma.aIReport.findMany({
     where: {
       companyId: company.id,
-      type: 'FUNDAMENTAL_CHANGE',
+      status: 'COMPLETED',
     },
     orderBy: {
       createdAt: 'desc',
     },
     take: 50,
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      changeDirection: true,
+      previousScore: true,
+      currentScore: true,
+      createdAt: true,
+    },
   });
 
-  const positiveCount = reports.filter(r => r.changeDirection === 'positive').length;
-  const negativeCount = reports.filter(r => r.changeDirection === 'negative').length;
+  const fundamentalChangeReports = reports.filter(r => r.type === 'FUNDAMENTAL_CHANGE');
+  const monthlyReports = reports.filter(r => r.type === 'MONTHLY_OVERVIEW');
+  const positiveCount = fundamentalChangeReports.filter(r => r.changeDirection === 'positive').length;
+  const negativeCount = fundamentalChangeReports.filter(r => r.changeDirection === 'negative').length;
 
   return (
     <div className="container max-w-5xl mx-auto px-4 py-8">
@@ -85,7 +96,7 @@ export default async function ReportsListPage({ params }: PageProps) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">
-              Relatórios de Mudanças Fundamentais
+              Relatórios
             </h1>
             <p className="text-muted-foreground">
               {company.name} ({company.ticker})
@@ -103,25 +114,37 @@ export default async function ReportsListPage({ params }: PageProps) {
 
         {/* Stats */}
         {reports.length > 0 && (
-          <div className="flex gap-4 mt-4">
+          <div className="flex flex-wrap gap-4 mt-4">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {reports.length} relatório{reports.length !== 1 ? 's' : ''}
+                {reports.length} relatório{reports.length !== 1 ? 's' : ''} no total
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="text-sm text-muted-foreground">
-                {positiveCount} positiva{positiveCount !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-red-600" />
-              <span className="text-sm text-muted-foreground">
-                {negativeCount} negativa{negativeCount !== 1 ? 's' : ''}
-              </span>
-            </div>
+            {monthlyReports.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-purple-600" />
+                <span className="text-sm text-muted-foreground">
+                  {monthlyReports.length} relatório{monthlyReports.length !== 1 ? 's' : ''} mensal{monthlyReports.length !== 1 ? 'is' : ''}
+                </span>
+              </div>
+            )}
+            {fundamentalChangeReports.length > 0 && (
+              <>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-green-600" />
+                  <span className="text-sm text-muted-foreground">
+                    {positiveCount} mudança{positiveCount !== 1 ? 's' : ''} positiva{positiveCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-red-600" />
+                  <span className="text-sm text-muted-foreground">
+                    {negativeCount} mudança{negativeCount !== 1 ? 's' : ''} negativa{negativeCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -159,14 +182,15 @@ export default async function ReportsListPage({ params }: PageProps) {
             Nenhum relatório disponível
           </h3>
           <p className="text-muted-foreground">
-            Ainda não foram detectadas mudanças fundamentais significativas neste ativo.
+            Ainda não há relatórios disponíveis para este ativo.
             <br />
-            Inscreva-se no monitoramento para ser notificado quando houver mudanças.
+            Inscreva-se no monitoramento para ser notificado quando houver novos relatórios.
           </p>
         </Card>
       ) : (
         <div className="space-y-4">
           {reports.map((report) => {
+            const isMonthlyReport = report.type === 'MONTHLY_OVERVIEW';
             const isPositive = report.changeDirection === 'positive';
             const scoreDelta = report.currentScore && report.previousScore 
               ? Number(report.currentScore) - Number(report.previousScore)
@@ -189,22 +213,29 @@ export default async function ReportsListPage({ params }: PageProps) {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <Badge 
-                          variant={isPositive ? 'default' : 'destructive'}
-                          className="text-sm"
-                        >
-                          {isPositive ? (
-                            <>
-                              <TrendingUp className="h-3 w-3 mr-1" />
-                              Positiva
-                            </>
-                          ) : (
-                            <>
-                              <TrendingDown className="h-3 w-3 mr-1" />
-                              Negativa
-                            </>
-                          )}
-                        </Badge>
+                        {isMonthlyReport ? (
+                          <Badge variant="secondary" className="text-sm">
+                            <Brain className="h-3 w-3 mr-1" />
+                            Relatório Mensal
+                          </Badge>
+                        ) : (
+                          <Badge 
+                            variant={isPositive ? 'default' : 'destructive'}
+                            className="text-sm"
+                          >
+                            {isPositive ? (
+                              <>
+                                <TrendingUp className="h-3 w-3 mr-1" />
+                                Mudança Positiva
+                              </>
+                            ) : (
+                              <>
+                                <TrendingDown className="h-3 w-3 mr-1" />
+                                Mudança Negativa
+                              </>
+                            )}
+                          </Badge>
+                        )}
                         
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Calendar className="h-3 w-3" />
@@ -216,23 +247,28 @@ export default async function ReportsListPage({ params }: PageProps) {
                         </div>
                       </div>
 
-                      {isPremium ? (
-                        <div className="mb-3">
-                          <span className="text-lg font-semibold">
-                            Score: {Number(report.previousScore).toFixed(1)} → {' '}
-                          </span>
-                          <span className={`text-lg font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                            {Number(report.currentScore).toFixed(1)}
-                          </span>
-                          <Badge variant="outline" className="ml-2">
-                            {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}
-                          </Badge>
-                        </div>
-                      ) : (
-                        <div className="mb-3 flex items-center gap-2 text-muted-foreground">
-                          <Lock className="h-4 w-4" />
-                          <span className="text-sm">Score disponível apenas para usuários Premium</span>
-                        </div>
+                      {/* Score - apenas para relatórios de mudança fundamental */}
+                      {!isMonthlyReport && (
+                        <>
+                          {isPremium ? (
+                            <div className="mb-3">
+                              <span className="text-lg font-semibold">
+                                Score: {Number(report.previousScore).toFixed(1)} → {' '}
+                              </span>
+                              <span className={`text-lg font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                {Number(report.currentScore).toFixed(1)}
+                              </span>
+                              <Badge variant="outline" className="ml-2">
+                                {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <div className="mb-3 flex items-center gap-2 text-muted-foreground">
+                              <Lock className="h-4 w-4" />
+                              <span className="text-sm">Score disponível apenas para usuários Premium</span>
+                            </div>
+                          )}
+                        </>
                       )}
 
                       {preview && (

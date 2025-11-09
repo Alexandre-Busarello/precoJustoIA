@@ -63,24 +63,40 @@ export default function AIAnalysisDual({
   
   // Ref para evitar múltiplas chamadas simultâneas
   const isGeneratingRef = useRef(false)
-  const hasLoadedRef = useRef(false)
+  const hasLoadedRef = useRef<string | false>(false)
 
   // Carregar relatórios ao montar o componente
   useEffect(() => {
-    // Evitar múltiplas chamadas no StrictMode do React
-    if (hasLoadedRef.current) return
-    hasLoadedRef.current = true
+    // Evitar múltiplas chamadas no StrictMode do React apenas na primeira renderização
+    // Mas permitir recarregar quando o ticker mudar
+    const currentTicker = ticker
+    const previousTicker = hasLoadedRef.current
     
+    // Se já carregamos para este ticker, não recarregar (evita loop no StrictMode)
+    // Mas sempre carregar na primeira vez ou quando o ticker mudar
+    if (typeof previousTicker === 'string' && previousTicker === currentTicker) {
+      console.log(`⏸️ loadReports: Já carregado para este ticker (${currentTicker}), pulando para evitar loop...`)
+      return
+    }
+    
+    hasLoadedRef.current = currentTicker
+    console.log(`🔄 loadReports: Carregando relatórios para ${currentTicker} (anterior: ${previousTicker})`)
     loadReports()
   }, [ticker]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Verifica se um relatório precisa ser regenerado (mais de 30 dias)
   const needsRegeneration = (report: AIReport): boolean => {
-    if (!report || !report.createdAt) return true
+    if (!report || !report.createdAt) {
+      console.log('📅 needsRegeneration: Sem relatório ou data, retornando true')
+      return true
+    }
     const now = new Date()
     const reportDate = new Date(report.createdAt)
     const daysDiff = Math.floor((now.getTime() - reportDate.getTime()) / (1000 * 60 * 60 * 24))
-    return daysDiff >= 30
+    console.log(`📅 needsRegeneration: Data do relatório: ${reportDate.toISOString()}, Hoje: ${now.toISOString()}, Diferença: ${daysDiff} dias`)
+    const needs = daysDiff >= 30
+    console.log(`📅 needsRegeneration: Precisa regenerar? ${needs} (${daysDiff} >= 30)`)
+    return needs
   }
 
   const loadReports = async (skipAutoGenerate = false) => {
@@ -97,20 +113,33 @@ export default function AIAnalysisDual({
           
           // Verificar se precisa gerar automaticamente (mais de 30 dias ou primeiro relatório)
           // Só gerar automaticamente se não estiver já gerando e se for Premium
-          if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current && needsRegeneration(report)) {
+          console.log(`🔍 Verificando condições para auto-geração: skipAutoGenerate=${skipAutoGenerate}, userIsPremium=${userIsPremium}, isAutoGenerating=${isAutoGenerating}, isGeneratingRef=${isGeneratingRef.current}`)
+          const needsRegen = needsRegeneration(report)
+          console.log(`🔍 needsRegeneration retornou: ${needsRegen}`)
+          
+          // Verificar condições para auto-geração
+          if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current && needsRegen) {
             console.log('🤖 Relatório mensal tem mais de 30 dias. Gerando automaticamente...')
-            setIsAutoGenerating(true)
-            isGeneratingRef.current = true
-            await generateMonthlyReport()
-            return // generateMonthlyReport já recarrega os relatórios
+            // Chamar generateMonthlyReport que vai gerenciar o ref internamente
+            // Não setar o ref aqui para evitar deadlock
+            generateMonthlyReport().catch((err) => {
+              console.error('Erro ao gerar relatório mensal:', err)
+              isGeneratingRef.current = false
+              setIsAutoGenerating(false)
+            })
+            return // Não aguardar, deixar rodar em background
+          } else {
+            console.log(`⏸️ Condições não atendidas para auto-geração. skipAutoGenerate=${skipAutoGenerate}, userIsPremium=${userIsPremium}, isAutoGenerating=${isAutoGenerating}, isGeneratingRef=${isGeneratingRef.current}, needsRegeneration=${needsRegen}`)
           }
         } else {
           // Não há relatório mensal - gerar automaticamente se for Premium
           if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current) {
             console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
-            setIsAutoGenerating(true)
-            isGeneratingRef.current = true
-            await generateMonthlyReport()
+            generateMonthlyReport().catch((err) => {
+              console.error('Erro ao gerar relatório mensal:', err)
+              isGeneratingRef.current = false
+              setIsAutoGenerating(false)
+            })
             return
           }
         }
@@ -118,9 +147,11 @@ export default function AIAnalysisDual({
         // Relatório não encontrado - gerar automaticamente se for Premium
         if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current) {
           console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
-          setIsAutoGenerating(true)
-          isGeneratingRef.current = true
-          await generateMonthlyReport()
+          generateMonthlyReport().catch((err) => {
+            console.error('Erro ao gerar relatório mensal:', err)
+            isGeneratingRef.current = false
+            setIsAutoGenerating(false)
+          })
           return
         }
       }
@@ -143,6 +174,17 @@ export default function AIAnalysisDual({
   }
 
   const generateMonthlyReport = async () => {
+    // O ref já deve estar setado em loadReports antes de chamar esta função
+    // Mas verificamos novamente por segurança (double-check)
+    if (isGeneratingRef.current) {
+      console.log('⚠️ Geração já em andamento. Ignorando chamada duplicada.')
+      return
+    }
+
+    // Setar o ref IMEDIATAMENTE para bloquear outras chamadas
+    // (caso tenha sido chamado diretamente sem passar por loadReports)
+    isGeneratingRef.current = true
+    
     if (!userIsPremium) {
       setError('Análise por IA disponível apenas para usuários Premium')
       isGeneratingRef.current = false
@@ -150,17 +192,14 @@ export default function AIAnalysisDual({
       return
     }
 
-    // Proteção contra múltiplas chamadas simultâneas
-    if (isGeneratingRef.current) {
-      console.log('⚠️ Geração já em andamento. Ignorando chamada duplicada.')
-      return
-    }
-
     setIsLoading(true)
     setError(null)
-    isGeneratingRef.current = true
+    setIsAutoGenerating(true)
+    
+    console.log('🚀 Iniciando chamada para API de geração de relatório...')
 
     try {
+      console.log(`📡 Fazendo requisição POST para /api/ai-reports/${ticker}/generate`)
       const response = await fetch(`/api/ai-reports/${ticker}/generate`, {
         method: 'POST',
         headers: {
@@ -174,6 +213,7 @@ export default function AIAnalysisDual({
           financials,
         }),
       })
+      console.log(`📡 Resposta recebida: status ${response.status}`)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))

@@ -10,7 +10,7 @@
  */
 
 import { NextRequest } from 'next/server'
-import { cache } from './cache-service'
+import { rateLimitCache } from './rate-limit-cache-service'
 
 // Configurações de rate limiting
 export interface RateLimitConfig {
@@ -133,7 +133,7 @@ export class RateLimitMiddleware {
     
     // Verificar se IP está bloqueado
     const blockKey = `ip_block:${ip}:${config.endpoint}`
-    const blockData = await cache.get<{ blockedUntil: number; reason: string }>(blockKey, {
+    const blockData = await rateLimitCache.get<{ blockedUntil: number; reason: string }>(blockKey, {
       prefix: 'security',
       ttl: config.blockDuration
     })
@@ -154,7 +154,7 @@ export class RateLimitMiddleware {
     
     // Obter dados de rate limit
     const rateLimitKey = `rate_limit:${ip}:${config.endpoint}`
-    const rateLimitData = await cache.get<RateLimitData>(rateLimitKey, {
+    const rateLimitData = await rateLimitCache.get<RateLimitData>(rateLimitKey, {
       prefix: 'security',
       ttl: 86400 // 24 horas
     }) || {
@@ -326,7 +326,7 @@ export class RateLimitMiddleware {
     const blockKey = `ip_block:${ip}:${config.endpoint}`
     const blockedUntil = Date.now() + (config.blockDuration * 1000)
     
-    await cache.set(blockKey, {
+    await rateLimitCache.set(blockKey, {
       blockedUntil,
       reason,
       blockedAt: Date.now(),
@@ -347,7 +347,7 @@ export class RateLimitMiddleware {
     data: RateLimitData,
     config: RateLimitConfig
   ): Promise<void> {
-    await cache.set(key, data, {
+    await rateLimitCache.set(key, data, {
       prefix: 'security',
       ttl: 86400 // 24 horas
     })
@@ -483,14 +483,14 @@ export class RateLimitMiddleware {
   static async unblockIP(ip: string, endpoint: string): Promise<boolean> {
     try {
       const blockKey = `ip_block:${ip}:${endpoint}`
-      await cache.delete(blockKey, { prefix: 'security' })
+      await rateLimitCache.delete(blockKey, { prefix: 'security' })
       
       // Também resetar violações
       const rateLimitKey = `rate_limit:${ip}:${endpoint}`
-      const data = await cache.get<RateLimitData>(rateLimitKey, { prefix: 'security' })
+      const data = await rateLimitCache.get<RateLimitData>(rateLimitKey, { prefix: 'security' })
       if (data) {
         data.violations = 0
-        await cache.set(rateLimitKey, data, { prefix: 'security', ttl: 86400 })
+        await rateLimitCache.set(rateLimitKey, data, { prefix: 'security', ttl: 86400 })
       }
       
       console.log(`✅ IP DESBLOQUEADO: ${ip} para endpoint ${endpoint}`)
@@ -511,10 +511,10 @@ export class RateLimitMiddleware {
     rateLimitData?: RateLimitData
   }> {
     const blockKey = `ip_block:${ip}:${endpoint}`
-    const blockData = await cache.get<{ blockedUntil: number }>(blockKey, { prefix: 'security' })
+    const blockData = await rateLimitCache.get<{ blockedUntil: number }>(blockKey, { prefix: 'security' })
     
     const rateLimitKey = `rate_limit:${ip}:${endpoint}`
-    const rateLimitData = await cache.get<RateLimitData>(rateLimitKey, { prefix: 'security' })
+    const rateLimitData = await rateLimitCache.get<RateLimitData>(rateLimitKey, { prefix: 'security' })
     
     return {
       blocked: blockData ? blockData.blockedUntil > Date.now() : false,

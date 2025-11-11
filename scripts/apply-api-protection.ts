@@ -135,10 +135,10 @@ async function main() {
       console.log('   ```\n')
     }
     
-    const protected = routes.filter(r => r.hasProtection)
+    const protectedRoutes = routes.filter(r => r.hasProtection)
     console.log(`\n📊 Estatísticas:`)
     console.log(`   Total de rotas: ${routes.length}`)
-    console.log(`   Com proteção: ${protected.length} ✅`)
+    console.log(`   Com proteção: ${protectedRoutes.length} ✅`)
     console.log(`   Sem proteção: ${unprotected.length} ${unprotected.length > 0 ? '⚠️' : '✅'}`)
   } else {
     console.log('Uso:')

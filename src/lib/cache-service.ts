@@ -143,22 +143,6 @@ function handleRedisError(error: any): void {
   }
 }
 
-function shouldUseRedis(): boolean {
-  const result = !redisDisabled && redisConnected && redisClient !== null
-  
-  // 🔍 DEBUG: Log detalhado
-  if (!result) {
-    console.log(`🔍 shouldUseRedis = false:`, {
-      disabled: redisDisabled,
-      connected: redisConnected,
-      clientExists: redisClient !== null,
-      lastError: lastCriticalError
-    })
-  }
-  
-  return result
-}
-
 /**
  * Desconectar após operação (modo ultra-agressivo para minimizar conexões)
  * Só executa se a variável de ambiente REDIS_DISCONNECT_AFTER_OP=true

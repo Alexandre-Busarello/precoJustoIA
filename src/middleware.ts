@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { applyGlobalApiProtection } from '@/lib/api-global-protection'
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
+  
+  // 🛡️ PROTEÇÃO GLOBAL: Rate limiting em todas as rotas /api/*
+  // Isso aplica proteção básica automaticamente sem precisar alterar cada rota
+  if (pathname.startsWith('/api/')) {
+    const rateLimitResponse = await applyGlobalApiProtection(request)
+    if (rateLimitResponse) {
+      return rateLimitResponse // Rate limit excedido ou IP bloqueado
+    }
+    // Se não houver problema com rate limit, continuar com o processamento normal
+  }
   
   // OTIMIZAÇÃO CRAWL BUDGET: Redirecionar tickers maiúsculos para minúsculos
   if (pathname.startsWith('/acao/') || pathname.startsWith('/compara-acoes/')) {
@@ -92,6 +103,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/api/:path*',        // 🛡️ Proteger todas as rotas da API
     '/admin/:path*',
     '/upgrade',
     '/upgrade/:path*',

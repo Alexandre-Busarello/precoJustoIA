@@ -335,6 +335,7 @@ interface BrapiKeyStatistics {
   lastDividendValue?: number;
   lastDividendDate?: string;
   dividendYield?: number;
+  payoutRatio?: number; // Percentual do lucro distribuído como dividendos
   totalAssets?: number;
   updatedAt?: string;
 }
@@ -726,37 +727,43 @@ async function fetchWardTickers(): Promise<WardTickerItem[]> {
 
 // Função para buscar dados de uma empresa na Ward API
 async function fetchWardData(ticker: string): Promise<WardApiResponse | null> {
-  return executeWithRetry(async () => {
-    console.log(`🔍 Buscando dados da Ward para ${ticker}...`);
-    
-    const response = await axios.get(
-      `https://api.ward.app.br/api/tools/screening/GetStockForAnalise?ticker=${ticker}`,
-      {
-        headers: {
-          'accept': 'application/json, text/plain, */*',
-          'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-          'cache-control': 'no-cache',
-          'content-type': 'application/json',
-          'origin': 'https://www.ward.app.br',
-          'referer': 'https://www.ward.app.br/',
-          'sec-fetch-dest': 'empty',
-          'sec-fetch-mode': 'cors',
-          'sec-fetch-site': 'same-site',
-          'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
-          'Cookie': `jwtToken=${WARD_JWT_TOKEN}`
-        },
-        timeout: 30000
-      }
-    );
+  try {
+    return await executeWithRetry(async () => {
+      console.log(`🔍 Buscando dados da Ward para ${ticker}...`);
+      
+      const response = await axios.get(
+        `https://api.ward.app.br/api/tools/screening/GetStockForAnalise?ticker=${ticker}`,
+        {
+          headers: {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            'cache-control': 'no-cache',
+            'content-type': 'application/json',
+            'origin': 'https://www.ward.app.br',
+            'referer': 'https://www.ward.app.br/',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-site',
+            'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
+            'Cookie': `jwtToken=${WARD_JWT_TOKEN}`
+          },
+          timeout: 30000
+        }
+      );
 
-    if (response.status === 200 && response.data) {
-      console.log(`✅ Dados da Ward obtidos para ${ticker}: ${response.data.historicalStocks?.length || 0} anos`);
-      return response.data;
-    } else {
-      console.log(`⚠️  Resposta inesperada da Ward para ${ticker}: Status ${response.status}`);
-      return null;
-    }
-  }, 3, 1500); // 3 tentativas, 1.5s de delay inicial
+      if (response.status === 200 && response.data) {
+        console.log(`✅ Dados da Ward obtidos para ${ticker}: ${response.data.historicalStocks?.length || 0} anos`);
+        return response.data;
+      } else {
+        console.log(`⚠️  Resposta inesperada da Ward para ${ticker}: Status ${response.status}`);
+        return null;
+      }
+    }, 3, 1500); // 3 tentativas, 1.5s de delay inicial
+  } catch (error: any) {
+    // Não lançar erro, apenas logar e retornar null para não interromper processamento
+    console.log(`⚠️  Erro ao buscar dados da Ward para ${ticker} após todas as tentativas: ${error.message}`);
+    return null;
+  }
 }
 
 // Interface para dados financeiros completos
@@ -850,6 +857,10 @@ function mergeFinancialDataWithPriority(
   if (wardData) sources.push('ward');
   if (brapiData) sources.push('brapi');
   const dataSource = sources.join('+');
+
+  console.log('fundamentusData?.lpa', fundamentusData?.lpa);
+  console.log('wardData?.lpa', wardData?.lpa);
+  console.log('brapiData?.lpa', brapiData?.lpa);
   
   return {
     year: year,
@@ -904,7 +915,7 @@ function mergeFinancialDataWithPriority(
     dividendYield12m: fundamentusData?.dividendYield12m || wardData?.dividendYield12m || brapiData?.dividendYield12m || null,
     ultimoDividendo: brapiData?.ultimoDividendo || null, // Só na Brapi
     dataUltimoDividendo: brapiData?.dataUltimoDividendo || null, // Só na Brapi
-    payout: wardData?.payout || null, // Só na Ward
+    payout: wardData?.payout || brapiData?.payout || null, // Ward > Brapi
     
     // === PERFORMANCE E VARIAÇÕES ===
     variacao52Semanas: brapiData?.variacao52Semanas || null, // Só na Brapi
@@ -950,6 +961,119 @@ function mergeFinancialDataWithPriority(
 // Função para mesclar dados da Ward com dados da Brapi (complementar) - MANTIDA PARA COMPATIBILIDADE
 function mergeWardWithBrapiData(wardData: any, brapiData: any, year: number): FinancialDataComplete {
   return mergeFinancialDataWithPriority(null, wardData, brapiData, year);
+}
+
+// Função helper para calcular payout quando não disponível
+// Retorna payout em decimal (ex: 0.75 = 75%)
+function calculatePayout(params: {
+  payoutFromAPI?: number | null;
+  dividendYield?: number | null; // Em decimal (ex: 0.05 = 5%)
+  marketCap?: number | null;
+  lpa?: number | null;
+  sharesOutstanding?: number | null;
+  lucroLiquido?: number | null;
+  year?: number; // Para logs
+}): number | null {
+  const { payoutFromAPI, dividendYield, marketCap, lpa, sharesOutstanding, lucroLiquido, year } = params;
+  
+  // Se temos payout da API, normalizar para decimal
+  let payout = payoutFromAPI || null;
+  if (payout && payout > 1) {
+    // Se veio em porcentagem (ex: 75), converter para decimal (0.75)
+    payout = payout / 100;
+  }
+  
+  if (payout) {
+    return payout;
+  }
+  
+  // Tentar calcular usando dividendYield × marketCap e lpa × sharesOutstanding
+  if (dividendYield && marketCap && lpa && sharesOutstanding && lpa > 0 && sharesOutstanding > 0) {
+    const dividendosTotais = dividendYield * marketCap;
+    const lucroLiquidoTotal = lpa * sharesOutstanding;
+    
+    if (lucroLiquidoTotal > 0) {
+      payout = dividendosTotais / lucroLiquidoTotal;
+      const yearLabel = year ? `${year} ` : '';
+      console.log(`  📊 Payout ${yearLabel}calculado: (${dividendosTotais.toFixed(0)} / ${lucroLiquidoTotal.toFixed(0)}) = ${(payout * 100).toFixed(2)}%`);
+      return payout;
+    }
+  }
+  
+  // Opção 2: Usar dividendYield × marketCap e lucro líquido direto
+  if (dividendYield && marketCap && lucroLiquido && lucroLiquido > 0) {
+    const dividendosTotais = dividendYield * marketCap;
+    payout = dividendosTotais / lucroLiquido;
+    const yearLabel = year ? `${year} ` : '';
+    console.log(`  📊 Payout ${yearLabel}calculado (aproximado): (${dividendosTotais.toFixed(0)} / ${lucroLiquido.toFixed(0)}) = ${(payout * 100).toFixed(2)}%`);
+    return payout;
+  }
+  
+  return null;
+}
+
+// Função helper para calcular ROIC quando não disponível
+// Retorna ROIC em decimal (ex: 0.20 = 20%)
+// Fórmula: ROIC = EBIT / Invested Capital
+// Onde Invested Capital = Total Assets - Current Liabilities (ou Patrimônio Líquido + Dívida Total)
+function calculateROIC(params: {
+  roicFromAPI?: number | null;
+  ebit?: number | null; // EBIT direto
+  receitaTotal?: number | null;
+  operatingMargins?: number | null; // Margem operacional (em decimal)
+  totalAssets?: number | null;
+  currentLiabilities?: number | null;
+  patrimonioLiquido?: number | null;
+  totalDivida?: number | null;
+  year?: number; // Para logs
+}): number | null {
+  const { roicFromAPI, ebit, receitaTotal, operatingMargins, totalAssets, currentLiabilities, patrimonioLiquido, totalDivida, year } = params;
+  
+  // Se temos ROIC da API, normalizar para decimal
+  let roic = roicFromAPI || null;
+  if (roic && roic > 1) {
+    // Se veio em porcentagem (ex: 20), converter para decimal (0.20)
+    roic = roic / 100;
+  }
+  
+  if (roic) {
+    return roic;
+  }
+  
+  // Calcular EBIT se não fornecido diretamente
+  let calculatedEBIT = ebit || null;
+  if (!calculatedEBIT && receitaTotal && operatingMargins) {
+    calculatedEBIT = receitaTotal * operatingMargins;
+  }
+  
+  if (!calculatedEBIT || calculatedEBIT <= 0) {
+    return null;
+  }
+  
+  // Calcular Invested Capital
+  let investedCapital = null;
+  
+  // Método 1: Total Assets - Current Liabilities (mais comum)
+  if (totalAssets && currentLiabilities !== null && currentLiabilities !== undefined) {
+    investedCapital = totalAssets - currentLiabilities;
+  }
+  // Método 2: Patrimônio Líquido + Dívida Total
+  else if (patrimonioLiquido && totalDivida !== null && totalDivida !== undefined) {
+    investedCapital = patrimonioLiquido + totalDivida;
+  }
+  // Método 3: Apenas Total Assets (fallback menos preciso)
+  else if (totalAssets) {
+    investedCapital = totalAssets;
+  }
+  
+  if (investedCapital && investedCapital > 0) {
+    roic = calculatedEBIT / investedCapital;
+    const yearLabel = year ? `${year} ` : '';
+    console.log(`  📊 ROIC ${yearLabel}calculado: (${calculatedEBIT.toFixed(0)} / ${investedCapital.toFixed(0)}) = ${(roic * 100).toFixed(2)}%`);
+    return roic;
+  }
+  
+  return null;
 }
 
 // Função para converter dados da Ward para o formato do banco
@@ -2175,7 +2299,7 @@ async function processFinancialDataTTM(companyId: number, ticker: string, financ
     });
     
     // Preparar dados TTM para atualização
-    const ttmData = {
+    const ttmDataRaw = {
       // === INDICADORES DE VALUATION ===
       forwardPE: financialData.currentPrice && financialData.earningsGrowth ? 
         financialData.currentPrice / (financialData.earningsGrowth * financialData.currentPrice) : null,
@@ -2215,18 +2339,43 @@ async function processFinancialDataTTM(companyId: number, ticker: string, financ
       dataSource: existingFinancialData?.dataSource === 'ward+brapi' ? 'ward+brapi' : 'brapi'
     };
     
+    // Filtrar campos: preservar valores existentes quando novo valor é NULL
+    const ttmData: any = {};
+    if (existingFinancialData) {
+      // Para cada campo, só atualizar se o novo valor não for NULL
+      // Se for NULL e já existe valor no banco, manter o valor do banco
+      Object.keys(ttmDataRaw).forEach(key => {
+        const newValue = (ttmDataRaw as any)[key];
+        
+        // Se novo valor não é NULL, usar novo valor
+        // Se novo valor é NULL, manter valor existente (não atualizar campo)
+        if (newValue !== null && newValue !== undefined) {
+          ttmData[key] = newValue;
+        }
+        // Caso contrário, não adicionar ao objeto de update para preservar valor existente
+      });
+    } else {
+      // Se não existe registro, usar todos os valores (mesmo NULL)
+      Object.assign(ttmData, ttmDataRaw);
+    }
+    
     // Atualizar apenas os campos TTM, preservando dados históricos da Ward
     if (existingFinancialData) {
-      await prisma.financialData.update({
-        where: {
-          companyId_year: {
-            companyId,
-            year: currentYear
-          }
-        },
-        data: ttmData
-      });
-      console.log(`✅ Dados TTM atualizados para ${ticker} (${currentYear})`);
+      // Só atualizar se houver campos para atualizar
+      if (Object.keys(ttmData).length > 0) {
+        await prisma.financialData.update({
+          where: {
+            companyId_year: {
+              companyId,
+              year: currentYear
+            }
+          },
+          data: ttmData
+        });
+        console.log(`✅ Dados TTM atualizados para ${ticker} (${currentYear})`);
+      } else {
+        console.log(`⏭️  Nenhum campo TTM novo para atualizar para ${ticker} (${currentYear})`);
+      }
     } else {
       // Se não existe dados para o ano atual, criar novo registro apenas com TTM
       await prisma.financialData.create({
@@ -2261,7 +2410,8 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
     const existingData = await checkExistingHistoricalData(company.id);
     
     // Buscar dados completos da Brapi PRO (otimizado)
-    const brapiProData = await fetchBrapiProData(ticker, forceFullUpdate);
+    let brapiProData = await fetchBrapiProData(ticker, forceFullUpdate);
+    console.log('brapiProData', brapiProData);
     if (brapiProData) {
       console.log(`🔄 Processando dados históricos da Brapi PRO para ${ticker}...`);
       
@@ -2285,13 +2435,22 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
     }
 
     // Buscar dados da Ward (mantém compatibilidade com dados existentes)
-    const wardData = await fetchWardData(ticker);
-    if (!wardData || !wardData.historicalStocks) {
-      console.log(`⚠️  Nenhum dado histórico encontrado na Ward para ${ticker}`);
-      if (!brapiProData) {
-        console.log(`❌ Nenhuma fonte de dados disponível para ${ticker}`);
-        return;
+    // Não interromper processamento se Ward falhar
+    let wardData = null;
+    try {
+      wardData = await fetchWardData(ticker);
+      if (!wardData || !wardData.historicalStocks) {
+        console.log(`⚠️  Nenhum dado histórico encontrado na Ward para ${ticker}`);
       }
+    } catch (error: any) {
+      // Erro já tratado dentro de fetchWardData, apenas logar e continuar
+      console.log(`⚠️  Continuando processamento sem dados da Ward para ${ticker}`);
+    }
+    
+    // Verificar se temos pelo menos uma fonte de dados
+    if (!wardData && !brapiProData) {
+      console.log(`❌ Nenhuma fonte de dados disponível para ${ticker}`);
+      return;
     }
 
     // Buscar dados da Brapi para complementar (apenas ano atual)
@@ -2392,14 +2551,7 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
               }
             }
 
-            // ROIC aproximado
-            if (financial?.totalRevenue && financial?.operatingMargins && balance.totalAssets && balance.totalCurrentLiabilities) {
-              const ebit = financial.totalRevenue * financial.operatingMargins;
-              const investedCapital = balance.totalAssets - balance.totalCurrentLiabilities;
-              if (investedCapital > 0) {
-                roic = ebit / investedCapital;
-              }
-            }
+            // ROIC será calculado pela função helper se necessário
 
             // P/EBIT
             if (quoteData.marketCap && financial?.totalRevenue && financial?.operatingMargins) {
@@ -2435,6 +2587,16 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
             earningsYield = quoteData.earningsPerShare / quoteData.regularMarketPrice;
           }
 
+          // === CALCULAR PAYOUT SE NÃO DISPONÍVEL ===
+          const calculatedPayout = calculatePayout({
+            payoutFromAPI: stats?.payoutRatio,
+            dividendYield: stats?.dividendYield ? stats.dividendYield / 100 : null,
+            marketCap: quoteData.marketCap,
+            lpa: quoteData.earningsPerShare || stats?.trailingEps,
+            sharesOutstanding: stats?.sharesOutstanding,
+            lucroLiquido: financial?.grossProfits
+          });
+
           brapiData = {
             // === INDICADORES DE VALUATION ===
             pl: quoteData.priceEarnings || null,
@@ -2469,7 +2631,15 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
             
             // === INDICADORES DE RENTABILIDADE ===
             roe: financial?.returnOnEquity || (stats?.returnOnEquity ? stats.returnOnEquity / 100 : null),
-            roic: roic,
+            roic: calculateROIC({
+              roicFromAPI: roic,
+              receitaTotal: financial?.totalRevenue,
+              operatingMargins: financial?.operatingMargins,
+              totalAssets: balance?.totalAssets,
+              currentLiabilities: balance?.totalCurrentLiabilities,
+              patrimonioLiquido: balance?.totalStockholderEquity,
+              totalDivida: (balance?.shortLongTermDebt || 0) + (balance?.longTermDebt || 0) || financial?.totalDebt
+            }),
             roa: financial?.returnOnAssets || (stats?.returnOnAssets ? stats.returnOnAssets / 100 : null),
             margemBruta: financial?.grossMargins || (stats?.grossMargin ? stats.grossMargin / 100 : null),
             margemEbitda: financial?.ebitdaMargins || null,
@@ -2483,6 +2653,7 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
             
             // === DADOS DE DIVIDENDOS ===
             dividendYield12m: stats?.dividendYield ? stats.dividendYield / 100 : null,
+            payout: calculatedPayout, // Payout da API ou calculado
             ultimoDividendo: stats?.lastDividendValue || null,
             dataUltimoDividendo: stats?.lastDividendDate ? new Date(stats.lastDividendDate) : null,
             
@@ -2531,8 +2702,104 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       }
     }
 
-    // Se não temos dados da Ward, mas temos da Brapi PRO, já processamos tudo acima
+    // Se não temos dados da Ward, usar dados complementares da Brapi para atualizar o ano atual
     if (!wardData || !wardData.historicalStocks) {
+      if (brapiData) {
+        // Usar dados complementares da Brapi para atualizar o ano atual
+        const currentYear = new Date().getFullYear();
+        console.log(`🔄 Usando dados complementares da Brapi para atualizar ${ticker} (${currentYear})...`);
+        
+        // Buscar dados existentes para o ano atual
+        const existingFinancialData = await prisma.financialData.findUnique({
+          where: {
+            companyId_year: {
+              companyId: company.id,
+              year: currentYear
+            }
+          }
+        });
+        
+        // Mesclar dados com prioridade (só Brapi neste caso)
+        let finalFinancialData = mergeFinancialDataWithPriority(
+          null, // Fundamentus
+          null, // Ward
+          brapiData, // Brapi complementar
+          currentYear
+        );
+        
+        // Calcular ROIC se não disponível
+        if (!finalFinancialData.roic || finalFinancialData.roic === null) {
+          const balanceSheetData = await prisma.balanceSheet.findFirst({
+            where: { companyId: company.id },
+            orderBy: { endDate: 'desc' },
+            select: {
+              totalAssets: true,
+              totalCurrentLiabilities: true,
+              totalStockholderEquity: true
+            }
+          });
+          
+          const calculatedROIC = calculateROIC({
+            roicFromAPI: finalFinancialData.roic,
+            ebit: finalFinancialData.ebitda ? Number(finalFinancialData.ebitda) : null,
+            receitaTotal: finalFinancialData.receitaTotal ? Number(finalFinancialData.receitaTotal) : null,
+            operatingMargins: finalFinancialData.margemEbitda,
+            totalAssets: balanceSheetData?.totalAssets ? Number(balanceSheetData.totalAssets) : (finalFinancialData.totalAssets ? Number(finalFinancialData.totalAssets) : null),
+            currentLiabilities: balanceSheetData?.totalCurrentLiabilities ? Number(balanceSheetData.totalCurrentLiabilities) : null,
+            patrimonioLiquido: balanceSheetData?.totalStockholderEquity ? Number(balanceSheetData.totalStockholderEquity) : (finalFinancialData.patrimonioLiquido ? Number(finalFinancialData.patrimonioLiquido) : null),
+            totalDivida: finalFinancialData.totalDivida ? Number(finalFinancialData.totalDivida) : null,
+            year: currentYear
+          });
+          
+          if (calculatedROIC) {
+            finalFinancialData.roic = calculatedROIC;
+          }
+        }
+        
+        // Preservar valores existentes quando novo valor é NULL
+        let updateData: any = {};
+        if (existingFinancialData) {
+          // Para cada campo, só atualizar se o novo valor não for NULL
+          Object.keys(finalFinancialData).forEach(key => {
+            const newValue = (finalFinancialData as any)[key];
+            
+            // Se novo valor não é NULL, usar novo valor
+            if (newValue !== null && newValue !== undefined) {
+              updateData[key] = newValue;
+            }
+            // Se novo valor é NULL, manter valor existente (não atualizar campo)
+          });
+        } else {
+          // Se não existe registro, usar todos os valores (mesmo NULL)
+          updateData = finalFinancialData;
+        }
+        
+        // Upsert dos dados financeiros
+        if (Object.keys(updateData).length > 0 || !existingFinancialData) {
+          // Remover 'year' de finalFinancialData pois já está sendo especificado explicitamente
+          const { year, ...finalDataWithoutYear } = finalFinancialData;
+          
+          await prisma.financialData.upsert({
+            where: {
+              companyId_year: {
+                companyId: company.id,
+                year: currentYear
+              }
+            },
+            update: updateData,
+            create: {
+              companyId: company.id,
+              year: currentYear,
+              ...finalDataWithoutYear
+            }
+          });
+          
+          console.log(`✅ Dados complementares da Brapi atualizados para ${ticker} (${currentYear})`);
+        } else {
+          console.log(`⏭️  Nenhum campo novo para atualizar com dados complementares da Brapi para ${ticker}`);
+        }
+      }
+      
       console.log(`✅ ${ticker}: Processamento concluído apenas com dados da Brapi PRO`);
       return;
     }
@@ -2582,6 +2849,59 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
           }
         } else {
           finalFinancialData = wardFinancialData as FinancialDataComplete;
+        }
+        
+        // === CALCULAR PAYOUT E ROIC SE NÃO DISPONÍVEIS (para anos históricos também) ===
+        if (!finalFinancialData.payout || finalFinancialData.payout === null) {
+          const calculatedPayout = calculatePayout({
+            payoutFromAPI: finalFinancialData.payout,
+            dividendYield: finalFinancialData.dividendYield12m,
+            marketCap: finalFinancialData.marketCap ? Number(finalFinancialData.marketCap) : null,
+            lpa: finalFinancialData.lpa,
+            sharesOutstanding: finalFinancialData.sharesOutstanding ? Number(finalFinancialData.sharesOutstanding) : null,
+            lucroLiquido: finalFinancialData.lucroLiquido ? Number(finalFinancialData.lucroLiquido) : null,
+            year: finalFinancialData.year
+          });
+          
+          if (calculatedPayout) {
+            finalFinancialData.payout = calculatedPayout;
+          }
+        }
+        
+        // Calcular ROIC se não disponível
+        if (!finalFinancialData.roic || finalFinancialData.roic === null) {
+          // Buscar dados do balanço do ano específico se disponível
+          const balanceSheetData = await prisma.balanceSheet.findFirst({
+            where: { 
+              companyId: company.id,
+              endDate: {
+                gte: new Date(finalFinancialData.year, 0, 1),
+                lt: new Date(finalFinancialData.year + 1, 0, 1)
+              }
+            },
+            orderBy: { endDate: 'desc' },
+            select: {
+              totalAssets: true,
+              totalCurrentLiabilities: true,
+              totalStockholderEquity: true
+            }
+          });
+          
+          const calculatedROIC = calculateROIC({
+            roicFromAPI: finalFinancialData.roic,
+            ebit: finalFinancialData.ebitda ? Number(finalFinancialData.ebitda) : null, // Usar EBITDA como aproximação de EBIT
+            receitaTotal: finalFinancialData.receitaTotal ? Number(finalFinancialData.receitaTotal) : null,
+            operatingMargins: finalFinancialData.margemEbitda, // Usar margem EBITDA como aproximação
+            totalAssets: balanceSheetData?.totalAssets ? Number(balanceSheetData.totalAssets) : (finalFinancialData.ativoTotal ? Number(finalFinancialData.ativoTotal) : (finalFinancialData.totalAssets ? Number(finalFinancialData.totalAssets) : null)),
+            currentLiabilities: balanceSheetData?.totalCurrentLiabilities ? Number(balanceSheetData.totalCurrentLiabilities) : (finalFinancialData.passivoCirculante ? Number(finalFinancialData.passivoCirculante) : null),
+            patrimonioLiquido: balanceSheetData?.totalStockholderEquity ? Number(balanceSheetData.totalStockholderEquity) : (finalFinancialData.patrimonioLiquido ? Number(finalFinancialData.patrimonioLiquido) : null),
+            totalDivida: finalFinancialData.totalDivida ? Number(finalFinancialData.totalDivida) : null,
+            year: finalFinancialData.year
+          });
+          
+          if (calculatedROIC) {
+            finalFinancialData.roic = calculatedROIC;
+          }
         }
         
         // Upsert dos dados financeiros (uma linha por empresa/ano)
@@ -2831,16 +3151,418 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       }
     }
 
+    // Verificar se há anos faltantes que não estão na Ward mas podem ser obtidos da Brapi PRO
+    const currentYear = new Date().getFullYear();
+    const previousYear = currentYear - 1; // 2024 se currentYear é 2025
+    const processedYearsSet = new Set(wardData.historicalStocks.map(s => parseInt(s.ano)));
+    const missingYears: number[] = [];
+    
+    // Verificar se 2024 e 2025 não estão na Ward
+    if (!processedYearsSet.has(previousYear) && brapiProData) {
+      missingYears.push(previousYear);
+    }
+    if (!processedYearsSet.has(currentYear) && brapiProData) {
+      missingYears.push(currentYear);
+    }
+    
+    // Se precisamos processar 2024 mas não temos dados históricos completos, buscar novamente
+    // Isso acontece quando fetchBrapiProData retornou apenas TTM porque já existem dados históricos
+    const needs2024Data = missingYears.includes(previousYear);
+    if (needs2024Data) {
+      // Verificar se temos dados históricos completos (balanceSheetHistory indica dados completos)
+      const hasFullHistory = brapiProData && brapiProData.balanceSheetHistory && brapiProData.balanceSheetHistory.length > 0;
+      
+      if (!hasFullHistory) {
+        console.log(`🔄 Buscando dados históricos completos da Brapi PRO para processar ${previousYear}...`);
+        brapiProData = await fetchBrapiProData(ticker, true); // forceFullUpdate = true para garantir dados históricos
+      } else if (brapiProData) {
+        // Verificar se temos dados específicos de 2024
+        const has2024Data = brapiProData.balanceSheetHistory?.some(b => 
+          b.endDate && new Date(b.endDate).getFullYear() === previousYear
+        ) || false;
+        
+        if (!has2024Data) {
+          console.log(`🔄 Dados históricos completos não contêm ${previousYear}, buscando novamente...`);
+          brapiProData = await fetchBrapiProData(ticker, true);
+        }
+      }
+    }
+    
+    // Processar anos faltantes usando dados da Brapi PRO
+    if (missingYears.length > 0 && brapiProData) {
+      console.log(`📅 Processando ${missingYears.length} ano(s) faltante(s) da Brapi PRO: ${missingYears.join(', ')}`);
+      
+      for (const year of missingYears) {
+        try {
+          // Buscar dados do ano específico da Brapi PRO
+          const yearBalance = brapiProData.balanceSheetHistory?.find(b => 
+            b.endDate && new Date(b.endDate).getFullYear() === year
+          );
+          const yearIncome = brapiProData.incomeStatementHistory?.find(i => 
+            i.endDate && new Date(i.endDate).getFullYear() === year
+          );
+          const yearCashflow = brapiProData.cashflowHistory?.find(c => 
+            c.endDate && new Date(c.endDate).getFullYear() === year
+          );
+          const yearKeyStats = brapiProData.defaultKeyStatisticsHistory?.find(k => 
+            k.updatedAt && new Date(k.updatedAt).getFullYear() === year
+          );
+          const yearFinancialData = brapiProData.financialDataHistory?.find(f => 
+            f.updatedAt && new Date(f.updatedAt).getFullYear() === year
+          );
+          
+          // Se for o ano atual, usar dados TTM também
+          const isCurrentYear = year === currentYear;
+          const balance = yearBalance || (isCurrentYear ? brapiProData.balanceSheetHistory?.[0] : null);
+          const income = yearIncome || (isCurrentYear ? brapiProData.incomeStatementHistory?.[0] : null);
+          const cashflow = yearCashflow || (isCurrentYear ? brapiProData.cashflowHistory?.[0] : null);
+          const keyStats = yearKeyStats || (isCurrentYear ? brapiProData.defaultKeyStatistics : null);
+          const financial = yearFinancialData || (isCurrentYear ? brapiProData.financialData : null);
+          
+          // Se temos pelo menos alguns dados, criar registro
+          if (balance || income || financial || keyStats) {
+            // Preparar dados financeiros da Brapi para este ano
+            const brapiYearData = await prepareBrapiYearData(
+              company.id,
+              brapiProData,
+              balance,
+              income,
+              cashflow,
+              keyStats,
+              financial,
+              year
+            );
+            
+            if (brapiYearData) {
+              // Buscar dados existentes para este ano
+              const existingFinancialData = await prisma.financialData.findUnique({
+                where: {
+                  companyId_year: {
+                    companyId: company.id,
+                    year: year
+                  }
+                }
+              });
+              
+              // Mesclar com dados da Brapi complementar se disponível
+              let finalFinancialData = mergeFinancialDataWithPriority(
+                null, // Fundamentus
+                null, // Ward (não temos)
+                brapiYearData, // Brapi
+                year
+              );
+              
+              // Calcular payout e ROIC se não disponíveis
+              if (!finalFinancialData.payout || finalFinancialData.payout === null) {
+                const calculatedPayout = calculatePayout({
+                  payoutFromAPI: finalFinancialData.payout,
+                  dividendYield: finalFinancialData.dividendYield12m,
+                  marketCap: finalFinancialData.marketCap ? Number(finalFinancialData.marketCap) : null,
+                  lpa: finalFinancialData.lpa,
+                  sharesOutstanding: finalFinancialData.sharesOutstanding ? Number(finalFinancialData.sharesOutstanding) : null,
+                  lucroLiquido: finalFinancialData.lucroLiquido ? Number(finalFinancialData.lucroLiquido) : null,
+                  year: year
+                });
+                
+                if (calculatedPayout) {
+                  finalFinancialData.payout = calculatedPayout;
+                }
+              }
+              
+              if (!finalFinancialData.roic || finalFinancialData.roic === null) {
+                const balanceSheetData = await prisma.balanceSheet.findFirst({
+                  where: { 
+                    companyId: company.id,
+                    endDate: {
+                      gte: new Date(year, 0, 1),
+                      lt: new Date(year + 1, 0, 1)
+                    }
+                  },
+                  orderBy: { endDate: 'desc' },
+                  select: {
+                    totalAssets: true,
+                    totalCurrentLiabilities: true,
+                    totalStockholderEquity: true
+                  }
+                });
+                
+                const calculatedROIC = calculateROIC({
+                  roicFromAPI: finalFinancialData.roic,
+                  ebit: finalFinancialData.ebitda ? Number(finalFinancialData.ebitda) : null,
+                  receitaTotal: finalFinancialData.receitaTotal ? Number(finalFinancialData.receitaTotal) : null,
+                  operatingMargins: finalFinancialData.margemEbitda,
+                  totalAssets: balanceSheetData?.totalAssets ? Number(balanceSheetData.totalAssets) : (finalFinancialData.ativoTotal ? Number(finalFinancialData.ativoTotal) : (finalFinancialData.totalAssets ? Number(finalFinancialData.totalAssets) : null)),
+                  currentLiabilities: balanceSheetData?.totalCurrentLiabilities ? Number(balanceSheetData.totalCurrentLiabilities) : (finalFinancialData.passivoCirculante ? Number(finalFinancialData.passivoCirculante) : null),
+                  patrimonioLiquido: balanceSheetData?.totalStockholderEquity ? Number(balanceSheetData.totalStockholderEquity) : (finalFinancialData.patrimonioLiquido ? Number(finalFinancialData.patrimonioLiquido) : null),
+                  totalDivida: finalFinancialData.totalDivida ? Number(finalFinancialData.totalDivida) : null,
+                  year: year
+                });
+                
+                if (calculatedROIC) {
+                  finalFinancialData.roic = calculatedROIC;
+                }
+              }
+              
+              // Preservar valores existentes quando novo valor é NULL
+              let updateData: any = {};
+              if (existingFinancialData) {
+                Object.keys(finalFinancialData).forEach(key => {
+                  const newValue = (finalFinancialData as any)[key];
+                  if (newValue !== null && newValue !== undefined) {
+                    updateData[key] = newValue;
+                  }
+                });
+              } else {
+                updateData = finalFinancialData;
+              }
+              
+              // Upsert dos dados financeiros
+              if (Object.keys(updateData).length > 0 || !existingFinancialData) {
+                const { year: _, ...finalDataWithoutYear } = finalFinancialData;
+                
+                await prisma.financialData.upsert({
+                  where: {
+                    companyId_year: {
+                      companyId: company.id,
+                      year: year
+                    }
+                  },
+                  update: updateData,
+                  create: {
+                    companyId: company.id,
+                    year: year,
+                    ...finalDataWithoutYear
+                  }
+                });
+                
+                console.log(`  ✅ ${year}: Dados criados/atualizados da Brapi PRO`);
+                processedYears++;
+                if (!existingFinancialData) {
+                  createdYears++;
+                } else {
+                  updatedYears++;
+                }
+              }
+            }
+          }
+        } catch (error: any) {
+          console.error(`  ❌ Erro ao processar ano ${year} da Brapi PRO:`, error.message);
+        }
+      }
+    }
+    
     const summary = [`${processedYears} anos processados`];
     if (complementedYears > 0) {
       summary.push(`${complementedYears} complementados com Brapi`);
+    }
+    if (missingYears.length > 0) {
+      summary.push(`${missingYears.length} ano(s) adicionado(s) da Brapi PRO`);
     }
     
     console.log(`✅ ${ticker}: ${summary.join(', ')}`);
     
   } catch (error: any) {
-    console.error(`❌ Erro ao processar empresa ${ticker}:`, error.message);
+    console.error(`❌ 1 Erro ao processar empresa ${ticker}:`, error.message);
   }
+}
+
+// Função helper para preparar dados de um ano específico da Brapi PRO
+async function prepareBrapiYearData(
+  companyId: number,
+  brapiProData: BrapiProResponse['results'][0],
+  balance: BrapiBalanceSheet | null | undefined,
+  income: BrapiIncomeStatement | null | undefined,
+  cashflow: BrapiCashflowStatement | null | undefined,
+  keyStats: BrapiKeyStatistics | null | undefined,
+  financial: BrapiFinancialData | null | undefined,
+  year: number
+): Promise<any | null> {
+  if (!balance && !income && !financial && !keyStats) {
+    return null;
+  }
+  
+  // Calcular indicadores derivados
+  let psr = null;
+  let pAtivos = null;
+  let passivoAtivos = null;
+  let giroAtivos = null;
+  let dividaLiquidaPl = null;
+  let dividaLiquidaEbitda = null;
+  let pCapGiro = null;
+  let pEbit = null;
+  
+  // Buscar marketCap do banco de dados se disponível
+  const existingData = await prisma.financialData.findFirst({
+    where: { companyId: companyId },
+    orderBy: { year: 'desc' },
+    select: { marketCap: true }
+  });
+  const marketCap = existingData?.marketCap ? Number(existingData.marketCap) : (keyStats?.sharesOutstanding && brapiProData.regularMarketPrice ? keyStats.sharesOutstanding * brapiProData.regularMarketPrice : null);
+  
+  if (balance) {
+    // Calcular PSR: Market Cap / Total Revenue
+    if (financial?.totalRevenue && marketCap) {
+      psr = marketCap / financial.totalRevenue;
+    }
+    
+    // P/Ativos = Market Cap / Total Assets
+    if (marketCap && balance.totalAssets) {
+      pAtivos = marketCap / balance.totalAssets;
+    }
+    
+    // Passivo/Ativos
+    if (balance?.totalCurrentLiabilities && balance?.nonCurrentLiabilities && balance?.totalAssets) {
+      const totalRealLiab = balance.totalCurrentLiabilities + balance.nonCurrentLiabilities;
+      if (totalRealLiab > 0 && balance.totalAssets > 0) {
+        passivoAtivos = totalRealLiab / balance.totalAssets;
+      }
+    }
+    
+    // Giro Ativos = Receita Total / Total Assets
+    if (financial?.totalRevenue && balance?.totalAssets) {
+      giroAtivos = financial.totalRevenue / balance.totalAssets;
+    }
+    
+    // Dívida Líquida/PL - usar totalLiab como aproximação da dívida
+    const totalDebt = balance.totalLiab || financial?.totalDebt || 0;
+    const cash = balance.cash || financial?.totalCash || 0;
+    if (totalDebt > 0 && balance.totalStockholderEquity) {
+      dividaLiquidaPl = (totalDebt - cash) / balance.totalStockholderEquity;
+    }
+    
+    // Dívida Líquida/EBITDA
+    if (totalDebt > 0 && financial?.ebitda) {
+      dividaLiquidaEbitda = (totalDebt - cash) / financial.ebitda;
+    }
+    
+    // P/Capital de Giro
+    if (marketCap && balance.totalCurrentAssets && balance.totalCurrentLiabilities) {
+      const workingCapital = balance.totalCurrentAssets - balance.totalCurrentLiabilities;
+      if (workingCapital > 0) {
+        pCapGiro = marketCap / workingCapital;
+      }
+    }
+    
+    // P/EBIT
+    if (marketCap && financial?.totalRevenue && financial?.operatingMargins) {
+      const ebit = financial.totalRevenue * financial.operatingMargins;
+      if (ebit > 0) {
+        pEbit = marketCap / ebit;
+      }
+    }
+  }
+  
+  // Calcular earnings yield e P/L usando trailingEps
+  let earningsYield = null;
+  let pl = null;
+  if (keyStats?.trailingEps && brapiProData.regularMarketPrice && keyStats.trailingEps > 0) {
+    pl = brapiProData.regularMarketPrice / keyStats.trailingEps;
+    earningsYield = 1 / pl;
+  }
+  
+  return {
+    // === INDICADORES DE VALUATION ===
+    pl: pl,
+    forwardPE: keyStats?.forwardPE || null,
+    earningsYield: earningsYield,
+    pvp: keyStats?.priceToBook || null,
+    dy: keyStats?.dividendYield ? keyStats.dividendYield / 100 : null,
+    evEbitda: keyStats?.enterpriseToEbitda || null,
+    evEbit: keyStats?.enterpriseToRevenue || null,
+    evRevenue: keyStats?.enterpriseToRevenue || null,
+    psr: psr,
+    pAtivos: pAtivos,
+    pCapGiro: pCapGiro,
+    pEbit: pEbit,
+    lpa: keyStats?.trailingEps || income?.earningsPerShare || null,
+    trailingEps: keyStats?.trailingEps || null,
+    vpa: keyStats?.bookValue || null,
+    
+    // === DADOS DE MERCADO E AÇÕES ===
+    marketCap: marketCap,
+    enterpriseValue: keyStats?.enterpriseValue || null,
+    sharesOutstanding: keyStats?.sharesOutstanding || null,
+    totalAssets: balance?.totalAssets || null,
+    
+    // === INDICADORES DE ENDIVIDAMENTO E LIQUIDEZ ===
+    dividaLiquidaPl: dividaLiquidaPl,
+    dividaLiquidaEbitda: dividaLiquidaEbitda,
+    liquidezCorrente: financial?.currentRatio || null,
+    liquidezRapida: financial?.quickRatio || null,
+    passivoAtivos: passivoAtivos,
+    debtToEquity: financial?.debtToEquity || null,
+    
+    // === INDICADORES DE RENTABILIDADE ===
+    roe: financial?.returnOnEquity || null,
+    roic: calculateROIC({
+      roicFromAPI: null,
+      receitaTotal: financial?.totalRevenue,
+      operatingMargins: financial?.operatingMargins,
+      totalAssets: balance?.totalAssets,
+      currentLiabilities: balance?.totalCurrentLiabilities,
+      patrimonioLiquido: balance?.totalStockholderEquity,
+      totalDivida: balance?.totalLiab || financial?.totalDebt || null,
+      year: year
+    }),
+    roa: financial?.returnOnAssets || null,
+    margemBruta: financial?.grossMargins || null,
+    margemEbitda: financial?.ebitdaMargins || null,
+    margemLiquida: financial?.profitMargins || keyStats?.profitMargins || null,
+    giroAtivos: giroAtivos,
+    
+    // === INDICADORES DE CRESCIMENTO ===
+    cagrLucros5a: keyStats?.earningsAnnualGrowth || null,
+    crescimentoLucros: financial?.earningsGrowth || null,
+    crescimentoReceitas: financial?.revenueGrowth || null,
+    
+    // === DADOS DE DIVIDENDOS ===
+    dividendYield12m: keyStats?.dividendYield ? keyStats.dividendYield / 100 : null,
+    payout: calculatePayout({
+      payoutFromAPI: keyStats?.payoutRatio,
+      dividendYield: keyStats?.dividendYield ? keyStats.dividendYield / 100 : null,
+      marketCap: marketCap,
+      lpa: keyStats?.trailingEps || income?.earningsPerShare,
+      sharesOutstanding: keyStats?.sharesOutstanding,
+      lucroLiquido: income?.netIncome || financial?.grossProfits,
+      year: year
+    }),
+    ultimoDividendo: keyStats?.lastDividendValue || null,
+    dataUltimoDividendo: keyStats?.lastDividendDate ? new Date(keyStats.lastDividendDate) : null,
+    
+    // === PERFORMANCE E VARIAÇÕES ===
+    variacao52Semanas: keyStats?.["52WeekChange"] || null,
+    retornoAnoAtual: keyStats?.ytdReturn || null,
+    
+    // === DADOS FINANCEIROS OPERACIONAIS ===
+    ebitda: financial?.ebitda || income?.ebit || null,
+    receitaTotal: financial?.totalRevenue || income?.totalRevenue || null,
+    lucroLiquido: income?.netIncome || financial?.grossProfits || null,
+    fluxoCaixaOperacional: cashflow?.operatingCashFlow || financial?.operatingCashflow || null,
+    fluxoCaixaInvestimento: cashflow?.investmentCashFlow || null,
+    fluxoCaixaFinanciamento: cashflow?.financingCashFlow || null,
+    fluxoCaixaLivre: financial?.freeCashflow || null,
+    totalCaixa: financial?.totalCash || balance?.cash || null,
+    totalDivida: financial?.totalDebt || balance?.totalLiab || null,
+    receitaPorAcao: financial?.revenuePerShare || null,
+    caixaPorAcao: financial?.totalCashPerShare || null,
+    
+    // === DADOS DO BALANÇO PATRIMONIAL ===
+    ativoCirculante: balance?.totalCurrentAssets || null,
+    ativoTotal: balance?.totalAssets || null,
+    passivoCirculante: balance?.totalCurrentLiabilities || null,
+    passivoTotal: balance?.totalLiab || null,
+    patrimonioLiquido: balance?.totalStockholderEquity || null,
+    caixa: balance?.cash || null,
+    estoques: null, // Não disponível na interface
+    contasReceber: null, // Não disponível na interface
+    imobilizado: null, // Não disponível na interface
+    intangivel: balance?.netTangibleAssets || null,
+    dividaCirculante: balance?.currentLiabilities || null,
+    dividaLongoPrazo: balance?.nonCurrentLiabilities || null,
+    
+    // === METADADOS ===
+    dataSource: 'brapi'
+  };
 }
 
 // Função principal com gerenciamento de estado baseado em tickers individuais
@@ -2857,7 +3579,7 @@ async function main() {
     const forceFullIndex = args.indexOf('--force-full');
     const resetIndex = args.indexOf('--reset');
     const discoverIndex = args.indexOf('--discover');
-    const enableBrapiComplement = noBrapiIndex === -1;
+    const enableBrapiComplement = true; //noBrapiIndex === -1;
     const forceFullUpdate = forceFullIndex !== -1;
     const resetState = resetIndex !== -1;
     const discoverTickers = discoverIndex !== -1;
@@ -3189,30 +3911,75 @@ async function processCompanyTTMOnly(
       
       // Preparar dados da Brapi no formato correto
       let brapiFormattedData = null;
-      if (brapiTTMData?.financialData) {
+      if (brapiTTMData?.financialData || brapiTTMData?.defaultKeyStatistics) {
+        // === CALCULAR PAYOUT SE NÃO DISPONÍVEL ===
+        const stats = brapiTTMData.defaultKeyStatistics;
+        const financial = brapiTTMData.financialData;
+        
+        // Buscar marketCap do banco de dados se disponível
+        const existingData = await prisma.financialData.findFirst({
+          where: { companyId: company.id },
+          orderBy: { year: 'desc' },
+          select: { marketCap: true }
+        });
+        
+        const calculatedPayoutTTM = calculatePayout({
+          payoutFromAPI: stats?.payoutRatio,
+          dividendYield: stats?.dividendYield ? stats.dividendYield / 100 : null,
+          marketCap: existingData?.marketCap ? Number(existingData.marketCap) : null,
+          lpa: stats?.trailingEps,
+          sharesOutstanding: stats?.sharesOutstanding,
+          lucroLiquido: financial?.grossProfits,
+          year: currentYear
+        });
+        
+        // Buscar dados do balanço para calcular ROIC
+        const balanceSheetData = await prisma.balanceSheet.findFirst({
+          where: { companyId: company.id },
+          orderBy: { endDate: 'desc' },
+          select: {
+            totalAssets: true,
+            totalCurrentLiabilities: true,
+            totalStockholderEquity: true
+          }
+        });
+        
         brapiFormattedData = {
           // Mapear campos da Brapi para o formato esperado
-          forwardPE: brapiTTMData.financialData.currentPrice && brapiTTMData.financialData.earningsGrowth ? 
+          forwardPE: brapiTTMData.financialData?.currentPrice && brapiTTMData.financialData?.earningsGrowth ? 
             brapiTTMData.financialData.currentPrice / (brapiTTMData.financialData.earningsGrowth * brapiTTMData.financialData.currentPrice) : null,
-          liquidezCorrente: brapiTTMData.financialData.currentRatio,
-          liquidezRapida: brapiTTMData.financialData.quickRatio,
-          debtToEquity: brapiTTMData.financialData.debtToEquity,
-          roe: brapiTTMData.financialData.returnOnEquity,
-          roa: brapiTTMData.financialData.returnOnAssets,
-          margemBruta: brapiTTMData.financialData.grossMargins,
-          margemEbitda: brapiTTMData.financialData.ebitdaMargins,
-          margemLiquida: brapiTTMData.financialData.profitMargins,
-          crescimentoLucros: brapiTTMData.financialData.earningsGrowth,
-          crescimentoReceitas: brapiTTMData.financialData.revenueGrowth,
-          ebitda: brapiTTMData.financialData.ebitda,
-          receitaTotal: brapiTTMData.financialData.totalRevenue,
-          lucroLiquido: brapiTTMData.financialData.grossProfits,
-          fluxoCaixaOperacional: brapiTTMData.financialData.operatingCashflow,
-          fluxoCaixaLivre: brapiTTMData.financialData.freeCashflow,
-          totalCaixa: brapiTTMData.financialData.totalCash,
-          totalDivida: brapiTTMData.financialData.totalDebt,
-          receitaPorAcao: brapiTTMData.financialData.revenuePerShare,
-          caixaPorAcao: brapiTTMData.financialData.totalCashPerShare
+          liquidezCorrente: brapiTTMData.financialData?.currentRatio,
+          liquidezRapida: brapiTTMData.financialData?.quickRatio,
+          debtToEquity: brapiTTMData.financialData?.debtToEquity,
+          roe: brapiTTMData.financialData?.returnOnEquity,
+          roic: calculateROIC({
+            roicFromAPI: null, // Não temos ROIC direto da API TTM
+            ebit: brapiTTMData.financialData?.ebitda, // Usar EBITDA como aproximação
+            receitaTotal: brapiTTMData.financialData?.totalRevenue,
+            operatingMargins: brapiTTMData.financialData?.operatingMargins || brapiTTMData.financialData?.ebitdaMargins,
+            totalAssets: balanceSheetData?.totalAssets ? Number(balanceSheetData.totalAssets) : null,
+            currentLiabilities: balanceSheetData?.totalCurrentLiabilities ? Number(balanceSheetData.totalCurrentLiabilities) : null,
+            patrimonioLiquido: balanceSheetData?.totalStockholderEquity ? Number(balanceSheetData.totalStockholderEquity) : null,
+            totalDivida: brapiTTMData.financialData?.totalDebt,
+            year: currentYear
+          }),
+          roa: brapiTTMData.financialData?.returnOnAssets,
+          margemBruta: brapiTTMData.financialData?.grossMargins,
+          margemEbitda: brapiTTMData.financialData?.ebitdaMargins,
+          margemLiquida: brapiTTMData.financialData?.profitMargins,
+          crescimentoLucros: brapiTTMData.financialData?.earningsGrowth,
+          crescimentoReceitas: brapiTTMData.financialData?.revenueGrowth,
+          ebitda: brapiTTMData.financialData?.ebitda,
+          receitaTotal: brapiTTMData.financialData?.totalRevenue,
+          lucroLiquido: brapiTTMData.financialData?.grossProfits,
+          fluxoCaixaOperacional: brapiTTMData.financialData?.operatingCashflow,
+          fluxoCaixaLivre: brapiTTMData.financialData?.freeCashflow,
+          totalCaixa: brapiTTMData.financialData?.totalCash,
+          totalDivida: brapiTTMData.financialData?.totalDebt,
+          receitaPorAcao: brapiTTMData.financialData?.revenuePerShare,
+          caixaPorAcao: brapiTTMData.financialData?.totalCashPerShare,
+          // Payout do defaultKeyStatistics ou calculado
+          payout: calculatedPayoutTTM
         };
       }
       
@@ -3244,6 +4011,60 @@ async function processCompanyTTMOnly(
         console.log(`  🆕 Novos dados TTM criados`);
       }
       
+      // Calcular ROIC se não disponível após mesclagem
+      if (!finalFinancialData.roic || finalFinancialData.roic === null) {
+        const balanceSheetDataForROIC = await prisma.balanceSheet.findFirst({
+          where: { 
+            companyId: company.id,
+            endDate: {
+              gte: new Date(currentYear, 0, 1),
+              lt: new Date(currentYear + 1, 0, 1)
+            }
+          },
+          orderBy: { endDate: 'desc' },
+          select: {
+            totalAssets: true,
+            totalCurrentLiabilities: true,
+            totalStockholderEquity: true
+          }
+        });
+        
+        const calculatedROIC = calculateROIC({
+          roicFromAPI: finalFinancialData.roic,
+          ebit: finalFinancialData.ebitda ? Number(finalFinancialData.ebitda) : null,
+          receitaTotal: finalFinancialData.receitaTotal ? Number(finalFinancialData.receitaTotal) : null,
+          operatingMargins: finalFinancialData.margemEbitda,
+          totalAssets: balanceSheetDataForROIC?.totalAssets ? Number(balanceSheetDataForROIC.totalAssets) : (finalFinancialData.ativoTotal ? Number(finalFinancialData.ativoTotal) : (finalFinancialData.totalAssets ? Number(finalFinancialData.totalAssets) : null)),
+          currentLiabilities: balanceSheetDataForROIC?.totalCurrentLiabilities ? Number(balanceSheetDataForROIC.totalCurrentLiabilities) : (finalFinancialData.passivoCirculante ? Number(finalFinancialData.passivoCirculante) : null),
+          patrimonioLiquido: balanceSheetDataForROIC?.totalStockholderEquity ? Number(balanceSheetDataForROIC.totalStockholderEquity) : (finalFinancialData.patrimonioLiquido ? Number(finalFinancialData.patrimonioLiquido) : null),
+          totalDivida: finalFinancialData.totalDivida ? Number(finalFinancialData.totalDivida) : null,
+          year: currentYear
+        });
+        
+        if (calculatedROIC) {
+          finalFinancialData.roic = calculatedROIC;
+        }
+      }
+      
+      // Preservar valores existentes quando novo valor é NULL
+      let updateData: any = {};
+      if (existingFinancialData) {
+        // Para cada campo, só atualizar se o novo valor não for NULL
+        // Se for NULL e já existe valor no banco, manter o valor do banco
+        Object.keys(finalFinancialData).forEach(key => {
+          const newValue = (finalFinancialData as any)[key];
+          
+          // Se novo valor não é NULL, usar novo valor
+          if (newValue !== null && newValue !== undefined) {
+            updateData[key] = newValue;
+          }
+          // Se novo valor é NULL, manter valor existente (não atualizar campo)
+        });
+      } else {
+        // Se não existe registro, usar todos os valores (mesmo NULL)
+        updateData = finalFinancialData;
+      }
+      
       // Upsert dos dados financeiros
       await prisma.financialData.upsert({
         where: {
@@ -3252,7 +4073,7 @@ async function processCompanyTTMOnly(
             year: currentYear
           }
         },
-        update: finalFinancialData,
+        update: updateData,
         create: {
           companyId: company.id,
           year: currentYear,

@@ -799,7 +799,7 @@ async function processCompany(ticker: string): Promise<void> {
     console.log(`✅ ${ticker}: ${indicators.join(', ')}`);
     
   } catch (error: any) {
-    console.error(`❌ Erro ao processar empresa ${ticker}:`, error.message);
+    console.error(`❌ 2 Erro ao processar empresa ${ticker}:`, error.message);
   }
 }
 

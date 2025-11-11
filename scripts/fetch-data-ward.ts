@@ -857,10 +857,6 @@ function mergeFinancialDataWithPriority(
   if (wardData) sources.push('ward');
   if (brapiData) sources.push('brapi');
   const dataSource = sources.join('+');
-
-  console.log('fundamentusData?.lpa', fundamentusData?.lpa);
-  console.log('wardData?.lpa', wardData?.lpa);
-  console.log('brapiData?.lpa', brapiData?.lpa);
   
   return {
     year: year,
@@ -2411,7 +2407,6 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
     
     // Buscar dados completos da Brapi PRO (otimizado)
     let brapiProData = await fetchBrapiProData(ticker, forceFullUpdate);
-    console.log('brapiProData', brapiProData);
     if (brapiProData) {
       console.log(`🔄 Processando dados históricos da Brapi PRO para ${ticker}...`);
       

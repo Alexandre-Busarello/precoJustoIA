@@ -31,8 +31,6 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
     const pl = this.getPL(financialData, use7YearAverages, historicalFinancials);
     const evEbitda = toNumber(financialData.evEbitda);
     const dividaLiquidaEbitda = this.getDividaLiquidaEbitda(financialData, use7YearAverages, historicalFinancials);
-    console.log('financialData.cagrLucros5a', financialData.cagrLucros5a);
-    console.log('historicalFinancials.crescimentoReceitas', financialData.crescimentoReceitas);
     const cagrLucros5aRaw = toNumber(financialData.cagrLucros5a);
     const cagrLucros5a = validateCAGR5Years(cagrLucros5aRaw);
     const payout = toNumber(financialData.payout);

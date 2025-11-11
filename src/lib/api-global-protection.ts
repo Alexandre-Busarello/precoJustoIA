@@ -61,6 +61,7 @@ export async function applyGlobalApiProtection(
   // Verificar se é uma rota com rate limiting mais restritivo
   const strictConfig = STRICT_ROUTES[pathname]
   const config = strictConfig || GLOBAL_API_RATE_LIMIT
+  config.endpoint = pathname;
 
   // Aplicar rate limiting
   const rateLimitResult = await RateLimitMiddleware.checkRateLimit(request, config)

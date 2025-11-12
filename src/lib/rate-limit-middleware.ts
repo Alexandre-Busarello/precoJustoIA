@@ -56,6 +56,17 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
     minTimeBetweenRequests: 2000,
     endpoint: 'login'
   },
+
+  // APIs gerais - Permissivo mas protegido
+  DIVIDEND_YIELD_CALCULATOR: {
+    window1Min: 15,
+    window15Min: 30,
+    window1Hour: 60,
+    window24Hour: 120,
+    blockAfterViolations: 10,
+    blockDuration: 3600,
+    endpoint: 'api-dividend-yield-calculator'
+  },
   
   // APIs gerais - Permissivo mas protegido
   API_GENERAL: {

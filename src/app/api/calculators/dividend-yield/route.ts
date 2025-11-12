@@ -11,7 +11,7 @@ import { withRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit-middleware"
 export async function POST(request: NextRequest) {
   return withRateLimit(
     request,
-    RATE_LIMIT_CONFIGS.REGISTER, // Usar mesmo rate limit de registro
+    RATE_LIMIT_CONFIGS.DIVIDEND_YIELD_CALCULATOR, // Usar mesmo rate limit de registro
     async () => {
       try {
         const body = await request.json()

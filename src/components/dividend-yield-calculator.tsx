@@ -86,6 +86,13 @@ function DividendYieldCalculatorContent() {
       }
 
       setResult(data.data)
+
+      // Se usuário estiver logado, redirecionar automaticamente para o relatório completo
+      if (session?.user) {
+        const tickerUpper = ticker.toUpperCase().trim()
+        window.location.href = `/calculadoras/dividend-yield/${tickerUpper}/report?investmentAmount=${amount}`
+        return // Não renderizar resultados básicos, já vai redirecionar
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao processar cálculo")
     } finally {

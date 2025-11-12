@@ -25,15 +25,17 @@ function RegisterForm() {
   
   // Obter callbackUrl da URL ou usar dashboard como padrão
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
-  const isEarlyAdopter = searchParams.get('earlyAdopter') === 'true'
+  // 🔒 SEGURANÇA: Removido isEarlyAdopter da URL - não deve ser controlado pelo cliente
+  // Early Adopters são marcados apenas via webhooks após pagamento confirmado
 
   useEffect(() => {
     checkRegistrationLimit()
-  }, [isEarlyAdopter])
+  }, [])
 
   const checkRegistrationLimit = async () => {
     try {
-      const response = await fetch(`/api/alfa/register-check?earlyAdopter=${isEarlyAdopter}`)
+      // 🔒 SEGURANÇA: Sempre verificar como usuário normal (não early adopter)
+      const response = await fetch(`/api/alfa/register-check?earlyAdopter=false`)
       if (response.ok) {
         const data = await response.json()
         setCanRegister(data.canRegister)
@@ -63,6 +65,7 @@ function RegisterForm() {
     }
 
     try {
+      // 🔒 SEGURANÇA: Não enviar isEarlyAdopter - será definido apenas via webhooks
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
@@ -72,7 +75,7 @@ function RegisterForm() {
           name,
           email,
           password,
-          isEarlyAdopter,
+          // isEarlyAdopter removido - será definido apenas via webhooks após pagamento
         }),
       })
 
@@ -117,7 +120,7 @@ function RegisterForm() {
     )
   }
 
-  if (!canRegister && !isEarlyAdopter) {
+  if (!canRegister) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="w-full max-w-2xl px-4">
@@ -146,13 +149,10 @@ function RegisterForm() {
         <Card className="w-full">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">
-              {isEarlyAdopter ? 'Cadastro Early Adopter' : 'Criar Conta'}
+              Criar Conta
             </CardTitle>
             <CardDescription className="text-center">
-              {isEarlyAdopter 
-                ? 'Complete seu cadastro como Early Adopter e garanta preço congelado para sempre!'
-                : 'Crie sua conta para começar'
-              }
+              Crie sua conta para começar
             </CardDescription>
           </CardHeader>
         <CardContent className="space-y-4">

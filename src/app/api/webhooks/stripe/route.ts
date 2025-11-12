@@ -260,7 +260,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
         const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 24900 // R$ 249,00
         
         await sendWelcomeEmail(userEmail, undefined, isEarlyAdopter)
-        console.log(`📧 Welcome email sent to ${userEmail}`)
+        console.log(`📧 Welcome email sent to ${userEmail} (Early Adopter: ${isEarlyAdopter})`)
       } catch (emailError) {
         console.error('❌ Failed to send welcome email:', emailError)
         // Não falhar o webhook por causa do email

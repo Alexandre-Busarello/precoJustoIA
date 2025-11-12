@@ -11,9 +11,13 @@ export async function POST(request: NextRequest) {
     async () => {
       try {
         const body = await request.json()
-        const { name, email, password, isEarlyAdopter = false, ...rest } = body
-
+        
+        // 🔒 SEGURANÇA: Whitelist explícita de campos permitidos
+        // Extrair apenas os campos permitidos e ignorar qualquer campo extra
+        const { name, email, password, ...rest } = body
+        
         // 🍯 HONEYPOT: Verificar se campos ocultos foram preenchidos (indica bot)
+        // Também detecta tentativas de injeção de campos sensíveis
         if (RateLimitMiddleware.checkHoneypot(rest)) {
           const ip = RateLimitMiddleware.getClientIP(request)
           RateLimitMiddleware.logSuspiciousActivity(ip, 'HONEYPOT_TRIGGERED', 'register', {
@@ -24,6 +28,34 @@ export async function POST(request: NextRequest) {
           await RateLimitMiddleware.checkRateLimit(request, {
             ...RATE_LIMIT_CONFIGS.REGISTER,
             blockAfterViolations: 1 // Bloquear imediatamente
+          })
+          
+          return NextResponse.json(
+            { message: "Erro ao processar requisição" },
+            { status: 400 }
+          )
+        }
+        
+        // 🔒 SEGURANÇA: Detectar tentativas de injeção de campos sensíveis
+        const sensitiveFields = [
+          'isEarlyAdopter', 'earlyAdopterDate', 'isAdmin', 'subscriptionTier',
+          'premiumExpiresAt', 'wasPremiumBefore', 'firstPremiumAt', 'lastPremiumAt',
+          'premiumCount', 'stripeCustomerId', 'stripeSubscriptionId', 'stripePriceId',
+          'stripeCurrentPeriodEnd', 'isInactive', 'inactivatedAt', 'lastLoginAt',
+          'emailVerified', 'id'
+        ]
+        
+        const attemptedInjection = sensitiveFields.some(field => rest[field] !== undefined)
+        if (attemptedInjection) {
+          const ip = RateLimitMiddleware.getClientIP(request)
+          RateLimitMiddleware.logSuspiciousActivity(ip, 'SENSITIVE_FIELD_INJECTION', 'register', {
+            attemptedFields: sensitiveFields.filter(field => rest[field] !== undefined)
+          })
+          
+          // Bloquear IP por tentativa de injeção de campos sensíveis
+          await RateLimitMiddleware.checkRateLimit(request, {
+            ...RATE_LIMIT_CONFIGS.REGISTER,
+            blockAfterViolations: 1
           })
           
           return NextResponse.json(
@@ -84,8 +116,10 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Verificar se pode registrar (limite da fase Alfa)
-        const canRegister = await canUserRegister(isEarlyAdopter)
+        // 🔒 SEGURANÇA: Verificar se pode registrar (limite da fase Alfa)
+        // NUNCA usar valor do cliente para isEarlyAdopter - sempre false no registro
+        // Early Adopters são marcados apenas via webhooks após pagamento confirmado
+        const canRegister = await canUserRegister(false)
         if (!canRegister) {
           return NextResponse.json(
             { message: "Limite de usuários atingido para a fase Alfa. Entre na lista de interesse." },
@@ -108,14 +142,16 @@ export async function POST(request: NextRequest) {
         // Hash da senha
         const hashedPassword = await bcrypt.hash(password, 12)
 
-        // Criar usuário
+        // 🔒 SEGURANÇA: Criar usuário com campos explícitos apenas
+        // isEarlyAdopter sempre false no registro - será atualizado via webhook após pagamento
+        // Campos sensíveis são definidos apenas pelo servidor/webhooks
         const user = await prisma.user.create({
           data: {
             name,
             email,
             password: hashedPassword,
-            isEarlyAdopter,
-            earlyAdopterDate: isEarlyAdopter ? new Date() : null,
+            isEarlyAdopter: false, // Sempre false - webhooks atualizam após pagamento
+            earlyAdopterDate: null, // Será definido pelo webhook se for Early Adopter
             lastLoginAt: new Date(),
           }
         })

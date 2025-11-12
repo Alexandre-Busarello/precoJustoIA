@@ -12,7 +12,8 @@ import {
   ChevronDown,
   Wrench,
   Building2,
-  Search
+  Search,
+  Calculator
 } from "lucide-react"
 
 interface ToolsDropdownProps {
@@ -43,7 +44,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
     setIsOpen(false)
   }, [pathname])
 
-  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes'].includes(pathname)
+  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras'].includes(pathname)
 
   const tools = [
     {
@@ -137,6 +138,35 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
                 </div>
               </Link>
             ))}
+            
+            {/* Separador */}
+            <div className="border-t border-border my-2"></div>
+            
+            {/* Seção Calculadoras */}
+            <div className="px-2 py-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Calculadoras</p>
+              <Link
+                href="/calculadoras/dividend-yield"
+                className={`flex items-center gap-3 p-3 rounded-md hover:bg-muted transition-colors ${
+                  pathname?.startsWith('/calculadoras/dividend-yield') ? 'bg-muted' : ''
+                }`}
+              >
+                <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500">
+                  <div className="text-white">
+                    <Calculator className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Dividend Yield</span>
+                    <Badge variant="secondary" className="text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                      Grátis
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Calcule renda passiva com dividendos</p>
+                </div>
+              </Link>
+            </div>
           </div>
           
           {/* Footer do dropdown */}

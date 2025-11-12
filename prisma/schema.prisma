@@ -64,6 +64,9 @@ model User {
   isInactive          Boolean   @default(false) @map("is_inactive")
   inactivatedAt       DateTime? @map("inactivated_at")
   
+  // Acquisition tracking
+  acquisition         String?   @map("acquisition") // Origem do cadastro (ex: "Calculadora de Dividend Yield")
+  
   accounts         Account[]
   sessions         Session[]
   portfolios       Portfolio[]

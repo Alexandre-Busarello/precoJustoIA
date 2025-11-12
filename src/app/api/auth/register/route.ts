@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
         
         // 🔒 SEGURANÇA: Whitelist explícita de campos permitidos
         // Extrair apenas os campos permitidos e ignorar qualquer campo extra
-        const { name, email, password, ...rest } = body
+        const { name, email, password, acquisition, ...rest } = body
         
         // 🍯 HONEYPOT: Verificar se campos ocultos foram preenchidos (indica bot)
         // Também detecta tentativas de injeção de campos sensíveis
@@ -116,6 +116,24 @@ export async function POST(request: NextRequest) {
           )
         }
 
+        // Validar acquisition se fornecido (deve ser um valor permitido)
+        const allowedAcquisitions = [
+          'Calculadora de Dividend Yield',
+          'Landing Page',
+          'Blog',
+          'Referral',
+          'Google Ads',
+          'Facebook Ads',
+          'Outros'
+        ]
+        
+        if (acquisition && !allowedAcquisitions.includes(acquisition)) {
+          return NextResponse.json(
+            { message: "Valor de acquisition inválido" },
+            { status: 400 }
+          )
+        }
+
         // 🔒 SEGURANÇA: Verificar se pode registrar (limite da fase Alfa)
         // NUNCA usar valor do cliente para isEarlyAdopter - sempre false no registro
         // Early Adopters são marcados apenas via webhooks após pagamento confirmado
@@ -153,6 +171,7 @@ export async function POST(request: NextRequest) {
             isEarlyAdopter: false, // Sempre false - webhooks atualizam após pagamento
             earlyAdopterDate: null, // Será definido pelo webhook se for Early Adopter
             lastLoginAt: new Date(),
+            acquisition: acquisition || null, // Rastrear origem do cadastro
           }
         })
 

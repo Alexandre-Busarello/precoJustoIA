@@ -36,7 +36,10 @@ import {
   GitCompare,
   ChevronDown,
   Info,
-  FileText
+  FileText,
+  Calculator,
+  TrendingUp,
+  ArrowRight
 } from 'lucide-react'
 
 interface PageProps {
@@ -870,6 +873,47 @@ export default async function TickerPage({ params }: PageProps) {
               ticker={ticker} 
               userIsPremium={userIsPremium}
             />
+
+            {/* Card de Calculadora de Dividend Yield - Destacado */}
+            {latestFinancials?.dy && Number(latestFinancials.dy) > 0 && (
+              <Card className="mb-6 border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20">
+                <CardContent className="p-6">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                          <Calculator className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-lg">Calcule sua Renda Passiva</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Descubra quanto você pode ganhar mensalmente com dividendos de {ticker}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 text-sm">
+                        <TrendingUp className="w-4 h-4 text-green-600" />
+                        <span className="text-muted-foreground">
+                          Dividend Yield atual: <span className="font-semibold text-green-600">
+                            {(Number(latestFinancials.dy) * 100).toFixed(2)}%
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                    <Button 
+                      asChild 
+                      size="lg"
+                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
+                    >
+                      <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`}>
+                        Calcular Agora
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Indicadores Financeiros com Gráficos */}
             <FinancialIndicators 

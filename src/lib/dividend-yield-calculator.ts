@@ -1,140 +1,259 @@
-import { prisma } from '@/lib/prisma';
-import { toNumber } from '@/lib/strategies/base-strategy';
+/**
+ * DIVIDEND YIELD CALCULATOR SERVICE
+ * 
+ * Serviço para calcular dividend yield e projeções de renda passiva
+ * com verificação automática de atualização de dados
+ */
+
+import { prisma } from "@/lib/prisma"
+import { DividendService } from "./dividend-service"
+
+const DIVIDEND_UPDATE_THRESHOLD_DAYS = 7
 
 /**
- * Calcula o dividend yield médio dos últimos 5 anos para um ativo
+ * Verifica se os dividendos de uma empresa estão desatualizados
  */
-export async function calculateAverageDividendYield(ticker: string): Promise<number | null> {
+export async function areDividendsOutdated(ticker: string): Promise<boolean> {
   try {
-    // Buscar empresa pelo ticker
     const company = await prisma.company.findUnique({
-      where: { ticker: ticker.toUpperCase() }
-    });
+      where: { ticker },
+      select: {
+        dataUltimoDividendo: true,
+        yahooLastUpdatedAt: true,
+      },
+    })
 
     if (!company) {
-      console.log(`❌ Empresa não encontrada: ${ticker}`);
-      return null;
+      return false // Empresa não encontrada
     }
 
-    // Buscar dados financeiros dos últimos 5 anos
-    const currentYear = new Date().getFullYear();
-    const fiveYearsAgo = currentYear - 5;
+    const now = new Date()
+    const sevenDaysAgo = new Date(now.getTime() - DIVIDEND_UPDATE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000)
 
-    const financialData = await prisma.financialData.findMany({
-      where: {
-        companyId: company.id,
-        year: {
-          gte: fiveYearsAgo,
-          lte: currentYear
+    // Verificar data do último dividendo
+    if (company.dataUltimoDividendo) {
+      const lastDividendDate = new Date(company.dataUltimoDividendo)
+      if (lastDividendDate < sevenDaysAgo) {
+        return true
+      }
+    }
+
+    // Verificar última atualização do Yahoo Finance
+    if (company.yahooLastUpdatedAt) {
+      const lastUpdateDate = new Date(company.yahooLastUpdatedAt)
+      if (lastUpdateDate < sevenDaysAgo) {
+        return true
+      }
+    }
+
+    // Se não tem nenhuma data, considerar desatualizado
+    if (!company.dataUltimoDividendo && !company.yahooLastUpdatedAt) {
+      return true
+    }
+
+    return false
+  } catch (error) {
+    console.error(`Erro ao verificar se dividendos estão desatualizados para ${ticker}:`, error)
+    return false // Em caso de erro, não considerar desatualizado para não bloquear
+  }
+}
+
+/**
+ * Atualiza dividendos garantindo pelo menos 5 anos de histórico
+ * Sempre busca os últimos 5 anos para garantir dados completos e atualizados
+ */
+export async function updateDividendsIfNeeded(ticker: string): Promise<void> {
+  try {
+    // Sempre buscar pelo menos 5 anos de histórico
+    const fiveYearsAgo = new Date()
+    fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5)
+
+    console.log(
+      `🔄 [DIVIDEND-CALC] ${ticker}: Buscando dividendos dos últimos 5 anos (desde ${fiveYearsAgo.toISOString().split('T')[0]})...`
+    )
+
+    // Sempre buscar os últimos 5 anos de histórico
+    // Executar de forma síncrona para garantir que os dados estejam disponíveis
+    try {
+      await DividendService.fetchAndSaveDividends(ticker, fiveYearsAgo)
+      console.log(`✅ [DIVIDEND-CALC] ${ticker}: Dividendos atualizados com sucesso (últimos 5 anos)`)
+    } catch (error) {
+      console.error(`❌ [DIVIDEND-CALC] Erro ao atualizar dividendos de ${ticker}:`, error)
+      // Tentar buscar sem data específica como fallback (busca histórico completo disponível)
+      try {
+        console.log(`🔄 [DIVIDEND-CALC] ${ticker}: Tentando fallback (busca completa)...`)
+        await DividendService.fetchAndSaveDividends(ticker)
+        console.log(`✅ [DIVIDEND-CALC] ${ticker}: Fallback bem-sucedido`)
+      } catch (fallbackError) {
+        console.error(`❌ [DIVIDEND-CALC] Erro no fallback para ${ticker}:`, fallbackError)
+        // Não lançar erro para não bloquear o cálculo - usar dados disponíveis
+      }
+    }
+  } catch (error) {
+    console.error(`Erro ao atualizar dividendos para ${ticker}:`, error)
+    // Não lançar erro para não bloquear o cálculo
+  }
+}
+
+/**
+ * Calcula dividend yield e projeções de renda
+ */
+export async function calculateDividendYield(
+  ticker: string,
+  investmentAmount: number
+): Promise<{
+  success: boolean
+  data?: {
+    ticker: string
+    companyName: string
+    currentPrice: number
+    dividendYield: number
+    monthlyIncome: number
+    annualIncome: number
+    lastDividend: {
+      amount: number
+      date: Date
+    }
+    dividendHistory: Array<{
+      date: Date
+      amount: number
+    }>
+    averageMonthlyDividend: number
+    averageQuarterlyDividend: number
+    totalDividendsLast12Months: number
+  }
+  error?: string
+}> {
+  try {
+    // Verificar e atualizar dividendos ANTES de buscar dados
+    // Isso garante que temos pelo menos 5 anos de histórico
+    await updateDividendsIfNeeded(ticker)
+
+    // Buscar empresa e dados financeiros após atualização
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      include: {
+        dividendHistory: {
+          orderBy: { exDate: "desc" },
+          take: 150, // Aumentado para garantir que pegamos todos os dividendos dos últimos 5+ anos
         },
-        OR: [
-          { dy: { not: null } },
-          { dividendYield12m: { not: null } }
-        ]
+        dailyQuotes: {
+          orderBy: { date: "desc" },
+          take: 1,
+        },
+        financialData: {
+          orderBy: { year: "desc" },
+          take: 1,
+        },
       },
-      select: {
-        year: true,
-        dy: true,
-        dividendYield12m: true
-      },
-      orderBy: {
-        year: 'desc'
-      }
-    });
-
-    if (financialData.length === 0) {
-      console.log(`❌ Nenhum dado de dividend yield encontrado para ${ticker}`);
-      return null;
-    }
-
-    // Calcular média dos dividend yields disponíveis
-    const validYields: number[] = [];
-
-    for (const data of financialData) {
-      // Priorizar dy (dividend yield atual), depois dividendYield12m
-      let yield_ = toNumber(data.dy);
-      if (!yield_ || yield_ <= 0) {
-        yield_ = toNumber(data.dividendYield12m);
-      }
-
-      if (yield_ && yield_ > 0 && yield_ <= 1) { // Validar que está em formato decimal (0-1)
-        validYields.push(yield_);
-      }
-    }
-
-    if (validYields.length === 0) {
-      console.log(`❌ Nenhum dividend yield válido encontrado para ${ticker}`);
-      return null;
-    }
-
-    // Calcular média
-    const averageYield = validYields.reduce((sum, yield_) => sum + yield_, 0) / validYields.length;
-
-    // Aplicar cap de 10% (muito difícil uma empresa manter >10% de yield no longo prazo)
-    const cappedYield = Math.min(averageYield, 0.10);
-
-    console.log(`✅ ${ticker}: DY médio calculado = ${(cappedYield * 100).toFixed(2)}% (${validYields.length} anos)${averageYield > 0.10 ? ' [limitado a 10%]' : ''}`);
-    
-    return cappedYield;
-
-  } catch (error) {
-    console.error(`❌ Erro ao calcular DY médio para ${ticker}:`, error);
-    return null;
-  }
-}
-
-/**
- * Calcula dividend yield médio para múltiplos ativos
- */
-export async function calculateAverageDividendYieldBatch(tickers: string[]): Promise<Record<string, number | null>> {
-  const results: Record<string, number | null> = {};
-
-  for (const ticker of tickers) {
-    results[ticker.toUpperCase()] = await calculateAverageDividendYield(ticker);
-  }
-
-  return results;
-}
-
-/**
- * Busca dividend yield mais recente de um ativo (fallback se não houver dados históricos)
- */
-export async function getLatestDividendYield(ticker: string): Promise<number | null> {
-  try {
-    const company = await prisma.company.findUnique({
-      where: { ticker: ticker.toUpperCase() }
-    });
+    })
 
     if (!company) {
-      return null;
-    }
-
-    // Buscar dados financiais mais recentes separadamente
-    const latestFinancials = await prisma.financialData.findFirst({
-      where: { companyId: company.id },
-      orderBy: { updatedAt: 'desc' },
-      select: {
-        dy: true,
-        dividendYield12m: true
+      return {
+        success: false,
+        error: "Empresa não encontrada",
       }
-    });
-
-    if (!latestFinancials) {
-      return null;
     }
 
-    const latest = latestFinancials;
-    let yield_ = toNumber(latest.dy);
-    if (!yield_ || yield_ <= 0) {
-      yield_ = toNumber(latest.dividendYield12m);
+    // Obter preço atual
+    const currentPrice = company.dailyQuotes[0]?.price
+      ? Number(company.dailyQuotes[0].price)
+      : null
+
+    if (!currentPrice || currentPrice <= 0) {
+      return {
+        success: false,
+        error: "Preço atual não disponível",
+      }
     }
 
-    // Aplicar cap de 10% no dividend yield mais recente também
-    const validYield = yield_ && yield_ > 0 && yield_ <= 1 ? yield_ : null;
-    return validYield ? Math.min(validYield, 0.10) : null;
+    // Calcular dividendos dos últimos 12 meses
+    const oneYearAgo = new Date()
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
 
+    const dividendsLast12Months = company.dividendHistory.filter(
+      (div) => new Date(div.exDate) >= oneYearAgo
+    )
+
+    const totalDividendsLast12Months = dividendsLast12Months.reduce(
+      (sum, div) => sum + Number(div.amount),
+      0
+    )
+
+    // Calcular dividend yield
+    const dividendYield = totalDividendsLast12Months / currentPrice
+
+    // Calcular renda mensal e anual projetada
+    const annualIncome = investmentAmount * dividendYield
+    const monthlyIncome = annualIncome / 12
+
+    // Calcular médias
+    const allDividends = company.dividendHistory.map((div) => ({
+      date: div.exDate,
+      amount: Number(div.amount),
+    }))
+
+    // Média mensal (assumindo pagamentos mensais ou trimestrais)
+    const totalDividends = allDividends.reduce((sum, div) => sum + div.amount, 0)
+    const monthsWithDividends = new Set(
+      allDividends.map((div) => `${div.date.getFullYear()}-${div.date.getMonth()}`)
+    ).size
+
+    const averageMonthlyDividend =
+      monthsWithDividends > 0 ? totalDividends / monthsWithDividends : 0
+
+    // Média trimestral
+    const quartersWithDividends = new Set(
+      allDividends.map(
+        (div) => `${div.date.getFullYear()}-Q${Math.floor(div.date.getMonth() / 3) + 1}`
+      )
+    ).size
+
+    const averageQuarterlyDividend =
+      quartersWithDividends > 0 ? totalDividends / quartersWithDividends : 0
+
+    // Último dividendo
+    const lastDividend = company.dividendHistory[0]
+      ? {
+          amount: Number(company.dividendHistory[0].amount),
+          date: company.dividendHistory[0].exDate,
+        }
+      : null
+
+    if (!lastDividend) {
+      return {
+        success: false,
+        error: "Nenhum dividendo encontrado para esta empresa",
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        ticker: company.ticker,
+        companyName: company.name,
+        currentPrice,
+        dividendYield,
+        monthlyIncome,
+        annualIncome,
+        lastDividend: {
+          amount: lastDividend.amount,
+          date: lastDividend.date, // Manter como Date para compatibilidade
+        },
+        dividendHistory: allDividends.slice(0, 20).map((div) => ({
+          date: div.date, // Manter como Date para compatibilidade
+          amount: div.amount,
+        })),
+        averageMonthlyDividend,
+        averageQuarterlyDividend,
+        totalDividendsLast12Months,
+      },
+    }
   } catch (error) {
-    console.error(`❌ Erro ao buscar DY mais recente para ${ticker}:`, error);
-    return null;
+    console.error(`Erro ao calcular dividend yield para ${ticker}:`, error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Erro desconhecido",
+    }
   }
 }

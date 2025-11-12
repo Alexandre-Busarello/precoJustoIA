@@ -95,11 +95,70 @@ export class DividendService {
         return errorResult;
       }
 
+      // Verificar dividendos existentes no banco antes de buscar
+      const existingDividends = await prisma.dividendHistory.findMany({
+        where: {
+          companyId: company.id,
+          exDate: {
+            gte: startDate || new Date(new Date().setFullYear(new Date().getFullYear() - 5)),
+          },
+        },
+        orderBy: { exDate: "desc" },
+      });
+
+      console.log(
+        `📊 [DIVIDENDS] ${ticker}: ${existingDividends.length} dividendos já existem no banco para o período`
+      );
+
+      // Log dos dividendos existentes de 2025 para comparação
+      const existing2025 = existingDividends.filter(
+        (d) => d.exDate.getFullYear() === 2025
+      );
+      if (existing2025.length > 0) {
+        console.log(`📊 [DIVIDENDS] ${ticker}: Dividendos de 2025 no banco:`);
+        existing2025.forEach((d) => {
+          console.log(
+            `  - ${d.exDate.toISOString().split('T')[0]}: R$ ${Number(d.amount).toFixed(4)}`
+          );
+        });
+      }
+
       // Fetch dividends from Yahoo Finance
       const dividends = await this.fetchDividendsFromYahoo(ticker, startDate);
 
+      // Comparar com o que já existe no banco
+      const yahoo2025 = dividends.filter((d) => d.date.getFullYear() === 2025);
+      if (yahoo2025.length !== existing2025.length) {
+        console.log(
+          `⚠️ [DIVIDENDS] ${ticker}: DISCREPÂNCIA detectada!`
+        );
+        console.log(
+          `  Banco: ${existing2025.length} dividendos de 2025`
+        );
+        console.log(
+          `  Yahoo: ${yahoo2025.length} dividendos de 2025`
+        );
+        console.log(
+          `  Diferença: ${existing2025.length - yahoo2025.length} dividendos faltando no Yahoo`
+        );
+      }
+
       if (dividends.length === 0) {
-        console.log(`⚠️ [DIVIDENDS] ${ticker}: Nenhum dividendo encontrado`);
+        console.log(`⚠️ [DIVIDENDS] ${ticker}: Nenhum dividendo encontrado no Yahoo`);
+        // Se não encontrou nada no Yahoo mas tem no banco, retornar sucesso com contagem do banco
+        if (existingDividends.length > 0) {
+          console.log(
+            `✅ [DIVIDENDS] ${ticker}: Usando ${existingDividends.length} dividendos existentes no banco`
+          );
+          const existingResult = {
+            success: true,
+            dividendsCount: existingDividends.length,
+            message: "Using existing dividends from database",
+          };
+          await cache.set(cacheKey, existingResult, { ttl: 14400 });
+          return existingResult;
+        }
+
         const noDataResult = {
           success: true,
           dividendsCount: 0,
@@ -111,8 +170,27 @@ export class DividendService {
         return noDataResult;
       }
 
+      // IMPORTANTE: Não sobrescrever dividendos existentes no banco
+      // O Yahoo Finance pode não retornar todos os tipos (ex: JCP)
+      // Vamos apenas ADICIONAR novos dividendos, não remover os existentes
       // Save only new dividends to database (avoid unnecessary writes)
       await this.saveDividendsToDatabase(company.id, dividends);
+      
+      // Log final: comparar total no banco após salvamento
+      const finalDividends = await prisma.dividendHistory.findMany({
+        where: {
+          companyId: company.id,
+          exDate: {
+            gte: startDate || new Date(new Date().setFullYear(new Date().getFullYear() - 5)),
+          },
+        },
+        orderBy: { exDate: "desc" },
+      });
+      
+      const final2025 = finalDividends.filter((d) => d.exDate.getFullYear() === 2025);
+      console.log(
+        `📊 [DIVIDENDS] ${ticker}: Após atualização - ${finalDividends.length} dividendos no banco (${final2025.length} de 2025)`
+      );
 
       // Find the latest dividend
       const latestDividend = dividends.reduce((latest, current) => {
@@ -186,16 +264,136 @@ export class DividendService {
       defaultStartDate.setFullYear(defaultStartDate.getFullYear() - 10);
 
       const period1 = startDate || defaultStartDate;
-      const period2 = new Date(); // Até hoje
+      // IMPORTANTE: Buscar até 1 ano no futuro para capturar dividendos futuros/projetados
+      // O Yahoo Finance pode ter dividendos anunciados mas ainda não pagos
+      const period2 = new Date();
+      period2.setFullYear(period2.getFullYear() + 1); // 1 ano à frente para capturar dividendos futuros
+
+      console.log(
+        `📅 [YAHOO] ${ticker}: Buscando dividendos de ${period1.toISOString().split('T')[0]} até ${period2.toISOString().split('T')[0]} (incluindo futuros)`
+      );
 
       // Use chart() com events para obter dividendos
-      const result = await yahooFinance.chart(yahooSymbol, {
-        period1,
-        period2,
-        interval: "1mo",
-        events: "dividends", // Importante: solicitar eventos de dividendos
-        return: "array",
-      });
+      // Tentar buscar todos os eventos disponíveis para capturar JCP e outros tipos
+      // IMPORTANTE: Usar interval menor pode ajudar a capturar mais dividendos
+      // Tentar primeiro com "1d" para capturar todos os dividendos, incluindo futuros
+      let result;
+      try {
+        result = await yahooFinance.chart(yahooSymbol, {
+          period1,
+          period2,
+          interval: "1d", // Intervalo diário para capturar todos os dividendos
+          events: "dividends", // Importante: solicitar eventos de dividendos
+          // Nota: Yahoo Finance pode não diferenciar JCP de dividendos normais
+          // Ambos aparecem como "dividends" na API
+          return: "array",
+        });
+        console.log(`✅ [YAHOO] ${ticker}: Busca com interval "1d" bem-sucedida`);
+      } catch (error) {
+        console.log(`⚠️ [YAHOO] ${ticker}: Erro com interval "1d", tentando "1mo":`, error);
+        // Fallback para intervalo mensal se diário falhar
+        result = await yahooFinance.chart(yahooSymbol, {
+          period1,
+          period2,
+          interval: "1mo",
+          events: "dividends",
+          return: "array",
+        });
+      }
+
+      // Tentar também buscar via quoteSummary para ver se há mais informações
+      let quoteSummaryDividends: any = null;
+      try {
+        const quoteSummary = await yahooFinance.quoteSummary(yahooSymbol, {
+          modules: ['summaryDetail', 'defaultKeyStatistics', 'calendarEvents']
+        });
+        quoteSummaryDividends = quoteSummary;
+        console.log(
+          `🔍 [YAHOO] ${ticker}: QuoteSummary retornado:`,
+          JSON.stringify({
+            hasSummaryDetail: !!quoteSummary?.summaryDetail,
+            hasDefaultKeyStatistics: !!quoteSummary?.defaultKeyStatistics,
+            hasCalendarEvents: !!quoteSummary?.calendarEvents,
+            dividendYield: quoteSummary?.summaryDetail?.dividendYield,
+            trailingAnnualDividendRate: quoteSummary?.summaryDetail?.trailingAnnualDividendRate,
+            trailingAnnualDividendYield: quoteSummary?.summaryDetail?.trailingAnnualDividendYield,
+            exDividendDate: quoteSummary?.calendarEvents?.exDividendDate,
+            dividendDate: quoteSummary?.calendarEvents?.dividendDate,
+          }, null, 2)
+        );
+        
+        // Tentar extrair dividendos futuros do calendarEvents se disponível
+        if (quoteSummary?.calendarEvents?.exDividendDate) {
+          console.log(
+            `📅 [YAHOO] ${ticker}: Ex-Dividend Date encontrado no calendarEvents:`,
+            quoteSummary.calendarEvents.exDividendDate
+          );
+        }
+      } catch (quoteError) {
+        console.log(`⚠️ [YAHOO] ${ticker}: Não foi possível buscar quoteSummary:`, quoteError);
+      }
+
+      // Log da estrutura completa retornada para debug
+      console.log(
+        `🔍 [YAHOO] ${ticker}: Estrutura retornada:`,
+        JSON.stringify({
+          hasResult: !!result,
+          hasEvents: !!(result && result.events),
+          hasDividends: !!(result && result.events && result.events.dividends),
+          dividendType: result?.events?.dividends
+            ? Array.isArray(result.events.dividends)
+              ? "array"
+              : typeof result.events.dividends === "object"
+              ? "object"
+              : typeof result.events.dividends
+            : "null",
+          dividendCount: Array.isArray(result?.events?.dividends)
+            ? result.events.dividends.length
+            : typeof result?.events?.dividends === "object"
+            ? Object.keys(result.events.dividends).length
+            : 0,
+          availableEvents: result?.events ? Object.keys(result.events) : [],
+        }, null, 2)
+      );
+
+      // Log detalhado dos primeiros e últimos dividendos retornados para debug
+      if (result?.events?.dividends) {
+        const allDividends = Array.isArray(result.events.dividends)
+          ? result.events.dividends
+          : Object.values(result.events.dividends);
+        
+        // Ordenar por data para pegar os mais recentes
+        const sortedDividends = allDividends
+          .map((div: any) => ({
+            date: div.date instanceof Date ? div.date : new Date(div.date),
+            amount: div.amount,
+          }))
+          .sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
+        
+        console.log(
+          `🔍 [YAHOO] ${ticker}: Amostra dos primeiros 5 dividendos (mais recentes):`,
+          JSON.stringify(sortedDividends.slice(0, 5).map((d: any) => ({
+            date: d.date.toISOString().split('T')[0],
+            amount: d.amount,
+          })), null, 2)
+        );
+        
+        // Log dos dividendos futuros (após hoje)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const futureDividends = sortedDividends.filter((d: any) => d.date > today);
+        if (futureDividends.length > 0) {
+          console.log(
+            `🔮 [YAHOO] ${ticker}: ${futureDividends.length} dividendos FUTUROS encontrados:`,
+            JSON.stringify(futureDividends.map((d: any) => ({
+              date: d.date.toISOString().split('T')[0],
+              amount: d.amount,
+            })), null, 2)
+          );
+        } else {
+          console.log(`⚠️ [YAHOO] ${ticker}: Nenhum dividendo futuro encontrado na resposta da API`);
+        }
+      }
 
       // Extrair dividendos dos eventos
       const dividends: DividendData[] = [];
@@ -205,25 +403,61 @@ export class DividendService {
 
         // Se for um array
         if (Array.isArray(dividendEvents)) {
+          console.log(`📋 [YAHOO] ${ticker}: Processando ${dividendEvents.length} dividendos (formato: array)`);
+          
+          // Log de TODOS os dividendos antes de filtrar para debug
+          const allRawDividends = dividendEvents.map((div: any, index: number) => ({
+            index,
+            raw: div,
+            date: div.date,
+            dateType: typeof div.date,
+            amount: div.amount,
+            amountType: typeof div.amount,
+          }));
+          
+          console.log(
+            `🔍 [YAHOO] ${ticker}: TODOS os ${dividendEvents.length} dividendos retornados (antes de filtrar):`,
+            JSON.stringify(allRawDividends.slice(0, 20), null, 2) // Primeiros 20 para não poluir logs
+          );
+          
           for (const div of dividendEvents) {
             if (div.date && div.amount && div.amount > 0) {
+              const divDate = div.date instanceof Date ? div.date : new Date(div.date);
+              
+              // Log se o dividendo é futuro
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              if (divDate > today) {
+                console.log(
+                  `🔮 [YAHOO] ${ticker}: Dividendo FUTURO encontrado: ${divDate.toISOString().split('T')[0]} = R$ ${Number(div.amount).toFixed(4)}`
+                );
+              }
+              
               dividends.push({
-                date: div.date instanceof Date ? div.date : new Date(div.date),
+                date: divDate,
                 amount: Number(div.amount),
               });
+            } else {
+              // Log dividendos que foram filtrados
+              console.log(
+                `⚠️ [YAHOO] ${ticker}: Dividendo filtrado (sem data ou valor):`,
+                JSON.stringify(div)
+              );
             }
           }
         }
         // Se for um objeto (mapeado por timestamp)
         else if (typeof dividendEvents === "object") {
-          for (const [timestamp, div] of Object.entries(dividendEvents)) {
+          const entries = Object.entries(dividendEvents);
+          console.log(`📋 [YAHOO] ${ticker}: Processando ${entries.length} dividendos (formato: object)`);
+          for (const [timestamp, div] of entries) {
             const divData = div as any;
             if (divData.amount && divData.amount > 0) {
+              const divDate = divData.date instanceof Date
+                ? divData.date
+                : new Date(divData.date || Number(timestamp) * 1000);
               dividends.push({
-                date:
-                  divData.date instanceof Date
-                    ? divData.date
-                    : new Date(divData.date || Number(timestamp) * 1000),
+                date: divDate,
                 amount: Number(divData.amount),
               });
             }
@@ -231,9 +465,40 @@ export class DividendService {
         }
       }
 
-      console.log(
-        `📊 [YAHOO] ${ticker}: ${dividends.length} dividendos encontrados`
-      );
+      // Agrupar dividendos por ano para log detalhado
+      const dividendsByYear = new Map<number, DividendData[]>();
+      dividends.forEach((div) => {
+        const year = div.date.getFullYear();
+        if (!dividendsByYear.has(year)) {
+          dividendsByYear.set(year, []);
+        }
+        dividendsByYear.get(year)!.push(div);
+      });
+
+      // Log detalhado por ano
+      console.log(`📊 [YAHOO] ${ticker}: ${dividends.length} dividendos encontrados no total`);
+      const sortedYears = Array.from(dividendsByYear.keys()).sort((a, b) => b - a);
+      sortedYears.forEach((year) => {
+        const yearDividends = dividendsByYear.get(year)!;
+        const dates = yearDividends.map((d) => d.date.toISOString().split('T')[0]).join(', ');
+        console.log(
+          `  📅 ${year}: ${yearDividends.length} dividendo(s) - Datas: ${dates}`
+        );
+      });
+
+      // Log especial para 2025
+      const dividends2025 = dividendsByYear.get(2025) || [];
+      if (dividends2025.length > 0) {
+        console.log(`🎯 [YAHOO] ${ticker}: Dividendos de 2025 encontrados:`);
+        dividends2025.forEach((div) => {
+          console.log(
+            `  - ${div.date.toISOString().split('T')[0]}: R$ ${div.amount.toFixed(4)}`
+          );
+        });
+      } else {
+        console.log(`⚠️ [YAHOO] ${ticker}: Nenhum dividendo encontrado para 2025`);
+      }
+
       return dividends.sort((a, b) => b.date.getTime() - a.date.getTime());
     } catch (error) {
       console.error(

@@ -15,7 +15,6 @@ import {
   LayoutDashboard, 
   BarChart3, 
   Shield, 
-  Zap, 
   LogOut,
   User,
   Settings,
@@ -27,7 +26,8 @@ import {
   Building2,
   Filter,
   Sparkles,
-  Bell
+  Bell,
+  Calculator
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -354,6 +354,42 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                         </div>
                       </Link>
                     ))}
+                </div>
+              </div>
+
+              {/* Seção Calculadoras */}
+              <div>
+                <div className="flex items-center gap-2 px-3 py-2 mb-2">
+                  <Calculator className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Calculadoras
+                  </h3>
+                </div>
+                <div className="space-y-1">
+                  <Link
+                    href="/calculadoras/dividend-yield"
+                    onClick={() => setIsOpen(false)}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      pathname?.startsWith('/calculadoras/dividend-yield')
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <div className="p-1.5 rounded-md bg-gradient-to-br from-green-500 to-emerald-500">
+                      <div className="text-white text-sm">
+                        <Calculator className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">Dividend Yield</span>
+                        <Badge variant="secondary" className="text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                          Grátis
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Calcule renda passiva com dividendos</p>
+                    </div>
+                  </Link>
                 </div>
               </div>
 

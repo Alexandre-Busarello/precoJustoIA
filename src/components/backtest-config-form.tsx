@@ -17,12 +17,12 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  Search,
   Loader2,
   Info,
   Settings,
   BarChart3
 } from 'lucide-react';
+import { AssetSearchInput, CompanySearchResult } from '@/components/asset-search-input';
 
 // Interfaces
 interface BacktestAsset {
@@ -52,13 +52,7 @@ interface BacktestConfigFormProps {
   isSaving?: boolean;
 }
 
-interface CompanySearchResult {
-  id: string;
-  ticker: string;
-  name: string;
-  sector?: string;
-  logoUrl?: string;
-}
+// CompanySearchResult agora vem de asset-search-input.tsx
 
 export function BacktestConfigForm({ 
   initialConfig, 
@@ -88,13 +82,9 @@ export function BacktestConfigForm({
   // Estados locais para DY de cada ativo (mapa ticker -> valor input)
   const [dividendYieldInputs, setDividendYieldInputs] = useState<Record<string, string>>({});
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<CompanySearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [isAddingAsset, setIsAddingAsset] = useState(false);
   const [isRemovingAsset, setIsRemovingAsset] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const initialConfigRef = useRef<string>('');
   const isInitialLoad = useRef(true);
   const configChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -153,60 +143,6 @@ export function BacktestConfigForm({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]); // Removido onConfigChange das dependências para evitar loop infinito
-
-  // Cleanup do timeout quando componente for desmontado
-  useEffect(() => {
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
-  }, [searchTimeout]);
-
-  // Buscar empresas com debounce
-  const searchCompanies = async (term: string) => {
-    if (term.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const response = await fetch(`/api/search-companies?q=${encodeURIComponent(term)}`);
-      
-      if (!response.ok) {
-        throw new Error('Erro na busca de empresas');
-      }
-
-      const data = await response.json();
-      setSearchResults(data.companies || []);
-    } catch (error) {
-      console.error('Erro na busca:', error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  // Função para busca com debounce
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
-    
-    // Limpar timeout anterior
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
-    
-    // Definir novo timeout
-    if (value.length >= 2) {
-      const timeout = setTimeout(() => {
-        searchCompanies(value);
-      }, 300); // 300ms de debounce
-      setSearchTimeout(timeout);
-    } else {
-      setSearchResults([]);
-    }
-  };
 
   // Adicionar ativo
   const addAsset = async (company: CompanySearchResult) => {
@@ -275,9 +211,6 @@ export function BacktestConfigForm({
         }
       });
       setDividendYieldInputs(newDYInputs);
-
-      setSearchTerm('');
-      setSearchResults([]);
     } catch (error) {
       console.error('Erro ao adicionar ativo:', error);
       // Em caso de erro, fallback para lógica local
@@ -294,8 +227,6 @@ export function BacktestConfigForm({
       });
 
       setConfig(prev => ({ ...prev, assets: newAssets }));
-      setSearchTerm('');
-      setSearchResults([]);
     } finally {
       setIsAddingAsset(false);
     }
@@ -749,47 +680,12 @@ export function BacktestConfigForm({
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Busca de Ativos */}
-          <div className="space-y-2">
-            <Label htmlFor="search">Buscar Ativo</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="search"
-                value={searchTerm}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Digite o ticker ou nome da empresa..."
-                className="pl-10"
-              />
-              {isSearching && (
-                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin" />
-              )}
-            </div>
-            
-            {/* Resultados da Busca */}
-            {searchResults.length > 0 && (
-              <div className="border rounded-lg max-h-40 overflow-y-auto">
-                {searchResults.map((company) => (
-                  <div
-                    key={company.ticker}
-                    className="p-3 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer border-b last:border-b-0"
-                    onClick={() => addAsset(company)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{company.ticker}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{company.name}</p>
-                      </div>
-                      {company.sector && (
-                        <Badge variant="outline" className="text-xs">
-                          {company.sector}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <AssetSearchInput
+            label="Buscar Ativo"
+            placeholder="Digite o ticker ou nome da empresa..."
+            onCompanySelect={addAsset}
+            disabled={isAddingAsset || isRemovingAsset}
+          />
 
           {/* Lista de Ativos Selecionados */}
           <div className="space-y-3">

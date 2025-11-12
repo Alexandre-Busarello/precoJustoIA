@@ -54,15 +54,31 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 48 * 60 * 60, // 48 horas em segundos
+  },
+  jwt: {
+    maxAge: 48 * 60 * 60, // 48 horas em segundos
   },
   callbacks: {
     async jwt({ token, user, trigger }) {
-      // Se é um novo login, usar dados do user e armazenar o ID real
+      // Se é um novo login, não precisa verificar expiração
       if (user) {
         token.userId = user.id // Armazenar o ID real do usuário
         token.subscriptionTier = user.subscriptionTier || "FREE"
         token.premiumExpiresAt = user.premiumExpiresAt?.toISOString()
+        return token
+      }
+      
+      // Para tokens existentes, verificar se têm exp/iat válidos
+      // Tokens antigos sem exp são considerados inválidos
+      if (!token.exp || !token.iat) {
+        throw new Error('Token inválido - requer novo login')
+      }
+      
+      // Verificar se o token expirou
+      if (Date.now() >= token.exp * 1000) {
+        throw new Error('Token expirado')
       }
       
       // Se é uma atualização da sessão, buscar dados atualizados do banco
@@ -88,12 +104,32 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
-      if (token) {
-        // Usar o ID real do usuário armazenado no token, não o token.sub
-        session.user.id = (token.userId as string) || token.sub!
-        session.user.subscriptionTier = token.subscriptionTier as string
-        session.user.premiumExpiresAt = token.premiumExpiresAt as string
+      // Validar token antes de criar a sessão
+      // Tokens antigos sem exp são considerados inválidos
+      if (!token || !token.exp || !token.iat) {
+        // Retornar sessão sem user faz o NextAuth tratar como não autenticado
+        return {
+          ...session,
+          user: null as any,
+          expires: new Date(0).toISOString()
+        }
       }
+      
+      // Verificar se o token expirou
+      if (Date.now() >= token.exp * 1000) {
+        // Retornar sessão sem user faz o NextAuth tratar como não autenticado
+        return {
+          ...session,
+          user: null as any,
+          expires: new Date(0).toISOString()
+        }
+      }
+      
+      // Token válido, preencher dados do usuário
+      session.user.id = (token.userId as string) || token.sub!
+      session.user.subscriptionTier = token.subscriptionTier as string
+      session.user.premiumExpiresAt = token.premiumExpiresAt as string
+      
       return session
     },
     async redirect({ url, baseUrl }) {

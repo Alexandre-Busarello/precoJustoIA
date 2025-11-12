@@ -2,6 +2,8 @@
 
 import { useSession } from 'next-auth/react'
 import { useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { isSessionExpiredError } from '@/lib/auth-utils'
 
 interface UseSessionRefreshOptions {
   /**
@@ -24,6 +26,7 @@ interface UseSessionRefreshOptions {
 
 export function useSessionRefresh(options: UseSessionRefreshOptions = {}) {
   const { data: session, update: updateSession, status } = useSession()
+  const router = useRouter()
   const { 
     checkOnMount = true, 
     enablePolling = false, 
@@ -82,26 +85,43 @@ export function useSessionRefresh(options: UseSessionRefreshOptions = {}) {
       if (currentTier !== newTier) {
         console.log('Subscription tier changed:', { from: currentTier, to: newTier })
         
-        // Forçar atualização completa da sessão NextAuth
-        await updateSession()
+        try {
+          // Forçar atualização completa da sessão NextAuth
+          await updateSession()
 
-        // Chamar callback se fornecido
-        if (onSessionUpdate) {
-          onSessionUpdate(data.user)
+          // Chamar callback se fornecido
+          if (onSessionUpdate) {
+            onSessionUpdate(data.user)
+          }
+
+          return data.user
+        } catch (updateError) {
+          // Se a atualização falhar por expiração de token, redirecionar para login
+          if (isSessionExpiredError(updateError)) {
+            console.log('Token expirado durante atualização, redirecionando para login...')
+            router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname))
+            return null
+          }
+          throw updateError
         }
-
-        return data.user
       }
 
       console.log('No subscription changes detected')
       return null
     } catch (error) {
       console.error('Erro ao atualizar sessão:', error)
+      
+      // Se o erro for de expiração de token, redirecionar para login
+      if (isSessionExpiredError(error)) {
+        console.log('Token expirado, redirecionando para login...')
+        router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname))
+      }
+      
       return null
     } finally {
       isCheckingRef.current = false
     }
-  }, [session?.user?.id, session?.user?.subscriptionTier, status, updateSession, onSessionUpdate])
+  }, [session?.user?.id, session?.user?.subscriptionTier, status, updateSession, onSessionUpdate, router])
 
   const startPolling = useCallback(() => {
     if (isPollingRef.current || !enablePolling) return
@@ -122,6 +142,20 @@ export function useSessionRefresh(options: UseSessionRefreshOptions = {}) {
       console.log('Session polling stopped')
     }
   }, [])
+
+  // Detectar quando a sessão se torna inválida/expirada e redirecionar
+  useEffect(() => {
+    // Se o status mudou para 'unauthenticated', significa que a sessão foi invalidada
+    // Isso pode acontecer quando o token expira ou é inválido
+    if (status === 'unauthenticated') {
+      console.log('Sessão invalidada/expirada, redirecionando para login...')
+      const currentPath = window.location.pathname
+      // Não redirecionar se já estiver na página de login
+      if (currentPath !== '/login' && currentPath !== '/register') {
+        router.push('/login?callbackUrl=' + encodeURIComponent(currentPath))
+      }
+    }
+  }, [status, router])
 
   // Verificar sessão quando a página é acessada (checkOnMount)
   useEffect(() => {

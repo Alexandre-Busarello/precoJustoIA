@@ -19,5 +19,8 @@ declare module "next-auth/jwt" {
   interface JWT {
     subscriptionTier: string
     premiumExpiresAt?: string
+    userId?: string
+    exp?: number  // Timestamp de expiração
+    iat?: number // Timestamp de criação
   }
 }

@@ -60,16 +60,49 @@ type ChartType = 'line' | 'candlestick'
 export default function PriceChart({ data, technicalAnalysis, ticker }: PriceChartProps) {
   const [chartType, setChartType] = useState<ChartType>('line')
 
-  // Preparar dados para o gráfico
+  // Preparar dados para o gráfico - agrupar por mês e pegar último registro com volume
   const chartData = useMemo(() => {
-    return data.map(item => ({
-      ...item,
-      date: new Date(item.date).toLocaleDateString('pt-BR', { 
-        month: 'short', 
-        year: '2-digit' 
-      }),
-      fullDate: item.date
-    }))
+    // Criar um mapa para agrupar por mês/ano
+    const monthlyData = new Map<string, PriceChartData>()
+    
+    // Processar dados em ordem cronológica
+    const sortedData = [...data].sort((a, b) => {
+      const dateA = new Date(a.date).getTime()
+      const dateB = new Date(b.date).getTime()
+      return dateA - dateB
+    })
+    
+    // Agrupar por mês/ano e manter apenas o último registro com volume válido
+    sortedData.forEach(item => {
+      const date = new Date(item.date)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      
+      // Só considerar registros com volume > 0
+      if (item.volume > 0) {
+        const existing = monthlyData.get(monthKey)
+        
+        // Se não existe registro para este mês, ou se este é mais recente, atualizar
+        if (!existing || new Date(item.date).getTime() > new Date(existing.date).getTime()) {
+          monthlyData.set(monthKey, item)
+        }
+      }
+    })
+    
+    // Converter mapa para array e formatar datas
+    return Array.from(monthlyData.values())
+      .sort((a, b) => {
+        const dateA = new Date(a.date).getTime()
+        const dateB = new Date(b.date).getTime()
+        return dateA - dateB
+      })
+      .map(item => ({
+        ...item,
+        date: new Date(item.date).toLocaleDateString('pt-BR', { 
+          month: 'short', 
+          year: '2-digit' 
+        }),
+        fullDate: item.date
+      }))
   }, [data])
 
   // Preparar dados dos indicadores técnicos para o gráfico

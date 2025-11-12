@@ -1,4 +1,5 @@
 import { Metadata } from "next"
+import { Suspense } from "react"
 import { DividendYieldCalculator } from "@/components/dividend-yield-calculator"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -69,7 +70,9 @@ export default function DividendYieldCalculatorPage() {
 
       {/* Main Calculator */}
       <div className="max-w-4xl mx-auto mb-12">
-        <DividendYieldCalculator />
+        <Suspense fallback={<div className="text-center py-8">Carregando calculadora...</div>}>
+          <DividendYieldCalculator />
+        </Suspense>
       </div>
 
       {/* Preview do Relatório Completo - DEPOIS da Calculadora */}

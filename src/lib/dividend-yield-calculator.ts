@@ -257,3 +257,138 @@ export async function calculateDividendYield(
     }
   }
 }
+
+/**
+ * Calcula o dividend yield médio dos últimos 5 anos
+ * Retorna null se não houver dados suficientes
+ */
+export async function calculateAverageDividendYield(ticker: string): Promise<number | null> {
+  try {
+    // Garantir que temos dados atualizados
+    await updateDividendsIfNeeded(ticker)
+
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      include: {
+        dividendHistory: {
+          orderBy: { exDate: "desc" },
+          take: 150, // Últimos 5+ anos
+        },
+        dailyQuotes: {
+          orderBy: { date: "desc" },
+          take: 1,
+        },
+      },
+    })
+
+    if (!company || !company.dailyQuotes[0]) {
+      return null
+    }
+
+    const currentPrice = Number(company.dailyQuotes[0].price)
+    if (!currentPrice || currentPrice <= 0) {
+      return null
+    }
+
+    // Agrupar dividendos por ano
+    const fiveYearsAgo = new Date()
+    fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5)
+
+    const dividendsByYear = new Map<number, number>()
+    
+    for (const div of company.dividendHistory) {
+      const divDate = new Date(div.exDate)
+      if (divDate >= fiveYearsAgo) {
+        const year = divDate.getFullYear()
+        const amount = Number(div.amount)
+        dividendsByYear.set(year, (dividendsByYear.get(year) || 0) + amount)
+      }
+    }
+
+    if (dividendsByYear.size === 0) {
+      return null
+    }
+
+    // Calcular dividend yield médio anual
+    const yearlyYields: number[] = []
+    
+    for (const [year, totalDividends] of dividendsByYear.entries()) {
+      // Buscar preço médio do ano (usar preço atual como aproximação se não houver histórico)
+      // Para simplificar, vamos usar o preço atual para todos os anos
+      // Em uma implementação mais precisa, buscaríamos o preço médio de cada ano
+      const yearlyYield = totalDividends / currentPrice
+      yearlyYields.push(yearlyYield)
+    }
+
+    if (yearlyYields.length === 0) {
+      return null
+    }
+
+    // Calcular média dos yields anuais
+    const averageYield = yearlyYields.reduce((sum, yield_) => sum + yield_, 0) / yearlyYields.length
+
+    return averageYield
+  } catch (error) {
+    console.error(`Erro ao calcular dividend yield médio para ${ticker}:`, error)
+    return null
+  }
+}
+
+/**
+ * Obtém o dividend yield mais recente (últimos 12 meses)
+ * Retorna null se não houver dados
+ */
+export async function getLatestDividendYield(ticker: string): Promise<number | null> {
+  try {
+    // Garantir que temos dados atualizados
+    await updateDividendsIfNeeded(ticker)
+
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      include: {
+        dividendHistory: {
+          orderBy: { exDate: "desc" },
+          take: 150,
+        },
+        dailyQuotes: {
+          orderBy: { date: "desc" },
+          take: 1,
+        },
+      },
+    })
+
+    if (!company || !company.dailyQuotes[0]) {
+      return null
+    }
+
+    const currentPrice = Number(company.dailyQuotes[0].price)
+    if (!currentPrice || currentPrice <= 0) {
+      return null
+    }
+
+    // Calcular dividendos dos últimos 12 meses
+    const oneYearAgo = new Date()
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+
+    const dividendsLast12Months = company.dividendHistory.filter(
+      (div) => new Date(div.exDate) >= oneYearAgo
+    )
+
+    if (dividendsLast12Months.length === 0) {
+      return null
+    }
+
+    const totalDividendsLast12Months = dividendsLast12Months.reduce(
+      (sum, div) => sum + Number(div.amount),
+      0
+    )
+
+    // Calcular dividend yield
+    const dividendYield = totalDividendsLast12Months / currentPrice
+
+    return dividendYield
+  } catch (error) {
+    console.error(`Erro ao obter dividend yield mais recente para ${ticker}:`, error)
+    return null
+  }
+}

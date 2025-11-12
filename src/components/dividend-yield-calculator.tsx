@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,7 +32,7 @@ interface CalculationResult {
   totalDividendsLast12Months: number
 }
 
-export function DividendYieldCalculator() {
+function DividendYieldCalculatorContent() {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
   const [ticker, setTicker] = useState("")
@@ -206,6 +206,25 @@ export function DividendYieldCalculator() {
         />
       )}
     </div>
+  )
+}
+
+export function DividendYieldCalculator() {
+  return (
+    <Suspense fallback={
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">Carregando calculadora...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <DividendYieldCalculatorContent />
+    </Suspense>
   )
 }
 

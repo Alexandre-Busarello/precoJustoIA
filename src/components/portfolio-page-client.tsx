@@ -749,6 +749,13 @@ function PortfolioOverview({
         <PortfolioHoldingsTable
           key={`overview-holdings-${portfolioId}-${refreshKey}`}
           portfolioId={portfolioId}
+          onNavigateToTransactions={() => {
+            setActiveTab("transactions");
+            // Update URL to include tab parameter
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "transactions");
+            window.history.replaceState({}, "", url.toString());
+          }}
         />
       </div>
 

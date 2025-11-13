@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, Scale, RefreshCw } from "lucide-react";
 import { portfolioCache } from "@/lib/portfolio-cache";
 
 interface Holding {
@@ -36,19 +36,114 @@ interface Holding {
 
 interface PortfolioHoldingsTableProps {
   portfolioId: string;
+  onNavigateToTransactions?: () => void;
 }
 
 export function PortfolioHoldingsTable({
   portfolioId,
+  onNavigateToTransactions,
 }: PortfolioHoldingsTableProps) {
   const { toast } = useToast();
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalValue, setTotalValue] = useState(0);
+  const [shouldShowRebalancing, setShouldShowRebalancing] = useState(false);
+  const [maxDeviation, setMaxDeviation] = useState(0);
+  const [generatingRebalancing, setGeneratingRebalancing] = useState(false);
 
   useEffect(() => {
-    loadHoldings();
+    const loadData = async () => {
+      await loadHoldings();
+      await checkRebalancingNeeded();
+    };
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId]);
+
+  const checkRebalancingNeeded = async () => {
+    try {
+      const response = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing/check`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setShouldShowRebalancing(data.shouldShow);
+        setMaxDeviation(data.maxDeviation || 0);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar necessidade de rebalanceamento:', error);
+    }
+  };
+
+  const handleGenerateRebalancing = async () => {
+    try {
+      setGeneratingRebalancing(true);
+
+      // Delete existing rebalancing suggestions first
+      const pendingResponse = await fetch(
+        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+      );
+      
+      if (pendingResponse.ok) {
+        const pendingData = await pendingResponse.json();
+        const rebalancingTx = (pendingData.transactions || []).filter(
+          (tx: any) => tx.type === 'SELL_REBALANCE' || tx.type === 'BUY_REBALANCE'
+        );
+        
+        // Delete each rebalancing transaction
+        await Promise.all(
+          rebalancingTx.map((tx: any) =>
+            fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
+              method: 'DELETE'
+            }).catch(() => {})
+          )
+        );
+      }
+
+      // Generate new rebalancing suggestions
+      const generateResponse = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing`,
+        { method: 'POST' }
+      );
+
+      if (!generateResponse.ok) {
+        throw new Error('Erro ao gerar sugestões de rebalanceamento');
+      }
+
+      toast({
+        title: 'Sugestões geradas',
+        description: 'Sugestões de rebalanceamento geradas com sucesso'
+      });
+
+      // Invalidate cache
+      portfolioCache.invalidateAll(portfolioId);
+
+      // Navigate to transactions tab
+      if (onNavigateToTransactions) {
+        // Small delay to ensure transactions are created
+        setTimeout(() => {
+          onNavigateToTransactions();
+        }, 300);
+      } else {
+        // Fallback: navigate using URL
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'transactions');
+        window.history.pushState({}, '', url.toString());
+        // Trigger page reload or tab change
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Erro ao gerar sugestões:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível gerar sugestões de rebalanceamento',
+        variant: 'destructive'
+      });
+    } finally {
+      setGeneratingRebalancing(false);
+    }
+  };
 
   const loadHoldings = async (forceRefresh = false) => {
     try {
@@ -124,7 +219,8 @@ export function PortfolioHoldingsTable({
     );
   }
 
-  const hasRebalancingNeeded = holdings.some((h) => h.needsRebalancing);
+  // Use the same logic as rebalancing suggestions section
+  const hasRebalancingNeeded = shouldShowRebalancing;
 
   // Função para determinar a prioridade de ordenação por status
   const getStatusPriority = (holding: Holding) => {
@@ -289,17 +385,39 @@ export function PortfolioHoldingsTable({
 
         {hasRebalancingNeeded && (
           <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 rounded-lg">
-            <div className="flex flex-col sm:flex-row items-start gap-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
                   Rebalanceamento Recomendado
                 </p>
                 <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                  {maxDeviation > 0 && (
+                    <>Desvio máximo detectado: <strong>{(maxDeviation * 100).toFixed(1)}%</strong>. </>
+                  )}
                   Alguns ativos estão fora da alocação alvo. Considere
                   rebalancear sua carteira.
                 </p>
               </div>
+              <Button
+                onClick={handleGenerateRebalancing}
+                disabled={generatingRebalancing}
+                size="sm"
+                variant="default"
+                className="w-full sm:w-auto flex-shrink-0 bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {generatingRebalancing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Gerando...
+                  </>
+                ) : (
+                  <>
+                    <Scale className="h-4 w-4 mr-2" />
+                    Gerar Sugestões
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         )}

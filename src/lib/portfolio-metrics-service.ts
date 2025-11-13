@@ -789,7 +789,9 @@ export class PortfolioMetricsService {
     let totalDividends = 0;
 
     for (const tx of transactions) {
-      if (tx.type === 'CASH_CREDIT') {
+      if (tx.type === 'CASH_CREDIT' || tx.type === 'MONTHLY_CONTRIBUTION') {
+        // 🔧 CORREÇÃO: MONTHLY_CONTRIBUTION também é um aporte (dinheiro novo na carteira)
+        // Deve ser contado como investimento, não como lucro
         totalCashCredits += Number(tx.amount);
       } else if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
         totalPurchases += Number(tx.amount);
@@ -813,7 +815,7 @@ export class PortfolioMetricsService {
       totalWithdrawn: totalWithdrawn.toFixed(2),
       totalDividends: totalDividends.toFixed(2),
       totalInvested: totalInvested.toFixed(2),
-      note: 'Apenas CASH_DEBIT é saque real'
+      note: 'CASH_CREDIT e MONTHLY_CONTRIBUTION são aportes (investimento). Apenas CASH_DEBIT é saque real'
     });
 
     return { totalInvested, totalWithdrawn, totalDividends };

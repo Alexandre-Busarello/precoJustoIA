@@ -286,7 +286,9 @@ export class PortfolioAnalyticsService {
         if (tx.date > txProcessingDate) break;
 
         // Process this transaction
-        if (tx.type === 'CASH_CREDIT') {
+        if (tx.type === 'CASH_CREDIT' || tx.type === 'MONTHLY_CONTRIBUTION') {
+          // 🔧 CORREÇÃO: MONTHLY_CONTRIBUTION também é um aporte (dinheiro novo na carteira)
+          // Deve ser contado como investimento, não como lucro
           cashBalance += Number(tx.amount);
           totalInvested += Number(tx.amount); // Acumula aportes
         } else if (tx.type === 'DIVIDEND') {

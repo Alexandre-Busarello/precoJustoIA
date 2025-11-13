@@ -20,8 +20,10 @@ import {
 import { usePremiumStatus } from "@/hooks/use-premium-status";
 import { PortfolioMetricsCard } from "@/components/portfolio-metrics-card";
 import { PortfolioHoldingsTable } from "@/components/portfolio-holdings-table";
+import { PortfolioClosedPositionsTable } from "@/components/portfolio-closed-positions-table";
 import { PortfolioTransactionList } from "@/components/portfolio-transaction-list";
 import { PortfolioTransactionSuggestions } from "@/components/portfolio-transaction-suggestions";
+import { PortfolioPendingTransactionsCTA } from "@/components/portfolio-pending-transactions-cta";
 import { PortfolioConfigForm } from "@/components/portfolio-config-form";
 import { PortfolioTransactionForm } from "@/components/portfolio-transaction-form";
 import { ConvertBacktestModal } from "@/components/convert-backtest-modal";
@@ -732,12 +734,11 @@ function PortfolioOverview({
             Nova Transação
           </Button>
         </div>
-        <PortfolioTransactionSuggestions
-          key={`overview-suggestions-${portfolioId}-${refreshKey}`}
+        <PortfolioPendingTransactionsCTA
+          key={`overview-pending-cta-${portfolioId}-${refreshKey}`}
           portfolioId={portfolioId}
           trackingStarted={trackingStarted}
-          onTrackingStart={handleUpdate}
-          onTransactionsConfirmed={handleUpdate}
+          onGoToTransactions={() => setActiveTab("transactions")}
         />
       </div>
 
@@ -745,6 +746,13 @@ function PortfolioOverview({
         <h3 className="text-lg font-semibold mb-4">Posições Atuais</h3>
         <PortfolioHoldingsTable
           key={`overview-holdings-${portfolioId}-${refreshKey}`}
+          portfolioId={portfolioId}
+        />
+      </div>
+
+      <div className="mt-6">
+        <PortfolioClosedPositionsTable
+          key={`overview-closed-${portfolioId}-${refreshKey}`}
           portfolioId={portfolioId}
         />
       </div>

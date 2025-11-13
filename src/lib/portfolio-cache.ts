@@ -27,6 +27,7 @@ const CACHE_KEYS = {
   holdings: (portfolioId: string) => `portfolio_holdings_${portfolioId}`,
   transactions: (portfolioId: string) => `portfolio_transactions_${portfolioId}`,
   suggestions: (portfolioId: string) => `portfolio_suggestions_${portfolioId}`,
+  closedPositions: (portfolioId: string) => `portfolio_closed_positions_${portfolioId}`,
   
   // Prefixo geral para limpeza em massa
   prefix: 'portfolio_',
@@ -177,6 +178,20 @@ export const suggestionsCache = {
     removeCacheData(CACHE_KEYS.suggestions(portfolioId)),
 };
 
+/**
+ * Cache de Closed Positions (Posições Encerradas)
+ */
+export const closedPositionsCache = {
+  get: (portfolioId: string) => 
+    getCacheData(CACHE_KEYS.closedPositions(portfolioId)),
+  
+  set: (portfolioId: string, data: any) => 
+    setCacheData(CACHE_KEYS.closedPositions(portfolioId), data, portfolioId),
+  
+  remove: (portfolioId: string) => 
+    removeCacheData(CACHE_KEYS.closedPositions(portfolioId)),
+};
+
 // ==================== INVALIDAÇÃO GLOBAL ====================
 
 /**
@@ -198,6 +213,7 @@ export function invalidateAllPortfolioCache(portfolioId: string): void {
   holdingsCache.remove(portfolioId);
   transactionsCache.remove(portfolioId);
   suggestionsCache.remove(portfolioId);
+  closedPositionsCache.remove(portfolioId);
   
   console.log(`✅ [CACHE] Todos os caches invalidados para: ${portfolioId}`);
 }
@@ -269,6 +285,7 @@ export const portfolioCache = {
   holdings: holdingsCache,
   transactions: transactionsCache,
   suggestions: suggestionsCache,
+  closedPositions: closedPositionsCache,
   
   // Ações globais
   invalidateAll: invalidateAllPortfolioCache,

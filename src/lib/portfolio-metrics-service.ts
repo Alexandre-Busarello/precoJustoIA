@@ -36,6 +36,19 @@ export interface PortfolioHolding {
   needsRebalancing: boolean; // True if absolute diff > 5% OR relative deviation > 20%
 }
 
+export interface ClosedPosition {
+  ticker: string;
+  averagePrice: number; // Preço médio de compra
+  totalInvested: number; // Total investido (compras)
+  totalSold: number; // Total recebido com vendas
+  realizedReturn: number; // Rentabilidade realizada (vendas - compras)
+  realizedReturnPercentage: number; // Percentual de rentabilidade realizada
+  totalDividends: number; // Total de dividendos recebidos (incluindo após sair da posição)
+  totalReturn: number; // Rentabilidade total (realizada + dividendos)
+  totalReturnPercentage: number; // Percentual de rentabilidade total
+  closedDate: Date; // Data em que a posição foi zerada
+}
+
 export interface PortfolioMetricsData {
   currentValue: number;
   cashBalance: number;
@@ -463,6 +476,254 @@ export class PortfolioMetricsService {
     }
 
     return holdings.sort((a, b) => b.currentValue - a.currentValue);
+  }
+
+  /**
+   * Get closed positions (assets that were fully sold)
+   * Calculates realized return and total return including dividends
+   */
+  static async getClosedPositions(portfolioId: string): Promise<ClosedPosition[]> {
+    console.log(`\n🔍 [CLOSED POSITIONS] Analyzing portfolio ${portfolioId}...`);
+    
+    // Get all executed transactions
+    const transactions = await prisma.portfolioTransaction.findMany({
+      where: {
+        portfolioId,
+        status: {
+          in: ['CONFIRMED', 'EXECUTED']
+        },
+        ticker: {
+          not: null
+        }
+      },
+      orderBy: {
+        date: 'asc'
+      }
+    });
+
+    console.log(`📊 [CLOSED POSITIONS] Found ${transactions.length} transactions`);
+
+    // Track positions over time
+    const positionHistory = new Map<string, {
+      quantity: number;
+      totalInvested: number;
+      totalSold: number;
+      lastTransactionDate: Date;
+    }>();
+
+    // Track all dividends by ticker (including after position closed)
+    const allDividendsByTicker = await this.getDividendsByTicker(portfolioId);
+
+    // Process transactions chronologically
+    for (const tx of transactions) {
+      if (!tx.ticker) continue;
+
+      const ticker = tx.ticker;
+      const current = positionHistory.get(ticker) || {
+        quantity: 0,
+        totalInvested: 0,
+        totalSold: 0,
+        lastTransactionDate: tx.date
+      };
+
+      if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
+        // Purchase: add quantity and invested amount
+        const quantity = Number(tx.quantity || 0);
+        const amount = Number(tx.amount);
+        
+        // Calculate new average price
+        const totalQuantity = current.quantity + quantity;
+        const totalInvested = current.totalInvested + amount;
+        
+        current.quantity = totalQuantity;
+        current.totalInvested = totalInvested;
+        current.lastTransactionDate = tx.date;
+      } else if (tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
+        // Sale: reduce quantity and track sale proceeds
+        const quantitySold = Number(tx.quantity || 0);
+        const saleAmount = Number(tx.amount);
+        
+        if (current.quantity > 0) {
+          // Calculate average cost per share
+          const averageCost = current.totalInvested / current.quantity;
+          
+          // Reduce quantity and invested proportionally
+          const costReduction = averageCost * quantitySold;
+          current.quantity -= quantitySold;
+          current.totalInvested -= costReduction;
+          current.totalSold += saleAmount;
+          current.lastTransactionDate = tx.date;
+        }
+      }
+
+      positionHistory.set(ticker, current);
+    }
+
+    // Find positions that are closed (quantity = 0) but had transactions
+    const closedPositions: ClosedPosition[] = [];
+
+    console.log(`📋 [CLOSED POSITIONS] Analyzing ${positionHistory.size} tickers in position history`);
+
+    for (const [ticker, position] of positionHistory) {
+      console.log(`\n🔍 [CLOSED POSITIONS] Checking ${ticker}:`, {
+        quantity: position.quantity,
+        totalInvested: position.totalInvested,
+        totalSold: position.totalSold
+      });
+
+      // First, check if there were any purchases for this ticker
+      // This is the source of truth - if there were purchases, we can have a closed position
+      let totalSharesBought = 0;
+      let originalTotalInvested = 0;
+      
+      for (const tx of transactions) {
+        if (tx.ticker !== ticker) continue;
+        if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
+          totalSharesBought += Number(tx.quantity || 0);
+          originalTotalInvested += Number(tx.amount);
+        }
+      }
+
+      console.log(`  📊 [CLOSED POSITIONS] ${ticker} summary:`, {
+        totalSharesBought,
+        originalTotalInvested,
+        currentQuantity: position.quantity,
+        totalSold: position.totalSold
+      });
+      
+      // Only include positions that:
+      // 1. Are fully closed (quantity = 0 or very close to 0 due to rounding)
+      // 2. Had purchases (originalTotalInvested > 0)
+      // 3. Had sales (totalSold > 0) - meaning we actually sold everything
+      const isClosed = Math.abs(position.quantity) < 0.01; // Allow for small rounding errors
+      if (isClosed && originalTotalInvested > 0 && position.totalSold > 0) {
+        console.log(`  ✅ [CLOSED POSITIONS] ${ticker} is CLOSED - adding to list`);
+        // Average price = total invested / total shares bought
+        const averagePrice = totalSharesBought > 0 
+          ? originalTotalInvested / totalSharesBought 
+          : 0;
+
+        // Realized return = total sold - original total invested
+        const realizedReturn = position.totalSold - originalTotalInvested;
+        const realizedReturnPercentage = originalTotalInvested > 0 
+          ? (realizedReturn / originalTotalInvested) 
+          : 0;
+
+        // Get all dividends for this ticker (including after position closed)
+        const totalDividends = allDividendsByTicker.get(ticker) || 0;
+        
+        // Total return = realized return + dividends
+        const totalReturn = realizedReturn + totalDividends;
+        const totalReturnPercentage = originalTotalInvested > 0 
+          ? (totalReturn / originalTotalInvested) 
+          : 0;
+
+        closedPositions.push({
+          ticker,
+          averagePrice,
+          totalInvested: originalTotalInvested,
+          totalSold: position.totalSold,
+          realizedReturn,
+          realizedReturnPercentage,
+          totalDividends,
+          totalReturn,
+          totalReturnPercentage,
+          closedDate: position.lastTransactionDate
+        });
+      } else {
+        console.log(`  ⏭️ [CLOSED POSITIONS] ${ticker} is NOT closed:`, {
+          isClosed,
+          hasPurchases: originalTotalInvested > 0,
+          hasSales: position.totalSold > 0
+        });
+      }
+    }
+
+    // Also check for tickers that had purchases but are not in positionHistory
+    // This can happen if all shares were sold in a single transaction
+    const tickersWithPurchases = new Set<string>();
+    for (const tx of transactions) {
+      if (tx.ticker && (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE')) {
+        tickersWithPurchases.add(tx.ticker);
+      }
+    }
+
+    for (const ticker of tickersWithPurchases) {
+      // Skip if already in closedPositions
+      if (closedPositions.some(p => p.ticker === ticker)) {
+        continue;
+      }
+
+      // Check if this ticker is not in positionHistory (meaning quantity is 0)
+      // or if it's in positionHistory but quantity is 0
+      const position = positionHistory.get(ticker);
+      const isNotInHistory = !position;
+      const isZeroInHistory = position && Math.abs(position.quantity) < 0.01;
+
+      if (isNotInHistory || isZeroInHistory) {
+        // Calculate totals from transactions
+        let totalSharesBought = 0;
+        let originalTotalInvested = 0;
+        let totalSold = 0;
+        let lastSaleDate: Date | null = null;
+
+        for (const tx of transactions) {
+          if (tx.ticker !== ticker) continue;
+          if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
+            totalSharesBought += Number(tx.quantity || 0);
+            originalTotalInvested += Number(tx.amount);
+          } else if (tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
+            totalSold += Number(tx.amount);
+            if (!lastSaleDate || tx.date > lastSaleDate) {
+              lastSaleDate = tx.date;
+            }
+          }
+        }
+
+        // If we had purchases and sales, and total sold > 0, it's a closed position
+        if (originalTotalInvested > 0 && totalSold > 0 && lastSaleDate) {
+          console.log(`  ✅ [CLOSED POSITIONS] ${ticker} found via transaction analysis - adding to list`);
+
+          const averagePrice = totalSharesBought > 0 
+            ? originalTotalInvested / totalSharesBought 
+            : 0;
+
+          const realizedReturn = totalSold - originalTotalInvested;
+          const realizedReturnPercentage = originalTotalInvested > 0 
+            ? (realizedReturn / originalTotalInvested) 
+            : 0;
+
+          const totalDividends = allDividendsByTicker.get(ticker) || 0;
+          const totalReturn = realizedReturn + totalDividends;
+          const totalReturnPercentage = originalTotalInvested > 0 
+            ? (totalReturn / originalTotalInvested) 
+            : 0;
+
+          closedPositions.push({
+            ticker,
+            averagePrice,
+            totalInvested: originalTotalInvested,
+            totalSold,
+            realizedReturn,
+            realizedReturnPercentage,
+            totalDividends,
+            totalReturn,
+            totalReturnPercentage,
+            closedDate: lastSaleDate
+          });
+        }
+      }
+    }
+
+    console.log(`\n✅ [CLOSED POSITIONS] Found ${closedPositions.length} closed positions`);
+    closedPositions.forEach(pos => {
+      console.log(`  - ${pos.ticker}: Investido R$ ${pos.totalInvested.toFixed(2)}, Vendido R$ ${pos.totalSold.toFixed(2)}, Retorno ${(pos.realizedReturnPercentage * 100).toFixed(2)}%`);
+    });
+
+    // Sort by closed date (most recent first)
+    return closedPositions.sort((a, b) => 
+      b.closedDate.getTime() - a.closedDate.getTime()
+    );
   }
 
   /**

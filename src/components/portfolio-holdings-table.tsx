@@ -50,15 +50,67 @@ export function PortfolioHoldingsTable({
   const [shouldShowRebalancing, setShouldShowRebalancing] = useState(false);
   const [maxDeviation, setMaxDeviation] = useState(0);
   const [generatingRebalancing, setGeneratingRebalancing] = useState(false);
+  const [hasPendingContributions, setHasPendingContributions] = useState(false);
+  const [pendingContributionsCount, setPendingContributionsCount] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
       await loadHoldings();
       await checkRebalancingNeeded();
+      await checkPendingContributions();
     };
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId]);
+
+  // Re-check pending contributions when transactions change
+  useEffect(() => {
+    const handleTransactionUpdate = async () => {
+      // Small delay to ensure backend has processed the transaction
+      setTimeout(async () => {
+        await checkPendingContributions();
+        await checkRebalancingNeeded();
+      }, 500);
+    };
+
+    // Listen for transaction updates
+    window.addEventListener('transaction-updated', handleTransactionUpdate);
+    window.addEventListener('reload-suggestions', handleTransactionUpdate);
+    window.addEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+
+    return () => {
+      window.removeEventListener('transaction-updated', handleTransactionUpdate);
+      window.removeEventListener('reload-suggestions', handleTransactionUpdate);
+      window.removeEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolioId]);
+
+  const checkPendingContributions = async () => {
+    try {
+      const response = await fetch(
+        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const contributionTx = (data.transactions || []).filter(
+          (tx: any) => 
+            tx.type !== 'SELL_REBALANCE' && 
+            tx.type !== 'BUY_REBALANCE' &&
+            (tx.type === 'MONTHLY_CONTRIBUTION' || 
+             tx.type === 'CASH_CREDIT' || 
+             tx.type === 'BUY' || 
+             tx.type === 'DIVIDEND')
+        );
+        
+        setHasPendingContributions(contributionTx.length > 0);
+        setPendingContributionsCount(contributionTx.length);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar transações pendentes de contribuição:', error);
+    }
+  };
 
   const checkRebalancingNeeded = async () => {
     try {
@@ -77,6 +129,16 @@ export function PortfolioHoldingsTable({
   };
 
   const handleGenerateRebalancing = async () => {
+    // Don't allow if there are pending contributions
+    if (hasPendingContributions) {
+      toast({
+        title: 'Atenção',
+        description: `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       setGeneratingRebalancing(true);
 
@@ -388,23 +450,38 @@ export function PortfolioHoldingsTable({
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
-                  Rebalanceamento Recomendado
-                </p>
-                <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
-                  {maxDeviation > 0 && (
-                    <>Desvio máximo detectado: <strong>{(maxDeviation * 100).toFixed(1)}%</strong>. </>
-                  )}
-                  Alguns ativos estão fora da alocação alvo. Considere
-                  rebalancear sua carteira.
-                </p>
+                {hasPendingContributions ? (
+                  <>
+                    <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
+                      ⚠️ Atenção
+                    </p>
+                    <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                      Você tem <strong>{pendingContributionsCount} transação(ões) pendente(s)</strong> na seção &quot;Aportes e Compras&quot;. 
+                      Complete todas as transações de aportes e compras antes de gerar sugestões de rebalanceamento.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
+                      Rebalanceamento Recomendado
+                    </p>
+                    <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                      {maxDeviation > 0 && (
+                        <>Desvio máximo detectado: <strong>{(maxDeviation * 100).toFixed(1)}%</strong>. </>
+                      )}
+                      Alguns ativos estão fora da alocação alvo. Considere
+                      rebalancear sua carteira.
+                    </p>
+                  </>
+                )}
               </div>
               <Button
                 onClick={handleGenerateRebalancing}
-                disabled={generatingRebalancing}
+                disabled={generatingRebalancing || hasPendingContributions}
                 size="sm"
                 variant="default"
-                className="w-full sm:w-auto flex-shrink-0 bg-orange-600 hover:bg-orange-700 text-white"
+                className="w-full sm:w-auto flex-shrink-0 bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                title={hasPendingContributions ? `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"` : ''}
               >
                 {generatingRebalancing ? (
                   <>

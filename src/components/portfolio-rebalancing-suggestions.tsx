@@ -388,15 +388,15 @@ export function PortfolioRebalancingSuggestions({
   }
 
   return (
-    <Card className="border-2 border-orange-200 dark:border-orange-900">
-      <CardHeader>
+    <Card className="border-2 border-orange-200 dark:border-orange-900 overflow-hidden">
+      <CardHeader className="pb-3">
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Scale className="h-5 w-5 text-orange-600" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Scale className="h-5 w-5 text-orange-600 flex-shrink-0" />
               <CardTitle className="text-lg">Rebalanceamento</CardTitle>
               {shouldShow && maxDeviation > 0 && (
-                <Badge variant="destructive" className="ml-2">
+                <Badge variant="destructive" className="ml-2 flex-shrink-0">
                   Desvio: {(maxDeviation * 100).toFixed(1)}%
                 </Badge>
               )}
@@ -407,6 +407,7 @@ export function PortfolioRebalancingSuggestions({
               disabled={generating || hasPendingContributions}
               size="sm"
               variant="outline"
+              className="w-full sm:w-auto flex-shrink-0"
               title={hasPendingContributions ? `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"` : ''}
             >
               {generating ? (
@@ -424,16 +425,16 @@ export function PortfolioRebalancingSuggestions({
           )}
           </div>
           {shouldShow && deviationDetails && (
-            <p className="text-sm text-muted-foreground mt-2">{deviationDetails}</p>
+            <p className="text-sm text-muted-foreground mt-2 break-words overflow-wrap-anywhere">{deviationDetails}</p>
           )}
-        <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 rounded-md p-3 mt-2">
+        <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 rounded-md p-3 mt-2 overflow-hidden">
           {hasPendingContributions ? (
-            <p className="text-xs text-orange-800 dark:text-orange-200">
+            <p className="text-xs text-orange-800 dark:text-orange-200 break-words overflow-wrap-anywhere">
               <strong>⚠️ Atenção:</strong> Você tem <strong>{pendingContributionsCount} transação(ões) pendente(s)</strong> na seção &quot;Aportes e Compras&quot;. 
               Complete todas as transações de aportes e compras antes de gerar sugestões de rebalanceamento.
             </p>
           ) : (
-            <p className="text-xs text-orange-800 dark:text-orange-200">
+            <p className="text-xs text-orange-800 dark:text-orange-200 break-words overflow-wrap-anywhere">
               <strong>⚠️ Importante:</strong> O rebalanceamento deve ser feito apenas após confirmar os aportes do mês atual. 
               Isso garante que o rebalanceamento considere o dinheiro novo aportado.
             </p>
@@ -482,10 +483,10 @@ export function PortfolioRebalancingSuggestions({
           </div>
         </CardContent>
       ) : (
-        <CardContent>
+        <CardContent className="overflow-x-hidden">
           <div className="space-y-4">
             {/* Header Actions */}
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col sm:flex-row justify-end gap-2">
               {suggestions.length > 0 && (
                 <>
                   <Button
@@ -493,6 +494,7 @@ export function PortfolioRebalancingSuggestions({
                     disabled={generating || hasPendingContributions}
                     size="sm"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     title={hasPendingContributions ? `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"` : 'Recalcular sugestões de rebalanceamento'}
                   >
                     {generating ? (
@@ -508,12 +510,13 @@ export function PortfolioRebalancingSuggestions({
                     )}
                   </Button>
                   {suggestions.length > 1 && (
-                    <>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                       <Button
                         onClick={handleRejectAll}
                         disabled={rejectingAll}
                         size="sm"
                         variant="outline"
+                        className="w-full sm:w-auto"
                       >
                         {rejectingAll ? (
                           <>
@@ -531,17 +534,18 @@ export function PortfolioRebalancingSuggestions({
                         onClick={handleConfirmAll}
                         disabled={confirmingAll}
                         size="sm"
+                        className="w-full sm:w-auto"
                       >
                         {confirmingAll ? 'Confirmando...' : 'Confirmar Todas'}
                       </Button>
-                    </>
+                    </div>
                   )}
                 </>
               )}
             </div>
 
             {/* Transactions List - Sells first, then buys */}
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-x-hidden">
               {suggestions
                 .sort((a, b) => {
                   // Sort: SELL_REBALANCE first, then BUY_REBALANCE
@@ -552,15 +556,15 @@ export function PortfolioRebalancingSuggestions({
                 .map(tx => (
                 <div
                   key={tx.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3 overflow-hidden"
                 >
-                  <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                  <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0 overflow-hidden">
                     <div className="flex-shrink-0 mt-0.5">
                       {getTypeIcon(tx.type)}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">
+                        <span className="font-medium text-sm break-words">
                           {getTypeLabel(tx.type)}
                         </span>
                         {tx.ticker && (
@@ -573,17 +577,17 @@ export function PortfolioRebalancingSuggestions({
                         <span className="flex-shrink-0">
                           {format(parseLocalDate(tx.date), 'dd/MM/yyyy')}
                         </span>
-                        <span className="font-medium flex-shrink-0">
+                        <span className="font-medium flex-shrink-0 break-words">
                           R$ {tx.amount.toFixed(2)}
                         </span>
                         {tx.quantity && (
-                          <span className="flex-shrink-0">
+                          <span className="flex-shrink-0 break-words">
                             {tx.quantity.toFixed(0)} ações
                           </span>
                         )}
                       </div>
                       {tx.notes && (
-                        <p className="text-xs text-muted-foreground mt-1 break-words">
+                        <p className="text-xs text-muted-foreground mt-1 break-words overflow-wrap-anywhere">
                           {tx.notes}
                         </p>
                       )}
@@ -596,7 +600,7 @@ export function PortfolioRebalancingSuggestions({
                       variant="ghost"
                       onClick={() => handleConfirmSingle(tx.id)}
                       title="Confirmar"
-                      className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                      className="h-8 w-8 sm:h-9 sm:w-9 p-0 flex-shrink-0"
                     >
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                     </Button>
@@ -605,7 +609,7 @@ export function PortfolioRebalancingSuggestions({
                       variant="ghost"
                       onClick={() => handleRejectSingle(tx.id)}
                       title="Rejeitar"
-                      className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                      className="h-8 w-8 sm:h-9 sm:w-9 p-0 flex-shrink-0"
                     >
                       <XCircle className="h-4 w-4 text-red-600" />
                     </Button>

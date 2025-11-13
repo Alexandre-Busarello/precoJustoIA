@@ -282,19 +282,20 @@ export function PortfolioDividendSuggestions({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-green-600" />
+    <Card className="overflow-hidden">
+      <CardHeader className="overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 flex-shrink-0">
+            <DollarSign className="h-5 w-5 text-green-600 flex-shrink-0" />
             Dividendos
           </CardTitle>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
               onClick={generateSuggestions}
               disabled={generating}
+              className="w-full sm:w-auto"
             >
               {generating ? (
                 <>
@@ -314,6 +315,7 @@ export function PortfolioDividendSuggestions({
                 size="sm"
                 onClick={confirmAll}
                 disabled={confirmingAll}
+                className="w-full sm:w-auto"
               >
                 {confirmingAll ? (
                   <>
@@ -331,7 +333,7 @@ export function PortfolioDividendSuggestions({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="overflow-x-hidden">
         {suggestions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -339,41 +341,42 @@ export function PortfolioDividendSuggestions({
             <p className="text-sm mt-2">Clique em &quot;Gerar Sugestões&quot; para buscar dividendos disponíveis</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-x-hidden">
             {suggestions.map((suggestion) => (
               <div
                 key={suggestion.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors gap-3 overflow-hidden"
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 flex-shrink-0">
                       {suggestion.ticker}
                     </Badge>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm text-muted-foreground flex-shrink-0">
                       {format(new Date(suggestion.date), "dd/MM/yyyy", { locale: ptBR })}
                     </span>
                   </div>
-                  <p className="text-sm font-medium">
+                  <p className="text-sm font-medium break-words">
                     R$ {suggestion.amount.toFixed(2)}
                   </p>
                   {/* Show calculation: quantity x dividend per share */}
                   {suggestion.quantity && suggestion.price && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 break-words overflow-wrap-anywhere">
                       {suggestion.quantity.toFixed(0)} ações × R$ {suggestion.price.toFixed(4)}/ação = R$ {suggestion.amount.toFixed(2)}
                     </p>
                   )}
                   {suggestion.notes && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 break-words overflow-wrap-anywhere">
                       {suggestion.notes}
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 sm:flex-shrink-0 justify-end sm:justify-start">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => confirmTransaction(suggestion.id)}
+                    className="flex-shrink-0"
                   >
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                   </Button>
@@ -381,6 +384,7 @@ export function PortfolioDividendSuggestions({
                     variant="outline"
                     size="sm"
                     onClick={() => rejectTransaction(suggestion.id)}
+                    className="flex-shrink-0"
                   >
                     <XCircle className="h-4 w-4 text-red-600" />
                   </Button>

@@ -114,16 +114,22 @@ export function PortfolioTransactionSuggestions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId, trackingStarted]);
 
-  // Safety filter: Ensure suggestions state never contains rebalancing transactions
+  // Safety filter: Ensure suggestions state never contains rebalancing or dividend transactions
   useEffect(() => {
-    const hasRebalancing = suggestions.some(
-      (tx) => tx.type === 'SELL_REBALANCE' || tx.type === 'BUY_REBALANCE'
+    const hasInvalidTypes = suggestions.some(
+      (tx) => 
+        tx.type === 'SELL_REBALANCE' || 
+        tx.type === 'BUY_REBALANCE' ||
+        tx.type === 'DIVIDEND'
     );
     
-    if (hasRebalancing) {
-      console.warn('⚠️ Found rebalancing transactions in contribution suggestions, filtering out...');
+    if (hasInvalidTypes) {
+      console.warn('⚠️ Found invalid transaction types in contribution suggestions, filtering out...');
       const filtered = suggestions.filter(
-        (tx) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+        (tx) => 
+          tx.type !== 'SELL_REBALANCE' && 
+          tx.type !== 'BUY_REBALANCE' &&
+          tx.type !== 'DIVIDEND'
       );
       setSuggestions(filtered);
     }
@@ -205,7 +211,7 @@ export function PortfolioTransactionSuggestions({
 
     // Set up polling to check cash balance changes every 2 seconds
     // This will detect changes from other tabs/components
-    const interval = setInterval(checkCashBalanceAndRegenerate, 2000);
+    const interval = setInterval(checkCashBalanceAndRegenerate, 120000);
 
     return () => {
       clearInterval(interval);
@@ -337,9 +343,12 @@ export function PortfolioTransactionSuggestions({
         
         if (cached && Array.isArray(cached) && cached.length > 0) {
           console.log('📦 [CACHE] Found cached suggestions, using them');
-          // Filter out rebalancing transactions from cache
+          // Filter out rebalancing and dividend transactions from cache
           const filteredCached = cached.filter(
-            (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+            (tx: any) => 
+              tx.type !== 'SELL_REBALANCE' && 
+              tx.type !== 'BUY_REBALANCE' &&
+              tx.type !== 'DIVIDEND'
           );
           if (filteredCached.length > 0) {
             console.log(`📦 [CACHE] Using ${filteredCached.length} cached suggestions`);
@@ -388,9 +397,12 @@ export function PortfolioTransactionSuggestions({
             );
           }
           
-          // Filter out rebalancing transactions (they have their own component)
+          // Filter out rebalancing and dividend transactions (they have their own components)
           const pendingTx = allPendingTx.filter(
-            (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+            (tx: any) => 
+              tx.type !== 'SELL_REBALANCE' && 
+              tx.type !== 'BUY_REBALANCE' &&
+              tx.type !== 'DIVIDEND'
           );
           
           console.log(`📊 Found ${pendingTx.length} contribution-related pending transactions`);
@@ -425,9 +437,12 @@ export function PortfolioTransactionSuggestions({
               
               if (reloadResponse.ok) {
                 const reloadData = await reloadResponse.json();
-                // Filter out rebalancing transactions
+                // Filter out rebalancing and dividend transactions
                 const filteredTx = (reloadData.transactions || []).filter(
-                  (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+                  (tx: any) => 
+                    tx.type !== 'SELL_REBALANCE' && 
+                    tx.type !== 'BUY_REBALANCE' &&
+                    tx.type !== 'DIVIDEND'
                 );
                 portfolioCache.suggestions.set(portfolioId, filteredTx);
                 setSuggestions(filteredTx);
@@ -996,9 +1011,9 @@ export function PortfolioTransactionSuggestions({
   const monthGroups = groupByMonth();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-x-hidden">
       {/* Header */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 overflow-x-hidden">
         <div className="flex items-center gap-2">
           <DollarSign className="h-5 w-5 text-blue-600 flex-shrink-0" />
           <h3 className="font-semibold text-sm sm:text-base">
@@ -1011,17 +1026,17 @@ export function PortfolioTransactionSuggestions({
           )}
         </div>
         
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex flex-col sm:flex-row gap-2 overflow-x-hidden">
           <Button
             onClick={handleRecalculateSuggestions}
             disabled={recalculating}
             size="sm"
             variant="ghost"
             title="Recalcular sugestões de transações"
-            className="text-xs flex-shrink-0 cursor-pointer hover:no-underline"
+            className="text-xs flex-shrink-0 cursor-pointer hover:no-underline w-full sm:w-auto"
           >
             <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
-            <span className="ml-2 hidden sm:inline">Recalcular</span>
+            <span className="ml-2">Recalcular</span>
           </Button>
           
           {contributionSuggestions.length > 1 && (
@@ -1029,7 +1044,7 @@ export function PortfolioTransactionSuggestions({
               onClick={handleConfirmAll}
               disabled={confirmingAll}
               size="sm"
-              className="flex-shrink-0 text-xs sm:text-sm cursor-pointer hover:no-underline"
+              className="flex-shrink-0 text-xs sm:text-sm cursor-pointer hover:no-underline w-full sm:w-auto"
             >
               {confirmingAll ? 'Confirmando...' : 'Confirmar Todas'}
             </Button>
@@ -1044,14 +1059,14 @@ export function PortfolioTransactionSuggestions({
         const isRejectingThisMonth = rejectingMonth === month;
         
         return (
-          <Card key={month}>
+          <Card key={month} className="overflow-hidden">
             <Collapsible open={isExpanded} onOpenChange={() => toggleMonth(month)}>
               <CollapsibleTrigger asChild>
-                <CardHeader className="pb-3 cursor-pointer hover:bg-accent/50 transition-colors">
-                  <div className="flex items-center justify-between min-w-0">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                <CardHeader className="pb-3 cursor-pointer hover:bg-accent/50 transition-colors overflow-hidden">
+                  <div className="flex items-center justify-between min-w-0 gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                       <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <CardTitle className="text-base capitalize truncate">{month}</CardTitle>
+                      <CardTitle className="text-base capitalize truncate break-words">{month}</CardTitle>
                       <Badge variant="outline" className="flex-shrink-0">{transactions.length}</Badge>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
@@ -1109,15 +1124,15 @@ export function PortfolioTransactionSuggestions({
                     {transactions.map(tx => (
                       <div
                         key={tx.id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3"
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3 overflow-hidden"
                       >
-                        <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                        <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0 overflow-hidden">
                           <div className="flex-shrink-0 mt-0.5">
                             {getTypeIcon(tx.type)}
                           </div>
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 overflow-hidden">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium text-sm">
+                              <span className="font-medium text-sm break-words">
                                 {getTypeLabel(tx.type)}
                               </span>
                               {tx.ticker && (
@@ -1130,17 +1145,17 @@ export function PortfolioTransactionSuggestions({
                               <span className="flex-shrink-0">
                                 {format(parseLocalDate(tx.date), 'dd/MM/yyyy')}
                               </span>
-                              <span className="font-medium flex-shrink-0">
+                              <span className="font-medium flex-shrink-0 break-words">
                                 R$ {tx.amount.toFixed(2)}
                               </span>
                               {tx.quantity && (
-                                <span className="flex-shrink-0">
+                                <span className="flex-shrink-0 break-words">
                                   {tx.quantity.toFixed(0)} ações
                                 </span>
                               )}
                             </div>
                             {tx.notes && (
-                              <p className="text-xs text-muted-foreground mt-1 break-words">
+                              <p className="text-xs text-muted-foreground mt-1 break-words overflow-wrap-anywhere">
                                 {tx.notes}
                               </p>
                             )}
@@ -1153,7 +1168,7 @@ export function PortfolioTransactionSuggestions({
                             variant="ghost"
                             onClick={() => handleConfirmSingle(tx.id)}
                             title="Confirmar"
-                            className="h-8 w-8 sm:h-9 sm:w-9 p-0 cursor-pointer hover:no-underline"
+                            className="h-8 w-8 sm:h-9 sm:w-9 p-0 cursor-pointer hover:no-underline flex-shrink-0"
                             disabled={isConfirmingThisMonth || isRejectingThisMonth}
                           >
                             <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -1163,7 +1178,7 @@ export function PortfolioTransactionSuggestions({
                             variant="ghost"
                             onClick={() => handleRejectSingle(tx.id)}
                             title="Rejeitar"
-                            className="h-8 w-8 sm:h-9 sm:w-9 p-0 cursor-pointer hover:no-underline"
+                            className="h-8 w-8 sm:h-9 sm:w-9 p-0 cursor-pointer hover:no-underline flex-shrink-0"
                             disabled={isConfirmingThisMonth || isRejectingThisMonth}
                           >
                             <XCircle className="h-4 w-4 text-red-600" />

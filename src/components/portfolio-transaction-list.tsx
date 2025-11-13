@@ -261,6 +261,17 @@ export function PortfolioTransactionList({
       portfolioCache.invalidateAll(portfolioId);
       invalidateDashboardPortfoliosCache();
 
+      // Dispatch event for cash flow change to trigger suggestion regeneration
+      if (editingTransaction) {
+        window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+          detail: {
+            transactionType: editingTransaction.type,
+            portfolioId: portfolioId,
+            action: 'updated'
+          }
+        }));
+      }
+
       setShowEditModal(false);
       setEditingTransaction(null);
       loadTransactions();
@@ -306,6 +317,17 @@ export function PortfolioTransactionList({
       // Invalidar todos os caches da carteira e dashboard
       portfolioCache.invalidateAll(portfolioId);
       invalidateDashboardPortfoliosCache();
+
+      // Dispatch event for cash flow change to trigger suggestion regeneration
+      if (deletingTransaction) {
+        window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+          detail: {
+            transactionType: deletingTransaction.type,
+            portfolioId: portfolioId,
+            action: 'deleted'
+          }
+        }));
+      }
 
       setShowDeleteDialog(false);
       setDeletingTransaction(null);

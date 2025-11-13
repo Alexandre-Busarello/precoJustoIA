@@ -135,86 +135,91 @@ export function PortfolioTransactionSuggestions({
     }
   }, [suggestions]);
 
-  // Track previous cash balance to detect changes
-  const previousCashBalanceRef = useRef<number | null>(null);
+  // Helper function to check if a transaction type affects cash flow
+  const transactionAffectsCashFlow = (transactionType: string): boolean => {
+    const cashFlowTypes = [
+      'CASH_CREDIT',
+      'MONTHLY_CONTRIBUTION',
+      'CASH_DEBIT',
+      'SELL_WITHDRAWAL',
+      'DIVIDEND'
+    ];
+    return cashFlowTypes.includes(transactionType);
+  };
 
-  // Monitor cash balance changes and auto-regenerate suggestions
+  // Listen for transaction events that affect cash flow
   useEffect(() => {
     if (!trackingStarted) return;
 
-    const checkCashBalanceAndRegenerate = async () => {
+    const handleCashFlowChange = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ transactionType: string; portfolioId?: string; action?: string }>;
+      const { transactionType, portfolioId: eventPortfolioId } = customEvent.detail || {};
+      
+      // Only process events for this portfolio
+      if (eventPortfolioId && eventPortfolioId !== portfolioId) return;
+      
+      // Only regenerate if transaction affects cash flow
+      if (!transactionType || !transactionAffectsCashFlow(transactionType)) {
+        return;
+      }
+
+      console.log('💰 [CASH_FLOW_EVENT] Transaction affecting cash flow detected:', {
+        transactionType,
+        portfolioId: eventPortfolioId || portfolioId,
+        action: customEvent.detail?.action
+      });
+
       try {
+        // Check status first to see if we need to regenerate
         const statusResponse = await fetch(
           `/api/portfolio/${portfolioId}/transactions/suggestions/status`
         );
+        
         if (statusResponse.ok) {
           const statusData = await statusResponse.json();
-          const currentCashBalance = statusData.cashBalance || 0;
           
           // Update suggestion status
           setSuggestionStatus({
             isRecent: statusData.isRecent,
             needsRegeneration: statusData.needsRegeneration,
-            cashBalance: currentCashBalance,
+            cashBalance: statusData.cashBalance || 0,
             hasCashAvailable: statusData.hasCashAvailable || false
           });
 
-          // Check if cash balance changed significantly (> R$ 0.01)
-          if (previousCashBalanceRef.current !== null) {
-            const cashChange = Math.abs(currentCashBalance - previousCashBalanceRef.current);
-            
-            if (cashChange > 0.01) {
-              console.log('💰 [CASH_CHANGED] Cash balance changed, regenerating suggestions', {
-                previous: previousCashBalanceRef.current,
-                current: currentCashBalance,
-                change: cashChange
-              });
+          // Auto-regenerate suggestions when cash flow changes
+          // Only if there are no pending buy suggestions (to avoid loops)
+          if (!statusData.hasPendingBuySuggestions) {
+            try {
+              await fetch(
+                `/api/portfolio/${portfolioId}/transactions/suggestions/contributions`,
+                { method: 'POST' }
+              );
               
-              // Auto-regenerate suggestions when cash changes
-              // Only if there are no pending buy suggestions (to avoid loops)
-              if (!statusData.hasPendingBuySuggestions) {
-                try {
-                  await fetch(
-                    `/api/portfolio/${portfolioId}/transactions/suggestions/contributions`,
-                    { method: 'POST' }
-                  );
-                  
-                  // Reload suggestions after a short delay
-                  setTimeout(() => {
-                    // Use window.location.reload or call loadSuggestions via state update
-                    // to avoid dependency issues
-                    window.dispatchEvent(new Event('reload-suggestions'));
-                  }, 500);
-                } catch (error) {
-                  console.error('Error auto-regenerating suggestions:', error);
-                }
-              }
+              // Reload suggestions after a short delay
+              setTimeout(() => {
+                loadSuggestions(true);
+              }, 500);
+            } catch (error) {
+              console.error('Error auto-regenerating suggestions:', error);
             }
           }
-          
-          // Update previous cash balance
-          previousCashBalanceRef.current = currentCashBalance;
         }
       } catch (error) {
-        console.error('Error checking cash balance:', error);
+        console.error('Error handling cash flow change:', error);
       }
     };
 
-    // Listen for reload event
+    // Listen for reload event (for other triggers)
     const handleReload = () => {
       loadSuggestions(true);
     };
+
+    // Listen for cash flow change events
+    window.addEventListener('transaction-cash-flow-changed', handleCashFlowChange);
     window.addEventListener('reload-suggestions', handleReload);
 
-    // Initial check
-    checkCashBalanceAndRegenerate();
-
-    // Set up polling to check cash balance changes every 2 seconds
-    // This will detect changes from other tabs/components
-    const interval = setInterval(checkCashBalanceAndRegenerate, 120000);
-
     return () => {
-      clearInterval(interval);
+      window.removeEventListener('transaction-cash-flow-changed', handleCashFlowChange);
       window.removeEventListener('reload-suggestions', handleReload);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,8 +241,6 @@ export function PortfolioTransactionSuggestions({
               cashBalance: statusData.cashBalance || 0,
               hasCashAvailable: statusData.hasCashAvailable || false
             });
-            // Initialize previous cash balance
-            previousCashBalanceRef.current = statusData.cashBalance || 0;
           }
         } catch (error) {
           console.error('Error checking suggestion status:', error);

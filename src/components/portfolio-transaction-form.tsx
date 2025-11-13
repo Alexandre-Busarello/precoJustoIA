@@ -171,6 +171,15 @@ export function PortfolioTransactionForm({
       invalidatePortfolioAnalyticsCache(portfolioId);
       invalidateDashboardPortfoliosCache();
 
+      // Dispatch event for cash flow change to trigger suggestion regeneration
+      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+        detail: {
+          transactionType: type,
+          portfolioId: portfolioId,
+          action: 'created'
+        }
+      }));
+
       if (onSuccess) {
         onSuccess();
       }
@@ -216,6 +225,24 @@ export function PortfolioTransactionForm({
 
       // Invalidar cache de dashboard também
       invalidateDashboardPortfoliosCache();
+
+      // Dispatch event for cash flow change (both CASH_CREDIT and the transaction type)
+      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+        detail: {
+          transactionType: 'CASH_CREDIT',
+          portfolioId: portfolioId,
+          action: 'created'
+        }
+      }));
+      if (pendingTransactionData?.type) {
+        window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+          detail: {
+            transactionType: pendingTransactionData.type,
+            portfolioId: portfolioId,
+            action: 'created'
+          }
+        }));
+      }
 
       if (onSuccess) {
         onSuccess();

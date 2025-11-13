@@ -53,6 +53,7 @@ export function PortfolioRebalancingSuggestions({
   const [maxDeviation, setMaxDeviation] = useState(0);
   const [deviationDetails, setDeviationDetails] = useState('');
   const [confirmingAll, setConfirmingAll] = useState(false);
+  const [rejectingAll, setRejectingAll] = useState(false);
   const [hasPendingContributions, setHasPendingContributions] = useState(false);
   const [pendingContributionsCount, setPendingContributionsCount] = useState(0);
 
@@ -314,6 +315,51 @@ export function PortfolioRebalancingSuggestions({
     }
   };
 
+  const handleRejectAll = async () => {
+    if (!confirm(`Rejeitar todas as ${suggestions.length} transações de rebalanceamento?`)) {
+      return;
+    }
+
+    try {
+      setRejectingAll(true);
+      
+      const transactionIds = suggestions.map(s => s.id);
+      
+      const response = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/reject-batch`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionIds })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao rejeitar transações');
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: `${suggestions.length} transações rejeitadas`
+      });
+
+      portfolioCache.invalidateAll(portfolioId);
+      await loadPendingRebalancing();
+      await checkRebalancingNeeded();
+      await checkPendingContributions();
+      
+      if (onTransactionsConfirmed) onTransactionsConfirmed();
+    } catch {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao rejeitar transações em lote',
+        variant: 'destructive'
+      });
+    } finally {
+      setRejectingAll(false);
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     if (type === 'SELL_REBALANCE') {
       return <ArrowUpCircle className="h-4 w-4 text-red-600" />;
@@ -439,15 +485,58 @@ export function PortfolioRebalancingSuggestions({
         <CardContent>
           <div className="space-y-4">
             {/* Header Actions */}
-            <div className="flex justify-end">
-              {suggestions.length > 1 && (
-                <Button
-                  onClick={handleConfirmAll}
-                  disabled={confirmingAll}
-                  size="sm"
-                >
-                  {confirmingAll ? 'Confirmando...' : 'Confirmar Todas'}
-                </Button>
+            <div className="flex justify-end gap-2">
+              {suggestions.length > 0 && (
+                <>
+                  <Button
+                    onClick={handleGenerateSuggestions}
+                    disabled={generating || hasPendingContributions}
+                    size="sm"
+                    variant="outline"
+                    title={hasPendingContributions ? `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"` : 'Recalcular sugestões de rebalanceamento'}
+                  >
+                    {generating ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Recalculando...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Recalcular
+                      </>
+                    )}
+                  </Button>
+                  {suggestions.length > 1 && (
+                    <>
+                      <Button
+                        onClick={handleRejectAll}
+                        disabled={rejectingAll}
+                        size="sm"
+                        variant="outline"
+                      >
+                        {rejectingAll ? (
+                          <>
+                            <XCircle className="h-4 w-4 mr-2 animate-spin" />
+                            Rejeitando...
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Rejeitar Todas
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleConfirmAll}
+                        disabled={confirmingAll}
+                        size="sm"
+                      >
+                        {confirmingAll ? 'Confirmando...' : 'Confirmar Todas'}
+                      </Button>
+                    </>
+                  )}
+                </>
               )}
             </div>
 

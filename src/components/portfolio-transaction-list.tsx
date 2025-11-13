@@ -126,11 +126,7 @@ export function PortfolioTransactionList({
       const params = new URLSearchParams();
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (filterType !== 'all') params.append('type', filterType);
-      // Exclude DIVIDEND transactions - they have their own section
-      params.append('excludeType', 'DIVIDEND');
-      
-      // Cache key includes filters
-      const cacheKey = `${portfolioId}_${filterStatus}_${filterType}`;
+      // Include all transaction types including DIVIDEND - history should be complete
       
       // Try cache first (unless force refresh or filters applied)
       if (!forceRefresh && filterStatus === 'all' && filterType === 'all') {
@@ -183,7 +179,8 @@ export function PortfolioTransactionList({
       'SELL_WITHDRAWAL': 4,      // Venda para saque
       'SELL_REBALANCE': 5,       // Venda de rebalanceamento
       'DIVIDEND': 6,             // Dividendo
-      'CASH_CREDIT': 7           // Aporte (primeira operação do dia, aparece por último na lista DESC)
+      'MONTHLY_CONTRIBUTION': 7, // Aporte Mensal
+      'CASH_CREDIT': 8           // Aporte (primeira operação do dia, aparece por último na lista DESC)
     };
 
     const sorted = [...txs].sort((a, b) => {
@@ -488,7 +485,7 @@ export function PortfolioTransactionList({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os tipos</SelectItem>
-            <SelectItem value="CASH_CREDIT">Aportes</SelectItem>
+            <SelectItem value="CASH_CREDIT,MONTHLY_CONTRIBUTION">Aportes</SelectItem>
             <SelectItem value="BUY,BUY_REBALANCE">Compras</SelectItem>
             <SelectItem value="SELL_REBALANCE,SELL_WITHDRAWAL">Vendas</SelectItem>
             <SelectItem value="DIVIDEND">Dividendos</SelectItem>
@@ -534,7 +531,16 @@ export function PortfolioTransactionList({
                     R$ {tx.amount.toFixed(2)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {tx.quantity ? tx.quantity.toFixed(0) : '-'}
+                    {tx.type === 'DIVIDEND' && tx.quantity && tx.price ? (
+                      <div className="flex flex-col items-end">
+                        <span>{tx.quantity.toFixed(0)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          × R$ {tx.price.toFixed(4)}/ação
+                        </span>
+                      </div>
+                    ) : (
+                      tx.quantity ? tx.quantity.toFixed(0) : '-'
+                    )}
                   </TableCell>
                   <TableCell>
                     {getStatusBadge(tx.status)}

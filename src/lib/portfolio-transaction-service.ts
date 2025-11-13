@@ -1802,6 +1802,7 @@ export class PortfolioTransactionService {
         const existingDividendsInMonth = existingDividendsByMonth.get(monthKey) || [];
 
         // Check if this dividend already exists (compare both per-share and total amounts)
+        // Only skip if transaction is CONFIRMED or EXECUTED (not PENDING or REJECTED)
         let shouldSkip = false;
         let skipReason = '';
         let matchedTransaction = null;
@@ -1832,15 +1833,18 @@ export class PortfolioTransactionService {
           if (isMatch) {
             matchedTransaction = existing;
             
-            if (existing.status === 'REJECTED') {
+            // Only skip if transaction is CONFIRMED or EXECUTED (same asset, same month, same value)
+            // REJECTED transactions can be suggested again (user might want to reconsider)
+            // PENDING transactions are already shown, so we skip to avoid duplicates
+            if (existing.status === 'CONFIRMED' || existing.status === 'EXECUTED') {
               shouldSkip = true;
-              skipReason = `Previously rejected by user`;
-            } else if (existing.status === 'CONFIRMED' || existing.status === 'EXECUTED') {
-              shouldSkip = true;
-              skipReason = `Already processed (${existing.status})`;
+              skipReason = `Already processed (${existing.status}) - same asset, same month, same value`;
             } else if (existing.status === 'PENDING') {
               shouldSkip = true;
               skipReason = `Already pending`;
+            } else if (existing.status === 'REJECTED') {
+              // Don't skip rejected transactions - allow user to reconsider
+              console.log(`🔄 [DIVIDEND REJECTED] ${ticker}: Previously rejected, but allowing re-suggestion`);
             }
             break;
           }

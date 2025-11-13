@@ -357,6 +357,12 @@ export function PortfolioDividendSuggestions({
                   <p className="text-sm font-medium">
                     R$ {suggestion.amount.toFixed(2)}
                   </p>
+                  {/* Show calculation: quantity x dividend per share */}
+                  {suggestion.quantity && suggestion.price && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {suggestion.quantity.toFixed(0)} ações × R$ {suggestion.price.toFixed(4)}/ação = R$ {suggestion.amount.toFixed(2)}
+                    </p>
+                  )}
                   {suggestion.notes && (
                     <p className="text-xs text-muted-foreground mt-1">
                       {suggestion.notes}

@@ -52,17 +52,29 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     // 🎯 RECALCULAR SUGESTÕES AUTOMATICAMENTE
     // Após rejeitar uma transação, novas sugestões devem ser geradas
     try {
+      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      
+      // Reset lastSuggestionsGeneratedAt to force regeneration
+      const { prisma } = await import('@/lib/prisma');
+      await prisma.portfolioConfig.update({
+        where: { id: resolvedParams.id },
+        data: { lastSuggestionsGeneratedAt: null }, // Reset to force regeneration
+      }).catch(() => {});
+      
       // Deletar transações pendentes antigas (que podem estar desatualizadas)
-      await fetch(`${process.env.NEXTAUTH_URL}/api/portfolio/${resolvedParams.id}/transactions/pending`, {
+      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/pending`, {
         method: 'DELETE'
-      });
+      }).catch(() => {});
       
-      // Gerar novas sugestões baseadas no novo estado da carteira
-      await fetch(`${process.env.NEXTAUTH_URL}/api/portfolio/${resolvedParams.id}/transactions/suggestions`, {
+      // Wait a bit to ensure transaction is fully processed
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Gerar novas sugestões de contribuição baseadas no novo estado da carteira
+      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/suggestions/contributions`, {
         method: 'POST'
-      });
+      }).catch(() => {});
       
-      console.log('✅ Sugestões recalculadas após rejeição de transação');
+      console.log('✅ Sugestões de contribuição recalculadas após rejeição de transação');
     } catch (suggestionError) {
       console.error('⚠️ Erro ao recalcular sugestões:', suggestionError);
       // Não falhar a rejeição por erro nas sugestões

@@ -30,6 +30,15 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     const body = await request.json().catch(() => ({}));
     
+    // Get transaction before confirming to check type
+    const { prisma } = await import('@/lib/prisma');
+    const transactionBeforeConfirm = await prisma.portfolioTransaction.findUnique({
+      where: { id: resolvedParams.transactionId },
+      select: { type: true, portfolioId: true }
+    });
+    
+    const isMonthlyContribution = transactionBeforeConfirm?.type === 'MONTHLY_CONTRIBUTION';
+    
     const updates: any = {};
     if (body.amount) updates.amount = Number(body.amount);
     if (body.price) updates.price = Number(body.price);
@@ -62,18 +71,36 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     // 🎯 RECALCULAR SUGESTÕES AUTOMATICAMENTE
     // Após confirmar uma transação, novas sugestões devem ser geradas
+    // Se foi um MONTHLY_CONTRIBUTION, especialmente importante gerar compras
     try {
+      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      
+      if (isMonthlyContribution) {
+        console.log('💰 [MONTHLY_CONFIRMED] Monthly contribution confirmed, will generate buy suggestions');
+      }
+      
+      // Reset lastSuggestionsGeneratedAt to force regeneration
+      // This ensures suggestions are regenerated when transactions affect cash flow
+      await prisma.portfolioConfig.update({
+        where: { id: resolvedParams.id },
+        data: { lastSuggestionsGeneratedAt: null }, // Reset to force regeneration
+      }).catch(() => {});
+      
       // Deletar transações pendentes antigas (que podem estar desatualizadas)
-      await fetch(`${process.env.NEXTAUTH_URL}/api/portfolio/${resolvedParams.id}/transactions/pending`, {
+      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/pending`, {
         method: 'DELETE'
-      });
+      }).catch(() => {});
       
-      // Gerar novas sugestões baseadas no novo estado da carteira
-      await fetch(`${process.env.NEXTAUTH_URL}/api/portfolio/${resolvedParams.id}/transactions/suggestions`, {
+      // Wait a bit to ensure transaction is fully processed
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Gerar novas sugestões de contribuição baseadas no novo estado da carteira
+      // This will generate buy suggestions if monthly contribution was confirmed
+      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/suggestions/contributions`, {
         method: 'POST'
-      });
+      }).catch(() => {});
       
-      console.log('✅ Sugestões recalculadas após confirmação de transação');
+      console.log('✅ Sugestões de contribuição recalculadas após confirmação de transação');
     } catch (suggestionError) {
       console.error('⚠️ Erro ao recalcular sugestões:', suggestionError);
       // Não falhar a confirmação por erro nas sugestões

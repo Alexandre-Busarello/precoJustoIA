@@ -349,6 +349,7 @@ model PortfolioConfig {
   
   // Status tracking
   lastTransactionDate DateTime? @map("last_transaction_date") @db.Date
+  lastSuggestionsGeneratedAt DateTime? @map("last_suggestions_generated_at") // Last time suggestions were generated
   isActive            Boolean  @default(true) @map("is_active")
   trackingStarted     Boolean  @default(false) @map("tracking_started") // Start auto suggestions
   
@@ -389,7 +390,8 @@ model PortfolioConfigAsset {
 }
 
 enum TransactionType {
-  CASH_CREDIT          // Monthly contribution to cash
+  CASH_CREDIT          // Manual contribution to cash
+  MONTHLY_CONTRIBUTION // Monthly contribution suggested by system
   CASH_DEBIT           // Manual cash withdrawal
   BUY                  // Asset purchase (contribution)
   SELL_REBALANCE       // Sale for rebalancing

@@ -1,8 +1,8 @@
 /**
- * Transaction Suggestions API
+ * Dividend Suggestions API
  * 
- * GET /api/portfolio/[id]/transactions/suggestions - Get suggested transactions
- * POST /api/portfolio/[id]/transactions/suggestions - Create pending transactions from suggestions
+ * GET /api/portfolio/[id]/transactions/suggestions/dividends - Get dividend suggestions
+ * POST /api/portfolio/[id]/transactions/suggestions/dividends - Create pending transactions from dividend suggestions
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,12 +16,11 @@ interface RouteContext {
 }
 
 /**
- * GET /api/portfolio/[id]/transactions/suggestions
- * Generate and return transaction suggestions
+ * GET /api/portfolio/[id]/transactions/suggestions/dividends
+ * Generate and return dividend suggestions
  */
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
-    // Await params (Next.js 15+)
     const resolvedParams = await params;
     
     const currentUser = await getCurrentUser();
@@ -30,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
-    const suggestions = await PortfolioTransactionService.getSuggestedTransactions(
+    const suggestions = await PortfolioTransactionService.getDividendSuggestions(
       resolvedParams.id,
       currentUser.id
     );
@@ -41,21 +40,20 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     });
 
   } catch (error) {
-    console.error('Erro ao gerar sugestões:', error);
+    console.error('Erro ao gerar sugestões de dividendos:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erro ao gerar sugestões' },
+      { error: error instanceof Error ? error.message : 'Erro ao gerar sugestões de dividendos' },
       { status: 500 }
     );
   }
 }
 
 /**
- * POST /api/portfolio/[id]/transactions/suggestions
- * Create pending transactions from suggestions
+ * POST /api/portfolio/[id]/transactions/suggestions/dividends
+ * Create pending transactions from dividend suggestions
  */
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
-    // Await params (Next.js 15+)
     const resolvedParams = await params;
     
     const currentUser = await getCurrentUser();
@@ -64,7 +62,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
-    const suggestions = await PortfolioTransactionService.getSuggestedTransactions(
+    const suggestions = await PortfolioTransactionService.getDividendSuggestions(
       resolvedParams.id,
       currentUser.id
     );
@@ -72,7 +70,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (suggestions.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'Nenhuma transação pendente para criar'
+        message: 'Nenhuma sugestão de dividendo para criar',
+        transactionIds: []
       });
     }
 
@@ -84,15 +83,14 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     return NextResponse.json({
       success: true,
-      transactionIds,
-      count: transactionIds.length,
-      message: `${transactionIds.length} transações pendentes criadas`
+      message: `${transactionIds.length} sugestão(ões) de dividendo criada(s)`,
+      transactionIds
     });
 
   } catch (error) {
-    console.error('Erro ao criar transações pendentes:', error);
+    console.error('Erro ao criar sugestões de dividendos:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erro ao criar transações pendentes' },
+      { error: error instanceof Error ? error.message : 'Erro ao criar sugestões de dividendos' },
       { status: 500 }
     );
   }

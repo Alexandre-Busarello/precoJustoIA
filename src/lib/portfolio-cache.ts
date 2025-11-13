@@ -28,10 +28,14 @@ const CACHE_KEYS = {
   transactions: (portfolioId: string) => `portfolio_transactions_${portfolioId}`,
   suggestions: (portfolioId: string) => `portfolio_suggestions_${portfolioId}`,
   closedPositions: (portfolioId: string) => `portfolio_closed_positions_${portfolioId}`,
+  dividends: (portfolioId: string) => `portfolio_dividends_${portfolioId}`,
   
   // Prefixo geral para limpeza em massa
   prefix: 'portfolio_',
 } as const;
+
+// TTL específico para dividendos: 24 horas
+const DIVIDENDS_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 horas
 
 // ==================== FUNÇÕES DE CACHE ====================
 
@@ -192,6 +196,20 @@ export const closedPositionsCache = {
     removeCacheData(CACHE_KEYS.closedPositions(portfolioId)),
 };
 
+/**
+ * Cache de Dividends (Dividendos) - TTL de 24 horas
+ */
+export const dividendsCache = {
+  get: (portfolioId: string) => 
+    getCacheData(CACHE_KEYS.dividends(portfolioId), DIVIDENDS_CACHE_DURATION),
+  
+  set: (portfolioId: string, data: any) => 
+    setCacheData(CACHE_KEYS.dividends(portfolioId), data, portfolioId),
+  
+  remove: (portfolioId: string) => 
+    removeCacheData(CACHE_KEYS.dividends(portfolioId)),
+};
+
 // ==================== INVALIDAÇÃO GLOBAL ====================
 
 /**
@@ -214,6 +232,7 @@ export function invalidateAllPortfolioCache(portfolioId: string): void {
   transactionsCache.remove(portfolioId);
   suggestionsCache.remove(portfolioId);
   closedPositionsCache.remove(portfolioId);
+  dividendsCache.remove(portfolioId);
   
   console.log(`✅ [CACHE] Todos os caches invalidados para: ${portfolioId}`);
 }
@@ -286,6 +305,7 @@ export const portfolioCache = {
   transactions: transactionsCache,
   suggestions: suggestionsCache,
   closedPositions: closedPositionsCache,
+  dividends: dividendsCache,
   
   // Ações globais
   invalidateAll: invalidateAllPortfolioCache,
@@ -295,5 +315,6 @@ export const portfolioCache = {
   
   // Constantes
   CACHE_DURATION,
+  DIVIDENDS_CACHE_DURATION,
 } as const;
 

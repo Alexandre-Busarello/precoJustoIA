@@ -14,7 +14,6 @@ import {
   ArrowUpCircle,
   DollarSign,
   Calendar,
-  AlertTriangle,
   RefreshCw,
   ChevronDown,
   ChevronRight
@@ -53,6 +52,12 @@ export function PortfolioTransactionSuggestions({
   onTrackingStart,
   onTransactionsConfirmed
 }: PortfolioTransactionSuggestionsProps) {
+  console.log('🎯 [COMPONENT_RENDER] PortfolioTransactionSuggestions rendered', { 
+    portfolioId, 
+    trackingStarted,
+    timestamp: new Date().toISOString()
+  });
+  
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestedTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,31 +68,97 @@ export function PortfolioTransactionSuggestions({
   const [confirmingMonth, setConfirmingMonth] = useState<string | null>(null);
   const [rejectingMonth, setRejectingMonth] = useState<string | null>(null);
   
+  // State to check if suggestions were generated recently
+  const [suggestionStatus, setSuggestionStatus] = useState<{
+    isRecent: boolean;
+    needsRegeneration: boolean;
+    cashBalance: number;
+    hasCashAvailable: boolean;
+  } | null>(null);
+  
   // Use ref for lock to survive re-renders (React StrictMode safe)
   const isCreatingSuggestionsRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
+  const lastPortfolioIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Prevent double-loading in React StrictMode (dev mode)
-    if (hasLoadedOnceRef.current) {
-      console.log('⏭️ Skipping duplicate useEffect call (StrictMode)');
+    console.log('🔄 [USE_EFFECT] Component mounted/updated', { 
+      portfolioId, 
+      trackingStarted, 
+      hasLoadedOnce: hasLoadedOnceRef.current,
+      lastPortfolioId: lastPortfolioIdRef.current
+    });
+    
+    // Reset hasLoadedOnce if portfolioId changed
+    if (lastPortfolioIdRef.current !== portfolioId) {
+      console.log('🔄 [PORTFOLIO_CHANGED] Portfolio ID changed, resetting load flag');
+      hasLoadedOnceRef.current = false;
+      lastPortfolioIdRef.current = portfolioId;
+    }
+    
+    // Prevent double-loading in React StrictMode (dev mode) - but only for same portfolio
+    if (hasLoadedOnceRef.current && lastPortfolioIdRef.current === portfolioId) {
+      console.log('⏭️ [STRICT_MODE] Skipping duplicate useEffect call (StrictMode)');
       return;
     }
     
     if (trackingStarted) {
+      console.log('✅ [TRACKING_STARTED] Loading suggestions...');
       hasLoadedOnceRef.current = true;
+      lastPortfolioIdRef.current = portfolioId;
       loadSuggestions();
     } else {
+      console.log('⏸️ [TRACKING_NOT_STARTED] Tracking not started, skipping suggestions');
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioId, trackingStarted]);
 
+  // Safety filter: Ensure suggestions state never contains rebalancing transactions
+  useEffect(() => {
+    const hasRebalancing = suggestions.some(
+      (tx) => tx.type === 'SELL_REBALANCE' || tx.type === 'BUY_REBALANCE'
+    );
+    
+    if (hasRebalancing) {
+      console.warn('⚠️ Found rebalancing transactions in contribution suggestions, filtering out...');
+      const filtered = suggestions.filter(
+        (tx) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+      );
+      setSuggestions(filtered);
+    }
+  }, [suggestions]);
+
+  // Check suggestion status when component mounts or when suggestions are empty
+  useEffect(() => {
+    if (suggestions.length === 0) {
+      const checkStatus = async () => {
+        try {
+          const statusResponse = await fetch(
+            `/api/portfolio/${portfolioId}/transactions/suggestions/status`
+          );
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            setSuggestionStatus({
+              isRecent: statusData.isRecent,
+              needsRegeneration: statusData.needsRegeneration,
+              cashBalance: statusData.cashBalance || 0,
+              hasCashAvailable: statusData.hasCashAvailable || false
+            });
+          }
+        } catch (error) {
+          console.error('Error checking suggestion status:', error);
+        }
+      };
+      checkStatus();
+    }
+  }, [portfolioId, suggestions.length]);
+
   const handleRecalculateSuggestions = async () => {
     try {
       setRecalculating(true);
       
-      // 1. Delete all pending transactions
+      // 1. Delete all pending transactions (including rebalancing ones)
       const deleteResponse = await fetch(
         `/api/portfolio/${portfolioId}/transactions/pending`,
         { method: 'DELETE' }
@@ -103,7 +174,9 @@ export function PortfolioTransactionSuggestions({
       isCreatingSuggestionsRef.current = false;
       hasLoadedOnceRef.current = false;
       hasAutoExpandedRef.current = false; // Reset auto-expand flag
-      await loadSuggestions();
+      
+      // Force refresh to reload from API
+      await loadSuggestions(true);
       
       toast({
         title: 'Sugestões recalculadas',
@@ -162,97 +235,205 @@ export function PortfolioTransactionSuggestions({
 
   const loadSuggestions = async (forceRefresh = false) => {
     try {
+      console.log('🔄 [LOAD_SUGGESTIONS] Starting...', { portfolioId, forceRefresh, trackingStarted });
       setLoading(true);
       
       // Try cache first (unless force refresh)
+      // IMPORTANT: Don't use cache if it's empty - we need to try generating suggestions
       if (!forceRefresh) {
         const cached = portfolioCache.suggestions.get(portfolioId) as any;
-        if (cached) {
-          setSuggestions(cached);
-          setLoading(false);
-          return;
+        console.log('📦 [CACHE_CHECK] Cache check', { 
+          hasCache: !!cached, 
+          isArray: Array.isArray(cached), 
+          length: Array.isArray(cached) ? cached.length : 0 
+        });
+        
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          console.log('📦 [CACHE] Found cached suggestions, using them');
+          // Filter out rebalancing transactions from cache
+          const filteredCached = cached.filter(
+            (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+          );
+          if (filteredCached.length > 0) {
+            console.log(`📦 [CACHE] Using ${filteredCached.length} cached suggestions`);
+            setSuggestions(filteredCached);
+            setLoading(false);
+            return;
+          } else {
+            console.log('📦 [CACHE] Cached suggestions filtered out (all rebalancing), will fetch from API');
+          }
+        } else {
+          console.log('📦 [CACHE] No cached suggestions or cache is empty, will fetch from API');
         }
+      } else {
+        console.log('🔄 [FORCE_REFRESH] Skipping cache, will fetch from API');
       }
       
       // First, get pending transactions that are already in the database
-      const pendingResponse = await fetch(
-        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+      // Filter only contribution-related transactions (exclude rebalancing)
+      try {
+        const pendingResponse = await fetch(
+          `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+        );
+
+        console.log('🔄 Pending response status:', pendingResponse.status);
+        
+        if (pendingResponse.ok) {
+          const pendingData = await pendingResponse.json();
+          const allPendingTx = pendingData.transactions || [];
+          
+          console.log(`📊 Found ${allPendingTx.length} total pending transactions`);
+          
+          // Separate rebalancing transactions to delete them
+          const rebalancingTx = allPendingTx.filter(
+            (tx: any) => tx.type === 'SELL_REBALANCE' || tx.type === 'BUY_REBALANCE'
+          );
+          
+          // Delete rebalancing transactions if found (they should be in their own component)
+          if (rebalancingTx.length > 0) {
+            console.log(`🧹 Found ${rebalancingTx.length} rebalancing transactions in contribution section, deleting...`);
+            await Promise.all(
+              rebalancingTx.map((tx: any) =>
+                fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
+                  method: 'DELETE'
+                }).catch(() => {})
+              )
+            );
+          }
+          
+          // Filter out rebalancing transactions (they have their own component)
+          const pendingTx = allPendingTx.filter(
+            (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+          );
+          
+          console.log(`📊 Found ${pendingTx.length} contribution-related pending transactions`);
+          
+          // If there are pending transactions, check for duplicates
+          if (pendingTx.length > 0) {
+            // Check for duplicates (same date, type, ticker)
+            const seen = new Set<string>();
+            let hasDuplicates = false;
+            
+            for (const tx of pendingTx) {
+              const key = `${tx.date}_${tx.type}_${tx.ticker || 'null'}`;
+              if (seen.has(key)) {
+                hasDuplicates = true;
+                break;
+              }
+              seen.add(key);
+            }
+            
+            // If duplicates found, clean them up
+            if (hasDuplicates) {
+              console.log('🧹 Duplicates detected, cleaning up...');
+              await fetch(
+                `/api/portfolio/${portfolioId}/transactions/cleanup-duplicates`,
+                { method: 'POST' }
+              );
+              
+              // Reload after cleanup
+              const reloadResponse = await fetch(
+                `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+              );
+              
+              if (reloadResponse.ok) {
+                const reloadData = await reloadResponse.json();
+                // Filter out rebalancing transactions
+                const filteredTx = (reloadData.transactions || []).filter(
+                  (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+                );
+                portfolioCache.suggestions.set(portfolioId, filteredTx);
+                setSuggestions(filteredTx);
+              }
+            } else {
+              portfolioCache.suggestions.set(portfolioId, pendingTx);
+              setSuggestions(pendingTx);
+            }
+            
+            setLoading(false);
+            return;
+          }
+        } else {
+          console.warn('⚠️ Failed to fetch pending transactions, will try to generate suggestions anyway');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching pending transactions:', error);
+        // Continue to generate suggestions even if fetch fails
+      }
+      
+      // If we reach here, there are no pending contribution transactions
+      // Check if we need to generate suggestions based on lastSuggestionsGeneratedAt
+      console.log('🔄 [NO_PENDING] No pending contribution transactions found, checking if we need to generate...');
+      
+      // Check suggestion status first
+      const statusResponse = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/suggestions/status`
       );
       
-      if (pendingResponse.ok) {
-        const pendingData = await pendingResponse.json();
-        const pendingTx = pendingData.transactions || [];
+      let needsRegeneration = true;
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json();
+        needsRegeneration = statusData.needsRegeneration;
+        const hasCashAvailable = statusData.hasCashAvailable || false;
+        const cashBalance = statusData.cashBalance || 0;
         
-        // If there are pending transactions, check for duplicates
-        if (pendingTx.length > 0) {
-          // Check for duplicates (same date, type, ticker)
-          const seen = new Set<string>();
-          let hasDuplicates = false;
-          
-          for (const tx of pendingTx) {
-            const key = `${tx.date}_${tx.type}_${tx.ticker || 'null'}`;
-            if (seen.has(key)) {
-              hasDuplicates = true;
-              break;
-            }
-            seen.add(key);
-          }
-          
-          // If duplicates found, clean them up
-          if (hasDuplicates) {
-            console.log('🧹 Duplicates detected, cleaning up...');
-            await fetch(
-              `/api/portfolio/${portfolioId}/transactions/cleanup-duplicates`,
-              { method: 'POST' }
-            );
-            
-            // Reload after cleanup
-            const reloadResponse = await fetch(
-              `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-            );
-            
-            if (reloadResponse.ok) {
-              const reloadData = await reloadResponse.json();
-              portfolioCache.suggestions.set(portfolioId, reloadData.transactions || []);
-              setSuggestions(reloadData.transactions || []);
-            }
-          } else {
-            portfolioCache.suggestions.set(portfolioId, pendingTx);
-            setSuggestions(pendingTx);
-          }
-          
+        console.log(`📅 [STATUS] lastSuggestionsGeneratedAt: ${statusData.lastSuggestionsGeneratedAt}, needsRegeneration: ${needsRegeneration}, isRecent: ${statusData.isRecent}, hasCashAvailable: ${hasCashAvailable}, cashBalance: R$ ${cashBalance.toFixed(2)}`);
+        
+        // If suggestions were generated recently (< 30 days) AND no cash available, just show empty state
+        // BUT if there's cash available, we should always generate buy suggestions
+        if (!needsRegeneration && !hasCashAvailable) {
+          console.log('✅ [RECENT] Suggestions were generated recently and no cash available, no need to regenerate');
+          portfolioCache.suggestions.set(portfolioId, []);
+          setSuggestions([]);
           setLoading(false);
           return;
+        }
+        
+        if (hasCashAvailable) {
+          console.log(`💰 [CASH_AVAILABLE] R$ ${cashBalance.toFixed(2)} available, will generate buy suggestions even if recently generated`);
         }
       }
       
       // Prevent concurrent creation of suggestions (use ref for React StrictMode)
       if (isCreatingSuggestionsRef.current) {
-        console.log('⏳ Already creating suggestions, skipping... (ref lock active)');
+        console.log('⏳ [LOCK] Already creating suggestions, skipping... (ref lock active)');
         setLoading(false);
         return;
       }
+
+      console.log('🔄 [GENERATE] Starting to generate suggestions (needsRegeneration=true)...');
       
-      // If no pending transactions, generate new suggestions
+      // Generate suggestions if needed (> 30 days since last generation)
+      console.log(`📡 [API_CALL] Calling GET /api/portfolio/${portfolioId}/transactions/suggestions/contributions`);
+      
+      // Use the new contributions endpoint (separate from rebalancing)
       const suggestionsResponse = await fetch(
-        `/api/portfolio/${portfolioId}/transactions/suggestions`
+        `/api/portfolio/${portfolioId}/transactions/suggestions/contributions`
       );
+
+      console.log('📡 [API_RESPONSE] Suggestions response status:', suggestionsResponse.status, suggestionsResponse.ok);
       
       if (!suggestionsResponse.ok) {
+        const errorText = await suggestionsResponse.text();
+        console.error('❌ Error generating suggestions:', errorText);
         throw new Error('Erro ao carregar sugestões');
       }
 
       const suggestionsData = await suggestionsResponse.json();
       const newSuggestions = suggestionsData.suggestions || [];
       
+      console.log(`📊 [SUGGESTIONS] Generated ${newSuggestions.length} new suggestions`, newSuggestions);
+      
       // If there are suggestions, create them as PENDING in the database
       if (newSuggestions.length > 0 && !isCreatingSuggestionsRef.current) {
-        console.log(`📝 Creating ${newSuggestions.length} new suggestions as PENDING...`);
+        console.log(`📝 [CREATE] Creating ${newSuggestions.length} new contribution suggestions as PENDING...`);
         isCreatingSuggestionsRef.current = true; // Lock acquired
+        
+        console.log(`📡 [API_CALL] Calling POST /api/portfolio/${portfolioId}/transactions/suggestions/contributions`);
         
         try {
           const createResponse = await fetch(
-            `/api/portfolio/${portfolioId}/transactions/suggestions`,
+            `/api/portfolio/${portfolioId}/transactions/suggestions/contributions`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' }
@@ -270,9 +451,13 @@ export function PortfolioTransactionSuggestions({
             
             if (reloadResponse.ok) {
               const reloadData = await reloadResponse.json();
-              portfolioCache.suggestions.set(portfolioId, reloadData.transactions || []);
-              setSuggestions(reloadData.transactions || []);
-              console.log(`✅ Loaded ${reloadData.transactions?.length || 0} PENDING transactions`);
+              // Filter out rebalancing transactions (they have their own component)
+              const filteredTx = (reloadData.transactions || []).filter(
+                (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+              );
+              portfolioCache.suggestions.set(portfolioId, filteredTx);
+              setSuggestions(filteredTx);
+              console.log(`✅ Loaded ${filteredTx.length} contribution PENDING transactions (excluded rebalancing)`);
             }
           } else {
             console.error('❌ Failed to create suggestions:', await createResponse.text());
@@ -282,6 +467,7 @@ export function PortfolioTransactionSuggestions({
           console.log('🔓 Lock released');
         }
       } else if (newSuggestions.length === 0) {
+        console.log('ℹ️ No suggestions generated (may be waiting for monthly contribution decision or no cash available)');
         portfolioCache.suggestions.set(portfolioId, []);
         setSuggestions([]);
       }
@@ -299,6 +485,10 @@ export function PortfolioTransactionSuggestions({
 
   const handleConfirmSingle = async (transactionId: string) => {
     try {
+      // Get transaction type before confirming to check if it's MONTHLY_CONTRIBUTION
+      const txToConfirm = suggestions.find(tx => tx.id === transactionId);
+      const isMonthlyContribution = txToConfirm?.type === 'MONTHLY_CONTRIBUTION';
+      
       const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`,
         { method: 'POST' }
@@ -315,11 +505,22 @@ export function PortfolioTransactionSuggestions({
 
       // Invalidar todos os caches da carteira
       portfolioCache.invalidateAll(portfolioId);
+      portfolioCache.suggestions.remove(portfolioId); // Clear suggestions cache specifically
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
       hasAutoExpandedRef.current = false; // Reset auto-expand flag
-      loadSuggestions();
+      
+      // If monthly contribution was confirmed, wait a bit then reload to get buy suggestions
+      if (isMonthlyContribution) {
+        console.log('💰 [MONTHLY_CONFIRMED] Monthly contribution confirmed, will reload to get buy suggestions');
+        setTimeout(() => {
+          loadSuggestions(true); // Force refresh to get buy suggestions
+        }, 1000);
+      } else {
+        loadSuggestions(true);
+      }
+      
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
       toast({
@@ -352,11 +553,12 @@ export function PortfolioTransactionSuggestions({
 
       // Invalidar todos os caches da carteira
       portfolioCache.invalidateAll(portfolioId);
+      portfolioCache.suggestions.remove(portfolioId); // Clear suggestions cache specifically
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
       hasAutoExpandedRef.current = false; // Reset auto-expand flag
-      loadSuggestions();
+      loadSuggestions(true); // Force refresh
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
       toast({
@@ -368,14 +570,19 @@ export function PortfolioTransactionSuggestions({
   };
 
   const handleConfirmAll = async () => {
-    if (!confirm(`Confirmar todas as ${suggestions.length} transações sugeridas?`)) {
+    // Filter out rebalancing transactions before confirming
+    const contributionOnly = suggestions.filter(
+      (tx) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+    );
+    
+    if (!confirm(`Confirmar todas as ${contributionOnly.length} transações de aportes e compras?`)) {
       return;
     }
 
     try {
       setConfirmingAll(true);
       
-      const transactionIds = suggestions.map(s => s.id);
+      const transactionIds = contributionOnly.map(s => s.id);
       
       const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/confirm-batch`,
@@ -392,16 +599,32 @@ export function PortfolioTransactionSuggestions({
 
       toast({
         title: 'Sucesso',
-        description: `${suggestions.length} transações confirmadas`
+        description: `${contributionOnly.length} transações confirmadas`
       });
 
       // Invalidar todos os caches da carteira
       portfolioCache.invalidateAll(portfolioId);
+      portfolioCache.suggestions.remove(portfolioId); // Clear suggestions cache specifically
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
       hasAutoExpandedRef.current = false; // Reset auto-expand flag
-      loadSuggestions();
+      
+      // Check if any confirmed transaction is MONTHLY_CONTRIBUTION
+      const hasMonthlyContribution = contributionOnly.some(
+        tx => tx.type === 'MONTHLY_CONTRIBUTION'
+      );
+      
+      // If monthly contribution was confirmed, wait a bit then reload to get buy suggestions
+      if (hasMonthlyContribution) {
+        console.log('💰 [BATCH_MONTHLY_CONFIRMED] Monthly contribution confirmed in batch, will reload to get buy suggestions');
+        setTimeout(() => {
+          loadSuggestions(true); // Force refresh to get buy suggestions
+        }, 1500); // Wait longer for batch processing
+      } else {
+        loadSuggestions(true); // Force refresh
+      }
+      
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
       toast({
@@ -415,7 +638,7 @@ export function PortfolioTransactionSuggestions({
   };
 
   const getTypeIcon = (type: string) => {
-    if (type === 'CASH_CREDIT' || type === 'DIVIDEND') {
+    if (type === 'CASH_CREDIT' || type === 'MONTHLY_CONTRIBUTION' || type === 'DIVIDEND') {
       return <ArrowDownCircle className="h-4 w-4 text-green-600" />;
     }
     if (type === 'CASH_DEBIT' || type.includes('SELL')) {
@@ -427,6 +650,7 @@ export function PortfolioTransactionSuggestions({
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       'CASH_CREDIT': 'Aporte',
+      'MONTHLY_CONTRIBUTION': 'Aporte Mensal',
       'CASH_DEBIT': 'Saque',
       'BUY': 'Compra',
       'SELL_REBALANCE': 'Venda (Rebal.)',
@@ -477,11 +701,12 @@ export function PortfolioTransactionSuggestions({
 
       // Invalidar todos os caches da carteira
       portfolioCache.invalidateAll(portfolioId);
+      portfolioCache.suggestions.remove(portfolioId); // Clear suggestions cache specifically
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
       hasAutoExpandedRef.current = false; // Reset auto-expand flag
-      loadSuggestions();
+      loadSuggestions(true); // Force refresh
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
       toast({
@@ -528,11 +753,12 @@ export function PortfolioTransactionSuggestions({
 
       // Invalidar todos os caches da carteira
       portfolioCache.invalidateAll(portfolioId);
+      portfolioCache.suggestions.remove(portfolioId); // Clear suggestions cache specifically
 
       // Reset lock before reloading
       isCreatingSuggestionsRef.current = false;
       hasAutoExpandedRef.current = false; // Reset auto-expand flag
-      loadSuggestions();
+      loadSuggestions(true); // Force refresh
       if (onTransactionsConfirmed) onTransactionsConfirmed();
     } catch {
       toast({
@@ -548,7 +774,12 @@ export function PortfolioTransactionSuggestions({
   const groupByMonth = () => {
     const groups: Record<string, SuggestedTransaction[]> = {};
     
-    suggestions.forEach(tx => {
+    // Filter out rebalancing transactions (safety check)
+    const contributionOnly = suggestions.filter(
+      (tx) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+    );
+    
+    contributionOnly.forEach(tx => {
       const monthKey = format(parseLocalDate(tx.date), 'MMMM yyyy', { locale: ptBR });
       if (!groups[monthKey]) {
         groups[monthKey] = [];
@@ -582,7 +813,14 @@ export function PortfolioTransactionSuggestions({
     }
   }, [suggestions]);
 
+  console.log('🎯 [RENDER_CHECK] Component render check', { 
+    loading, 
+    trackingStarted, 
+    suggestionsCount: suggestions.length 
+  });
+
   if (loading) {
+    console.log('⏳ [LOADING] Showing loading spinner');
     return (
       <div className="flex items-center justify-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -591,6 +829,7 @@ export function PortfolioTransactionSuggestions({
   }
 
   if (!trackingStarted) {
+    console.log('⏸️ [TRACKING_NOT_STARTED] Showing tracking not started card');
     return (
       <Card className="border-2 border-dashed border-blue-200 dark:border-blue-900">
         <CardContent className="py-12">
@@ -616,19 +855,57 @@ export function PortfolioTransactionSuggestions({
   }
 
   if (suggestions.length === 0) {
+    // Show "Tudo em dia" only if:
+    // 1. Suggestions were generated recently (< 30 days) AND
+    // 2. No cash available (if there's cash, we should suggest buys)
+    const shouldShowAllUpToDate = (suggestionStatus?.isRecent ?? false) && 
+      !(suggestionStatus?.hasCashAvailable ?? false);
+    
     return (
       <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-blue-600 flex-shrink-0" />
+            <CardTitle className="text-lg">Aportes e Compras</CardTitle>
+          </div>
+        </CardHeader>
         <CardContent className="py-8">
           <div className="text-center text-muted-foreground">
-            <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-600 opacity-50" />
-            <p className="font-medium">Tudo em dia!</p>
-            <p className="text-sm mt-1">Não há transações pendentes no momento</p>
+            {shouldShowAllUpToDate ? (
+              <>
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-600 opacity-50" />
+                <p className="font-medium">Tudo em dia!</p>
+                <p className="text-sm mt-1">Não há aportes ou compras pendentes no momento</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium mb-2">Nenhuma sugestão encontrada</p>
+                <p className="text-sm mt-1 mb-4">Clique no botão abaixo para gerar novas sugestões</p>
+                <Button
+                  onClick={() => {
+                    console.log('🔄 [MANUAL_REFRESH] User clicked to refresh suggestions');
+                    hasLoadedOnceRef.current = false;
+                    portfolioCache.suggestions.remove(portfolioId);
+                    loadSuggestions(true);
+                  }}
+                  variant="outline"
+                  size="sm"
+                >
+                  Gerar Sugestões
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
     );
   }
 
+  // Filter out rebalancing transactions before rendering (final safety check)
+  const contributionSuggestions = suggestions.filter(
+    (tx) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+  );
+  
   const monthGroups = groupByMonth();
 
   return (
@@ -636,10 +913,15 @@ export function PortfolioTransactionSuggestions({
       {/* Header */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-orange-600 flex-shrink-0" />
+          <DollarSign className="h-5 w-5 text-blue-600 flex-shrink-0" />
           <h3 className="font-semibold text-sm sm:text-base">
-            {suggestions.length} transaç{suggestions.length !== 1 ? 'ões' : 'ão'} pendente{suggestions.length !== 1 ? 's' : ''}
+            Aportes e Compras
           </h3>
+          {contributionSuggestions.length > 0 && (
+            <Badge variant="outline" className="ml-2">
+              {contributionSuggestions.length} pendente{contributionSuggestions.length !== 1 ? 's' : ''}
+            </Badge>
+          )}
         </div>
         
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -655,7 +937,7 @@ export function PortfolioTransactionSuggestions({
             <span className="ml-2 hidden sm:inline">Recalcular</span>
           </Button>
           
-          {suggestions.length > 1 && (
+          {contributionSuggestions.length > 1 && (
             <Button
               onClick={handleConfirmAll}
               disabled={confirmingAll}

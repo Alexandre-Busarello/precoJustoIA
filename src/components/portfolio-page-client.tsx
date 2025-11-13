@@ -23,6 +23,8 @@ import { PortfolioHoldingsTable } from "@/components/portfolio-holdings-table";
 import { PortfolioClosedPositionsTable } from "@/components/portfolio-closed-positions-table";
 import { PortfolioTransactionList } from "@/components/portfolio-transaction-list";
 import { PortfolioTransactionSuggestions } from "@/components/portfolio-transaction-suggestions";
+import { PortfolioRebalancingSuggestions } from "@/components/portfolio-rebalancing-suggestions";
+import { PortfolioDividendSuggestions } from "@/components/portfolio-dividend-suggestions";
 import { PortfolioPendingTransactionsCTA } from "@/components/portfolio-pending-transactions-cta";
 import { PortfolioConfigForm } from "@/components/portfolio-config-form";
 import { PortfolioTransactionForm } from "@/components/portfolio-transaction-form";
@@ -849,15 +851,37 @@ function PortfolioTransactions({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Transações Sugeridas</h3>
-        <PortfolioTransactionSuggestions
-          key={`suggestions-${portfolioId}-${refreshKey}`}
-          portfolioId={portfolioId}
-          trackingStarted={trackingStarted}
-          onTrackingStart={handleTransactionUpdate}
-          onTransactionsConfirmed={handleTransactionUpdate}
-        />
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Transações Sugeridas</h3>
+          <PortfolioTransactionSuggestions
+            key={`suggestions-${portfolioId}-${refreshKey}`}
+            portfolioId={portfolioId}
+            trackingStarted={trackingStarted}
+            onTrackingStart={handleTransactionUpdate}
+            onTransactionsConfirmed={handleTransactionUpdate}
+          />
+        </div>
+
+        {/* Rebalancing Suggestions Section */}
+        <div>
+          <PortfolioRebalancingSuggestions
+            key={`rebalancing-${portfolioId}-${refreshKey}`}
+            portfolioId={portfolioId}
+            trackingStarted={trackingStarted}
+            onTransactionsConfirmed={handleTransactionUpdate}
+          />
+        </div>
+
+        {/* Dividend Suggestions Section */}
+        <div>
+          <PortfolioDividendSuggestions
+            key={`dividends-${portfolioId}-${refreshKey}`}
+            portfolioId={portfolioId}
+            trackingStarted={trackingStarted}
+            onTransactionsConfirmed={handleTransactionUpdate}
+          />
+        </div>
       </div>
 
       {/* AI Transaction Assistant */}

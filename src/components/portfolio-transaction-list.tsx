@@ -126,6 +126,8 @@ export function PortfolioTransactionList({
       const params = new URLSearchParams();
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (filterType !== 'all') params.append('type', filterType);
+      // Exclude DIVIDEND transactions - they have their own section
+      params.append('excludeType', 'DIVIDEND');
       
       // Cache key includes filters
       const cacheKey = `${portfolioId}_${filterStatus}_${filterType}`;
@@ -420,7 +422,7 @@ export function PortfolioTransactionList({
   };
 
   const getTypeIcon = (type: string) => {
-    if (type === 'CASH_CREDIT' || type === 'DIVIDEND') {
+    if (type === 'CASH_CREDIT' || type === 'MONTHLY_CONTRIBUTION' || type === 'DIVIDEND') {
       return <ArrowDownCircle className="h-4 w-4 text-green-600" />;
     }
     if (type === 'CASH_DEBIT' || type.includes('SELL')) {
@@ -432,6 +434,7 @@ export function PortfolioTransactionList({
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       'CASH_CREDIT': 'Aporte',
+      'MONTHLY_CONTRIBUTION': 'Aporte Mensal',
       'CASH_DEBIT': 'Saque',
       'BUY': 'Compra',
       'SELL_REBALANCE': 'Venda (Rebal.)',

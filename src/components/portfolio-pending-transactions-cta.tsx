@@ -22,6 +22,30 @@ export function PortfolioPendingTransactionsCTA({
 }: PortfolioPendingTransactionsCTAProps) {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generatingSuggestions, setGeneratingSuggestions] = useState(false);
+  const [suggestionStatus, setSuggestionStatus] = useState<{
+    lastSuggestionsGeneratedAt: string | null;
+    needsRegeneration: boolean;
+    isRecent: boolean;
+    cashBalance: number;
+    hasCashAvailable: boolean;
+  } | null>(null);
+
+  const loadSuggestionStatus = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/suggestions/status`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setSuggestionStatus(data);
+        return data;
+      }
+    } catch (error) {
+      console.error("Erro ao verificar status de sugestões:", error);
+    }
+    return null;
+  }, [portfolioId]);
 
   const loadPendingCount = useCallback(async () => {
     try {
@@ -30,7 +54,10 @@ export function PortfolioPendingTransactionsCTA({
       // Try cache first
       const cached = portfolioCache.suggestions.get(portfolioId) as any;
       if (cached && Array.isArray(cached)) {
-        setPendingCount(cached.length);
+        const filteredCached = cached.filter(
+          (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+        );
+        setPendingCount(filteredCached.length);
         setLoading(false);
         return;
       }
@@ -45,13 +72,17 @@ export function PortfolioPendingTransactionsCTA({
       }
 
       const data = await response.json();
-      const count = data.transactions?.length || 0;
+      const allPendingTx = data.transactions || [];
+      const contributionTx = allPendingTx.filter(
+        (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+      );
+      const count = contributionTx.length;
       
       setPendingCount(count);
       
-      // Cache the result
-      if (data.transactions) {
-        portfolioCache.suggestions.set(portfolioId, data.transactions);
+      // Cache the result (only contribution transactions)
+      if (contributionTx.length > 0) {
+        portfolioCache.suggestions.set(portfolioId, contributionTx);
       }
     } catch (error) {
       console.error("Erro ao carregar contagem de transações pendentes:", error);
@@ -63,17 +94,67 @@ export function PortfolioPendingTransactionsCTA({
 
   useEffect(() => {
     if (trackingStarted) {
+      loadSuggestionStatus();
       loadPendingCount();
     } else {
       setLoading(false);
     }
-  }, [trackingStarted, refreshKey, loadPendingCount]);
+  }, [trackingStarted, refreshKey, loadPendingCount, loadSuggestionStatus]);
 
-  if (loading) {
+  // Try to generate suggestions if needed
+  useEffect(() => {
+    if (!trackingStarted || loading || generatingSuggestions) return;
+    if (pendingCount === null) return; // Wait for initial load
+    
+    // Check if we need to generate suggestions
+    // Generate if: needsRegeneration OR has cash available (always suggest buys when there's cash)
+    const shouldGenerate = suggestionStatus?.needsRegeneration || suggestionStatus?.hasCashAvailable;
+    
+    if (pendingCount === 0 && shouldGenerate) {
+      const reason = suggestionStatus?.hasCashAvailable 
+        ? 'has cash available' 
+        : 'needs regeneration';
+      console.log(`🔄 [CTA] No pending transactions and ${reason}, generating suggestions...`);
+      setGeneratingSuggestions(true);
+      
+      fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/contributions`, {
+        method: 'POST'
+      })
+        .then(response => {
+          if (response.ok) {
+            return response.json();
+          }
+          throw new Error('Failed to generate suggestions');
+        })
+        .then(data => {
+          console.log('✅ [CTA] Suggestions generated:', data);
+          // Reload status and pending count after generating suggestions
+          setTimeout(() => {
+            loadSuggestionStatus();
+            loadPendingCount();
+          }, 500);
+        })
+        .catch(error => {
+          console.error('❌ [CTA] Error generating suggestions:', error);
+        })
+        .finally(() => {
+          setGeneratingSuggestions(false);
+        });
+    }
+  }, [trackingStarted, pendingCount, suggestionStatus, portfolioId, loadPendingCount, loadSuggestionStatus, loading, generatingSuggestions]);
+
+  if (loading || generatingSuggestions) {
     return (
-      <div className="flex items-center justify-center py-4">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-      </div>
+      <Card>
+        <CardContent className="py-6">
+          <div className="flex items-center justify-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+            <p className="text-sm text-muted-foreground">
+              {generatingSuggestions ? 'Gerando sugestões...' : 'Carregando...'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -102,7 +183,15 @@ export function PortfolioPendingTransactionsCTA({
     );
   }
 
-  if (pendingCount === null || pendingCount === 0) {
+  // Show "Tudo em dia" only if:
+  // 1. Suggestions were generated recently (< 30 days) AND
+  // 2. No pending transactions AND
+  // 3. No cash available (if there's cash, we should suggest buys)
+  const shouldShowAllUpToDate = pendingCount === 0 && 
+    suggestionStatus?.isRecent && 
+    !suggestionStatus?.hasCashAvailable;
+
+  if (shouldShowAllUpToDate) {
     return (
       <Card>
         <CardContent className="py-6">

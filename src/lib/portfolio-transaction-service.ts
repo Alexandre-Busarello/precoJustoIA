@@ -117,10 +117,15 @@ export class PortfolioTransactionService {
     }));
   }
 
+
+  // Store debug info globally (per request) - will be cleared after use
+  private static debugInfo: Map<string, any> = new Map();
+
   /**
-   * Generate suggested transactions for pending months
+   * Get contribution suggestions (monthly contributions + buy transactions for available cash)
+   * This is separate from rebalancing - only suggests BUY transactions, prioritizing assets furthest from target
    */
-  static async getSuggestedTransactions(
+  static async getContributionSuggestions(
     portfolioId: string,
     userId: string
   ): Promise<SuggestedTransaction[]> {
@@ -138,43 +143,44 @@ export class PortfolioTransactionService {
       return [];
     }
 
-    console.log(`🚀 [SUGGESTIONS] Starting parallel data fetch...`);
+    console.log(`💰 [CONTRIBUTION SUGGESTIONS] Starting...`);
     const startTime = Date.now();
 
-    // 🧹 AUTO-CLEANUP: Remove PENDING transactions from past months
-    // This ensures that when a new month starts, old suggestions are removed
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startOfCurrentMonth = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      1
-    );
-
-    const deletedOldPending = await prisma.portfolioTransaction.deleteMany({
-      where: {
-        portfolioId,
-        status: "PENDING",
-        isAutoSuggested: true,
-        date: {
-          lt: startOfCurrentMonth, // Delete PENDING transactions from before this month
-        },
-      },
+    // Check if we need to regenerate suggestions (more than 30 days since last generation)
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Get full portfolio config to access lastSuggestionsGeneratedAt
+    const fullPortfolio = await prisma.portfolioConfig.findUnique({
+      where: { id: portfolioId },
+      select: { lastSuggestionsGeneratedAt: true },
     });
 
-    if (deletedOldPending.count > 0) {
-      console.log(
-        `🧹 [AUTO-CLEANUP] Removed ${deletedOldPending.count} outdated PENDING transactions from previous months`
-      );
+    const needsRegeneration = !fullPortfolio?.lastSuggestionsGeneratedAt || 
+      new Date(fullPortfolio.lastSuggestionsGeneratedAt) < thirtyDaysAgo;
+
+    if (needsRegeneration) {
+      console.log(`🔄 [REGENERATION NEEDED] Last generation was ${fullPortfolio?.lastSuggestionsGeneratedAt ? new Date(fullPortfolio.lastSuggestionsGeneratedAt).toISOString() : 'never'}, cleaning old pending transactions...`);
+      
+      // Delete all old pending transactions
+      const deletedCount = await prisma.portfolioTransaction.deleteMany({
+        where: {
+          portfolioId,
+          status: "PENDING",
+          isAutoSuggested: true,
+        },
+      });
+      
+      console.log(`🧹 [CLEANUP] Deleted ${deletedCount.count} old pending transactions`);
     }
 
-    // OPTIMIZATION: Parallelize independent operations
-    const [holdings, prices, nextDates, existingTransactions] =
+    // Get data in parallel
+    const [holdings, prices, nextDates, existingTransactions, cashBalance, pendingBuyCount] =
       await Promise.all([
         this.getCurrentHoldings(portfolioId),
         this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
         this.calculateNextTransactionDates(portfolioId),
-        // Get existing transactions (PENDING, CONFIRMED, REJECTED) to avoid duplicates
         prisma.portfolioTransaction.findMany({
           where: {
             portfolioId,
@@ -190,16 +196,738 @@ export class PortfolioTransactionService {
             quantity: true,
           },
         }),
+        this.getCurrentCashBalance(portfolioId),
+        // Check if there are already PENDING buy transactions
+        prisma.portfolioTransaction.count({
+          where: {
+            portfolioId,
+            status: 'PENDING',
+            type: 'BUY',
+            isAutoSuggested: true
+          }
+        })
       ]);
 
-    const fetchTime = Date.now() - startTime;
-    console.log(
-      `⚡ [PERFORMANCE] Data fetched in ${fetchTime}ms (parallelized)`
+    const suggestions: SuggestedTransaction[] = [];
+
+    // Check if there's a monthly contribution for current month (any status)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfCurrentMonth = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1
+    );
+    startOfCurrentMonth.setHours(0, 0, 0, 0);
+
+    // Check if there's a monthly contribution in current month (any status)
+    const currentMonthContribution = existingTransactions.find(
+      (tx) =>
+        ((tx.type as string) === "MONTHLY_CONTRIBUTION" || tx.type === "CASH_CREDIT") &&
+        new Date(tx.date).getTime() >= startOfCurrentMonth.getTime()
     );
 
-    // Create a Set of existing transactions for fast lookup
-    // Include PENDING, CONFIRMED, and REJECTED to avoid re-suggesting
-    // Include amount/quantity in key to allow multiple transactions of same asset on same day
+    console.log(
+      `📅 [CHECK_CONTRIBUTION] Current month contribution check:`,
+      currentMonthContribution
+        ? `Found ${currentMonthContribution.type} with status ${currentMonthContribution.status}`
+        : 'No contribution found in current month'
+    );
+
+    // Monthly contribution is "decided" only if it's CONFIRMED, REJECTED, or EXECUTED
+    // PENDING means user hasn't decided yet, so we don't suggest buy transactions
+    const monthlyContributionDecided = currentMonthContribution && 
+      (currentMonthContribution.status === "CONFIRMED" || 
+       currentMonthContribution.status === "REJECTED" ||
+       currentMonthContribution.status === "EXECUTED");
+
+    console.log(
+      `📅 [SUGGESTION_LOGIC] nextDates.length=${nextDates.length}, monthlyContributionDecided=${monthlyContributionDecided}, cashBalance=${cashBalance.toFixed(2)}, portfolioAssets=${portfolio.assets?.length || 0}, holdings=${holdings.size}, prices=${prices.size}`
+    );
+
+    // 1. Generate monthly contribution suggestions FIRST (if not already decided)
+    if (nextDates.length > 0 && !monthlyContributionDecided) {
+      console.log(
+        `📅 [CONTRIBUTIONS] ${nextDates.length} pending monthly contributions - suggesting FIRST`
+      );
+      console.log(`📅 [DATES] Next dates to suggest:`, nextDates.map(d => d.toISOString().split("T")[0]));
+
+      // Calculate cash balance once (will be updated as we add contributions)
+      let runningCashBalance = cashBalance;
+      
+      for (const date of nextDates) {
+        // Suggest MONTHLY_CONTRIBUTION (monthly contribution suggested by system)
+        // This should be the FIRST suggestion, before any buy transactions
+        const suggestion = {
+          date,
+          type: "MONTHLY_CONTRIBUTION" as TransactionType,
+          amount: Number(portfolio.monthlyContribution),
+          reason: `Aporte mensal de R$ ${Number(
+            portfolio.monthlyContribution
+          ).toFixed(2)}`,
+          cashBalanceBefore: runningCashBalance,
+          cashBalanceAfter: runningCashBalance + Number(portfolio.monthlyContribution),
+        };
+        
+        console.log(`📝 [SUGGESTION] Creating MONTHLY_CONTRIBUTION suggestion:`, {
+          date: date.toISOString().split("T")[0],
+          amount: suggestion.amount,
+          cashBalanceBefore: suggestion.cashBalanceBefore,
+          cashBalanceAfter: suggestion.cashBalanceAfter
+        });
+        
+        suggestions.push(suggestion);
+        
+        // Update running balance for next iteration
+        runningCashBalance += Number(portfolio.monthlyContribution);
+      }
+      
+      console.log(`📊 [BEFORE_FILTER] Created ${suggestions.length} monthly contribution suggestions before deduplication`);
+      
+      // Filter monthly contribution suggestions (but don't return yet - we'll generate buys too)
+      const monthlyContribSuggestions = suggestions.slice(); // Copy array
+      const filteredMonthlyContributions = this.filterDuplicateSuggestions(
+        monthlyContribSuggestions,
+        existingTransactions
+      );
+      
+      console.log(
+        `✅ [MONTHLY_CONTRIBUTIONS] ${filteredMonthlyContributions.length} monthly contribution suggestions after deduplication`
+      );
+      console.log(`📊 [FILTERED] Filtered suggestions:`, filteredMonthlyContributions.map(s => ({
+        date: s.date.toISOString().split("T")[0],
+        type: s.type,
+        amount: s.amount
+      })));
+      
+      // Replace suggestions array with filtered monthly contributions
+      // Then continue to generate buy suggestions below (don't return early)
+      suggestions.length = 0; // Clear array
+      suggestions.push(...filteredMonthlyContributions);
+    } else {
+      console.log(
+        `⏸️ [SKIP_CONTRIBUTION] Not suggesting monthly contribution:`,
+        {
+          nextDatesLength: nextDates.length,
+          monthlyContributionDecided,
+          reason: nextDates.length === 0 
+            ? 'No dates returned from calculateNextTransactionDates' 
+            : 'Monthly contribution already decided'
+        }
+      );
+    }
+
+    // 2. Generate buy suggestions when there's cash available AND no pending buy suggestions
+    // Avoid infinite loops: if there are already PENDING buy transactions, don't generate more
+    // User wants to invest available cash, but we should wait for pending transactions to be confirmed/rejected
+    console.log(`🔍 [BUY_LOGIC_CHECK] Checking conditions:`, {
+      cashBalance: cashBalance.toFixed(2),
+      cashBalanceCheck: cashBalance > 0.01,
+      pendingBuyCount,
+      monthlyContributionDecided,
+      nextDatesLength: nextDates.length,
+      shouldGenerateBuys: cashBalance > 0.01 && pendingBuyCount === 0
+    });
+
+    const shouldGenerateBuys = cashBalance > 0.01 && pendingBuyCount === 0; // Generate buys only if no pending buy suggestions exist
+
+    if (shouldGenerateBuys) {
+      const reason = monthlyContributionDecided 
+        ? 'monthly contribution already decided - investing available cash' 
+        : nextDates.length > 0 
+          ? 'monthly contribution pending but investing available cash anyway'
+          : 'no monthly contribution pending - investing available cash';
+      console.log(
+        `💵 [CASH AVAILABLE] R$ ${cashBalance.toFixed(2)} available for investment (${reason})`
+      );
+
+      console.log(`📊 [BEFORE_BUY_GEN] Portfolio assets: ${portfolio.assets?.length || 0}, Holdings: ${holdings.size}, Prices: ${prices.size}`);
+      
+      const buySuggestions = await this.generateBuyTransactionsForCash(
+        portfolio,
+        cashBalance,
+        holdings,
+        prices
+      );
+      
+      console.log(`💰 [BUY_SUGGESTIONS] Generated ${buySuggestions.length} buy suggestions`);
+      if (buySuggestions.length === 0) {
+        console.log(`⚠️ [NO_BUY_SUGGESTIONS] No buy suggestions generated despite cash available. Check: assets count, prices availability, allocations`);
+      }
+      
+      suggestions.push(...buySuggestions);
+    } else {
+      if (cashBalance <= 0.01) {
+        console.log(`⏸️ [NO_CASH] No cash available (R$ ${cashBalance.toFixed(2)})`);
+      } else if (pendingBuyCount > 0) {
+        console.log(
+          `⏸️ [BUY_PENDING] Cash available (R$ ${cashBalance.toFixed(2)}) but ${pendingBuyCount} pending buy suggestion(s) already exist - waiting for confirmation/rejection to avoid infinite loop`
+        );
+      } else {
+        console.log(`⏸️ [BUY_NOT_GENERATED] Unexpected condition:`, {
+          cashBalance: cashBalance.toFixed(2),
+          pendingBuyCount,
+          monthlyContributionDecided,
+          nextDatesLength: nextDates.length
+        });
+      }
+    }
+
+    // Filter duplicates
+    console.log(`🔍 [BEFORE_FILTER] ${suggestions.length} suggestions before deduplication`);
+    const filteredSuggestions = this.filterDuplicateSuggestions(
+      suggestions,
+      existingTransactions
+    );
+    console.log(`🔍 [AFTER_FILTER] ${filteredSuggestions.length} suggestions after deduplication`);
+    
+    if (suggestions.length > 0 && filteredSuggestions.length === 0) {
+      console.log(`⚠️ [FILTER_REMOVED_ALL] All suggestions were filtered out as duplicates!`);
+      console.log(`📊 [FILTER_DEBUG] Existing transactions count: ${existingTransactions.length}`);
+    }
+
+    // Update lastSuggestionsGeneratedAt timestamp
+    await prisma.portfolioConfig.update({
+      where: { id: portfolioId },
+      data: { lastSuggestionsGeneratedAt: now },
+    });
+
+    const totalTime = Date.now() - startTime;
+    console.log(
+      `✅ [CONTRIBUTION SUGGESTIONS] ${filteredSuggestions.length} suggestions generated (${totalTime}ms)`
+    );
+
+    // Store debug info for API response
+    const debugData = {
+      nextDatesLength: nextDates.length,
+      monthlyContributionDecided,
+      cashBalance,
+      pendingBuyCount,
+      shouldGenerateBuys: cashBalance > 0.01 && pendingBuyCount === 0,
+      portfolioAssets: portfolio.assets?.length || 0,
+      holdingsCount: holdings.size,
+      pricesCount: prices.size,
+      suggestionsBeforeFilter: suggestions.length,
+      suggestionsAfterFilter: filteredSuggestions.length,
+      currentMonthContribution: currentMonthContribution ? {
+        type: currentMonthContribution.type,
+        status: currentMonthContribution.status,
+        date: currentMonthContribution.date.toISOString().split("T")[0]
+      } : null
+    };
+    
+    this.debugInfo.set(portfolioId, debugData);
+    console.log(`💾 [DEBUG_STORED] Stored debug info for portfolio ${portfolioId}:`, JSON.stringify(debugData, null, 2));
+
+    return filteredSuggestions;
+  }
+
+  /**
+   * Get debug info for the last getContributionSuggestions call
+   */
+  static getContributionSuggestionsDebug(portfolioId: string): any {
+    return this.debugInfo.get(portfolioId) || null;
+  }
+
+  /**
+   * Clear debug info for a portfolio
+   */
+  static clearContributionSuggestionsDebug(portfolioId: string): void {
+    this.debugInfo.delete(portfolioId);
+  }
+
+  /**
+   * Get rebalancing suggestions (SELL_REBALANCE + BUY_REBALANCE)
+   * Only generated when user explicitly requests or when portfolio deviates significantly
+   */
+  static async getRebalancingSuggestions(
+    portfolioId: string,
+    userId: string
+  ): Promise<SuggestedTransaction[]> {
+    // Verify ownership
+    const portfolio = await PortfolioService.getPortfolioConfig(
+      portfolioId,
+      userId
+    );
+    if (!portfolio) {
+      throw new Error("Portfolio not found");
+    }
+
+    if (!portfolio.trackingStarted) {
+      return [];
+    }
+
+    console.log(`⚖️ [REBALANCING SUGGESTIONS] Starting...`);
+    const startTime = Date.now();
+
+    // Get data in parallel
+    const [holdings, prices, existingTransactions] = await Promise.all([
+      this.getCurrentHoldings(portfolioId),
+      this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
+      prisma.portfolioTransaction.findMany({
+        where: {
+          portfolioId,
+          status: { in: ["PENDING", "CONFIRMED", "REJECTED"] },
+          isAutoSuggested: true,
+          type: { in: ["SELL_REBALANCE", "BUY_REBALANCE"] },
+        },
+        select: {
+          date: true,
+          type: true,
+          ticker: true,
+          status: true,
+          amount: true,
+          quantity: true,
+        },
+      }),
+    ]);
+
+    const today = new Date();
+    const portfolioValue = this.calculatePortfolioValue(holdings, prices);
+    const currentAllocations = this.calculateCurrentAllocations(
+      holdings,
+      prices,
+      portfolioValue
+    );
+    const cashBalance = await this.getCurrentCashBalance(portfolioId);
+
+    // Generate rebalancing transactions
+    const rebalanceSuggestions = this.generateRebalanceTransactions(
+      portfolio.assets,
+      holdings,
+      prices,
+      portfolioValue,
+      currentAllocations,
+      cashBalance,
+      today
+    );
+
+    // Filter duplicates
+    const filteredSuggestions = this.filterDuplicateSuggestions(
+      rebalanceSuggestions,
+      existingTransactions
+    );
+
+    const totalTime = Date.now() - startTime;
+    console.log(
+      `✅ [REBALANCING SUGGESTIONS] ${filteredSuggestions.length} suggestions generated (${totalTime}ms)`
+    );
+
+    return filteredSuggestions;
+  }
+
+  /**
+   * Check if rebalancing should be shown (portfolio deviates significantly from targets)
+   */
+  static async shouldShowRebalancing(
+    portfolioId: string,
+    userId: string,
+    threshold: number = 0.05 // 5% deviation threshold
+  ): Promise<{ shouldShow: boolean; maxDeviation: number; details: string }> {
+    const portfolio = await PortfolioService.getPortfolioConfig(
+      portfolioId,
+      userId
+    );
+    if (!portfolio || !portfolio.trackingStarted) {
+      return { shouldShow: false, maxDeviation: 0, details: "" };
+    }
+
+    const [holdings, prices] = await Promise.all([
+      this.getCurrentHoldings(portfolioId),
+      this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
+    ]);
+
+    const portfolioValue = this.calculatePortfolioValue(holdings, prices);
+    const currentAllocations = this.calculateCurrentAllocations(
+      holdings,
+      prices,
+      portfolioValue
+    );
+
+    let maxDeviation = 0;
+    const deviations: string[] = [];
+
+    for (const asset of portfolio.assets) {
+      const currentAlloc = currentAllocations.get(asset.ticker) || 0;
+      const targetAlloc = Number(asset.targetAllocation);
+      const deviation = Math.abs(currentAlloc - targetAlloc);
+
+      if (deviation > maxDeviation) {
+        maxDeviation = deviation;
+      }
+
+      if (deviation > threshold) {
+        deviations.push(
+          `${asset.ticker}: ${(currentAlloc * 100).toFixed(1)}% → ${(targetAlloc * 100).toFixed(1)}% (desvio: ${(deviation * 100).toFixed(1)}%)`
+        );
+      }
+    }
+
+    const shouldShow = maxDeviation > threshold;
+    const details = deviations.length > 0
+      ? `Desvios detectados: ${deviations.join("; ")}`
+      : "Carteira dentro dos limites de alocação";
+
+    return { shouldShow, maxDeviation, details };
+  }
+
+  /**
+   * Generate buy transactions for available cash, prioritizing assets furthest from target allocation
+   */
+  private static async generateBuyTransactionsForCash(
+    portfolio: any,
+    availableCash: number,
+    holdings: Map<string, { quantity: number; totalInvested: number }>,
+    prices: Map<string, number>
+  ): Promise<SuggestedTransaction[]> {
+    console.log(`🔄 [GENERATE_BUY] Starting with R$ ${availableCash.toFixed(2)} available cash`);
+    console.log(`📊 [GENERATE_BUY] Portfolio has ${portfolio.assets?.length || 0} assets configured`);
+    console.log(`📊 [GENERATE_BUY] Holdings: ${holdings.size} tickers, Prices: ${prices.size} tickers`);
+    
+    const suggestions: SuggestedTransaction[] = [];
+    let cashBalance = availableCash;
+    const today = new Date();
+
+    // Calculate current allocations
+    const portfolioValue = this.calculatePortfolioValue(holdings, prices);
+    console.log(`💰 [GENERATE_BUY] Portfolio value: R$ ${portfolioValue.toFixed(2)}`);
+    
+    const currentAllocations = this.calculateCurrentAllocations(
+      holdings,
+      prices,
+      portfolioValue
+    );
+    
+    console.log(`📊 [GENERATE_BUY] Current allocations:`, Array.from(currentAllocations.entries()).map(([ticker, alloc]) => 
+      `${ticker}: ${(alloc * 100).toFixed(1)}%`
+    ));
+
+    // Calculate deviation from target for each asset (only underallocated assets)
+    const assetsWithDeviation: Array<{
+      ticker: string;
+      targetAlloc: number;
+      currentAlloc: number;
+      deviation: number;
+      price: number;
+    }> = [];
+
+    console.log(`🔍 [GENERATE_BUY] Checking ${portfolio.assets?.length || 0} assets for underallocation...`);
+    
+    for (const asset of portfolio.assets) {
+      const price = prices.get(asset.ticker);
+      if (!price) {
+        console.log(`⚠️ [GENERATE_BUY] No price found for ${asset.ticker}, skipping`);
+        continue;
+      }
+
+      const targetAlloc = Number(asset.targetAllocation);
+      const currentAlloc = currentAllocations.get(asset.ticker) || 0;
+      
+      console.log(`  📊 [GENERATE_BUY] ${asset.ticker}: current=${(currentAlloc * 100).toFixed(1)}%, target=${(targetAlloc * 100).toFixed(1)}%, price=R$ ${price.toFixed(2)}`);
+      
+      // Only consider underallocated assets (we want to buy, not sell)
+      if (currentAlloc < targetAlloc) {
+        const deviation = targetAlloc - currentAlloc;
+        assetsWithDeviation.push({
+          ticker: asset.ticker,
+          targetAlloc,
+          currentAlloc,
+          deviation,
+          price,
+        });
+        console.log(`    ✅ [GENERATE_BUY] ${asset.ticker} is underallocated (deviation: ${(deviation * 100).toFixed(1)}%)`);
+      } else {
+        console.log(`    ⏸️ [GENERATE_BUY] ${asset.ticker} is not underallocated, skipping`);
+      }
+    }
+    
+    console.log(`📊 [GENERATE_BUY] Found ${assetsWithDeviation.length} underallocated assets`);
+
+    // Sort by deviation (furthest from target first)
+    assetsWithDeviation.sort((a, b) => b.deviation - a.deviation);
+
+    console.log(
+      `📊 [BUY PRIORITY] Assets sorted by deviation from target:`,
+      assetsWithDeviation.map(
+        (a) =>
+          `${a.ticker}: ${(a.currentAlloc * 100).toFixed(1)}% → ${(a.targetAlloc * 100).toFixed(1)}% (desvio: ${(a.deviation * 100).toFixed(1)}%)`
+      )
+    );
+
+    // Calculate total deviation once (outside loop for efficiency)
+    const totalDeviation = assetsWithDeviation.reduce(
+      (sum, a) => sum + a.deviation,
+      0
+    );
+    
+    console.log(`💰 [GENERATE_BUY] Total deviation: ${totalDeviation.toFixed(4)}, Available cash: R$ ${availableCash.toFixed(2)}`);
+
+    // Distribute cash prioritizing assets furthest from target
+    // IMPORTANT: Use cashBalance (updated) instead of availableCash to ensure we don't exceed available funds
+    let remainingCash = cashBalance;
+    let totalSuggested = 0;
+    const suggestedTickers = new Set<string>(); // Track which tickers already have suggestions
+    
+    // First pass: Calculate proportional allocations for each asset
+    const assetAllocations: Array<{
+      asset: typeof assetsWithDeviation[0];
+      targetAmount: number;
+      maxNeeded: number;
+      priority: number;
+    }> = [];
+    
+    for (const asset of assetsWithDeviation) {
+      const allocationWeight = asset.deviation / totalDeviation;
+      const targetAmount = availableCash * allocationWeight; // Use initial availableCash for proportional calculation
+      
+      const currentValue = (holdings.get(asset.ticker)?.quantity || 0) * asset.price;
+      const targetValue = (portfolioValue + availableCash) * asset.targetAlloc;
+      const maxNeeded = Math.max(0, targetValue - currentValue);
+      
+      assetAllocations.push({
+        asset,
+        targetAmount,
+        maxNeeded,
+        priority: asset.deviation, // Higher deviation = higher priority
+      });
+    }
+    
+    // Sort by priority (highest deviation first)
+    assetAllocations.sort((a, b) => b.priority - a.priority);
+    
+    console.log(`📊 [GENERATE_BUY] Calculated allocations for ${assetAllocations.length} assets`);
+    
+    // Second pass: Distribute cash ensuring we use as much as possible
+    for (let i = 0; i < assetAllocations.length; i++) {
+      const { asset, targetAmount, maxNeeded } = assetAllocations[i];
+      const isLastAsset = i === assetAllocations.length - 1;
+      
+      if (remainingCash <= 0.01) {
+        console.log(`⏸️ [GENERATE_BUY] No more cash available (R$ ${remainingCash.toFixed(2)}), stopping`);
+        break;
+      }
+
+      // CRITICAL: Only suggest one buy per ticker to avoid duplicates
+      if (suggestedTickers.has(asset.ticker)) {
+        console.log(`⏸️ [GENERATE_BUY] ${asset.ticker}: Already has a buy suggestion, skipping to avoid duplicates`);
+        continue;
+      }
+
+      // Calculate amount to invest
+      // Strategy: Use proportional allocation, prioritizing using all available cash
+      // We'll respect maxNeeded as a guideline, but if there's leftover cash, we'll distribute it
+      let amountToInvest: number;
+      
+      // Calculate how much we can invest without exceeding maxNeeded
+      const maxByNeeded = Math.min(targetAmount, maxNeeded);
+      
+      // For last asset, invest all remaining cash (even if slightly exceeds maxNeeded)
+      // For other assets, use proportional allocation
+      if (isLastAsset) {
+        // Last asset gets ALL remaining cash (even if exceeds maxNeeded slightly)
+        // This ensures we use as much cash as possible
+        amountToInvest = remainingCash;
+        if (amountToInvest > maxNeeded) {
+          console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Last asset - investing all remaining: R$ ${amountToInvest.toFixed(2)} (exceeds maxNeeded: R$ ${maxNeeded.toFixed(2)} by R$ ${(amountToInvest - maxNeeded).toFixed(2)})`);
+        } else {
+          console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Last asset - investing all remaining: R$ ${amountToInvest.toFixed(2)} (maxNeeded: R$ ${maxNeeded.toFixed(2)})`);
+        }
+      } else {
+        // Use proportional allocation, prioritizing using all available cash
+        // Calculate how much cash will be left for remaining assets
+        const remainingAssetsCount = assetAllocations.length - i - 1;
+        
+        if (remainingAssetsCount === 0) {
+          // This is effectively the last asset, invest all remaining cash
+          amountToInvest = remainingCash;
+          console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Effectively last asset - investing all remaining: R$ ${amountToInvest.toFixed(2)}`);
+        } else {
+          // Estimate how much cash each remaining asset will need
+          const avgRemainingPerAsset = remainingCash / (remainingAssetsCount + 1);
+          
+          // If we have plenty of cash relative to maxNeeded, we can exceed it
+          // Otherwise, use proportional allocation but don't be too restrictive
+          if (avgRemainingPerAsset > maxNeeded * 1.2) {
+            // We have plenty of cash, can exceed maxNeeded to use more cash
+            amountToInvest = Math.min(targetAmount * 1.3, remainingCash); // Allow 30% over targetAmount
+            console.log(`  💰 [GENERATE_BUY] ${asset.ticker}: Plenty of cash - investing R$ ${amountToInvest.toFixed(2)} (targetAmount: R$ ${targetAmount.toFixed(2)}, maxNeeded: R$ ${maxNeeded.toFixed(2)})`);
+          } else {
+            // Use proportional allocation, but be more generous
+            amountToInvest = Math.min(targetAmount, remainingCash);
+            // If maxNeeded is very restrictive, still use at least targetAmount
+            if (amountToInvest < targetAmount * 0.8 && remainingCash > targetAmount) {
+              amountToInvest = Math.min(targetAmount, remainingCash);
+            }
+          }
+        }
+      }
+
+      console.log(`  💰 [GENERATE_BUY] ${asset.ticker}: targetAmount=R$ ${targetAmount.toFixed(2)}, maxNeeded=R$ ${maxNeeded.toFixed(2)}, amountToInvest=R$ ${amountToInvest.toFixed(2)}, remainingCash=R$ ${remainingCash.toFixed(2)}`);
+
+      if (amountToInvest > 0.01) {
+        const sharesToBuy = Math.floor(amountToInvest / asset.price);
+
+        if (sharesToBuy > 0) {
+          const actualAmount = sharesToBuy * asset.price;
+          
+          // Double-check: don't exceed remaining cash
+          if (actualAmount > remainingCash) {
+            console.log(`⚠️ [GENERATE_BUY] ${asset.ticker}: actualAmount (R$ ${actualAmount.toFixed(2)}) exceeds remainingCash (R$ ${remainingCash.toFixed(2)}), skipping`);
+            continue;
+          }
+
+          suggestions.push({
+            date: today,
+            type: "BUY",
+            ticker: asset.ticker,
+            amount: actualAmount,
+            price: asset.price,
+            quantity: sharesToBuy,
+            reason: `Compra de ${sharesToBuy} ações (alocação atual ${(asset.currentAlloc * 100).toFixed(1)}% → alvo ${(asset.targetAlloc * 100).toFixed(1)}%, prioridade por desvio)`,
+            cashBalanceBefore: remainingCash,
+            cashBalanceAfter: remainingCash - actualAmount,
+          });
+
+          suggestedTickers.add(asset.ticker); // Mark this ticker as having a suggestion
+          totalSuggested += actualAmount;
+          remainingCash -= actualAmount;
+          
+          console.log(`  ✅ [GENERATE_BUY] ${asset.ticker}: Added suggestion for R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining cash: R$ ${remainingCash.toFixed(2)}`);
+        } else {
+          console.log(`  ⏸️ [GENERATE_BUY] ${asset.ticker}: Not enough to buy even 1 share (amountToInvest: R$ ${amountToInvest.toFixed(2)}, price: R$ ${asset.price.toFixed(2)})`);
+        }
+      }
+    }
+    
+    // If there's still remaining cash after all allocations, distribute it proportionally
+    // This ensures we use as much cash as possible
+    if (remainingCash > 0.01 && assetAllocations.length > 0) {
+      console.log(`💰 [GENERATE_BUY] Distributing remaining cash: R$ ${remainingCash.toFixed(2)}`);
+      
+      // Distribute remaining cash proportionally among ALL assets that have suggestions
+      // Use the same proportional weights based on deviation
+      const assetsWithSuggestions = assetAllocations.filter(({ asset }) => 
+        suggestedTickers.has(asset.ticker)
+      );
+      
+      if (assetsWithSuggestions.length > 0) {
+        // Calculate total deviation for assets with suggestions
+        const totalDeviationForSuggested = assetsWithSuggestions.reduce(
+          (sum, { asset }) => sum + asset.deviation,
+          0
+        );
+        
+        // Distribute remaining cash proportionally
+        for (const { asset } of assetsWithSuggestions) {
+          if (remainingCash <= 0.01) break;
+          
+          const allocationWeight = asset.deviation / totalDeviationForSuggested;
+          const additionalAmount = Math.min(remainingCash * allocationWeight, remainingCash);
+          
+          if (additionalAmount > 0.01) {
+            const sharesToBuy = Math.floor(additionalAmount / asset.price);
+            if (sharesToBuy > 0) {
+              const actualAmount = sharesToBuy * asset.price;
+              
+              // Update existing suggestion
+              const index = suggestions.findIndex(s => s.ticker === asset.ticker);
+              if (index >= 0 && suggestions[index]) {
+                suggestions[index].amount += actualAmount;
+                suggestions[index].quantity = (suggestions[index].quantity || 0) + sharesToBuy;
+                suggestions[index].reason = (suggestions[index].reason || '') + ` + ${sharesToBuy} ações (saldo restante)`;
+                totalSuggested += actualAmount;
+                remainingCash -= actualAmount;
+                console.log(`  🔄 [GENERATE_BUY] ${asset.ticker}: Updated suggestion + R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining: R$ ${remainingCash.toFixed(2)}`);
+              }
+            }
+          }
+        }
+      }
+      
+      // If still have remaining cash (due to rounding), give it all to the last asset
+      if (remainingCash > 0.01 && assetAllocations.length > 0) {
+        const lastAllocation = assetAllocations[assetAllocations.length - 1];
+        const { asset } = lastAllocation;
+        
+        const sharesToBuy = Math.floor(remainingCash / asset.price);
+        if (sharesToBuy > 0) {
+          const actualAmount = sharesToBuy * asset.price;
+          const beforeRemaining = remainingCash;
+          remainingCash -= actualAmount;
+          
+          const existingSuggestion = suggestions.find(s => s.ticker === asset.ticker);
+          if (existingSuggestion) {
+            // Update existing suggestion
+            const index = suggestions.findIndex(s => s.ticker === asset.ticker);
+            if (index >= 0 && suggestions[index]) {
+              suggestions[index].amount += actualAmount;
+              suggestions[index].quantity = (suggestions[index].quantity || 0) + sharesToBuy;
+              suggestions[index].reason = (suggestions[index].reason || '') + ` + ${sharesToBuy} ações (saldo final)`;
+              totalSuggested += actualAmount;
+              console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Added final leftover: R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining: R$ ${remainingCash.toFixed(2)}`);
+            }
+          } else {
+            // Create new suggestion
+            suggestions.push({
+              date: today,
+              type: "BUY",
+              ticker: asset.ticker,
+              amount: actualAmount,
+              price: asset.price,
+              quantity: sharesToBuy,
+              reason: `Compra de ${sharesToBuy} ações (saldo final restante)`,
+              cashBalanceBefore: beforeRemaining,
+              cashBalanceAfter: remainingCash,
+            });
+            suggestedTickers.add(asset.ticker);
+            totalSuggested += actualAmount;
+            console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Added final leftover cash: R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining: R$ ${remainingCash.toFixed(2)}`);
+          }
+        }
+      }
+    }
+    
+    console.log(`💰 [GENERATE_BUY] Total suggested: R$ ${totalSuggested.toFixed(2)} / Available cash: R$ ${availableCash.toFixed(2)}`);
+    if (totalSuggested > availableCash + 0.01) {
+      console.error(`❌ [GENERATE_BUY] ERROR: Total suggested (R$ ${totalSuggested.toFixed(2)}) exceeds available cash (R$ ${availableCash.toFixed(2)})!`);
+    }
+    
+    // Final safety check: ensure no duplicate tickers
+    const tickerCounts = new Map<string, number>();
+    suggestions.forEach(s => {
+      if (s.ticker) {
+        tickerCounts.set(s.ticker, (tickerCounts.get(s.ticker) || 0) + 1);
+      }
+    });
+    
+    const duplicates = Array.from(tickerCounts.entries()).filter(([_, count]) => count > 1);
+    if (duplicates.length > 0) {
+      console.error(`❌ [GENERATE_BUY] ERROR: Found duplicate tickers in suggestions:`, duplicates);
+      // Remove duplicates, keeping only the first occurrence
+      const seenTickers = new Set<string>();
+      const deduplicatedSuggestions = suggestions.filter(s => {
+        if (!s.ticker) return true;
+        if (seenTickers.has(s.ticker)) {
+          console.log(`🧹 [GENERATE_BUY] Removing duplicate suggestion for ${s.ticker}`);
+          return false;
+        }
+        seenTickers.add(s.ticker);
+        return true;
+      });
+      console.log(`🧹 [GENERATE_BUY] Removed ${suggestions.length - deduplicatedSuggestions.length} duplicate suggestions`);
+      return deduplicatedSuggestions;
+    }
+
+    return suggestions;
+  }
+
+  /**
+   * Filter duplicate suggestions based on existing transactions
+   */
+  private static filterDuplicateSuggestions(
+    suggestions: SuggestedTransaction[],
+    existingTransactions: any[]
+  ): SuggestedTransaction[] {
     const existingTransactionKeys = new Set(
       existingTransactions.map((tx) => {
         const dateStr = tx.date.toISOString().split("T")[0];
@@ -207,8 +935,6 @@ export class PortfolioTransactionService {
         const amount = Number(tx.amount).toFixed(2);
         const quantity = tx.quantity ? Number(tx.quantity).toFixed(6) : "null";
 
-        // For BUY/SELL transactions, include quantity in key to allow multiple purchases
-        // For other transactions (DEPOSIT, DIVIDEND), include amount
         if (
           tx.type === "BUY" ||
           tx.type === "SELL_REBALANCE" ||
@@ -222,110 +948,12 @@ export class PortfolioTransactionService {
       })
     );
 
-    // Create a Map for dividend amount checking (to avoid suggesting same dividend amount)
-    const existingDividendMap = new Map<
-      string,
-      { amount: number; status: string }
-    >();
-    existingTransactions
-      .filter((tx) => tx.type === "DIVIDEND" && tx.ticker)
-      .forEach((tx) => {
-        const key = `${tx.date.toISOString().split("T")[0]}_${tx.ticker}`;
-        existingDividendMap.set(key, {
-          amount: Number(tx.amount),
-          status: tx.status,
-        });
-      });
-
+    console.log(`🔍 [FILTER_DEDUP] Checking ${suggestions.length} suggestions against ${existingTransactionKeys.size} existing transactions`);
     if (existingTransactionKeys.size > 0) {
-      console.log(
-        `🔍 [DEDUP CHECK] Found ${existingTransactionKeys.size} existing transactions (PENDING/CONFIRMED/REJECTED)`
-      );
+      console.log(`🔍 [FILTER_DEDUP] Existing transaction keys:`, Array.from(existingTransactionKeys).slice(0, 10));
     }
 
-    const suggestions: SuggestedTransaction[] = [];
-
-    if (nextDates.length > 0) {
-      console.log(
-        `📅 [PENDING CONTRIBUTIONS] ${nextDates.length} pending monthly contributions`
-      );
-
-      // Generate suggestions for each missing month (includes rebalancing if needed)
-      for (const date of nextDates) {
-        const monthSuggestions = await this.generateMonthTransactions(
-          portfolio,
-          date,
-          holdings,
-          prices
-        );
-
-        suggestions.push(...monthSuggestions);
-
-        // Update holdings with suggested transactions for next iteration
-        this.updateHoldingsWithSuggestions(holdings, monthSuggestions);
-      }
-    } else {
-      // No pending monthly contributions, check if immediate rebalancing is needed
-      console.log(
-        `📊 [NO PENDING MONTHS] Checking if rebalancing is needed...`
-      );
-
-      console.log(`🔍 [DEBUG] Portfolio data:`, {
-        portfolioId: portfolio.id,
-        assetsCount: portfolio.assets?.length || 0,
-        assets:
-          portfolio.assets?.map(
-            (a: any) =>
-              `${a.ticker}: ${(Number(a.targetAllocation) * 100).toFixed(1)}%`
-          ) || [],
-        holdingsCount: holdings.size,
-        holdings: Array.from(holdings.entries()).map(
-          ([ticker, holding]) =>
-            `${ticker}: ${
-              holding.quantity
-            } shares (R$ ${holding.totalInvested.toFixed(2)} invested)`
-        ),
-        pricesCount: prices.size,
-        prices: Array.from(prices.entries()).map(
-          ([ticker, price]) => `${ticker}: R$ ${price.toFixed(2)}`
-        ),
-      });
-
-      const rebalancingSuggestions = await this.generateRebalancingSuggestions(
-        portfolio,
-        holdings,
-        prices
-      );
-
-      if (rebalancingSuggestions.length > 0) {
-        console.log(
-          `⚖️ [REBALANCING NEEDED] ${rebalancingSuggestions.length} rebalancing transactions suggested`
-        );
-        suggestions.push(...rebalancingSuggestions);
-      } else {
-        console.log(`✅ [PORTFOLIO BALANCED] No rebalancing needed`);
-      }
-    }
-
-    // DIVIDEND SUGGESTIONS: Check for pending dividends in current month
-    console.log(`💰 [DIVIDENDS] Checking for pending dividend payments...`);
-    const dividendSuggestions = await this.generateDividendSuggestions(
-      portfolioId,
-      holdings,
-      prices
-    );
-
-    if (dividendSuggestions.length > 0) {
-      console.log(
-        `💵 [DIVIDENDS] ${dividendSuggestions.length} dividend transactions suggested`
-      );
-      suggestions.push(...dividendSuggestions);
-    } else {
-      console.log(`✅ [DIVIDENDS] No pending dividends for current month`);
-    }
-
-    // INTELLIGENCE: Filter out suggestions that already exist
-    const filteredSuggestions = suggestions.filter((suggestion) => {
+    const filtered = suggestions.filter((suggestion) => {
       const dateStr = suggestion.date.toISOString().split("T")[0];
       const ticker = suggestion.ticker || "null";
       const amount = suggestion.amount.toFixed(2);
@@ -333,7 +961,6 @@ export class PortfolioTransactionService {
         ? suggestion.quantity.toFixed(6)
         : "null";
 
-      // Create key using same logic as existing transactions
       let key: string;
       if (
         suggestion.type === "BUY" ||
@@ -346,77 +973,27 @@ export class PortfolioTransactionService {
         key = `${dateStr}_${suggestion.type}_${ticker}_${amount}`;
       }
 
-      // Check for exact match (any status)
-      if (existingTransactionKeys.has(key)) {
-        console.log(
-          `⏩ [SKIP DUPLICATE] ${suggestion.type} ${
-            suggestion.ticker || ""
-          } on ${dateStr} (${
-            suggestion.type === "BUY" ||
-            suggestion.type === "SELL_REBALANCE" ||
-            suggestion.type === "BUY_REBALANCE" ||
-            suggestion.type === "SELL_WITHDRAWAL"
-              ? `qty: ${quantity}`
-              : `amt: R$ ${amount}`
-          }) already exists`
-        );
-        return false;
+      const isDuplicate = existingTransactionKeys.has(key);
+      if (isDuplicate) {
+        console.log(`🚫 [FILTER_DEDUP] Filtered out duplicate: ${key} (type: ${suggestion.type}, date: ${dateStr}, amount: ${amount})`);
       }
-
-      // Special handling for dividends - check for similar amounts
-      if (suggestion.type === "DIVIDEND" && suggestion.ticker) {
-        const dividendKey = `${suggestion.date.toISOString().split("T")[0]}_${
-          suggestion.ticker
-        }`;
-        const existingDividend = existingDividendMap.get(dividendKey);
-
-        if (existingDividend) {
-          const amountDiff = Math.abs(
-            existingDividend.amount - suggestion.amount
-          );
-          const tolerance = Math.max(0.01, suggestion.amount * 0.05); // 5% tolerance or R$ 0.01 minimum
-
-          if (amountDiff <= tolerance) {
-            console.log(
-              `⏩ [SKIP SIMILAR DIVIDEND] ${suggestion.ticker} on ${
-                suggestion.date.toISOString().split("T")[0]
-              }: R$ ${suggestion.amount.toFixed(
-                2
-              )} vs existing R$ ${existingDividend.amount.toFixed(2)} (${
-                existingDividend.status
-              })`
-            );
-            return false;
-          }
-        }
-      }
-
-      return true;
+      return !isDuplicate;
     });
 
-    const skippedCount = suggestions.length - filteredSuggestions.length;
-
-    if (skippedCount > 0) {
-      console.log(
-        `🛡️ [DEDUP] Skipped ${skippedCount} suggestions (already exist as PENDING)`
-      );
-    }
-
-    const totalTime = Date.now() - startTime;
-    console.log(
-      `✅ [TOTAL SUGGESTIONS] ${filteredSuggestions.length} unique transactions suggested (${totalTime}ms total)`
-    );
-
-    return filteredSuggestions;
+    console.log(`✅ [FILTER_DEDUP] Filtered ${suggestions.length} suggestions → ${filtered.length} remaining`);
+    return filtered;
   }
 
   /**
    * Calculate next transaction dates based on rebalance frequency
-   * Only returns FUTURE dates (today or later) that are due for contribution
+   * Always suggests contribution for the current month if no CASH_CREDIT exists in current month
+   * (regardless of whether previous month's contribution was accepted or rejected)
    */
   private static async calculateNextTransactionDates(
     portfolioId: string
   ): Promise<Date[]> {
+    console.log(`📅 [CALC_DATES] Starting calculateNextTransactionDates for portfolio ${portfolioId}`);
+    
     const portfolio = await prisma.portfolioConfig.findUnique({
       where: { id: portfolioId },
       select: {
@@ -425,68 +1002,65 @@ export class PortfolioTransactionService {
       },
     });
 
-    if (!portfolio) return [];
-
-    // Get the REAL last transaction date from actual transactions
-    const lastTransaction = await prisma.portfolioTransaction.findFirst({
-      where: {
-        portfolioId,
-        status: { in: ["CONFIRMED", "EXECUTED"] },
-        type: "CASH_CREDIT", // Last monthly contribution
-      },
-      orderBy: {
-        date: "desc",
-      },
-      select: {
-        date: true,
-      },
-    });
+    if (!portfolio) {
+      console.log(`❌ [CALC_DATES] Portfolio not found`);
+      return [];
+    }
 
     const dates: Date[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Start of today
+    
+    // Get start of current month
+    const startOfCurrentMonth = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1
+    );
+    startOfCurrentMonth.setHours(0, 0, 0, 0);
+    
+    console.log(`📅 [CALC_DATES] Today: ${today.toISOString().split("T")[0]}, Start of month: ${startOfCurrentMonth.toISOString().split("T")[0]}`);
 
-    const startDate = lastTransaction?.date || portfolio.startDate;
-    const currentDate = new Date(startDate);
-    currentDate.setHours(0, 0, 0, 0);
+    // Check if there's already a PENDING MONTHLY_CONTRIBUTION or CASH_CREDIT transaction in the current month
+    // Only PENDING transactions prevent suggesting (user hasn't decided yet)
+    // CONFIRMED/REJECTED/EXECUTED don't prevent - we can suggest again if needed
+    const currentMonthPendingTransaction = await prisma.portfolioTransaction.findFirst({
+      where: {
+        portfolioId,
+        status: "PENDING",
+        type: { in: ["MONTHLY_CONTRIBUTION", "CASH_CREDIT"] as any },
+        date: {
+          gte: startOfCurrentMonth, // Within current month
+        },
+      },
+      select: {
+        date: true,
+        status: true,
+        type: true,
+      },
+    });
 
     console.log(
-      `📆 [DATE CALC] Last contribution: ${
-        startDate.toISOString().split("T")[0]
-      }, Today: ${today.toISOString().split("T")[0]}`
+      `📅 [CHECK_MONTH] Current month PENDING transaction check:`,
+      currentMonthPendingTransaction 
+        ? `Found ${currentMonthPendingTransaction.type} with status ${currentMonthPendingTransaction.status} on ${currentMonthPendingTransaction.date.toISOString().split("T")[0]}`
+        : 'No PENDING transaction found in current month'
     );
 
-    // Calculate frequency in months
-    const frequencyMonths =
-      portfolio.rebalanceFrequency === "monthly"
-        ? 1
-        : portfolio.rebalanceFrequency === "quarterly"
-        ? 3
-        : 12;
-
-    // Calculate next contribution date after last transaction
-    currentDate.setMonth(currentDate.getMonth() + frequencyMonths);
-
-    // Only include if date is today or in the past (overdue)
-    // But we'll use today's date for overdue contributions
-    if (currentDate <= today) {
-      // Contribution is overdue, suggest it for today
-      dates.push(new Date(today));
+    // If there's a PENDING transaction, don't suggest again (user hasn't decided yet)
+    if (currentMonthPendingTransaction) {
       console.log(
-        `📅 [PENDING] Contribution overdue (expected ${
-          currentDate.toISOString().split("T")[0]
-        }), suggesting for TODAY (${today.toISOString().split("T")[0]})`
+        `⏸️ [PENDING_EXISTS] PENDING contribution already exists for current month, not suggesting again`
       );
-    }
-    // Future date - not yet due
-    else {
-      console.log(
-        `⏰ [NOT DUE] Next contribution scheduled for ${
-          currentDate.toISOString().split("T")[0]
-        }`
-      );
+      return dates; // Return empty array - don't suggest
     }
 
+    // If no PENDING transaction exists in current month, suggest for first day of current month
+    // This ensures we always suggest the monthly contribution for the current month
+    dates.push(new Date(startOfCurrentMonth));
+    console.log(
+      `📅 [SUGGEST] No PENDING contribution in current month (${startOfCurrentMonth.toISOString().split("T")[0]}), suggesting for first day of month`
+    );
     return dates;
   }
 
@@ -674,319 +1248,7 @@ export class PortfolioTransactionService {
     return totalValue;
   }
 
-  /**
-   * Generate immediate rebalancing suggestions (if portfolio is unbalanced)
-   */
-  private static async generateRebalancingSuggestions(
-    portfolio: any,
-    holdings: Map<string, { quantity: number; totalInvested: number }>,
-    prices: Map<string, number>
-  ): Promise<SuggestedTransaction[]> {
-    console.log(`🔄 [REBALANCING] Starting rebalancing analysis...`);
 
-    const suggestions: SuggestedTransaction[] = [];
-
-    // 💰 Calcular valores do portfólio
-    const currentCash = await this.getCurrentCashBalance(portfolio.id);
-    const holdingsValue = this.calculatePortfolioValue(holdings, prices);
-
-    // 🔧 CORREÇÃO: Considera tambem o saldo em caixa para rebalancear
-    const portfolioValueForAllocation = holdingsValue + currentCash;
-
-    console.log(`💰 [REBALANCING] Portfolio breakdown:`, {
-      holdingsValue: holdingsValue.toFixed(2),
-      currentCash: currentCash.toFixed(2),
-      totalValue: (holdingsValue + currentCash).toFixed(2),
-      note: "Alocações calculadas sobre holdings apenas (sem caixa)",
-    });
-
-    if (portfolioValueForAllocation === 0) {
-      console.log(
-        "⚠️ [REBALANCING] Portfolio value is 0, no rebalancing needed"
-      );
-      return [];
-    }
-
-    const currentAllocations = this.calculateCurrentAllocations(
-      holdings,
-      prices,
-      portfolioValueForAllocation
-    );
-
-    // Check if rebalancing is needed
-    // Criteria: >2 percentage points absolute OR >15% relative deviation
-    const deviations: Array<{
-      ticker: string;
-      current: number;
-      target: number;
-      diff: number;
-    }> = [];
-
-    for (const asset of portfolio.assets) {
-      const currentAlloc = currentAllocations.get(asset.ticker) || 0;
-      const targetAlloc = Number(asset.targetAllocation);
-      const diff = currentAlloc - targetAlloc;
-
-      const absoluteDiff = Math.abs(diff);
-      const relativeDeviation =
-        targetAlloc > 0 ? Math.abs(diff / targetAlloc) : 0;
-
-      // 🔧 CORREÇÃO: Thresholds adaptativos baseados no tamanho da alocação
-      // Para alocações pequenas, usar threshold relativo; para grandes, usar absoluto
-      // ESPECIAL: Se meta é 0%, qualquer posição precisa ser vendida
-      const adaptiveAbsoluteThreshold = Math.max(0.02, targetAlloc * 0.3); // Mínimo 2%, máximo 30% da alocação
-      const relativeThreshold = 0.25; // 25% de desvio relativo
-      
-      // Special case: if target is 0% and we have any position, always needs rebalancing
-      const needsRebalancing = targetAlloc === 0 
-        ? currentAlloc > 0 
-        : (absoluteDiff > adaptiveAbsoluteThreshold || relativeDeviation > relativeThreshold);
-
-      console.log(`🔍 [DEVIATION ANALYSIS] ${asset.ticker}:`, {
-        current: `${(currentAlloc * 100).toFixed(2)}%`,
-        target: `${(targetAlloc * 100).toFixed(2)}%`,
-        diff: `${diff > 0 ? "+" : ""}${(diff * 100).toFixed(2)}%`,
-        absoluteDiff: `${(absoluteDiff * 100).toFixed(2)}%`,
-        relativeDeviation: `${(relativeDeviation * 100).toFixed(1)}%`,
-        adaptiveThreshold: `${(adaptiveAbsoluteThreshold * 100).toFixed(2)}%`,
-        needsRebalancing,
-      });
-
-      if (needsRebalancing) {
-        deviations.push({
-          ticker: asset.ticker,
-          current: currentAlloc,
-          target: targetAlloc,
-          diff,
-        });
-
-        console.log(
-          `⚖️ [NEEDS REBALANCING] ${asset.ticker}: ${(
-            currentAlloc * 100
-          ).toFixed(2)}% → ${(targetAlloc * 100).toFixed(2)}%`
-        );
-      } else {
-        console.log(`✅ [BALANCED] ${asset.ticker}: Within acceptable range`);
-      }
-    }
-
-    // 🚨 CRÍTICO: Detectar ativos NÃO CONFIGURADOS na alocação
-    const configuredTickers = new Set(
-      portfolio.assets.map((asset: any) => asset.ticker)
-    );
-    const unconfiguredAssets: Array<{
-      ticker: string;
-      current: number;
-      shouldSell: boolean;
-    }> = [];
-
-    for (const [ticker, holding] of holdings) {
-      if (!configuredTickers.has(ticker) && holding.quantity > 0) {
-        const currentValue = holding.quantity * (prices.get(ticker) || 0);
-        const currentAlloc =
-          portfolioValueForAllocation > 0
-            ? currentValue / portfolioValueForAllocation
-            : 0;
-
-        unconfiguredAssets.push({
-          ticker,
-          current: currentAlloc,
-          shouldSell: true,
-        });
-
-        console.log(
-          `🚨 [UNCONFIGURED ASSET] ${ticker}: ${(currentAlloc * 100).toFixed(
-            2
-          )}% (R$ ${currentValue.toFixed(2)}) - NOT in allocation config`
-        );
-      }
-    }
-
-    const totalPortfolioValue = holdingsValue + currentCash;
-    const cashPercentage =
-      totalPortfolioValue > 0 ? currentCash / totalPortfolioValue : 0;
-
-    console.log(
-      `💰 [CASH ANALYSIS] Available cash: R$ ${currentCash.toFixed(2)} (${(
-        cashPercentage * 100
-      ).toFixed(1)}% of portfolio)`
-    );
-
-    // Determinar se precisa de rebalanceamento
-    const needsRebalancing =
-      deviations.length > 0 ||
-      unconfiguredAssets.length > 0 ||
-      cashPercentage > 0.05;
-
-    if (!needsRebalancing) {
-      console.log("✅ Portfolio is balanced, no rebalancing needed");
-      return [];
-    }
-
-    console.log("⚖️ Portfolio needs rebalancing:");
-
-    if (deviations.length > 0) {
-      console.log(
-        "📊 Configured assets deviations:",
-        deviations.map(
-          (d) =>
-            `${d.ticker}: ${(d.current * 100).toFixed(2)}% vs ${(
-              d.target * 100
-            ).toFixed(2)}% (${d.diff > 0 ? "+" : ""}${(d.diff * 100).toFixed(
-              2
-            )}%)`
-        )
-      );
-    }
-
-    if (unconfiguredAssets.length > 0) {
-      console.log(
-        "🚨 Unconfigured assets to sell:",
-        unconfiguredAssets.map(
-          (a) => `${a.ticker}: ${(a.current * 100).toFixed(2)}%`
-        )
-      );
-    }
-
-    if (cashPercentage > 0.05) {
-      console.log(
-        `💰 Significant cash to invest: ${(cashPercentage * 100).toFixed(1)}%`
-      );
-    }
-
-    const today = new Date();
-    let availableCash = currentCash; // Já calculado acima
-
-    // 🚨 PASSO 1: Vender ativos NÃO CONFIGURADOS na alocação
-    for (const unconfiguredAsset of unconfiguredAssets) {
-      const holding = holdings.get(unconfiguredAsset.ticker);
-      const price = prices.get(unconfiguredAsset.ticker);
-
-      if (holding && price && holding.quantity > 0) {
-        const sellValue = holding.quantity * price;
-
-        suggestions.push({
-          date: today,
-          type: "SELL_WITHDRAWAL",
-          ticker: unconfiguredAsset.ticker,
-          amount: sellValue,
-          price: price,
-          quantity: holding.quantity,
-          reason: `Venda de ${
-            unconfiguredAsset.ticker
-          }: ativo não está configurado na alocação da carteira (${(
-            unconfiguredAsset.current * 100
-          ).toFixed(1)}% atual)`,
-          cashBalanceBefore: availableCash,
-          cashBalanceAfter: availableCash + sellValue,
-        });
-
-        availableCash += sellValue;
-        console.log(
-          `💸 [SELL UNCONFIGURED] ${unconfiguredAsset.ticker}: ${
-            holding.quantity
-          } shares × R$ ${price.toFixed(2)} = R$ ${sellValue.toFixed(2)}`
-        );
-      }
-    }
-
-    // 🎯 PASSO 2 & 3: Rebalanceamento completo (vendas + compras)
-    // Se há desvios de alocação OU caixa disponível, fazer rebalanceamento
-    if (deviations.length > 0 || availableCash > 0) {
-      console.log(`💰 [REBALANCING] Starting rebalancing with:`, {
-        availableCash: availableCash.toFixed(2),
-        portfolioValueForAllocation: portfolioValueForAllocation.toFixed(2),
-        deviationsCount: deviations.length,
-        assetsCount: portfolio.assets.length,
-      });
-
-      const rebalanceSuggestions = this.generateRebalanceTransactions(
-        portfolio.assets,
-        holdings,
-        prices,
-        portfolioValueForAllocation,
-        currentAllocations,
-        availableCash,
-        today
-      );
-
-      console.log(
-        `✅ [REBALANCING] Generated ${rebalanceSuggestions.length} suggestions`
-      );
-      suggestions.push(...rebalanceSuggestions);
-    }
-
-    return suggestions;
-  }
-
-  /**
-   * Generate transactions for a specific month
-   */
-  private static async generateMonthTransactions(
-    portfolio: any,
-    date: Date,
-    holdings: Map<string, { quantity: number; totalInvested: number }>,
-    prices: Map<string, number>
-  ): Promise<SuggestedTransaction[]> {
-    const suggestions: SuggestedTransaction[] = [];
-
-    // Calculate current cash balance
-    const cashBalance = await this.getCurrentCashBalance(portfolio.id);
-
-    // 1. Suggest CASH_CREDIT (monthly contribution)
-    suggestions.push({
-      date,
-      type: "CASH_CREDIT",
-      amount: Number(portfolio.monthlyContribution),
-      reason: `Aporte mensal de R$ ${Number(
-        portfolio.monthlyContribution
-      ).toFixed(2)}`,
-      cashBalanceBefore: cashBalance,
-      cashBalanceAfter: cashBalance + Number(portfolio.monthlyContribution),
-    });
-
-    const currentCash = cashBalance + Number(portfolio.monthlyContribution);
-
-    // 2. Calculate portfolio value and current allocations
-    const portfolioValue = this.calculatePortfolioValue(holdings, prices);
-    const currentAllocations = this.calculateCurrentAllocations(
-      holdings,
-      prices,
-      portfolioValue
-    );
-
-    // 3. Check if rebalancing is needed (>5% deviation)
-    const rebalancingNeeded = portfolio.assets.some((asset: any) => {
-      const currentAlloc = currentAllocations.get(asset.ticker) || 0;
-      const targetAlloc = Number(asset.targetAllocation);
-      return Math.abs(currentAlloc - targetAlloc) > 0.05;
-    });
-
-    if (rebalancingNeeded) {
-      // Generate rebalancing transactions
-      const rebalanceSuggestions = this.generateRebalanceTransactions(
-        portfolio.assets,
-        holdings,
-        prices,
-        portfolioValue,
-        currentAllocations,
-        currentCash,
-        date
-      );
-      suggestions.push(...rebalanceSuggestions);
-    } else {
-      // Generate regular buy transactions
-      const buySuggestions = this.generateBuyTransactions(
-        portfolio.assets,
-        currentCash,
-        prices,
-        date
-      );
-      suggestions.push(...buySuggestions);
-    }
-
-    return suggestions;
-  }
 
   /**
    * Get current cash balance using FAST aggregation (O(1) complexity)
@@ -999,7 +1261,7 @@ export class PortfolioTransactionService {
    * - Generating historical cash balance timeline
    * - One-time data migration/fixes
    */
-  private static async getCurrentCashBalance(
+  static async getCurrentCashBalance(
     portfolioId: string
   ): Promise<number> {
     // Single query to get all transaction types and amounts
@@ -1038,6 +1300,7 @@ export class PortfolioTransactionService {
       // Credits increase cash
       if (
         tx.type === "CASH_CREDIT" ||
+        (tx.type as string) === "MONTHLY_CONTRIBUTION" ||
         tx.type === "DIVIDEND" ||
         tx.type === "SELL_REBALANCE" ||
         tx.type === "SELL_WITHDRAWAL"
@@ -1143,7 +1406,7 @@ export class PortfolioTransactionService {
       let cashBalanceAfter = runningBalance;
 
       // Apply transaction to running balance
-      if (tx.type === "CASH_CREDIT" || tx.type === "DIVIDEND") {
+      if (tx.type === "CASH_CREDIT" || (tx.type as string) === "MONTHLY_CONTRIBUTION" || tx.type === "DIVIDEND") {
         cashBalanceAfter += Number(tx.amount);
       } else if (
         tx.type === "CASH_DEBIT" ||
@@ -1197,7 +1460,9 @@ export class PortfolioTransactionService {
     };
 
     for (const tx of transactions) {
-      if (tx.type === "CASH_CREDIT") summary.CASH_CREDIT += Number(tx.amount);
+      if (tx.type === "CASH_CREDIT" || (tx.type as string) === "MONTHLY_CONTRIBUTION") {
+        summary.CASH_CREDIT += Number(tx.amount);
+      }
       else if (tx.type === "BUY") summary.BUY += Number(tx.amount);
       else if (tx.type === "BUY_REBALANCE")
         summary.BUY_REBALANCE += Number(tx.amount);
@@ -1290,6 +1555,72 @@ export class PortfolioTransactionService {
     );
 
     return allocations;
+  }
+
+  /**
+   * Get dividend suggestions (public method)
+   */
+  static async getDividendSuggestions(
+    portfolioId: string,
+    userId: string
+  ): Promise<SuggestedTransaction[]> {
+    // Verify ownership
+    const portfolio = await PortfolioService.getPortfolioConfig(
+      portfolioId,
+      userId
+    );
+    if (!portfolio) {
+      throw new Error("Portfolio not found");
+    }
+
+    if (!portfolio.trackingStarted) {
+      return [];
+    }
+
+    console.log(`💰 [DIVIDEND SUGGESTIONS] Starting...`);
+    const startTime = Date.now();
+
+    // Get data in parallel
+    const [holdings, prices, existingTransactions] = await Promise.all([
+      this.getCurrentHoldings(portfolioId),
+      this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
+      prisma.portfolioTransaction.findMany({
+        where: {
+          portfolioId,
+          status: { in: ["PENDING", "CONFIRMED", "REJECTED"] },
+          isAutoSuggested: true,
+          type: "DIVIDEND",
+        },
+        select: {
+          date: true,
+          type: true,
+          ticker: true,
+          status: true,
+          amount: true,
+          quantity: true,
+          price: true,
+        },
+      }),
+    ]);
+
+    const suggestions = await this.generateDividendSuggestions(
+      portfolioId,
+      holdings,
+      prices
+    );
+
+    // Filter duplicates
+    const filteredSuggestions = this.filterDuplicateSuggestions(
+      suggestions,
+      existingTransactions
+    );
+
+    const totalTime = Date.now() - startTime;
+    console.log(
+      `✅ [DIVIDEND SUGGESTIONS] ${filteredSuggestions.length} suggestions generated (${totalTime}ms)`
+    );
+
+    return filteredSuggestions;
   }
 
   /**
@@ -1877,91 +2208,6 @@ export class PortfolioTransactionService {
     return suggestions;
   }
 
-  /**
-   * Generate regular buy transactions (for monthly contributions)
-   */
-  private static generateBuyTransactions(
-    assets: any[],
-    availableCash: number,
-    prices: Map<string, number>,
-    date: Date
-  ): SuggestedTransaction[] {
-    const suggestions: SuggestedTransaction[] = [];
-    let cashBalance = availableCash;
-
-    for (const asset of assets) {
-      const price = prices.get(asset.ticker);
-      if (!price || cashBalance <= 0) continue;
-
-      const targetAmount = availableCash * Number(asset.targetAllocation);
-      const sharesToBuy = Math.floor(targetAmount / price);
-
-      if (sharesToBuy > 0) {
-        const actualAmount = sharesToBuy * price;
-
-        suggestions.push({
-          date,
-          type: "BUY",
-          ticker: asset.ticker,
-          amount: actualAmount,
-          price,
-          quantity: sharesToBuy,
-          reason: `Compra de ${sharesToBuy} ações conforme alocação de ${(
-            Number(asset.targetAllocation) * 100
-          ).toFixed(1)}%`,
-          cashBalanceBefore: cashBalance,
-          cashBalanceAfter: cashBalance - actualAmount,
-        });
-
-        cashBalance -= actualAmount;
-      }
-    }
-
-    return suggestions;
-  }
-
-  /**
-   * Generate buy transactions for rebalancing (uses BUY_REBALANCE type)
-   */
-  private static generateBuyTransactionsForRebalancing(
-    assets: any[],
-    availableCash: number,
-    prices: Map<string, number>,
-    date: Date
-  ): SuggestedTransaction[] {
-    const suggestions: SuggestedTransaction[] = [];
-    let cashBalance = availableCash;
-
-    for (const asset of assets) {
-      const price = prices.get(asset.ticker);
-      if (!price || cashBalance <= 0) continue;
-
-      const targetAmount = availableCash * Number(asset.targetAllocation);
-      const sharesToBuy = Math.floor(targetAmount / price);
-
-      if (sharesToBuy > 0) {
-        const actualAmount = sharesToBuy * price;
-
-        suggestions.push({
-          date,
-          type: "BUY_REBALANCE",
-          ticker: asset.ticker,
-          amount: actualAmount,
-          price,
-          quantity: sharesToBuy,
-          reason: `Rebalanceamento: compra de ${sharesToBuy} ações (alocação alvo ${(
-            Number(asset.targetAllocation) * 100
-          ).toFixed(1)}%)`,
-          cashBalanceBefore: cashBalance,
-          cashBalanceAfter: cashBalance - actualAmount,
-        });
-
-        cashBalance -= actualAmount;
-      }
-    }
-
-    return suggestions;
-  }
 
   /**
    * Update holdings with suggested transactions (for multi-month simulation)
@@ -2163,6 +2409,14 @@ export class PortfolioTransactionService {
     console.log(
       `✅ Pending transactions: ${createdCount} created, ${skippedCount} skipped (duplicates) for portfolio ${portfolioId}`
     );
+
+    // Update lastSuggestionsGeneratedAt when creating pending transactions
+    if (createdCount > 0) {
+      await prisma.portfolioConfig.update({
+        where: { id: portfolioId },
+        data: { lastSuggestionsGeneratedAt: new Date() },
+      });
+    }
 
     return transactionIds;
   }

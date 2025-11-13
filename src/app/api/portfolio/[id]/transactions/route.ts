@@ -63,9 +63,15 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       filters
     );
 
+    // Filter out excluded types
+    const excludeType = searchParams.get('excludeType');
+    const filteredTransactions = excludeType
+      ? transactions.filter(tx => tx.type !== excludeType)
+      : transactions;
+
     return NextResponse.json({
-      transactions,
-      count: transactions.length
+      transactions: filteredTransactions,
+      count: filteredTransactions.length
     });
 
   } catch (error) {
@@ -143,6 +149,35 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
+
+    // 🔄 REGENERAR SUGESTÕES AUTOMATICAMENTE
+    // Sempre que uma nova transação é criada, as sugestões devem ser atualizadas
+    try {
+      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      
+      // Deletar transações pendentes antigas (que podem estar desatualizadas)
+      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/pending`, {
+        method: 'DELETE'
+      }).catch(() => {});
+      
+      // Invalidate lastSuggestionsGeneratedAt to force regeneration
+      // This ensures suggestions are regenerated when manual transactions affect cash flow
+      const { prisma } = await import('@/lib/prisma');
+      await prisma.portfolioConfig.update({
+        where: { id: resolvedParams.id },
+        data: { lastSuggestionsGeneratedAt: null }, // Reset to force regeneration
+      }).catch(() => {});
+      
+      // Gerar novas sugestões de contribuição baseadas no novo estado da carteira
+      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/suggestions/contributions`, {
+        method: 'POST'
+      }).catch(() => {});
+      
+      console.log('✅ Sugestões de contribuição recalculadas após criação de transação manual');
+    } catch (suggestionError) {
+      console.error('⚠️ Erro ao recalcular sugestões:', suggestionError);
+      // Não falhar a criação por erro nas sugestões
+    }
 
     return NextResponse.json({
       success: true,

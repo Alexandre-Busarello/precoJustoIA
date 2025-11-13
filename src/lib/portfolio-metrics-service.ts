@@ -752,7 +752,7 @@ export class PortfolioMetricsService {
       
       // Credits increase cash
       if (tx.type === 'CASH_CREDIT' || tx.type === 'DIVIDEND' || 
-          tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
+          tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL' || tx.type === 'MONTHLY_CONTRIBUTION') {
         balance += amount;
         console.log(`  ✅ [${dateStr}] ${tx.type} ${tx.ticker || '-'}: +R$ ${amount.toFixed(2)} → R$ ${balance.toFixed(2)}`);
       }

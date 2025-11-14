@@ -27,7 +27,7 @@ export const STRIPE_CONFIG = {
       },
       early: {
         priceId: process.env.STRIPE_EARLY_ANNUAL_PRICE_ID!,
-        amount: 24900, // R$ 249.00 em centavos
+        amount: 11880, // R$ 118.80 em centavos
         currency: 'brl',
         interval: 'year' as const,
       },

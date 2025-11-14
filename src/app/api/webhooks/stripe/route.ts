@@ -257,7 +257,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
     if (userEmail) {
       try {
         // Verificar se é Early Adopter baseado no preço
-        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 24900 // R$ 249,00
+        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 11880 // R$ 118,80
         
         await sendWelcomeEmail(userEmail, undefined, isEarlyAdopter)
         console.log(`📧 Welcome email sent to ${userEmail} (Early Adopter: ${isEarlyAdopter})`)
@@ -438,7 +438,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
     if (!user.wasPremiumBefore && user.email) {
       try {
         // Verificar se é Early Adopter baseado no preço
-        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 24900 // R$ 249,00
+        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 11880 // R$ 118,80
         
         await sendWelcomeEmail(user.email, user.name || undefined, isEarlyAdopter)
         console.log(`📧 Welcome email sent to ${user.email}`)

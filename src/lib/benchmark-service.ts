@@ -16,7 +16,7 @@ interface BenchmarkData {
 /**
  * Busca dados do CDI do Banco Central do Brasil
  * API SGS - Sistema Gerenciador de Séries Temporais
- * Série 4391: CDI acumulado no mês anualizado
+ * Série 12: CDI (taxa diária %)
  */
 async function fetchCDIData(startDate: Date, endDate: Date): Promise<BenchmarkDataPoint[]> {
   try {
@@ -31,8 +31,8 @@ async function fetchCDIData(startDate: Date, endDate: Date): Promise<BenchmarkDa
     const dataInicial = formatDate(startDate);
     const dataFinal = formatDate(endDate);
 
-    // API do Banco Central
-    const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.4391/dados?formato=json&dataInicial=${dataInicial}&dataFinal=${dataFinal}`;
+    // API do Banco Central - Série 12: CDI (taxa diária %)
+    const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?formato=json&dataInicial=${dataInicial}&dataFinal=${dataFinal}`;
     
     const response = await fetch(url);
 

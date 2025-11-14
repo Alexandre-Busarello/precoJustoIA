@@ -642,28 +642,69 @@ export class PortfolioAnalyticsService {
         
         // O Banco Central retorna o CDI como taxa diária (%)
         // Valores típicos: 0.03% a 0.06% ao dia
-        // Calcular taxa média diária do período
-        const avgDailyRate = cdiData.length > 0
+        // Agrupar dados por mês e calcular taxa mensal para cada mês
+        // Criar um mapa de mês -> taxa mensal
+        const monthlyRateMap = new Map<string, number>();
+        
+        // Calcular taxa média diária geral como fallback
+        const avgDailyRateFallback = cdiData.length > 0
           ? cdiData.reduce((sum, item) => sum + item.value, 0) / cdiData.length
           : 0;
-        
-        // Converter taxa diária para mensal (assumindo ~21 dias úteis por mês)
-        // Juros compostos: (1 + taxa_diária/100)^21 - 1
-        const avgMonthlyRate = avgDailyRate > 0
-          ? Math.pow(1 + (avgDailyRate / 100), 21) - 1
+        const monthlyRateFallback = avgDailyRateFallback > 0
+          ? Math.pow(1 + (avgDailyRateFallback / 100), 21) - 1
           : 0;
         
-        console.log(`📊 [BENCHMARK CDI] Taxa média diária: ${avgDailyRate.toFixed(4)}% a.d.`);
-        console.log(`📊 [BENCHMARK CDI] Taxa mensal equivalente: ${(avgMonthlyRate * 100).toFixed(3)}% a.m.`);
+        // Agrupar dados CDI por mês
+        const cdiByMonth = new Map<string, number[]>();
+        for (const item of cdiData) {
+          const monthKey = item.date.substring(0, 7); // YYYY-MM
+          if (!cdiByMonth.has(monthKey)) {
+            cdiByMonth.set(monthKey, []);
+          }
+          cdiByMonth.get(monthKey)!.push(item.value);
+        }
+        
+        // Calcular taxa mensal para cada mês
+        for (const [monthKey, values] of cdiByMonth) {
+          const avgDailyRate = values.reduce((sum, v) => sum + v, 0) / values.length;
+          const monthlyRate = avgDailyRate > 0
+            ? Math.pow(1 + (avgDailyRate / 100), 21) - 1
+            : 0;
+          monthlyRateMap.set(monthKey, monthlyRate);
+        }
+        
+        if (monthlyRateMap.size > 0) {
+          const avgMonthlyRate = Array.from(monthlyRateMap.values()).reduce((sum, r) => sum + r, 0) / monthlyRateMap.size;
+          console.log(`📊 [BENCHMARK CDI] Taxa mensal média: ${(avgMonthlyRate * 100).toFixed(3)}% a.m.`);
+        }
         
         // Simular investimento com aportes mensais
         let accumulatedValue = sortedEvolution[0].invested || 0;
         const results: number[] = [accumulatedValue];
         
         for (let i = 1; i < sortedEvolution.length; i++) {
+          // Buscar taxa mensal do período entre o ponto anterior e o atual
+          // Usar o mês do ponto atual (que representa o final do período)
+          const evolutionDate = sortedEvolution[i].date;
+          const monthKey = evolutionDate.substring(0, 7); // YYYY-MM
+          
+          // Tentar usar taxa do mês atual, se não houver, usar do mês anterior ou fallback
+          let monthlyRate = monthlyRateMap.get(monthKey);
+          
+          // Se não encontrou, tentar mês anterior
+          if (monthlyRate === undefined && i > 0) {
+            const prevDate = sortedEvolution[i - 1].date;
+            const prevMonthKey = prevDate.substring(0, 7);
+            monthlyRate = monthlyRateMap.get(prevMonthKey);
+          }
+          
+          // Se ainda não encontrou, usar fallback
+          if (monthlyRate === undefined) {
+            monthlyRate = monthlyRateFallback;
+          }
+          
           // Aplicar rendimento CDI mensal sobre saldo atual
-          // Usar taxa média mensal calculada acima
-          accumulatedValue = accumulatedValue * (1 + avgMonthlyRate);
+          accumulatedValue = accumulatedValue * (1 + monthlyRate);
           
           // Adicionar novo aporte após rendimento
           accumulatedValue += monthlyContributions[i] || 0;

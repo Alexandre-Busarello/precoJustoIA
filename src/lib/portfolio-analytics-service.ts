@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { HistoricalDataService } from './historical-data-service';
 import { getLatestPrices as getQuotes, pricesToNumberMap } from './quote-service';
+import { fetchBenchmarkData, alignBenchmarkDates, type BenchmarkData } from './benchmark-service';
 
 /**
  * Ponto de evolução da carteira
@@ -581,6 +582,7 @@ export class PortfolioAnalyticsService {
 
   /**
    * Calcula comparação com benchmarks (CDI e Ibovespa)
+   * Usa dados reais de benchmarks do backend via benchmark-service
    */
   private static async calculateBenchmarkComparison(
     evolution: EvolutionPoint[],
@@ -589,29 +591,169 @@ export class PortfolioAnalyticsService {
     if (evolution.length === 0) return [];
 
     const comparison: BenchmarkComparison[] = [];
-    const initialValue = evolution[0].invested || 100; // Base inicial
 
-    // Taxas aproximadas (anualizadas)
-    const CDI_ANNUAL_RATE = 0.1175; // ~11.75% ao ano (média recente)
-    const IBOV_ANNUAL_RATE = 0.08; // ~8% ao ano (média histórica)
-
-    const CDI_MONTHLY_RATE = Math.pow(1 + CDI_ANNUAL_RATE, 1/12) - 1;
-    const IBOV_MONTHLY_RATE = Math.pow(1 + IBOV_ANNUAL_RATE, 1/12) - 1;
-
-    for (let i = 0; i < evolution.length; i++) {
-      const point = evolution[i];
-      const monthsElapsed = i;
-
-      // Cálculo de retorno acumulado com juros compostos
-      const cdiAccumulated = (Math.pow(1 + CDI_MONTHLY_RATE, monthsElapsed) - 1) * 100;
-      const ibovAccumulated = (Math.pow(1 + IBOV_MONTHLY_RATE, monthsElapsed) - 1) * 100;
-
-      comparison.push({
-        date: point.date,
-        portfolio: point.return,
-        cdi: cdiAccumulated,
-        ibovespa: ibovAccumulated
-      });
+    try {
+      // Obter datas do período da evolução
+      const sortedEvolution = [...evolution].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      
+      const firstDate = new Date(sortedEvolution[0].date);
+      const lastDate = new Date(sortedEvolution[sortedEvolution.length - 1].date);
+      
+      console.log(`📊 [BENCHMARK] Buscando dados reais de benchmarks de ${firstDate.toISOString().split('T')[0]} até ${lastDate.toISOString().split('T')[0]}`);
+      
+      // Buscar dados reais de benchmarks
+      const benchmarkData: BenchmarkData = await fetchBenchmarkData(firstDate, lastDate);
+      
+      // Extrair datas da evolução para alinhamento
+      const evolutionDates = sortedEvolution.map(e => e.date);
+      
+      // Alinhar dados de benchmarks com as datas da evolução
+      const alignedCDI = alignBenchmarkDates(benchmarkData.cdi, evolutionDates);
+      const alignedIBOV = alignBenchmarkDates(benchmarkData.ibov, evolutionDates);
+      
+      console.log(`📊 [BENCHMARK] CDI: ${alignedCDI.length} pontos alinhados, IBOV: ${alignedIBOV.length} pontos alinhados`);
+      
+      // Calcular aportes mensais médios baseado na evolução
+      // O primeiro ponto tem o investimento inicial, depois calculamos diferenças
+      let previousInvested = sortedEvolution[0].invested || 0;
+      const monthlyContributions: number[] = [0]; // Primeiro mês não tem aporte adicional
+      
+      for (let i = 1; i < sortedEvolution.length; i++) {
+        const currentInvested = sortedEvolution[i].invested || 0;
+        const contribution = Math.max(0, currentInvested - previousInvested);
+        monthlyContributions.push(contribution);
+        previousInvested = currentInvested;
+      }
+      
+      // Simular investimento no CDI com aportes mensais
+      const simulateCDIInvestment = (cdiData: Array<{ date: string; value: number }>) => {
+        if (cdiData.length === 0 || sortedEvolution.length === 0) return [];
+        
+        // CDI do Banco Central (série 4391) vem como taxa mensal anualizada (% ao ano)
+        // Precisamos converter para taxa mensal efetiva
+        // Fórmula: (1 + taxa_anual/100)^(1/12) - 1
+        
+        // Simular investimento com aportes mensais
+        let accumulatedValue = sortedEvolution[0].invested || 0;
+        const results: number[] = [accumulatedValue];
+        
+        for (let i = 1; i < sortedEvolution.length; i++) {
+          // Buscar taxa CDI do mês correspondente usando a data da evolução
+          const evolutionDate = sortedEvolution[i].date;
+          const cdiPoint = cdiData.find(item => item.date === evolutionDate);
+          
+          // Se não encontrar exato, usar o mais próximo ou média
+          let cdiValue = 0;
+          if (cdiPoint) {
+            cdiValue = cdiPoint.value;
+          } else if (cdiData.length > 0) {
+            // Usar média do período como fallback
+            cdiValue = cdiData.reduce((sum, item) => sum + item.value, 0) / cdiData.length;
+          }
+          
+          // Converter taxa anual para mensal
+          // Série 4391: CDI acumulado no mês anualizado (% ao ano)
+          const monthlyRate = cdiValue > 0
+            ? Math.pow(1 + (cdiValue / 100), 1/12) - 1
+            : 0;
+          
+          // Aplicar rendimento CDI mensal sobre saldo atual
+          accumulatedValue = accumulatedValue * (1 + monthlyRate);
+          
+          // Adicionar novo aporte após rendimento
+          accumulatedValue += monthlyContributions[i] || 0;
+          
+          results.push(accumulatedValue);
+        }
+        
+        return results;
+      };
+      
+      // Simular investimento no IBOV com aportes mensais
+      const simulateIBOVInvestment = (ibovData: Array<{ date: string; value: number }>) => {
+        if (ibovData.length === 0 || sortedEvolution.length === 0) return [];
+        
+        // IBOV é índice de preço, calculamos variação percentual mês a mês
+        let accumulatedValue = sortedEvolution[0].invested || 0;
+        const results: number[] = [accumulatedValue];
+        
+        for (let i = 1; i < sortedEvolution.length; i++) {
+          // Buscar valores IBOV do mês atual e anterior usando as datas
+          const currentDate = sortedEvolution[i].date;
+          const previousDate = sortedEvolution[i - 1].date;
+          
+          const currentIbov = ibovData.find(item => item.date === currentDate);
+          const previousIbov = ibovData.find(item => item.date === previousDate);
+          
+          // Calcular retorno mensal do IBOV
+          let monthReturn = 0;
+          if (currentIbov && previousIbov && previousIbov.value > 0) {
+            monthReturn = (currentIbov.value - previousIbov.value) / previousIbov.value;
+          }
+          
+          // Aplicar retorno sobre saldo atual
+          accumulatedValue = accumulatedValue * (1 + monthReturn);
+          
+          // Adicionar novo aporte
+          accumulatedValue += monthlyContributions[i] || 0;
+          
+          results.push(accumulatedValue);
+        }
+        
+        return results;
+      };
+      
+      const cdiValues = simulateCDIInvestment(alignedCDI);
+      const ibovValues = simulateIBOVInvestment(alignedIBOV);
+      
+      // Calcular retornos acumulados em percentual para cada ponto
+      for (let i = 0; i < sortedEvolution.length; i++) {
+        const point = sortedEvolution[i];
+        const totalInvested = point.invested || 1; // Evitar divisão por zero
+        
+        // Retorno da carteira já está calculado em point.return
+        const portfolioReturn = point.return;
+        
+        // Calcular retorno acumulado do CDI
+        const cdiValue = cdiValues[i] || totalInvested;
+        const cdiReturn = totalInvested > 0 
+          ? ((cdiValue - totalInvested) / totalInvested) * 100 
+          : 0;
+        
+        // Calcular retorno acumulado do IBOV
+        const ibovValue = ibovValues[i] || totalInvested;
+        const ibovReturn = totalInvested > 0 
+          ? ((ibovValue - totalInvested) / totalInvested) * 100 
+          : 0;
+        
+        comparison.push({
+          date: point.date,
+          portfolio: portfolioReturn,
+          cdi: cdiReturn,
+          ibovespa: ibovReturn
+        });
+      }
+      
+      console.log(`✅ [BENCHMARK] Comparação calculada para ${comparison.length} pontos`);
+      if (comparison.length > 0) {
+        const last = comparison[comparison.length - 1];
+        console.log(`📊 [BENCHMARK] Último ponto - Carteira: ${last.portfolio.toFixed(2)}%, CDI: ${last.cdi.toFixed(2)}%, IBOV: ${last.ibovespa.toFixed(2)}%`);
+      }
+      
+    } catch (error) {
+      console.error('❌ [BENCHMARK] Erro ao calcular comparação com benchmarks:', error);
+      // Fallback: retornar comparação vazia ou com valores zero
+      // A interface espera retornos em percentual, então retornamos zeros
+      for (const point of evolution) {
+        comparison.push({
+          date: point.date,
+          portfolio: point.return,
+          cdi: 0,
+          ibovespa: 0
+        });
+      }
     }
 
     return comparison;

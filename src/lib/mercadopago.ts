@@ -22,7 +22,7 @@ export const preference = new Preference(client)
 export const MERCADOPAGO_CONFIG = {
   plans: {
     early: {
-      amount: 249.00,
+      amount: 118.8,
       description: 'Preço Justo AI - Early Adopter Anual',
       duration: 365, // dias
     },

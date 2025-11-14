@@ -215,18 +215,65 @@ export function PortfolioDividendSuggestions({
 
   const confirmingAll = confirmAllMutation.isPending;
 
+  // Helper function to check if transactionId is temporary (suggestion not yet created as PENDING)
+  const isTemporaryId = (id: string): boolean => {
+    return id.startsWith('suggestion-');
+  };
+
+  // Helper function to find suggestion by temporary ID
+  const findSuggestionById = (id: string): SuggestedTransaction | undefined => {
+    return suggestions.find(s => s.id === id);
+  };
+
   // Mutation for confirming single transaction
   const confirmTransactionMutation = useMutation({
     mutationFn: async (transactionId: string) => {
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`, {
-        method: 'POST'
-      });
+      // Check if this is a temporary ID (suggestion not yet created as PENDING)
+      if (isTemporaryId(transactionId)) {
+        const suggestion = findSuggestionById(transactionId);
+        if (!suggestion) {
+          throw new Error('Sugestão não encontrada');
+        }
 
-      if (!response.ok) {
-        throw new Error('Erro ao confirmar transação');
+        // Use the new endpoint that creates and confirms in one operation
+        const response = await fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            suggestion: {
+              date: suggestion.date,
+              type: suggestion.type,
+              ticker: suggestion.ticker,
+              amount: suggestion.amount,
+              price: suggestion.price,
+              quantity: suggestion.quantity,
+              notes: suggestion.notes,
+              reason: suggestion.notes || (suggestion as any).reason,
+              cashBalanceBefore: (suggestion as any).cashBalanceBefore ?? 0,
+              cashBalanceAfter: (suggestion as any).cashBalanceAfter ?? 0,
+            },
+            action: 'confirm'
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Erro ao confirmar sugestão');
+        }
+
+        return response.json();
+      } else {
+        // Regular transaction ID - use existing endpoint
+        const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`, {
+          method: 'POST'
+        });
+
+        if (!response.ok) {
+          throw new Error('Erro ao confirmar transação');
+        }
+
+        return response.json();
       }
-
-      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -245,10 +292,10 @@ export function PortfolioDividendSuggestions({
         onTransactionsConfirmed();
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: 'Erro',
-        description: 'Não foi possível confirmar a transação',
+        description: error.message || 'Não foi possível confirmar a transação',
         variant: 'destructive'
       });
     }
@@ -261,15 +308,52 @@ export function PortfolioDividendSuggestions({
   // Mutation for rejecting transaction
   const rejectTransactionMutation = useMutation({
     mutationFn: async (transactionId: string) => {
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`, {
-        method: 'POST'
-      });
+      // Check if this is a temporary ID (suggestion not yet created as PENDING)
+      if (isTemporaryId(transactionId)) {
+        const suggestion = findSuggestionById(transactionId);
+        if (!suggestion) {
+          throw new Error('Sugestão não encontrada');
+        }
 
-      if (!response.ok) {
-        throw new Error('Erro ao rejeitar transação');
+        // Use the new endpoint that creates and rejects in one operation
+        const response = await fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            suggestion: {
+              date: suggestion.date,
+              type: suggestion.type,
+              ticker: suggestion.ticker,
+              amount: suggestion.amount,
+              price: suggestion.price,
+              quantity: suggestion.quantity,
+              notes: suggestion.notes,
+              reason: suggestion.notes || (suggestion as any).reason,
+              cashBalanceBefore: (suggestion as any).cashBalanceBefore ?? 0,
+              cashBalanceAfter: (suggestion as any).cashBalanceAfter ?? 0,
+            },
+            action: 'reject'
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Erro ao rejeitar sugestão');
+        }
+
+        return response.json();
+      } else {
+        // Regular transaction ID - use existing endpoint
+        const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`, {
+          method: 'POST'
+        });
+
+        if (!response.ok) {
+          throw new Error('Erro ao rejeitar transação');
+        }
+
+        return response.json();
       }
-
-      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -282,10 +366,10 @@ export function PortfolioDividendSuggestions({
       portfolioCache.dividends.remove(portfolioId);
       portfolioCache.suggestions.remove(portfolioId);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: 'Erro',
-        description: 'Não foi possível rejeitar a transação',
+        description: error.message || 'Não foi possível rejeitar a transação',
         variant: 'destructive'
       });
     }

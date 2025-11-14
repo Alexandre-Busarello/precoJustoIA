@@ -2426,6 +2426,86 @@ export class PortfolioTransactionService {
   }
 
   /**
+   * Create a single pending transaction from a suggestion
+   * Returns the created transaction ID
+   */
+  static async createSinglePendingTransaction(
+    portfolioId: string,
+    userId: string,
+    suggestion: SuggestedTransaction
+  ): Promise<string> {
+    // Verify ownership
+    const portfolio = await PortfolioService.getPortfolioConfig(
+      portfolioId,
+      userId
+    );
+    if (!portfolio) {
+      throw new Error("Portfolio not found");
+    }
+
+    // Check if a similar transaction already exists
+    const { exists, existingTransaction } =
+      await this.checkSimilarTransactionExists(portfolioId, suggestion);
+
+    if (exists && existingTransaction) {
+      // If it exists and is PENDING, return its ID
+      if (existingTransaction.status === "PENDING") {
+        return existingTransaction.id;
+      }
+      // If it's CONFIRMED or EXECUTED, throw error
+      throw new Error("Transaction already exists and was processed");
+    }
+
+    // Calculate cash balances if not provided
+    let cashBalanceBefore = suggestion.cashBalanceBefore;
+    let cashBalanceAfter = suggestion.cashBalanceAfter;
+    
+    if (cashBalanceBefore === 0 && cashBalanceAfter === 0) {
+      // Calculate current cash balance
+      const currentCashBalance = await this.getCurrentCashBalance(portfolioId);
+      cashBalanceBefore = currentCashBalance;
+      
+      // Calculate cash balance after based on transaction type
+      if (suggestion.type === "DIVIDEND" || suggestion.type === "CASH_CREDIT" || suggestion.type === "MONTHLY_CONTRIBUTION") {
+        cashBalanceAfter = currentCashBalance + suggestion.amount;
+      } else if (suggestion.type === "CASH_DEBIT" || suggestion.type === "SELL_WITHDRAWAL") {
+        cashBalanceAfter = currentCashBalance - suggestion.amount;
+      } else if (suggestion.type === "BUY" || suggestion.type === "BUY_REBALANCE") {
+        cashBalanceAfter = currentCashBalance - suggestion.amount;
+      } else if (suggestion.type === "SELL_REBALANCE") {
+        cashBalanceAfter = currentCashBalance + suggestion.amount;
+      } else {
+        cashBalanceAfter = currentCashBalance;
+      }
+    }
+
+    // Create new PENDING transaction
+    const transaction = await safeWrite(
+      "create-single-pending-transaction",
+      () =>
+        prisma.portfolioTransaction.create({
+          data: {
+            portfolioId,
+            date: suggestion.date,
+            type: suggestion.type,
+            ticker: suggestion.ticker,
+            amount: suggestion.amount,
+            price: suggestion.price,
+            quantity: suggestion.quantity,
+            cashBalanceBefore: cashBalanceBefore,
+            cashBalanceAfter: cashBalanceAfter,
+            status: "PENDING",
+            isAutoSuggested: true,
+            notes: suggestion.reason,
+          },
+        }),
+      ["portfolio_transactions"]
+    );
+
+    return transaction.id;
+  }
+
+  /**
    * Confirm a transaction
    */
   static async confirmTransaction(

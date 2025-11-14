@@ -2506,6 +2506,45 @@ export class PortfolioTransactionService {
   }
 
   /**
+   * Recalculate contribution suggestions (Aportes e Compras)
+   * Deletes all pending MONTHLY_CONTRIBUTION and BUY suggestions and regenerates them
+   */
+  private static async recalculateContributionSuggestions(
+    portfolioId: string,
+    userId: string
+  ): Promise<void> {
+    try {
+      console.log(`🔄 [RECALCULATE] Recalculating contribution suggestions for portfolio ${portfolioId}`);
+
+      // Delete all pending MONTHLY_CONTRIBUTION and BUY suggestions
+      const deletedCount = await prisma.portfolioTransaction.deleteMany({
+        where: {
+          portfolioId,
+          status: "PENDING",
+          isAutoSuggested: true,
+          type: { in: ["MONTHLY_CONTRIBUTION", "BUY"] },
+        },
+      });
+
+      console.log(`🧹 [RECALCULATE] Deleted ${deletedCount.count} pending contribution suggestions`);
+
+      // Generate new suggestions
+      const newSuggestions = await this.getContributionSuggestions(portfolioId, userId);
+
+      if (newSuggestions.length > 0) {
+        // Create new pending transactions from suggestions
+        await this.createPendingTransactions(portfolioId, userId, newSuggestions);
+        console.log(`✅ [RECALCULATE] Created ${newSuggestions.length} new contribution suggestions`);
+      } else {
+        console.log(`ℹ️ [RECALCULATE] No new contribution suggestions generated`);
+      }
+    } catch (error) {
+      console.error(`❌ [RECALCULATE] Error recalculating contribution suggestions:`, error);
+      // Don't throw - we don't want to break the main operation if recalculation fails
+    }
+  }
+
+  /**
    * Confirm a transaction
    */
   static async confirmTransaction(
@@ -2549,6 +2588,9 @@ export class PortfolioTransactionService {
     );
 
     console.log(`✅ Transaction confirmed: ${transactionId}`);
+
+    // Recalculate contribution suggestions
+    await this.recalculateContributionSuggestions(transaction.portfolioId, userId);
   }
 
   /**
@@ -2589,6 +2631,9 @@ export class PortfolioTransactionService {
     );
 
     console.log(`✅ Transaction rejected: ${transactionId}`);
+
+    // Recalculate contribution suggestions
+    await this.recalculateContributionSuggestions(transaction.portfolioId, userId);
   }
 
   /**
@@ -2635,6 +2680,9 @@ export class PortfolioTransactionService {
     );
 
     console.log(`✅ Transaction reverted to pending: ${transactionId}`);
+
+    // Recalculate contribution suggestions
+    await this.recalculateContributionSuggestions(transaction.portfolioId, userId);
   }
 
   /**
@@ -2689,6 +2737,9 @@ export class PortfolioTransactionService {
         transactions[0].portfolioId,
         latestDate
       );
+
+      // Recalculate contribution suggestions (only once for the portfolio)
+      await this.recalculateContributionSuggestions(transactions[0].portfolioId, userId);
     }
 
     console.log(`✅ Confirmed ${transactionIds.length} transactions in batch`);
@@ -2786,6 +2837,9 @@ export class PortfolioTransactionService {
       `✅ Created auto cash credit + purchase: ${cashCreditTransaction.id}, ${transaction.id}`
     );
 
+    // Recalculate contribution suggestions
+    await this.recalculateContributionSuggestions(portfolioId, userId);
+
     return {
       cashCreditId: cashCreditTransaction.id,
       transactionId: transaction.id,
@@ -2877,6 +2931,9 @@ export class PortfolioTransactionService {
 
     console.log(`✅ Manual transaction created: ${transaction.id}`);
 
+    // Recalculate contribution suggestions
+    await this.recalculateContributionSuggestions(portfolioId, userId);
+
     return transaction.id;
   }
 
@@ -2905,6 +2962,8 @@ export class PortfolioTransactionService {
       );
     }
 
+    const portfolioId = transaction.portfolioId;
+
     await safeWrite(
       "delete-transaction",
       () =>
@@ -2915,6 +2974,9 @@ export class PortfolioTransactionService {
     );
 
     console.log(`✅ Transaction deleted: ${transactionId}`);
+
+    // Recalculate contribution suggestions
+    await this.recalculateContributionSuggestions(portfolioId, userId);
   }
 
   /**
@@ -2985,5 +3047,8 @@ export class PortfolioTransactionService {
     }
 
     console.log(`✅ Transaction updated: ${transactionId}`);
+
+    // Recalculate contribution suggestions
+    await this.recalculateContributionSuggestions(portfolioId, userId);
   }
 }

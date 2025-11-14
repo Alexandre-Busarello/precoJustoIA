@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, cache } from 'react';
+import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,8 +54,8 @@ export function PortfolioTransactionAI({
   currentCashBalance = 0
 }: PortfolioTransactionAIProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TransactionAIResult | null>(null);
   const [showResults, setShowResults] = useState(false);
 
@@ -67,39 +68,29 @@ export function PortfolioTransactionAI({
     'Compra de 50 BOVA11 a R$ 120,00 cada',
   ];
 
-  const handleGenerate = async () => {
-    if (!input.trim()) {
-      toast({
-        title: 'Entrada vazia',
-        description: 'Digite as transações que deseja cadastrar',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setResult(null);
-      setShowResults(false);
-
-      const response = await cache(async() => fetch('/api/portfolio/transaction-ai', {
+  // Mutation for generating transactions with AI
+  const generateTransactionsMutation = useMutation({
+    mutationFn: async ({ inputText, cashBalance }: { inputText: string; cashBalance: number }) => {
+      const response = await fetch('/api/portfolio/transaction-ai', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           portfolioId,
-          input: input.trim(),
-          currentCashBalance
+          input: inputText.trim(),
+          currentCashBalance: cashBalance
         }),
-      }))();
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Erro ao processar transações');
       }
 
-      const data = await response.json();
+      return response.json();
+    },
+    onSuccess: (data) => {
       setResult(data);
       setShowResults(true);
 
@@ -115,34 +106,45 @@ export function PortfolioTransactionAI({
           description: `${data.transactions.length} transação(ões) identificada(s)`,
         });
       }
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao processar transações:', error);
       toast({
         title: 'Erro no processamento',
-        description: error instanceof Error ? error.message : 'Erro ao processar com IA',
+        description: error.message || 'Erro ao processar com IA',
         variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
     }
+  });
+
+  const handleGenerate = () => {
+    if (!input.trim()) {
+      toast({
+        title: 'Entrada vazia',
+        description: 'Digite as transações que deseja cadastrar',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setResult(null);
+    setShowResults(false);
+    generateTransactionsMutation.mutate({ inputText: input, cashBalance: currentCashBalance });
   };
 
-  const handleApplyTransactions = async () => {
-    if (!result?.transactions) return;
-
-    try {
-      setLoading(true);
-
-      const response = await cache(async() => fetch('/api/portfolio/apply-ai-transactions', {
+  // Mutation for applying generated transactions
+  const applyTransactionsMutation = useMutation({
+    mutationFn: async (transactions: Transaction[]) => {
+      const response = await fetch('/api/portfolio/apply-ai-transactions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           portfolioId,
-          transactions: result.transactions
+          transactions
         }),
-      }))();
+      });
 
       const data = await response.json();
 
@@ -150,11 +152,17 @@ export function PortfolioTransactionAI({
         throw new Error(data.error || 'Erro ao aplicar transações');
       }
 
+      return data;
+    },
+    onSuccess: (data) => {
       // Sucesso - invalidar cache para atualizar interface
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
       invalidateDashboardPortfoliosCache();
       
-      onTransactionsGenerated(result.transactions);
+      if (result) {
+        onTransactionsGenerated(result.transactions);
+      }
       setShowResults(false);
       setInput('');
       setResult(null);
@@ -174,14 +182,11 @@ export function PortfolioTransactionAI({
           });
         }, 1000);
       }
-
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao aplicar transações:', error);
       
-      let errorMessage = 'Erro desconhecido';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      let errorMessage = error.message || 'Erro desconhecido';
       
       // Traduzir erros técnicos para linguagem amigável
       if (errorMessage.includes('INSUFFICIENT_CASH')) {
@@ -193,10 +198,16 @@ export function PortfolioTransactionAI({
         description: errorMessage,
         variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
     }
+  });
+
+  const handleApplyTransactions = () => {
+    if (!result?.transactions) return;
+    applyTransactionsMutation.mutate(result.transactions);
   };
+
+  // Combined loading state from both mutations
+  const loading = generateTransactionsMutation.isPending || applyTransactionsMutation.isPending;
 
   const getTransactionIcon = (type: string) => {
     switch (type) {
@@ -300,11 +311,11 @@ IMPORTANTE: Para compras, sempre informe quantidade E preço por ação"
         {/* Generate Button */}
         <Button 
           onClick={handleGenerate}
-          disabled={disabled || loading || !input.trim()}
+          disabled={disabled || generateTransactionsMutation.isPending || !input.trim()}
           className="w-full"
           size="lg"
         >
-          {loading ? (
+          {generateTransactionsMutation.isPending ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Processando transações...
@@ -410,10 +421,10 @@ IMPORTANTE: Para compras, sempre informe quantidade E preço por ação"
                 <div className="flex gap-2 pt-2">
                   <Button 
                     onClick={handleApplyTransactions}
-                    disabled={loading}
+                    disabled={applyTransactionsMutation.isPending}
                     className="flex-1"
                   >
-                    {loading ? (
+                    {applyTransactionsMutation.isPending ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Aplicando...

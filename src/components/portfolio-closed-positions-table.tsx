@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, cache } from "react";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -11,10 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { TrendingUp, TrendingDown, History } from "lucide-react";
-import { portfolioCache } from "@/lib/portfolio-cache";
 
 interface ClosedPosition {
   ticker: string;
@@ -37,53 +36,58 @@ export function PortfolioClosedPositionsTable({
   portfolioId,
 }: PortfolioClosedPositionsTableProps) {
   const { toast } = useToast();
-  const [closedPositions, setClosedPositions] = useState<ClosedPosition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
+  // Query for loading closed positions
+  const fetchClosedPositions = async () => {
+    const response = await fetch(`/api/portfolio/${portfolioId}/closed-positions`);
+
+    if (!response.ok) {
+      throw new Error("Erro ao carregar posições encerradas");
+    }
+
+    const data = await response.json();
+    return data.closedPositions || [];
+  };
+
+  const {
+    data: closedPositions = [],
+    isLoading: loading,
+    error: closedPositionsError
+  } = useQuery({
+    queryKey: ['portfolio-closed-positions', portfolioId],
+    queryFn: fetchClosedPositions,
+  });
+
+  // Show error toast if query fails
   useEffect(() => {
-    loadClosedPositions();
-  }, [portfolioId]);
-
-  const loadClosedPositions = async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-
-      // Try cache first (unless force refresh)
-      if (!forceRefresh) {
-        const cached = portfolioCache.closedPositions?.get(portfolioId) as any;
-        if (cached) {
-          setClosedPositions(cached.closedPositions || []);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Fetch from API
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/closed-positions`))();
-
-      if (!response.ok) {
-        throw new Error("Erro ao carregar posições encerradas");
-      }
-
-      const data = await response.json();
-      
-      // Cache the result
-      if (portfolioCache.closedPositions) {
-        portfolioCache.closedPositions.set(portfolioId, data);
-      }
-      
-      setClosedPositions(data.closedPositions || []);
-    } catch (error) {
-      console.error("Erro ao carregar posições encerradas:", error);
+    if (closedPositionsError) {
       toast({
         title: "Erro",
         description: "Não foi possível carregar as posições encerradas",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [closedPositionsError, toast]);
+
+  // Invalidate cache when transactions change
+  useEffect(() => {
+    const handleTransactionUpdate = () => {
+      // Small delay to ensure backend has processed the transaction
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['portfolio-closed-positions', portfolioId] });
+      }, 500);
+    };
+
+    // Listen for transaction updates
+    window.addEventListener('transaction-updated', handleTransactionUpdate);
+    window.addEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+
+    return () => {
+      window.removeEventListener('transaction-updated', handleTransactionUpdate);
+      window.removeEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+    };
+  }, [portfolioId, queryClient]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -160,7 +164,7 @@ export function PortfolioClosedPositionsTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {closedPositions.map((position) => (
+              {closedPositions.map((position: ClosedPosition) => (
                 <TableRow key={position.ticker}>
                   <TableCell className="font-medium">
                     {position.ticker}

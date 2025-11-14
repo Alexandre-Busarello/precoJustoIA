@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, cache } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -92,8 +93,7 @@ export function PortfolioTransactionList({
   onTransactionUpdate
 }: PortfolioTransactionListProps) {
   const { toast } = useToast();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   
@@ -107,65 +107,10 @@ export function PortfolioTransactionList({
     quantity: '',
     notes: ''
   });
-  const [saving, setSaving] = useState(false);
   
   // Delete confirmation state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    loadTransactions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId, filterStatus, filterType]);
-
-  const loadTransactions = async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-      
-      const params = new URLSearchParams();
-      if (filterStatus !== 'all') params.append('status', filterStatus);
-      if (filterType !== 'all') params.append('type', filterType);
-      // Include all transaction types including DIVIDEND - history should be complete
-      
-      // Try cache first (unless force refresh or filters applied)
-      if (!forceRefresh && filterStatus === 'all' && filterType === 'all') {
-        const cached = portfolioCache.transactions.get(portfolioId) as any;
-        if (cached) {
-          const sortedTransactions = sortAndGroupTransactions(cached);
-          setTransactions(sortedTransactions);
-          setLoading(false);
-          return;
-        }
-      }
-      
-      // Fetch from API
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions?${params}`))();
-      
-      if (!response.ok) {
-        throw new Error('Erro ao carregar transações');
-      }
-
-      const data = await response.json();
-      
-      // Only cache if no filters
-      if (filterStatus === 'all' && filterType === 'all') {
-        portfolioCache.transactions.set(portfolioId, data.transactions || []);
-      }
-      
-      const sortedTransactions = sortAndGroupTransactions(data.transactions || []);
-      setTransactions(sortedTransactions);
-    } catch (error) {
-      console.error('Erro ao carregar transações:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar as transações',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Sort transactions by date (DESC) and type priority
   const sortAndGroupTransactions = (txs: Transaction[]): Transaction[] => {
@@ -207,6 +152,47 @@ export function PortfolioTransactionList({
     return sorted;
   };
 
+  // Fetch transactions with React Query
+  const fetchTransactions = async (): Promise<Transaction[]> => {
+    const params = new URLSearchParams();
+    if (filterStatus !== 'all') params.append('status', filterStatus);
+    if (filterType !== 'all') params.append('type', filterType);
+    
+    const response = await fetch(`/api/portfolio/${portfolioId}/transactions?${params}`);
+    
+    if (!response.ok) {
+      throw new Error('Erro ao carregar transações');
+    }
+
+    const data = await response.json();
+    return data.transactions || [];
+  };
+
+  const {
+    data: transactionsData = [],
+    isLoading: loading,
+    error: transactionsError
+  } = useQuery({
+    queryKey: ['portfolio-transactions', portfolioId, filterStatus, filterType],
+    queryFn: fetchTransactions,
+    // Configurações globais do query-provider.tsx já aplicam:
+    // staleTime: 5 minutos, gcTime: 10 minutos, refetchOnMount: false, refetchOnWindowFocus: false
+  });
+
+  // Sort and group transactions
+  const transactions = sortAndGroupTransactions(transactionsData);
+
+  // Show error toast if query fails
+  useEffect(() => {
+    if (transactionsError) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar as transações',
+        variant: 'destructive'
+      });
+    }
+  }, [transactionsError, toast]);
+
   const handleEditClick = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setEditForm({
@@ -219,73 +205,79 @@ export function PortfolioTransactionList({
     setShowEditModal(true);
   };
 
-  const handleEditSave = async () => {
-    if (!editingTransaction) return;
-
-    try {
-      setSaving(true);
-
-      const updates: any = {
-        date: editForm.date,
-        amount: parseFloat(editForm.amount),
-        notes: editForm.notes
-      };
-
-      if (editForm.price) {
-        updates.price = parseFloat(editForm.price);
-      }
-      if (editForm.quantity) {
-        updates.quantity = parseFloat(editForm.quantity);
-      }
-
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions/${editingTransaction.id}`,
+  const editMutation = useMutation({
+    mutationFn: async ({ transactionId, transactionType, updates }: { transactionId: string; transactionType: string; updates: any }) => {
+      const response = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/${transactionId}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updates)
         }
-      ))();
+      );
 
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Erro ao atualizar transação');
       }
 
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
       toast({
         title: 'Sucesso',
         description: 'Transação atualizada com sucesso'
       });
 
       // Invalidar todos os caches da carteira e dashboard
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
       invalidateDashboardPortfoliosCache();
 
       // Dispatch event for cash flow change to trigger suggestion regeneration
-      if (editingTransaction) {
-        window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
-          detail: {
-            transactionType: editingTransaction.type,
-            portfolioId: portfolioId,
-            action: 'updated'
-          }
-        }));
-      }
+      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+        detail: {
+          transactionType: variables.transactionType,
+          portfolioId: portfolioId,
+          action: 'updated'
+        }
+      }));
 
       setShowEditModal(false);
       setEditingTransaction(null);
-      loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao atualizar transação:', error);
       toast({
         title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao atualizar transação',
+        description: error.message || 'Erro ao atualizar transação',
         variant: 'destructive'
       });
-    } finally {
-      setSaving(false);
     }
+  });
+
+  const handleEditSave = async () => {
+    if (!editingTransaction) return;
+
+    const updates: any = {
+      date: editForm.date,
+      amount: parseFloat(editForm.amount),
+      notes: editForm.notes
+    };
+
+    if (editForm.price) {
+      updates.price = parseFloat(editForm.price);
+    }
+    if (editForm.quantity) {
+      updates.quantity = parseFloat(editForm.quantity);
+    }
+
+    editMutation.mutate({
+      transactionId: editingTransaction.id,
+      transactionType: editingTransaction.type,
+      updates
+    });
   };
 
   const handleDeleteClick = (transaction: Transaction) => {
@@ -293,28 +285,28 @@ export function PortfolioTransactionList({
     setShowDeleteDialog(true);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deletingTransaction) return;
-
-    try {
-      setDeleting(true);
-
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions/${deletingTransaction.id}`,
+  const deleteMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(
+        `/api/portfolio/${portfolioId}/transactions/${transactionId}`,
         { method: 'DELETE' }
-      ))();
+      );
 
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Erro ao excluir transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação excluída com sucesso'
       });
 
       // Invalidar todos os caches da carteira e dashboard
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
       invalidateDashboardPortfoliosCache();
 
@@ -331,113 +323,140 @@ export function PortfolioTransactionList({
 
       setShowDeleteDialog(false);
       setDeletingTransaction(null);
-      loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao excluir transação:', error);
       toast({
         title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao excluir transação',
+        description: error.message || 'Erro ao excluir transação',
         variant: 'destructive'
       });
-    } finally {
-      setDeleting(false);
     }
+  });
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingTransaction) return;
+    deleteMutation.mutate(deletingTransaction.id);
   };
 
-  const handleConfirm = async (transactionId: string) => {
-    try {
-      const response = await cache(async() => fetch(
+  const confirmMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação confirmada'
       });
 
       // Invalidar cache do dashboard
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       invalidateDashboardPortfoliosCache();
       
-      loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
-    } catch {
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Erro ao confirmar transação',
         variant: 'destructive'
       });
     }
+  });
+
+  const handleConfirm = async (transactionId: string) => {
+    confirmMutation.mutate(transactionId);
   };
 
-  const handleReject = async (transactionId: string) => {
-    try {
-      const response = await cache(async() => fetch(
+  const rejectMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason: 'Rejeitado pelo usuário' })
         }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação rejeitada'
       });
 
       // Invalidar cache do dashboard
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       invalidateDashboardPortfoliosCache();
       
-      loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
-    } catch {
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Erro ao rejeitar transação',
         variant: 'destructive'
       });
     }
+  });
+
+  const handleReject = async (transactionId: string) => {
+    rejectMutation.mutate(transactionId);
   };
 
-  const handleRevert = async (transactionId: string) => {
-    try {
-      const response = await cache(async() => fetch(
+  const revertMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/revert`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao reverter transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação revertida para pendente'
       });
 
       // Invalidar cache do dashboard
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       invalidateDashboardPortfoliosCache();
       portfolioCache.invalidateAll(portfolioId);
       
-      await loadTransactions();
       if (onTransactionUpdate) onTransactionUpdate();
-    } catch {
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Erro ao reverter transação',
         variant: 'destructive'
       });
     }
+  });
+
+  const handleRevert = async (transactionId: string) => {
+    revertMutation.mutate(transactionId);
   };
 
   const getTypeIcon = (type: string) => {
@@ -707,12 +726,12 @@ export function PortfolioTransactionList({
               <Button
                 variant="outline"
                 onClick={() => setShowEditModal(false)}
-                disabled={saving}
+                disabled={editMutation.isPending}
               >
                 Cancelar
               </Button>
-              <Button onClick={handleEditSave} disabled={saving}>
-                {saving ? 'Salvando...' : 'Salvar Alterações'}
+              <Button onClick={handleEditSave} disabled={editMutation.isPending}>
+                {editMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
               </Button>
             </div>
           </div>
@@ -742,13 +761,13 @@ export function PortfolioTransactionList({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              disabled={deleting}
+              disabled={deleteMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleting ? 'Excluindo...' : 'Excluir Transação'}
+              {deleteMutation.isPending ? 'Excluindo...' : 'Excluir Transação'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

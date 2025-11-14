@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, cache } from "react";
+import { useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -44,32 +45,103 @@ export function PortfolioHoldingsTable({
   onNavigateToTransactions,
 }: PortfolioHoldingsTableProps) {
   const { toast } = useToast();
-  const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalValue, setTotalValue] = useState(0);
-  const [shouldShowRebalancing, setShouldShowRebalancing] = useState(false);
-  const [maxDeviation, setMaxDeviation] = useState(0);
-  const [generatingRebalancing, setGeneratingRebalancing] = useState(false);
-  const [hasPendingContributions, setHasPendingContributions] = useState(false);
-  const [pendingContributionsCount, setPendingContributionsCount] = useState(0);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const loadData = async () => {
-      await loadHoldings();
-      await checkRebalancingNeeded();
-      await checkPendingContributions();
+  // Query for loading holdings
+  const fetchHoldings = async () => {
+    const response = await fetch(`/api/portfolio/${portfolioId}/holdings`);
+    
+    if (!response.ok) {
+      throw new Error("Erro ao carregar posições");
+    }
+
+    const data = await response.json();
+    return data;
+  };
+
+  const {
+    data: holdingsData,
+    isLoading: loadingHoldings,
+    error: holdingsError
+  } = useQuery({
+    queryKey: ['portfolio-holdings', portfolioId],
+    queryFn: fetchHoldings,
+  });
+
+  const holdings = holdingsData?.holdings || [];
+
+  // Query for checking pending contributions
+  const fetchPendingContributions = async () => {
+    const response = await fetch(
+      `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Erro ao verificar transações pendentes');
+    }
+
+    const data = await response.json();
+    const contributionTx = (data.transactions || []).filter(
+      (tx: any) => 
+        tx.type !== 'SELL_REBALANCE' && 
+        tx.type !== 'BUY_REBALANCE' &&
+        (tx.type === 'MONTHLY_CONTRIBUTION' || 
+         tx.type === 'CASH_CREDIT' || 
+         tx.type === 'BUY' || 
+         tx.type === 'DIVIDEND')
+    );
+    
+    return {
+      hasPending: contributionTx.length > 0,
+      count: contributionTx.length
     };
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId]);
+  };
 
-  // Re-check pending contributions when transactions change
+  const {
+    data: pendingContributionsData,
+  } = useQuery({
+    queryKey: ['portfolio-pending-contributions', portfolioId],
+    queryFn: fetchPendingContributions,
+  });
+
+  const hasPendingContributions = pendingContributionsData?.hasPending || false;
+  const pendingContributionsCount = pendingContributionsData?.count || 0;
+
+  // Query for checking rebalancing needed
+  const fetchRebalancingCheck = async () => {
+    const response = await fetch(
+      `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing/check`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Erro ao verificar necessidade de rebalanceamento');
+    }
+
+    const data = await response.json();
+    return {
+      shouldShow: data.shouldShow || false,
+      maxDeviation: data.maxDeviation || 0
+    };
+  };
+
+  const {
+    data: rebalancingCheckData,
+  } = useQuery({
+    queryKey: ['portfolio-rebalancing-check', portfolioId],
+    queryFn: fetchRebalancingCheck,
+  });
+
+  const shouldShowRebalancing = rebalancingCheckData?.shouldShow || false;
+  const maxDeviation = rebalancingCheckData?.maxDeviation || 0;
+
+  // Re-check when transactions change
   useEffect(() => {
-    const handleTransactionUpdate = async () => {
+    const handleTransactionUpdate = () => {
       // Small delay to ensure backend has processed the transaction
-      setTimeout(async () => {
-        await checkPendingContributions();
-        await checkRebalancingNeeded();
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio-holdings', portfolioId] });
       }, 500);
     };
 
@@ -83,69 +155,15 @@ export function PortfolioHoldingsTable({
       window.removeEventListener('reload-suggestions', handleTransactionUpdate);
       window.removeEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId]);
+  }, [portfolioId, queryClient]);
 
-  const checkPendingContributions = async () => {
-    try {
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      ))();
-      
-      if (response.ok) {
-        const data = await response.json();
-        const contributionTx = (data.transactions || []).filter(
-          (tx: any) => 
-            tx.type !== 'SELL_REBALANCE' && 
-            tx.type !== 'BUY_REBALANCE' &&
-            (tx.type === 'MONTHLY_CONTRIBUTION' || 
-             tx.type === 'CASH_CREDIT' || 
-             tx.type === 'BUY' || 
-             tx.type === 'DIVIDEND')
-        );
-        
-        setHasPendingContributions(contributionTx.length > 0);
-        setPendingContributionsCount(contributionTx.length);
-      }
-    } catch (error) {
-      console.error('Erro ao verificar transações pendentes de contribuição:', error);
-    }
-  };
-
-  const checkRebalancingNeeded = async () => {
-    try {
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing/check`
-      ))();
-      
-      if (response.ok) {
-        const data = await response.json();
-        setShouldShowRebalancing(data.shouldShow);
-        setMaxDeviation(data.maxDeviation || 0);
-      }
-    } catch (error) {
-      console.error('Erro ao verificar necessidade de rebalanceamento:', error);
-    }
-  };
-
-  const handleGenerateRebalancing = async () => {
-    // Don't allow if there are pending contributions
-    if (hasPendingContributions) {
-      toast({
-        title: 'Atenção',
-        description: `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"`,
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      setGeneratingRebalancing(true);
-
+  // Mutation for generating rebalancing suggestions
+  const generateRebalancingMutation = useMutation({
+    mutationFn: async () => {
       // Delete existing rebalancing suggestions first
-      const pendingResponse = await cache(async() => fetch(
+      const pendingResponse = await fetch(
         `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      ))();
+      );
       
       if (pendingResponse.ok) {
         const pendingData = await pendingResponse.json();
@@ -156,29 +174,36 @@ export function PortfolioHoldingsTable({
         // Delete each rebalancing transaction
         await Promise.all(
           rebalancingTx.map((tx: any) =>
-            cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
+            fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
               method: 'DELETE'
-            }))().catch(() => {})
+            }).catch(() => {})
           )
         );
       }
 
       // Generate new rebalancing suggestions
-      const generateResponse = await cache(async() => fetch(
+      const generateResponse = await fetch(
         `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!generateResponse.ok) {
         throw new Error('Erro ao gerar sugestões de rebalanceamento');
       }
 
+      return generateResponse.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sugestões geradas',
         description: 'Sugestões de rebalanceamento geradas com sucesso'
       });
 
       // Invalidate cache
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-holdings', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
 
       // Navigate to transactions tab
@@ -195,55 +220,44 @@ export function PortfolioHoldingsTable({
         // Trigger page reload or tab change
         window.location.reload();
       }
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao gerar sugestões:', error);
       toast({
         title: 'Erro',
         description: 'Não foi possível gerar sugestões de rebalanceamento',
         variant: 'destructive'
       });
-    } finally {
-      setGeneratingRebalancing(false);
     }
+  });
+
+  const handleGenerateRebalancing = () => {
+    // Don't allow if there are pending contributions
+    if (hasPendingContributions) {
+      toast({
+        title: 'Atenção',
+        description: `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    generateRebalancingMutation.mutate();
   };
 
-  const loadHoldings = async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-
-      // Try cache first (unless force refresh)
-      if (!forceRefresh) {
-        const cached = portfolioCache.holdings.get(portfolioId) as any;
-        if (cached) {
-          setHoldings(cached.holdings || []);
-          setTotalValue(cached.totalValue || 0);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Fetch from API
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/holdings`))();
-
-      if (!response.ok) {
-        throw new Error("Erro ao carregar posições");
-      }
-
-      const data = await response.json();
-      portfolioCache.holdings.set(portfolioId, data);
-      setHoldings(data.holdings || []);
-      setTotalValue(data.totalValue || 0);
-    } catch (error) {
-      console.error("Erro ao carregar posições:", error);
+  // Show error toast if holdings query fails
+  useEffect(() => {
+    if (holdingsError) {
       toast({
         title: "Erro",
         description: "Não foi possível carregar as posições",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [holdingsError, toast]);
+
+  const loading = loadingHoldings;
+  const generatingRebalancing = generateRebalancingMutation.isPending;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, cache } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,8 +53,7 @@ export function PortfolioConfigForm({
   const router = useRouter();
   const { toast } = useToast();
   const { isPremium } = usePremiumStatus();
-  
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [name, setName] = useState(initialData?.name || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [startDate, setStartDate] = useState(initialData?.startDate || new Date().toISOString().split('T')[0]);
@@ -127,7 +127,110 @@ export function PortfolioConfigForm({
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Mutation for creating portfolio
+  const createPortfolioMutation = useMutation({
+    mutationFn: async (data: {
+      name: string;
+      description?: string;
+      startDate: string;
+      monthlyContribution: number;
+      rebalanceFrequency: string;
+      assets: Asset[];
+    }) => {
+      const response = await fetch('/api/portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao criar carteira');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Sucesso!',
+        description: 'Carteira criada com sucesso'
+      });
+
+      // Invalidate dashboard cache
+      invalidateDashboardPortfoliosCache();
+      queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        router.push(`/carteira?id=${data.portfolioId}`);
+      }
+    },
+    onError: (error: Error) => {
+      console.error('Erro ao criar carteira:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao criar carteira',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Mutation for updating portfolio
+  const updatePortfolioMutation = useMutation({
+    mutationFn: async (data: {
+      portfolioId: string;
+      name: string;
+      description?: string;
+      monthlyContribution: number;
+      rebalanceFrequency: string;
+    }) => {
+      const response = await fetch(`/api/portfolio/${data.portfolioId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name,
+          description: data.description,
+          monthlyContribution: data.monthlyContribution,
+          rebalanceFrequency: data.rebalanceFrequency
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao atualizar carteira');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Sucesso!',
+        description: 'Carteira atualizada com sucesso'
+      });
+
+      // Invalidate dashboard cache
+      invalidateDashboardPortfoliosCache();
+      queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+      if (initialData?.id) {
+        queryClient.invalidateQueries({ queryKey: ['portfolio', initialData.id] });
+      }
+
+      if (onSuccess) {
+        onSuccess();
+      }
+    },
+    onError: (error: Error) => {
+      console.error('Erro ao atualizar carteira:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao atualizar carteira',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!isValid) {
@@ -139,88 +242,37 @@ export function PortfolioConfigForm({
       return;
     }
 
-    setLoading(true);
-
-    try {
-      if (mode === 'create') {
-        const response = await cache(async() => fetch('/api/portfolio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name,
-            description,
-            startDate,
-            monthlyContribution,
-            rebalanceFrequency,
-            assets
-          })
-        }))();
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Erro ao criar carteira');
-        }
-
-        const data = await response.json();
-        
-        toast({
-          title: 'Sucesso!',
-          description: 'Carteira criada com sucesso'
-        });
-
-        // Invalidate dashboard cache
-        invalidateDashboardPortfoliosCache();
-
-        if (onSuccess) {
-          onSuccess();
-        } else {
-          router.push(`/carteira?id=${data.portfolioId}`);
-        }
-      } else {
-        // Edit mode - update portfolio
-        if (!initialData?.id) {
-          throw new Error('ID da carteira não encontrado');
-        }
-
-        const response = await cache(async() => fetch(`/api/portfolio/${initialData.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name,
-            description,
-            monthlyContribution,
-            rebalanceFrequency
-          })
-        }))();
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Erro ao atualizar carteira');
-        }
-
-        toast({
-          title: 'Sucesso!',
-          description: 'Carteira atualizada com sucesso'
-        });
-
-        // Invalidate dashboard cache
-        invalidateDashboardPortfoliosCache();
-
-        if (onSuccess) {
-          onSuccess();
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao salvar carteira:', error);
-      toast({
-        title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao salvar carteira',
-        variant: 'destructive'
+    if (mode === 'create') {
+      createPortfolioMutation.mutate({
+        name,
+        description,
+        startDate,
+        monthlyContribution,
+        rebalanceFrequency,
+        assets
       });
-    } finally {
-      setLoading(false);
+    } else {
+      // Edit mode - update portfolio
+      if (!initialData?.id) {
+        toast({
+          title: 'Erro',
+          description: 'ID da carteira não encontrado',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      updatePortfolioMutation.mutate({
+        portfolioId: initialData.id,
+        name,
+        description,
+        monthlyContribution,
+        rebalanceFrequency
+      });
     }
   };
+
+  const loading = createPortfolioMutation.isPending || updatePortfolioMutation.isPending;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">

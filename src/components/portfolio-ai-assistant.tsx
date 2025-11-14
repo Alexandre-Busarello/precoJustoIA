@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, cache } from 'react';
+import { useState, useEffect } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,7 +33,6 @@ interface PortfolioAIAssistantProps {
 export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAssets = [] }: PortfolioAIAssistantProps) {
   const { toast } = useToast();
   const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(false);
   const [generatedAssets, setGeneratedAssets] = useState<Asset[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [aiReasoning, setAiReasoning] = useState<string>('');
@@ -62,28 +62,17 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
     "Empresas baratas com P/VP baixo e boa rentabilidade"
   ];
 
-  const handleGeneratePortfolio = async () => {
-    if (!prompt.trim()) {
-      toast({
-        title: 'Prompt obrigatório',
-        description: 'Descreva como você quer sua carteira',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setLoading(true);
-    setShowResults(false);
-
-    try {
-      const response = await cache(async() => fetch('/api/portfolio/ai-assistant', {
+  // Mutation for generating portfolio with AI
+  const generatePortfolioMutation = useMutation({
+    mutationFn: async ({ promptText, assets }: { promptText: string; assets: Asset[] }) => {
+      const response = await fetch('/api/portfolio/ai-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          prompt: prompt.trim(),
-          currentAssets: currentAssets.length > 0 ? currentAssets : undefined
+          prompt: promptText.trim(),
+          currentAssets: assets.length > 0 ? assets : undefined
         })
-      }))();
+      });
 
       if (!response.ok) {
         const error = await response.json();
@@ -96,6 +85,9 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
         throw new Error('Nenhum ativo foi gerado pela IA');
       }
 
+      return data;
+    },
+    onSuccess: (data) => {
       setGeneratedAssets(data.assets);
       setAiReasoning(data.reasoning || 'Carteira configurada pela IA');
       setDataSource(data.dataSource || 'general');
@@ -110,18 +102,33 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
         title: 'Carteira gerada!',
         description: `${data.assets.length} ativos configurados pela IA${screeningInfo}`,
       });
-
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao gerar carteira:', error);
       toast({
         title: 'Erro na geração',
-        description: error instanceof Error ? error.message : 'Erro ao processar com IA',
+        description: error.message || 'Erro ao processar com IA',
         variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
     }
+  });
+
+  const handleGeneratePortfolio = () => {
+    if (!prompt.trim()) {
+      toast({
+        title: 'Prompt obrigatório',
+        description: 'Descreva como você quer sua carteira',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setShowResults(false);
+    generatePortfolioMutation.mutate({ promptText: prompt, assets: currentAssets });
   };
+
+  // Loading state from mutation
+  const loading = generatePortfolioMutation.isPending;
 
   const handleApplyAssets = () => {
     onAssetsGenerated(generatedAssets);

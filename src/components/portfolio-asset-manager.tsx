@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, cache } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,9 +47,7 @@ export function PortfolioAssetManager({
 }: PortfolioAssetManagerProps) {
   const { toast } = useToast();
   const { isPremium } = usePremiumStatus();
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTicker, setNewTicker] = useState("");
   const [newAllocation, setNewAllocation] = useState("");
@@ -63,10 +62,37 @@ export function PortfolioAssetManager({
     return "bulk";
   });
 
+  // Query for loading portfolio assets
+  const fetchPortfolio = async () => {
+    const response = await fetch(`/api/portfolio/${portfolioId}`);
+
+    if (!response.ok) {
+      throw new Error("Erro ao carregar ativos");
+    }
+
+    const data = await response.json();
+    return data.portfolio.assets || [];
+  };
+
+  const {
+    data: assets = [],
+    isLoading: loading,
+    error: assetsError
+  } = useQuery({
+    queryKey: ['portfolio', portfolioId],
+    queryFn: fetchPortfolio,
+  });
+
+  // Show error toast if query fails
   useEffect(() => {
-    loadAssets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId]);
+    if (assetsError) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os ativos",
+        variant: "destructive",
+      });
+    }
+  }, [assetsError, toast]);
 
   // Detectar hash e fazer scroll quando dados carregarem
   useEffect(() => {
@@ -106,43 +132,88 @@ export function PortfolioAssetManager({
     }
   }, [loading]);
 
-  const loadAssets = async () => {
-    try {
-      setLoading(true);
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}`))();
+  // Local state for editing allocations before saving
+  const [localAssets, setLocalAssets] = useState<Asset[]>([]);
 
-      if (!response.ok) {
-        throw new Error("Erro ao carregar ativos");
-      }
-
-      const data = await response.json();
-      setAssets(data.portfolio.assets || []);
-    } catch (error) {
-      console.error("Erro ao carregar ativos:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os ativos",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Sync local assets with query data
+  useEffect(() => {
+    setLocalAssets(assets);
+  }, [assets]);
 
   const updateAllocation = (index: number, value: string) => {
-    const newAssets = [...assets];
+    const newAssets = [...localAssets];
     newAssets[index].targetAllocation = parseFloat(value) / 100 || 0;
-    setAssets(newAssets);
+    setLocalAssets(newAssets);
   };
 
-  const totalAllocation = assets.reduce(
-    (sum, a) => sum + a.targetAllocation,
+  // Use localAssets for display/editing, fallback to assets from query
+  const displayAssets = localAssets.length > 0 ? localAssets : assets;
+
+  const totalAllocation = displayAssets.reduce(
+    (sum: number, a: Asset) => sum + a.targetAllocation,
     0
   );
   const totalPercent = totalAllocation * 100;
   const isValid = totalPercent >= 99.5 && totalPercent <= 100.5;
 
-  const handleAddAsset = async () => {
+  // Mutation for adding asset
+  const addAssetMutation = useMutation({
+    mutationFn: async ({ ticker, targetAllocation, updatedAssets }: { ticker: string; targetAllocation: number; updatedAssets: Array<{ ticker: string; targetAllocation: number }> }) => {
+      // Add new asset
+      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker, targetAllocation }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Erro ao adicionar ativo");
+      }
+
+      // Update existing assets with new allocations
+      if (updatedAssets.length > 0) {
+        const updateResponse = await fetch(
+          `/api/portfolio/${portfolioId}/assets`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assets: updatedAssets }),
+          }
+        );
+
+        if (!updateResponse.ok) {
+          console.error("Failed to update existing assets allocations");
+        }
+      }
+
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: "Ativo adicionado!",
+        description: `${variables.ticker} foi adicionado com ${(
+          variables.targetAllocation * 100
+        ).toFixed(1)}% e as demais alocações foram redistribuídas`,
+      });
+
+      setNewTicker("");
+      setNewAllocation("");
+      setShowAddModal(false);
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+      onUpdate();
+    },
+    onError: (error: Error) => {
+      console.error("Erro ao adicionar ativo:", error);
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao adicionar ativo",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleAddAsset = () => {
     if (!newTicker) {
       toast({
         title: "Ticker obrigatório",
@@ -154,7 +225,7 @@ export function PortfolioAssetManager({
 
     const ticker = newTicker.toUpperCase().trim();
 
-    if (assets.some((a) => a.ticker === ticker)) {
+    if (assets.some((a: Asset) => a.ticker === ticker)) {
       toast({
         title: "Ativo já existe",
         description: "Este ativo já está na carteira",
@@ -194,78 +265,77 @@ export function PortfolioAssetManager({
       });
     }
 
-    try {
-      setSaving(true);
+    // Redistribute existing assets proportionally
+    const currentTotal = assets.reduce(
+      (sum: number, a: Asset) => sum + a.targetAllocation,
+      0
+    );
+    const remainingAllocation = 1 - newAllocValue;
 
-      // Redistribute existing assets proportionally
-      const currentTotal = assets.reduce(
-        (sum, a) => sum + a.targetAllocation,
-        0
-      );
-      const remainingAllocation = 1 - newAllocValue;
+    const updatedAssets = assets.map((a: Asset) => ({
+      ticker: a.ticker,
+      targetAllocation:
+        currentTotal > 0
+          ? (a.targetAllocation / currentTotal) * remainingAllocation
+          : remainingAllocation / assets.length,
+    }));
 
-      const updatedAssets = assets.map((a) => ({
-        ticker: a.ticker,
-        targetAllocation:
-          currentTotal > 0
-            ? (a.targetAllocation / currentTotal) * remainingAllocation
-            : remainingAllocation / assets.length,
-      }));
+    addAssetMutation.mutate({ ticker, targetAllocation: newAllocValue, updatedAssets });
+  };
 
-      // Add new asset
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
-        method: "POST",
+  // Mutation for removing asset
+  const removeAssetMutation = useMutation({
+    mutationFn: async ({ ticker, updatedAssets }: { ticker: string; updatedAssets: Array<{ ticker: string; targetAllocation: number }> }) => {
+      // Remove the asset
+      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, targetAllocation: newAllocValue }),
-      }))();
+        body: JSON.stringify({ ticker }),
+      });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Erro ao adicionar ativo");
+        throw new Error(error.error || "Erro ao remover ativo");
       }
 
-      // Update existing assets with new allocations
+      // Update remaining assets with redistributed allocations
       if (updatedAssets.length > 0) {
-        const updateResponse = await cache(async() => fetch(
+        const updateResponse = await fetch(
           `/api/portfolio/${portfolioId}/assets`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ assets: updatedAssets }),
           }
-        ))();
+        );
 
         if (!updateResponse.ok) {
-          console.error("Failed to update existing assets allocations");
+          console.error("Failed to update remaining assets allocations");
         }
       }
 
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
       toast({
-        title: "Ativo adicionado!",
-        description: `${ticker} foi adicionado com ${(
-          newAllocValue * 100
-        ).toFixed(1)}% e as demais alocações foram redistribuídas`,
+        title: "Ativo removido!",
+        description: `${variables.ticker} foi removido e as demais alocações foram redistribuídas`,
       });
 
-      setNewTicker("");
-      setNewAllocation("");
-      setShowAddModal(false);
-      loadAssets();
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
       onUpdate();
-    } catch (error) {
-      console.error("Erro ao adicionar ativo:", error);
+    },
+    onError: (error: Error) => {
+      console.error("Erro ao remover ativo:", error);
       toast({
         title: "Erro",
-        description:
-          error instanceof Error ? error.message : "Erro ao adicionar ativo",
+        description: error.message || "Erro ao remover ativo",
         variant: "destructive",
       });
-    } finally {
-      setSaving(false);
     }
-  };
+  });
 
-  const handleRemoveAsset = async (ticker: string) => {
+  const handleRemoveAsset = (ticker: string) => {
     if (
       !confirm(
         `Remover ${ticker} da carteira?\n\nSe você possui ações deste ativo, uma transação de venda será sugerida.`
@@ -274,114 +344,55 @@ export function PortfolioAssetManager({
       return;
     }
 
-    try {
-      setSaving(true);
+    // Find the asset being removed
+    const removedAsset = assets.find((a: Asset) => a.ticker === ticker);
+    if (!removedAsset) return;
 
-      // Find the asset being removed
-      const removedAsset = assets.find((a) => a.ticker === ticker);
-      if (!removedAsset) return;
-
-      // Remove the asset
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker }),
-      }))();
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Erro ao remover ativo");
-      }
-
-      // Redistribute the removed allocation proportionally to remaining assets
-      const remainingAssets = assets.filter((a) => a.ticker !== ticker);
-      if (remainingAssets.length > 0) {
-        const remainingTotal = remainingAssets.reduce(
-          (sum, a) => sum + a.targetAllocation,
-          0
-        );
-        const removedAllocation = removedAsset.targetAllocation;
-
-        const updatedAssets = remainingAssets.map((a) => ({
-          ticker: a.ticker,
-          targetAllocation:
-            remainingTotal > 0
-              ? a.targetAllocation +
-                (a.targetAllocation / remainingTotal) * removedAllocation
-              : 1 / remainingAssets.length,
-        }));
-
-        // Update remaining assets with redistributed allocations
-        const updateResponse = await cache(async() => fetch(
-          `/api/portfolio/${portfolioId}/assets`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ assets: updatedAssets }),
-          }
-        ))();
-
-        if (!updateResponse.ok) {
-          console.error("Failed to update remaining assets allocations");
-        }
-      }
-
-      toast({
-        title: "Ativo removido!",
-        description: `${ticker} foi removido e as demais alocações foram redistribuídas`,
-      });
-
-      loadAssets();
-      onUpdate();
-    } catch (error) {
-      console.error("Erro ao remover ativo:", error);
-      toast({
-        title: "Erro",
-        description:
-          error instanceof Error ? error.message : "Erro ao remover ativo",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveAllocations = async () => {
-    if (!isValid) {
-      toast({
-        title: "Alocação inválida",
-        description: "A soma das alocações deve estar entre 99.5% e 100.5%",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      // Normalize allocations to sum exactly 100% if needed
-      const currentTotal = assets.reduce(
-        (sum, a) => sum + a.targetAllocation,
+    // Redistribute the removed allocation proportionally to remaining assets
+    const remainingAssets = assets.filter((a: Asset) => a.ticker !== ticker);
+    let updatedAssets: Array<{ ticker: string; targetAllocation: number }> = [];
+    
+    if (remainingAssets.length > 0) {
+      const remainingTotal = remainingAssets.reduce(
+        (sum: number, a: Asset) => sum + a.targetAllocation,
         0
       );
-      const normalizedAssets = assets.map((asset) => ({
-        ticker: asset.ticker,
-        targetAllocation:
-          currentTotal !== 1
-            ? asset.targetAllocation / currentTotal
-            : asset.targetAllocation,
-      }));
+      const removedAllocation = removedAsset.targetAllocation;
 
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
+      updatedAssets = remainingAssets.map((a: Asset) => ({
+        ticker: a.ticker,
+        targetAllocation:
+          remainingTotal > 0
+            ? a.targetAllocation +
+              (a.targetAllocation / remainingTotal) * removedAllocation
+            : 1 / remainingAssets.length,
+      }));
+    }
+
+    removeAssetMutation.mutate({ ticker, updatedAssets });
+  };
+
+  // Mutation for saving allocations
+  const saveAllocationsMutation = useMutation({
+    mutationFn: async (normalizedAssets: Array<{ ticker: string; targetAllocation: number }>) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assets: normalizedAssets }),
-      }))();
+      });
 
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Erro ao salvar alocações");
       }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      const currentTotal = displayAssets.reduce(
+        (sum: number, a: Asset) => sum + a.targetAllocation,
+        0
+      );
 
       toast({
         title: "Alocações salvas!",
@@ -391,109 +402,103 @@ export function PortfolioAssetManager({
             : "As alterações foram aplicadas com sucesso",
       });
 
-      loadAssets(); // Reload to show normalized values
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
       onUpdate();
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error("Erro ao salvar alocações:", error);
       toast({
         title: "Erro",
-        description:
-          error instanceof Error ? error.message : "Erro ao salvar alocações",
+        description: error.message || "Erro ao salvar alocações",
         variant: "destructive",
       });
-    } finally {
-      setSaving(false);
     }
+  });
+
+  const handleSaveAllocations = () => {
+    if (!isValid) {
+      toast({
+        title: "Alocação inválida",
+        description: "A soma das alocações deve estar entre 99.5% e 100.5%",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Normalize allocations to sum exactly 100% if needed
+    const currentTotal = displayAssets.reduce(
+      (sum: number, a: Asset) => sum + a.targetAllocation,
+      0
+    );
+    const normalizedAssets = displayAssets.map((asset: Asset) => ({
+      ticker: asset.ticker,
+      targetAllocation:
+        currentTotal !== 1
+          ? asset.targetAllocation / currentTotal
+          : asset.targetAllocation,
+    }));
+
+    saveAllocationsMutation.mutate(normalizedAssets);
   };
 
-  const handleAssetsFromAI = async (
-    generatedAssets: { ticker: string; targetAllocation: number }[]
-  ) => {
-    try {
-      setSaving(true);
-
-      // Replace all current assets with AI generated ones using replaceAll flag
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
+  // Mutation for replacing all assets (from AI or bulk)
+  const replaceAllAssetsMutation = useMutation({
+    mutationFn: async ({ assets: newAssets, source }: { assets: Array<{ ticker: string; targetAllocation: number }>; source: 'ai' | 'bulk' }) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          assets: generatedAssets,
-          replaceAll: true, // 🤖 Flag para IA: deletar todos os ativos e recriar
+          assets: newAssets,
+          replaceAll: true,
         }),
-      }))();
+      });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Erro ao aplicar ativos da IA");
+        throw new Error(error.error || `Erro ao aplicar ativos${source === 'ai' ? ' da IA' : ' em lote'}`);
       }
 
-      const result = await response.json();
-
-      toast({
-        title: "Carteira reconstruída pela IA!",
-        description:
-          result.message ||
-          `${generatedAssets.length} ativos foram configurados pela IA`,
-      });
-
-      loadAssets();
-      onUpdate();
-    } catch (error) {
-      console.error("Erro ao aplicar ativos da IA:", error);
-      toast({
-        title: "Erro",
-        description:
-          error instanceof Error ? error.message : "Erro ao aplicar ativos",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAssetsFromBulk = async (
-    bulkAssets: { ticker: string; targetAllocation: number }[]
-  ) => {
-    try {
-      setSaving(true);
-
-      // Replace all current assets with bulk input ones using replaceAll flag
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          assets: bulkAssets,
-          replaceAll: true, // 📝 Flag para bulk: deletar todos os ativos e recriar
-        }),
-      }))();
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Erro ao aplicar ativos em lote");
+      return response.json();
+    },
+    onSuccess: (result, variables) => {
+      if (variables.source === 'ai') {
+        toast({
+          title: "Carteira reconstruída pela IA!",
+          description:
+            result.message ||
+            `${variables.assets.length} ativos foram configurados pela IA`,
+        });
+      } else {
+        toast({
+          title: "Ativos aplicados!",
+          description:
+            result.message || `${variables.assets.length} ativos foram configurados`,
+        });
       }
 
-      const result = await response.json();
-
-      toast({
-        title: "Ativos aplicados!",
-        description:
-          result.message || `${bulkAssets.length} ativos foram configurados`,
-      });
-
-      loadAssets();
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
       onUpdate();
-    } catch (error) {
-      console.error("Erro ao aplicar ativos em lote:", error);
+    },
+    onError: (error: Error) => {
+      console.error("Erro ao aplicar ativos:", error);
       toast({
         title: "Erro",
-        description:
-          error instanceof Error ? error.message : "Erro ao aplicar ativos",
+        description: error.message || "Erro ao aplicar ativos",
         variant: "destructive",
       });
-    } finally {
-      setSaving(false);
     }
+  });
+
+  const handleAssetsFromAI = (generatedAssets: { ticker: string; targetAllocation: number }[]) => {
+    replaceAllAssetsMutation.mutate({ assets: generatedAssets, source: 'ai' });
   };
+
+  const handleAssetsFromBulk = (bulkAssets: { ticker: string; targetAllocation: number }[]) => {
+    replaceAllAssetsMutation.mutate({ assets: bulkAssets, source: 'bulk' });
+  };
+
+  // Combined saving state from all mutations
+  const saving = addAssetMutation.isPending || removeAssetMutation.isPending || saveAllocationsMutation.isPending || replaceAllAssetsMutation.isPending;
 
   if (loading) {
     return (
@@ -530,7 +535,7 @@ export function PortfolioAssetManager({
         <CardContent>
           <div className="space-y-6">
             {/* Quick Actions for Adding Multiple Assets */}
-            {assets.length === 0 && (
+            {displayAssets.length === 0 && (
               <div className="space-y-4">
                 <Tabs defaultValue="manual" className="w-full">
                   <TabsList className="grid w-full grid-cols-3">
@@ -574,7 +579,7 @@ export function PortfolioAssetManager({
                     <PortfolioAIAssistant
                       onAssetsGenerated={handleAssetsFromAI}
                       disabled={!isPremium || saving}
-                      currentAssets={assets.map((a) => ({
+                      currentAssets={displayAssets.map((a: Asset) => ({
                         ticker: a.ticker,
                         targetAllocation: a.targetAllocation,
                       }))}
@@ -584,10 +589,10 @@ export function PortfolioAssetManager({
               </div>
             )}
 
-            {assets.length > 0 && (
+            {displayAssets.length > 0 && (
               <>
                 <div className="space-y-3">
-                  {assets.map((asset, index) => (
+                  {displayAssets.map((asset: Asset, index: number) => (
                     <div
                       key={`asset-${asset.id}`}
                       className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 border rounded-lg bg-card"
@@ -719,7 +724,7 @@ export function PortfolioAssetManager({
                       <PortfolioAIAssistant
                         onAssetsGenerated={handleAssetsFromAI}
                         disabled={!isPremium || saving}
-                        currentAssets={assets.map((a) => ({
+                        currentAssets={displayAssets.map((a: Asset) => ({
                           ticker: a.ticker,
                           targetAllocation: a.targetAllocation,
                         }))}

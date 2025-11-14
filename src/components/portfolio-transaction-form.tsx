@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, cache } from 'react';
+import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -47,7 +48,7 @@ export function PortfolioTransactionForm({
   onCancel
 }: PortfolioTransactionFormProps) {
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [showCashConfirmDialog, setShowCashConfirmDialog] = useState(false);
   const [insufficientCashData, setInsufficientCashData] = useState<{
     insufficientAmount: number;
@@ -67,6 +68,142 @@ export function PortfolioTransactionForm({
 
   const selectedType = TRANSACTION_TYPES.find(t => t.value === type);
   const requiresAsset = selectedType?.requiresAsset || false;
+
+  // Mutation for creating transaction
+  const createTransactionMutation = useMutation({
+    mutationFn: async (transactionData: any) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transactionData)
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        // Check for insufficient cash error
+        if (responseData.code === 'INSUFFICIENT_CASH' && responseData.details) {
+          // Store error details to throw later after setting state
+          throw { 
+            type: 'INSUFFICIENT_CASH',
+            details: responseData.details,
+            transactionData 
+          };
+        }
+        
+        throw new Error(responseData.error || 'Erro ao criar transação');
+      }
+
+      return responseData;
+    },
+    onSuccess: (responseData, variables) => {
+      toast({
+        title: 'Sucesso!',
+        description: responseData.message || 'Transação registrada com sucesso'
+      });
+
+      // Invalidar cache de analytics e dashboard
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
+      invalidatePortfolioAnalyticsCache(portfolioId);
+      invalidateDashboardPortfoliosCache();
+
+      // Dispatch event for cash flow change to trigger suggestion regeneration
+      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+        detail: {
+          transactionType: variables.type,
+          portfolioId: portfolioId,
+          action: 'created'
+        }
+      }));
+
+      if (onSuccess) {
+        onSuccess();
+      }
+    },
+    onError: (error: any) => {
+      // Handle insufficient cash error specially
+      if (error?.type === 'INSUFFICIENT_CASH') {
+        setInsufficientCashData(error.details);
+        setPendingTransactionData(error.transactionData);
+        setShowCashConfirmDialog(true);
+        return;
+      }
+
+      console.error('Erro ao criar transação:', error);
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Erro ao criar transação',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Mutation for creating transaction with automatic cash credit
+  const createTransactionWithCashCreditMutation = useMutation({
+    mutationFn: async ({ transactionData, cashCreditAmount }: { transactionData: any; cashCreditAmount: number }) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...transactionData,
+          autoAddCashCredit: true,
+          cashCreditAmount
+        })
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Erro ao criar transação');
+      }
+
+      return responseData;
+    },
+    onSuccess: (responseData, variables) => {
+      toast({
+        title: 'Sucesso!',
+        description: responseData.message || 'Aporte e compra criados com sucesso'
+      });
+
+      // Invalidar cache de dashboard também
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
+      invalidateDashboardPortfoliosCache();
+
+      // Dispatch event for cash flow change (both CASH_CREDIT and the transaction type)
+      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+        detail: {
+          transactionType: 'CASH_CREDIT',
+          portfolioId: portfolioId,
+          action: 'created'
+        }
+      }));
+      if (variables.transactionData?.type) {
+        window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+          detail: {
+            transactionType: variables.transactionData.type,
+            portfolioId: portfolioId,
+            action: 'created'
+          }
+        }));
+      }
+
+      setShowCashConfirmDialog(false);
+      setInsufficientCashData(null);
+      setPendingTransactionData(null);
+
+      if (onSuccess) {
+        onSuccess();
+      }
+    },
+    onError: (error: Error) => {
+      console.error('Erro ao criar transação com aporte:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao criar transação',
+        variant: 'destructive'
+      });
+    }
+  });
 
   // Auto-calculate amount when price or quantity changes
   const handlePriceChange = (value: string) => {
@@ -122,144 +259,38 @@ export function PortfolioTransactionForm({
       }
     }
 
-    setLoading(true);
+    const transactionData: any = {
+      type,
+      date,
+      amount: parseFloat(amount),
+      notes: notes || undefined,
+    };
 
-    try {
-      const transactionData: any = {
-        type,
-        date,
-        amount: parseFloat(amount),
-        notes: notes || undefined,
-      };
-
-      if (requiresAsset) {
-        transactionData.ticker = ticker.toUpperCase();
-        
-        if (type !== 'DIVIDEND') {
-          transactionData.price = parseFloat(price);
-          transactionData.quantity = parseFloat(quantity);
-        }
+    if (requiresAsset) {
+      transactionData.ticker = ticker.toUpperCase();
+      
+      if (type !== 'DIVIDEND') {
+        transactionData.price = parseFloat(price);
+        transactionData.quantity = parseFloat(quantity);
       }
-
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(transactionData)
-      }))();
-
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        // Check for insufficient cash error
-        if (responseData.code === 'INSUFFICIENT_CASH' && responseData.details) {
-          setInsufficientCashData(responseData.details);
-          setPendingTransactionData(transactionData);
-          setShowCashConfirmDialog(true);
-          setLoading(false);
-          return;
-        }
-        
-        throw new Error(responseData.error || 'Erro ao criar transação');
-      }
-
-      toast({
-        title: 'Sucesso!',
-        description: responseData.message || 'Transação registrada com sucesso'
-      });
-
-      // Invalidar cache de analytics e dashboard
-      invalidatePortfolioAnalyticsCache(portfolioId);
-      invalidateDashboardPortfoliosCache();
-
-      // Dispatch event for cash flow change to trigger suggestion regeneration
-      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
-        detail: {
-          transactionType: type,
-          portfolioId: portfolioId,
-          action: 'created'
-        }
-      }));
-
-      if (onSuccess) {
-        onSuccess();
-      }
-    } catch (error) {
-      console.error('Erro ao criar transação:', error);
-      toast({
-        title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao criar transação',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
     }
+
+    createTransactionMutation.mutate(transactionData);
   };
 
   const handleConfirmWithCashCredit = async () => {
     if (!pendingTransactionData || !insufficientCashData) return;
 
-    setLoading(true);
     setShowCashConfirmDialog(false);
 
-    try {
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...pendingTransactionData,
-          autoAddCashCredit: true,
-          cashCreditAmount: insufficientCashData.insufficientAmount
-        })
-      }))();
-
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new Error(responseData.error || 'Erro ao criar transação');
-      }
-
-      toast({
-        title: 'Sucesso!',
-        description: responseData.message || 'Aporte e compra criados com sucesso'
-      });
-
-      // Invalidar cache de dashboard também
-      invalidateDashboardPortfoliosCache();
-
-      // Dispatch event for cash flow change (both CASH_CREDIT and the transaction type)
-      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
-        detail: {
-          transactionType: 'CASH_CREDIT',
-          portfolioId: portfolioId,
-          action: 'created'
-        }
-      }));
-      if (pendingTransactionData?.type) {
-        window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
-          detail: {
-            transactionType: pendingTransactionData.type,
-            portfolioId: portfolioId,
-            action: 'created'
-          }
-        }));
-      }
-
-      if (onSuccess) {
-        onSuccess();
-      }
-    } catch (error) {
-      console.error('Erro ao criar transação com aporte:', error);
-      toast({
-        title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao criar transação',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-      setInsufficientCashData(null);
-      setPendingTransactionData(null);
-    }
+    createTransactionWithCashCreditMutation.mutate({
+      transactionData: pendingTransactionData,
+      cashCreditAmount: insufficientCashData.insufficientAmount
+    });
   };
+
+  // Combined loading state from both mutations
+  const loading = createTransactionMutation.isPending || createTransactionWithCashCreditMutation.isPending;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -456,11 +487,11 @@ export function PortfolioTransactionForm({
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmWithCashCredit}
-              disabled={loading}
+              disabled={createTransactionWithCashCreditMutation.isPending}
               className="bg-green-600 hover:bg-green-700"
             >
               <Plus className="h-4 w-4 mr-2" />
-              {loading ? 'Criando...' : 'Sim, Adicionar Aporte'}
+              {createTransactionWithCashCreditMutation.isPending ? 'Criando...' : 'Sim, Adicionar Aporte'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

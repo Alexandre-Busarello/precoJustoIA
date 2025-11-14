@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, cache } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -23,25 +23,17 @@ export function PortfolioNegativeCashAlert({
   onFixed
 }: PortfolioNegativeCashAlertProps) {
   const { toast } = useToast();
-  const [fixing, setFixing] = useState(false);
-  const [recalculating, setRecalculating] = useState(false);
-  const [recalcBalances, setRecalcBalances] = useState(false);
-
-  // Only show alert for significantly negative cash (more than R$ 0.10)
-  // Tiny negative balances (< R$ 0.10) are considered rounding errors
-  // Positive balances are now auto-corrected by automatic recalculation
-  if (cashBalance >= -0.10) return null;
+  const queryClient = useQueryClient();
 
   const amountNeeded = Math.abs(cashBalance);
 
-  const handleAddCashCredit = async () => {
-    try {
-      setFixing(true);
-
+  // Mutation for adding cash credit
+  const addCashCreditMutation = useMutation({
+    mutationFn: async (amountNeeded: number) => {
       // Get the earliest transaction date to add credit before it
-      const transactionsRes = await cache(async() => fetch(
+      const transactionsRes = await fetch(
         `/api/portfolio/${portfolioId}/transactions?limit=1&orderBy=date&order=asc`
-      ))();
+      );
       
       let earliestDate = new Date();
       if (transactionsRes.ok) {
@@ -54,7 +46,7 @@ export function PortfolioNegativeCashAlert({
       }
 
       // Create CASH_CREDIT transaction
-      const response = await cache(async() => fetch(
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions`,
         {
           method: 'POST',
@@ -66,77 +58,105 @@ export function PortfolioNegativeCashAlert({
             notes: 'Aporte retroativo para correção de saldo'
           })
         }
-      ))();
+      );
 
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Erro ao adicionar aporte');
       }
 
-      toast({
-        title: 'Aporte adicionado!',
-        description: `Crédito de R$ ${amountNeeded.toFixed(2)} registrado com sucesso. Recalculando saldos...`
-      });
-
       // Recalculate all cash balances in chronological order
-      const recalcResponse = await cache(async() => fetch(
+      const recalcResponse = await fetch(
         `/api/portfolio/${portfolioId}/recalculate-balances`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!recalcResponse.ok) {
         console.error('Erro ao recalcular saldos');
       }
 
-      // Recalculate metrics
-      await handleRecalculateMetrics();
+      return response.json();
+    },
+    onSuccess: (_, amountNeeded) => {
+      toast({
+        title: 'Aporte adicionado!',
+        description: `Crédito de R$ ${amountNeeded.toFixed(2)} registrado com sucesso. Recalculando saldos...`
+      });
 
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-analytics', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+      
+      // Trigger metrics recalculation
+      recalculateMetricsMutation.mutate();
+      
       onFixed();
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao adicionar aporte:', error);
       toast({
         title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao adicionar aporte',
+        description: error.message || 'Erro ao adicionar aporte',
         variant: 'destructive'
       });
-    } finally {
-      setFixing(false);
     }
+  });
+
+  const handleAddCashCredit = () => {
+    addCashCreditMutation.mutate(amountNeeded);
   };
 
-  const handleRecalculateMetrics = async () => {
-    try {
-      setRecalculating(true);
+  const fixing = addCashCreditMutation.isPending;
 
-      const response = await cache(async() => fetch(
+  // Mutation for recalculating metrics
+  const recalculateMetricsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/metrics`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao recalcular métricas');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Métricas atualizadas',
         description: 'As métricas foram recalculadas com sucesso.'
       });
-    } catch (error) {
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['portfolio-analytics', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+    },
+    onError: (error: Error) => {
       console.error('Erro ao recalcular métricas:', error);
-    } finally {
-      setRecalculating(false);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao recalcular métricas',
+        variant: 'destructive'
+      });
     }
+  });
+
+  const handleRecalculateMetrics = () => {
+    recalculateMetricsMutation.mutate();
   };
 
-  const handleRecalculateBalances = async () => {
-    try {
-      setRecalcBalances(true);
+  const recalculating = recalculateMetricsMutation.isPending;
 
+  // Mutation for recalculating balances
+  const recalculateBalancesMutation = useMutation({
+    mutationFn: async () => {
       // First recalculate balances
-      const balancesResponse = await cache(async() => fetch(
+      const balancesResponse = await fetch(
         `/api/portfolio/${portfolioId}/recalculate-balances`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!balancesResponse.ok) {
         throw new Error('Erro ao recalcular saldos');
@@ -152,23 +172,41 @@ export function PortfolioNegativeCashAlert({
         throw new Error('Erro ao recalcular métricas');
       }
 
+      return { balances: await balancesResponse.json(), metrics: await metricsResponse.json() };
+    },
+    onSuccess: () => {
       toast({
         title: 'Saldos corrigidos!',
         description: 'Os saldos de caixa foram recalculados em ordem cronológica.'
       });
 
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-analytics', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+
       onFixed();
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao recalcular saldos:', error);
       toast({
         title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao recalcular saldos',
+        description: error.message || 'Erro ao recalcular saldos',
         variant: 'destructive'
       });
-    } finally {
-      setRecalcBalances(false);
     }
+  });
+
+  const handleRecalculateBalances = () => {
+    recalculateBalancesMutation.mutate();
   };
+
+  const recalcBalances = recalculateBalancesMutation.isPending;
+
+  // Only show alert for significantly negative cash (more than R$ 0.10)
+  // Tiny negative balances (< R$ 0.10) are considered rounding errors
+  // Positive balances are now auto-corrected by automatic recalculation
+  if (cashBalance >= -0.10) return null;
 
   return (
     <Card className="border-2 border-destructive bg-destructive/5">

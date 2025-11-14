@@ -18,7 +18,8 @@ export function PortfolioPendingTransactionsCTA({
   portfolioId,
   trackingStarted,
   onGoToTransactions,
-  refreshKey = 0,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  refreshKey: _refreshKey, // Mantido para compatibilidade com key do componente pai, mas não usado internamente
 }: PortfolioPendingTransactionsCTAProps) {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,6 +52,8 @@ export function PortfolioPendingTransactionsCTA({
     queryKey: ["suggestion-status", portfolioId],
     queryFn: fetchSuggestionStatus,
     enabled: !!portfolioId && trackingStarted,
+    // Configurações globais do query-provider.tsx já aplicam:
+    // staleTime: 5 minutos, gcTime: 10 minutos, refetchOnMount: false, refetchOnWindowFocus: false
   });
 
   // Update local state when query data changes
@@ -85,6 +88,8 @@ export function PortfolioPendingTransactionsCTA({
     queryKey: ["pending-transactions", portfolioId],
     queryFn: fetchPendingTransactions,
     enabled: !!portfolioId,
+    // Configurações globais do query-provider.tsx já aplicam:
+    // staleTime: 5 minutos, gcTime: 10 minutos, refetchOnMount: false, refetchOnWindowFocus: false
   });
 
   // Update local state when query data changes
@@ -101,14 +106,13 @@ export function PortfolioPendingTransactionsCTA({
 
   const queryClient = useQueryClient();
 
+  // Removido useEffect que forçava refetch - agora usa cache do React Query
+  // O React Query já gerencia o cache automaticamente, não precisamos forçar refetch
   useEffect(() => {
-    if (trackingStarted) {
-      refetchSuggestionStatus();
-      refetchPendingCount();
-    } else {
+    if (!trackingStarted) {
       setLoading(false);
     }
-  }, [trackingStarted, refreshKey, refetchPendingCount, refetchSuggestionStatus]);
+  }, [trackingStarted]);
 
   // Try to generate suggestions if needed
   useEffect(() => {

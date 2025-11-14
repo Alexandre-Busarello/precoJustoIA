@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, cache } from 'react';
+import { useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,114 +47,147 @@ export function PortfolioRebalancingSuggestions({
   onTransactionsConfirmed
 }: PortfolioRebalancingSuggestionsProps) {
   const { toast } = useToast();
-  const [suggestions, setSuggestions] = useState<SuggestedTransaction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [shouldShow, setShouldShow] = useState(false);
-  const [maxDeviation, setMaxDeviation] = useState(0);
-  const [deviationDetails, setDeviationDetails] = useState('');
-  const [confirmingAll, setConfirmingAll] = useState(false);
-  const [rejectingAll, setRejectingAll] = useState(false);
-  const [hasPendingContributions, setHasPendingContributions] = useState(false);
-  const [pendingContributionsCount, setPendingContributionsCount] = useState(0);
+  const queryClient = useQueryClient();
 
-  const checkPendingContributions = async () => {
-    try {
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      ))();
-      
-      if (response.ok) {
-        const data = await response.json();
-        const contributionTx = (data.transactions || []).filter(
-          (tx: any) => 
-            tx.type !== 'SELL_REBALANCE' && 
-            tx.type !== 'BUY_REBALANCE' &&
-            (tx.type === 'MONTHLY_CONTRIBUTION' || 
-             tx.type === 'CASH_CREDIT' || 
-             tx.type === 'BUY' || 
-             tx.type === 'DIVIDEND')
-        );
-        
-        setHasPendingContributions(contributionTx.length > 0);
-        setPendingContributionsCount(contributionTx.length);
-      }
-    } catch (error) {
-      console.error('Erro ao verificar transações pendentes de contribuição:', error);
+  // Query for checking pending contributions
+  const fetchPendingContributions = async () => {
+    const response = await fetch(
+      `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Erro ao verificar transações pendentes');
     }
+
+    const data = await response.json();
+    const contributionTx = (data.transactions || []).filter(
+      (tx: any) => 
+        tx.type !== 'SELL_REBALANCE' && 
+        tx.type !== 'BUY_REBALANCE' &&
+        (tx.type === 'MONTHLY_CONTRIBUTION' || 
+         tx.type === 'CASH_CREDIT' || 
+         tx.type === 'BUY' || 
+         tx.type === 'DIVIDEND')
+    );
+    
+    return {
+      hasPending: contributionTx.length > 0,
+      count: contributionTx.length
+    };
   };
 
-  useEffect(() => {
-    if (trackingStarted) {
-      checkRebalancingNeeded();
-      loadPendingRebalancing();
-      checkPendingContributions();
+  const {
+    data: pendingContributionsData,
+  } = useQuery({
+    queryKey: ['portfolio-pending-contributions', portfolioId],
+    queryFn: fetchPendingContributions,
+    enabled: trackingStarted,
+  });
+
+  const hasPendingContributions = pendingContributionsData?.hasPending || false;
+  const pendingContributionsCount = pendingContributionsData?.count || 0;
+
+  // Query for checking rebalancing needed
+  const fetchRebalancingCheck = async () => {
+    const response = await fetch(
+      `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing/check`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Erro ao verificar necessidade de rebalanceamento');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId, trackingStarted]);
+
+    const data = await response.json();
+    return {
+      shouldShow: data.shouldShow || false,
+      maxDeviation: data.maxDeviation || 0,
+      details: data.details || ''
+    };
+  };
+
+  const {
+    data: rebalancingCheckData,
+  } = useQuery({
+    queryKey: ['portfolio-rebalancing-check', portfolioId],
+    queryFn: fetchRebalancingCheck,
+    enabled: trackingStarted,
+  });
+
+  const shouldShow = rebalancingCheckData?.shouldShow || false;
+  const maxDeviation = rebalancingCheckData?.maxDeviation || 0;
+  const deviationDetails = rebalancingCheckData?.details || '';
+
+  // Query for loading pending rebalancing suggestions
+  const fetchPendingRebalancing = async () => {
+    const response = await fetch(
+      `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Erro ao carregar sugestões de rebalanceamento');
+    }
+
+    const data = await response.json();
+    const rebalancingTx = (data.transactions || []).filter(
+      (tx: any) => tx.type === 'SELL_REBALANCE' || tx.type === 'BUY_REBALANCE'
+    );
+    return rebalancingTx;
+  };
+
+  const {
+    data: suggestions = [],
+    isLoading: loading,
+  } = useQuery({
+    queryKey: ['portfolio-rebalancing-suggestions', portfolioId],
+    queryFn: fetchPendingRebalancing,
+    enabled: trackingStarted,
+  });
+
+  // Re-check when transactions change
+  useEffect(() => {
+    if (!trackingStarted) return;
+
+    const handleTransactionUpdate = () => {
+      // Small delay to ensure backend has processed the transaction
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-suggestions', portfolioId] });
+      }, 500);
+    };
+
+    // Listen for transaction updates
+    window.addEventListener('transaction-updated', handleTransactionUpdate);
+    window.addEventListener('reload-suggestions', handleTransactionUpdate);
+    window.addEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+
+    return () => {
+      window.removeEventListener('transaction-updated', handleTransactionUpdate);
+      window.removeEventListener('reload-suggestions', handleTransactionUpdate);
+      window.removeEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+    };
+  }, [portfolioId, trackingStarted, queryClient]);
 
   // Re-check pending contributions when callback is triggered
   useEffect(() => {
     if (onTransactionsConfirmed && trackingStarted) {
       // Small delay to ensure backend has processed the transaction
       const timeout = setTimeout(() => {
-        checkPendingContributions();
+        queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
       }, 500);
       
       return () => clearTimeout(timeout);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onTransactionsConfirmed, trackingStarted]);
+  }, [onTransactionsConfirmed, trackingStarted, portfolioId, queryClient]);
 
-  const checkRebalancingNeeded = async () => {
-    try {
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing/check`
-      ))();
-      
-      if (response.ok) {
-        const data = await response.json();
-        setShouldShow(data.shouldShow);
-        setMaxDeviation(data.maxDeviation);
-        setDeviationDetails(data.details);
-      }
-    } catch (error) {
-      console.error('Erro ao verificar necessidade de rebalanceamento:', error);
-    }
-  };
-
-  const loadPendingRebalancing = async () => {
-    try {
-      setLoading(true);
-      
-      // Get all pending transactions and filter rebalancing ones
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      ))();
-      
-      if (response.ok) {
-        const data = await response.json();
-        const rebalancingTx = (data.transactions || []).filter(
-          (tx: any) => tx.type === 'SELL_REBALANCE' || tx.type === 'BUY_REBALANCE'
-        );
-        setSuggestions(rebalancingTx);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar sugestões de rebalanceamento:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGenerateSuggestions = async () => {
-    try {
-      setGenerating(true);
-      
+  // Mutation for generating rebalancing suggestions
+  const generateSuggestionsMutation = useMutation({
+    mutationFn: async () => {
       // Delete existing rebalancing suggestions
       // First get all pending rebalancing transactions
-      const pendingResponse = await cache(async() => fetch(
+      const pendingResponse = await fetch(
         `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      ))();
+      );
       
       if (pendingResponse.ok) {
         const pendingData = await pendingResponse.json();
@@ -164,201 +198,242 @@ export function PortfolioRebalancingSuggestions({
         // Delete each rebalancing transaction
         await Promise.all(
           rebalancingTx.map((tx: any) =>
-            cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
+            fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
               method: 'DELETE'
-            }))().catch(() => {})
+            }).catch(() => {})
           )
         );
       }
 
       // Generate new rebalancing suggestions
-      const generateResponse = await cache(async() => fetch(
+      const generateResponse = await fetch(
         `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!generateResponse.ok) {
         throw new Error('Erro ao gerar sugestões de rebalanceamento');
       }
 
+      return generateResponse.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sugestões geradas',
         description: 'Sugestões de rebalanceamento geradas com sucesso'
       });
 
-      // Reload suggestions
-      await loadPendingRebalancing();
-      await checkRebalancingNeeded();
-      await checkPendingContributions(); // Check if contributions are still pending
-
-      // Invalidar cache
+      // Invalidate all related queries
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-suggestions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao gerar sugestões:', error);
       toast({
         title: 'Erro',
         description: 'Não foi possível gerar sugestões de rebalanceamento',
         variant: 'destructive'
       });
-    } finally {
-      setGenerating(false);
     }
+  });
+
+  const handleGenerateSuggestions = () => {
+    generateSuggestionsMutation.mutate();
   };
 
-  const handleConfirmSingle = async (transactionId: string) => {
-    try {
-      const response = await cache(async() => fetch(
+  const generating = generateSuggestionsMutation.isPending;
+
+  // Mutation for confirming single transaction
+  const confirmSingleMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`,
         { method: 'POST' }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação confirmada'
       });
 
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-suggestions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
-      await loadPendingRebalancing();
-      await checkRebalancingNeeded();
-      await checkPendingContributions(); // Check if contributions are still pending
       
       if (onTransactionsConfirmed) onTransactionsConfirmed();
-    } catch {
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Erro ao confirmar transação',
         variant: 'destructive'
       });
     }
+  });
+
+  const handleConfirmSingle = (transactionId: string) => {
+    confirmSingleMutation.mutate(transactionId);
   };
 
-  const handleRejectSingle = async (transactionId: string) => {
-    try {
-      const response = await cache(async() => fetch(
+  // Mutation for rejecting single transaction
+  const rejectSingleMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason: 'Rejeitado pelo usuário' })
         }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação rejeitada'
       });
 
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-suggestions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
-      await loadPendingRebalancing();
-      await checkPendingContributions(); // Check if contributions are still pending
       
       if (onTransactionsConfirmed) onTransactionsConfirmed();
-    } catch {
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Erro ao rejeitar transação',
         variant: 'destructive'
       });
     }
+  });
+
+  const handleRejectSingle = (transactionId: string) => {
+    rejectSingleMutation.mutate(transactionId);
   };
 
-  const handleConfirmAll = async () => {
-    if (!confirm(`Confirmar todas as ${suggestions.length} transações de rebalanceamento?`)) {
-      return;
-    }
-
-    try {
-      setConfirmingAll(true);
-      
-      const transactionIds = suggestions.map(s => s.id);
-      
-      const response = await cache(async() => fetch(
+  // Mutation for confirming all transactions
+  const confirmAllMutation = useMutation({
+    mutationFn: async (transactionIds: string[]) => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/confirm-batch`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transactionIds })
         }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transações');
       }
 
+      return response.json();
+    },
+    onSuccess: (_, transactionIds) => {
       toast({
         title: 'Sucesso',
-        description: `${suggestions.length} transações confirmadas`
+        description: `${transactionIds.length} transações confirmadas`
       });
 
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-suggestions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
-      await loadPendingRebalancing();
-      await checkRebalancingNeeded();
-      await checkPendingContributions(); // Check if contributions are still pending
       
       if (onTransactionsConfirmed) onTransactionsConfirmed();
-    } catch {
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Erro ao confirmar transações em lote',
         variant: 'destructive'
       });
-    } finally {
-      setConfirmingAll(false);
     }
-  };
+  });
 
-  const handleRejectAll = async () => {
-    if (!confirm(`Rejeitar todas as ${suggestions.length} transações de rebalanceamento?`)) {
+  const handleConfirmAll = () => {
+    if (!confirm(`Confirmar todas as ${suggestions.length} transações de rebalanceamento?`)) {
       return;
     }
 
-    try {
-      setRejectingAll(true);
-      
-      const transactionIds = suggestions.map(s => s.id);
-      
-      const response = await cache(async() => fetch(
+    const transactionIds = suggestions.map((s: SuggestedTransaction) => s.id);
+    confirmAllMutation.mutate(transactionIds);
+  };
+
+  const confirmingAll = confirmAllMutation.isPending;
+
+  // Mutation for rejecting all transactions
+  const rejectAllMutation = useMutation({
+    mutationFn: async (transactionIds: string[]) => {
+      const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/reject-batch`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transactionIds })
         }
-      ))();
+      );
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transações');
       }
 
+      return response.json();
+    },
+    onSuccess: (_, transactionIds) => {
       toast({
         title: 'Sucesso',
-        description: `${suggestions.length} transações rejeitadas`
+        description: `${transactionIds.length} transações rejeitadas`
       });
 
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-suggestions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
-      await loadPendingRebalancing();
-      await checkRebalancingNeeded();
-      await checkPendingContributions();
       
       if (onTransactionsConfirmed) onTransactionsConfirmed();
-    } catch {
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Erro ao rejeitar transações em lote',
         variant: 'destructive'
       });
-    } finally {
-      setRejectingAll(false);
     }
+  });
+
+  const handleRejectAll = () => {
+    if (!confirm(`Rejeitar todas as ${suggestions.length} transações de rebalanceamento?`)) {
+      return;
+    }
+
+    const transactionIds = suggestions.map((s: SuggestedTransaction) => s.id);
+    rejectAllMutation.mutate(transactionIds);
   };
+
+  const rejectingAll = rejectAllMutation.isPending;
 
   const getTypeIcon = (type: string) => {
     if (type === 'SELL_REBALANCE') {
@@ -547,13 +622,13 @@ export function PortfolioRebalancingSuggestions({
             {/* Transactions List - Sells first, then buys */}
             <div className="space-y-3 overflow-x-hidden">
               {suggestions
-                .sort((a, b) => {
+                .sort((a: SuggestedTransaction, b: SuggestedTransaction) => {
                   // Sort: SELL_REBALANCE first, then BUY_REBALANCE
                   if (a.type === 'SELL_REBALANCE' && b.type !== 'SELL_REBALANCE') return -1;
                   if (a.type !== 'SELL_REBALANCE' && b.type === 'SELL_REBALANCE') return 1;
                   return 0;
                 })
-                .map(tx => (
+                .map((tx: SuggestedTransaction) => (
                 <div
                   key={tx.id}
                   className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3 overflow-hidden"

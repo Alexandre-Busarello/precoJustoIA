@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, cache } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -102,9 +102,78 @@ interface AnalyticsData {
 }
 
 export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Query for loading analytics
+  const fetchAnalytics = async (): Promise<AnalyticsData> => {
+    console.log("🌐 [API] Buscando analytics do servidor...");
+    const response = await fetch(`/api/portfolio/${portfolioId}/analytics`);
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch analytics");
+    }
+
+    const data = await response.json();
+    console.log("📊 [FRONTEND] Analytics data received:", {
+      evolutionCount: data.evolution?.length,
+      monthlyReturnsCount: data.monthlyReturns?.length,
+      drawdownPeriodsCount: data.drawdownPeriods?.length,
+    });
+
+    return data;
+  };
+
+  const {
+    data: analytics,
+    isLoading: loading,
+    error: analyticsError
+  } = useQuery({
+    queryKey: ['portfolio-analytics', portfolioId],
+    queryFn: fetchAnalytics,
+    // Configurações globais do query-provider.tsx já aplicam:
+    // staleTime: 5 minutos, gcTime: 10 minutos, refetchOnMount: false, refetchOnWindowFocus: false
+  });
+
+  const error = analyticsError ? "Erro ao carregar análises" : null;
+
+  // Early return if loading or error - analytics will be undefined
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
+          <p className="text-muted-foreground">Calculando análises...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-muted-foreground">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+            <p>{error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!analytics || analytics.evolution.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-muted-foreground">
+            <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p>Não há dados suficientes para gerar análises</p>
+            <p className="text-sm mt-2">
+              Adicione transações à carteira para ver as análises
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // Helper para formatar datas em UTC (evita problemas de timezone)
   const formatDateUTC = (dateString: string) => {
@@ -173,95 +242,6 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
     return formatMonthYear(dateString);
   };
 
-  const fetchAnalytics = useCallback(
-    async (forceRefresh = false) => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Try cache first (unless force refresh)
-        if (!forceRefresh) {
-          const cached = portfolioCache.analytics.get(
-            portfolioId
-          ) as AnalyticsData | null;
-          if (cached) {
-            setAnalytics(cached);
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Fetch from API
-        console.log("🌐 [API] Buscando analytics do servidor...");
-        const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/analytics`))();
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch analytics");
-        }
-
-        const data = await response.json();
-        console.log("📊 [FRONTEND] Analytics data received:", {
-          evolutionCount: data.evolution?.length,
-          monthlyReturnsCount: data.monthlyReturns?.length,
-          drawdownPeriodsCount: data.drawdownPeriods?.length,
-        });
-
-        // Save to cache
-        portfolioCache.analytics.set(portfolioId, data);
-        setAnalytics(data);
-      } catch (err) {
-        console.error("Error fetching analytics:", err);
-        setError("Erro ao carregar análises");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [portfolioId]
-  );
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
-          <p className="text-muted-foreground">Calculando análises...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="text-center text-muted-foreground">
-            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-            <p>{error}</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!analytics || analytics.evolution.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="text-center text-muted-foreground">
-            <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Não há dados suficientes para gerar análises</p>
-            <p className="text-sm mt-2">
-              Adicione transações à carteira para ver as análises
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   const { summary } = analytics;
 
@@ -876,7 +856,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
  * Função utilitária para invalidar TODOS os caches de uma carteira
  * Deve ser chamada quando qualquer escrita acontecer (criar, editar, deletar transações, etc)
  *
- * @deprecated Use portfolioCache.invalidateAll() diretamente do @/lib/portfolio-cache
+ * @deprecated Use queryClient.invalidateQueries({ queryKey: ['portfolio-analytics', portfolioId] }) diretamente
  */
 export function invalidatePortfolioAnalyticsCache(portfolioId: string) {
   portfolioCache.invalidateAll(portfolioId);

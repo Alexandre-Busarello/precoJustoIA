@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, cache } from 'react';
+import { useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,105 +40,106 @@ export function PortfolioDividendSuggestions({
   onTransactionsConfirmed
 }: PortfolioDividendSuggestionsProps) {
   const { toast } = useToast();
-  const [suggestions, setSuggestions] = useState<SuggestedTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [confirmingAll, setConfirmingAll] = useState(false);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (trackingStarted) {
-      loadSuggestions();
-    } else {
-      setLoading(false);
+  // Query for loading dividend suggestions
+  const fetchDividendSuggestions = async (): Promise<SuggestedTransaction[]> => {
+    // First, fetch pending DIVIDEND transactions
+    const pendingResponse = await fetch(`/api/portfolio/${portfolioId}/transactions?status=PENDING&type=DIVIDEND`);
+    if (pendingResponse.ok) {
+      const pendingData = await pendingResponse.json();
+      const pendingDividends = (pendingData.transactions || []).filter((tx: any) => tx.type === 'DIVIDEND');
+      
+      if (pendingDividends.length > 0) {
+        return pendingDividends;
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId, trackingStarted]);
 
-  const loadSuggestions = async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-      
-      // Try cache first (unless force refresh)
-      if (!forceRefresh) {
-        const cached = portfolioCache.dividends.get(portfolioId) as SuggestedTransaction[] | null;
-        if (cached && Array.isArray(cached) && cached.length >= 0) {
-          console.log('✅ [DIVIDENDS CACHE] Using cached data');
-          setSuggestions(cached);
-          setLoading(false);
-          return;
-        }
-      }
-      
-      // First, fetch pending DIVIDEND transactions
-      const pendingResponse = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions?status=PENDING&type=DIVIDEND`))();
-      if (pendingResponse.ok) {
-        const pendingData = await pendingResponse.json();
-        const pendingDividends = (pendingData.transactions || []).filter((tx: any) => tx.type === 'DIVIDEND');
-        
-        if (pendingDividends.length > 0) {
-          // Cache pending transactions
-          portfolioCache.dividends.set(portfolioId, pendingDividends);
-          setSuggestions(pendingDividends);
-          setLoading(false);
-          return;
-        }
-      }
+    // If no pending transactions, try to get suggestions
+    const response = await fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`);
+    if (!response.ok) {
+      throw new Error('Erro ao carregar sugestões de dividendos');
+    }
 
-      // If no pending transactions, try to get suggestions
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`))();
-      if (!response.ok) {
-        throw new Error('Erro ao carregar sugestões de dividendos');
-      }
+    const data = await response.json();
+    const fetchedSuggestions = data.suggestions || [];
+    
+    // Map suggestions to include id (for pending transactions)
+    // If suggestions don't have id, they're not yet created as pending transactions
+    return fetchedSuggestions.map((s: any, index: number) => ({
+      ...s,
+      id: s.id || `suggestion-${index}` // Temporary id for display
+    }));
+  };
 
-      const data = await response.json();
-      const fetchedSuggestions = data.suggestions || [];
-      
-      // Map suggestions to include id (for pending transactions)
-      // If suggestions don't have id, they're not yet created as pending transactions
-      const mappedSuggestions = fetchedSuggestions.map((s: any, index: number) => ({
-        ...s,
-        id: s.id || `suggestion-${index}` // Temporary id for display
-      }));
-      
-      // Cache suggestions (TTL 24 horas)
-      portfolioCache.dividends.set(portfolioId, mappedSuggestions);
-      setSuggestions(mappedSuggestions);
-    } catch (error) {
-      console.error('Erro ao carregar sugestões de dividendos:', error);
+  const {
+    data: suggestions = [],
+    isLoading: loading,
+    error: suggestionsError
+  } = useQuery({
+    queryKey: ['portfolio-dividend-suggestions', portfolioId],
+    queryFn: fetchDividendSuggestions,
+    enabled: trackingStarted,
+  });
+
+  // Show error toast if query fails
+  useEffect(() => {
+    if (suggestionsError) {
       toast({
         title: 'Erro',
         description: 'Não foi possível carregar sugestões de dividendos',
         variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [suggestionsError, toast]);
 
-  const generateSuggestions = async () => {
-    try {
-      setGenerating(true);
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`, {
+  // Re-check when transactions change
+  useEffect(() => {
+    if (!trackingStarted) return;
+
+    const handleTransactionUpdate = () => {
+      // Small delay to ensure backend has processed the transaction
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['portfolio-dividend-suggestions', portfolioId] });
+      }, 500);
+    };
+
+    // Listen for transaction updates
+    window.addEventListener('transaction-updated', handleTransactionUpdate);
+    window.addEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+
+    return () => {
+      window.removeEventListener('transaction-updated', handleTransactionUpdate);
+      window.removeEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+    };
+  }, [portfolioId, trackingStarted, queryClient]);
+
+  // Mutation for generating dividend suggestions
+  const generateSuggestionsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`, {
         method: 'POST'
-      }))();
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Erro ao gerar sugestões');
       }
 
-      const data = await response.json();
-      
+      return response.json();
+    },
+    onSuccess: (data) => {
       if (data.transactionIds && data.transactionIds.length > 0) {
         toast({
           title: 'Sucesso',
           description: `${data.transactionIds.length} sugestão(ões) de dividendo criada(s)`,
         });
         
-        // Clear cache and reload (force refresh to get new pending transactions)
+        // Invalidate queries to reload
+        queryClient.invalidateQueries({ queryKey: ['portfolio-dividend-suggestions', portfolioId] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
         portfolioCache.dividends.remove(portfolioId);
         portfolioCache.suggestions.remove(portfolioId);
-        await loadSuggestions(true);
         
         if (onTransactionsConfirmed) {
           onTransactionsConfirmed();
@@ -148,121 +150,149 @@ export function PortfolioDividendSuggestions({
           description: data.message || 'Nenhuma sugestão de dividendo para criar',
         });
       }
-    } catch (error) {
+    },
+    onError: (error: Error) => {
       console.error('Erro ao gerar sugestões:', error);
       toast({
         title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao gerar sugestões',
+        description: error.message || 'Erro ao gerar sugestões',
         variant: 'destructive'
       });
-    } finally {
-      setGenerating(false);
     }
+  });
+
+  const generateSuggestions = () => {
+    generateSuggestionsMutation.mutate();
   };
 
-  const confirmAll = async () => {
-    if (suggestions.length === 0) return;
+  const generating = generateSuggestionsMutation.isPending;
 
-    try {
-      setConfirmingAll(true);
-      const transactionIds = suggestions.map(s => s.id);
-
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/confirm-batch`, {
+  // Mutation for confirming all transactions
+  const confirmAllMutation = useMutation({
+    mutationFn: async (transactionIds: string[]) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/confirm-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactionIds })
-      }))();
+      });
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transações');
       }
 
+      return response.json();
+    },
+    onSuccess: (_, transactionIds) => {
       toast({
         title: 'Sucesso',
         description: `${transactionIds.length} transação(ões) confirmada(s)`,
       });
 
-      // Clear cache and reload
+      // Invalidate queries to reload
+      queryClient.invalidateQueries({ queryKey: ['portfolio-dividend-suggestions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.suggestions.remove(portfolioId);
       portfolioCache.transactions.remove(portfolioId);
-      await loadSuggestions();
 
       if (onTransactionsConfirmed) {
         onTransactionsConfirmed();
       }
-    } catch (error) {
-      console.error('Erro ao confirmar transações:', error);
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Não foi possível confirmar as transações',
         variant: 'destructive'
       });
-    } finally {
-      setConfirmingAll(false);
     }
+  });
+
+  const confirmAll = () => {
+    if (suggestions.length === 0) return;
+    const transactionIds = suggestions.map((s: SuggestedTransaction) => s.id);
+    confirmAllMutation.mutate(transactionIds);
   };
 
-  const confirmTransaction = async (transactionId: string) => {
-    try {
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`, {
+  const confirmingAll = confirmAllMutation.isPending;
+
+  // Mutation for confirming single transaction
+  const confirmTransactionMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`, {
         method: 'POST'
-      }))();
+      });
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação confirmada',
       });
 
-      // Clear cache and reload (force refresh)
+      // Invalidate queries to reload
+      queryClient.invalidateQueries({ queryKey: ['portfolio-dividend-suggestions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       portfolioCache.dividends.remove(portfolioId);
       portfolioCache.suggestions.remove(portfolioId);
       portfolioCache.transactions.remove(portfolioId);
-      await loadSuggestions(true);
 
       if (onTransactionsConfirmed) {
         onTransactionsConfirmed();
       }
-    } catch (error) {
-      console.error('Erro ao confirmar transação:', error);
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Não foi possível confirmar a transação',
         variant: 'destructive'
       });
     }
+  });
+
+  const confirmTransaction = (transactionId: string) => {
+    confirmTransactionMutation.mutate(transactionId);
   };
 
-  const rejectTransaction = async (transactionId: string) => {
-    try {
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`, {
+  // Mutation for rejecting transaction
+  const rejectTransactionMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`, {
         method: 'POST'
-      }))();
+      });
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transação');
       }
 
+      return response.json();
+    },
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação rejeitada',
       });
 
-      // Clear cache and reload (force refresh)
+      // Invalidate queries to reload
+      queryClient.invalidateQueries({ queryKey: ['portfolio-dividend-suggestions', portfolioId] });
       portfolioCache.dividends.remove(portfolioId);
       portfolioCache.suggestions.remove(portfolioId);
-      await loadSuggestions(true);
-    } catch (error) {
-      console.error('Erro ao rejeitar transação:', error);
+    },
+    onError: () => {
       toast({
         title: 'Erro',
         description: 'Não foi possível rejeitar a transação',
         variant: 'destructive'
       });
     }
+  });
+
+  const rejectTransaction = (transactionId: string) => {
+    rejectTransactionMutation.mutate(transactionId);
   };
 
   if (!trackingStarted) {

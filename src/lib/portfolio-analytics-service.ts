@@ -197,7 +197,10 @@ export class PortfolioAnalyticsService {
     // Ensure we have historical data for all tickers
     // Optimized: Check all tickers at once, then fetch only missing data
     if (tickers.length > 0) {
-      const firstTransactionDate = transactions[0].date;
+      // Converter para Date se for string (Prisma retorna como string ISO)
+      const firstTransactionDate = transactions[0].date instanceof Date 
+        ? transactions[0].date 
+        : new Date(transactions[0].date);
       const endDate = new Date();
       
       // Buscar apenas 3 anos antes da primeira transação (otimização)
@@ -241,10 +244,13 @@ export class PortfolioAnalyticsService {
 
     // Get all dates (monthly) from first transaction to today
     // Garantir que usamos UTC para evitar timezone issues
-    const firstTx = transactions[0].date;
+    // Converter para Date se for string (Prisma retorna como string ISO)
+    const firstTxDate = transactions[0].date instanceof Date 
+      ? transactions[0].date 
+      : new Date(transactions[0].date);
     const startDate = new Date(Date.UTC(
-      firstTx.getFullYear(),
-      firstTx.getMonth(),
+      firstTxDate.getFullYear(),
+      firstTxDate.getMonth(),
       1 // Primeiro dia do mês da primeira transação
     ));
     const endDate = new Date();
@@ -283,8 +289,11 @@ export class PortfolioAnalyticsService {
       while (lastProcessedTxIndex < transactions.length) {
         const tx = transactions[lastProcessedTxIndex];
         
+        // Converter tx.date para Date se for string (Prisma retorna como string ISO)
+        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+        
         // Stop if transaction is after current processing date
-        if (tx.date > txProcessingDate) break;
+        if (txDate > txProcessingDate) break;
 
         // Process this transaction
         if (tx.type === 'CASH_CREDIT' || tx.type === 'MONTHLY_CONTRIBUTION') {

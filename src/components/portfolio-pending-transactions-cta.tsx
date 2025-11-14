@@ -29,6 +29,7 @@ export function PortfolioPendingTransactionsCTA({
     isRecent: boolean;
     cashBalance: number;
     hasCashAvailable: boolean;
+    hasPendingBuySuggestions: boolean;
   } | null>(null);
 
   const loadSuggestionStatus = useCallback(async () => {
@@ -105,13 +106,42 @@ export function PortfolioPendingTransactionsCTA({
   useEffect(() => {
     if (!trackingStarted || loading || generatingSuggestions) return;
     if (pendingCount === null) return; // Wait for initial load
+    if (!suggestionStatus) return; // Wait for status to load
+    
+    // CRITICAL: Don't generate suggestions if there are already pending buy suggestions
+    // This prevents infinite loops when hasPendingBuySuggestions is true but pendingCount is 0
+    // (can happen if there's a mismatch between what the status endpoint checks and what we count)
+    if (suggestionStatus.hasPendingBuySuggestions) {
+      console.log('⏸️ [CTA] Skipping suggestion generation: hasPendingBuySuggestions is true', {
+        pendingCount,
+        cashBalance: suggestionStatus.cashBalance,
+        hasCashAvailable: suggestionStatus.hasCashAvailable,
+        needsRegeneration: suggestionStatus.needsRegeneration
+      });
+      return;
+    }
+    
+    // CRITICAL: Don't generate if suggestions were generated recently (isRecent = true)
+    // This prevents loops when a transaction was rejected/accepted and we tried to generate
+    // but there were no suggestions to create. The getContributionSuggestions() updates
+    // lastSuggestionsGeneratedAt even when returning empty, so isRecent will be true.
+    if (suggestionStatus.isRecent && pendingCount === 0) {
+      console.log('⏸️ [CTA] Skipping suggestion generation: isRecent is true and no pending transactions', {
+        pendingCount,
+        cashBalance: suggestionStatus.cashBalance,
+        hasCashAvailable: suggestionStatus.hasCashAvailable,
+        needsRegeneration: suggestionStatus.needsRegeneration,
+        lastSuggestionsGeneratedAt: suggestionStatus.lastSuggestionsGeneratedAt
+      });
+      return;
+    }
     
     // Check if we need to generate suggestions
     // Generate if: needsRegeneration OR has cash available (always suggest buys when there's cash)
-    const shouldGenerate = suggestionStatus?.needsRegeneration || suggestionStatus?.hasCashAvailable;
+    const shouldGenerate = suggestionStatus.needsRegeneration || suggestionStatus.hasCashAvailable;
     
     if (pendingCount === 0 && shouldGenerate) {
-      const reason = suggestionStatus?.hasCashAvailable 
+      const reason = suggestionStatus.hasCashAvailable 
         ? 'has cash available' 
         : 'needs regeneration';
       console.log(`🔄 [CTA] No pending transactions and ${reason}, generating suggestions...`);
@@ -128,11 +158,18 @@ export function PortfolioPendingTransactionsCTA({
         })
         .then(data => {
           console.log('✅ [CTA] Suggestions generated:', data);
+          
+          // If no suggestions were created (count === 0 or debug.suggestionsGenerated === 0),
+          // wait a bit longer before reloading to ensure lastSuggestionsGeneratedAt is updated
+          const noSuggestionsCreated = data.count === 0 || 
+            (data.debug && data.debug.suggestionsGenerated === 0);
+          const delay = noSuggestionsCreated ? 1000 : 500;
+          
           // Reload status and pending count after generating suggestions
           setTimeout(() => {
             loadSuggestionStatus();
             loadPendingCount();
-          }, 500);
+          }, delay);
         })
         .catch(error => {
           console.error('❌ [CTA] Error generating suggestions:', error);

@@ -144,18 +144,18 @@ export function useSessionRefresh(options: UseSessionRefreshOptions = {}) {
   }, [])
 
   // Detectar quando a sessão se torna inválida/expirada e redirecionar
-  useEffect(() => {
-    // Se o status mudou para 'unauthenticated', significa que a sessão foi invalidada
-    // Isso pode acontecer quando o token expira ou é inválido
-    if (status === 'unauthenticated') {
-      console.log('Sessão invalidada/expirada, redirecionando para login...')
-      const currentPath = window.location.pathname
-      // Não redirecionar se já estiver na página de login
-      if (currentPath !== '/login' && currentPath !== '/register') {
-        router.push('/login?callbackUrl=' + encodeURIComponent(currentPath))
-      }
-    }
-  }, [status, router])
+  // useEffect(() => {
+  //   // Se o status mudou para 'unauthenticated', significa que a sessão foi invalidada
+  //   // Isso pode acontecer quando o token expira ou é inválido
+  //   if (status === 'unauthenticated') {
+  //     console.log('Sessão invalidada/expirada, redirecionando para login...')
+  //     const currentPath = window.location.pathname
+  //     // Não redirecionar se já estiver na página de login
+  //     if (currentPath !== '/login' && currentPath !== '/register') {
+  //       router.push('/login?callbackUrl=' + encodeURIComponent(currentPath))
+  //     }
+  //   }
+  // }, [status, router])
 
   // Verificar sessão quando a página é acessada (checkOnMount)
   useEffect(() => {

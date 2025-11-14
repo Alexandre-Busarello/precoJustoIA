@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, cache } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,7 +82,7 @@ export function PortfolioTransactionAI({
       setResult(null);
       setShowResults(false);
 
-      const response = await fetch('/api/portfolio/transaction-ai', {
+      const response = await cache(async() => fetch('/api/portfolio/transaction-ai', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,7 +92,7 @@ export function PortfolioTransactionAI({
           input: input.trim(),
           currentCashBalance
         }),
-      });
+      }))();
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -133,7 +133,7 @@ export function PortfolioTransactionAI({
     try {
       setLoading(true);
 
-      const response = await fetch('/api/portfolio/apply-ai-transactions', {
+      const response = await cache(async() => fetch('/api/portfolio/apply-ai-transactions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -142,7 +142,7 @@ export function PortfolioTransactionAI({
           portfolioId,
           transactions: result.transactions
         }),
-      });
+      }))();
 
       const data = await response.json();
 

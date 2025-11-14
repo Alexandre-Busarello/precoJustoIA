@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, cache } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -140,7 +140,7 @@ export function PortfolioTransactionList({
       }
       
       // Fetch from API
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions?${params}`);
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions?${params}`))();
       
       if (!response.ok) {
         throw new Error('Erro ao carregar transações');
@@ -238,14 +238,14 @@ export function PortfolioTransactionList({
         updates.quantity = parseFloat(editForm.quantity);
       }
 
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/${editingTransaction.id}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updates)
         }
-      );
+      ))();
 
       if (!response.ok) {
         const error = await response.json();
@@ -299,10 +299,10 @@ export function PortfolioTransactionList({
     try {
       setDeleting(true);
 
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/${deletingTransaction.id}`,
         { method: 'DELETE' }
-      );
+      ))();
 
       if (!response.ok) {
         const error = await response.json();
@@ -347,10 +347,10 @@ export function PortfolioTransactionList({
 
   const handleConfirm = async (transactionId: string) => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`,
         { method: 'POST' }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transação');
@@ -377,14 +377,14 @@ export function PortfolioTransactionList({
 
   const handleReject = async (transactionId: string) => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason: 'Rejeitado pelo usuário' })
         }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transação');
@@ -411,10 +411,10 @@ export function PortfolioTransactionList({
 
   const handleRevert = async (transactionId: string) => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/revert`,
         { method: 'POST' }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao reverter transação');

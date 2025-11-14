@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, cache } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,7 +109,7 @@ export function PortfolioAssetManager({
   const loadAssets = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/portfolio/${portfolioId}`);
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}`))();
 
       if (!response.ok) {
         throw new Error("Erro ao carregar ativos");
@@ -213,11 +213,11 @@ export function PortfolioAssetManager({
       }));
 
       // Add new asset
-      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker, targetAllocation: newAllocValue }),
-      });
+      }))();
 
       if (!response.ok) {
         const error = await response.json();
@@ -226,14 +226,14 @@ export function PortfolioAssetManager({
 
       // Update existing assets with new allocations
       if (updatedAssets.length > 0) {
-        const updateResponse = await fetch(
+        const updateResponse = await cache(async() => fetch(
           `/api/portfolio/${portfolioId}/assets`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ assets: updatedAssets }),
           }
-        );
+        ))();
 
         if (!updateResponse.ok) {
           console.error("Failed to update existing assets allocations");
@@ -282,11 +282,11 @@ export function PortfolioAssetManager({
       if (!removedAsset) return;
 
       // Remove the asset
-      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker }),
-      });
+      }))();
 
       if (!response.ok) {
         const error = await response.json();
@@ -312,14 +312,14 @@ export function PortfolioAssetManager({
         }));
 
         // Update remaining assets with redistributed allocations
-        const updateResponse = await fetch(
+        const updateResponse = await cache(async() => fetch(
           `/api/portfolio/${portfolioId}/assets`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ assets: updatedAssets }),
           }
-        );
+        ))();
 
         if (!updateResponse.ok) {
           console.error("Failed to update remaining assets allocations");
@@ -372,11 +372,11 @@ export function PortfolioAssetManager({
             : asset.targetAllocation,
       }));
 
-      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assets: normalizedAssets }),
-      });
+      }))();
 
       if (!response.ok) {
         const error = await response.json();
@@ -413,14 +413,14 @@ export function PortfolioAssetManager({
       setSaving(true);
 
       // Replace all current assets with AI generated ones using replaceAll flag
-      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           assets: generatedAssets,
           replaceAll: true, // 🤖 Flag para IA: deletar todos os ativos e recriar
         }),
-      });
+      }))();
 
       if (!response.ok) {
         const error = await response.json();
@@ -458,14 +458,14 @@ export function PortfolioAssetManager({
       setSaving(true);
 
       // Replace all current assets with bulk input ones using replaceAll flag
-      const response = await fetch(`/api/portfolio/${portfolioId}/assets`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/assets`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           assets: bulkAssets,
           replaceAll: true, // 📝 Flag para bulk: deletar todos os ativos e recriar
         }),
-      });
+      }))();
 
       if (!response.ok) {
         const error = await response.json();

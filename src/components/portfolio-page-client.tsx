@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, cache } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -105,7 +105,7 @@ export function PortfolioPageClient() {
         setLoading(true);
       }
 
-      const response = await fetch("/api/portfolio");
+      const response = await cache(async() => fetch("/api/portfolio"))();
 
       if (!response.ok) {
         throw new Error("Erro ao carregar carteiras");
@@ -581,7 +581,7 @@ function PortfolioOverview({
       }
 
       // Fetch from API
-      const response = await fetch(`/api/portfolio/${portfolioId}/metrics`);
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/metrics`))();
       if (response.ok) {
         const data = await response.json();
         portfolioCache.metrics.set(portfolioId, data.metrics);
@@ -817,7 +817,7 @@ function PortfolioTransactions({
   const loadMetrics = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/portfolio/${portfolioId}/metrics`);
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/metrics`))();
       if (response.ok) {
         const data = await response.json();
         setMetrics(data.metrics);

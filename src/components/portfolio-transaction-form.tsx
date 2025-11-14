@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, cache } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -141,11 +141,11 @@ export function PortfolioTransactionForm({
         }
       }
 
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(transactionData)
-      });
+      }))();
 
       const responseData = await response.json();
 
@@ -202,7 +202,7 @@ export function PortfolioTransactionForm({
     setShowCashConfirmDialog(false);
 
     try {
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -210,7 +210,7 @@ export function PortfolioTransactionForm({
           autoAddCashCredit: true,
           cashCreditAmount: insufficientCashData.insufficientAmount
         })
-      });
+      }))();
 
       const responseData = await response.json();
 

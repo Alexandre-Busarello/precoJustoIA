@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, cache } from "react";
 import {
   Table,
   TableBody,
@@ -59,7 +59,7 @@ export function PortfolioClosedPositionsTable({
       }
 
       // Fetch from API
-      const response = await fetch(`/api/portfolio/${portfolioId}/closed-positions`);
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/closed-positions`))();
 
       if (!response.ok) {
         throw new Error("Erro ao carregar posições encerradas");

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, cache } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -143,7 +143,7 @@ export function PortfolioConfigForm({
 
     try {
       if (mode === 'create') {
-        const response = await fetch('/api/portfolio', {
+        const response = await cache(async() => fetch('/api/portfolio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -154,7 +154,7 @@ export function PortfolioConfigForm({
             rebalanceFrequency,
             assets
           })
-        });
+        }))();
 
         if (!response.ok) {
           const error = await response.json();
@@ -182,7 +182,7 @@ export function PortfolioConfigForm({
           throw new Error('ID da carteira não encontrado');
         }
 
-        const response = await fetch(`/api/portfolio/${initialData.id}`, {
+        const response = await cache(async() => fetch(`/api/portfolio/${initialData.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -191,7 +191,7 @@ export function PortfolioConfigForm({
             monthlyContribution,
             rebalanceFrequency
           })
-        });
+        }))();
 
         if (!response.ok) {
           const error = await response.json();

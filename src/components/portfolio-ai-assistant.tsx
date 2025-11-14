@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, cache } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -76,14 +76,14 @@ export function PortfolioAIAssistant({ onAssetsGenerated, disabled, currentAsset
     setShowResults(false);
 
     try {
-      const response = await fetch('/api/portfolio/ai-assistant', {
+      const response = await cache(async() => fetch('/api/portfolio/ai-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           prompt: prompt.trim(),
           currentAssets: currentAssets.length > 0 ? currentAssets : undefined
         })
-      });
+      }))();
 
       if (!response.ok) {
         const error = await response.json();

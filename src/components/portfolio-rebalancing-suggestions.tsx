@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, cache } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,9 +59,9 @@ export function PortfolioRebalancingSuggestions({
 
   const checkPendingContributions = async () => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      );
+      ))();
       
       if (response.ok) {
         const data = await response.json();
@@ -107,9 +107,9 @@ export function PortfolioRebalancingSuggestions({
 
   const checkRebalancingNeeded = async () => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing/check`
-      );
+      ))();
       
       if (response.ok) {
         const data = await response.json();
@@ -127,9 +127,9 @@ export function PortfolioRebalancingSuggestions({
       setLoading(true);
       
       // Get all pending transactions and filter rebalancing ones
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      );
+      ))();
       
       if (response.ok) {
         const data = await response.json();
@@ -151,9 +151,9 @@ export function PortfolioRebalancingSuggestions({
       
       // Delete existing rebalancing suggestions
       // First get all pending rebalancing transactions
-      const pendingResponse = await fetch(
+      const pendingResponse = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      );
+      ))();
       
       if (pendingResponse.ok) {
         const pendingData = await pendingResponse.json();
@@ -164,18 +164,18 @@ export function PortfolioRebalancingSuggestions({
         // Delete each rebalancing transaction
         await Promise.all(
           rebalancingTx.map((tx: any) =>
-            fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
+            cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
               method: 'DELETE'
-            }).catch(() => {})
+            }))().catch(() => {})
           )
         );
       }
 
       // Generate new rebalancing suggestions
-      const generateResponse = await fetch(
+      const generateResponse = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing`,
         { method: 'POST' }
-      );
+      ))();
 
       if (!generateResponse.ok) {
         throw new Error('Erro ao gerar sugestões de rebalanceamento');
@@ -207,10 +207,10 @@ export function PortfolioRebalancingSuggestions({
 
   const handleConfirmSingle = async (transactionId: string) => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`,
         { method: 'POST' }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transação');
@@ -238,14 +238,14 @@ export function PortfolioRebalancingSuggestions({
 
   const handleRejectSingle = async (transactionId: string) => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason: 'Rejeitado pelo usuário' })
         }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transação');
@@ -280,14 +280,14 @@ export function PortfolioRebalancingSuggestions({
       
       const transactionIds = suggestions.map(s => s.id);
       
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/confirm-batch`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transactionIds })
         }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transações');
@@ -325,14 +325,14 @@ export function PortfolioRebalancingSuggestions({
       
       const transactionIds = suggestions.map(s => s.id);
       
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/reject-batch`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transactionIds })
         }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transações');

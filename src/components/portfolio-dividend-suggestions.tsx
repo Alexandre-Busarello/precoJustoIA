@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, cache } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -69,7 +69,7 @@ export function PortfolioDividendSuggestions({
       }
       
       // First, fetch pending DIVIDEND transactions
-      const pendingResponse = await fetch(`/api/portfolio/${portfolioId}/transactions?status=PENDING&type=DIVIDEND`);
+      const pendingResponse = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions?status=PENDING&type=DIVIDEND`))();
       if (pendingResponse.ok) {
         const pendingData = await pendingResponse.json();
         const pendingDividends = (pendingData.transactions || []).filter((tx: any) => tx.type === 'DIVIDEND');
@@ -84,7 +84,7 @@ export function PortfolioDividendSuggestions({
       }
 
       // If no pending transactions, try to get suggestions
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`);
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`))();
       if (!response.ok) {
         throw new Error('Erro ao carregar sugestões de dividendos');
       }
@@ -117,9 +117,9 @@ export function PortfolioDividendSuggestions({
   const generateSuggestions = async () => {
     try {
       setGenerating(true);
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/dividends`, {
         method: 'POST'
-      });
+      }))();
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -167,11 +167,11 @@ export function PortfolioDividendSuggestions({
       setConfirmingAll(true);
       const transactionIds = suggestions.map(s => s.id);
 
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/confirm-batch`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/confirm-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactionIds })
-      });
+      }))();
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transações');
@@ -204,9 +204,9 @@ export function PortfolioDividendSuggestions({
 
   const confirmTransaction = async (transactionId: string) => {
     try {
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`, {
         method: 'POST'
-      });
+      }))();
 
       if (!response.ok) {
         throw new Error('Erro ao confirmar transação');
@@ -238,9 +238,9 @@ export function PortfolioDividendSuggestions({
 
   const rejectTransaction = async (transactionId: string) => {
     try {
-      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`, {
+      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`, {
         method: 'POST'
-      });
+      }))();
 
       if (!response.ok) {
         throw new Error('Erro ao rejeitar transação');

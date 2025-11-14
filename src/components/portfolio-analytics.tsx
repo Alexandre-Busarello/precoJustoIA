@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, cache } from "react";
 import {
   Card,
   CardContent,
@@ -193,7 +193,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
 
         // Fetch from API
         console.log("🌐 [API] Buscando analytics do servidor...");
-        const response = await fetch(`/api/portfolio/${portfolioId}/analytics`);
+        const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/analytics`))();
 
         if (!response.ok) {
           throw new Error("Failed to fetch analytics");

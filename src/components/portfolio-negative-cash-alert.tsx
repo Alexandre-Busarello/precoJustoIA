@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, cache } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -39,9 +39,9 @@ export function PortfolioNegativeCashAlert({
       setFixing(true);
 
       // Get the earliest transaction date to add credit before it
-      const transactionsRes = await fetch(
+      const transactionsRes = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions?limit=1&orderBy=date&order=asc`
-      );
+      ))();
       
       let earliestDate = new Date();
       if (transactionsRes.ok) {
@@ -54,7 +54,7 @@ export function PortfolioNegativeCashAlert({
       }
 
       // Create CASH_CREDIT transaction
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions`,
         {
           method: 'POST',
@@ -66,7 +66,7 @@ export function PortfolioNegativeCashAlert({
             notes: 'Aporte retroativo para correção de saldo'
           })
         }
-      );
+      ))();
 
       if (!response.ok) {
         const error = await response.json();
@@ -79,10 +79,10 @@ export function PortfolioNegativeCashAlert({
       });
 
       // Recalculate all cash balances in chronological order
-      const recalcResponse = await fetch(
+      const recalcResponse = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/recalculate-balances`,
         { method: 'POST' }
-      );
+      ))();
 
       if (!recalcResponse.ok) {
         console.error('Erro ao recalcular saldos');
@@ -108,10 +108,10 @@ export function PortfolioNegativeCashAlert({
     try {
       setRecalculating(true);
 
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/metrics`,
         { method: 'POST' }
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error('Erro ao recalcular métricas');
@@ -133,10 +133,10 @@ export function PortfolioNegativeCashAlert({
       setRecalcBalances(true);
 
       // First recalculate balances
-      const balancesResponse = await fetch(
+      const balancesResponse = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/recalculate-balances`,
         { method: 'POST' }
-      );
+      ))();
 
       if (!balancesResponse.ok) {
         throw new Error('Erro ao recalcular saldos');

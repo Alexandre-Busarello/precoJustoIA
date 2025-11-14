@@ -59,6 +59,7 @@ export function AnalyticsDashboardClient() {
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d'>('30d');
   const [filterUserId, setFilterUserId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('overview');
 
   const fetchAnalytics = async () => {
     try {
@@ -96,6 +97,37 @@ export function AnalyticsDashboardClient() {
     }
   };
 
+  // Ler hash da URL ao carregar e quando mudar
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash && ['overview', 'funnels', 'journey', 'heatmap'].includes(hash)) {
+        setActiveTab(hash);
+      } else if (!hash) {
+        setActiveTab('overview');
+      }
+    };
+
+    // Ler hash inicial
+    handleHashChange();
+
+    // Listener para mudanças no hash (botão voltar/avançar do navegador)
+    window.addEventListener('hashchange', handleHashChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
+  // Atualizar hash quando tab mudar
+  useEffect(() => {
+    if (activeTab !== 'overview') {
+      window.history.replaceState(null, '', `#${activeTab}`);
+    } else {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,7 +163,7 @@ export function AnalyticsDashboardClient() {
   return (
     <div className="space-y-6">
       {/* Filtros de Data e Usuário */}
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="funnels">Funis</TabsTrigger>

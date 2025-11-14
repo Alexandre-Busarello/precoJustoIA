@@ -41,6 +41,9 @@ const FUNNEL_TYPES = [
   { value: 'ranking_to_asset', label: 'Ranking → Visualização de Ativo' },
   { value: 'asset_to_comparison', label: 'Ativo → Comparação' },
   { value: 'comparison_to_backtest', label: 'Comparação → Backtest' },
+  { value: 'portfolio_page_to_creation', label: 'Acesso /carteira → Criação de Carteira' },
+  { value: 'portfolio_view_to_update', label: 'Acesso Carteira Específica → Atualização' },
+  { value: 'ranking_page_to_creation', label: 'Acesso /ranking → Criação de Ranking' },
 ];
 
 interface FunnelViewerProps {

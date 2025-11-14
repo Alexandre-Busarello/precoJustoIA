@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useTracking } from '@/hooks/use-tracking';
+import { EventType } from '@/lib/tracking-types';
 import { DollarSign, AlertTriangle, Plus } from 'lucide-react';
 import { invalidatePortfolioAnalyticsCache } from '@/components/portfolio-analytics';
 import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
@@ -48,6 +50,7 @@ export function PortfolioTransactionForm({
   onCancel
 }: PortfolioTransactionFormProps) {
   const { toast } = useToast();
+  const { trackEvent } = useTracking();
   const queryClient = useQueryClient();
   const [showCashConfirmDialog, setShowCashConfirmDialog] = useState(false);
   const [insufficientCashData, setInsufficientCashData] = useState<{
@@ -100,6 +103,14 @@ export function PortfolioTransactionForm({
       toast({
         title: 'Sucesso!',
         description: responseData.message || 'Transação registrada com sucesso'
+      });
+
+      // Track evento de atualização de carteira (transação adicionada)
+      trackEvent(EventType.FEATURE_USED, undefined, {
+        feature: 'portfolio_updated',
+        portfolioId: portfolioId,
+        updateType: 'transaction',
+        transactionType: variables.type,
       });
 
       // Invalidar cache de analytics e dashboard

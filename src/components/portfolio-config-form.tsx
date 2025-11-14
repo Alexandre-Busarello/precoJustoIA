@@ -221,6 +221,12 @@ export function PortfolioConfigForm({
         description: 'Carteira atualizada com sucesso'
       });
 
+      // Track evento de atualização de carteira
+      trackEvent(EventType.FEATURE_USED, undefined, {
+        feature: 'portfolio_updated',
+        portfolioId: initialData?.id,
+      });
+
       // Invalidate dashboard cache
       invalidateDashboardPortfoliosCache();
       queryClient.invalidateQueries({ queryKey: ['portfolios'] });

@@ -307,6 +307,264 @@ export async function GET(request: NextRequest) {
         break;
       }
 
+      case 'portfolio_page_to_creation': {
+        // Funnel: Acesso à página /carteira → Criação de carteira
+        const [portfolioPageViews, portfolioCreations] = await Promise.all([
+          // @ts-ignore - Prisma Client será regenerado após migration
+          prisma.userEvent.findMany({
+            where: {
+              ...where,
+              eventType: 'PAGE_VIEW',
+              page: '/carteira',
+            },
+            select: {
+              userId: true,
+              sessionId: true,
+              timestamp: true,
+            },
+          }),
+          // @ts-ignore - Prisma Client será regenerado após migration
+          prisma.userEvent.findMany({
+            where: {
+              ...where,
+              eventType: 'FEATURE_USED',
+            },
+            select: {
+              userId: true,
+              sessionId: true,
+              timestamp: true,
+              metadata: true,
+            },
+          }),
+        ]);
+
+        // Filtrar apenas eventos de criação de carteira (metadata.feature === 'portfolio_created')
+        const portfolioCreationEvents = portfolioCreations.filter((e: any) => {
+          const metadata = e.metadata as any;
+          return metadata?.feature === 'portfolio_created';
+        });
+
+        // Agrupar por usuário/sessão e verificar se criaram carteira após acessar /carteira
+        const portfolioViewers = new Set<string>();
+        portfolioPageViews.forEach((e: any) => {
+          if (e.userId) {
+            portfolioViewers.add(e.userId);
+          } else {
+            portfolioViewers.add(`session:${e.sessionId}`);
+          }
+        });
+
+        const portfolioCreators = new Set<string>();
+        portfolioCreationEvents.forEach((e: any) => {
+          if (e.userId) {
+            portfolioCreators.add(e.userId);
+          } else {
+            portfolioCreators.add(`session:${e.sessionId}`);
+          }
+        });
+
+        // Usuários que acessaram /carteira E criaram carteira
+        const portfolioViewersWhoCreated = Array.from(portfolioViewers).filter(id => portfolioCreators.has(id));
+
+        funnel = {
+          name: 'Acesso /carteira → Criação de Carteira',
+          steps: [
+            {
+              name: 'Acessou /carteira',
+              eventType: 'PAGE_VIEW',
+              page: '/carteira',
+              count: portfolioViewers.size,
+              percentage: 100,
+            },
+            {
+              name: 'Criou Carteira',
+              eventType: 'FEATURE_USED',
+              count: portfolioViewersWhoCreated.length,
+              percentage: portfolioViewers.size > 0 
+                ? (portfolioViewersWhoCreated.length / portfolioViewers.size) * 100 
+                : 0,
+            },
+          ],
+          totalUsers: portfolioViewers.size,
+          conversionRate: portfolioViewers.size > 0 
+            ? (portfolioViewersWhoCreated.length / portfolioViewers.size) * 100 
+            : 0,
+        };
+        break;
+      }
+
+      case 'portfolio_view_to_update': {
+        // Funnel: Acesso à página /carteira?id=... → Atualização de carteira
+        // @ts-ignore - Prisma Client será regenerado após migration
+        const allPortfolioPageViews = await prisma.userEvent.findMany({
+          where: {
+            ...where,
+            eventType: 'PAGE_VIEW',
+            page: {
+              contains: '/carteira',
+            },
+          },
+          select: {
+            userId: true,
+            sessionId: true,
+            timestamp: true,
+            page: true,
+          },
+        });
+
+        // Filtrar apenas páginas com query string (id=...)
+        const portfolioDetailViews = allPortfolioPageViews.filter((e: any) => 
+          e.page.includes('/carteira?id=')
+        );
+
+        // @ts-ignore - Prisma Client será regenerado após migration
+        const portfolioUpdates = await prisma.userEvent.findMany({
+          where: {
+            ...where,
+            eventType: 'FEATURE_USED',
+          },
+          select: {
+            userId: true,
+            sessionId: true,
+            timestamp: true,
+            metadata: true,
+          },
+        });
+
+        // Filtrar apenas eventos de atualização de carteira (metadata.feature === 'portfolio_updated')
+        const portfolioUpdateEvents = portfolioUpdates.filter((e: any) => {
+          const metadata = e.metadata as any;
+          return metadata?.feature === 'portfolio_updated';
+        });
+
+        // Agrupar por usuário/sessão e verificar se atualizaram após acessar página específica
+        const portfolioDetailViewers = new Set<string>();
+        portfolioDetailViews.forEach((e: any) => {
+          if (e.userId) {
+            portfolioDetailViewers.add(e.userId);
+          } else {
+            portfolioDetailViewers.add(`session:${e.sessionId}`);
+          }
+        });
+
+        const portfolioUpdaters = new Set<string>();
+        portfolioUpdateEvents.forEach((e: any) => {
+          if (e.userId) {
+            portfolioUpdaters.add(e.userId);
+          } else {
+            portfolioUpdaters.add(`session:${e.sessionId}`);
+          }
+        });
+
+        // Usuários que acessaram página específica E atualizaram carteira
+        const portfolioViewersWhoUpdated = Array.from(portfolioDetailViewers).filter(id => portfolioUpdaters.has(id));
+
+        funnel = {
+          name: 'Acesso Carteira Específica → Atualização',
+          steps: [
+            {
+              name: 'Acessou Carteira Específica',
+              eventType: 'PAGE_VIEW',
+              page: '/carteira?id=...',
+              count: portfolioDetailViewers.size,
+              percentage: 100,
+            },
+            {
+              name: 'Atualizou Carteira',
+              eventType: 'FEATURE_USED',
+              count: portfolioViewersWhoUpdated.length,
+              percentage: portfolioDetailViewers.size > 0 
+                ? (portfolioViewersWhoUpdated.length / portfolioDetailViewers.size) * 100 
+                : 0,
+            },
+          ],
+          totalUsers: portfolioDetailViewers.size,
+          conversionRate: portfolioDetailViewers.size > 0 
+            ? (portfolioViewersWhoUpdated.length / portfolioDetailViewers.size) * 100 
+            : 0,
+        };
+        break;
+      }
+
+      case 'ranking_page_to_creation': {
+        // Funnel: Acesso à página /ranking → Criação de ranking
+        const [rankingPageViews, rankingCreations] = await Promise.all([
+          // @ts-ignore - Prisma Client será regenerado após migration
+          prisma.userEvent.findMany({
+            where: {
+              ...where,
+              eventType: 'PAGE_VIEW',
+              page: '/ranking',
+            },
+            select: {
+              userId: true,
+              sessionId: true,
+              timestamp: true,
+            },
+          }),
+          // @ts-ignore - Prisma Client será regenerado após migration
+          prisma.userEvent.findMany({
+            where: {
+              ...where,
+              eventType: 'RANKING_CREATED',
+            },
+            select: {
+              userId: true,
+              sessionId: true,
+              timestamp: true,
+            },
+          }),
+        ]);
+
+        // Agrupar por usuário/sessão e verificar se criaram ranking após acessar /ranking
+        const rankingViewers = new Set<string>();
+        rankingPageViews.forEach((e: any) => {
+          if (e.userId) {
+            rankingViewers.add(e.userId);
+          } else {
+            rankingViewers.add(`session:${e.sessionId}`);
+          }
+        });
+
+        const rankingCreators = new Set<string>();
+        rankingCreations.forEach((e: any) => {
+          if (e.userId) {
+            rankingCreators.add(e.userId);
+          } else {
+            rankingCreators.add(`session:${e.sessionId}`);
+          }
+        });
+
+        // Usuários que acessaram /ranking E criaram ranking
+        const rankingViewersWhoCreated = Array.from(rankingViewers).filter(id => rankingCreators.has(id));
+
+        funnel = {
+          name: 'Acesso /ranking → Criação de Ranking',
+          steps: [
+            {
+              name: 'Acessou /ranking',
+              eventType: 'PAGE_VIEW',
+              page: '/ranking',
+              count: rankingViewers.size,
+              percentage: 100,
+            },
+            {
+              name: 'Criou Ranking',
+              eventType: 'RANKING_CREATED',
+              count: rankingViewersWhoCreated.length,
+              percentage: rankingViewers.size > 0 
+                ? (rankingViewersWhoCreated.length / rankingViewers.size) * 100 
+                : 0,
+            },
+          ],
+          totalUsers: rankingViewers.size,
+          conversionRate: rankingViewers.size > 0 
+            ? (rankingViewersWhoCreated.length / rankingViewers.size) * 100 
+            : 0,
+        };
+        break;
+      }
+
       default:
         return NextResponse.json(
           { error: 'Tipo de funil inválido' },

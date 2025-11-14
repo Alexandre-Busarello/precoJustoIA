@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import AuthProvider from "@/providers/session-provider";
+import { QueryProvider } from "@/providers/query-provider";
 import Header from "@/components/header";
 import { StructuredData } from "@/components/structured-data";
 import { SessionRefreshProvider } from "@/components/session-refresh-provider";
@@ -140,22 +141,24 @@ export default function RootLayout({
             gtag('config', 'G-G7T3PKSEY4');
           `}
         </Script>
-        <AuthProvider>
-          <SessionRefreshProvider>
-            <AlfaProvider>
-              <LastLoginUpdater />
-              <ScrollToTop />
-              <div className="min-h-screen bg-background">
-                <Header />
-                <main>
-                  {children}
-                </main>
-                <AdminLink />
-              </div>
-              <Toaster position="top-right" />
-            </AlfaProvider>
-          </SessionRefreshProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <SessionRefreshProvider>
+              <AlfaProvider>
+                <LastLoginUpdater />
+                <ScrollToTop />
+                <div className="min-h-screen bg-background">
+                  <Header />
+                  <main>
+                    {children}
+                  </main>
+                  <AdminLink />
+                </div>
+                <Toaster position="top-right" />
+              </AlfaProvider>
+            </SessionRefreshProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

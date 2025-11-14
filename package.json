@@ -54,6 +54,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@stripe/react-stripe-js": "^4.0.2",
     "@stripe/stripe-js": "^7.9.0",
+    "@tanstack/react-query": "^5.90.9",
     "@types/nodemailer": "^7.0.1",
     "axios": "^1.12.1",
     "bcryptjs": "^3.0.2",

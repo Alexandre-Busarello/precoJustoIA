@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, cache } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ArrowRight, Calendar } from "lucide-react";
-import { portfolioCache } from "@/lib/portfolio-cache";
 
 interface PortfolioPendingTransactionsCTAProps {
   portfolioId: string;
@@ -32,75 +32,83 @@ export function PortfolioPendingTransactionsCTA({
     hasPendingBuySuggestions: boolean;
   } | null>(null);
 
-  const loadSuggestionStatus = useCallback(async () => {
-    try {
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions/suggestions/status`
-      ))();
-      if (response.ok) {
-        const data = await response.json();
-        setSuggestionStatus(data);
-        return data;
-      }
-    } catch (error) {
-      console.error("Erro ao verificar status de sugestões:", error);
+  // Fetch function for suggestion status
+  const fetchSuggestionStatus = async () => {
+    const response = await fetch(
+      `/api/portfolio/${portfolioId}/transactions/suggestions/status`
+    );
+    if (!response.ok) {
+      throw new Error("Erro ao verificar status de sugestões");
     }
-    return null;
-  }, [portfolioId]);
+    return response.json();
+  };
 
-  const loadPendingCount = useCallback(async () => {
-    try {
-      setLoading(true);
+  // Use React Query for suggestion status
+  const {
+    data: suggestionStatusData,
+    refetch: refetchSuggestionStatus,
+  } = useQuery({
+    queryKey: ["suggestion-status", portfolioId],
+    queryFn: fetchSuggestionStatus,
+    enabled: !!portfolioId && trackingStarted,
+  });
 
-      // Try cache first
-      const cached = portfolioCache.suggestions.get(portfolioId) as any;
-      if (cached && Array.isArray(cached)) {
-        const filteredCached = cached.filter(
-          (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
-        );
-        setPendingCount(filteredCached.length);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch pending transactions count with React cache for deduplication
-      const response = await cache(async() => fetch(
-        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      ))();
-
-      if (!response.ok) {
-        throw new Error("Erro ao carregar transações pendentes");
-      }
-
-      const data = await response.json();
-      const allPendingTx = data.transactions || [];
-      const contributionTx = allPendingTx.filter(
-        (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
-      );
-      const count = contributionTx.length;
-      
-      setPendingCount(count);
-      
-      // Cache the result (only contribution transactions)
-      if (contributionTx.length > 0) {
-        portfolioCache.suggestions.set(portfolioId, contributionTx);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar contagem de transações pendentes:", error);
-      setPendingCount(0);
-    } finally {
-      setLoading(false);
+  // Update local state when query data changes
+  useEffect(() => {
+    if (suggestionStatusData) {
+      setSuggestionStatus(suggestionStatusData);
     }
-  }, [portfolioId]);
+  }, [suggestionStatusData]);
+
+  // Fetch function for pending transactions
+  const fetchPendingTransactions = async () => {
+    const response = await fetch(
+      `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+    );
+    if (!response.ok) {
+      throw new Error("Erro ao carregar transações pendentes");
+    }
+    const data = await response.json();
+    const allPendingTx = data.transactions || [];
+    const contributionTx = allPendingTx.filter(
+      (tx: any) => tx.type !== 'SELL_REBALANCE' && tx.type !== 'BUY_REBALANCE'
+    );
+    return contributionTx.length;
+  };
+
+  // Use React Query for pending count
+  const {
+    data: pendingCountData,
+    isLoading: pendingLoading,
+    refetch: refetchPendingCount,
+  } = useQuery({
+    queryKey: ["pending-transactions", portfolioId],
+    queryFn: fetchPendingTransactions,
+    enabled: !!portfolioId,
+  });
+
+  // Update local state when query data changes
+  useEffect(() => {
+    if (pendingCountData !== undefined) {
+      setPendingCount(pendingCountData);
+    }
+  }, [pendingCountData]);
+
+  useEffect(() => {
+    setLoading(pendingLoading);
+  }, [pendingLoading]);
+
+
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (trackingStarted) {
-      loadSuggestionStatus();
-      loadPendingCount();
+      refetchSuggestionStatus();
+      refetchPendingCount();
     } else {
       setLoading(false);
     }
-  }, [trackingStarted, refreshKey, loadPendingCount, loadSuggestionStatus]);
+  }, [trackingStarted, refreshKey, refetchPendingCount, refetchSuggestionStatus]);
 
   // Try to generate suggestions if needed
   useEffect(() => {
@@ -147,9 +155,9 @@ export function PortfolioPendingTransactionsCTA({
       console.log(`🔄 [CTA] No pending transactions and ${reason}, generating suggestions...`);
       setGeneratingSuggestions(true);
       
-      cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/contributions`, {
+      fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/contributions`, {
         method: 'POST'
-      }))()
+      })
         .then(response => {
           if (response.ok) {
             return response.json();
@@ -167,8 +175,11 @@ export function PortfolioPendingTransactionsCTA({
           
           // Reload status and pending count after generating suggestions
           setTimeout(() => {
-            loadSuggestionStatus();
-            loadPendingCount();
+            refetchSuggestionStatus();
+            refetchPendingCount();
+            // Also invalidate queries to ensure fresh data
+            queryClient.invalidateQueries({ queryKey: ["suggestion-status", portfolioId] });
+            queryClient.invalidateQueries({ queryKey: ["pending-transactions", portfolioId] });
           }, delay);
         })
         .catch(error => {
@@ -178,7 +189,7 @@ export function PortfolioPendingTransactionsCTA({
           setGeneratingSuggestions(false);
         });
     }
-  }, [trackingStarted, pendingCount, suggestionStatus, portfolioId, loadPendingCount, loadSuggestionStatus, loading, generatingSuggestions]);
+  }, [trackingStarted, pendingCount, suggestionStatus, portfolioId, refetchPendingCount, refetchSuggestionStatus, queryClient, loading, generatingSuggestions]);
 
   if (loading || generatingSuggestions) {
     return (

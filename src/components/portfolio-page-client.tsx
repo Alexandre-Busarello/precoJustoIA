@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, cache } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,6 @@ import { PortfolioTransactionAI } from "@/components/portfolio-transaction-ai";
 import { PortfolioTransactionAICTA } from "@/components/portfolio-transaction-ai-cta";
 import { DeletePortfolioDialog } from "@/components/delete-portfolio-dialog";
 import { invalidateDashboardPortfoliosCache } from "@/components/dashboard-portfolios";
-import { portfolioCache } from "@/lib/portfolio-cache";
 import {
   Dialog,
   DialogContent,
@@ -69,23 +69,47 @@ interface Portfolio {
 /**
  * Portfolio Page Client Component
  */
+// Fetch function for portfolios
+const fetchPortfolios = async (): Promise<Portfolio[]> => {
+  const response = await fetch("/api/portfolio");
+  if (!response.ok) {
+    throw new Error("Erro ao carregar carteiras");
+  }
+  const data = await response.json();
+  return data.portfolios || [];
+};
+
 export function PortfolioPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { isPremium } = usePremiumStatus();
+  const queryClient = useQueryClient();
 
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  // Use React Query for portfolios
+  const {
+    data: portfolios = [],
+    isLoading: loading,
+    error: portfoliosError,
+  } = useQuery({
+    queryKey: ["portfolios"],
+    queryFn: fetchPortfolios,
+  });
+
   const [selectedPortfolio, setSelectedPortfolio] = useState<string | null>(
     null
   );
-  const [loading, setLoading] = useState(true);
 
-  // Load portfolios on mount
+  // Show error toast if portfolios query fails
   useEffect(() => {
-    loadPortfolios();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (portfoliosError) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar suas carteiras",
+        variant: "destructive",
+      });
+    }
+  }, [portfoliosError, toast]);
 
   // Auto-select portfolio from URL or first one
   useEffect(() => {
@@ -98,35 +122,9 @@ export function PortfolioPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, portfolios]);
 
-  const loadPortfolios = async (silent = false) => {
-    try {
-      // Only show loading on initial load, not on updates
-      if (!silent) {
-        setLoading(true);
-      }
-
-      const response = await cache(async() => fetch("/api/portfolio"))();
-
-      if (!response.ok) {
-        throw new Error("Erro ao carregar carteiras");
-      }
-
-      const data = await response.json();
-      setPortfolios(data.portfolios || []);
-    } catch (error) {
-      console.error("Erro ao carregar carteiras:", error);
-      if (!silent) {
-        toast({
-          title: "Erro",
-          description: "Não foi possível carregar suas carteiras",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
-    }
+  // Reload portfolios function (for use by child components)
+  const reloadPortfolios = () => {
+    queryClient.invalidateQueries({ queryKey: ["portfolios"] });
   };
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -212,7 +210,7 @@ export function PortfolioPageClient() {
                 mode="create"
                 onSuccess={() => {
                   setShowCreateModal(false);
-                  loadPortfolios(true);
+                  reloadPortfolios();
                 }}
                 onCancel={() => setShowCreateModal(false)}
               />
@@ -237,7 +235,7 @@ export function PortfolioPageClient() {
               <ConvertBacktestModal
                 onSuccess={(portfolioId) => {
                   setShowConvertBacktestModal(false);
-                  loadPortfolios();
+                  reloadPortfolios();
                   router.push(`/carteira?id=${portfolioId}`);
                 }}
                 onCancel={() => setShowConvertBacktestModal(false)}
@@ -342,7 +340,7 @@ export function PortfolioPageClient() {
         {currentPortfolio ? (
           <PortfolioDetails
             portfolio={currentPortfolio}
-            onUpdate={() => loadPortfolios(true)}
+            onUpdate={() => reloadPortfolios()}
           />
         ) : (
           <Card>
@@ -368,7 +366,7 @@ export function PortfolioPageClient() {
             mode="create"
             onSuccess={() => {
               setShowCreateModal(false);
-              loadPortfolios();
+              reloadPortfolios();
             }}
             onCancel={() => setShowCreateModal(false)}
           />
@@ -391,7 +389,7 @@ export function PortfolioPageClient() {
           <ConvertBacktestModal
             onSuccess={(portfolioId) => {
               setShowConvertBacktestModal(false);
-              loadPortfolios();
+              reloadPortfolios();
               router.push(`/carteira?id=${portfolioId}`);
             }}
             onCancel={() => setShowConvertBacktestModal(false)}
@@ -553,56 +551,43 @@ function PortfolioOverview({
   onUpdate: () => void;
   setActiveTab: (tab: string) => void;
 }) {
-  const [metrics, setMetrics] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Fetch function for metrics
+  const fetchMetrics = async () => {
+    const response = await fetch(`/api/portfolio/${portfolioId}/metrics`);
+    if (!response.ok) {
+      throw new Error("Erro ao carregar métricas");
+    }
+    const data = await response.json();
+    return data.metrics;
+  };
+
+  // Use React Query for metrics
+  const {
+    data: metrics,
+    isLoading: loading,
+  } = useQuery({
+    queryKey: ["portfolio-metrics", portfolioId],
+    queryFn: fetchMetrics,
+    enabled: !!portfolioId,
+  });
 
   // Reactive update - only reloads local data without full page refresh
   const handleUpdate = () => {
     setRefreshKey((prev) => prev + 1);
-    loadMetrics(); // Reload only metrics
+    // Invalidate metrics query to reload
+    queryClient.invalidateQueries({ queryKey: ["portfolio-metrics", portfolioId] });
     onUpdate(); // Notify parent to update portfolio selector badges
     invalidateDashboardPortfoliosCache(); // Invalidate dashboard cache
   };
 
-  const loadMetrics = async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-
-      // Try cache first (unless force refresh)
-      if (!forceRefresh) {
-        const cached = portfolioCache.metrics.get(portfolioId);
-        if (cached) {
-          setMetrics(cached);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Fetch from API
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/metrics`))();
-      if (response.ok) {
-        const data = await response.json();
-        portfolioCache.metrics.set(portfolioId, data.metrics);
-        setMetrics(data.metrics);
-      }
-    } catch (error) {
-      console.error("Error loading metrics:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMetrics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId]);
-
   // Reload metrics when refreshKey changes
   useEffect(() => {
     if (refreshKey > 0) {
-      loadMetrics();
+      queryClient.invalidateQueries({ queryKey: ["portfolio-metrics", portfolioId] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
@@ -803,36 +788,36 @@ function PortfolioTransactions({
   const { isPremium } = usePremiumStatus();
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [metrics, setMetrics] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  // Fetch function for metrics
+  const fetchMetrics = async () => {
+    const response = await fetch(`/api/portfolio/${portfolioId}/metrics`);
+    if (!response.ok) {
+      throw new Error("Erro ao carregar métricas");
+    }
+    const data = await response.json();
+    return data.metrics;
+  };
+
+  // Use React Query for metrics
+  const {
+    data: metrics,
+    isLoading: loading,
+  } = useQuery({
+    queryKey: ["portfolio-metrics", portfolioId],
+    queryFn: fetchMetrics,
+    enabled: !!portfolioId,
+  });
 
   // Reactive update - only refreshes local components without full page reload
   const handleTransactionUpdate = async () => {
     setRefreshKey((prev) => prev + 1);
-    loadMetrics(); // Reload metrics to get updated cash balance
+    // Invalidate metrics query to reload
+    queryClient.invalidateQueries({ queryKey: ["portfolio-metrics", portfolioId] });
     onUpdate(); // Notify parent to update portfolio selector badges only
     invalidateDashboardPortfoliosCache(); // Invalidate dashboard cache
   };
-
-  const loadMetrics = async () => {
-    try {
-      setLoading(true);
-      const response = await cache(async() => fetch(`/api/portfolio/${portfolioId}/metrics`))();
-      if (response.ok) {
-        const data = await response.json();
-        setMetrics(data.metrics);
-      }
-    } catch (error) {
-      console.error("Error loading metrics:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMetrics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolioId]);
 
   // Detectar hash e fazer scroll quando dados carregarem
   useEffect(() => {

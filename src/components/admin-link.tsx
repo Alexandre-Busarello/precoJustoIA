@@ -42,7 +42,7 @@ export default function AdminLink() {
   return (
     <div className="fixed bottom-4 right-4 z-50">
       <Button asChild className="bg-red-600 hover:bg-red-700 text-white shadow-lg">
-        <Link href="/admin/tickets" className="flex items-center gap-2">
+        <Link href="/admin" className="flex items-center gap-2">
           <Shield className="w-4 h-4" />
           <span className="hidden sm:inline">Painel Admin</span>
           <Badge variant="secondary" className="bg-red-500 text-white text-xs">

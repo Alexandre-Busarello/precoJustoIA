@@ -22,6 +22,7 @@ import { FunnelViewer } from './funnel-viewer';
 import { JourneyAnalyzer } from './journey-analyzer';
 import { HeatmapViewer } from './heatmap-viewer';
 import { UserEmailFilter } from './user-email-filter';
+import { UserTypeChart } from './user-type-chart';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface AnalyticsData {
@@ -36,6 +37,16 @@ interface AnalyticsData {
     pageViews: number;
     dailyActiveUsers: number;
     monthlyActiveUsers: number;
+    userTypeCounts?: {
+      premium: number;
+      free: number;
+      anonymous: number;
+    };
+    eventsByUserType?: {
+      premium: number;
+      free: number;
+      anonymous: number;
+    };
   };
   topPages: Array<{ page: string; count: number }>;
   topEvents: Array<{ eventType: string; count: number }>;
@@ -183,6 +194,31 @@ export function AnalyticsDashboardClient() {
             <p className="text-xs text-muted-foreground">
               No período selecionado
             </p>
+            {data.metrics.eventsByUserType && (
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    Premium
+                  </span>
+                  <span className="font-medium">{data.metrics.eventsByUserType.premium.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    Gratuito
+                  </span>
+                  <span className="font-medium">{data.metrics.eventsByUserType.free.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                    Anônimo
+                  </span>
+                  <span className="font-medium">{data.metrics.eventsByUserType.anonymous.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -196,6 +232,31 @@ export function AnalyticsDashboardClient() {
             <p className="text-xs text-muted-foreground">
               {data.metrics.dailyActiveUsers} DAU • {data.metrics.monthlyActiveUsers} MAU
             </p>
+            {data.metrics.userTypeCounts && (
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    Premium
+                  </span>
+                  <span className="font-medium">{data.metrics.userTypeCounts.premium.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    Gratuito
+                  </span>
+                  <span className="font-medium">{data.metrics.userTypeCounts.free.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                    Anônimo
+                  </span>
+                  <span className="font-medium">{data.metrics.userTypeCounts.anonymous.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -225,6 +286,24 @@ export function AnalyticsDashboardClient() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Gráficos de Distribuição por Tipo de Usuário */}
+      {(data.metrics.userTypeCounts || data.metrics.eventsByUserType) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {data.metrics.userTypeCounts && (
+            <UserTypeChart
+              title="Distribuição de Usuários"
+              data={data.metrics.userTypeCounts}
+            />
+          )}
+          {data.metrics.eventsByUserType && (
+            <UserTypeChart
+              title="Distribuição de Eventos"
+              data={data.metrics.eventsByUserType}
+            />
+          )}
+        </div>
+      )}
 
       {/* Top Páginas */}
       <Card>

@@ -17,6 +17,7 @@ import {
   isTrackingOptedOut,
 } from '@/lib/tracking-utils';
 import { EventType } from '@/lib/tracking-types';
+import { useAdminStatus } from './use-admin-status';
 
 const BATCH_SIZE = 50; // Máximo de eventos por batch
 const FLUSH_INTERVAL = 5000; // 5 segundos
@@ -153,6 +154,7 @@ function isDuplicateEvent(
 export function useTracking(): UseTrackingReturn {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { isAdmin } = useAdminStatus();
   const sessionIdRef = useRef<string | null>(null);
   const lastPageRef = useRef<string | null>(null);
   const scrollDepthRef = useRef<number>(0);
@@ -223,6 +225,9 @@ export function useTracking(): UseTrackingReturn {
     element?: string,
     metadata?: Record<string, any>
   ) => {
+    // Não trackear se usuário for admin
+    if (isAdmin) return;
+    
     if (isTrackingOptedOut() || !sessionIdRef.current) return;
 
     const pageMeta = getPageMetadata();
@@ -252,11 +257,11 @@ export function useTracking(): UseTrackingReturn {
       // Agenda flush automático
       scheduleFlush();
     }
-  }, [flush, scheduleFlush]);
+  }, [flush, scheduleFlush, isAdmin]);
 
   // Auto-track de mudanças de página
   useEffect(() => {
-    if (!sessionIdRef.current || isTrackingOptedOut()) return;
+    if (isAdmin || !sessionIdRef.current || isTrackingOptedOut()) return;
 
     const currentPage = pathname;
     
@@ -288,11 +293,11 @@ export function useTracking(): UseTrackingReturn {
       scrollTracked = false;
       scrollDepthRef.current = 0;
     }
-  }, [pathname, trackEventInternal]);
+  }, [pathname, trackEventInternal, isAdmin]);
 
   // Auto-track de cliques (para mapa de calor)
   useEffect(() => {
-    if (isTrackingOptedOut() || !sessionIdRef.current) return;
+    if (isAdmin || isTrackingOptedOut() || !sessionIdRef.current) return;
 
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -343,11 +348,11 @@ export function useTracking(): UseTrackingReturn {
     return () => {
       document.removeEventListener('click', handleClick, true);
     };
-  }, [trackEventInternal]);
+  }, [trackEventInternal, isAdmin]);
 
   // Auto-track de scroll
   useEffect(() => {
-    if (isTrackingOptedOut()) return;
+    if (isAdmin || isTrackingOptedOut()) return;
 
     const handleScroll = () => {
       const depth = getScrollDepth();
@@ -371,10 +376,12 @@ export function useTracking(): UseTrackingReturn {
     return () => {
       window.removeEventListener('scroll', handleScroll);
     };
-  }, [trackEventInternal]);
+  }, [trackEventInternal, isAdmin]);
 
   // Track tempo na página ao sair
   useEffect(() => {
+    if (isAdmin) return;
+    
     const handleBeforeUnload = () => {
       if (timeOnPageStart) {
         const timeSpent = Math.floor((Date.now() - timeOnPageStart) / 1000);
@@ -397,7 +404,7 @@ export function useTracking(): UseTrackingReturn {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [trackEventInternal, flush]);
+  }, [trackEventInternal, flush, isAdmin]);
 
   /**
    * Track evento customizado

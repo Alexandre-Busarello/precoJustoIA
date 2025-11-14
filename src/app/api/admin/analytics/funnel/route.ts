@@ -35,8 +35,12 @@ export async function GET(request: NextRequest) {
         gte: start,
         lte: end,
       },
-      userId: userId ? userId : { not: null }, // Se userId fornecido, filtra por ele; senão apenas usuários logados
     };
+    
+    // Se userId fornecido, filtra por ele; senão inclui todos (anônimos e logados)
+    if (userId) {
+      where.userId = userId;
+    }
 
     let funnel: {
       name: string;

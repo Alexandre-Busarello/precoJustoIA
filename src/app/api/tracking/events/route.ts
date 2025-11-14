@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/user-service';
 import { enqueueEvents, prepareEventsFromRequest } from '@/lib/tracking-queue';
 import { EventType } from '@/lib/tracking-types';
 
@@ -47,6 +48,22 @@ export async function POST(request: NextRequest) {
     try {
       const session = await getServerSession(authOptions);
       userId = session?.user?.id || providedUserId || null;
+      
+      // Verifica se o usuário é admin - se for, não processa eventos
+      if (userId) {
+        const user = await getCurrentUser();
+        if (user?.isAdmin) {
+          // Retorna sucesso mas não processa eventos de admin
+          return NextResponse.json(
+            { 
+              success: true, 
+              queued: 0,
+              message: 'Admin events are not tracked' 
+            },
+            { status: 202 }
+          );
+        }
+      }
     } catch (error) {
       // Continua mesmo se não conseguir obter sessão
       userId = providedUserId || null;

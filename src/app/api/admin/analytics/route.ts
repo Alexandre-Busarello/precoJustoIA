@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       ? new Date(startDate) 
       : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    // Construir filtro base
+    // Construir filtro base (inclui usuários anônimos agora)
     const baseWhere: any = {
       timestamp: {
         gte: start,
@@ -43,6 +43,22 @@ export async function GET(request: NextRequest) {
     if (userId) {
       baseWhere.userId = userId;
     }
+    
+    // Buscar informações de usuários Premium para agregação
+    // @ts-ignore - Prisma Client será regenerado após migration
+    const premiumUsers = await prisma.user.findMany({
+      where: {
+        subscriptionTier: 'PREMIUM',
+        OR: [
+          { premiumExpiresAt: null },
+          { premiumExpiresAt: { gt: new Date() } },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+    const premiumUserIds = new Set(premiumUsers.map(u => u.id));
 
     // Métricas gerais
     const [
@@ -55,6 +71,8 @@ export async function GET(request: NextRequest) {
       topAssets,
       dailyActiveUsers,
       monthlyActiveUsers,
+      userTypeCounts,
+      eventsByUserType,
     ] = await Promise.all([
       // Total de eventos no período
       // @ts-ignore - Prisma Client será regenerado após migration
@@ -62,14 +80,11 @@ export async function GET(request: NextRequest) {
         where: baseWhere,
       }),
 
-      // Usuários únicos (ignora filtro de userId se aplicado)
+      // Usuários únicos (inclui anônimos agora)
       // @ts-ignore - Prisma Client será regenerado após migration
       prisma.userEvent.groupBy({
         by: ['userId'],
-        where: {
-          ...baseWhere,
-          userId: userId ? userId : { not: null },
-        },
+        where: baseWhere,
       }).then(results => results.length),
 
       // Sessões únicas
@@ -161,7 +176,7 @@ export async function GET(request: NextRequest) {
           .slice(0, 10);
       }),
 
-      // DAU (Daily Active Users) - últimos 7 dias (ignora filtro de userId)
+      // DAU (Daily Active Users) - últimos 7 dias (inclui anônimos)
       // @ts-ignore - Prisma Client será regenerado após migration
       prisma.userEvent.groupBy({
         by: ['userId'],
@@ -170,11 +185,10 @@ export async function GET(request: NextRequest) {
             gte: new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000),
             lte: end,
           },
-          userId: userId ? userId : { not: null },
         },
       }).then(results => results.length),
 
-      // MAU (Monthly Active Users) - últimos 30 dias (ignora filtro de userId)
+      // MAU (Monthly Active Users) - últimos 30 dias (inclui anônimos)
       // @ts-ignore - Prisma Client será regenerado após migration
       prisma.userEvent.groupBy({
         by: ['userId'],
@@ -183,9 +197,64 @@ export async function GET(request: NextRequest) {
             gte: new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000),
             lte: end,
           },
-          userId: userId ? userId : { not: null },
         },
       }).then(results => results.length),
+
+      // Agregação por tipo de usuário (Premium, Gratuito, Anônimo)
+      // @ts-ignore - Prisma Client será regenerado após migration
+      prisma.userEvent.findMany({
+        where: baseWhere,
+        select: {
+          userId: true,
+        },
+        distinct: ['userId'],
+      }).then(async (events) => {
+        const userTypeCounts = {
+          premium: 0,
+          free: 0,
+          anonymous: 0,
+        };
+
+        for (const event of events) {
+          if (!event.userId) {
+            userTypeCounts.anonymous++;
+          } else if (premiumUserIds.has(event.userId)) {
+            userTypeCounts.premium++;
+          } else {
+            userTypeCounts.free++;
+          }
+        }
+
+        return userTypeCounts;
+      }),
+
+      // Eventos por tipo de usuário
+      // @ts-ignore - Prisma Client será regenerado após migration
+      prisma.userEvent.findMany({
+        where: baseWhere,
+        select: {
+          userId: true,
+          eventType: true,
+        },
+      }).then((events) => {
+        const eventsByType = {
+          premium: 0,
+          free: 0,
+          anonymous: 0,
+        };
+
+        events.forEach((event: any) => {
+          if (!event.userId) {
+            eventsByType.anonymous++;
+          } else if (premiumUserIds.has(event.userId)) {
+            eventsByType.premium++;
+          } else {
+            eventsByType.free++;
+          }
+        });
+
+        return eventsByType;
+      }),
     ]);
 
     return NextResponse.json({
@@ -200,6 +269,8 @@ export async function GET(request: NextRequest) {
         pageViews,
         dailyActiveUsers: dailyActiveUsers,
         monthlyActiveUsers: monthlyActiveUsers,
+        userTypeCounts,
+        eventsByUserType,
       },
       topPages,
       topEvents,

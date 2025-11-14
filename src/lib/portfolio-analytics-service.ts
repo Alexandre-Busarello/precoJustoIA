@@ -631,36 +631,30 @@ export class PortfolioAnalyticsService {
       const simulateCDIInvestment = (cdiData: Array<{ date: string; value: number }>) => {
         if (cdiData.length === 0 || sortedEvolution.length === 0) return [];
         
-        // CDI do Banco Central (série 4391) vem como taxa mensal anualizada (% ao ano)
-        // Precisamos converter para taxa mensal efetiva
-        // Fórmula: (1 + taxa_anual/100)^(1/12) - 1
+        // O Banco Central retorna o CDI como taxa diária (%)
+        // Valores típicos: 0.03% a 0.06% ao dia
+        // Calcular taxa média diária do período
+        const avgDailyRate = cdiData.length > 0
+          ? cdiData.reduce((sum, item) => sum + item.value, 0) / cdiData.length
+          : 0;
+        
+        // Converter taxa diária para mensal (assumindo ~21 dias úteis por mês)
+        // Juros compostos: (1 + taxa_diária/100)^21 - 1
+        const avgMonthlyRate = avgDailyRate > 0
+          ? Math.pow(1 + (avgDailyRate / 100), 21) - 1
+          : 0;
+        
+        console.log(`📊 [BENCHMARK CDI] Taxa média diária: ${avgDailyRate.toFixed(4)}% a.d.`);
+        console.log(`📊 [BENCHMARK CDI] Taxa mensal equivalente: ${(avgMonthlyRate * 100).toFixed(3)}% a.m.`);
         
         // Simular investimento com aportes mensais
         let accumulatedValue = sortedEvolution[0].invested || 0;
         const results: number[] = [accumulatedValue];
         
         for (let i = 1; i < sortedEvolution.length; i++) {
-          // Buscar taxa CDI do mês correspondente usando a data da evolução
-          const evolutionDate = sortedEvolution[i].date;
-          const cdiPoint = cdiData.find(item => item.date === evolutionDate);
-          
-          // Se não encontrar exato, usar o mais próximo ou média
-          let cdiValue = 0;
-          if (cdiPoint) {
-            cdiValue = cdiPoint.value;
-          } else if (cdiData.length > 0) {
-            // Usar média do período como fallback
-            cdiValue = cdiData.reduce((sum, item) => sum + item.value, 0) / cdiData.length;
-          }
-          
-          // Converter taxa anual para mensal
-          // Série 4391: CDI acumulado no mês anualizado (% ao ano)
-          const monthlyRate = cdiValue > 0
-            ? Math.pow(1 + (cdiValue / 100), 1/12) - 1
-            : 0;
-          
           // Aplicar rendimento CDI mensal sobre saldo atual
-          accumulatedValue = accumulatedValue * (1 + monthlyRate);
+          // Usar taxa média mensal calculada acima
+          accumulatedValue = accumulatedValue * (1 + avgMonthlyRate);
           
           // Adicionar novo aporte após rendimento
           accumulatedValue += monthlyContributions[i] || 0;

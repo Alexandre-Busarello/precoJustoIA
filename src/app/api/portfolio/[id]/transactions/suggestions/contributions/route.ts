@@ -93,7 +93,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         message: 'Nenhuma sugestão de contribuição para criar',
         debug: {
           cashBalance,
-          hasCashAvailable: cashBalance > 0.01,
+          hasCashAvailable: cashBalance >= 100,
           trackingStarted: portfolio?.trackingStarted,
           assetsCount: portfolio?.assets?.length || 0,
           monthlyContribution: portfolio?.monthlyContribution,

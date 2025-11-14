@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, cache } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,9 +34,9 @@ export function PortfolioPendingTransactionsCTA({
 
   const loadSuggestionStatus = useCallback(async () => {
     try {
-      const response = await fetch(
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions/suggestions/status`
-      );
+      ))();
       if (response.ok) {
         const data = await response.json();
         setSuggestionStatus(data);
@@ -63,10 +63,10 @@ export function PortfolioPendingTransactionsCTA({
         return;
       }
 
-      // Fetch pending transactions count
-      const response = await fetch(
+      // Fetch pending transactions count with React cache for deduplication
+      const response = await cache(async() => fetch(
         `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      );
+      ))();
 
       if (!response.ok) {
         throw new Error("Erro ao carregar transações pendentes");
@@ -147,9 +147,9 @@ export function PortfolioPendingTransactionsCTA({
       console.log(`🔄 [CTA] No pending transactions and ${reason}, generating suggestions...`);
       setGeneratingSuggestions(true);
       
-      fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/contributions`, {
+      cache(async() => fetch(`/api/portfolio/${portfolioId}/transactions/suggestions/contributions`, {
         method: 'POST'
-      })
+      }))()
         .then(response => {
           if (response.ok) {
             return response.json();

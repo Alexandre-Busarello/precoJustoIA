@@ -77,9 +77,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         hasPendingBuySuggestions = pendingBuyTransactions > 0;
         
         // Cash is only "available" if:
-        // 1. There's cash balance > R$ 0.01 AND
+        // 1. There's cash balance >= R$ 100.00 (minimum for meaningful buy suggestions) AND
         // 2. There are NO pending buy suggestions (to avoid infinite loops)
-        hasCashAvailable = cashBalance > 0.01 && !hasPendingBuySuggestions;
+        hasCashAvailable = cashBalance >= 100 && !hasPendingBuySuggestions;
       } catch (error) {
         console.error('Error getting cash balance:', error);
       }

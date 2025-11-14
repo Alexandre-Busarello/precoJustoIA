@@ -322,14 +322,14 @@ export class PortfolioTransactionService {
     // User wants to invest available cash, but we should wait for pending transactions to be confirmed/rejected
     console.log(`🔍 [BUY_LOGIC_CHECK] Checking conditions:`, {
       cashBalance: cashBalance.toFixed(2),
-      cashBalanceCheck: cashBalance > 0.01,
+      cashBalanceCheck: cashBalance >= 100,
       pendingBuyCount,
       monthlyContributionDecided,
       nextDatesLength: nextDates.length,
-      shouldGenerateBuys: cashBalance > 0.01 && pendingBuyCount === 0
+      shouldGenerateBuys: cashBalance >= 100 && pendingBuyCount === 0
     });
 
-    const shouldGenerateBuys = cashBalance > 0.01 && pendingBuyCount === 0; // Generate buys only if no pending buy suggestions exist
+    const shouldGenerateBuys = cashBalance >= 100 && pendingBuyCount === 0; // Generate buys only if cash >= R$ 100 and no pending buy suggestions exist
 
     if (shouldGenerateBuys) {
       const reason = monthlyContributionDecided 
@@ -357,8 +357,8 @@ export class PortfolioTransactionService {
       
       suggestions.push(...buySuggestions);
     } else {
-      if (cashBalance <= 0.01) {
-        console.log(`⏸️ [NO_CASH] No cash available (R$ ${cashBalance.toFixed(2)})`);
+      if (cashBalance < 100) {
+        console.log(`⏸️ [NO_CASH] Insufficient cash for buy suggestions (R$ ${cashBalance.toFixed(2)}, minimum R$ 100.00)`);
       } else if (pendingBuyCount > 0) {
         console.log(
           `⏸️ [BUY_PENDING] Cash available (R$ ${cashBalance.toFixed(2)}) but ${pendingBuyCount} pending buy suggestion(s) already exist - waiting for confirmation/rejection to avoid infinite loop`

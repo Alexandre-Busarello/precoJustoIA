@@ -12,6 +12,7 @@ import { Toaster } from "sonner";
 import AdminLink from "@/components/admin-link";
 import { ScrollToTop } from "@/components/scroll-to-top";
 import { LastLoginUpdater } from "@/components/last-login-updater";
+import { TrackingProvider } from "@/components/tracking-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -145,16 +146,18 @@ export default function RootLayout({
           <AuthProvider>
             <SessionRefreshProvider>
               <AlfaProvider>
-                <LastLoginUpdater />
-                <ScrollToTop />
-                <div className="min-h-screen bg-background">
-                  <Header />
-                  <main>
-                    {children}
-                  </main>
-                  <AdminLink />
-                </div>
-                <Toaster position="top-right" />
+                <TrackingProvider>
+                  <LastLoginUpdater />
+                  <ScrollToTop />
+                  <div className="min-h-screen bg-background">
+                    <Header />
+                    <main>
+                      {children}
+                    </main>
+                    <AdminLink />
+                  </div>
+                  <Toaster position="top-right" />
+                </TrackingProvider>
               </AlfaProvider>
             </SessionRefreshProvider>
           </AuthProvider>

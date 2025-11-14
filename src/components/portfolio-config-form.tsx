@@ -18,6 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useTracking } from '@/hooks/use-tracking';
+import { EventType } from '@/lib/tracking-types';
 import { Plus, Trash2, TrendingUp, Bot, FileText } from 'lucide-react';
 import { PortfolioAIAssistant } from '@/components/portfolio-ai-assistant';
 import { PortfolioBulkAssetInput } from '@/components/portfolio-bulk-asset-input';
@@ -52,6 +54,7 @@ export function PortfolioConfigForm({
 }: PortfolioConfigFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { trackEvent } = useTracking();
   const { isPremium } = usePremiumStatus();
   const queryClient = useQueryClient();
   const [name, setName] = useState(initialData?.name || '');
@@ -154,6 +157,15 @@ export function PortfolioConfigForm({
       toast({
         title: 'Sucesso!',
         description: 'Carteira criada com sucesso'
+      });
+
+      // Track evento de criação de carteira
+      trackEvent(EventType.FEATURE_USED, undefined, {
+        feature: 'portfolio_created',
+        portfolioId: data.portfolioId,
+        assetCount: assets.length,
+        monthlyContribution: monthlyContribution,
+        rebalanceFrequency: rebalanceFrequency,
       });
 
       // Invalidate dashboard cache

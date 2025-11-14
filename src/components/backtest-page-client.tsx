@@ -13,6 +13,8 @@ import { BacktestConfigHistory } from '@/components/backtest-config-history';
 import { BacktestProgressIndicator } from '@/components/backtest-progress-indicator';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useTracking } from '@/hooks/use-tracking';
+import { EventType } from '@/lib/tracking-types';
 import { 
   TrendingUp, 
   Settings, 
@@ -100,6 +102,7 @@ export function BacktestPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { trackEvent } = useTracking();
   
   // Ler estado da URL
   const urlView = searchParams.get('view') || 'welcome'; // welcome, lista, configure, results, history
@@ -439,6 +442,17 @@ export function BacktestPageClient() {
       console.log('🔍 BacktestPageClient - configId usado:', (config as any).id);
       console.log('🔍 BacktestPageClient - configId retornado:', data.configId);
       setCurrentResult(data.result);
+      
+      // Track evento de execução de backtest
+      trackEvent(EventType.BACKTEST_RUN, undefined, {
+        assetCount: config.assets.length,
+        startDate: config.startDate.toISOString(),
+        endDate: config.endDate.toISOString(),
+        initialCapital: config.initialCapital,
+        monthlyContribution: config.monthlyContribution,
+        rebalanceFrequency: config.rebalanceFrequency,
+        configId: data.configId || (config as any).id,
+      });
       
       // IMPORTANTE: Atualizar o currentConfig com o configId retornado se não tinha antes
       if (!((config as any).id) && data.configId) {

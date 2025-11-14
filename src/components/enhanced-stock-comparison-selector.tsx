@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTracking } from '@/hooks/use-tracking'
+import { EventType } from '@/lib/tracking-types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +42,7 @@ export function EnhancedStockComparisonSelector({ initialTickers = [] }: Enhance
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const { trackEvent } = useTracking()
 
   // Marcar que usuário usou o Comparador
   useEffect(() => {
@@ -116,8 +119,15 @@ export function EnhancedStockComparisonSelector({ initialTickers = [] }: Enhance
 
   const handleCompare = () => {
     if (selectedCompanies.length >= 2) {
-      const tickers = selectedCompanies.map(c => c.ticker).join('/')
-      router.push(`/compara-acoes/${tickers}`)
+      const tickers = selectedCompanies.map(c => c.ticker)
+      
+      // Track evento de início de comparação
+      trackEvent(EventType.COMPARISON_STARTED, undefined, {
+        tickerCount: tickers.length,
+        tickers: tickers,
+      })
+      
+      router.push(`/compara-acoes/${tickers.join('/')}`)
     }
   }
 

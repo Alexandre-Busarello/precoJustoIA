@@ -78,6 +78,7 @@ model User {
   aiReportFeedbacks AIReportFeedback[]
   backtestConfigs  BacktestConfig[]
   assetSubscriptions UserAssetSubscription[]
+  userEvents        UserEvent[]
 
   @@map("users")
 }
@@ -1274,4 +1275,49 @@ enum EmailStatus {
   PENDING               // Aguardando envio
   SENT                  // Enviado com sucesso
   FAILED                // Falhou após múltiplas tentativas
+}
+
+// ===== SISTEMA DE TRACKING DE EVENTOS =====
+
+enum EventType {
+  PAGE_VIEW             // Visualização de página
+  CLICK                 // Clique em elemento
+  SCROLL                // Scroll na página
+  TIME_ON_PAGE          // Tempo gasto na página
+  NAVIGATION            // Navegação entre páginas
+  FORM_SUBMIT           // Submissão de formulário
+  FEATURE_USED          // Uso de feature específica
+  ASSET_VIEWED          // Visualização de ativo
+  RANKING_CREATED       // Criação de ranking
+  BACKTEST_RUN          // Execução de backtest
+  COMPARISON_STARTED    // Início de comparação
+  SEARCH                // Busca realizada
+  DOWNLOAD              // Download de arquivo
+  ERROR                 // Erro ocorrido
+}
+
+// Eventos de tracking de usuários
+model UserEvent {
+  id          String    @id @default(cuid())
+  userId      String?   @map("user_id") // Nullable para visitantes
+  sessionId   String    @map("session_id") // Identificador de sessão
+  eventType   EventType @map("event_type")
+  page        String    // Rota da página (ex: /acao/PETR4)
+  element     String?   // Elemento clicado/interagido (ex: button#create-ranking)
+  metadata    Json?     // Dados adicionais: coordenadas, scroll depth, tempo, etc.
+  timestamp   DateTime  // Timestamp do evento (pode ser diferente de createdAt)
+  userAgent   String?   @map("user_agent")
+  ipHash      String?   @map("ip_hash") // Hash do IP para privacidade
+  referrer    String?   // Página de origem
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId, timestamp])
+  @@index([sessionId, timestamp])
+  @@index([eventType, timestamp])
+  @@index([page, timestamp])
+  @@index([timestamp])
+  @@index([userId, eventType])
+  @@map("user_events")
 }

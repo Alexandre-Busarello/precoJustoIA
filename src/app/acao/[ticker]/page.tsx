@@ -17,6 +17,7 @@ import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import AssetSubscriptionButton from '@/components/asset-subscription-button'
 import { RelatedCompanies } from '@/components/related-companies'
 import { Footer } from '@/components/footer'
+import { TrackingAssetView } from '@/components/tracking-asset-view'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import Link from 'next/link'
@@ -661,25 +662,8 @@ export default async function TickerPage({ params }: PageProps) {
 
   return (
     <>
-      {/* Barra de Busca no Topo */}
-      {/* <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto py-4 px-4">
-          <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
-              <h2 className="text-base sm:text-lg font-semibold truncate">Análise de Ações</h2>
-              <div className="hidden md:block text-sm text-muted-foreground truncate">
-                {companyData.name} ({ticker})
-              </div>
-            </div>
-            <div className="w-full sm:w-auto sm:max-w-md">
-              <CompanySearch 
-                placeholder="Buscar outras empresas..."
-                className="w-full"
-              />
-            </div>
-          </div>
-        </div>
-      </div> */}
+      <TrackingAssetView ticker={ticker} assetType={companyData.assetType} />
+
 
       <div className="container mx-auto py-8 px-4">
         {/* Layout Responsivo: 2 Cards Separados */}

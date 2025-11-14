@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from "react"
 import { useSession } from "next-auth/react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
+import { useTracking } from "@/hooks/use-tracking"
+import { EventType } from "@/lib/tracking-types"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
@@ -232,6 +234,7 @@ export interface QuickRankerHandle {
 const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
   ({ rankingId, onRankingGenerated }, ref) => {
   const { data: session } = useSession()
+  const { trackEvent } = useTracking()
   const [selectedModel, setSelectedModel] = useState<string>("")
   const [params, setParams] = useState<RankingParams>({})
   const [loading, setLoading] = useState(false)
@@ -633,6 +636,13 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       const data: RankingResponse = await response.json()
       setResults(data)
       setIsResultsExpanded(true) // Expandir automaticamente quando novos resultados são gerados
+      
+      // Track evento de criação de ranking
+      trackEvent(EventType.RANKING_CREATED, undefined, {
+        model: selectedModel,
+        resultCount: data.results?.length || data.count || 0,
+        params: params,
+      })
       
       // Notificar que um novo ranking foi gerado (para atualizar o histórico)
       if (onRankingGenerated) {

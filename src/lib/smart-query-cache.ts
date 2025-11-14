@@ -88,7 +88,10 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   
   // Processing
   'tickerProcessingStatus': 'ticker_processing_status',
-  'alfaWaitlist': 'alfa_waitlist'
+  'alfaWaitlist': 'alfa_waitlist',
+  
+  // Tracking & Analytics
+  'userEvent': 'user_events'
 }
 
 // Mapeamento de dependências entre tabelas

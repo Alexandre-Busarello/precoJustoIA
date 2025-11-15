@@ -1,12 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { useSession } from 'next-auth/react'
+import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { PLBolsaChart } from '@/components/pl-bolsa-chart'
 import {
   PLBolsaFilters,
   PLBolsaFiltersState,
 } from '@/components/pl-bolsa-filters'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Lock, ArrowRight } from 'lucide-react'
 
 interface PLBolsaPageClientProps {
   initialSectors: string[]
@@ -34,6 +39,7 @@ interface PLBolsaAPIResponse {
     minScore?: number
     excludeUnprofitable?: boolean
   }
+  requiresLogin?: boolean
 }
 
 async function fetchPLBolsaData(
@@ -70,7 +76,6 @@ export function PLBolsaPageClient({
   initialSectors,
 }: PLBolsaPageClientProps) {
   const { data: session } = useSession()
-  const router = useRouter()
   const isLoggedIn = !!session
 
   const [filters, setFilters] = useState<PLBolsaFiltersState>({

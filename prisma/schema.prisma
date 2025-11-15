@@ -1321,3 +1321,54 @@ model UserEvent {
   @@index([userId, eventType])
   @@map("user_events")
 }
+
+// ===== SISTEMA DE LOG DE WEBHOOKS =====
+
+enum WebhookProvider {
+  STRIPE
+  MERCADOPAGO
+}
+
+enum WebhookEventStatus {
+  PENDING   // Aguardando processamento
+  PROCESSING // Em processamento
+  DONE      // Processado com sucesso
+  FAILED    // Falhou ao processar
+}
+
+model WebhookEvent {
+  id                String            @id @default(cuid())
+  provider          WebhookProvider   // STRIPE ou MERCADOPAGO
+  eventId           String?           @map("event_id") // ID do evento no provider (ex: evt_xxx do Stripe)
+  eventType         String            @map("event_type") // Tipo do evento (ex: payment_intent.succeeded)
+  status            WebhookEventStatus @default(PENDING)
+  
+  // Dados do evento
+  rawData           Json              @map("raw_data") // Dados completos do evento
+  processedData     Json?             @map("processed_data") // Dados processados/extrahidos
+  
+  // Metadados
+  userId            String?           @map("user_id") // ID do usuário afetado (se identificável)
+  paymentId         String?           @map("payment_id") // ID do pagamento no provider
+  externalReference String?           @map("external_reference") // Referência externa (ex: external_reference do MercadoPago)
+  
+  // Processamento
+  errorMessage      String?           @map("error_message") // Mensagem de erro se falhou
+  retryCount        Int               @default(0) @map("retry_count") // Número de tentativas
+  lastProcessedAt   DateTime?         @map("last_processed_at") // Última tentativa de processamento
+  
+  // Timestamps
+  receivedAt        DateTime          @default(now()) @map("received_at") // Quando foi recebido
+  processedAt       DateTime?         @map("processed_at") // Quando foi processado com sucesso
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  
+  @@index([provider, status])
+  @@index([status, createdAt])
+  @@index([eventId, provider]) // Para evitar duplicatas
+  @@index([userId])
+  @@index([paymentId])
+  @@index([externalReference])
+  @@index([createdAt])
+  @@map("webhook_events")
+}

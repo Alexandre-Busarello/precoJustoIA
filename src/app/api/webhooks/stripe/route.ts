@@ -4,6 +4,7 @@ import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
 import { sendPaymentFailureEmail, sendWelcomeEmail } from '@/lib/email-service'
+import { WebhookProcessor } from '@/lib/webhook-processor'
 import Stripe from 'stripe'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -44,51 +45,124 @@ export async function POST(request: NextRequest) {
     console.log('🎯 Stripe webhook event received:', event.type)
     console.log('📦 Event ID:', event.id)
 
-    // Processar diferentes tipos de eventos
+    // Extrair metadados do evento para salvar no banco
+    const eventData = event.data.object as any
+    let userId: string | null = null
+    let paymentId: string | null = null
+
+    // Tentar extrair userId e paymentId baseado no tipo de evento
+    if (event.type === 'checkout.session.completed') {
+      userId = (eventData as Stripe.Checkout.Session).client_reference_id || 
+               (eventData as Stripe.Checkout.Session).metadata?.userId || null
+    } else if (event.type.includes('subscription')) {
+      userId = (eventData as Stripe.Subscription).metadata?.userId || null
+    } else if (event.type.includes('payment_intent')) {
+      userId = (eventData as Stripe.PaymentIntent).metadata?.userId || null
+      paymentId = (eventData as Stripe.PaymentIntent).id || null
+    } else if (event.type.includes('invoice')) {
+      paymentId = (eventData as Stripe.Invoice).id || null
+    }
+
+    // Salvar evento no banco com status PENDING
+    let webhookEventId: string
+    try {
+      const savedEvent = await safeWrite(
+        'save-stripe-webhook-event',
+        () => prisma.webhookEvent.create({
+          data: {
+            provider: 'STRIPE',
+            eventId: event.id,
+            eventType: event.type,
+            status: 'PENDING',
+            rawData: event as any,
+            processedData: {
+              userId,
+              paymentId,
+              eventType: event.type,
+            },
+            userId: userId || undefined,
+            paymentId: paymentId || undefined,
+          },
+        }),
+        ['webhook_events']
+      )
+      webhookEventId = savedEvent.id
+      console.log(`💾 Webhook event saved with ID: ${webhookEventId}`)
+    } catch (error) {
+      console.error('❌ Failed to save webhook event:', error)
+      // Continuar mesmo se falhar ao salvar (não bloquear o webhook)
+      webhookEventId = ''
+    }
+
+    // Processar evento
     let success = false
-    
-    switch (event.type) {
-      case 'checkout.session.completed':
-        console.log('🛒 Processing checkout.session.completed')
-        success = await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
-        break
+    let errorMessage: string | null = null
 
-      case 'customer.subscription.created':
-        console.log('🔔 Processing customer.subscription.created')
-        success = await handleSubscriptionCreated(event.data.object as Stripe.Subscription)
-        break
+    try {
+      // Atualizar status para PROCESSING
+      if (webhookEventId) {
+        await safeWrite(
+          'update-webhook-status-processing',
+          () => prisma.webhookEvent.update({
+            where: { id: webhookEventId },
+            data: { 
+              status: 'PROCESSING',
+              lastProcessedAt: new Date(),
+            },
+          }),
+          ['webhook_events']
+        )
+      }
 
-      case 'setup_intent.succeeded':
-        success = await handleSetupIntentSucceeded(event.data.object as Stripe.SetupIntent)
-        break
+      // Processar usando o WebhookProcessor
+      success = await WebhookProcessor.processStripeEvent({
+        eventType: event.type,
+        rawData: event as any,
+      })
 
-      case 'customer.subscription.updated':
-        success = await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
-        break
-
-      case 'customer.subscription.deleted':
-        success = await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
-        break
-
-      case 'invoice.payment_succeeded':
-        success = await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice)
-        break
-
-      case 'invoice.payment_failed':
-        success = await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice)
-        break
-
-      case 'payment_intent.succeeded':
-        success = await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent)
-        break
-
-      case 'payment_intent.payment_failed':
-        success = await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent)
-        break
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`)
-        success = true // Eventos não tratados são considerados "sucesso" para não bloquear
+      // Atualizar status baseado no resultado
+      if (webhookEventId) {
+        await safeWrite(
+          'update-webhook-status-result',
+          () => prisma.webhookEvent.update({
+            where: { id: webhookEventId },
+            data: {
+              status: success ? 'DONE' : 'FAILED',
+              processedAt: success ? new Date() : undefined,
+              lastProcessedAt: new Date(),
+              errorMessage: success ? null : 'Processing failed',
+              retryCount: { increment: 1 },
+            },
+          }),
+          ['webhook_events']
+        )
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error('❌ Error processing webhook:', error)
+      
+      // Atualizar status para FAILED
+      if (webhookEventId) {
+        try {
+          await safeWrite(
+            'update-webhook-status-failed',
+            () => prisma.webhookEvent.update({
+              where: { id: webhookEventId },
+              data: {
+                status: 'FAILED',
+                lastProcessedAt: new Date(),
+                errorMessage,
+                retryCount: { increment: 1 },
+              },
+            }),
+            ['webhook_events']
+          )
+        } catch (updateError) {
+          console.error('❌ Failed to update webhook event status:', updateError)
+        }
+      }
+      
+      success = false
     }
 
     if (!success) {

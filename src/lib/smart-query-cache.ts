@@ -91,7 +91,10 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   'alfaWaitlist': 'alfa_waitlist',
   
   // Tracking & Analytics
-  'userEvent': 'user_events'
+  'userEvent': 'user_events',
+  
+  // Webhooks
+  'webhookEvent': 'webhook_events'
 }
 
 // Mapeamento de dependências entre tabelas
@@ -138,6 +141,9 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'ticket_messages': ['support_tickets', 'ticket_messages'],
   'ai_reports': ['companies', 'ai_reports', 'ai_report_feedbacks'],
   'ai_report_feedbacks': ['ai_reports', 'ai_report_feedbacks'],
+  
+  // Webhooks (afetam usuários quando processados)
+  'webhook_events': ['users', 'webhook_events'],
   
   // YouTube Analysis
   'youtube_analyses': ['companies', 'youtube_analyses', 'asset_snapshots'],

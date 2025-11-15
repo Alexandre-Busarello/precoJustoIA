@@ -1184,7 +1184,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
               <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #f59e0b; border-radius: 12px; padding: 20px; margin: 30px 0; text-align: center;">
                 <h3 style="color: #92400e; font-weight: 700; margin-bottom: 12px; font-size: 18px;">👑 Parabéns, Early Adopter!</h3>
                 <p style="color: #92400e; font-size: 14px; margin: 0;">
-                  Você garantiu o <strong>preço congelado para sempre</strong> e faz parte do grupo exclusivo que está moldando o futuro da plataforma!
+                  Você garantiu acesso por 3 anos, o  <strong>preço congelado para sempre</strong> e agora faz parte do grupo exclusivo que está moldando o futuro da plataforma!
                 </p>
               </div>
               ` : ''}

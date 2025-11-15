@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processWebhookNotification, validateWebhookSignature } from '@/lib/mercadopago'
 import { prisma } from '@/lib/prisma'
-import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
-import { sendWelcomeEmail } from '@/lib/email-service'
+import { safeWrite } from '@/lib/prisma-wrapper'
+import { WebhookProcessor } from '@/lib/webhook-processor'
 
 export async function POST(request: NextRequest) {
   console.log('🔗 MercadoPago webhook POST request received')
@@ -73,15 +73,115 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
-    let success = false
+    // Extrair metadados do evento
+    const eventType = body.type || body.action || 'payment'
+    const paymentId = paymentData.id ? String(paymentData.id) : null
+    const userId = paymentData.external_reference?.split('-')[0] || null
 
-    // Processar apenas pagamentos aprovados
-    if (paymentData.status === 'approved') {
-      console.log('💰 Processing approved payment')
-      success = await handlePaymentApproved(paymentData)
-    } else {
-      console.log(`📋 Payment status: ${paymentData.status} - no action needed`)
-      success = true // Outros status são considerados sucesso (não precisam retry)
+    // Salvar evento no banco com status PENDING
+    let webhookEventId: string
+    try {
+      const savedEvent = await safeWrite(
+        'save-mercadopago-webhook-event',
+        () => prisma.webhookEvent.create({
+          data: {
+            provider: 'MERCADOPAGO',
+            eventId: paymentId ? `mp_${paymentId}` : undefined,
+            eventType,
+            status: 'PENDING',
+            rawData: body,
+            processedData: {
+              paymentId,
+              userId,
+              status: paymentData.status,
+              externalReference: paymentData.external_reference,
+            },
+            userId: userId || undefined,
+            paymentId: paymentId || undefined,
+            externalReference: paymentData.external_reference || undefined,
+          },
+        }),
+        ['webhook_events']
+      )
+      webhookEventId = savedEvent.id
+      console.log(`💾 Webhook event saved with ID: ${webhookEventId}`)
+    } catch (error) {
+      console.error('❌ Failed to save webhook event:', error)
+      webhookEventId = ''
+    }
+
+    // Processar evento
+    let success = false
+    let errorMessage: string | null = null
+
+    try {
+      // Atualizar status para PROCESSING
+      if (webhookEventId) {
+        await safeWrite(
+          'update-webhook-status-processing',
+          () => prisma.webhookEvent.update({
+            where: { id: webhookEventId },
+            data: { 
+              status: 'PROCESSING',
+              lastProcessedAt: new Date(),
+            },
+          }), []
+        )
+      }
+
+      // Processar apenas pagamentos aprovados
+      if (paymentData.status === 'approved') {
+        console.log('💰 Processing approved payment')
+        success = await WebhookProcessor.processMercadoPagoEvent({
+          eventType,
+          rawData: body,
+        })
+      } else {
+        console.log(`📋 Payment status: ${paymentData.status} - no action needed`)
+        success = true // Outros status são considerados sucesso
+      }
+
+      // Atualizar status baseado no resultado
+      if (webhookEventId) {
+        await safeWrite(
+          'update-webhook-status-result',
+          () => prisma.webhookEvent.update({
+            where: { id: webhookEventId },
+            data: {
+              status: success ? 'DONE' : 'FAILED',
+              processedAt: success ? new Date() : undefined,
+              lastProcessedAt: new Date(),
+              errorMessage: success ? null : 'Processing failed',
+              retryCount: { increment: 1 },
+            },
+          }), []
+        )
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error('❌ Error processing webhook:', error)
+      
+      // Atualizar status para FAILED
+      if (webhookEventId) {
+        try {
+          await safeWrite(
+            'update-webhook-status-failed',
+            () => prisma.webhookEvent.update({
+              where: { id: webhookEventId },
+              data: {
+                status: 'FAILED',
+                lastProcessedAt: new Date(),
+                errorMessage,
+                retryCount: { increment: 1 },
+              },
+            }), []
+          )
+        } catch (updateError) {
+          console.error('❌ Failed to update webhook event status:', updateError)
+        }
+      }
+      
+      success = false
     }
 
     if (!success) {
@@ -103,120 +203,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handlePaymentApproved(paymentData: any): Promise<boolean> {
-  console.log('🎯 Processing approved PIX payment:', paymentData.id)
-  console.log('💰 Amount:', paymentData.transaction_amount)
-  console.log('👤 External reference:', paymentData.external_reference)
-  
-  try {
-    const userId = paymentData.external_reference
-
-    if (!userId) {
-      console.error('❌ User ID não encontrado no external_reference:', paymentData)
-      return false
-    }
-
-    // Validar dados do pagamento
-    const amount = paymentData.transaction_amount
-    if (!amount || amount <= 0) {
-      console.error('❌ Invalid payment amount:', amount)
-      return false
-    }
-
-    // Determinar duração baseada no valor do pagamento
-    // R$ 47 = mensal (30 dias), R$ 249 = early adopter (365 dias), R$ 497 = anual (365 dias)
-    let planDuration: number
-    let planType: string
-    
-    if (amount >= 200) {
-      planDuration = 365 // anual ou early adopter
-      planType = amount <= 300 ? 'early' : 'annual' // R$ 249 = early, R$ 497 = annual
-    } else {
-      planDuration = 30 // mensal
-      planType = 'monthly'
-    }
-
-    console.log(`📅 Plan type: ${planType}, duration: ${planDuration} days`)
-
-    // Calcular data de expiração
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + planDuration)
-
-    console.log('🔍 Looking up user in database...')
-    // Buscar usuário atual para verificar se já foi premium
-    const currentUser = await safeQueryWithParams(
-      'user-by-id-mercadopago',
-      () => prisma.user.findUnique({
-        where: { id: userId },
-        select: { wasPremiumBefore: true, firstPremiumAt: true, email: true, name: true }
-      }),
-      { userId }
-    ) as any
-
-    if (!currentUser) {
-      console.error('❌ User not found in database:', userId)
-      return false
-    }
-
-    console.log('👤 User found:', currentUser.email)
-
-    console.log('💾 Updating user in database...')
-    
-    // Preparar dados de atualização baseados no tipo de plano
-    const updateData: any = {
-      subscriptionTier: 'PREMIUM',
-      premiumExpiresAt: expiresAt,
-      wasPremiumBefore: true,
-      firstPremiumAt: currentUser?.firstPremiumAt || new Date(),
-      lastPremiumAt: new Date(),
-      premiumCount: {
-        increment: 1,
-      },
-    }
-
-    // Se for Early Adopter, marcar campos especiais
-    if (planType === 'early') {
-      updateData.isEarlyAdopter = true
-      updateData.earlyAdopterDate = new Date()
-      console.log('🎉 Marking user as Early Adopter!')
-    }
-
-    // Atualizar usuário no banco de dados
-    await safeWrite(
-      'mercadopago-payment-approved',
-      () => prisma.user.update({
-        where: { id: userId },
-        data: updateData,
-      }),
-      ['users']
-    )
-
-    console.log(`✅ User ${userId} (${currentUser.email}) upgraded to PREMIUM via PIX (${planType}) until ${expiresAt}`)
-    console.log(`🎉 PIX payment processed successfully! Amount: R$ ${amount}`)
-    
-    // Enviar email de boas-vindas
-    if (currentUser.email) {
-      try {
-        // Verificar se é Early Adopter baseado no tipo de plano
-        const isEarlyAdopter = planType === 'early'
-        
-        await sendWelcomeEmail(currentUser.email, currentUser.name || undefined, isEarlyAdopter)
-        console.log(`📧 Welcome email sent to ${currentUser.email} (Early Adopter: ${isEarlyAdopter})`)
-      } catch (emailError) {
-        console.error('❌ Failed to send welcome email:', emailError)
-        // Não falhar o webhook por causa do email
-      }
-    }
-    
-    return true
-  } catch (error) {
-    console.error('❌ Error handling PIX payment approved:', error)
-    console.error('🔍 Error details:', {
-      userId: paymentData.external_reference,
-      amount: paymentData.transaction_amount,
-      paymentId: paymentData.id,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    })
-    return false
-  }
-}

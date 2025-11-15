@@ -13,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Slider } from '@/components/ui/slider'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Filter, X } from 'lucide-react'
@@ -58,6 +57,9 @@ export function PLBolsaFilters({
   )
   const [minScore, setMinScore] = useState<number | undefined>(
     initialFilters?.minScore
+  )
+  const [minScoreInput, setMinScoreInput] = useState<string>(
+    initialFilters?.minScore?.toString() || ''
   )
   const [excludeUnprofitable, setExcludeUnprofitable] = useState(
     initialFilters?.excludeUnprofitable || false
@@ -170,26 +172,60 @@ export function PLBolsaFilters({
 
           {/* Score Mínimo */}
           <div className="space-y-2">
-            <Label htmlFor="minScore">
-              Score Mínimo: {minScore !== undefined ? minScore : 'Sem filtro'}
-            </Label>
-            <div className="space-y-2">
-              <Slider
+            <Label htmlFor="minScore">Score Mínimo (0-100)</Label>
+            <div className="flex gap-2 items-center">
+              <Input
                 id="minScore"
+                type="number"
                 min={0}
                 max={100}
-                step={1}
-                value={minScore !== undefined ? [minScore] : [0]}
-                onValueChange={(value) =>
-                  setMinScore(value[0] === 0 ? undefined : value[0])
-                }
+                placeholder="Sem filtro"
+                value={minScoreInput}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setMinScoreInput(value)
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value.trim()
+                  if (value === '') {
+                    setMinScore(undefined)
+                    setMinScoreInput('')
+                  } else {
+                    const numValue = parseInt(value, 10)
+                    if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                      setMinScore(numValue === 0 ? undefined : numValue)
+                      setMinScoreInput(numValue === 0 ? '' : value)
+                    } else {
+                      // Valor inválido, restaurar valor anterior
+                      setMinScoreInput(minScore?.toString() || '')
+                    }
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur()
+                  }
+                }}
+                className="w-full"
               />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>0</span>
-                <span>50</span>
-                <span>100</span>
-              </div>
+              {minScoreInput && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setMinScore(undefined)
+                    setMinScoreInput('')
+                  }}
+                  className="shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Deixe em branco para não filtrar por score
+            </p>
           </div>
 
           {/* Excluir Não Lucrativas */}

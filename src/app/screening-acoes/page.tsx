@@ -12,7 +12,7 @@ import { ScreeningAIAssistant } from "@/components/screening-ai-assistant"
 import { CompanyLogo } from "@/components/company-logo"
 import { AddToBacktestButton } from "@/components/add-to-backtest-button"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
-import { AssetTypeHub } from "@/components/asset-type-hub"
+import { AssetTypeHubWrapper } from "@/components/asset-type-hub-wrapper"
 import { 
   Search, 
   Loader2, 
@@ -27,7 +27,6 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import Head from "next/head"
-import { Footer } from "@/components/footer"
 
 interface ScreeningFilter {
   enabled: boolean;
@@ -151,10 +150,10 @@ function ScreeningAcoesContent() {
     }
   }, [assetType])
   
-  // Se não houver assetType, mostrar o HUB
+  // Se não houver assetType, mostrar o HUB com conteúdo SEO
   if (!assetType) {
     return (
-      <AssetTypeHub
+      <AssetTypeHubWrapper
         pageType="screening"
         title="Screening de Ações"
         description="Escolha o tipo de ativo que deseja analisar: apenas ações B3, apenas BDRs ou ambos juntos."
@@ -694,141 +693,6 @@ function ScreeningAcoesContent() {
           </Card>
         )}
 
-        {/* SEO Content Section - Apenas para usuários não logados */}
-        {!isLoggedIn && (
-          <div className="mt-12 space-y-8">
-            {/* O que é Screening de Ações */}
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-                  O que é Screening de Ações?
-                </h2>
-                <div className="prose prose-slate dark:prose-invert max-w-none">
-                  <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-4">
-                    <strong>Screening de ações</strong> é uma técnica fundamentalista que permite encontrar empresas na Bolsa de Valores (B3) que atendem critérios específicos de investimento. Com nosso <strong>filtro customizável de ações</strong>, você pode buscar empresas por múltiplos indicadores financeiros simultaneamente.
-                  </p>
-                  <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-4">
-                    Nossa ferramenta de <strong>screening fundamentalista</strong> analisa mais de <strong>350 empresas listadas na B3</strong>, incluindo ações brasileiras e BDRs (Brazilian Depositary Receipts), permitindo que você encontre oportunidades de investimento baseadas em seus próprios critérios de <strong>valuation, rentabilidade, crescimento e qualidade</strong>.
-                  </p>
-                  <h3 className="text-2xl font-semibold mt-6 mb-3 text-slate-900 dark:text-white">
-                    Como Funciona o Screening de Ações?
-                  </h3>
-                  <ul className="list-disc list-inside space-y-2 text-slate-700 dark:text-slate-300">
-                    <li><strong>Filtros de Valuation:</strong> P/L (Preço/Lucro), P/VP (Preço/Valor Patrimonial), EV/EBITDA, PSR (Preço/Receita)</li>
-                    <li><strong>Filtros de Rentabilidade:</strong> ROE (Retorno sobre Patrimônio Líquido), ROIC (Retorno sobre Capital Investido), ROA (Retorno sobre Ativos)</li>
-                    <li><strong>Filtros de Crescimento:</strong> CAGR de Lucros e Receitas (últimos 5 anos)</li>
-                    <li><strong>Filtros de Dividendos:</strong> Dividend Yield, Payout Ratio</li>
-                    <li><strong>Filtros de Endividamento:</strong> Dívida Líquida/PL, Dívida Líquida/EBITDA, Liquidez Corrente</li>
-                    <li><strong>Filtros de Tamanho:</strong> Market Cap, Small Caps, Mid Caps, Blue Chips</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Por que usar Screening */}
-            <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
-              <CardContent className="p-8">
-                <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-                  Por que Usar Screening de Ações?
-                </h2>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
-                      <Target className="w-5 h-5 inline mr-2" />
-                      Encontre Oportunidades Rapidamente
-                    </h3>
-                    <p className="text-slate-700 dark:text-slate-300">
-                      Em vez de analisar centenas de ações manualmente, use <strong>filtros de ações</strong> para encontrar empresas que atendem seus critérios em segundos. Ideal para investidores que buscam <strong>ações subvalorizadas</strong> ou com características específicas.
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
-                      <TrendingUp className="w-5 h-5 inline mr-2" />
-                      Análise Fundamentalista Profissional
-                    </h3>
-                    <p className="text-slate-700 dark:text-slate-300">
-                      Nossa ferramenta utiliza dados financeiros reais da B3, processados com <strong>análise fundamentalista</strong> rigorosa. Todos os indicadores são calculados a partir de demonstrações financeiras oficiais.
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
-                      <Building2 className="w-5 h-5 inline mr-2" />
-                      Filtros Combinados
-                    </h3>
-                    <p className="text-slate-700 dark:text-slate-300">
-                      Combine múltiplos filtros simultaneamente para refinar sua busca. Por exemplo: ações com <strong>P/L baixo</strong>, <strong>ROE alto</strong> e <strong>dividend yield atrativo</strong>.
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
-                      <Sparkles className="w-5 h-5 inline mr-2" />
-                      Assistente com IA
-                    </h3>
-                    <p className="text-slate-700 dark:text-slate-300">
-                      Use nosso <strong>assistente de IA</strong> para gerar filtros automaticamente baseados em sua descrição. Diga o que procura e nossa IA configura os filtros ideais para você.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Exemplos de Uso */}
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-                  Exemplos de Screening de Ações
-                </h2>
-                <div className="space-y-6">
-                  <div className="border-l-4 border-blue-500 pl-4">
-                    <h3 className="text-xl font-semibold mb-2 text-slate-900 dark:text-white">
-                      Encontrar Ações Value (Subvalorizadas)
-                    </h3>
-                    <p className="text-slate-700 dark:text-slate-300 mb-2">
-                      Configure filtros para encontrar ações com:
-                    </p>
-                    <ul className="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1">
-                      <li>P/L menor que 12</li>
-                      <li>P/VP menor que 1.5</li>
-                      <li>ROE maior que 15%</li>
-                      <li>Dívida Líquida/PL menor que 1.0</li>
-                    </ul>
-                  </div>
-                  <div className="border-l-4 border-green-500 pl-4">
-                    <h3 className="text-xl font-semibold mb-2 text-slate-900 dark:text-white">
-                      Buscar Ações com Dividendos Sustentáveis
-                    </h3>
-                    <p className="text-slate-700 dark:text-slate-300 mb-2">
-                      Configure filtros para encontrar ações com:
-                    </p>
-                    <ul className="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1">
-                      <li>Dividend Yield maior que 4%</li>
-                      <li>Payout Ratio menor que 80%</li>
-                      <li>ROE maior que 12%</li>
-                      <li>Crescimento de Lucros positivo nos últimos 5 anos</li>
-                    </ul>
-                  </div>
-                  <div className="border-l-4 border-purple-500 pl-4">
-                    <h3 className="text-xl font-semibold mb-2 text-slate-900 dark:text-white">
-                      Identificar Empresas em Crescimento
-                    </h3>
-                    <p className="text-slate-700 dark:text-slate-300 mb-2">
-                      Configure filtros para encontrar ações com:
-                    </p>
-                    <ul className="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1">
-                      <li>CAGR de Receitas maior que 10% (5 anos)</li>
-                      <li>CAGR de Lucros maior que 15% (5 anos)</li>
-                      <li>ROIC maior que 20%</li>
-                      <li>Margem Líquida maior que 10%</li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Footer - Apenas para usuários não logados */}
-        {!isLoggedIn && <Footer />}
 
         {/* Schema Markup para SEO */}
         <script

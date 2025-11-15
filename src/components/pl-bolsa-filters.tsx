@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -36,11 +37,21 @@ export function PLBolsaFilters({
   onFiltersChange,
   initialFilters,
 }: PLBolsaFiltersProps) {
+  const { data: session } = useSession()
+  const isLoggedIn = !!session
+  
+  // Limitar data final para não logados
+  const currentYear = new Date().getFullYear()
+  const lastYearEnd = new Date(currentYear - 1, 11, 31)
+  const maxEndDate = isLoggedIn 
+    ? new Date().toISOString().split('T')[0]
+    : lastYearEnd.toISOString().split('T')[0]
+
   const [startDate, setStartDate] = useState(
     initialFilters?.startDate || '2001-01-01'
   )
   const [endDate, setEndDate] = useState(
-    initialFilters?.endDate || new Date().toISOString().split('T')[0]
+    initialFilters?.endDate || maxEndDate
   )
   const [sector, setSector] = useState<string | undefined>(
     initialFilters?.sector
@@ -52,27 +63,35 @@ export function PLBolsaFilters({
     initialFilters?.excludeUnprofitable || false
   )
 
+  // Limitar endDate quando usuário não está logado
+  useEffect(() => {
+    if (!isLoggedIn && endDate > maxEndDate) {
+      setEndDate(maxEndDate)
+    }
+  }, [isLoggedIn, endDate, maxEndDate])
+
   // Aplicar filtros quando mudarem
   useEffect(() => {
+    const finalEndDate = !isLoggedIn && endDate > maxEndDate ? maxEndDate : endDate
     onFiltersChange({
       startDate,
-      endDate,
+      endDate: finalEndDate,
       sector,
       minScore,
       excludeUnprofitable,
     })
-  }, [startDate, endDate, sector, minScore, excludeUnprofitable, onFiltersChange])
+  }, [startDate, endDate, sector, minScore, excludeUnprofitable, isLoggedIn, maxEndDate, onFiltersChange])
 
   const hasActiveFilters =
     sector !== undefined ||
     minScore !== undefined ||
     excludeUnprofitable ||
     startDate !== '2001-01-01' ||
-    endDate !== new Date().toISOString().split('T')[0]
+    endDate !== maxEndDate
 
   const resetFilters = () => {
     setStartDate('2001-01-01')
-    setEndDate(new Date().toISOString().split('T')[0])
+    setEndDate(maxEndDate)
     setSector(undefined)
     setMinScore(undefined)
     setExcludeUnprofitable(false)
@@ -122,8 +141,13 @@ export function PLBolsaFilters({
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               min={startDate}
-              max={new Date().toISOString().split('T')[0]}
+              max={maxEndDate}
             />
+            {!isLoggedIn && (
+              <p className="text-xs text-muted-foreground">
+                Faça login para ver dados do ano atual
+              </p>
+            )}
           </div>
 
           {/* Setor */}

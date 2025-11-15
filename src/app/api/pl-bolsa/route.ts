@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import {
   calculateAggregatedPL,
   getAvailableSectors,
@@ -11,6 +13,9 @@ export const revalidate = 3600 // Revalidar a cada hora
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+    const isLoggedIn = !!session
+
     const searchParams = request.nextUrl.searchParams
 
     // Parse parâmetros
@@ -42,6 +47,14 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         )
       }
+    }
+
+    // Se usuário não está logado, limitar data final ao ano anterior
+    const currentYear = new Date().getFullYear()
+    const lastYearEnd = new Date(currentYear - 1, 11, 31) // 31 de dezembro do ano anterior
+
+    if (!isLoggedIn && (!endDate || endDate > lastYearEnd)) {
+      endDate = lastYearEnd
     }
 
     // Validar score
@@ -87,6 +100,7 @@ export async function GET(request: NextRequest) {
         minScore,
         excludeUnprofitable,
       },
+      requiresLogin: !isLoggedIn && (!endDateStr || new Date(endDateStr) > lastYearEnd),
     })
   } catch (error) {
     console.error('Erro ao buscar P/L histórico da bolsa:', error)

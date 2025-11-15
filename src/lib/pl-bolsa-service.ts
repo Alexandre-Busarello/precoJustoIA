@@ -269,7 +269,15 @@ async function calculateMonthsPL(
         }
       }
 
-      if (!pl || pl <= 0 || !isFinite(pl)) {
+      // Filtrar outliers e valores inválidos
+      // Desconsiderar: NULL, <= 0, > 100, < -100
+      if (
+        !pl ||
+        pl <= 0 ||
+        !isFinite(pl) ||
+        pl > 100 ||
+        pl < -100
+      ) {
         continue
       }
 

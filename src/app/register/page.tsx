@@ -25,6 +25,8 @@ function RegisterForm() {
   
   // Obter callbackUrl da URL ou usar dashboard como padrão
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  // Obter acquisition da URL para rastrear origem do cadastro
+  const acquisition = searchParams.get('acquisition') || undefined
   // 🔒 SEGURANÇA: Removido isEarlyAdopter da URL - não deve ser controlado pelo cliente
   // Early Adopters são marcados apenas via webhooks após pagamento confirmado
 
@@ -75,6 +77,7 @@ function RegisterForm() {
           name,
           email,
           password,
+          acquisition, // Rastrear origem do cadastro
           // isEarlyAdopter removido - será definido apenas via webhooks após pagamento
         }),
       })

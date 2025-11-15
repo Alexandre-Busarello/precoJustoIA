@@ -80,12 +80,28 @@ export async function GET(request: NextRequest) {
         where: baseWhere,
       }),
 
-      // Usuários únicos (inclui anônimos agora)
+      // Usuários únicos: usuários autenticados (por userId) + usuários anônimos (por sessionId)
       // @ts-ignore - Prisma Client será regenerado após migration
-      prisma.userEvent.groupBy({
-        by: ['userId'],
-        where: baseWhere,
-      }).then(results => results.length),
+      Promise.all([
+        // Usuários autenticados únicos
+        prisma.userEvent.groupBy({
+          by: ['userId'],
+          where: {
+            ...baseWhere,
+            userId: { not: null },
+          },
+        }).then(results => results.length),
+        // Sessões únicas de usuários anônimos
+        prisma.userEvent.groupBy({
+          by: ['sessionId'],
+          where: {
+            ...baseWhere,
+            userId: null,
+          },
+        }).then(results => results.length),
+      ]).then(([authenticatedUsers, anonymousSessions]) => 
+        authenticatedUsers + anonymousSessions
+      ),
 
       // Sessões únicas
       // @ts-ignore - Prisma Client será regenerado após migration
@@ -178,49 +194,93 @@ export async function GET(request: NextRequest) {
 
       // DAU (Daily Active Users) - últimos 7 dias (inclui anônimos)
       // @ts-ignore - Prisma Client será regenerado após migration
-      prisma.userEvent.groupBy({
-        by: ['userId'],
-        where: {
-          timestamp: {
-            gte: new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000),
-            lte: end,
+      Promise.all([
+        // Usuários autenticados únicos
+        prisma.userEvent.groupBy({
+          by: ['userId'],
+          where: {
+            timestamp: {
+              gte: new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000),
+              lte: end,
+            },
+            userId: { not: null },
           },
-        },
-      }).then(results => results.length),
+        }).then(results => results.length),
+        // Sessões únicas de usuários anônimos
+        prisma.userEvent.groupBy({
+          by: ['sessionId'],
+          where: {
+            timestamp: {
+              gte: new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000),
+              lte: end,
+            },
+            userId: null,
+          },
+        }).then(results => results.length),
+      ]).then(([authenticatedUsers, anonymousSessions]) => 
+        authenticatedUsers + anonymousSessions
+      ),
 
       // MAU (Monthly Active Users) - últimos 30 dias (inclui anônimos)
       // @ts-ignore - Prisma Client será regenerado após migration
-      prisma.userEvent.groupBy({
-        by: ['userId'],
-        where: {
-          timestamp: {
-            gte: new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000),
-            lte: end,
+      Promise.all([
+        // Usuários autenticados únicos
+        prisma.userEvent.groupBy({
+          by: ['userId'],
+          where: {
+            timestamp: {
+              gte: new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000),
+              lte: end,
+            },
+            userId: { not: null },
           },
-        },
-      }).then(results => results.length),
+        }).then(results => results.length),
+        // Sessões únicas de usuários anônimos
+        prisma.userEvent.groupBy({
+          by: ['sessionId'],
+          where: {
+            timestamp: {
+              gte: new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000),
+              lte: end,
+            },
+            userId: null,
+          },
+        }).then(results => results.length),
+      ]).then(([authenticatedUsers, anonymousSessions]) => 
+        authenticatedUsers + anonymousSessions
+      ),
 
       // Agregação por tipo de usuário (Premium, Gratuito, Anônimo)
       // @ts-ignore - Prisma Client será regenerado após migration
-      prisma.userEvent.findMany({
-        where: baseWhere,
-        select: {
-          userId: true,
-        },
-        distinct: ['userId'],
-      }).then(async (events) => {
+      Promise.all([
+        // Usuários autenticados únicos (Premium e Free)
+        prisma.userEvent.groupBy({
+          by: ['userId'],
+          where: {
+            ...baseWhere,
+            userId: { not: null },
+          },
+        }),
+        // Sessões únicas de usuários anônimos
+        prisma.userEvent.groupBy({
+          by: ['sessionId'],
+          where: {
+            ...baseWhere,
+            userId: null,
+          },
+        }),
+      ]).then(async ([authenticatedGroups, anonymousGroups]) => {
         const userTypeCounts = {
           premium: 0,
           free: 0,
-          anonymous: 0,
+          anonymous: anonymousGroups.length, // Conta sessões únicas de anônimos
         };
 
-        for (const event of events) {
-          if (!event.userId) {
-            userTypeCounts.anonymous++;
-          } else if (premiumUserIds.has(event.userId)) {
+        // Contar usuários autenticados por tipo
+        for (const group of authenticatedGroups) {
+          if (group.userId && premiumUserIds.has(group.userId)) {
             userTypeCounts.premium++;
-          } else {
+          } else if (group.userId) {
             userTypeCounts.free++;
           }
         }

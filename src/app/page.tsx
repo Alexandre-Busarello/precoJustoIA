@@ -662,6 +662,19 @@ export default async function Home() {
 
           {/* Additional Features */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+            <Link href="/pl-bolsa" className="block">
+              <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group h-full cursor-pointer">
+                <CardContent className="p-4 sm:p-6 text-center h-full flex flex-col">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center mb-3 sm:mb-4 mx-auto group-hover:scale-110 transition-transform flex-shrink-0">
+                    <LineChart className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold mb-2 sm:mb-3 group-hover:text-indigo-600 transition-colors">P/L Histórico da Bolsa</h3>
+                  <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed flex-grow">
+                    Acompanhe a evolução do P/L agregado da Bovespa desde 2001 com filtros avançados
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
             <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group h-full">
               <CardContent className="p-4 sm:p-6 text-center h-full flex flex-col">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mb-3 sm:mb-4 mx-auto group-hover:scale-110 transition-transform flex-shrink-0">

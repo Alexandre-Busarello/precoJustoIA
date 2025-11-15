@@ -98,6 +98,12 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
 
   const toolsItems = [
     {
+      title: "P/L Histórico",
+      href: "/pl-bolsa",
+      icon: <TrendingUp className="w-5 h-5" />,
+      show: true
+    },
+    {
       title: "Rankings",
       href: "/ranking", 
       icon: <BarChart3 className="w-5 h-5" />,

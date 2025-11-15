@@ -1372,3 +1372,28 @@ model WebhookEvent {
   @@index([createdAt])
   @@map("webhook_events")
 }
+
+// ===== HISTÓRICO P/L BOLSA =====
+
+// Cache de cálculos históricos do P/L agregado da bolsa
+model PlBolsaHistory {
+  id            String   @id @default(cuid())
+  date          DateTime @db.Date // Data do mês (primeiro dia do mês)
+  pl            Decimal  @db.Decimal(10, 4) // P/L agregado ponderado
+  averagePl     Decimal  @map("average_pl") @db.Decimal(10, 4) // Média histórica até esta data
+  companyCount Int      @map("company_count") // Número de empresas incluídas
+  
+  // Filtros aplicados (para cache por filtro)
+  sector        String?  // Setor filtrado (null = todos)
+  minScore      Int?     @map("min_score") // Score mínimo (null = sem filtro)
+  excludeUnprofitable Boolean @default(false) @map("exclude_unprofitable") // Excluir não lucrativas
+  
+  // Metadata
+  calculatedAt  DateTime @default(now()) @map("calculated_at")
+  
+  @@unique([date, sector, minScore, excludeUnprofitable])
+  @@index([date])
+  @@index([calculatedAt])
+  @@index([sector, date])
+  @@map("pl_bolsa_history")
+}

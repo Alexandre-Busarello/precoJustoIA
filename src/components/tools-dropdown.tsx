@@ -44,7 +44,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
     setIsOpen(false)
   }, [pathname])
 
-  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras'].includes(pathname)
+  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras', '/pl-bolsa'].includes(pathname)
 
   const tools = [
     {
@@ -67,6 +67,13 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       icon: <Building2 className="w-4 h-4" />,
       title: 'Análise Setorial',
       description: 'Compare setores da B3',
+      isPremium: false
+    },
+    {
+      href: '/pl-bolsa',
+      icon: <TrendingUp className="w-4 h-4" />,
+      title: 'P/L Histórico',
+      description: 'P/L histórico da Bovespa desde 2001',
       isPremium: false
     },
     {

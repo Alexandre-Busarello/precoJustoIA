@@ -61,8 +61,18 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="#" className="hover:text-blue-400 transition-colors">
-                  Análise com IA
+                <Link href="/pl-bolsa" className="hover:text-blue-400 transition-colors">
+                  📊 P/L Histórico da Bovespa
+                </Link>
+              </li>
+              <li>
+                <Link href="/analise-setorial" className="hover:text-blue-400 transition-colors">
+                  Análise Setorial
+                </Link>
+              </li>
+              <li>
+                <Link href="/screening-acoes" className="hover:text-blue-400 transition-colors">
+                  Screening de Ações
                 </Link>
               </li>
             </ul>

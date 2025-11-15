@@ -20,6 +20,7 @@ export default function robots(): MetadataRoute.Robots {
           '/sobre',
           '/contato',
           '/screening-acoes',
+          '/pl-bolsa',
           '/como-funciona',
           '/fundador',
           '/backtesting-carteiras',

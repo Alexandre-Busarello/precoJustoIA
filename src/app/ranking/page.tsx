@@ -187,17 +187,6 @@ function RankingContent() {
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)
   const quickRankerRef = useRef<QuickRankerHandle>(null)
   
-  // Se não houver assetType, mostrar o HUB
-  if (!assetType) {
-    return (
-      <AssetTypeHub
-        pageType="ranking"
-        title="Rankings de Ações"
-        description="Escolha o tipo de ativo que deseja ranquear: apenas ações B3, apenas BDRs ou ambos juntos."
-      />
-    )
-  }
-  
   // Callback para quando um novo ranking for gerado
   const handleRankingGenerated = () => {
     // Incrementar o trigger para forçar reload do histórico
@@ -223,14 +212,27 @@ function RankingContent() {
     }, 100)
   }
 
-  // Scroll para o histórico se houver ID na URL
+  // Scroll para o histórico se houver ID na URL (só executar se houver assetType)
   useEffect(() => {
+    if (!assetType) return // Não executar se não houver assetType
+    
     if (rankingId) {
       setShowHistory(true)
     } else {
       scrollToQuickRanker()
     }
-  }, [rankingId, showHistory])
+  }, [rankingId, assetType]) // Incluir assetType nas dependências
+  
+  // Se não houver assetType, mostrar o HUB (DEPOIS de todos os hooks)
+  if (!assetType) {
+    return (
+      <AssetTypeHub
+        pageType="ranking"
+        title="Rankings de Ações"
+        description="Escolha o tipo de ativo que deseja ranquear: apenas ações B3, apenas BDRs ou ambos juntos."
+      />
+    )
+  }
 
 
   return (

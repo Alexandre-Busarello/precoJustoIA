@@ -1391,7 +1391,7 @@ model PlBolsaHistory {
   // Metadata
   calculatedAt  DateTime @default(now()) @map("calculated_at")
   
-  @@unique([date, sector, minScore, excludeUnprofitable])
+  @@unique([date, sector, minScore, excludeUnprofitable], name: "pl_bolsa_history_unique")
   @@index([date])
   @@index([calculatedAt])
   @@index([sector, date])

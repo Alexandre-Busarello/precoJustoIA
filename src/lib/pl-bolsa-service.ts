@@ -46,16 +46,30 @@ async function getCachedData(
   const end = new Date(endDate)
   end.setDate(1)
 
-  const cached = await (prisma as any).plBolsaHistory.findMany({
-    where: {
-      date: {
-        gte: start,
-        lte: end,
-      },
-      sector: sector || null,
-      minScore: minScore ?? null,
-      excludeUnprofitable,
+  // Construir where clause corretamente para campos nullable
+  const whereClause: any = {
+    date: {
+      gte: start,
+      lte: end,
     },
+    excludeUnprofitable,
+  }
+
+  // Tratar campos nullable corretamente
+  if (sector !== undefined) {
+    whereClause.sector = sector || null
+  } else {
+    whereClause.sector = null
+  }
+
+  if (minScore !== undefined) {
+    whereClause.minScore = minScore ?? null
+  } else {
+    whereClause.minScore = null
+  }
+
+  const cached = await (prisma as any).plBolsaHistory.findMany({
+    where: whereClause,
     orderBy: {
       date: 'asc',
     },
@@ -79,35 +93,59 @@ async function saveToCache(
   excludeUnprofitable: boolean
 ): Promise<void> {
   // Salvar em lote para melhor performance
-  const promises = data.map((item) => {
+  const promises = data.map(async (item) => {
     const monthStart = new Date(item.date)
     monthStart.setDate(1)
 
-    return (prisma as any).plBolsaHistory.upsert({
-      where: {
-        date_sector_minScore_excludeUnprofitable: {
+    // Construir filtros para busca
+    const whereClause: any = {
+      date: monthStart,
+      excludeUnprofitable,
+    }
+
+    // Adicionar filtros opcionais (null para "todos")
+    if (sector !== undefined) {
+      whereClause.sector = sector || null
+    } else {
+      whereClause.sector = null
+    }
+
+    if (minScore !== undefined) {
+      whereClause.minScore = minScore ?? null
+    } else {
+      whereClause.minScore = null
+    }
+
+    // Verificar se já existe
+    const existing = await (prisma as any).plBolsaHistory.findFirst({
+      where: whereClause,
+    })
+
+    if (existing) {
+      // Atualizar existente
+      await (prisma as any).plBolsaHistory.update({
+        where: { id: existing.id },
+        data: {
+          pl: item.pl,
+          averagePl: item.averagePl,
+          companyCount: item.companyCount,
+          calculatedAt: new Date(),
+        },
+      })
+    } else {
+      // Criar novo
+      await (prisma as any).plBolsaHistory.create({
+        data: {
           date: monthStart,
+          pl: item.pl,
+          averagePl: item.averagePl,
+          companyCount: item.companyCount,
           sector: sector || null,
           minScore: minScore ?? null,
           excludeUnprofitable,
         },
-      },
-      update: {
-        pl: item.pl,
-        averagePl: item.averagePl,
-        companyCount: item.companyCount,
-        calculatedAt: new Date(),
-      },
-      create: {
-        date: monthStart,
-        pl: item.pl,
-        averagePl: item.averagePl,
-        companyCount: item.companyCount,
-        sector: sector || null,
-        minScore: minScore ?? null,
-        excludeUnprofitable,
-      },
-    })
+      })
+    }
   })
 
   await Promise.all(promises)

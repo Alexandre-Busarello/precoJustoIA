@@ -5,7 +5,7 @@ import {
   StrategyAnalysis,
   toNumber
 } from '@/lib/strategies';
-import { calculateOverallScore, OverallScore, FinancialData, FinancialStatementsData } from '@/lib/strategies/overall-score';
+import { calculateOverallScore, OverallScore, OverallScoreWithBreakdown, FinancialData, FinancialStatementsData } from '@/lib/strategies/overall-score';
 import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config';
 
 // Interface para dados da empresa
@@ -45,7 +45,7 @@ export interface CompanyAnalysisResult {
   name: string;
   sector: string | null;
   currentPrice: number;
-  overallScore: OverallScore | null;
+  overallScore: OverallScore | OverallScoreWithBreakdown | null; // Pode incluir breakdown se solicitado
   strategies: {
     graham: StrategyAnalysis | null;
     dividendYield: StrategyAnalysis | null;
@@ -266,6 +266,7 @@ export async function executeCompanyAnalysis(
     includeStatements?: boolean;
     companyId?: string;
     industry?: string | null;
+    includeBreakdown?: boolean; // Se deve incluir breakdown detalhado
   }
 ): Promise<CompanyAnalysisResult> {
   const { isLoggedIn, isPremium, includeStatements = true, companyId, industry } = options;
@@ -334,8 +335,9 @@ export async function executeCompanyAnalysis(
     }
   }
 
-  // Calcular score geral
-  const overallScore = isPremium ? calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData) : null;
+  // Calcular score geral (com breakdown se solicitado)
+  const includeBreakdown = options.includeBreakdown || false;
+  const overallScore = isPremium ? calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData, includeBreakdown) : null;
 
   return {
     ticker: companyData.ticker,

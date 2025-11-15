@@ -348,14 +348,14 @@ export class BDRDataService {
 
     // BDRs terminam com 34.SA ou 35.SA
     if (
-      normalizedTicker.endsWith("34.SA") ||
-      normalizedTicker.endsWith("35.SA")
+      normalizedTicker.endsWith("34") ||
+      normalizedTicker.endsWith("35")
     ) {
       return true;
     }
 
     // Alguns ETFs internacionais também são considerados BDRs para nosso propósito
-    const internationalETFs = ["IVVB11.SA", "SPXI11.SA"];
+    const internationalETFs = ["IVVB11", "SPXI11"];
     return internationalETFs.includes(normalizedTicker);
   }
 

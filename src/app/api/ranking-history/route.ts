@@ -108,16 +108,22 @@ export async function GET(request: NextRequest) {
     );
 
     // Transformar dados para melhor apresentação
-    const formattedHistory = history.map(item => ({
-      id: item.id,
-      model: item.model,
-      params: item.params,
-      results: item.results, // Incluir resultados cached
-      resultCount: item.resultCount,
-      createdAt: item.createdAt,
-      modelName: getModelDisplayName(item.model),
-      description: generateHistoryDescription(item.model, item.params as Record<string, unknown>)
-    }));
+    const formattedHistory = history.map(item => {
+      const params = item.params as Record<string, unknown>;
+      const assetTypeFilter = params.assetTypeFilter as 'b3' | 'bdr' | 'both' | undefined;
+      
+      return {
+        id: item.id,
+        model: item.model,
+        params: item.params,
+        results: item.results, // Incluir resultados cached
+        resultCount: item.resultCount,
+        createdAt: item.createdAt,
+        modelName: getModelDisplayName(item.model),
+        description: generateHistoryDescription(item.model, params),
+        assetTypeFilter: assetTypeFilter || 'b3' // Padrão 'b3' para rankings antigos (antes da funcionalidade BDR)
+      };
+    });
 
     // Debug apenas quando necessário
     if (process.env.NODE_ENV === 'development') {

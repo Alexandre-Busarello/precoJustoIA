@@ -11,12 +11,11 @@ export async function GET(request: NextRequest) {
     }
     
     // Buscar empresas por ticker ou nome (case insensitive)
-    // NOTA: Por enquanto, buscar apenas ações (STOCK)
-    // FIIs, BDRs e ETFs serão incluídos quando os dados forem enriquecidos
+    // Incluir ações B3 (STOCK) e BDRs
     const companies = await safeQueryWithParams('search-companies', () =>
       prisma.company.findMany({
         where: {
-          assetType: 'STOCK', // Filtrar apenas ações por enquanto
+          assetType: { in: ['STOCK', 'BDR'] }, // Incluir ações B3 e BDRs
           OR: [
             {
               ticker: {

@@ -23,6 +23,7 @@ interface HistoryItem {
   description: string
   resultCount: number
   createdAt: string
+  assetTypeFilter?: 'b3' | 'bdr' | 'both'
 }
 
 interface RankingHistoryProps {
@@ -237,10 +238,31 @@ export function RankingHistory({ className = "" }: RankingHistoryProps) {
                   <BarChart3 className="w-5 h-5 text-white" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1 flex-wrap">
                     <Badge className={`${getModelBadgeColor(item.model)} text-xs sm:text-sm flex-shrink-0`}>
                       {item.modelName}
                     </Badge>
+                    {/* Badge de tipo de ativo */}
+                    {item.assetTypeFilter && item.assetTypeFilter !== 'both' && (
+                      <Badge 
+                        variant={item.assetTypeFilter === 'bdr' ? 'default' : 'secondary'}
+                        className={`text-xs flex-shrink-0 ${
+                          item.assetTypeFilter === 'bdr' 
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                            : 'bg-green-600 hover:bg-green-700 text-white'
+                        }`}
+                      >
+                        {item.assetTypeFilter === 'bdr' ? '🌎 BDR' : '🇧🇷 B3'}
+                      </Badge>
+                    )}
+                    {item.assetTypeFilter === 'both' && (
+                      <Badge 
+                        variant="outline"
+                        className="text-xs flex-shrink-0 border-blue-300 text-blue-700 dark:text-blue-400"
+                      >
+                        🌍 Ambos
+                      </Badge>
+                    )}
                     <span className="text-xs sm:text-sm font-medium text-muted-foreground">
                       {item.resultCount} empresas
                     </span>

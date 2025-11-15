@@ -6,6 +6,7 @@ import {
   RankBuilderResult,
   TechnicalAnalysisData
 } from './types';
+import { BDRDataService } from '../bdr-data-service';
 
 // Funções utilitárias
 export function toNumber(value: unknown): number | null {
@@ -292,6 +293,38 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     });
   }
 
+  // Verificar se um ticker é BDR
+  protected isBDRTicker(ticker?: string | null): boolean {
+    if (!ticker) return false;
+    return BDRDataService.isBDR(ticker);
+  }
+
+  // Filtrar empresas por inclusão/exclusão de BDRs
+  protected filterBDRs(companies: CompanyData[], includeBDRs: boolean = true): CompanyData[] {
+    if (includeBDRs) return companies;
+    
+    return companies.filter(company => !this.isBDRTicker(company.ticker));
+  }
+
+  // Filtrar empresas por tipo de ativo (b3, bdr, both)
+  protected filterByAssetType(companies: CompanyData[], assetTypeFilter?: 'b3' | 'bdr' | 'both'): CompanyData[] {
+    if (!assetTypeFilter || assetTypeFilter === 'both') {
+      return companies; // Incluir todos
+    }
+    
+    if (assetTypeFilter === 'b3') {
+      // Apenas ações B3 (excluir BDRs)
+      return companies.filter(company => !this.isBDRTicker(company.ticker));
+    }
+    
+    if (assetTypeFilter === 'bdr') {
+      // Apenas BDRs
+      return companies.filter(company => this.isBDRTicker(company.ticker));
+    }
+    
+    return companies;
+  }
+
   // Converter StrategyAnalysis para RankBuilderResult
   protected convertToRankingResult(
     companyData: CompanyData, 
@@ -469,7 +502,8 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
       };
       
       // Calcular o score usando a função real COM demonstrações financeiras
-      const result = calculateOverallScore(strategies, financialData, currentPrice, statementsData);
+      // Não incluir breakdown aqui (só precisamos do score numérico)
+      const result = calculateOverallScore(strategies, financialData, currentPrice, statementsData, false);
       return result.score;
       
     } catch (error) {

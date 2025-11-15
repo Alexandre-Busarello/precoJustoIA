@@ -222,6 +222,7 @@ const models = [
 
 interface QuickRankerProps {
   rankingId?: string | null;
+  assetTypeFilter?: 'b3' | 'bdr' | 'both';
   onRankingGenerated?: () => void; // Callback quando um novo ranking é gerado
 }
 
@@ -232,7 +233,7 @@ export interface QuickRankerHandle {
 }
 
 const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
-  ({ rankingId, onRankingGenerated }, ref) => {
+  ({ rankingId, assetTypeFilter = 'both', onRankingGenerated }, ref) => {
   const { data: session } = useSession()
   const { trackEvent } = useTracking()
   const [selectedModel, setSelectedModel] = useState<string>("")
@@ -300,6 +301,15 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankingId]) // CORREÇÃO: Removido 'results' das dependências para evitar loop de reset
+
+  // Atualizar parâmetros padrão quando assetTypeFilter mudar
+  useEffect(() => {
+    if (selectedModel && !isViewingCached) {
+      // Reaplicar parâmetros padrão com os novos valores para BDRs
+      handleModelChange(selectedModel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetTypeFilter]) // Atualizar quando o filtro de tipo de ativo mudar
 
   // Carregar ranking específico por ID ou verificar sessionStorage
   useEffect(() => {
@@ -439,26 +449,29 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     setError(null)
     setIsResultsExpanded(false)
     
+    // Ajustar parâmetros padrão baseado no tipo de ativo
+    const isBDR = assetTypeFilter === 'bdr'
+    
     // Definir parâmetros padrão para cada modelo
     switch (model) {
       case "graham":
         setParams({ 
-          marginOfSafety: 0.20,     // 20%
+          marginOfSafety: isBDR ? 0.15 : 0.20,     // 15% para BDRs (múltiplos mais altos), 20% para Brasil
           companySize: 'all',       // Todas as empresas
           useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
       case "dividendYield":
         setParams({ 
-          minYield: 0.04,           // 4%
+          minYield: isBDR ? 0.025 : 0.04,           // 2.5% para BDRs (mercado americano tem DY menor), 4% para Brasil
           companySize: 'all',       // Todas as empresas
           useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
         break
       case "lowPE":
         setParams({ 
-          maxPE: 12, 
-          minROE: 0.12,             // P/L <= 12, ROE >= 12%
+          maxPE: isBDR ? 25 : 12,                   // P/L <= 25 para BDRs (mercado aceita múltiplos mais altos), <= 12 para Brasil
+          minROE: isBDR ? 0.12 : 0.12,             // ROE >= 12% (mesmo para ambos)
           companySize: 'all',       // Todas as empresas
           useTechnicalAnalysis: true // Análise técnica ativada por padrão
         })
@@ -472,10 +485,10 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         break
       case "fcd":
         setParams({ 
-          growthRate: 0.025,        // 2.5% crescimento perpétuo
-          discountRate: 0.10,       // 10% WACC
+          growthRate: isBDR ? 0.03 : 0.025,        // 3% crescimento para BDRs (mercado mais dinâmico), 2.5% para Brasil
+          discountRate: isBDR ? 0.12 : 0.10,       // 12% WACC para BDRs (risco diferente), 10% para Brasil
           yearsProjection: 5,       // 5 anos de projeção
-          minMarginOfSafety: 0.15,  // 15% margem de segurança
+          minMarginOfSafety: isBDR ? 0.10 : 0.15,  // 10% margem para BDRs (múltiplos mais altos), 15% para Brasil
           limit: 10,                // 10 resultados
           companySize: 'all',       // Todas as empresas
           useTechnicalAnalysis: true // Análise técnica ativada por padrão
@@ -483,8 +496,8 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         break
       case "gordon":
         setParams({ 
-          discountRate: 0.11,       // 11% taxa de desconto base
-          dividendGrowthRate: 0.04, // 4% crescimento base dos dividendos
+          discountRate: isBDR ? 0.12 : 0.11,       // 12% taxa de desconto para BDRs, 11% para Brasil
+          dividendGrowthRate: isBDR ? 0.05 : 0.04, // 5% crescimento para BDRs (empresas mais maduras), 4% para Brasil
           useSectoralAdjustment: true, // Ativar ajuste setorial
           sectoralWaccAdjustment: 0,   // Sem ajuste manual adicional
           limit: 10,                // 10 resultados
@@ -494,11 +507,11 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         break
         case "barsi":
           setParams({
-            targetDividendYield: 0.05,      // Meta de 5% de dividend yield
+            targetDividendYield: isBDR ? 0.03 : 0.05,      // 3% para BDRs (mercado americano), 5% para Brasil
             maxPriceToPayMultiplier: 1.0,   // Preço teto exato
-            minConsecutiveDividends: 3,     // 3 anos consecutivos
-            maxDebtToEquity: 1.0,           // Máximo 100% Dívida/PL
-            minROE: 0.10,                   // ROE mínimo 10%
+            minConsecutiveDividends: isBDR ? 3 : 3,     // 3 anos consecutivos (mesmo)
+            maxDebtToEquity: isBDR ? 1.5 : 1.0,           // 150% para BDRs (mais tolerável), 100% para Brasil
+            minROE: isBDR ? 0.12 : 0.10,                   // 12% ROE mínimo para BDRs, 10% para Brasil
             focusOnBEST: true,              // Focar nos setores B.E.S.T.
             companySize: 'all',             // Todas as empresas
             limit: 10,                      // 10 resultados
@@ -507,11 +520,11 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
           break
         case "fundamentalist":
           setParams({
-            minROE: 0.15,             // 15% ROE mínimo
-            minROIC: 0.15,            // 15% ROIC mínimo
-            maxDebtToEbitda: 3.0,     // 3x máximo dívida/EBITDA
-            minPayout: 0.40,          // 40% payout mínimo
-            maxPayout: 0.80,          // 80% payout máximo
+            minROE: isBDR ? 0.15 : 0.15,             // 15% ROE mínimo (mesmo)
+            minROIC: isBDR ? 0.15 : 0.15,            // 15% ROIC mínimo (mesmo)
+            maxDebtToEbitda: isBDR ? 4.0 : 3.0,     // 4x máximo para BDRs (mais tolerável), 3x para Brasil
+            minPayout: isBDR ? 0.30 : 0.40,          // 30% payout mínimo para BDRs, 40% para Brasil
+            maxPayout: isBDR ? 0.90 : 0.80,          // 90% payout máximo para BDRs, 80% para Brasil
             companySize: 'all',       // Todas as empresas
             limit: 10,                // 10 resultados
             useTechnicalAnalysis: true // Análise técnica ativada por padrão
@@ -625,7 +638,11 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         },
         body: JSON.stringify({
           model: selectedModel,
-          params,
+          params: {
+            ...params,
+            includeBDRs: assetTypeFilter === 'both' || assetTypeFilter === 'bdr',
+            assetTypeFilter
+          },
         }),
       })
 

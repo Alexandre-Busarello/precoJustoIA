@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, Suspense } from "react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { QuickRanker, QuickRankerHandle } from "@/components/quick-ranker"
 import { RankingHistorySection } from "@/components/ranking-history-section"
+import { AssetTypeHub } from "@/components/asset-type-hub"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -180,10 +181,22 @@ function RankingContent() {
   const { isPremium } = usePremiumStatus()
   const searchParams = useSearchParams()
   const rankingId = searchParams.get('id')
+  const assetType = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
   const isLoggedIn = !!session
   const [showHistory, setShowHistory] = useState(true)
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)
   const quickRankerRef = useRef<QuickRankerHandle>(null)
+  
+  // Se não houver assetType, mostrar o HUB
+  if (!assetType) {
+    return (
+      <AssetTypeHub
+        pageType="ranking"
+        title="Rankings de Ações"
+        description="Escolha o tipo de ativo que deseja ranquear: apenas ações B3, apenas BDRs ou ambos juntos."
+      />
+    )
+  }
   
   // Callback para quando um novo ranking for gerado
   const handleRankingGenerated = () => {
@@ -384,7 +397,12 @@ function RankingContent() {
 
         {/* Gerador de Ranking */}
         <div id="ranking-generator" className="mb-12">
-          <QuickRanker ref={quickRankerRef} rankingId={rankingId} onRankingGenerated={handleRankingGenerated} />
+          <QuickRanker 
+            ref={quickRankerRef} 
+            rankingId={rankingId} 
+            assetTypeFilter={assetType}
+            onRankingGenerated={handleRankingGenerated} 
+          />
         </div>
 
         {/* Modelos Disponíveis - Oculto para Premium */}

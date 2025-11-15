@@ -217,14 +217,18 @@ export default function CompanySearch({
                             variant={
                               company.assetType === 'STOCK' ? 'default' :
                               company.assetType === 'FII' ? 'secondary' :
-                              company.assetType === 'BDR' ? 'outline' :
+                              company.assetType === 'BDR' ? 'default' :
                               company.assetType === 'ETF' ? 'destructive' : 'default'
                             } 
-                            className="text-xs"
+                            className={`text-xs ${
+                              company.assetType === 'BDR' 
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                : ''
+                            }`}
                           >
-                            {company.assetType === 'STOCK' ? 'Ação' :
+                            {company.assetType === 'STOCK' ? '🇧🇷 Ação' :
                              company.assetType === 'FII' ? 'FII' :
-                             company.assetType === 'BDR' ? 'BDR' :
+                             company.assetType === 'BDR' ? '🌎 BDR' :
                              company.assetType === 'ETF' ? 'ETF' : company.assetType}
                           </Badge>
                           {company.sector && (

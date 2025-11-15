@@ -47,6 +47,7 @@ export interface CalculateScoreOptions {
   isLoggedIn?: boolean;
   includeStatements?: boolean;
   includeStrategies?: boolean; // Se deve retornar estratégias individuais (para /api/company-analysis)
+  includeBreakdown?: boolean; // Se deve incluir breakdown detalhado (para página entendendo-score)
   companyId?: string; // ID da empresa para statements
   industry?: string | null; // Indústria da empresa
 }
@@ -70,6 +71,7 @@ export async function calculateCompanyOverallScore(
     isLoggedIn = true,
     includeStatements = isPremium, // Default: incluir statements se for Premium
     includeStrategies = false, // Default: não incluir estratégias (só para /api/company-analysis)
+    includeBreakdown = false, // Default: não incluir breakdown (só para página entendendo-score)
     companyId,
     industry
   } = options;
@@ -159,6 +161,7 @@ export async function calculateCompanyOverallScore(
       isLoggedIn,
       isPremium,
       includeStatements, // Incluir demonstrações baseado em isPremium
+      includeBreakdown, // Incluir breakdown se solicitado
       companyId: companyId || String(companyData.id),
       industry: industry !== undefined ? industry : companyData.industry
     });

@@ -131,11 +131,16 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: GordonParams): StrategyAnalysis {
-    const { financials, currentPrice, historicalFinancials } = companyData;
+    const { financials, currentPrice, historicalFinancials, ticker } = companyData;
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const isBDR = this.isBDRTicker(ticker);
+    
+    // Para BDRs, ajustar taxa de desconto padrão (mercado americano tem WACC diferente)
+    const baseDiscountRate = isBDR ? Math.max(params.discountRate, 0.12) : params.discountRate; // Mínimo 12% para BDRs
+    const adjustedParams = { ...params, discountRate: baseDiscountRate };
     
     // Obter parâmetros ajustados por setor
-    const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(companyData, params);
+    const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(companyData, adjustedParams);
     
     const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
     const dividendYield12m = toNumber(financials.dividendYield12m);
@@ -165,15 +170,23 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     );
     const upside = fairValue && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : null;
     
+    // Ajustar critérios para BDRs (empresas americanas têm padrões diferentes)
+    const minDY = isBDR ? 0.03 : 0.04; // DY mínimo menor para BDRs (3% vs 4%)
+    const minDY12m = isBDR ? 0.02 : 0.03; // DY 12m mínimo menor para BDRs (2% vs 3%)
+    const maxPayout = isBDR ? 0.90 : 0.80; // Payout máximo mais alto para BDRs (90% vs 80%)
+    const minROE = isBDR ? 0.12 : 0.12; // Mesmo padrão
+    const minLiquidez = isBDR ? 1.0 : 1.2; // Liquidez pode ser menor para BDRs
+    const maxDividaLiquidaPl = isBDR ? 1.5 : 1.0; // Mais tolerante com dívida para BDRs (150% vs 100%)
+
     const criteria = [
       { label: 'Upside ≥ 15%', value: !!(upside && upside >= 15), description: `Upside: ${upside ? formatPercent(upside / 100) : 'N/A'}` },
-      { label: 'Dividend Yield ≥ 4%', value: !!(dy && dy >= 0.04), description: `DY: ${formatPercent(dy)}` },
-      { label: 'DY 12m ≥ 3%', value: !dividendYield12m || dividendYield12m >= 0.03, description: `DY 12m: ${dividendYield12m ? formatPercent(dividendYield12m) : 'N/A - Benefício da dúvida'}` },
-      { label: 'Payout ≤ 80%', value: !payout || payout <= 0.80, description: `Payout: ${payout ? formatPercent(payout) : 'N/A - Benefício da dúvida'}` },
-      { label: 'ROE ≥ 12%', value: !roe || roe >= 0.12, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: `Dividend Yield ≥ ${(minDY * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !!(dy && dy >= minDY), description: `DY: ${formatPercent(dy)}` },
+      { label: `DY 12m ≥ ${(minDY12m * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividendYield12m || dividendYield12m >= minDY12m, description: `DY 12m: ${dividendYield12m ? formatPercent(dividendYield12m) : 'N/A - Benefício da dúvida'}` },
+      { label: `Payout ≤ ${(maxPayout * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !payout || payout <= maxPayout, description: `Payout: ${payout ? formatPercent(payout) : 'N/A - Benefício da dúvida'}` },
+      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
       { label: 'Crescimento Lucros ≥ -20%', value: !crescimentoLucros || crescimentoLucros >= -0.20 || !!(cagrLucros5a && cagrLucros5a > 0), description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A - Benefício da dúvida'}${cagrLucros5a && cagrLucros5a > 0 ? ` (CAGR 5a: ${formatPercent(cagrLucros5a)})` : ''}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` }
+      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}${isBDR ? ' (BDR)' : ''}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` }
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
@@ -257,6 +270,9 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
     
     // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');

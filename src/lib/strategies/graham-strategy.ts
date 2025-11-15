@@ -14,8 +14,9 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: GrahamParams = {}): StrategyAnalysis {
-    const { financials, currentPrice, historicalFinancials } = companyData;
+    const { financials, currentPrice, historicalFinancials, ticker } = companyData;
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const isBDR = this.isBDRTicker(ticker);
     
     const lpa = toNumber(financials.lpa);
     const vpa = toNumber(financials.vpa);
@@ -30,16 +31,22 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const fairValue = this.calculateGrahamFairValue(lpa, vpa);
     const upside = fairValue && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : null;
     
+    // Ajustar critérios para BDRs (mercado internacional mais tolerante)
+    const minROE = isBDR ? 0.12 : 0.10; // ROE mínimo mais alto para BDRs (12% vs 10%)
+    const minLiquidez = isBDR ? 1.0 : 1.0; // Mesmo padrão
+    const maxDividaLiquidaPl = isBDR ? 2.0 : 1.5; // Mais tolerante com dívida (200% vs 150%)
+    const minMarketCap = isBDR ? 5000000000 : 2000000000; // Market Cap maior para BDRs (R$ 5B vs R$ 2B)
+    
     const criteria = [
       { label: 'Upside ≥ 10', value: !!(upside && upside >= 10), description: `Upside: ${formatPercent(upside! / 100)}` },
       { label: 'LPA positivo', value: !!(lpa && lpa > 0), description: `LPA: ${formatCurrency(lpa)}` },
       { label: 'VPA positivo', value: !!(vpa && vpa > 0), description: `VPA: ${formatCurrency(vpa)}` },
-      { label: 'ROE ≥ 10%', value: !roe || roe >= 0.10, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Liquidez Corrente ≥ 1.0', value: !liquidezCorrente || liquidezCorrente >= 1.0, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
       { label: 'Margem Líquida positiva', value: !margemLiquida || margemLiquida > 0, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
       { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15 || !!(cagrLucros5a && cagrLucros5a > 0), description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A - Benefício da dúvida'}${cagrLucros5a && cagrLucros5a > 0 ? ` (CAGR 5a: ${formatPercent(cagrLucros5a)})` : ''}` },
-      { label: 'Market Cap ≥ R$ 2B', value: !marketCap || marketCap >= 2000000000, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
+      { label: `Market Cap ≥ ${isBDR ? 'R$ 5B' : 'R$ 2B'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
@@ -127,6 +134,9 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
     
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
+    
     // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
 
@@ -136,8 +146,9 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
       if (this.shouldExcludeCompany(company)) continue;
 
-      const { financials, currentPrice, historicalFinancials } = company;
+      const { financials, currentPrice, historicalFinancials, ticker } = company;
       const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+      const isBDR = this.isBDRTicker(ticker);
       const lpa = toNumber(financials.lpa)!;
       const vpa = toNumber(financials.vpa)!;
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
@@ -151,8 +162,11 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       const fairValue = Math.sqrt(22.5 * lpa * vpa);
       const marginOfSafetyActual = (fairValue / currentPrice) - 1;
 
+      // Ajustar critérios para BDRs
+      const minMarketCap = isBDR ? 5000000000 : 2000000000; // R$ 5B para BDRs, R$ 2B para Brasil
+
       // Filtrar apenas empresas com margem de segurança >= parâmetro
-      if (marginOfSafetyActual >= marginOfSafety && (marketCap && marketCap >= 2000000000)) {
+      if (marginOfSafetyActual >= marginOfSafety && (marketCap && marketCap >= minMarketCap)) {
         const upside = ((fairValue / currentPrice) - 1) * 100;
 
         // Score de qualidade com foco na margem de segurança (conceito central do Graham)

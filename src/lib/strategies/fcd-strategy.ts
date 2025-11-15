@@ -14,8 +14,9 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: FCDParams = {}): StrategyAnalysis {
-    const { financials, currentPrice, historicalFinancials } = companyData;
+    const { financials, currentPrice, historicalFinancials, ticker } = companyData;
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const isBDR = this.isBDRTicker(ticker);
     
     const ebitda = toNumber(financials.ebitda);
     const fluxoCaixaLivre = toNumber(financials.fluxoCaixaLivre);
@@ -27,27 +28,36 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
     
+    // Ajustar taxa de desconto para BDRs (mercado internacional tem WACC diferente)
+    const defaultDiscountRate = isBDR ? 0.12 : 0.10; // 12% para BDRs (mercado americano), 10% para Brasil
+    
     const fairValue = this.calculateFCDFairValue(
       ebitda, 
       fluxoCaixaLivre, 
       sharesOutstanding,
       params.growthRate || 0.025,
-      params.discountRate || 0.10,
+      params.discountRate || defaultDiscountRate,
       params.yearsProjection || 5
     );
     
     const upside = fairValue && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : null;
     const minMarginOfSafety = params.minMarginOfSafety || 0.20;
 
+    // Ajustar critérios para BDRs
+    const minROE = isBDR ? 0.15 : 0.12; // ROE mínimo mais alto para BDRs (15% vs 12%)
+    const minMargemEbitda = isBDR ? 0.12 : 0.15; // Margem EBITDA pode ser um pouco menor para BDRs (12% vs 15%)
+    const minLiquidez = isBDR ? 1.0 : 1.2; // Liquidez pode ser um pouco menor para BDRs
+    const minMarketCap = isBDR ? 5000000000 : 2000000000; // Market Cap maior para BDRs (R$ 5B vs R$ 2B)
+
     const criteria = [
       { label: `Upside >= ${(minMarginOfSafety * 100)}`, value: !!((!!upside && upside >= (minMarginOfSafety * 100)) || !upside), description: `Upside: ${formatPercent(upside! / 100)}` },
       { label: 'EBITDA > 0', value: !!(ebitda && ebitda > 0), description: `EBITDA: ${formatCurrency(ebitda)}` },
       { label: 'FCO > 0', value: !fluxoCaixaOperacional || fluxoCaixaOperacional > 0, description: `FCO: ${formatCurrency(fluxoCaixaOperacional) || 'N/A - Benefício da dúvida'}` },
-      { label: 'ROE ≥ 12%', value: !roe || roe >= 0.12, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Margem EBITDA ≥ 15%', value: !margemEbitda || margemEbitda >= 0.15, description: `Margem EBITDA: ${formatPercent(margemEbitda) || 'N/A - Benefício da dúvida'}` },
+      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: `Margem EBITDA ≥ ${(minMargemEbitda * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !margemEbitda || margemEbitda >= minMargemEbitda, description: `Margem EBITDA: ${formatPercent(margemEbitda) || 'N/A - Benefício da dúvida'}` },
       { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Market Cap ≥ R$ 2B', value: !marketCap || marketCap >= 2000000000, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
+      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}${isBDR ? ' (BDR)' : ''}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: `Market Cap ≥ ${isBDR ? 'R$ 5B' : 'R$ 2B'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
     ];
 
     const passedCriteria = criteria.filter(c => c.value).length;
@@ -109,7 +119,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
   runRanking(companies: CompanyData[], params: FCDParams): RankBuilderResult[] {
     const { 
       growthRate = 0.025,      // 2.5% crescimento perpétuo (padrão conservador)
-      discountRate = 0.10,     // 10% WACC (padrão para mercado brasileiro)
+      discountRate,            // WACC (será ajustado se não fornecido)
       yearsProjection = 5,     // 5 anos de projeção explícita
       minMarginOfSafety = 0.20, // 20% margem de segurança mínima
       limit = 10,
@@ -119,7 +129,10 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const results: RankBuilderResult[] = [];
 
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
-    const filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
 
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company)) continue;
@@ -127,11 +140,15 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
       if (this.shouldExcludeCompany(company)) continue;
 
-      const { financials, currentPrice, historicalFinancials } = company;
+      const { financials, currentPrice, historicalFinancials, ticker } = company;
+      const isBDR = this.isBDRTicker(ticker);
       const ebitda = toNumber(financials.ebitda)!;
       const fluxoCaixaLivre = toNumber(financials.fluxoCaixaLivre);
       const sharesOutstanding = toNumber(financials.sharesOutstanding)!;
       const marketCap = toNumber(financials.marketCap)!;
+      
+      // Ajustar taxa de desconto para BDRs se não fornecida
+      const effectiveDiscountRate = discountRate || (isBDR ? 0.12 : 0.10);
       
       // Usar médias históricas para indicadores de qualidade
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
@@ -166,14 +183,14 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       // 3. Calcular Valor Presente dos Fluxos
       let presentValueCashflows = 0;
       for (let year = 0; year < projectedCashflows.length; year++) {
-        const pv = projectedCashflows[year] / Math.pow(1 + discountRate, year + 1);
+        const pv = projectedCashflows[year] / Math.pow(1 + effectiveDiscountRate, year + 1);
         presentValueCashflows += pv;
       }
 
       // 4. Calcular Valor Terminal e seu Valor Presente
       const terminalCashflow = projectedCashflows[projectedCashflows.length - 1] * (1 + growthRate);
-      const terminalValue = terminalCashflow / (discountRate - growthRate);
-      const presentValueTerminal = terminalValue / Math.pow(1 + discountRate, yearsProjection);
+      const terminalValue = terminalCashflow / (effectiveDiscountRate - growthRate);
+      const presentValueTerminal = terminalValue / Math.pow(1 + effectiveDiscountRate, yearsProjection);
 
       // 5. Valor Total da Empresa
       const enterpriseValue = presentValueCashflows + presentValueTerminal;
@@ -184,8 +201,11 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       // 7. Calcular Margem de Segurança
       const marginOfSafetyActual = (fairValuePerShare / currentPrice) - 1;
 
+      // Ajustar critérios para BDRs
+      const minMarketCap = isBDR ? 5000000000 : 2000000000; // R$ 5B para BDRs, R$ 2B para Brasil
+
       // Filtrar apenas empresas com margem >= parâmetro
-      if (marginOfSafetyActual >= minMarginOfSafety) {
+      if (marginOfSafetyActual >= minMarginOfSafety && marketCap >= minMarketCap) {
         const upside = marginOfSafetyActual * 100;
 
         // Score FCD: combina upside potencial + qualidade dos dados
@@ -208,7 +228,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
           fairValue: Number(fairValuePerShare.toFixed(2)),
           upside: Number(upside.toFixed(2)),
           marginOfSafety: Number((marginOfSafetyActual * 100).toFixed(2)),
-          rational: `Aprovada no FCD Premium Model com ${Number((marginOfSafetyActual * 100).toFixed(1))}% de margem de segurança. Preço justo R$ ${fairValuePerShare.toFixed(2)} vs atual R$ ${currentPrice.toFixed(2)}. Base: FCFF R$ ${(fcffBase/1000000).toFixed(0)}M, crescimento ${(growthRate*100).toFixed(1)}%, WACC ${(discountRate*100).toFixed(1)}%. Qualidade: ROE ${(roe*100).toFixed(1)}%, Margem EBITDA ${(margemEbitda*100).toFixed(1)}%. Score FCD: ${Number(fcdQualityScore.toFixed(1))}/100.`,
+          rational: `Aprovada no FCD Premium Model com ${Number((marginOfSafetyActual * 100).toFixed(1))}% de margem de segurança. Preço justo R$ ${fairValuePerShare.toFixed(2)} vs atual R$ ${currentPrice.toFixed(2)}. Base: FCFF R$ ${(fcffBase/1000000).toFixed(0)}M, crescimento ${(growthRate*100).toFixed(1)}%, WACC ${(effectiveDiscountRate*100).toFixed(1)}%. Qualidade: ROE ${(roe*100).toFixed(1)}%, Margem EBITDA ${(margemEbitda*100).toFixed(1)}%. Score FCD: ${Number(fcdQualityScore.toFixed(1))}/100.`,
           key_metrics: {
             fairValue: Number(fairValuePerShare.toFixed(2)),
             fcffBase: Number((fcffBase / 1000000).toFixed(1)), // Em milhões
@@ -216,7 +236,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
             presentValueCashflows: Number((presentValueCashflows / 1000000000).toFixed(2)), // Em bilhões
             presentValueTerminal: Number((presentValueTerminal / 1000000000).toFixed(2)), // Em bilhões
             terminalValueContribution: Number(((presentValueTerminal / enterpriseValue) * 100).toFixed(1)), // % do valor
-            impliedWACC: discountRate,
+            impliedWACC: effectiveDiscountRate,
             impliedGrowth: growthRate,
             projectionYears: yearsProjection,
             fcdQualityScore: Number(fcdQualityScore.toFixed(1)),

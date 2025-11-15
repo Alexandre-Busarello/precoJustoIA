@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,7 @@ import { ScreeningAIAssistant } from "@/components/screening-ai-assistant"
 import { CompanyLogo } from "@/components/company-logo"
 import { AddToBacktestButton } from "@/components/add-to-backtest-button"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { AssetTypeHub } from "@/components/asset-type-hub"
 import { 
   Search, 
   Loader2, 
@@ -36,6 +38,7 @@ interface ScreeningParams {
   limit?: number;
   companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
   useTechnicalAnalysis?: boolean;
+  assetTypeFilter?: 'b3' | 'bdr' | 'both';
   plFilter?: ScreeningFilter;
   pvpFilter?: ScreeningFilter;
   evEbitdaFilter?: ScreeningFilter;
@@ -76,13 +79,19 @@ interface RankingResponse {
   count: number;
 }
 
-export default function ScreeningAcoesPage() {
+function ScreeningAcoesContent() {
   const { data: session } = useSession()
   const { isPremium } = usePremiumStatus()
+  const searchParams = useSearchParams()
+  const assetType = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
+  
+  const assetTypeFilter = assetType || 'both'
+
   const [params, setParams] = useState<ScreeningParams>({
     limit: 20,
     companySize: 'all',
-    useTechnicalAnalysis: true
+    useTechnicalAnalysis: true,
+    assetTypeFilter
   })
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<RankingResponse | null>(null)
@@ -91,6 +100,16 @@ export default function ScreeningAcoesPage() {
   const [industries, setIndustries] = useState<string[]>([])
 
   const isLoggedIn = !!session
+
+  // Atualizar assetTypeFilter quando assetType mudar
+  useEffect(() => {
+    if (assetType) {
+      setParams(prev => ({
+        ...prev,
+        assetTypeFilter: assetType
+      }))
+    }
+  }, [assetType])
 
   // Buscar setores e indústrias
   useEffect(() => {
@@ -117,7 +136,11 @@ export default function ScreeningAcoesPage() {
     if (savedParams) {
       try {
         const parsed = JSON.parse(savedParams);
-        setParams(parsed);
+        setParams(prev => ({
+          ...prev,
+          ...parsed,
+          assetTypeFilter: assetType || 'both' // Manter assetTypeFilter atual
+        }));
         // Limpar sessionStorage após usar
         sessionStorage.removeItem('screeningParams');
       } catch (error) {
@@ -125,7 +148,18 @@ export default function ScreeningAcoesPage() {
         sessionStorage.removeItem('screeningParams');
       }
     }
-  }, [])
+  }, [assetType])
+  
+  // Se não houver assetType, mostrar o HUB
+  if (!assetType) {
+    return (
+      <AssetTypeHub
+        pageType="screening"
+        title="Screening de Ações"
+        description="Escolha o tipo de ativo que deseja analisar: apenas ações B3, apenas BDRs ou ambos juntos."
+      />
+    )
+  }
 
   const handleAIParametersGenerated = (aiParams: any) => {
     // Mesclar parâmetros gerados pela IA com os parâmetros atuais
@@ -148,11 +182,12 @@ export default function ScreeningAcoesPage() {
     setResults(null)
     setError(null)
     
-    // Resetar parâmetros
+    // Resetar parâmetros mantendo assetTypeFilter
     setParams({
       limit: 20,
       companySize: 'all',
-      useTechnicalAnalysis: true
+      useTechnicalAnalysis: true,
+      assetTypeFilter: assetType || 'both'
     })
     
     // Scroll para área de parâmetros
@@ -176,7 +211,11 @@ export default function ScreeningAcoesPage() {
         },
         body: JSON.stringify({
           model: 'screening',
-          params,
+          params: {
+            ...params,
+            includeBDRs: assetType === 'both' || assetType === 'bdr',
+            assetTypeFilter: assetType
+          },
         }),
       })
 
@@ -650,6 +689,21 @@ export default function ScreeningAcoesPage() {
       </div>
     </div>
     </>
+  )
+}
+
+export default function ScreeningAcoesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Carregando screening...</p>
+        </div>
+      </div>
+    }>
+      <ScreeningAcoesContent />
+    </Suspense>
   )
 }
 

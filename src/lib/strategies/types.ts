@@ -5,6 +5,8 @@ export interface StrategyParams {
   companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
   useTechnicalAnalysis?: boolean; // Priorizar ativos em sobrevenda (padrão: false)
   use7YearAverages?: boolean; // Usar médias de 7 anos dos indicadores quando disponível (padrão: false)
+  includeBDRs?: boolean; // Incluir BDRs nas análises (padrão: true)
+  assetTypeFilter?: 'b3' | 'bdr' | 'both'; // Filtrar por tipo de ativo (padrão: 'both')
 }
 
 export interface GrahamParams extends StrategyParams {
@@ -55,6 +57,9 @@ export interface ScreeningFilter {
 }
 
 export interface ScreeningParams extends StrategyParams {
+  // Tipo de ativo (b3, bdr, both)
+  assetTypeFilter?: 'b3' | 'bdr' | 'both';
+  
   // Valuation
   plFilter?: ScreeningFilter;
   pvpFilter?: ScreeningFilter;

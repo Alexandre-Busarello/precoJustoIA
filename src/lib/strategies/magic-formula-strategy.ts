@@ -15,9 +15,10 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: MagicFormulaParams): StrategyAnalysis {
-    const { financials, historicalFinancials } = companyData;
+    const { financials, historicalFinancials, ticker } = companyData;
     const { minROIC = 0.15, minEY = 0.8 } = params;
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const isBDR = this.isBDRTicker(ticker);
     
     const roic = this.getROIC(financials, use7YearAverages, historicalFinancials);
     const earningsYield = toNumber(financials.earningsYield);
@@ -28,15 +29,24 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
 
+    // Ajustar critérios para BDRs
+    const effectiveMinROIC = isBDR ? Math.max(minROIC, 0.12) : minROIC; // ROIC mínimo pode ser um pouco menor para BDRs
+    const effectiveMinEY = isBDR ? Math.max(minEY, 0.05) : minEY; // Earnings Yield mínimo menor para BDRs (mercado aceita P/E mais alto)
+    const minROE = isBDR ? 0.12 : 0.15; // ROE mínimo um pouco menor para BDRs (12% vs 15%)
+    const minMargemLiquida = isBDR ? 0.05 : 0.05; // Mesmo padrão
+    const minLiquidez = isBDR ? 1.0 : 1.2; // Liquidez pode ser menor para BDRs
+    const maxDividaLiquidaPl = isBDR ? 2.0 : 1.5; // Mais tolerante com dívida para BDRs (200% vs 150%)
+    const minMarketCap = isBDR ? 3000000000 : 1000000000; // Market Cap maior para BDRs (R$ 3B vs R$ 1B)
+
     const criteria = [
-      { label: `ROIC ≥ ${(minROIC * 100).toFixed(0)}%`, value: !!(roic && roic >= minROIC), description: `ROIC: ${formatPercent(roic)}` },
-      { label: `Earnings Yield ≥ ${(minEY * 100).toFixed(0)}%`, value: !!(earningsYield && earningsYield >= minEY), description: `EY: ${formatPercent(earningsYield)}` },
-      { label: 'ROE ≥ 15%', value: !roe || roe >= 0.15, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: `ROIC ≥ ${(effectiveMinROIC * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !!(roic && roic >= effectiveMinROIC), description: `ROIC: ${formatPercent(roic)}` },
+      { label: `Earnings Yield ≥ ${(effectiveMinEY * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !!(earningsYield && earningsYield >= effectiveMinEY), description: `EY: ${formatPercent(earningsYield)}` },
+      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
       { label: 'Crescimento Receitas ≥ -5%', value: !crescimentoReceitas || crescimentoReceitas >= -0.05, description: `Crescimento: ${formatPercent(crescimentoReceitas) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Margem Líquida ≥ 5%', value: !margemLiquida || margemLiquida >= 0.05, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Dív. Líq./PL ≤ 150%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.5, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Market Cap ≥ R$ 1B', value: !marketCap || marketCap >= 1000000000, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A - Benefício da dúvida'}` }
+      { label: `Margem Líquida ≥ ${(minMargemLiquida * 100).toFixed(0)}%`, value: !margemLiquida || margemLiquida >= minMargemLiquida, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
+      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}${isBDR ? ' (BDR)' : ''}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: `Market Cap ≥ ${isBDR ? 'R$ 3B' : 'R$ 1B'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A - Benefício da dúvida'}` }
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
@@ -74,11 +84,13 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
   }
 
   runRanking(companies: CompanyData[], params: MagicFormulaParams): RankBuilderResult[] {
-    // const { minROIC = 0, minEY = 0 } = params; // Não usado atualmente
     const results: RankBuilderResult[] = [];
 
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
     
     // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');

@@ -146,6 +146,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
 
   async runAnalysis(companyData: CompanyData, params: BarsiParams): Promise<StrategyAnalysis> {
     const { financials, currentPrice, sector, historicalFinancials, ticker } = companyData;
+    const isBDR = this.isBDRTicker(ticker);
     const {
       targetDividendYield,
       maxPriceToPayMultiplier = 1.0,
@@ -189,7 +190,8 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     const hasLowDebt = !dividaLiquidaPl || dividaLiquidaPl <= maxDebtToEquity;
     const hasPositiveMargin = !margemLiquida || margemLiquida > 0;
     const hasReasonablePayout = !payout || (payout > 0.20 && payout < 0.95); // Entre 20% e 80%
-    const hasMinimumSize = !marketCap || marketCap >= 1000000000; // R$ 1B mínimo
+    const minMarketCap = isBDR ? 2000000000 : 1000000000; // R$ 2B para BDRs, R$ 1B para Brasil
+    const hasMinimumSize = !marketCap || marketCap >= minMarketCap;
 
     const criteria = [
       { 
@@ -228,7 +230,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
         description: `Payout: ${payout ? formatPercent(payout) : 'N/A'}` 
       },
       { 
-        label: 'Market Cap ≥ R$ 1B', 
+        label: `Market Cap ≥ ${this.isBDRTicker(companyData.ticker) ? 'R$ 2B (BDR)' : 'R$ 1B'}`, 
         value: hasMinimumSize, 
         description: `Market Cap: ${marketCap ? formatCurrency(marketCap) : 'N/A'}` 
       }
@@ -315,13 +317,17 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
       minConsecutiveDividends = 3,
       maxDebtToEquity = 1.0,
       minROE = 0.10,
-      focusOnBEST = true
+      focusOnBEST = true,
+      includeBDRs = true
     } = params;
 
     const results: RankBuilderResult[] = [];
 
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
     
     // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');

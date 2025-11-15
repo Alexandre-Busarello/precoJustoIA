@@ -14,11 +14,12 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: LowPEParams): StrategyAnalysis {
-    const { financials, historicalFinancials } = companyData;
+    const { financials, historicalFinancials, ticker } = companyData;
     const { maxPE, minROE = 0.15 } = params;
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const isBDR = this.isBDRTicker(ticker);
     
-    const pl = this.getPL(financials, use7YearAverages, historicalFinancials);
+    const pl = this.getPL(financials, false, historicalFinancials);
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoReceitas = toNumber(financials.crescimentoReceitas);
     const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
@@ -28,19 +29,26 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     const marketCap = toNumber(financials.marketCap);
     const roic = this.getROIC(financials, use7YearAverages, historicalFinancials);
 
+    // Ajustar critérios para BDRs (mercado internacional aceita P/E mais alto)
+    const effectiveMaxPE = isBDR ? Math.max(maxPE, 25) : maxPE; // P/E máximo mais alto para BDRs (mínimo 25)
+    const effectiveMinROE = isBDR ? Math.max(minROE, 0.12) : minROE; // ROE mínimo mais alto para BDRs (mínimo 12%)
+    const minMargemLiquida = isBDR ? 0.05 : 0.03; // Margem líquida mínima mais alta para BDRs (5% vs 3%)
+    const maxDividaLiquidaPl = isBDR ? 2.5 : 2.0; // Mais tolerante com dívida para BDRs (250% vs 200%)
+    const minMarketCap = isBDR ? 2000000000 : 500000000; // Market Cap maior para BDRs (R$ 2B vs R$ 500M)
+
     const criteria = [
-      { label: `P/L entre 3-${maxPE}`, value: !!(pl && pl > 3 && pl <= maxPE), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
-      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: `P/L entre 3-${effectiveMaxPE}${isBDR ? ' (BDR)' : ''}`, value: !!(pl && pl > 3 && pl <= effectiveMaxPE), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
+      { label: `ROE ≥ ${(effectiveMinROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= effectiveMinROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
       { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Margem Líquida ≥ 3%', value: !margemLiquida || margemLiquida >= 0.03, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
+      { label: `Margem Líquida ≥ ${(minMargemLiquida * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !margemLiquida || margemLiquida >= minMargemLiquida, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
       { label: 'Liquidez Corrente ≥ 1.0', value: !liquidezCorrente || liquidezCorrente >= 1.0, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
       { label: 'ROA ≥ 5%', value: !roa || roa >= 0.05, description: `ROA: ${formatPercent(roa) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Dív. Líq./PL ≤ 200%', value: !dividaLiquidaPl || dividaLiquidaPl <= 2.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Market Cap ≥ R$ 500M', value: !marketCap || marketCap >= 500000000, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A - Benefício da dúvida'}` }
+      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: `Market Cap ≥ ${isBDR ? 'R$ 2B' : 'R$ 500M'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A - Benefício da dúvida'}` }
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 6 && !!pl && pl > 3 && pl <= maxPE; // Reduzido para dar benefício da dúvida
+    const isEligible = passedCriteria >= 6 && !!pl && pl > 3 && pl <= effectiveMaxPE; // Reduzido para dar benefício da dúvida
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular value score como no backend
@@ -75,11 +83,14 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
   }
 
   runRanking(companies: CompanyData[], params: LowPEParams): RankBuilderResult[] {
-    // const { maxPE, minROE = 0 } = params; // Não usado atualmente
+    const { maxPE, minROE = 0.15 } = params;
     const results: RankBuilderResult[] = [];
 
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
-    const filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
 
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company, params)) continue;
@@ -87,7 +98,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
       // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
       if (this.shouldExcludeCompany(company)) continue;
 
-      const { financials, currentPrice } = company;
+      const { financials, currentPrice, ticker } = company;
+      const isBDR = this.isBDRTicker(ticker);
       const pl = toNumber(financials.pl)!;
       const roe = toNumber(financials.roe) || 0;
       const roa = toNumber(financials.roa) || 0;
@@ -96,9 +108,18 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
       const crescimentoReceitas = toNumber(financials.crescimentoReceitas) || 0;
       const roic = toNumber(financials.roic) || 0;
 
+      // Ajustar critérios para BDRs
+      const effectiveMaxPE = isBDR ? Math.max(maxPE, 25) : maxPE;
+      const effectiveMinROE = isBDR ? Math.max(minROE, 0.12) : minROE;
+      
+      // Verificar se atende aos critérios ajustados
+      if (pl > effectiveMaxPE || roe < effectiveMinROE) continue;
+
       // Score de value investing (qualidade + preço baixo)
+      // Para BDRs, ajustar peso do P/L (mercado aceita P/E mais alto)
+      const plWeight = isBDR ? 1.5 : 2.0; // Menor penalização por P/L alto para BDRs
       let valueScore = (
-        Math.max(0, 50 - pl * 2) +         // Premia P/L baixo
+        Math.max(0, 50 - pl * plWeight) +         // Premia P/L baixo (ajustado para BDRs)
         Math.min(roe, 0.30) * 50 +          // ROE forte
         Math.min(roa, 0.20) * 100 +          // ROA eficiente
         Math.min(margemLiquida, 0.20) * 80 +            // Margem saudável

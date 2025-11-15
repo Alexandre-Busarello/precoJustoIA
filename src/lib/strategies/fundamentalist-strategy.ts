@@ -28,7 +28,7 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
     // Converter dados financeiros
     const roe = this.getROE(financialData, use7YearAverages, historicalFinancials);
     const roic = this.getROIC(financialData, use7YearAverages, historicalFinancials);
-    const pl = this.getPL(financialData, use7YearAverages, historicalFinancials);
+    const pl = this.getPL(financialData, false, historicalFinancials);
     const evEbitda = toNumber(financialData.evEbitda);
     const dividaLiquidaEbitda = this.getDividaLiquidaEbitda(financialData, use7YearAverages, historicalFinancials);
     const cagrLucros5aRaw = toNumber(financialData.cagrLucros5a);
@@ -432,10 +432,14 @@ export class FundamentalistStrategy extends AbstractStrategy<FundamentalistParam
   }
 
   runRanking(companies: CompanyData[], params: FundamentalistParams): RankBuilderResult[] {
+    const { includeBDRs = true } = params;
     const results: RankBuilderResult[] = [];
     
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
+    
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
     
     // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');

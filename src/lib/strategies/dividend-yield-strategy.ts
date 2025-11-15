@@ -14,27 +14,36 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
   }
 
   runAnalysis(companyData: CompanyData, params: DividendYieldParams): StrategyAnalysis {
-    const { financials, historicalFinancials } = companyData;
+    const { financials, historicalFinancials, ticker } = companyData;
     const { minYield } = params;
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const isBDR = this.isBDRTicker(ticker);
     
     const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
-    const pl = this.getPL(financials, use7YearAverages, historicalFinancials);
+    const pl = this.getPL(financials, false, historicalFinancials);
     const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
     const roic = this.getROIC(financials, use7YearAverages, historicalFinancials);
 
+    // Ajustar critérios para BDRs (empresas americanas pagam menos dividendos, mas são mais estáveis)
+    const minROE = isBDR ? 0.12 : 0.10; // ROE mínimo mais alto para BDRs (12% vs 10%)
+    const minLiquidez = isBDR ? 1.0 : 1.2; // Liquidez pode ser menor para BDRs
+    const maxDividaLiquidaPl = isBDR ? 1.5 : 1.0; // Mais tolerante com dívida para BDRs (150% vs 100%)
+    const maxPL = isBDR ? 30 : 25; // P/L máximo mais alto para BDRs (30 vs 25)
+    const minMargemLiquida = isBDR ? 0.05 : 0.05; // Mesmo padrão
+    const minMarketCap = isBDR ? 2000000000 : 1000000000; // Market Cap maior para BDRs (R$ 2B vs R$ 1B)
+
     const criteria = [
       { label: `Dividend Yield ≥ ${(minYield * 100).toFixed(0)}%`, value: !!(dy && dy >= minYield), description: `DY: ${formatPercent(dy)}` },
-      { label: 'ROE ≥ 10%', value: !roe || roe >= 0.10, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Liquidez Corrente ≥ 1.2', value: !liquidezCorrente || liquidezCorrente >= 1.2, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Dív. Líq./PL ≤ 100%', value: !dividaLiquidaPl || dividaLiquidaPl <= 1.0, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: 'P/L entre 4-25', value: !pl || (pl >= 4 && pl <= 25), description: `P/L: ${pl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Margem Líquida ≥ 5%', value: !margemLiquida || margemLiquida >= 0.05, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Market Cap ≥ R$ 1B', value: !marketCap || marketCap >= 1000000000, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000000).toFixed(1)}B` : 'N/A - Benefício da dúvida'}` }
+      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
+      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}${isBDR ? ' (BDR)' : ''}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
+      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: `P/L entre 4-${maxPL}${isBDR ? ' (BDR)' : ''}`, value: !pl || (pl >= 4 && pl <= maxPL), description: `P/L: ${pl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
+      { label: `Margem Líquida ≥ ${(minMargemLiquida * 100).toFixed(0)}%`, value: !margemLiquida || margemLiquida >= minMargemLiquida, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
+      { label: `Market Cap ≥ ${isBDR ? 'R$ 2B' : 'R$ 1B'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000000).toFixed(1)}B` : 'N/A - Benefício da dúvida'}` }
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
@@ -79,6 +88,9 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
     
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
+    
     // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
 
@@ -101,7 +113,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
       const { currentPrice, historicalFinancials } = company;
       const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
       const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials)!;
-      const pl = this.getPL(financials, use7YearAverages, historicalFinancials);
+      const pl = this.getPL(financials, false, historicalFinancials);
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
       const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
       const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials) || 0;

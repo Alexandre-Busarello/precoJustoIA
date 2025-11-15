@@ -393,9 +393,12 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
   runRanking(companies: CompanyData[], params: ScreeningParams): RankBuilderResult[] {
     const activeFiltersCount = this.countActiveFilters(params);
     
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    let filteredCompaniesForEmptyFilters = this.filterByAssetType(companies, params.assetTypeFilter);
+    
     if (activeFiltersCount === 0) {
       // Se não há filtros ativos, retorna todas as empresas ordenadas por market cap
-      const allResults = companies
+      const allResults = filteredCompaniesForEmptyFilters
         .map(company => {
           const marketCap = toNumber(company.financials.marketCap) || 0;
           return {
@@ -421,10 +424,12 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       return uniqueResults.slice(0, params.limit || 20);
     }
 
-    // Filtrar por tamanho de empresa primeiro (se configurado)
-    let filteredCompanies = companies;
+    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    let filteredCompanies = this.filterByAssetType(companies, params.assetTypeFilter);
+    
+    // Filtrar por tamanho de empresa (se configurado)
     if (params.companySize && params.companySize !== 'all') {
-      filteredCompanies = this.filterCompaniesBySize(companies, params.companySize);
+      filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize);
     }
 
     // Aplicar filtros e ranquear

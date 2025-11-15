@@ -55,9 +55,20 @@ interface RankBuilderRequest {
 }
 
 // Função para buscar dados de todas as empresas
-async function getCompaniesData(): Promise<CompanyData[]> {
+async function getCompaniesData(assetTypeFilter?: 'b3' | 'bdr' | 'both'): Promise<CompanyData[]> {
   const currentYear = new Date().getFullYear();
   const startYear = currentYear - 4; // Últimos 5 anos para demonstrações
+
+  // Determinar quais assetTypes incluir baseado no filtro
+  let assetTypes: ("STOCK" | "BDR")[] = [];
+  if (assetTypeFilter === 'b3') {
+    assetTypes = ["STOCK"];
+  } else if (assetTypeFilter === 'bdr') {
+    assetTypes = ["BDR"];
+  } else {
+    // 'both' ou undefined - incluir ambos
+    assetTypes = ["STOCK", "BDR"];
+  }
 
   const companies = await safeQueryWithParams(
     "all-companies-data",
@@ -129,7 +140,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
           },
         },
         where: {
-          assetType: "STOCK", // Filtrar apenas ações para o ranking
+          assetType: { in: assetTypes }, // Filtrar por tipo de ativo baseado no filtro
           financialData: {
             some: {
               // Filtros básicos para ter dados mínimos necessários
@@ -146,6 +157,7 @@ async function getCompaniesData(): Promise<CompanyData[]> {
       type: "all-companies",
       startYear,
       currentYear,
+      assetTypeFilter, // Incluir no cache key para diferenciar
     }
   );
 
@@ -442,8 +454,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Buscar dados de todas as empresas
-    const companies = await getCompaniesData();
+    // Buscar dados de todas as empresas (com filtro de tipo de ativo se fornecido)
+    const assetTypeFilter = (params as any).assetTypeFilter as 'b3' | 'bdr' | 'both' | undefined;
+    const companies = await getCompaniesData(assetTypeFilter);
 
     // Debug: verificar quantas empresas têm dados técnicos
     const companiesWithTechnical = companies.filter((c) => c.technicalAnalysis);

@@ -41,6 +41,7 @@ interface RankingHistoryItem {
   description: string
   resultCount: number
   createdAt: string
+  assetTypeFilter?: 'b3' | 'bdr' | 'both'
 }
 
 interface RankingHistorySectionProps {
@@ -390,12 +391,33 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
 
                     {/* Informações */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h4 className="font-semibold text-sm text-slate-900 dark:text-white truncate">
                           {item.modelName}
                         </h4>
                         {item.model === 'ai' && (
                           <Sparkles className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                        )}
+                        {/* Badge de tipo de ativo */}
+                        {item.assetTypeFilter && item.assetTypeFilter !== 'both' && (
+                          <Badge 
+                            variant={item.assetTypeFilter === 'bdr' ? 'default' : 'secondary'}
+                            className={`text-xs flex-shrink-0 ${
+                              item.assetTypeFilter === 'bdr' 
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                : 'bg-green-600 hover:bg-green-700 text-white'
+                            }`}
+                          >
+                            {item.assetTypeFilter === 'bdr' ? '🌎 BDR' : '🇧🇷 B3'}
+                          </Badge>
+                        )}
+                        {item.assetTypeFilter === 'both' && (
+                          <Badge 
+                            variant="outline"
+                            className="text-xs flex-shrink-0 border-blue-300 text-blue-700 dark:text-blue-400"
+                          >
+                            🌍 Ambos
+                          </Badge>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground line-clamp-1 mb-1">

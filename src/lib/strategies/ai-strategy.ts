@@ -26,12 +26,16 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
 
   // Método principal para ranking (3 etapas)
   async runRanking(companies: CompanyData[], params: AIParams): Promise<RankBuilderResult[]> {
+    const { includeBDRs = true } = params;
     console.log(`🚀 [AI-STRATEGY] Iniciando análise preditiva com IA para ${companies.length} empresas`);
     console.log(`📊 [AI-STRATEGY] Parâmetros: ${JSON.stringify(params)}`);
     
-    // ETAPA 0: Aplicar exclusões automáticas antes da análise IA
-    console.log(`🚫 [AI-STRATEGY] ETAPA 0: Aplicando exclusões automáticas`);
-    const filteredCompanies = companies.filter(company => !this.shouldExcludeCompany(company));
+    // ETAPA 0: Filtrar por tipo de ativo primeiro (b3, bdr, both)
+    let filteredCompanies = this.filterByAssetType(companies, params.assetTypeFilter);
+    
+    // ETAPA 0.5: Aplicar exclusões automáticas antes da análise IA
+    console.log(`🚫 [AI-STRATEGY] ETAPA 0.5: Aplicando exclusões automáticas`);
+    filteredCompanies = filteredCompanies.filter(company => !this.shouldExcludeCompany(company));
     console.log(`✅ [AI-STRATEGY] ${companies.length - filteredCompanies.length} empresas excluídas automaticamente`);
     
     // ETAPA 1: Seleção inteligente com LLM baseada nos critérios do usuário
@@ -106,7 +110,7 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
       currentPrice: company.currentPrice,
       marketCap: toNumber(company.financials.marketCap) || 0,
       roe: this.getROE(company.financials, use7YearAverages, company.historicalFinancials) || 0,
-      pl: this.getPL(company.financials, use7YearAverages, company.historicalFinancials) || 0,
+      pl: this.getPL(company.financials, false, company.historicalFinancials) || 0,
       dy: this.getDividendYield(company.financials, use7YearAverages, company.historicalFinancials) || 0,
       liquidezCorrente: this.getLiquidezCorrente(company.financials, use7YearAverages, company.historicalFinancials) || 0,
       margemLiquida: this.getMargemLiquida(company.financials, use7YearAverages, company.historicalFinancials) || 0,

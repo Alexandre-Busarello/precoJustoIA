@@ -27,6 +27,7 @@ import {
   RefreshCw,
   ChevronRight,
   Bell,
+  User,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -269,14 +270,27 @@ export default function Dashboard() {
                 Pronto para analisar ações hoje?
               </p>
             </div>
-            <Badge
-              variant={isPremium ? "default" : "secondary"}
-              className={`text-xs sm:text-sm px-3 py-1 ${
-                isPremium ? "bg-gradient-to-r from-violet-600 to-pink-600" : ""
-              }`}
-            >
-              {isPremium ? "✨ Premium" : "Gratuito"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="hidden sm:flex"
+              >
+                <Link href="/perfil" className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Perfil
+                </Link>
+              </Button>
+              <Badge
+                variant={isPremium ? "default" : "secondary"}
+                className={`text-xs sm:text-sm px-3 py-1 ${
+                  isPremium ? "bg-gradient-to-r from-violet-600 to-pink-600" : ""
+                }`}
+              >
+                {isPremium ? "✨ Premium" : "Gratuito"}
+              </Badge>
+            </div>
           </div>
         </div>
 

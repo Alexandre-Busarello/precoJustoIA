@@ -87,6 +87,12 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       icon: <BarChart3 className="w-5 h-5" />,
       show: !!session && isPremium,
       isPremiumFeature: !isPremium
+    },
+    {
+      title: "Perfil",
+      href: "/perfil",
+      icon: <User className="w-5 h-5" />,
+      show: !!session
     }
   ]
 
@@ -489,6 +495,21 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                   asChild
                 >
                   <Link 
+                    href="/perfil" 
+                    className="flex items-center gap-3"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <User className="w-4 h-4" />
+                    Perfil
+                  </Link>
+                </Button>
+                {/* <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  asChild
+                >
+                  <Link 
                     href="/settings" 
                     className="flex items-center gap-3"
                     onClick={() => setIsOpen(false)}
@@ -496,7 +517,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                     <Settings className="w-4 h-4" />
                     Configurações
                   </Link>
-                </Button>
+                </Button> */}
                 <Button
                   variant="ghost"
                   size="sm"

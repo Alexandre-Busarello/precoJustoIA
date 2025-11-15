@@ -155,6 +155,13 @@ export function UserProfileDropdown({
           </Link>
         </DropdownMenuItem>
         
+        <DropdownMenuItem asChild>
+          <Link href="/perfil" className="cursor-pointer">
+            <User className="mr-2 h-4 w-4" />
+            Perfil
+          </Link>
+        </DropdownMenuItem>
+        
         <DropdownMenuSeparator />
         
         {/* Upgrade CTA */}

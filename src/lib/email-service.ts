@@ -921,8 +921,8 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             line-height: 1.6;
-            color: #1e293b;
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: #0f172a;
+            background: linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #faf5ff 100%);
             margin: 0;
             padding: 0;
             min-height: 100vh;
@@ -944,8 +944,8 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           }
           
           .header {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            padding: 40px 30px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            padding: 48px 32px;
             text-align: center;
             position: relative;
             overflow: hidden;
@@ -965,137 +965,222 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           .logo-container {
             position: relative;
             z-index: 2;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
           }
           
           .logo {
-            max-width: 200px;
+            max-width: 180px;
             height: auto;
             filter: brightness(0) invert(1);
           }
           
           .header-title {
             color: #ffffff;
-            font-size: 32px;
+            font-size: 36px;
             font-weight: 800;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             position: relative;
             z-index: 2;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            letter-spacing: -0.5px;
           }
           
           .header-subtitle {
-            color: rgba(255, 255, 255, 0.9);
+            color: #ffffff;
             font-size: 18px;
-            font-weight: 400;
+            font-weight: 500;
             position: relative;
             z-index: 2;
+            opacity: 0.95;
+          }
+          
+          .badge-premium {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 9999px;
+            padding: 6px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-top: 8px;
           }
           
           .content {
-            padding: 40px 30px;
+            padding: 48px 32px;
+            background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
           }
           
           .greeting {
-            font-size: 18px;
-            color: #475569;
-            margin-bottom: 30px;
+            font-size: 22px;
+            color: #0f172a;
+            margin-bottom: 20px;
             text-align: center;
+            font-weight: 700;
           }
           
           .main-text {
             font-size: 16px;
-            color: #64748b;
-            margin-bottom: 30px;
+            color: #475569;
+            margin-bottom: 32px;
             text-align: center;
+            line-height: 1.7;
           }
           
           .button-container {
             text-align: center;
-            margin: 40px 0;
+            margin: 36px 0;
           }
           
           .button {
             display: inline-block;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            color: #ffffff;
-            padding: 16px 32px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            color: #ffffff !important;
+            padding: 18px 40px;
             text-decoration: none;
             border-radius: 12px;
-            font-weight: 600;
-            font-size: 16px;
+            font-weight: 700;
+            font-size: 17px;
             text-align: center;
-            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3), 0 4px 6px -2px rgba(59, 130, 246, 0.05);
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3), 0 4px 6px -2px rgba(37, 99, 235, 0.05);
             transition: all 0.2s ease;
             border: none;
             cursor: pointer;
+            letter-spacing: 0.3px;
           }
           
           .button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 20px 25px -5px rgba(59, 130, 246, 0.4), 0 10px 10px -5px rgba(59, 130, 246, 0.1);
+            box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.4), 0 10px 10px -5px rgba(37, 99, 235, 0.1);
           }
           
           .features-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin: 30px 0;
+            gap: 16px;
+            margin: 32px 0;
           }
           
           .feature-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            border: 0;
             border-radius: 12px;
-            padding: 20px;
+            padding: 24px 20px;
             text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+          }
+          
+          .feature-card:hover {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            transform: translateY(-2px);
+          }
+          
+          .feature-icon-wrapper {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          }
+          
+          .feature-icon-wrapper.blue {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+          }
+          
+          .feature-icon-wrapper.green {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          }
+          
+          .feature-icon-wrapper.purple {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+          }
+          
+          .feature-icon-wrapper.teal {
+            background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+          }
+          
+          .feature-icon-wrapper.orange {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+          }
+          
+          .feature-icon-wrapper.pink {
+            background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
           }
           
           .feature-icon {
             font-size: 32px;
-            margin-bottom: 12px;
             display: block;
+            line-height: 1;
           }
           
           .feature-title {
             font-weight: 700;
-            color: #1e293b;
-            margin-bottom: 8px;
-            font-size: 16px;
+            color: #0f172a;
+            margin-bottom: 10px;
+            font-size: 17px;
+            line-height: 1.3;
           }
           
           .feature-desc {
             color: #64748b;
             font-size: 14px;
-            line-height: 1.5;
+            line-height: 1.6;
+            margin-bottom: 8px;
+          }
+          
+          .feature-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            display: inline-block;
+            margin-top: 8px;
+          }
+          
+          .feature-link:hover {
+            text-decoration: underline;
           }
           
           .cta-section {
-            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-            border: 2px solid #0284c7;
+            background: linear-gradient(135deg, #eff6ff 0%, #faf5ff 100%);
+            border: 0;
             border-radius: 12px;
-            padding: 24px;
-            margin: 30px 0;
+            padding: 32px 24px;
+            margin: 32px 0;
             text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.1), 0 4px 6px -2px rgba(37, 99, 235, 0.05);
+          }
+          
+          .cta-title {
+            color: #1e40af;
+            font-weight: 700;
+            margin-bottom: 20px;
+            font-size: 20px;
           }
           
           .footer {
             background: #f8fafc;
-            padding: 30px;
+            padding: 32px;
             text-align: center;
             border-top: 1px solid #e2e8f0;
           }
           
           .footer-text {
             color: #64748b;
-            font-size: 14px;
-            margin-bottom: 15px;
+            font-size: 15px;
+            margin-bottom: 12px;
+            line-height: 1.6;
           }
           
           .footer-link {
-            color: #3b82f6;
+            color: #2563eb;
             text-decoration: none;
-            font-weight: 500;
+            font-weight: 600;
           }
           
           .footer-link:hover {
@@ -1103,22 +1188,110 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           }
           
           .footer-brand {
-            margin-top: 25px;
-            padding-top: 20px;
+            margin-top: 24px;
+            padding-top: 24px;
             border-top: 1px solid #e2e8f0;
           }
           
           .footer-brand-link {
-            color: #3b82f6;
+            color: #2563eb;
             text-decoration: none;
-            font-weight: 600;
-            font-size: 16px;
+            font-weight: 700;
+            font-size: 18px;
           }
           
           .footer-tagline {
             color: #94a3b8;
+            font-size: 14px;
+            margin-top: 6px;
+          }
+          
+          .tips-box {
+            background: #ffffff;
+            border: 0;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 32px 0;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          }
+          
+          .tips-title {
+            color: #0f172a;
+            font-weight: 700;
+            margin-bottom: 16px;
+            font-size: 18px;
+          }
+          
+          .tips-list {
+            color: #475569;
+            font-size: 15px;
+            line-height: 1.8;
+            margin: 0;
+            padding-left: 24px;
+          }
+          
+          .tips-list li {
+            margin-bottom: 10px;
+          }
+          
+          .tips-list strong {
+            color: #0f172a;
+            font-weight: 600;
+          }
+          
+          .early-adopter-box {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 32px 0;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.2);
+          }
+          
+          .early-adopter-title {
+            color: #78350f;
+            font-weight: 700;
+            margin-bottom: 12px;
+            font-size: 20px;
+          }
+          
+          .early-adopter-text {
+            color: #92400e;
+            font-size: 15px;
+            line-height: 1.6;
+            margin: 0;
+          }
+          
+          .whatsapp-box {
+            background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+            border: 2px solid #8b5cf6;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 32px 0;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.2);
+          }
+          
+          .whatsapp-title {
+            color: #6d28d9;
+            font-weight: 700;
+            margin-bottom: 12px;
+            font-size: 18px;
+          }
+          
+          .whatsapp-text {
+            color: #6d28d9;
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+          }
+          
+          .whatsapp-text-small {
+            color: #7c3aed;
             font-size: 13px;
-            margin-top: 5px;
+            margin: 0;
+            font-style: italic;
           }
           
           /* Responsividade */
@@ -1156,6 +1329,39 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
               grid-template-columns: 1fr;
               gap: 16px;
             }
+            
+            .header-title {
+              font-size: 30px;
+            }
+            
+            .header-subtitle {
+              font-size: 16px;
+            }
+            
+            .greeting {
+              font-size: 18px;
+            }
+            
+            .main-text {
+              font-size: 15px;
+            }
+            
+            .cta-title {
+              font-size: 18px;
+            }
+            
+            .tips-title {
+              font-size: 17px;
+            }
+            
+            .feature-icon-wrapper {
+              width: 56px;
+              height: 56px;
+            }
+            
+            .feature-icon {
+              font-size: 28px;
+            }
           }
         </style>
       </head>
@@ -1181,16 +1387,16 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
               </p>
               
               ${isEarlyAdopter ? `
-              <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #f59e0b; border-radius: 12px; padding: 20px; margin: 30px 0; text-align: center;">
-                <h3 style="color: #92400e; font-weight: 700; margin-bottom: 12px; font-size: 18px;">👑 Parabéns, Early Adopter!</h3>
-                <p style="color: #92400e; font-size: 14px; margin: 0;">
-                  Você garantiu acesso por 3 anos, o  <strong>preço congelado para sempre</strong> e agora faz parte do grupo exclusivo que está moldando o futuro da plataforma!
+              <div class="early-adopter-box">
+                <h3 class="early-adopter-title">👑 Parabéns, Early Adopter!</h3>
+                <p class="early-adopter-text">
+                  Você garantiu acesso por 3 anos, o <strong style="color: #78350f;">preço congelado para sempre</strong> e agora faz parte do grupo exclusivo que está moldando o futuro da plataforma!
                 </p>
               </div>
               ` : ''}
               
               <div class="cta-section">
-                <h3 style="color: #0369a1; font-weight: 700; margin-bottom: 16px; font-size: 18px;">🎯 Comece agora mesmo:</h3>
+                <h3 class="cta-title">🎯 Comece agora mesmo:</h3>
                 <div class="button-container">
                   <a href="${baseUrl}/dashboard" class="button">🚀 Acessar Dashboard</a>
                 </div>
@@ -1198,77 +1404,89 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
               
               <div class="features-grid">
                 <div class="feature-card">
-                  <span class="feature-icon">🤖</span>
+                  <div class="feature-icon-wrapper purple">
+                    <span class="feature-icon">🤖</span>
+                  </div>
                   <div class="feature-title">Análise com IA</div>
                   <div class="feature-desc">
                     Use nossa IA para análises preditivas avançadas
-                    <br><a href="${baseUrl}/ranking" style="color: #3b82f6; text-decoration: none; font-weight: 500;">→ Criar Ranking</a>
                   </div>
+                  <a href="${baseUrl}/ranking" class="feature-link">→ Criar Ranking</a>
                 </div>
                 
                 <div class="feature-card">
-                  <span class="feature-icon">📊</span>
+                  <div class="feature-icon-wrapper blue">
+                    <span class="feature-icon">📊</span>
+                  </div>
                   <div class="feature-title">8 Modelos Premium</div>
                   <div class="feature-desc">
                     Graham, Fórmula Mágica, DCF e muito mais
-                    <br><a href="${baseUrl}/ranking" style="color: #3b82f6; text-decoration: none; font-weight: 500;">→ Explorar Modelos</a>
                   </div>
+                  <a href="${baseUrl}/ranking" class="feature-link">→ Explorar Modelos</a>
                 </div>
                 
                 <div class="feature-card">
-                  <span class="feature-icon">🔍</span>
+                  <div class="feature-icon-wrapper teal">
+                    <span class="feature-icon">🔍</span>
+                  </div>
                   <div class="feature-title">Comparador Avançado</div>
                   <div class="feature-desc">
                     Compare até 10 ações lado a lado
-                    <br><a href="${baseUrl}/compara-acoes" style="color: #3b82f6; text-decoration: none; font-weight: 500;">→ Comparar Ações</a>
                   </div>
+                  <a href="${baseUrl}/compara-acoes" class="feature-link">→ Comparar Ações</a>
                 </div>
                 
                 <div class="feature-card">
-                  <span class="feature-icon">📈</span>
+                  <div class="feature-icon-wrapper green">
+                    <span class="feature-icon">📈</span>
+                  </div>
                   <div class="feature-title">Backtesting</div>
                   <div class="feature-desc">
                     Teste suas estratégias com dados históricos
-                    <br><a href="${baseUrl}/backtest" style="color: #3b82f6; text-decoration: none; font-weight: 500;">→ Fazer Backtest</a>
                   </div>
+                  <a href="${baseUrl}/backtest" class="feature-link">→ Fazer Backtest</a>
                 </div>
                 
                 <div class="feature-card">
-                  <span class="feature-icon">📋</span>
+                  <div class="feature-icon-wrapper orange">
+                    <span class="feature-icon">📋</span>
+                  </div>
                   <div class="feature-title">Análise Individual</div>
                   <div class="feature-desc">
                     Análise completa de qualquer ação
-                    <br><a href="${baseUrl}/" style="color: #3b82f6; text-decoration: none; font-weight: 500;">→ Analisar Ação</a>
                   </div>
+                  <a href="${baseUrl}/" class="feature-link">→ Analisar Ação</a>
                 </div>
                 
                 <div class="feature-card">
-                  <span class="feature-icon">🎯</span>
+                  <div class="feature-icon-wrapper pink">
+                    <span class="feature-icon">🎯</span>
+                  </div>
                   <div class="feature-title">Suporte VIP</div>
                   <div class="feature-desc">
                     Atendimento prioritário e especializado
-                    <br><a href="${baseUrl}/suporte" style="color: #3b82f6; text-decoration: none; font-weight: 500;">→ Central de Suporte</a>
                   </div>
+                  <a href="${baseUrl}/suporte" class="feature-link">→ Central de Suporte</a>
                 </div>
               </div>
               
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 30px 0;">
-                <h3 style="color: #1e293b; font-weight: 700; margin-bottom: 12px; font-size: 16px;">💡 Dicas para começar:</h3>
-                <ul style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
-                  <li style="margin-bottom: 8px;">Comece criando um <strong>ranking com IA</strong> para descobrir as melhores oportunidades</li>
-                  <li style="margin-bottom: 8px;">Use o <strong>comparador</strong> para analisar suas ações favoritas lado a lado</li>
-                  <li style="margin-bottom: 8px;">Teste suas estratégias com o <strong>backtesting</strong> antes de investir</li>
-                  <li style="margin-bottom: 8px;">Explore os <strong>8 modelos de valuation</strong> para diferentes perfis de investimento</li>
+              <div class="tips-box">
+                <h3 class="tips-title">💡 Dicas para começar:</h3>
+                <ul class="tips-list">
+                  <li>Comece criando um <strong>ranking com IA</strong> para descobrir as melhores oportunidades</li>
+                  <li>Use o <strong>comparador</strong> para analisar suas ações favoritas lado a lado</li>
+                  <li>Teste suas estratégias com o <strong>backtesting</strong> antes de investir</li>
+                  <li>Explore os <strong>8 modelos de valuation</strong> para diferentes perfis de investimento</li>
                 </ul>
               </div>
               
               ${isEarlyAdopter ? `
-              <div style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); border: 2px solid #8b5cf6; border-radius: 12px; padding: 20px; margin: 30px 0; text-align: center;">
-                <h3 style="color: #7c3aed; font-weight: 700; margin-bottom: 12px; font-size: 16px;">💬 Canal Exclusivo WhatsApp</h3>
-                <p style="color: #7c3aed; font-size: 14px; margin-bottom: 16px;">
+              <div class="whatsapp-box">
+                <h3 class="whatsapp-title">💬 Canal Exclusivo WhatsApp</h3>
+                <p class="whatsapp-text">
                   Como Early Adopter, você tem acesso direto ao CEO! Em breve você receberá o convite para o grupo exclusivo.
                 </p>
-                <p style="color: #7c3aed; font-size: 12px; margin: 0; font-style: italic;">
+                <p class="whatsapp-text-small">
                   Sua opinião ajuda a moldar o futuro da plataforma 🚀
                 </p>
               </div>

@@ -123,6 +123,19 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         userEmail: user.email,
       },
+      // Habilitar parcelamento para cartões de crédito
+      // Nota: O Stripe pode não suportar installments no Brasil ainda.
+      // Se não funcionar, o Stripe simplesmente não mostrará a opção de parcelamento.
+      // Quando o Stripe adicionar suporte oficial, esta configuração já estará ativa.
+      payment_settings: {
+        payment_method_options: {
+          card: {
+            installments: {
+              enabled: true,
+            },
+          } as any, // Cast necessário pois os tipos TypeScript podem não estar atualizados
+        },
+      },
     })
 
     console.log('Subscription created:', {

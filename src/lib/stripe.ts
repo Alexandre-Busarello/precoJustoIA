@@ -89,6 +89,17 @@ export async function createCheckoutSession({
       allow_promotion_codes: true,
       // Configurar cobrança automática
       billing_address_collection: 'required',
+      // Habilitar parcelamento para cartões de crédito
+      // Nota: O Stripe pode não suportar installments no Brasil ainda.
+      // Se não funcionar, o Stripe simplesmente não mostrará a opção de parcelamento.
+      // Quando o Stripe adicionar suporte oficial, esta configuração já estará ativa.
+      payment_method_options: {
+        card: {
+          installments: {
+            enabled: true,
+          },
+        },
+      },
       // Configurar trial period se necessário
       // subscription_data: {
       //   trial_period_days: 7,

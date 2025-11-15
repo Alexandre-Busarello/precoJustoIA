@@ -530,9 +530,10 @@ export class WebhookProcessor {
     let planDuration: number
     let planType: string
     
-    if (amount >= 200) {
-      planDuration = 365
-      planType = amount <= 300 ? 'early' : 'annual'
+    if (amount >= 100) {
+      // Early Adopter tem 3 anos de acesso
+      planDuration = amount <= 200 ? 365 * 3 : 365
+      planType = amount <= 200 ? 'early' : 'annual'
     } else {
       planDuration = 30
       planType = 'monthly'

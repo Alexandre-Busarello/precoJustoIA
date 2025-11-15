@@ -96,13 +96,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
     }
   ]
 
-  const toolsItems = [
-    {
-      title: "P/L Histórico",
-      href: "/pl-bolsa",
-      icon: <TrendingUp className="w-5 h-5" />,
-      show: true
-    },
+  const analysisItems = [
     {
       title: "Rankings",
       href: "/ranking", 
@@ -125,14 +119,30 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       show: true,
       description: "Filtros customizáveis",
       isNew: true
-    },
+    }
+  ]
+
+  const marketItems = [
+    {
+      title: "P/L Histórico",
+      href: "/pl-bolsa",
+      icon: <TrendingUp className="w-5 h-5" />,
+      show: true,
+      description: "P/L histórico da Bovespa"
+    }
+  ]
+
+  const comparisonItems = [
     {
       title: "Comparador",
       href: "/comparador", 
       icon: <GitCompare className="w-5 h-5" />,
       show: true,
       description: "Compare ações"
-    },
+    }
+  ]
+
+  const simulationItems = [
     {
       title: "Backtesting",
       href: "/backtest", 
@@ -142,6 +152,8 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       isPremiumFeature: !isPremium
     }
   ]
+
+  const toolsItems = [...analysisItems, ...marketItems, ...comparisonItems, ...simulationItems]
 
   const supportItems = [
     {
@@ -321,8 +333,13 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                     Ferramentas
                   </h3>
                 </div>
-                <div className="space-y-1">
-                  {toolsItems
+                
+                {/* Análise */}
+                <div className="px-3 py-1 mb-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Análise</p>
+                </div>
+                <div className="space-y-1 mb-3">
+                  {analysisItems
                     .filter(item => item.show)
                     .map((item) => (
                       <Link
@@ -336,9 +353,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                         }`}
                       >
                         <div className={`p-1.5 rounded-md ${
-                          item.href === '/backtest' 
-                            ? 'bg-gradient-to-br from-emerald-500 to-teal-500' 
-                            : item.href === '/analise-setorial'
+                          item.href === '/analise-setorial'
                             ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
                             : item.href === '/screening-acoes'
                             ? 'bg-gradient-to-br from-amber-500 to-yellow-500'
@@ -351,14 +366,109 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm">{item.title}</span>
-                            {item.isPremiumFeature && (
-                              <Badge variant="default" className="text-xs bg-gradient-to-r from-emerald-500 to-teal-500">
-                                Premium
-                              </Badge>
-                            )}
                             {item.isNew && (
                               <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
                                 🚀 Novo
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        </div>
+                      </Link>
+                    ))}
+                </div>
+
+                {/* Mercado */}
+                <div className="px-3 py-1 mb-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Mercado</p>
+                </div>
+                <div className="space-y-1 mb-3">
+                  {marketItems
+                    .filter(item => item.show)
+                    .map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setIsOpen(false)}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                          pathname === item.href
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <div className="p-1.5 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500">
+                          <div className="text-white text-sm">
+                            {item.icon}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <span className="font-medium text-sm">{item.title}</span>
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        </div>
+                      </Link>
+                    ))}
+                </div>
+
+                {/* Comparação */}
+                <div className="px-3 py-1 mb-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Comparação</p>
+                </div>
+                <div className="space-y-1 mb-3">
+                  {comparisonItems
+                    .filter(item => item.show)
+                    .map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setIsOpen(false)}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                          pathname === item.href
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <div className="p-1.5 rounded-md bg-gradient-to-br from-blue-500 to-purple-500">
+                          <div className="text-white text-sm">
+                            {item.icon}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <span className="font-medium text-sm">{item.title}</span>
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        </div>
+                      </Link>
+                    ))}
+                </div>
+
+                {/* Simulação */}
+                <div className="px-3 py-1 mb-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Simulação</p>
+                </div>
+                <div className="space-y-1">
+                  {simulationItems
+                    .filter(item => item.show)
+                    .map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setIsOpen(false)}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                          pathname === item.href
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <div className="p-1.5 rounded-md bg-gradient-to-br from-emerald-500 to-teal-500">
+                          <div className="text-white text-sm">
+                            {item.icon}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{item.title}</span>
+                            {item.isPremiumFeature && (
+                              <Badge variant="default" className="text-xs bg-gradient-to-r from-emerald-500 to-teal-500">
+                                Premium
                               </Badge>
                             )}
                           </div>

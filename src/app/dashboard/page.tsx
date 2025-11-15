@@ -12,7 +12,6 @@ import { Footer } from "@/components/footer";
 import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner";
 import { CompanyLogo } from "@/components/company-logo";
 import { useAlfa } from "@/contexts/alfa-context";
-import { getBestTip, type DashboardTipContext } from "@/lib/dashboard-tips";
 import { DashboardPortfolios } from "@/components/dashboard-portfolios";
 import {
   BarChart3,
@@ -23,11 +22,11 @@ import {
   MessageCircle,
   Sparkles,
   Check,
-  Lightbulb,
   RefreshCw,
   ChevronRight,
   Bell,
   User,
+  GitCompare,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -66,7 +65,6 @@ export default function Dashboard() {
   const [topCompanies, setTopCompanies] = useState<TopCompany[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [companiesFromCache, setCompaniesFromCache] = useState(false);
-  const [hasUsedComparator, setHasUsedComparator] = useState(false);
   const [portfolioCount, setPortfolioCount] = useState(0);
 
   useEffect(() => {
@@ -90,11 +88,6 @@ export default function Dashboard() {
     setHasJoinedWhatsApp(joined === "true");
   }, []);
 
-  // Verificar se usuário já usou o Comparador (tracking via localStorage)
-  useEffect(() => {
-    const used = localStorage.getItem("has_used_comparator");
-    setHasUsedComparator(used === "true");
-  }, []);
 
   const fetchStats = async () => {
     try {
@@ -235,25 +228,8 @@ export default function Dashboard() {
     return null;
   }
 
-  // Contexto para dicas dinâmicas
-  const tipContext: DashboardTipContext = {
-    totalRankings: stats?.totalRankings || 0,
-    hasUsedBacktest: stats?.hasUsedBacktest || false, // ✅ Tracking via banco (BacktestConfig)
-    hasUsedComparator: hasUsedComparator, // ✅ Tracking via localStorage
-    isPremium,
-    hasCreatedPortfolio: portfolioCount > 0,
-    portfolioCount,
-    hasRecentPortfolioActivity: false, // TODO: implementar se necessário
-  };
-
-  const currentTip = getBestTip(tipContext);
-
   // Determinar se usuário é novo ou experiente
   const isNewUser = (stats?.totalRankings || 0) === 0;
-
-  // Verificar se a dica do dia já cobre alguma funcionalidade (para evitar redundância)
-  const tipCoversBacktest = currentTip.ctaLink.includes("/backtest");
-  const tipCoversComparator = currentTip.ctaLink.includes("/comparador");
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
@@ -299,36 +275,56 @@ export default function Dashboard() {
           <EarlyAdopterDashboardBanner className="mb-6" />
         )}
 
-        {/* 💡 DICA DINÂMICA INTELIGENTE - Design Profissional */}
-        <Card className="bg-gradient-to-r from-blue-50 to-slate-50 dark:from-blue-950/20 dark:to-slate-950/20 border border-blue-200 dark:border-blue-800 hover:shadow-lg transition-all duration-300 mb-6">
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-start gap-4">
-              <div className="p-3 rounded-lg text-2xl bg-blue-100 dark:bg-blue-900/30 flex-shrink-0">
-                <Lightbulb className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        {/* 📊 P/L HISTÓRICO - Chamada Atrativa */}
+        <Link href="/pl-bolsa">
+          <Card className="group cursor-pointer bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/30 dark:via-purple-950/30 dark:to-pink-950/30 border-2 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-xl transition-all duration-300 mb-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-200/30 to-purple-200/30 rounded-full -translate-y-32 translate-x-32 group-hover:scale-150 transition-transform duration-700"></div>
+            
+            <CardContent className="p-6 relative z-10">
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg flex-shrink-0">
+                  <TrendingUp className="w-8 h-8 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-bold text-xl text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      📊 A bolsa está cara ou barata?
+                    </h3>
+                    <Badge variant="secondary" className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0">
+                      Novo
+                    </Badge>
+                  </div>
+                  <p className="text-sm sm:text-base text-slate-700 dark:text-slate-300 leading-relaxed mb-4 font-medium">
+                    Descubra o P/L histórico da Bovespa desde 2010 com dados de mais de 300 empresas. 
+                    Compare com a média histórica e identifique se o mercado está caro ou barato.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium shadow-md"
+                    >
+                      Ver P/L Histórico
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                    <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-indigo-600" />
+                        Grátis
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-indigo-600" />
+                        Dados desde 2010
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-indigo-600" />
+                        +300 empresas
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 mb-2">
-                  {currentTip.title}
-                </h3>
-                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
-                  {currentTip.description}
-                </p>
-                <Button
-                  asChild
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                >
-                  <Link
-                    href={currentTip.ctaLink}
-                    className="flex items-center gap-2"
-                  >
-                    {currentTip.cta}
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
 
         {/* Layout Principal */}
         <div className="space-y-6">
@@ -625,76 +621,62 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* 3. FERRAMENTAS RÁPIDAS - Grid dinâmico (esconde se já está na dica) */}
-            {(!tipCoversBacktest || !tipCoversComparator) && (
-              <div
-                className={`grid gap-4 ${
-                  tipCoversBacktest || tipCoversComparator
-                    ? "grid-cols-1" // Se uma está na dica, mostrar apenas 1 coluna
-                    : "grid-cols-1 sm:grid-cols-2" // Se nenhuma está na dica, 2 colunas
-                }`}
-              >
-                {/* Backtest - Só mostrar se NÃO estiver na dica */}
-                {!tipCoversBacktest && (
-                  <Link href="/backtest">
-                    <Card className="group cursor-pointer bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg transition-all duration-300 h-full">
-                      <CardContent className="p-5">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
-                            <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
-                              Backtesting
-                            </h3>
-                            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 text-xs px-2 py-0.5 font-semibold">
-                              NOVO
-                            </Badge>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
-                          Simule carteiras históricas com métricas avançadas
-                        </p>
-                        <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-sm font-medium">
-                          <span>Testar agora</span>
-                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                )}
+            {/* 3. FERRAMENTAS RÁPIDAS */}
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+              <Link href="/backtest">
+                <Card className="group cursor-pointer bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg transition-all duration-300 h-full">
+                  <CardContent className="p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
+                        <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                          Backtesting
+                        </h3>
+                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 text-xs px-2 py-0.5 font-semibold">
+                          NOVO
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
+                      Simule carteiras históricas com métricas avançadas
+                    </p>
+                    <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-sm font-medium">
+                      <span>Testar agora</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
 
-                {/* Comparador - Só mostrar se NÃO estiver na dica */}
-                {!tipCoversComparator && (
-                  <Link href="/comparador">
-                    <Card className="group cursor-pointer bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg transition-all duration-300 h-full">
-                      <CardContent className="p-5">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
-                            <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
-                              Comparador
-                            </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Até 6 ações
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
-                          Compare ações lado a lado com análise setorial
-                        </p>
-                        <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-sm font-medium">
-                          <span>Comparar agora</span>
-                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                )}
-              </div>
-            )}
+              <Link href="/comparador">
+                <Card className="group cursor-pointer bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg transition-all duration-300 h-full">
+                  <CardContent className="p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
+                        <GitCompare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                          Comparador
+                        </h3>
+                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-xs px-2 py-0.5 font-semibold">
+                          GRÁTIS
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
+                      Compare até 6 ações lado a lado
+                    </p>
+                    <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-sm font-medium">
+                      <span>Comparar agora</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            </div>
 
             {/* 3.5. ANÁLISES RECOMENDADAS - Design Profissional */}
             {!companiesLoading && topCompanies.length > 0 && (

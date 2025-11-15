@@ -324,7 +324,7 @@ export async function calculateAggregatedPL(
   filters: PLBolsaFilters = {}
 ): Promise<PLBolsaDataPoint[]> {
   const {
-    startDate = new Date('2001-01-01'),
+    startDate = new Date('2010-01-01'),
     endDate = new Date(),
     sector,
     minScore,

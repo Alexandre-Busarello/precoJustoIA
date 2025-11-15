@@ -44,6 +44,29 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
     }))
   }, [data])
 
+  // Calcular domínio do eixo Y dinamicamente
+  const yAxisDomain = useMemo((): [number, number] => {
+    if (!data || data.length === 0) {
+      return [0, 20] // Valor padrão quando não há dados
+    }
+
+    // Encontrar valores mínimo e máximo dos dados
+    const plValues = data.map((item) => item.pl).filter((v) => v != null && isFinite(v))
+    
+    if (plValues.length === 0) {
+      return [0, 20] // Valor padrão quando não há valores válidos
+    }
+
+    const minPL = Math.min(...plValues)
+    const maxPL = Math.max(...plValues)
+
+    // Se o mínimo for >= 4, começar em 4, senão começar em 0
+    const yMin = minPL >= 4 ? 4 : 0
+    const yMax = maxPL * 1.05 // Adicionar 5% de margem no topo
+
+    return [yMin, yMax]
+  }, [data])
+
   // Formatar valor do P/L
   const formatPL = (value: number) => {
     return `${value.toFixed(2)}x`
@@ -123,7 +146,7 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
               <YAxis
                 tick={{ fontSize: 12 }}
                 tickFormatter={formatPL}
-                domain={['dataMin * 0.95', 'dataMax * 1.05']}
+                domain={yAxisDomain}
                 label={{
                   value: 'P/L',
                   angle: -90,

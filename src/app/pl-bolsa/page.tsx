@@ -5,7 +5,7 @@ import { getAvailableSectors } from '@/lib/pl-bolsa-service'
 export const metadata: Metadata = {
   title: 'P/L Histórico da Bovespa | Análise de Valuation da Bolsa Brasileira',
   description:
-    'Gráfico interativo do P/L histórico da Bovespa desde 2001. Filtre por setor, período e score. Entenda a evolução da valorização da bolsa brasileira.',
+    'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score. Entenda a evolução da valorização da bolsa brasileira.',
   keywords: [
     'P/L bovespa',
     'P/L histórico',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'P/L Histórico da Bovespa | Preço Justo AI',
     description:
-      'Gráfico interativo do P/L histórico da Bovespa desde 2001. Filtre por setor, período e score.',
+      'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score.',
     type: 'website',
     url: 'https://precojusto.ai/pl-bolsa',
   },
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'P/L Histórico da Bovespa',
     description:
-      'Gráfico interativo do P/L histórico da Bovespa desde 2001. Filtre por setor, período e score.',
+      'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score.',
   },
   alternates: {
     canonical: 'https://precojusto.ai/pl-bolsa',
@@ -46,7 +46,7 @@ export default async function PLBolsaPage() {
         </h1>
         <p className="text-lg text-muted-foreground max-w-3xl">
           Acompanhe a evolução do P/L (Preço/Lucro) agregado da bolsa brasileira
-          desde 2001. Use os filtros para analisar setores específicos, períodos
+          desde 2010. Use os filtros para analisar setores específicos, períodos
           de tempo e empresas com score mínimo.
         </p>
       </div>
@@ -159,15 +159,15 @@ export default async function PLBolsaPage() {
             '@type': 'Dataset',
             name: 'P/L Histórico da Bovespa',
             description:
-              'Dados históricos do P/L agregado da Bovespa desde 2001, calculado como média ponderada por market cap',
+              'Dados históricos do P/L agregado da Bovespa desde 2010, calculado como média ponderada por market cap',
             url: 'https://precojusto.ai/pl-bolsa',
             creator: {
               '@type': 'Organization',
               name: 'Preço Justo AI',
               url: 'https://precojusto.ai',
             },
-            datePublished: '2001-01-01',
-            temporalCoverage: '2001-01-01/..',
+            datePublished: '2010-01-01',
+            temporalCoverage: '2010-01-01/..',
             spatialCoverage: {
               '@type': 'Place',
               name: 'Brasil',

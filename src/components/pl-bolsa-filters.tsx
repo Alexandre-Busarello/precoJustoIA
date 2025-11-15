@@ -47,7 +47,7 @@ export function PLBolsaFilters({
     : lastYearEnd.toISOString().split('T')[0]
 
   const [startDate, setStartDate] = useState(
-    initialFilters?.startDate || '2001-01-01'
+    initialFilters?.startDate || '2010-01-01'
   )
   const [endDate, setEndDate] = useState(
     initialFilters?.endDate || maxEndDate
@@ -88,11 +88,11 @@ export function PLBolsaFilters({
     sector !== undefined ||
     minScore !== undefined ||
     excludeUnprofitable ||
-    startDate !== '2001-01-01' ||
+    startDate !== '2010-01-01' ||
     endDate !== maxEndDate
 
   const resetFilters = () => {
-    setStartDate('2001-01-01')
+    setStartDate('2010-01-01')
     setEndDate(maxEndDate)
     setSector(undefined)
     setMinScore(undefined)

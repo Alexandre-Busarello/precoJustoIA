@@ -46,7 +46,8 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
 
   const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras', '/pl-bolsa'].includes(pathname)
 
-  const tools = [
+  // Agrupar ferramentas por categoria
+  const analysisTools = [
     {
       href: '/ranking',
       icon: <BarChart3 className="w-4 h-4" />,
@@ -68,21 +69,30 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       title: 'Análise Setorial',
       description: 'Compare setores da B3',
       isPremium: false
-    },
+    }
+  ]
+
+  const marketTools = [
     {
       href: '/pl-bolsa',
       icon: <TrendingUp className="w-4 h-4" />,
       title: 'P/L Histórico',
-      description: 'P/L histórico da Bovespa desde 2001',
+      description: 'P/L histórico da Bovespa desde 2010',
       isPremium: false
-    },
+    }
+  ]
+
+  const comparisonTools = [
     {
       href: '/comparador',
       icon: <GitCompare className="w-4 h-4" />,
       title: 'Comparador',
       description: 'Compare ações lado a lado',
       isPremium: false
-    },
+    }
+  ]
+
+  const simulationTools = [
     {
       href: '/backtest',
       icon: <TrendingUp className="w-4 h-4" />,
@@ -108,7 +118,98 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       {isOpen && (
         <div className="absolute top-full left-0 mt-2 w-80 bg-background border border-border rounded-lg shadow-lg z-50">
           <div className="p-2">
-            {tools.map((tool) => (
+            {/* Análise */}
+            <div className="px-2 py-1 mb-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase">Análise</p>
+            </div>
+            {analysisTools.map((tool) => (
+              <Link
+                key={tool.href}
+                href={tool.href}
+                className={`flex items-center gap-3 p-3 rounded-md hover:bg-muted transition-colors ${
+                  pathname === tool.href ? 'bg-muted' : ''
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${
+                  tool.href === '/analise-setorial'
+                    ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
+                    : 'bg-gradient-to-br from-blue-500 to-purple-500'
+                }`}>
+                  <div className="text-white">
+                    {tool.icon}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{tool.title}</span>
+                    {tool.isNew && (
+                      <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                        🚀 Novo
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{tool.description}</p>
+                </div>
+              </Link>
+            ))}
+
+            {/* Mercado */}
+            <div className="px-2 py-1 mb-1 mt-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase">Mercado</p>
+            </div>
+            {marketTools.map((tool) => (
+              <Link
+                key={tool.href}
+                href={tool.href}
+                className={`flex items-center gap-3 p-3 rounded-md hover:bg-muted transition-colors ${
+                  pathname === tool.href ? 'bg-muted' : ''
+                }`}
+              >
+                <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500">
+                  <div className="text-white">
+                    {tool.icon}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{tool.title}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{tool.description}</p>
+                </div>
+              </Link>
+            ))}
+
+            {/* Comparação */}
+            <div className="px-2 py-1 mb-1 mt-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase">Comparação</p>
+            </div>
+            {comparisonTools.map((tool) => (
+              <Link
+                key={tool.href}
+                href={tool.href}
+                className={`flex items-center gap-3 p-3 rounded-md hover:bg-muted transition-colors ${
+                  pathname === tool.href ? 'bg-muted' : ''
+                }`}
+              >
+                <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500">
+                  <div className="text-white">
+                    {tool.icon}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{tool.title}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{tool.description}</p>
+                </div>
+              </Link>
+            ))}
+
+            {/* Simulação */}
+            <div className="px-2 py-1 mb-1 mt-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase">Simulação</p>
+            </div>
+            {simulationTools.map((tool) => (
               <Link
                 key={tool.href}
                 href={tool.href}
@@ -119,8 +220,6 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
                 <div className={`p-2 rounded-lg ${
                   tool.isPremium 
                     ? 'bg-gradient-to-br from-emerald-500 to-teal-500' 
-                    : tool.href === '/analise-setorial'
-                    ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
                     : 'bg-gradient-to-br from-blue-500 to-purple-500'
                 }`}>
                   <div className="text-white">
@@ -133,11 +232,6 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
                     {tool.isPremium && !isPremium && (
                       <Badge variant="default" className="text-xs bg-gradient-to-r from-emerald-500 to-teal-500">
                         Premium
-                      </Badge>
-                    )}
-                    {(tool.isNew || tool.href === '/analise-setorial') && (
-                      <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
-                        🚀 Novo
                       </Badge>
                     )}
                   </div>

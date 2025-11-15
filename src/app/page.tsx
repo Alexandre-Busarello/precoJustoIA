@@ -670,7 +670,7 @@ export default async function Home() {
                   </div>
                   <h3 className="text-base sm:text-lg font-bold mb-2 sm:mb-3 group-hover:text-indigo-600 transition-colors">P/L Histórico da Bolsa</h3>
                   <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed flex-grow">
-                    Acompanhe a evolução do P/L agregado da Bovespa desde 2001 com filtros avançados
+                    Acompanhe a evolução do P/L agregado da Bovespa desde 2010 com filtros avançados
                   </p>
                 </CardContent>
               </Card>

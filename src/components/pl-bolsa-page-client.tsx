@@ -11,7 +11,8 @@ import {
 } from '@/components/pl-bolsa-filters'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Lock, ArrowRight } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Lock, ArrowRight, Check } from 'lucide-react'
 
 interface PLBolsaPageClientProps {
   initialSectors: string[]
@@ -79,7 +80,7 @@ export function PLBolsaPageClient({
   const isLoggedIn = !!session
 
   const [filters, setFilters] = useState<PLBolsaFiltersState>({
-    startDate: '2001-01-01',
+    startDate: '2010-01-01',
     endDate: new Date().toISOString().split('T')[0],
     sector: undefined,
     minScore: undefined,
@@ -94,10 +95,9 @@ export function PLBolsaPageClient({
     gcTime: 30 * 60 * 1000, // 30 minutos (antes era cacheTime)
   })
 
-  // Se não está logado e requer login, limitar data final ao ano anterior
+  // Calcular data limite para não logados
   const currentYear = new Date().getFullYear()
   const lastYearEnd = new Date(currentYear - 1, 11, 31)
-  const requiresLogin = data?.requiresLogin || (!isLoggedIn && filters.endDate && new Date(filters.endDate) > lastYearEnd)
 
   return (
     <div className="space-y-6">
@@ -108,36 +108,57 @@ export function PLBolsaPageClient({
         initialFilters={filters}
       />
 
-      {/* CTA de Login/Cadastro para não logados */}
-      {requiresLogin && !isLoggedIn && (
-        <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-4">
+      {/* CTA de Login/Cadastro para não logados - ANTES do gráfico */}
+      {!isLoggedIn && (
+        <Card className="border-2 border-indigo-300 dark:border-indigo-700 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/30 dark:via-purple-950/30 dark:to-pink-950/30 shadow-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-200/20 to-purple-200/20 rounded-full -translate-y-32 translate-x-32"></div>
+          
+          <CardContent className="p-6 relative z-10">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
               <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Lock className="w-6 h-6 text-white" />
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Lock className="w-8 h-8 text-white" />
                 </div>
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold mb-2">
-                  Acesse dados completos do ano atual
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Faça login ou cadastre-se gratuitamente para ver o P/L histórico completo da Bovespa,
-                  incluindo dados do ano atual e análises avançadas.
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                    🔒 Desbloqueie dados completos de 2025
+                  </h3>
+                  <Badge variant="secondary" className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0">
+                    Grátis
+                  </Badge>
+                </div>
+                <p className="text-slate-700 dark:text-slate-300 mb-4 text-base leading-relaxed">
+                  Você está visualizando dados até <strong>dezembro de 2024</strong>. 
+                  Faça login ou cadastre-se gratuitamente para acessar dados atualizados de <strong>2025</strong> e análises completas do P/L histórico da Bovespa.
                 </p>
                 <div className="flex flex-wrap gap-3">
-                  <Button asChild className="bg-blue-600 hover:bg-blue-700">
+                  <Button asChild size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium shadow-md">
                     <Link href={`/register?acquisition=P/L Histórico da Bovespa&callbackUrl=/pl-bolsa`}>
                       Criar conta gratuita
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </Link>
                   </Button>
-                  <Button variant="outline" asChild>
+                  <Button variant="outline" size="lg" asChild className="border-2">
                     <Link href={`/login?callbackUrl=/pl-bolsa`}>
                       Já tenho conta
                     </Link>
                   </Button>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Check className="w-3 h-3 text-indigo-600" />
+                    Cadastro em 30 segundos
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Check className="w-3 h-3 text-indigo-600" />
+                    Sem cartão de crédito
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Check className="w-3 h-3 text-indigo-600" />
+                    Dados completos de 2025
+                  </span>
                 </div>
               </div>
             </div>
@@ -158,13 +179,13 @@ export function PLBolsaPageClient({
         loading={isLoading}
       />
 
-      {/* Mensagem informativa para não logados */}
-      {requiresLogin && !isLoggedIn && (
-        <Card className="bg-muted/50">
+      {/* Mensagem informativa para não logados - DEPOIS do gráfico */}
+      {!isLoggedIn && (
+        <Card className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 border border-slate-200 dark:border-slate-700">
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground text-center">
-              📊 Dados exibidos até {lastYearEnd.toLocaleDateString('pt-BR', { year: 'numeric', month: 'long' })}. 
-              {' '}Faça login para ver dados atualizados do ano atual.
+            <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
+              📊 <strong>Dados exibidos até {lastYearEnd.toLocaleDateString('pt-BR', { year: 'numeric', month: 'long' })}.</strong> 
+              {' '}Faça login ou cadastre-se gratuitamente para ver dados atualizados de 2025.
             </p>
           </CardContent>
         </Card>

@@ -7,8 +7,8 @@ import { z } from 'zod'
 import crypto from 'crypto'
 
 const anonymizeSchema = z.object({
-  confirm: z.literal(true, {
-    errorMap: () => ({ message: 'Você deve confirmar a anonimização' })
+  confirm: z.boolean().refine((val) => val === true, {
+    message: 'Você deve confirmar a anonimização'
   }),
 })
 

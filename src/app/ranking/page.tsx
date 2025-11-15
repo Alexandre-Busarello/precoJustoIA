@@ -181,7 +181,9 @@ function RankingContent() {
   const { isPremium } = usePremiumStatus()
   const searchParams = useSearchParams()
   const rankingId = searchParams.get('id')
-  const assetType = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
+  const assetTypeParam = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
+  // Se houver rankingId mas não houver assetType, usar 'both' como padrão para não mostrar o hub
+  const assetType = assetTypeParam || (rankingId ? 'both' : null)
   const isLoggedIn = !!session
   const [showHistory, setShowHistory] = useState(true)
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)
@@ -223,7 +225,7 @@ function RankingContent() {
     }
   }, [rankingId, assetType]) // Incluir assetType nas dependências
   
-  // Se não houver assetType, mostrar o HUB com conteúdo SEO (DEPOIS de todos os hooks)
+  // Se não houver assetType E não houver rankingId, mostrar o HUB com conteúdo SEO (DEPOIS de todos os hooks)
   if (!assetType) {
     return (
       <AssetTypeHubWrapper

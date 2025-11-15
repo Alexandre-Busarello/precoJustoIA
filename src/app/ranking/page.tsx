@@ -27,6 +27,7 @@ import {
   AlertCircle
 } from "lucide-react"
 import Link from "next/link"
+import Head from "next/head"
 
 // FAQs para SEO
 const faqs = [
@@ -237,6 +238,22 @@ function RankingContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
+      <Head>
+        <title>Rankings de Ações B3 - 8 Modelos de Análise Fundamentalista | Preço Justo AI</title>
+        <meta name="description" content="Rankings de ações B3 com 8 modelos de análise fundamentalista: Fórmula de Graham (grátis), Value Investing, Fórmula Mágica, Dividend Yield, FCD, Gordon, Fundamentalista 3+1 e Análise Preditiva com IA. Encontre as melhores ações da Bolsa brasileira e BDRs." />
+        <meta name="keywords" content="rankings ações, ranking ações B3, análise fundamentalista ações, fórmula graham, value investing, fórmula mágica greenblatt, dividend yield, fluxo de caixa descontado, análise ações, ranking ações bolsa, melhores ações B3, ações subvalorizadas, análise preditiva IA, screening ações, valuation ações, ROE ações, P/L ações" />
+        <meta property="og:title" content="Rankings de Ações B3 - 8 Modelos de Análise Fundamentalista | Preço Justo AI" />
+        <meta property="og:description" content="Encontre as melhores ações da B3 e BDRs com 8 modelos de análise fundamentalista. De Graham a Inteligência Artificial: escolha a estratégia ideal para seu perfil." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://precojusto.ai/ranking" />
+        <meta property="og:site_name" content="Preço Justo AI" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Rankings de Ações B3 - 8 Modelos de Análise Fundamentalista | Preço Justo AI" />
+        <meta name="twitter:description" content="Encontre as melhores ações da B3 e BDRs com 8 modelos de análise fundamentalista. De Graham a Inteligência Artificial." />
+        <link rel="canonical" href="https://precojusto.ai/ranking" />
+        <meta name="robots" content="index, follow" />
+      </Head>
+      
       {/* Hero Section - Compacto para Premium */}
       <section className={`bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 ${
         isPremium ? 'py-6 md:py-8' : 'py-12 md:py-20'
@@ -531,6 +548,103 @@ function RankingContent() {
         </div>
         )}
 
+        {/* SEO Content Section - Apenas para usuários não logados */}
+        {!isLoggedIn && (
+          <div className="mb-12 space-y-8">
+            {/* O que são Rankings de Ações */}
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-8">
+                <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
+                  O que são Rankings de Ações?
+                </h2>
+                <div className="prose prose-slate dark:prose-invert max-w-none">
+                  <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-4">
+                    <strong>Rankings de ações</strong> são listas ordenadas de empresas da Bolsa de Valores (B3) baseadas em critérios específicos de <strong>análise fundamentalista</strong>. Nossa plataforma utiliza <strong>8 modelos consagrados de valuation</strong> para identificar as melhores oportunidades de investimento em ações brasileiras e BDRs.
+                  </p>
+                  <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-4">
+                    Cada modelo de <strong>ranking fundamentalista</strong> aplica uma metodologia diferente: desde a clássica <strong>Fórmula de Graham</strong> (gratuita) até análises avançadas com <strong>Inteligência Artificial</strong> que combinam múltiplas estratégias simultaneamente. Todos os rankings são gerados com dados financeiros reais da B3, processados através de <strong>análise fundamentalista rigorosa</strong>.
+                  </p>
+                  <h3 className="text-2xl font-semibold mt-6 mb-3 text-slate-900 dark:text-white">
+                    Por que Usar Rankings de Ações?
+                  </h3>
+                  <ul className="list-disc list-inside space-y-2 text-slate-700 dark:text-slate-300">
+                    <li><strong>Economize Tempo:</strong> Em vez de analisar centenas de ações manualmente, nossos rankings apresentam as melhores oportunidades já ordenadas</li>
+                    <li><strong>Metodologias Comprovadas:</strong> Utilizamos estratégias criadas por investidores lendários como Benjamin Graham e Joel Greenblatt</li>
+                    <li><strong>Análise Profunda:</strong> Cada ação no ranking recebe uma análise detalhada explicando por que foi selecionada</li>
+                    <li><strong>Preço Justo Calculado:</strong> Descubra o valor intrínseco de cada ação e o potencial de valorização (upside)</li>
+                    <li><strong>Histórico Salvo:</strong> Para usuários logados, todos os rankings são salvos para consulta futura</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Modelos Disponíveis */}
+            <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+              <CardContent className="p-8">
+                <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
+                  Modelos de Análise Fundamentalista Disponíveis
+                </h2>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                      <Target className="w-5 h-5 inline mr-2" />
+                      Fórmula de Graham (Gratuito)
+                    </h3>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      Método clássico criado por <strong>Benjamin Graham</strong>, o pai do value investing. Identifica ações subvalorizadas com margem de segurança incorporada. Ideal para investidores conservadores que buscam <strong>ações baratas</strong> e empresas sólidas.
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                      <Brain className="w-5 h-5 inline mr-2" />
+                      Análise Preditiva com IA (Premium)
+                    </h3>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      <strong>Inteligência Artificial</strong> que combina TODAS as estratégias disponíveis. Usa machine learning para identificar padrões complexos e criar rankings preditivos personalizados. Considera análise técnica e fundamentalista simultaneamente.
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                      <DollarSign className="w-5 h-5 inline mr-2" />
+                      Dividend Yield Anti-Trap (Premium)
+                    </h3>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      Foca em <strong>renda passiva sustentável</strong> evitando dividend traps. Analisa sustentabilidade do payout, histórico de pagamentos e qualidade da empresa. Ideal para investidores que buscam <strong>dividendos consistentes</strong>.
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                      <PieChart className="w-5 h-5 inline mr-2" />
+                      Fórmula Mágica (Premium)
+                    </h3>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      Método de <strong>Joel Greenblatt</strong> que combina qualidade operacional (ROIC) e preço atrativo (Earnings Yield). Equilibra rentabilidade e valuation para encontrar empresas excelentes a preços justos.
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                      <Calculator className="w-5 h-5 inline mr-2" />
+                      Fluxo de Caixa Descontado - FCD (Premium)
+                    </h3>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      Avaliação intrínseca por <strong>DCF (Discounted Cash Flow)</strong> com projeções sofisticadas de fluxo de caixa futuro. Calcula o valor intrínseco real da empresa considerando taxa de desconto e crescimento projetado.
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                      <BarChart3 className="w-5 h-5 inline mr-2" />
+                      Fundamentalista 3+1 (Premium)
+                    </h3>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      Análise simplificada com <strong>3 pilares essenciais</strong>: Qualidade (ROE, ROIC, margens), Preço (P/L, P/VP) e Endividamento (contexto por setor), mais bônus de dividendos sustentáveis.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* FAQs - Oculto para Premium */}
         {!isPremium && (
         <div className="mb-12">
@@ -566,8 +680,8 @@ function RankingContent() {
         )}
       </div>
 
-      {/* Footer */}
-      <Footer />
+      {/* Footer - Apenas para usuários não logados */}
+      {!isLoggedIn && <Footer />}
 
       {/* Schema Markup para SEO */}
       <script

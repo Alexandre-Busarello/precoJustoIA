@@ -13,7 +13,7 @@ export async function GET() {
   </sitemap>
   <sitemap>
     <loc>${baseUrl}/sitemap-blog.xml</loc>
-    <lastmod>2025-09-01</lastmod>
+    <lastmod>2025-11-11</lastmod>
   </sitemap>
   <sitemap>
     <loc>${baseUrl}/sitemap-companies.xml</loc>

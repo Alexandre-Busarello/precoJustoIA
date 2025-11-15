@@ -5,7 +5,7 @@ title: "Fórmula de Benjamin Graham: Como Encontrar Ações Baratas"
 excerpt: Entenda os critérios do pai do value investing e como aplicá-los para encontrar empresas subvalorizadas na bolsa brasileira.
 category: Estratégias
 readTime: 12 min
-publishDate: 2025-01-03
+publishDate: 2025-10-07
 author: Equipe Preço Justo AI
 tags:
   - Benjamin Graham

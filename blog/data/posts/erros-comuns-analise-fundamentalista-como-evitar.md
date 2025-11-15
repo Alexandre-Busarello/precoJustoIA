@@ -5,7 +5,7 @@ title: Erros Comuns na Análise Fundamentalista (e Como Evitá-los)
 excerpt: Os 10 erros mais frequentes que investidores cometem ao analisar empresas e como nossa plataforma ajuda a evitá-los.
 category: Educação
 readTime: 11 min
-publishDate: 2025-01-30
+publishDate: 2025-10-28
 author: Equipe Preço Justo AI
 tags:
   - erros comuns

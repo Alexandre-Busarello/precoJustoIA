@@ -5,7 +5,7 @@ title: "P/L, P/VPA, ROE: Entendendo os Indicadores Fundamentalistas"
 excerpt: Guia completo dos principais indicadores usados na análise fundamentalista, com exemplos práticos de empresas da B3.
 category: Educação
 readTime: 13 min
-publishDate: 2025-02-07
+publishDate: 2025-10-21
 author: Equipe Preço Justo AI
 tags:
   - indicadores

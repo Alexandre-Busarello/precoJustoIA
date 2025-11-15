@@ -5,7 +5,7 @@ title: Guia Completo da Análise Fundamentalista para Iniciantes
 excerpt: Aprenda passo a passo como analisar empresas usando os fundamentos financeiros. Do básico ao avançado, com exemplos práticos da B3.
 category: Educação
 readTime: 15 min
-publishDate: 2024-12-15
+publishDate: 2025-09-30
 author: Equipe Preço Justo AI
 featured: true
 tags:

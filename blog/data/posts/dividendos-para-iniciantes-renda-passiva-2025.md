@@ -5,7 +5,7 @@ title: "Dividendos para Iniciantes: Como Receber um 'Salário Extra' Todo Mês c
 excerpt: "Aprenda o passo a passo para ganhar renda passiva com dividendos. Um guia simples para escolher as melhores ações, montar sua primeira carteira e fazer o dinheiro trabalhar para você."
 category: Renda Passiva
 readTime: 8 min
-publishDate: 2025-01-15
+publishDate: 2025-10-14
 author: Equipe Preço Justo AI
 tags:
   - dividendos para iniciantes

@@ -5,7 +5,7 @@ title: "Calculadora de Dividend Yield: Descubra Quanto Você Pode Ganhar com Div
 excerpt: "Use nossa calculadora gratuita de dividend yield e descubra quanto você pode ganhar mensalmente com dividendos. Aprenda a calcular sua renda passiva projetada e tome decisões de investimento mais inteligentes."
 category: Ferramentas
 readTime: 10 min
-publishDate: 2025-01-20
+publishDate: 2025-11-04
 author: Equipe Preço Justo AI
 featured: true
 tags:

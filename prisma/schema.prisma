@@ -67,6 +67,15 @@ model User {
   // Acquisition tracking
   acquisition         String?   @map("acquisition") // Origem do cadastro (ex: "Calculadora de Dividend Yield")
   
+  // Onboarding
+  lastOnboardingSeenAt DateTime? @map("last_onboarding_seen_at") // Última vez que viu o onboarding
+  onboardingAcquisitionSource String? @map("onboarding_acquisition_source") // Como chegou até aqui (Google, YouTube, etc)
+  onboardingExperienceLevel String? @map("onboarding_experience_level") // Nível de experiência (Iniciante, Intermediário, Avançado)
+  onboardingInvestmentFocus String? @map("onboarding_investment_focus") // Foco principal (Renda Passiva, Crescimento, Ambos, Explorar)
+  
+  // Metadata
+  createdAt           DateTime  @default(now()) @map("created_at")
+  
   accounts         Account[]
   sessions         Session[]
   portfolios       Portfolio[]

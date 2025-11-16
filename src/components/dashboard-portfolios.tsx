@@ -96,51 +96,20 @@ export function DashboardPortfolios() {
         localStorage.removeItem(cacheKey);
       }
 
-      // Buscar do servidor
-      const response = await fetch("/api/portfolio");
+      // Buscar do servidor - endpoint único que retorna tudo pronto
+      const response = await fetch("/api/portfolio/dashboard");
       if (!response.ok) throw new Error("Failed to fetch portfolios");
 
       const data = await response.json();
       
-      // Fetch metrics for each portfolio em paralelo (otimização)
-      const portfoliosWithMetrics = await Promise.all(
-        data.portfolios.map(async (p: any) => {
-          try {
-            const metricsRes = await fetch(`/api/portfolio/${p.id}/metrics`);
-            if (!metricsRes.ok) return null;
-            
-            const metricsData = await metricsRes.json();
-            const metrics = metricsData.metrics;
-
-            return {
-              id: p.id,
-              name: p.name,
-              currentValue: metrics.currentValue || 0,
-              cashBalance: metrics.cashBalance || 0,
-              totalInvested: metrics.totalInvested || 0,
-              totalReturn: metrics.totalReturn || 0,
-              evolutionData: (metrics.evolutionData || []).slice(-6), // Last 6 months
-            };
-          } catch (error) {
-            console.error(`Error fetching metrics for ${p.id}:`, error);
-            return null;
-          }
-        })
-      );
-
-      const validPortfolios = portfoliosWithMetrics.filter(
-        (p): p is Portfolio => p !== null
-      );
-      
-      // Sort by return (best first)
-      validPortfolios.sort((a, b) => b.totalReturn - a.totalReturn);
-      
-      setPortfolios(validPortfolios);
+      // Dados já vêm ordenados e formatados do servidor
+      const portfoliosData = data.portfolios || [];
+      setPortfolios(portfoliosData);
       setFromCache(false);
 
       // Salvar no cache com expiração de 1 hora
       const cacheData: CachedPortfolioData = {
-        portfolios: validPortfolios,
+        portfolios: portfoliosData,
         timestamp: now,
         expiresAt: now + (60 * 60 * 1000), // 1 hora
       };

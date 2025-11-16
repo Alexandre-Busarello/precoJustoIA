@@ -15,10 +15,10 @@ import TechnicalAnalysisSection from '@/components/technical-analysis-section'
 import MarketSentimentSection from '@/components/market-sentiment-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import AssetSubscriptionButton from '@/components/asset-subscription-button'
-import { RelatedCompanies } from '@/components/related-companies'
 import { Footer } from '@/components/footer'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
+import { getSectorCompetitors } from '@/lib/competitor-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -46,13 +46,6 @@ interface PageProps {
   }
 }
 
-interface CompetitorData {
-  ticker: string;
-  name: string;
-  sector: string | null;
-  logoUrl?: string | null;
-  marketCap?: any;
-}
 
 // Tipo para valores do Prisma que podem ser Decimal
 type PrismaDecimal = { toNumber: () => number } | number | string | null | undefined
@@ -154,12 +147,30 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     
     const title = `${ticker} - ${company.name} | Análise Completa de BDR - Preço Justo AI`
     
-    const baseDescription = `Análise completa do BDR ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, P/L: ${latestFinancials?.pl ? (toNumber(latestFinancials.pl) ?? 0).toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? ((toNumber(latestFinancials.roe) ?? 0) * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
+    // Construir descrição base com informações financeiras
+    const priceInfo = currentPrice > 0 ? `Preço atual R$ ${currentPrice.toFixed(2)}` : ''
+    const plInfo = latestFinancials?.pl ? `P/L: ${(toNumber(latestFinancials.pl) ?? 0).toFixed(1)}` : ''
+    const roeInfo = latestFinancials?.roe ? `ROE: ${((toNumber(latestFinancials.roe) ?? 0) * 100).toFixed(1)}%` : ''
+    const sectorInfo = company.sector ? `Setor ${company.sector}` : ''
     
-    const companyInfo = company.description 
-      ? ` ${company.description.substring(0, 100)}...` 
-      : ''
+    const financialMetrics = [priceInfo, plInfo, roeInfo, sectorInfo].filter(Boolean).join(', ')
     
+    // Verificar se a descrição contém o texto padrão sobre BDRs
+    const defaultBdrText = 'BDRs são certificados de depósito que representam ações de empresas estrangeiras negociadas na B3'
+    const hasDefaultDescription = company.description?.includes(defaultBdrText) || false
+    
+    // Usar descrição da empresa apenas se não for o texto padrão e tiver conteúdo útil
+    let companyInfo = ''
+    if (company.description && !hasDefaultDescription && company.description.length > 50) {
+      // Pegar apenas as primeiras palavras úteis (evitar textos muito genéricos)
+      const cleanDescription = company.description.trim()
+      if (cleanDescription.length > 50 && !cleanDescription.toLowerCase().startsWith('bdr')) {
+        companyInfo = ` ${cleanDescription.substring(0, 120).trim()}...`
+      }
+    }
+    
+    // Construir descrição final priorizando informações específicas da empresa
+    const baseDescription = `Análise completa do BDR ${company.name} (${ticker}). ${financialMetrics}.`
     const description = `${baseDescription}${companyInfo} Análise com IA, indicadores financeiros e estratégias de investimento em BDRs.`
 
     const metadata = {
@@ -257,12 +268,13 @@ export default async function BdrPage({ params }: PageProps) {
       }
     }),
     getComprehensiveFinancialData(ticker, 'YEARLY', 7),
+    // Contar todos os relatórios (mensais e mudanças fundamentais)
     prisma.aIReport.count({
       where: {
         company: {
           ticker: ticker
         },
-        type: 'FUNDAMENTAL_CHANGE'
+        status: 'COMPLETED'
       }
     }),
     prisma.youTubeAnalysis.findFirst({
@@ -301,6 +313,24 @@ export default async function BdrPage({ params }: PageProps) {
   const latestFinancials = companyData.financialData?.[0]
   const latestQuote = companyData.dailyQuotes?.[0]
   const currentPrice = toNumber(latestQuote?.price) ?? toNumber(latestFinancials?.lpa) ?? 0
+
+  // Buscar concorrentes inteligentes para comparador premium (apenas BDRs)
+  const currentMarketCap = toNumber(latestFinancials?.marketCap)
+  const competitors = companyData.sector 
+    ? await getSectorCompetitors({
+        currentTicker: ticker,
+        sector: companyData.sector,
+        industry: companyData.industry,
+        currentMarketCap,
+        limit: 5,
+        assetType: 'BDR'
+      })
+    : []
+  
+  // Criar URL do comparador inteligente
+  const smartComparatorUrl = competitors.length > 0 
+    ? `/compara-acoes/${ticker}/${competitors.map(c => c.ticker).join('/')}`
+    : null
 
   // Converter dados financeiros para números
   const serializedFinancials = latestFinancials ? Object.fromEntries(
@@ -416,8 +446,28 @@ export default async function BdrPage({ params }: PageProps) {
                       </div>
                     )}
 
+                    {/* Card de Notificações - Destacado (apenas quando cards estão empilhados, até 1024px) */}
+                    <div className="mb-6 lg:hidden">
+                      <AssetSubscriptionButton
+                        ticker={ticker}
+                        companyId={companyData.id}
+                        variant="card"
+                        size="default"
+                        showLabel={true}
+                      />
+                    </div>
+
                     {/* Botões de Ação */}
                     <div className="mb-4 flex flex-wrap gap-2">
+                      {smartComparatorUrl && (
+                        <Button asChild>
+                          <Link href={smartComparatorUrl}>
+                            <GitCompare className="w-4 h-4 mr-2" />
+                            Comparador Inteligente
+                          </Link>
+                        </Button>
+                      )}
+                      
                       <AddToBacktestButton
                         asset={{
                           ticker: companyData.ticker,
@@ -429,14 +479,6 @@ export default async function BdrPage({ params }: PageProps) {
                         size="default"
                         showLabel={true}
                       />
-
-                      {/* <AssetSubscriptionButton
-                        ticker={ticker}
-                        companyId={companyData.id}
-                        variant="outline"
-                        size="default"
-                        showLabel={true}
-                      /> */}
 
                       {reportsCount > 0 && (
                         <Button asChild variant="outline" size="default">
@@ -494,6 +536,18 @@ export default async function BdrPage({ params }: PageProps) {
             {/* Card do Score - Separado */}
             <div className="lg:flex-shrink-0">
               <HeaderScoreWrapper ticker={ticker} />
+              
+              {/* Card de Notificações - Destacado (apenas quando cards estão lado a lado, >= 1024px) */}
+              <div className="hidden lg:block mt-4 lg:w-80">
+                <AssetSubscriptionButton
+                  ticker={ticker}
+                  companyId={companyData.id}
+                  variant="card"
+                  size="default"
+                  showLabel={true}
+                  compact={true}
+                />
+              </div>
             </div>
           </div>
         </div>

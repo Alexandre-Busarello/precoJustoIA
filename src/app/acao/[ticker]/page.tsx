@@ -22,6 +22,7 @@ import { Footer } from '@/components/footer'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
+import { getSectorCompetitors, getMixedRelatedCompanies, type CompetitorData } from '@/lib/competitor-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -51,328 +52,8 @@ interface PageProps {
   }
 }
 
-interface CompetitorData {
-  ticker: string;
-  name: string;
-  sector: string | null;
-  logoUrl?: string | null;
-  marketCap?: any;
-}
-
-
-// Funções de formatação definidas mais abaixo
-
-
-// Função para extrair prefixo do ticker (remove números finais)
-function getTickerPrefix(ticker: string): string {
-  return ticker.replace(/\d+$/, '') // Remove números no final
-}
-
-// Função para determinar o tamanho da empresa (reutiliza lógica do filterCompaniesBySize)
-function getCompanySize(marketCap: number | null): 'small_caps' | 'mid_caps' | 'blue_chips' | null {
-  if (!marketCap) return null;
-  
-  // Valores em bilhões de reais
-  const marketCapBillions = marketCap / 1_000_000_000;
-  
-  if (marketCapBillions < 2) {
-    return 'small_caps'; // Menos de R$ 2 bilhões
-  } else if (marketCapBillions >= 2 && marketCapBillions < 10) {
-    return 'mid_caps'; // R$ 2-10 bilhões
-  } else {
-    return 'blue_chips'; // Mais de R$ 10 bilhões
-  }
-}
-
-// Cache agora usa Redis com fallback para memória
-const COMPETITORS_CACHE_TTL = 1440 * 60 // 1 dia em segundos
+// Cache para metadata
 const METADATA_CACHE_TTL = 60 * 60 // 60 minutos em segundos
-
-// Função mista: combina empresas inteligentes (premium) + básicas para SEO
-async function getMixedRelatedCompanies(
-  currentTicker: string, 
-  sector: string | null, 
-  intelligentCompetitors: CompetitorData[], 
-  limit: number = 6
-): Promise<CompetitorData[]> {
-  if (!sector) return []
-  
-  try {
-    // Pegar 2-3 empresas do comparador inteligente (as melhores)
-    const intelligentPick = intelligentCompetitors.slice(0, 3)
-    const intelligentTickers = intelligentPick.map(c => c.ticker)
-    
-    // Completar com empresas básicas do setor (excluindo as já selecionadas)
-    const remainingSlots = limit - intelligentPick.length
-    const basicCompanies = await getBasicRelatedCompanies(
-      currentTicker, 
-      sector, 
-      remainingSlots + 3, // Buscar mais para ter opções
-      [...intelligentTickers, currentTicker] // Excluir empresas já selecionadas
-    )
-    
-    // Combinar e limitar ao total desejado
-    const mixed = [...intelligentPick, ...basicCompanies.slice(0, remainingSlots)]
-    return mixed.slice(0, limit)
-    
-  } catch (error) {
-    console.error('❌ Erro ao buscar empresas relacionadas mistas:', error)
-    return []
-  }
-}
-
-// Função básica para empresas relacionadas (SEO) - sem inteligência premium
-async function getBasicRelatedCompanies(
-  currentTicker: string, 
-  sector: string | null, 
-  limit: number = 6, 
-  excludeTickers: string[] = []
-): Promise<CompetitorData[]> {
-  if (!sector) return []
-  
-  try {
-    // Busca simples por setor, ordenada por market cap (sem inteligência premium)
-    const companies = await prisma.company.findMany({
-      where: {
-        sector: sector,
-        ticker: { 
-          notIn: excludeTickers.length > 0 ? excludeTickers : [currentTicker]
-        },
-        // Apenas empresas com dados financeiros básicos
-        financialData: {
-          some: {
-            marketCap: { not: null }
-          }
-        }
-      },
-      select: {
-        ticker: true,
-        name: true,
-        sector: true,
-        logoUrl: true,
-        financialData: {
-          select: {
-            marketCap: true,
-          },
-          orderBy: { year: 'desc' },
-          take: 1
-        }
-      },
-      orderBy: {
-        financialData: {
-          _count: 'desc' // Priorizar empresas com mais dados
-        }
-      },
-      take: limit
-    })
-
-    return companies.map(company => ({
-      ticker: company.ticker,
-      name: company.name,
-      sector: company.sector,
-      logoUrl: company.logoUrl,
-      marketCap: company.financialData?.[0]?.marketCap || null
-    } as CompetitorData))
-
-  } catch (error) {
-    console.error('❌ Erro ao buscar empresas relacionadas:', error)
-    return []
-  }
-}
-
-// Função para buscar concorrentes do mesmo setor com priorização de subsetor (otimizada)
-async function getSectorCompetitors(currentTicker: string, sector: string | null, industry: string | null, currentMarketCap: number | null = null, limit: number = 5): Promise<CompetitorData[]> {
-  if (!sector) return []
-  
-  try {
-    // Determinar o tamanho da empresa atual
-    const currentCompanySize = getCompanySize(currentMarketCap)
-    
-    // Verificar cache primeiro (incluir tamanho na chave do cache)
-    const cacheKey = `competitors-${currentTicker}-${sector}-${industry}-${currentCompanySize}-${limit}-v2`
-    const cached = await cache.get<{ ticker: string; name: string; sector: string | null }[]>(cacheKey, {
-      prefix: 'companies',
-      ttl: COMPETITORS_CACHE_TTL
-    })
-    
-    if (cached) {
-      console.log('📋 Usando concorrentes do cache para', currentTicker)
-      return cached
-    }
-
-    const currentPrefix = getTickerPrefix(currentTicker)
-    const currentYear = new Date().getFullYear()
-    
-    // Sempre incluir dados financeiros para filtrar por tamanho e lucro
-    // Para Large Caps, incluir dados financiais para filtrar por market cap
-    
-    const allCompetitors = await prisma.company.findMany({
-      where: {
-        OR: [
-          { industry: industry || undefined },
-          { sector: sector }
-        ],
-        ticker: { not: currentTicker },
-        // Filtrar empresas com dados financeiros recentes e com lucro positivo
-        financialData: {
-          some: {
-            year: { gte: currentYear - 1 },
-            // Excluir empresas com prejuízo (lucro líquido negativo ou nulo)
-            lucroLiquido: {
-              gt: 0
-            }
-          }
-        }
-      },
-      select: {
-        ticker: true,
-        name: true,
-        sector: true,
-        industry: true,
-        logoUrl: true,
-        // Incluir dados financiais apenas se for blue chip
-        financialData: {
-          select: {
-            marketCap: true,
-            lucroLiquido: true,
-            year: true
-          },
-          where: {
-            year: { gte: currentYear - 1 },
-            lucroLiquido: {
-              gt: 0
-            }
-          },
-          orderBy: { year: 'desc' },
-          take: 1
-        }
-      },
-      orderBy: [
-        { industry: industry ? 'asc' : 'desc' }, // Priorizar industry se especificado
-        { ticker: 'asc' }
-      ],
-      take: limit * 10 // Buscar mais para ter opções após filtrar prefixos, tamanho e lucro
-    })
-
-    // Filtrar empresas com mesmo prefixo e priorizar por industry
-    const seenPrefixes = new Set([currentPrefix])
-    const competitors: { ticker: string; name: string; sector: string | null }[] = []
-    
-    // Função auxiliar para verificar se a empresa atende aos critérios
-    const isValidCompetitor = (company: any, allowDifferentSizes: boolean = false): boolean => {
-      const companyPrefix = getTickerPrefix(company.ticker)
-      if (seenPrefixes.has(companyPrefix)) return false
-      
-      // Verificar se tem dados financeiros válidos
-      const financialData = company.financialData?.[0]
-      if (!financialData) return false
-      
-      // Verificar se tem lucro positivo (já filtrado na query, mas double check)
-      const lucroLiquido = toNumber(financialData.lucroLiquido)
-      if (!lucroLiquido || lucroLiquido <= 0) return false
-      
-      // Filtrar por tamanho de empresa (comparar com empresa atual)
-      if (currentCompanySize && !allowDifferentSizes) {
-        const competitorMarketCap = toNumber(financialData.marketCap)
-        if (competitorMarketCap) {
-          const competitorSize = getCompanySize(competitorMarketCap)
-          // Só incluir empresas do mesmo tamanho
-          if (competitorSize !== currentCompanySize) return false
-        } else {
-          return false // Se não tem market cap, não incluir
-        }
-      } else if (currentCompanySize && allowDifferentSizes) {
-        // No modo fallback, ainda precisamos de market cap válido
-        const competitorMarketCap = toNumber(financialData.marketCap)
-        if (!competitorMarketCap) return false
-      }
-      
-      return true
-    }
-    
-    // Função auxiliar para processar empresas com critério específico
-    const processCompanies = (companies: any[], filterFn: (company: any) => boolean, allowDifferentSizes: boolean = false) => {
-      for (const company of companies) {
-        if (competitors.length >= limit) break
-        if (filterFn(company) && isValidCompetitor(company, allowDifferentSizes)) {
-          const companyPrefix = getTickerPrefix(company.ticker)
-          seenPrefixes.add(companyPrefix)
-          competitors.push({
-            ticker: company.ticker,
-            name: company.name,
-            sector: company.sector,
-            logoUrl: company.logoUrl,
-            marketCap: company.financialData[0]?.marketCap || null
-          } as CompetitorData)
-        }
-      }
-    }
-
-    // PASSADA 1: Empresas do mesmo tamanho
-    // Primeiro: empresas do mesmo industry e mesmo tamanho
-    if (industry) {
-      processCompanies(
-        allCompetitors,
-        (company) => company.industry === industry,
-        false // Só mesmo tamanho
-      )
-    }
-    
-    // Depois: empresas do mesmo setor e mesmo tamanho (se ainda precisar)
-    if (competitors.length < limit) {
-      processCompanies(
-        allCompetitors,
-        (company) => company.sector === sector,
-        false // Só mesmo tamanho
-      )
-    }
-
-    // PASSADA 2: Fallback para outros tamanhos (se ainda não temos 6 empresas)
-    if (competitors.length < limit) {
-      console.log(`🔄 Fallback: apenas ${competitors.length} empresas do mesmo tamanho encontradas, buscando outros tamanhos...`)
-      
-      // Primeiro: empresas do mesmo industry (qualquer tamanho)
-      if (industry) {
-        processCompanies(
-          allCompetitors,
-          (company) => company.industry === industry,
-          true // Permitir tamanhos diferentes
-        )
-      }
-      
-      // Depois: empresas do mesmo setor (qualquer tamanho)
-      if (competitors.length < limit) {
-        processCompanies(
-          allCompetitors,
-          (company) => company.sector === sector,
-          true // Permitir tamanhos diferentes
-        )
-      }
-    }
-
-    // Log para debug
-    const sameSize = competitors.filter(comp => {
-      const financialData = allCompetitors.find(c => c.ticker === comp.ticker)?.financialData?.[0]
-      if (!financialData) return false
-      const competitorMarketCap = toNumber(financialData.marketCap)
-      const competitorSize = getCompanySize(competitorMarketCap)
-      return competitorSize === currentCompanySize
-    }).length
-    
-    console.log(`🔍 Empresa ${currentTicker} (${currentCompanySize}): encontrados ${competitors.length} concorrentes válidos (${sameSize} do mesmo tamanho, ${competitors.length - sameSize} de outros tamanhos)`)
-
-    // Armazenar no cache
-    await cache.set(cacheKey, competitors, {
-      prefix: 'companies',
-      ttl: COMPETITORS_CACHE_TTL
-    })
-    
-    return competitors
-  } catch (error) {
-    console.error('Erro ao buscar concorrentes:', error)
-    return []
-  }
-}
 
 // Componente IndicatorCard definido abaixo (após os componentes inline)
 
@@ -625,12 +306,19 @@ export default async function TickerPage({ params }: PageProps) {
   // Buscar concorrentes inteligentes para comparador premium
   const currentMarketCap = toNumber(latestFinancials?.marketCap)
   const competitors = companyData.sector 
-    ? await getSectorCompetitors(ticker, companyData.sector, companyData.industry, currentMarketCap, 5)
+    ? await getSectorCompetitors({
+        currentTicker: ticker,
+        sector: companyData.sector,
+        industry: companyData.industry,
+        currentMarketCap,
+        limit: 5,
+        assetType: 'STOCK'
+      })
     : []
   
   // Buscar empresas relacionadas mesclando inteligentes + básicas para SEO
   const relatedCompanies = companyData.sector 
-    ? await getMixedRelatedCompanies(ticker, companyData.sector, competitors, 6)
+    ? await getMixedRelatedCompanies(ticker, companyData.sector, competitors, 6, 'STOCK')
     : []
   
   
@@ -670,7 +358,7 @@ export default async function TickerPage({ params }: PageProps) {
       <div className="container mx-auto py-8 px-4">
         {/* Layout Responsivo: 2 Cards Separados */}
         <div className="mb-8">
-          {/* Desktop: Cards lado a lado */}
+          {/* Desktop: Cards lado a lado (a partir de 1024px) */}
           <div className="lg:flex lg:space-x-6 space-y-6 lg:space-y-0">
             
             {/* Card do Header da Empresa */}
@@ -743,8 +431,8 @@ export default async function TickerPage({ params }: PageProps) {
                       </div>
                     )}
 
-                    {/* Card de Notificações - Destacado */}
-                    <div className="mb-6">
+                    {/* Card de Notificações - Destacado (apenas quando cards estão empilhados, até 1024px) */}
+                    <div className="mb-6 lg:hidden">
                       <AssetSubscriptionButton
                         ticker={ticker}
                         companyId={companyData.id}
@@ -833,6 +521,18 @@ export default async function TickerPage({ params }: PageProps) {
             {/* Card do Score - Separado */}
             <div className="lg:flex-shrink-0">
               <HeaderScoreWrapper ticker={ticker} />
+              
+              {/* Card de Notificações - Destacado (apenas quando cards estão lado a lado, >= 1024px) */}
+              <div className="hidden lg:block mt-4 lg:w-80">
+                <AssetSubscriptionButton
+                  ticker={ticker}
+                  companyId={companyData.id}
+                  variant="card"
+                  size="default"
+                  showLabel={true}
+                  compact={true}
+                />
+              </div>
             </div>
           </div>
         </div>

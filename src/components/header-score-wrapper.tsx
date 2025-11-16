@@ -53,9 +53,9 @@ export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) 
   if (loading) {
     return (
       <Card className="w-full lg:w-80">
-        <CardContent className="p-6 text-center">
-          <p className="text-sm text-muted-foreground mb-4">Score Geral</p>
-          <div className="w-20 h-20 mx-auto bg-muted/50 rounded-full animate-pulse mb-3" />
+        <CardContent className="p-4 lg:p-4 text-center">
+          <p className="text-sm text-muted-foreground mb-3">Score Geral</p>
+          <div className="w-20 h-20 mx-auto bg-muted/50 rounded-full animate-pulse mb-2" />
           <p className="text-xs text-muted-foreground">Carregando...</p>
         </CardContent>
       </Card>
@@ -64,7 +64,7 @@ export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) 
 
   return (
     <Card className="w-full lg:w-80">
-      <CardContent className="p-6">
+      <CardContent className="p-4 lg:p-4">
         <CompactScore 
           overallScore={overallScore}
           isPremium={isPremium ?? false}

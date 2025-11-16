@@ -15,6 +15,7 @@ interface AssetSubscriptionButtonProps {
   variant?: 'default' | 'outline' | 'ghost' | 'card';
   size?: 'default' | 'sm' | 'lg' | 'icon';
   showLabel?: boolean;
+  compact?: boolean; // Layout compacto/vertical para desktop
 }
 
 export default function AssetSubscriptionButton({
@@ -23,6 +24,7 @@ export default function AssetSubscriptionButton({
   variant = 'card',
   size = 'default',
   showLabel = true,
+  compact = false,
 }: AssetSubscriptionButtonProps) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,13 +140,13 @@ export default function AssetSubscriptionButton({
     if (isSubscribed) {
       return (
         <Card className="border border-green-200 dark:border-green-900/30 bg-green-50/50 dark:bg-green-950/10">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
+          <CardContent className={`${compact ? 'p-3' : 'p-3 sm:p-4'}`}>
+            <div className={`flex ${compact ? 'flex-col' : 'items-center'} ${compact ? 'items-center gap-2' : 'justify-between gap-3'}`}>
+              <div className={`flex items-center gap-2 ${compact ? 'flex-col' : 'flex-1'} min-w-0`}>
                 <div className="w-8 h-8 rounded-lg bg-green-500 text-white flex items-center justify-center flex-shrink-0">
                   <Bell className="h-4 w-4 fill-current" />
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className={`${compact ? 'text-center' : 'flex-1'} min-w-0`}>
                   <p className="text-sm font-medium text-foreground">
                     Recebendo notificações sobre {ticker}
                   </p>
@@ -155,7 +157,7 @@ export default function AssetSubscriptionButton({
                 disabled={isLoading}
                 size="sm"
                 variant="ghost"
-                className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                className={`${compact ? 'w-full' : 'text-muted-foreground hover:text-destructive flex-shrink-0'}`}
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -175,21 +177,21 @@ export default function AssetSubscriptionButton({
     // Card destacado quando não inscrito (logado ou não)
     return (
       <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-purple-50 dark:from-primary/10 dark:to-purple-950/20 hover:border-primary/40 transition-all duration-200 hover:shadow-lg">
-        <CardContent className="p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <CardContent className={`${compact ? 'p-3' : 'p-4'} ${compact ? '' : 'sm:p-5 lg:p-6'}`}>
+          <div className={`flex ${compact ? 'flex-col' : 'flex-col lg:flex-row'} ${compact ? 'items-center' : 'lg:items-center'} ${compact ? 'gap-3' : 'gap-4'}`}>
             {/* Ícone */}
             <div className="flex-shrink-0">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary dark:bg-primary/20 flex items-center justify-center">
-                <Mail className="h-6 w-6" />
+              <div className={`${compact ? 'w-10 h-10' : 'w-12 h-12'} rounded-xl bg-primary/10 text-primary dark:bg-primary/20 flex items-center justify-center`}>
+                <Mail className={compact ? 'h-5 w-5' : 'h-6 w-6'} />
               </div>
             </div>
 
             {/* Conteúdo */}
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base sm:text-lg font-semibold text-foreground mb-1">
+            <div className={`${compact ? 'text-center' : 'flex-1'} min-w-0`}>
+              <h3 className={`${compact ? 'text-sm' : 'text-base lg:text-lg'} font-semibold text-foreground mb-1`}>
                 Receba Notificações por Email
               </h3>
-              <p className="text-sm text-muted-foreground mb-3 sm:mb-0">
+              <p className={`text-sm text-muted-foreground ${compact ? 'mb-2' : 'mb-3 lg:mb-0'}`}>
                 {session?.user 
                   ? `Seja notificado por email quando houver mudanças significativas nos fundamentos de ${ticker}`
                   : `Crie uma conta gratuita e receba notificações quando houver mudanças relevantes em ${ticker}`
@@ -198,12 +200,12 @@ export default function AssetSubscriptionButton({
             </div>
 
             {/* Botão de Ação */}
-            <div className="flex-shrink-0">
+            <div className={`flex-shrink-0 ${compact ? 'w-full' : 'w-full lg:w-auto'}`}>
               <Button
                 onClick={handleToggleSubscription}
                 disabled={isLoading}
-                size="default"
-                className="w-full sm:w-auto min-w-[140px] bg-primary hover:bg-primary/90 text-primary-foreground"
+                size={compact ? 'sm' : 'default'}
+                className={`${compact ? 'w-full' : 'w-full lg:w-auto'} min-w-[140px] bg-primary hover:bg-primary/90 text-primary-foreground`}
               >
                 {isLoading ? (
                   <>

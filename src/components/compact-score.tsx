@@ -115,7 +115,7 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
     return (
       <div className="flex flex-col items-center w-full">
         {/* Título */}
-        <div className="mb-4 text-center">
+        <div className="mb-2 text-center">
           <p className="text-sm text-muted-foreground flex items-center justify-center space-x-1">
             <span>Score Geral</span>
             <Crown className="w-3 h-3 text-yellow-500" />
@@ -123,17 +123,17 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
         </div>
 
         {/* Gauge centralizado */}
-        <div className="mb-3">
+        <div className="mb-2">
           <CompactScoreGauge score={overallScore.score} grade={overallScore.grade} />
         </div>
 
         {/* Classificação */}
-        <p className="text-sm text-center text-muted-foreground mb-3">
+        <p className="text-sm text-center text-muted-foreground mb-2">
           {overallScore.classification}
         </p>
 
         {/* Recomendação */}
-        <div className="w-full flex justify-center mb-3">
+        <div className="w-full flex justify-center mb-2">
           <RecommendationBadge recommendation={overallScore.recommendation} />
         </div>
 
@@ -152,9 +152,9 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
 
   // Para usuários não Premium - mostrar com blur
   return (
-    <div className="flex flex-col items-center w-full relative min-h-[180px]">
+    <div className="flex flex-col items-center w-full relative min-h-[160px]">
       {/* Título */}
-      <div className="mb-4 text-center">
+      <div className="mb-2 text-center">
         <p className="text-sm text-muted-foreground flex items-center justify-center space-x-1">
           <span>Score Geral</span>
           <Crown className="w-3 h-3 text-yellow-500" />
@@ -163,10 +163,10 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
       
       {/* Conteúdo com blur */}
       <div className="filter blur-sm pointer-events-none select-none flex flex-col items-center">
-        <div className="mb-3">
+        <div className="mb-2">
           <CompactScoreGauge score={75} grade="B" />
         </div>
-        <p className="text-sm text-center text-muted-foreground mb-4">
+        <p className="text-sm text-center text-muted-foreground mb-3">
           Bom
         </p>
         <RecommendationBadge recommendation="Empresa Boa" />
@@ -175,7 +175,7 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
       {/* Overlay para Premium/Login */}
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-[2px] rounded-lg border border-dashed border-orange-300">
         <Crown className="w-6 h-6 text-orange-600 mb-2" />
-        <p className="text-xs text-muted-foreground mb-3 text-center px-2">
+        <p className="text-xs text-muted-foreground mb-2 text-center px-2">
           {isLoggedIn ? "Upgrade para ver o score real" : "Faça login para ver o score"}
         </p>
         <Button asChild size="sm" variant="outline" className="text-xs">

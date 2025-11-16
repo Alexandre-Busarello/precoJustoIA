@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
@@ -77,7 +77,7 @@ export function PLBolsaPageClient({
   initialSectors,
 }: PLBolsaPageClientProps) {
   const { data: session } = useSession()
-  const isLoggedIn = !!session
+  const isLoggedIn = !!(session?.user?.id || session?.user?.email)
 
   const [filters, setFilters] = useState<PLBolsaFiltersState>({
     startDate: '2010-01-01',
@@ -86,6 +86,26 @@ export function PLBolsaPageClient({
     minScore: undefined,
     excludeUnprofitable: false,
   })
+
+  // Atualizar endDate quando usuário fizer login
+  useEffect(() => {
+    if (isLoggedIn) {
+      const today = new Date().toISOString().split('T')[0]
+      const currentYear = new Date().getFullYear()
+      const lastYearEnd = new Date(currentYear - 1, 11, 31).toISOString().split('T')[0]
+      
+      // Se a data final está limitada ao ano anterior, atualizar para hoje
+      setFilters(prev => {
+        if (prev.endDate <= lastYearEnd) {
+          return {
+            ...prev,
+            endDate: today
+          }
+        }
+        return prev
+      })
+    }
+  }, [isLoggedIn]) // Executar apenas quando isLoggedIn mudar
 
   // Usar React Query para cache e deduplicação
   const { data, isLoading, error } = useQuery({

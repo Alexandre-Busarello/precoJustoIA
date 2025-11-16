@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -37,7 +36,7 @@ export function PLBolsaFilters({
   initialFilters,
 }: PLBolsaFiltersProps) {
   const { data: session } = useSession()
-  const isLoggedIn = !!session
+  const isLoggedIn = !!(session?.user?.id || session?.user?.email)
   
   // Limitar data final para não logados
   const currentYear = new Date().getFullYear()
@@ -65,12 +64,27 @@ export function PLBolsaFilters({
     initialFilters?.excludeUnprofitable || false
   )
 
-  // Limitar endDate quando usuário não está logado
+  // Atualizar endDate quando status de login mudar
   useEffect(() => {
-    if (!isLoggedIn && endDate > maxEndDate) {
-      setEndDate(maxEndDate)
+    if (isLoggedIn) {
+      // Se usuário está logado, permitir data atual
+      const today = new Date().toISOString().split('T')[0]
+      setEndDate(prev => {
+        if (prev < today) {
+          return today
+        }
+        return prev
+      })
+    } else {
+      // Se usuário não está logado, limitar ao ano anterior
+      setEndDate(prev => {
+        if (prev > maxEndDate) {
+          return maxEndDate
+        }
+        return prev
+      })
     }
-  }, [isLoggedIn, endDate, maxEndDate])
+  }, [isLoggedIn, maxEndDate]) // Usando função de atualização para evitar dependência de endDate
 
   // Aplicar filtros quando mudarem
   useEffect(() => {

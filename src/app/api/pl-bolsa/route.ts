@@ -14,7 +14,8 @@ export const revalidate = 3600 // Revalidar a cada hora
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    const isLoggedIn = !!session
+    // Verificar se há sessão válida com usuário autenticado
+    const isLoggedIn = !!(session?.user?.id || session?.user?.email)
 
     const searchParams = request.nextUrl.searchParams
 
@@ -53,8 +54,12 @@ export async function GET(request: NextRequest) {
     const currentYear = new Date().getFullYear()
     const lastYearEnd = new Date(currentYear - 1, 11, 31) // 31 de dezembro do ano anterior
 
-    if (!isLoggedIn && (!endDate || endDate > lastYearEnd)) {
-      endDate = lastYearEnd
+    // Aplicar limitação apenas se usuário NÃO está logado
+    if (!isLoggedIn) {
+      // Se não há data final especificada ou se a data final é maior que o limite, aplicar limite
+      if (!endDate || endDate > lastYearEnd) {
+        endDate = lastYearEnd
+      }
     }
 
     // Validar score

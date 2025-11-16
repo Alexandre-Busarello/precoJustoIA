@@ -85,7 +85,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             line-height: 1.6;
             color: #1e293b;
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            background-color: #f5f5f5;
             margin: 0;
             padding: 0;
             min-height: 100vh;
@@ -107,7 +107,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
           }
           
           .header {
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            background-color: #1e293b;
             padding: 40px 30px;
             text-align: center;
             position: relative;
@@ -129,12 +129,15 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
             position: relative;
             z-index: 2;
             margin-bottom: 20px;
+            text-align: center;
           }
           
           .logo {
             max-width: 200px;
             height: auto;
             filter: brightness(0) invert(1);
+            display: block;
+            margin: 0 auto;
           }
           
           .header-title {
@@ -180,7 +183,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
           
           .button {
             display: inline-block;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            background-color: #1e293b;
             color: #ffffff;
             padding: 16px 32px;
             text-decoration: none;
@@ -227,9 +230,9 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
           }
           
           .warning {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            background-color: #fef3c7;
             border: 1px solid #f59e0b;
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 20px;
             margin: 30px 0;
           }
@@ -365,7 +368,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
               </p>
               
               <div class="button-container">
-                <a href="${resetUrl}" class="button">🔐 Redefinir Minha Senha</a>
+                <a href="${resetUrl}" class="button" style="background-color: #1e293b; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; text-align: center; display: inline-block;">🔐 Redefinir Minha Senha</a>
               </div>
               
               <div class="link-section">
@@ -460,7 +463,7 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             line-height: 1.6;
             color: #1e293b;
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            background-color: #f5f5f5;
             margin: 0;
             padding: 0;
             min-height: 100vh;
@@ -482,7 +485,7 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
           }
           
           .header {
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            background-color: #1e293b;
             padding: 40px 30px;
             text-align: center;
             position: relative;
@@ -504,12 +507,15 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
             position: relative;
             z-index: 2;
             margin-bottom: 20px;
+            text-align: center;
           }
           
           .logo {
             max-width: 200px;
             height: auto;
             filter: brightness(0) invert(1);
+            display: block;
+            margin: 0 auto;
           }
           
           .header-title {
@@ -555,7 +561,7 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
           
           .button {
             display: inline-block;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            background-color: #1e293b;
             color: #ffffff;
             padding: 16px 32px;
             text-decoration: none;
@@ -733,41 +739,36 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
                 Mas não se preocupe, isso é mais comum do que você imagina e tem solução fácil!
               </p>
               
-              <div style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); border: 2px solid #8b5cf6; border-radius: 16px; padding: 24px; margin: 30px 0; text-align: center; position: relative;">
-                <!-- Badge flutuante -->
-                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);">
-                  🔥 OFERTA LIMITADA
+              <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin: 30px 0; text-align: center;">
+                <div style="margin-bottom: 20px;">
+                  <h3 style="color: #111827; font-weight: 600; margin: 0 0 8px 0; font-size: 20px;">Early Adopter</h3>
+                  <p style="color: #64748b; font-size: 15px; margin: 0; font-weight: 500;">Preço congelado PARA SEMPRE</p>
                 </div>
                 
-                <div style="margin-top: 12px; margin-bottom: 20px;">
-                  <h3 style="color: #7c3aed; font-weight: 800; margin: 0 0 8px 0; font-size: 24px; letter-spacing: -0.5px;">👑 Early Adopter</h3>
-                  <p style="color: #8b5cf6; font-size: 16px; margin: 0; font-weight: 500;">Preço congelado PARA SEMPRE</p>
-                </div>
-                
-                <div style="background: white; border-radius: 12px; padding: 20px; margin: 20px 0; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.1);">
-                  <p style="color: #7c3aed; font-size: 16px; margin-bottom: 16px; font-weight: 600;">O que você está perdendo:</p>
+                <div style="background-color: #ffffff; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                  <p style="color: #111827; font-size: 15px; margin-bottom: 16px; font-weight: 600;">O que você está perdendo:</p>
                   <div style="display: grid; gap: 12px; text-align: left;">
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: #f8fafc; border-radius: 8px;">
-                      <span style="font-size: 20px;">🔒</span>
-                      <span style="color: #1e293b; font-weight: 600; font-size: 14px;">Preço congelado PARA SEMPRE (R$ 249/ano)</span>
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
+                      <span style="font-size: 18px;">🔒</span>
+                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Preço congelado PARA SEMPRE (R$ 249/ano)</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: #f8fafc; border-radius: 8px;">
-                      <span style="font-size: 20px;">💬</span>
-                      <span style="color: #1e293b; font-weight: 600; font-size: 14px;">Canal exclusivo WhatsApp com CEO</span>
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
+                      <span style="font-size: 18px;">💬</span>
+                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Canal exclusivo WhatsApp com CEO</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: #f8fafc; border-radius: 8px;">
-                      <span style="font-size: 20px;">🚀</span>
-                      <span style="color: #1e293b; font-weight: 600; font-size: 14px;">Acesso antecipado a novos recursos</span>
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
+                      <span style="font-size: 18px;">🚀</span>
+                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Acesso antecipado a novos recursos</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: #f8fafc; border-radius: 8px;">
-                      <span style="font-size: 20px;">💰</span>
-                      <span style="color: #1e293b; font-weight: 600; font-size: 14px;">Economia de R$ 248/ano (preço normal: R$ 497)</span>
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
+                      <span style="font-size: 18px;">💰</span>
+                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Economia de R$ 248/ano (preço normal: R$ 497)</span>
                     </div>
                   </div>
                 </div>
                 
-                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 8px; padding: 12px; margin-top: 16px;">
-                  <p style="color: #92400e; font-weight: 700; margin: 0; font-size: 14px;">⚠️ Esta oferta só existe durante a Fase Alfa e não voltará!</p>
+                <div style="background-color: #fef3c7; border-radius: 6px; padding: 12px; margin-top: 16px; border: 1px solid #f59e0b;">
+                  <p style="color: #92400e; font-weight: 600; margin: 0; font-size: 13px;">Esta oferta só existe durante a Fase Alfa e não voltará!</p>
                 </div>
               </div>
               
@@ -791,48 +792,48 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
               </div>
               
               <div class="button-container">
-                <a href="${retryUrl}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: #ffffff; padding: 18px 36px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 18px; text-align: center; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3), 0 4px 6px -2px rgba(59, 130, 246, 0.05); letter-spacing: -0.5px;">
-                  🚀 Garantir Oferta Early Adopter
+                <a href="${retryUrl}" style="display: inline-block; background-color: #1e293b; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; text-align: center;">
+                  Garantir Oferta Early Adopter
                 </a>
               </div>
               
-              <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 2px solid #0284c7; border-radius: 16px; padding: 32px; margin: 30px 0; text-align: center;">
-                <div style="margin-bottom: 24px;">
-                  <h3 style="color: #0369a1; font-weight: 800; margin-bottom: 8px; font-size: 24px; letter-spacing: -0.5px;">🎯 Acesso Completo Hoje</h3>
-                  <p style="color: #0284c7; font-size: 16px; margin: 0;">Todos os recursos Premium + Early Adopter</p>
+              <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin: 30px 0; text-align: center;">
+                <div style="margin-bottom: 20px;">
+                  <h3 style="color: #111827; font-weight: 600; margin-bottom: 8px; font-size: 20px;">Acesso Completo Hoje</h3>
+                  <p style="color: #64748b; font-size: 15px; margin: 0;">Todos os recursos Premium + Early Adopter</p>
                 </div>
                 
-                <div style="display: grid; gap: 16px; margin-bottom: 24px;">
-                  <div style="background: white; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1); display: flex; align-items: center; gap: 16px; text-align: left;">
-                    <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">🤖</div>
+                <div style="display: grid; gap: 12px; margin-bottom: 20px;">
+                  <div style="background-color: #ffffff; border-radius: 6px; padding: 16px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px; text-align: left;">
+                    <div style="width: 40px; height: 40px; background-color: #1e293b; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #ffffff;">🤖</div>
                     <div>
-                      <h4 style="color: #1e293b; font-weight: 700; margin: 0 0 4px 0; font-size: 16px;">Análise Preditiva com IA</h4>
+                      <h4 style="color: #111827; font-weight: 600; margin: 0 0 4px 0; font-size: 15px;">Análise Preditiva com IA</h4>
                       <p style="color: #64748b; margin: 0; font-size: 14px;">Google Gemini analisa 8 modelos + notícias</p>
                     </div>
                   </div>
                   
-                  <div style="background: white; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1); display: flex; align-items: center; gap: 16px; text-align: left;">
-                    <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">📊</div>
+                  <div style="background-color: #ffffff; border-radius: 6px; padding: 16px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px; text-align: left;">
+                    <div style="width: 40px; height: 40px; background-color: #1e293b; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #ffffff;">📊</div>
                     <div>
-                      <h4 style="color: #1e293b; font-weight: 700; margin: 0 0 4px 0; font-size: 16px;">8 Modelos de Valuation</h4>
+                      <h4 style="color: #111827; font-weight: 600; margin: 0 0 4px 0; font-size: 15px;">8 Modelos de Valuation</h4>
                       <p style="color: #64748b; margin: 0; font-size: 14px;">Graham, Fórmula Mágica, DCF e mais</p>
                     </div>
                   </div>
                   
-                  <div style="background: white; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1); display: flex; align-items: center; gap: 16px; text-align: left;">
-                    <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">📈</div>
+                  <div style="background-color: #ffffff; border-radius: 6px; padding: 16px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px; text-align: left;">
+                    <div style="width: 40px; height: 40px; background-color: #1e293b; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #ffffff;">📈</div>
                     <div>
-                      <h4 style="color: #1e293b; font-weight: 700; margin: 0 0 4px 0; font-size: 16px;">Backtesting de Carteiras</h4>
+                      <h4 style="color: #111827; font-weight: 600; margin: 0 0 4px 0; font-size: 15px;">Backtesting de Carteiras</h4>
                       <p style="color: #64748b; margin: 0; font-size: 14px;">Simule estratégias com dados históricos</p>
                     </div>
                   </div>
                 </div>
                 
-                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 16px;">
-                  <p style="color: #92400e; font-weight: 700; margin: 0; font-size: 18px;">
-                    💰 Tudo por apenas <span style="font-size: 24px; color: #dc2626;">R$ 249/ano</span>
+                <div style="background-color: #fef3c7; border-radius: 6px; padding: 16px; border: 1px solid #f59e0b;">
+                  <p style="color: #92400e; font-weight: 600; margin: 0; font-size: 16px;">
+                    Tudo por apenas <span style="font-size: 20px; color: #dc2626;">R$ 249/ano</span>
                   </p>
-                  <p style="color: #92400e; font-weight: 600; margin: 4px 0 0 0; font-size: 14px;">
+                  <p style="color: #92400e; font-weight: 500; margin: 4px 0 0 0; font-size: 13px;">
                     Preço congelado para sempre!
                   </p>
                 </div>
@@ -922,7 +923,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             line-height: 1.6;
             color: #0f172a;
-            background: linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #faf5ff 100%);
+            background-color: #ffffff;
             margin: 0;
             padding: 0;
             min-height: 100vh;
@@ -944,7 +945,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           }
           
           .header {
-            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            background-color: #1e293b;
             padding: 48px 32px;
             text-align: center;
             position: relative;
@@ -966,12 +967,15 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
             position: relative;
             z-index: 2;
             margin-bottom: 24px;
+            text-align: center;
           }
           
           .logo {
             max-width: 180px;
             height: auto;
             filter: brightness(0) invert(1);
+            display: block;
+            margin: 0 auto;
           }
           
           .header-title {
@@ -1009,7 +1013,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           
           .content {
             padding: 48px 32px;
-            background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+            background-color: #ffffff;
           }
           
           .greeting {
@@ -1035,7 +1039,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           
           .button {
             display: inline-block;
-            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            background-color: #1e293b;
             color: #ffffff !important;
             padding: 18px 40px;
             text-decoration: none;
@@ -1089,27 +1093,27 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           }
           
           .feature-icon-wrapper.blue {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            background-color: #1e293b;
           }
           
           .feature-icon-wrapper.green {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background-color: #1e293b;
           }
           
           .feature-icon-wrapper.purple {
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            background-color: #1e293b;
           }
           
           .feature-icon-wrapper.teal {
-            background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+            background-color: #1e293b;
           }
           
           .feature-icon-wrapper.orange {
-            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            background-color: #1e293b;
           }
           
           .feature-icon-wrapper.pink {
-            background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+            background-color: #1e293b;
           }
           
           .feature-icon {
@@ -1147,7 +1151,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           }
           
           .cta-section {
-            background: linear-gradient(135deg, #eff6ff 0%, #faf5ff 100%);
+            background-color: #f9fafb;
             border: 0;
             border-radius: 12px;
             padding: 32px 24px;
@@ -1240,7 +1244,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           }
           
           .early-adopter-box {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            background-color: #fef3c7;
             border: 2px solid #f59e0b;
             border-radius: 12px;
             padding: 24px;
@@ -1264,7 +1268,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           }
           
           .whatsapp-box {
-            background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+            background-color: #f9fafb;
             border: 2px solid #8b5cf6;
             border-radius: 12px;
             padding: 24px;
@@ -1398,7 +1402,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
               <div class="cta-section">
                 <h3 class="cta-title">🎯 Comece agora mesmo:</h3>
                 <div class="button-container">
-                  <a href="${baseUrl}/dashboard" class="button">🚀 Acessar Dashboard</a>
+                  <a href="${baseUrl}/dashboard" class="button" style="background-color: #1e293b; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; text-align: center; display: inline-block;">🚀 Acessar Dashboard</a>
                 </div>
               </div>
               
@@ -1631,11 +1635,15 @@ export function generateAssetChangeEmailTemplate(params: {
           
           <!-- Header with Logo -->
           <tr>
-            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-              <div style="margin: 0 auto 20px; display: inline-block; background-color: #ffffff; padding: 12px 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
-                <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block;" />
-              </div>
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">
+            <td style="background-color: #1e293b; padding: 40px 30px; text-align: center;">
+              <table role="presentation" style="width: 100%; margin: 0 auto;">
+                <tr>
+                  <td style="text-align: center;">
+                    <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto 20px; filter: brightness(0) invert(1);" />
+                  </td>
+                </tr>
+              </table>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">
                 Atualização de Monitoramento
               </h1>
             </td>
@@ -1643,30 +1651,28 @@ export function generateAssetChangeEmailTemplate(params: {
 
           <!-- Company Header with Logo -->
           <tr>
-            <td style="padding: 40px 30px 30px; text-align: center;">
+            <td style="padding: 40px 30px 30px; text-align: center; background-color: #ffffff;">
               ${emailCompatibleLogoUrl ? `
-              <table role="presentation" style="margin: 0 auto 24px;">
+              <table role="presentation" style="margin: 0 auto 20px;">
                 <tr>
                   <td style="text-align: center;">
-                    <div style="width: 96px; height: 96px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); border: 2px solid #f3f4f6;">
-                      <img src="${emailCompatibleLogoUrl}" 
-                           alt="${companyName}" 
-                           style="width: 64px; height: 64px; border-radius: 8px; object-fit: contain; display: block; margin: 0 auto;" 
-                           width="64" 
-                           height="64" />
-                    </div>
+                    <img src="${emailCompatibleLogoUrl}" 
+                         alt="${companyName}" 
+                         style="width: 64px; height: 64px; border-radius: 8px; object-fit: contain; display: block; margin: 0 auto;" 
+                         width="64" 
+                         height="64" />
                   </td>
                 </tr>
               </table>
               ` : ''}
-              <h2 style="color: #111827; margin: 0 0 8px 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">
+              <h2 style="color: #111827; margin: 0 0 6px 0; font-size: 24px; font-weight: 600;">
                 ${companyName}
               </h2>
-              <div style="color: #6b7280; font-size: 16px; font-weight: 500; margin-bottom: 16px; letter-spacing: 0.5px;">
+              <div style="color: #6b7280; font-size: 16px; font-weight: 500; margin-bottom: 16px;">
                 ${ticker}
               </div>
               <div style="text-align: center;">
-                <span style="display: inline-block; background-color: ${badgeColor}; color: #ffffff; padding: 8px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px ${badgeColor}40;">
+                <span style="display: inline-block; background-color: ${badgeColor}; color: #ffffff; padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600;">
                   ${badgeText}
                 </span>
               </div>
@@ -1675,9 +1681,9 @@ export function generateAssetChangeEmailTemplate(params: {
 
           <!-- Saudação -->
           <tr>
-            <td style="padding: 0 30px 20px;">
-              <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0;">
-                Olá <strong>${userName}</strong>,
+            <td style="padding: 30px 30px 20px;">
+              <p style="color: #374151; font-size: 17px; line-height: 1.6; margin: 0;">
+                Olá <strong>${userName}</strong>, 👋
               </p>
             </td>
           </tr>
@@ -1690,18 +1696,18 @@ export function generateAssetChangeEmailTemplate(params: {
               </p>
 
               <!-- Score Comparison Box -->
-              <table role="presentation" style="width: 100%; background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%); border-radius: 16px; border: 2px solid ${badgeColor}; margin: 24px 0; box-shadow: 0 4px 12px ${badgeColor}20;">
+              <table role="presentation" style="width: 100%; background-color: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; margin: 24px 0;">
                 <tr>
                   <td style="padding: 32px 20px; text-align: center;">
-                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
                       Score Geral
                     </div>
-                    <div style="font-size: 36px; font-weight: 700; color: #111827; margin: 16px 0;">
-                      <span style="color: #9ca3af; font-size: 32px;">${previousScore.toFixed(1)}</span>
-                      <span style="margin: 0 12px; color: ${badgeColor}; font-size: 28px;">${arrow}</span>
-                      <span style="color: ${badgeColor}; font-size: 40px;">${currentScore.toFixed(1)}</span>
+                    <div style="font-size: 32px; font-weight: 700; color: #111827; margin: 16px 0;">
+                      <span style="color: #9ca3af; font-size: 28px;">${previousScore.toFixed(1)}</span>
+                      <span style="margin: 0 12px; color: ${badgeColor}; font-size: 24px;">${arrow}</span>
+                      <span style="color: ${badgeColor}; font-size: 36px;">${currentScore.toFixed(1)}</span>
                     </div>
-                    <div style="display: inline-block; background-color: ${badgeColor}15; color: ${badgeColor}; padding: 6px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-top: 8px;">
+                    <div style="display: inline-block; background-color: ${badgeColor}; color: #ffffff; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; margin-top: 8px;">
                       ${isPositive ? '+' : ''}${scoreDelta} pontos
                     </div>
                   </td>
@@ -1713,11 +1719,11 @@ export function generateAssetChangeEmailTemplate(params: {
           <!-- Resumo do Relatório -->
           <tr>
             <td style="padding: 0 30px 30px;">
-              <div style="background: linear-gradient(135deg, ${badgeColor}08 0%, ${badgeColor}15 100%); border-left: 4px solid ${badgeColor}; padding: 20px 24px; border-radius: 12px; box-shadow: 0 2px 8px ${badgeColor}10;">
-                <h3 style="margin: 0 0 12px 0; color: #111827; font-size: 17px; font-weight: 700;">
-                  📊 Principais Mudanças Identificadas
+              <div style="background-color: #f9fafb; border-left: 3px solid ${badgeColor}; padding: 20px 24px; border-radius: 6px;">
+                <h3 style="margin: 0 0 12px 0; color: #111827; font-size: 16px; font-weight: 600;">
+                  Principais Mudanças Identificadas
                 </h3>
-                <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.7;">
+                <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
                   ${reportSummary}
                 </p>
               </div>
@@ -1729,9 +1735,9 @@ export function generateAssetChangeEmailTemplate(params: {
             <td style="padding: 0 30px 40px; text-align: center;">
               <table role="presentation" style="margin: 0 auto;">
                 <tr>
-                  <td style="border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.35);">
-                    <a href="${reportUrl}" style="display: inline-block; color: #ffffff; text-decoration: none; padding: 16px 36px; font-weight: 600; font-size: 16px; letter-spacing: 0.3px;">
-                      📄 Ver Relatório Completo
+                  <td style="border-radius: 6px; background-color: #1e293b;">
+                    <a href="${reportUrl}" style="display: inline-block; color: #ffffff; text-decoration: none; padding: 14px 32px; font-weight: 600; font-size: 16px;">
+                      Ver Relatório Completo
                     </a>
                   </td>
                 </tr>
@@ -1742,8 +1748,8 @@ export function generateAssetChangeEmailTemplate(params: {
           <!-- Secondary CTA -->
           <tr>
             <td style="padding: 0 30px 40px; text-align: center;">
-              <a href="${assetUrl}" style="color: #667eea; text-decoration: none; font-size: 15px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
-                📈 Ver página completa de ${ticker}
+              <a href="${assetUrl}" style="color: #1e293b; text-decoration: none; font-size: 15px; font-weight: 500;">
+                Ver página completa de ${ticker}
               </a>
             </td>
           </tr>
@@ -1759,19 +1765,19 @@ export function generateAssetChangeEmailTemplate(params: {
           <tr>
             <td style="padding: 32px 30px; text-align: center;">
               <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
-                💌 Você está recebendo este email porque se inscreveu para receber atualizações sobre <strong>${ticker}</strong>
+                Você está recebendo este email porque se inscreveu para receber atualizações sobre <strong>${ticker}</strong>
               </p>
               <table role="presentation" style="margin: 0 auto;">
                 <tr>
                   <td style="padding: 0 12px;">
-                    <a href="${manageSubscriptionsUrl}" style="color: #667eea; text-decoration: none; font-size: 14px; font-weight: 500;">
-                      ⚙️ Gerenciar inscrições
+                    <a href="${manageSubscriptionsUrl}" style="color: #1e293b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      Gerenciar inscrições
                     </a>
                   </td>
                   <td style="padding: 0 12px; color: #d1d5db;">|</td>
                   <td style="padding: 0 12px;">
-                    <a href="${baseUrl}/contato" style="color: #667eea; text-decoration: none; font-size: 14px; font-weight: 500;">
-                      💬 Suporte
+                    <a href="${baseUrl}/contato" style="color: #1e293b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      Suporte
                     </a>
                   </td>
                 </tr>
@@ -1781,11 +1787,11 @@ export function generateAssetChangeEmailTemplate(params: {
 
           <!-- Footer Branding -->
           <tr>
-            <td style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%); padding: 24px; text-align: center;">
-              <p style="color: #9ca3af; font-size: 13px; margin: 0 0 8px 0; font-weight: 500;">
+            <td style="background-color: #1e293b; padding: 24px; text-align: center;">
+              <p style="color: #e2e8f0; font-size: 13px; margin: 0 0 8px 0; font-weight: 500;">
                 © ${new Date().getFullYear()} Preço Justo AI
               </p>
-              <p style="color: #6b7280; font-size: 12px; margin: 0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 Análise fundamentalista inteligente • ${baseUrl}
               </p>
             </td>
@@ -1836,6 +1842,309 @@ export async function sendAssetChangeEmail(params: {
   reportUrl: string;
 }) {
   const template = generateAssetChangeEmailTemplate(params);
+  
+  return await sendEmail({
+    to: params.email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  });
+}
+
+// ===== TEMPLATE PARA USUÁRIOS GRATUITOS (CONVERSÃO) =====
+
+export function generateFreeUserAssetChangeEmailTemplate(params: {
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+}) {
+  const {
+    userName,
+    ticker,
+    companyName,
+    companyLogoUrl,
+  } = params;
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
+  const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
+  const upgradeUrl = `${baseUrl}/planos`;
+  const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
+  
+  // Converter URLs SVG para formato compatível com email
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    
+    if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/667eea/ffffff?text=${ticker}`;
+    }
+    
+    if (url.startsWith('/')) {
+      return baseUrl + url;
+    }
+    
+    return url;
+  };
+  
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
+
+  return {
+    subject: `Mudança detectada em ${ticker} - Veja os detalhes completos`,
+    html: `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atualização: ${ticker}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #f3f4f6;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); overflow: hidden;">
+          
+          <!-- Header with Logo -->
+          <tr>
+            <td style="background-color: #1e293b; padding: 40px 30px; text-align: center;">
+              <table role="presentation" style="width: 100%; margin: 0 auto;">
+                <tr>
+                  <td style="text-align: center;">
+                    <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto 20px; filter: brightness(0) invert(1);" />
+                  </td>
+                </tr>
+              </table>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">
+                Mudança Detectada
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Company Header with Logo -->
+          <tr>
+            <td style="padding: 40px 30px 30px; text-align: center; background-color: #ffffff;">
+              ${emailCompatibleLogoUrl ? `
+              <table role="presentation" style="margin: 0 auto 20px;">
+                <tr>
+                  <td style="text-align: center;">
+                    <img src="${emailCompatibleLogoUrl}" 
+                         alt="${companyName}" 
+                         style="width: 64px; height: 64px; border-radius: 8px; object-fit: contain; display: block; margin: 0 auto;" 
+                         width="64" 
+                         height="64" />
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
+              <h2 style="color: #111827; margin: 0 0 6px 0; font-size: 24px; font-weight: 600;">
+                ${companyName}
+              </h2>
+              <div style="color: #6b7280; font-size: 16px; font-weight: 500; margin-bottom: 16px;">
+                ${ticker}
+              </div>
+            </td>
+          </tr>
+
+          <!-- Saudação -->
+          <tr>
+            <td style="padding: 0 30px 20px;">
+              <p style="color: #374151; font-size: 17px; line-height: 1.6; margin: 0;">
+                Olá <strong>${userName}</strong>, 👋
+              </p>
+            </td>
+          </tr>
+
+          <!-- Informação Principal -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <p style="color: #374151; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
+                Detectamos uma <strong>mudança relevante</strong> nos fundamentos de <strong>${companyName} (${ticker})</strong>, uma empresa que você está monitorando.
+              </p>
+
+              <!-- Highlight Box -->
+              <table role="presentation" style="width: 100%; background-color: #fef3c7; border-radius: 8px; border: 1px solid #f59e0b; margin: 24px 0;">
+                <tr>
+                  <td style="padding: 24px; text-align: center;">
+                    <div style="font-size: 13px; color: #92400e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                      Notificação Limitada
+                    </div>
+                    <div style="font-size: 16px; font-weight: 600; color: #78350f; line-height: 1.5;">
+                      Faça upgrade para Premium e receba relatórios completos com análise detalhada da mudança
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- CTA Principal -->
+          <tr>
+            <td style="padding: 0 30px 40px; text-align: center;">
+              <table role="presentation" style="margin: 0 auto;">
+                <tr>
+                  <td style="border-radius: 6px; background-color: #1e293b;">
+                    <a href="${upgradeUrl}" style="display: inline-block; color: #ffffff; text-decoration: none; padding: 14px 32px; font-weight: 600; font-size: 16px;">
+                      Fazer Upgrade para Premium
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Benefícios Premium -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; border: 1px solid #e5e7eb;">
+                <h3 style="margin: 0 0 20px 0; color: #111827; font-size: 18px; font-weight: 600; text-align: center;">
+                  O que você recebe como Premium:
+                </h3>
+                
+                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 12px 0; vertical-align: top;">
+                      <div style="display: inline-block; width: 32px; height: 32px; background-color: #1e293b; border-radius: 6px; text-align: center; line-height: 32px; font-size: 16px; margin-right: 12px; vertical-align: middle; color: #ffffff;">
+                        🤖
+                      </div>
+                      <div style="display: inline-block; vertical-align: middle; width: calc(100% - 50px);">
+                        <h4 style="margin: 0 0 4px 0; color: #111827; font-weight: 600; font-size: 15px;">Relatórios com IA</h4>
+                        <p style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.5;">Análise completa gerada por Google Gemini AI explicando as mudanças</p>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 0; vertical-align: top;">
+                      <div style="display: inline-block; width: 32px; height: 32px; background-color: #1e293b; border-radius: 6px; text-align: center; line-height: 32px; font-size: 16px; margin-right: 12px; vertical-align: middle; color: #ffffff;">
+                        📊
+                      </div>
+                      <div style="display: inline-block; vertical-align: middle; width: calc(100% - 50px);">
+                        <h4 style="margin: 0 0 4px 0; color: #111827; font-weight: 600; font-size: 15px;">Scores Detalhados</h4>
+                        <p style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.5;">Veja exatamente como o score mudou e o que causou a variação</p>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 0; vertical-align: top;">
+                      <div style="display: inline-block; width: 32px; height: 32px; background-color: #1e293b; border-radius: 6px; text-align: center; line-height: 32px; font-size: 16px; margin-right: 12px; vertical-align: middle; color: #ffffff;">
+                        📈
+                      </div>
+                      <div style="display: inline-block; vertical-align: middle; width: calc(100% - 50px);">
+                        <h4 style="margin: 0 0 4px 0; color: #111827; font-weight: 600; font-size: 15px;">Análises Completas</h4>
+                        <p style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.5;">Acesso a todos os modelos de valuation e análises fundamentais</p>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 0; vertical-align: top;">
+                      <div style="display: inline-block; width: 32px; height: 32px; background-color: #1e293b; border-radius: 6px; text-align: center; line-height: 32px; font-size: 16px; margin-right: 12px; vertical-align: middle; color: #ffffff;">
+                        🔔
+                      </div>
+                      <div style="display: inline-block; vertical-align: middle; width: calc(100% - 50px);">
+                        <h4 style="margin: 0 0 4px 0; color: #111827; font-weight: 600; font-size: 15px;">Notificações Detalhadas</h4>
+                        <p style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.5;">Receba emails completos sempre que houver mudanças significativas</p>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Secondary CTA -->
+          <tr>
+            <td style="padding: 0 30px 40px; text-align: center;">
+              <a href="${assetUrl}" style="color: #1e293b; text-decoration: none; font-size: 15px; font-weight: 500;">
+                Ver página de ${ticker}
+              </a>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding: 0 30px;">
+              <div style="border-top: 1px solid #e5e7eb;"></div>
+            </td>
+          </tr>
+
+          <!-- Footer Info -->
+          <tr>
+            <td style="padding: 32px 30px; text-align: center;">
+              <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
+                Você está recebendo este email porque se inscreveu para receber atualizações sobre <strong>${ticker}</strong>
+              </p>
+              <table role="presentation" style="margin: 0 auto;">
+                <tr>
+                  <td style="padding: 0 12px;">
+                    <a href="${manageSubscriptionsUrl}" style="color: #1e293b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      Gerenciar inscrições
+                    </a>
+                  </td>
+                  <td style="padding: 0 12px; color: #d1d5db;">|</td>
+                  <td style="padding: 0 12px;">
+                    <a href="${baseUrl}/contato" style="color: #1e293b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      Suporte
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer Branding -->
+          <tr>
+            <td style="background-color: #1e293b; padding: 24px; text-align: center;">
+              <p style="color: #e2e8f0; font-size: 13px; margin: 0 0 8px 0; font-weight: 500;">
+                © ${new Date().getFullYear()} Preço Justo AI
+              </p>
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                Análise fundamentalista inteligente • ${baseUrl}
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `,
+    text: `
+Mudança detectada em ${ticker} - Veja os detalhes completos
+
+Olá ${userName},
+
+Detectamos uma mudança relevante nos fundamentos de ${companyName} (${ticker}), uma empresa que você está monitorando.
+
+Para ver detalhes completos e relatórios gerados por IA, faça upgrade para Premium.
+
+O que você recebe como Premium:
+- Relatórios com IA: Análise completa gerada por Google Gemini AI explicando as mudanças
+- Scores Detalhados: Veja exatamente como o score mudou e o que causou a variação
+- Análises Completas: Acesso a todos os modelos de valuation e análises fundamentais
+- Notificações Detalhadas: Receba emails completos sempre que houver mudanças significativas
+
+Fazer upgrade: ${upgradeUrl}
+
+Ver página de ${ticker}: ${assetUrl}
+
+Você está recebendo este email porque se inscreveu para receber atualizações sobre ${ticker}.
+Gerenciar inscrições: ${manageSubscriptionsUrl}
+
+Preço Justo AI - Análise fundamentalista inteligente
+${baseUrl}
+    `
+  };
+}
+
+export async function sendFreeUserAssetChangeEmail(params: {
+  email: string;
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+}) {
+  const template = generateFreeUserAssetChangeEmailTemplate(params);
   
   return await sendEmail({
     to: params.email,
@@ -1903,47 +2212,41 @@ export function generateMonthlyReportEmailTemplate(params: {
           
           <!-- Header with Logo -->
           <tr>
-            <td style="background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); padding: 40px 30px; text-align: center;">
-              <div style="margin: 0 auto 20px; display: inline-block; background-color: #ffffff; padding: 12px 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block;" />
-              </div>
-              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
-                📊 Relatório Mensal
+            <td style="background-color: #1e293b; padding: 40px 30px; text-align: center;">
+              <table role="presentation" style="width: 100%; margin: 0 auto;">
+                <tr>
+                  <td style="text-align: center;">
+                    <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto 20px; filter: brightness(0) invert(1);" />
+                  </td>
+                </tr>
+              </table>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">
+                Relatório Mensal
               </h1>
-              <p style="color: rgba(255, 255, 255, 0.9); margin: 8px 0 0 0; font-size: 16px; font-weight: 400;">
-                Análise completa com Inteligência Artificial
-              </p>
             </td>
           </tr>
 
           <!-- Company Header with Logo -->
           <tr>
-            <td style="padding: 40px 30px 30px; text-align: center; background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);">
+            <td style="padding: 40px 30px 30px; text-align: center; background-color: #ffffff;">
               ${emailCompatibleLogoUrl ? `
-              <table role="presentation" style="margin: 0 auto 24px;">
+              <table role="presentation" style="margin: 0 auto 20px;">
                 <tr>
                   <td style="text-align: center;">
-                    <div style="width: 96px; height: 96px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; padding: 16px; box-shadow: 0 8px 24px rgba(139, 92, 246, 0.15); border: 2px solid #e9d5ff;">
-                      <img src="${emailCompatibleLogoUrl}" 
-                           alt="${companyName}" 
-                           style="width: 64px; height: 64px; border-radius: 8px; object-fit: contain; display: block; margin: 0 auto;" 
-                           width="64" 
-                           height="64" />
-                    </div>
+                    <img src="${emailCompatibleLogoUrl}" 
+                         alt="${companyName}" 
+                         style="width: 64px; height: 64px; border-radius: 8px; object-fit: contain; display: block; margin: 0 auto;" 
+                         width="64" 
+                         height="64" />
                   </td>
                 </tr>
               </table>
               ` : ''}
-              <h2 style="color: #1e293b; margin: 0 0 8px 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
+              <h2 style="color: #111827; margin: 0 0 6px 0; font-size: 24px; font-weight: 600;">
                 ${companyName}
               </h2>
-              <div style="color: #6b7280; font-size: 18px; font-weight: 600; margin-bottom: 16px; letter-spacing: 0.5px;">
+              <div style="color: #6b7280; font-size: 16px; font-weight: 500; margin-bottom: 16px;">
                 ${ticker}
-              </div>
-              <div style="text-align: center;">
-                <span style="display: inline-block; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: #ffffff; padding: 10px 24px; border-radius: 24px; font-size: 14px; font-weight: 600; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);">
-                  🤖 Análise com IA
-                </span>
               </div>
             </td>
           </tr>
@@ -1966,17 +2269,14 @@ export function generateMonthlyReportEmailTemplate(params: {
               </p>
 
               <!-- Highlight Box -->
-              <table role="presentation" style="width: 100%; background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); border-radius: 16px; border: 2px solid #8b5cf6; margin: 24px 0; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);">
+              <table role="presentation" style="width: 100%; background-color: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; margin: 24px 0;">
                 <tr>
-                  <td style="padding: 32px 24px; text-align: center;">
-                    <div style="font-size: 14px; color: #7c3aed; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-                      📈 Análise Mensal Completa
+                  <td style="padding: 24px; text-align: center;">
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                      Análise Mensal Completa
                     </div>
-                    <div style="font-size: 18px; font-weight: 600; color: #1e293b; margin: 16px 0; line-height: 1.6;">
+                    <div style="font-size: 16px; font-weight: 600; color: #111827; line-height: 1.5;">
                       Análise fundamentalista completa gerada por nossa IA
-                    </div>
-                    <div style="display: inline-block; background-color: #8b5cf615; color: #7c3aed; padding: 8px 20px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-top: 12px;">
-                      ✨ Google Gemini AI
                     </div>
                   </td>
                 </tr>
@@ -1987,12 +2287,11 @@ export function generateMonthlyReportEmailTemplate(params: {
           <!-- Resumo do Relatório -->
           <tr>
             <td style="padding: 0 30px 30px;">
-              <div style="background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border-left: 4px solid #8b5cf6; padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1);">
-                <h3 style="margin: 0 0 16px 0; color: #1e293b; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                  <span style="font-size: 24px;">📋</span>
+              <div style="background-color: #f9fafb; border-left: 3px solid #1e293b; padding: 20px 24px; border-radius: 6px;">
+                <h3 style="margin: 0 0 12px 0; color: #111827; font-size: 16px; font-weight: 600;">
                   Resumo Executivo
                 </h3>
-                <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.8;">
+                <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
                   ${reportSummary}
                 </p>
               </div>
@@ -2004,9 +2303,9 @@ export function generateMonthlyReportEmailTemplate(params: {
             <td style="padding: 0 30px 40px; text-align: center;">
               <table role="presentation" style="margin: 0 auto;">
                 <tr>
-                  <td style="border-radius: 12px; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);">
-                    <a href="${reportUrl}" style="display: inline-block; color: #ffffff; text-decoration: none; padding: 18px 40px; font-weight: 600; font-size: 16px; letter-spacing: 0.3px;">
-                      📄 Ver Relatório Completo
+                  <td style="border-radius: 6px; background-color: #1e293b;">
+                    <a href="${reportUrl}" style="display: inline-block; color: #ffffff; text-decoration: none; padding: 14px 32px; font-weight: 600; font-size: 16px;">
+                      Ver Relatório Completo
                     </a>
                   </td>
                 </tr>
@@ -2017,8 +2316,8 @@ export function generateMonthlyReportEmailTemplate(params: {
           <!-- Secondary CTA -->
           <tr>
             <td style="padding: 0 30px 40px; text-align: center;">
-              <a href="${assetUrl}" style="color: #8b5cf6; text-decoration: none; font-size: 15px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
-                📈 Ver página completa de ${ticker}
+              <a href="${assetUrl}" style="color: #1e293b; text-decoration: none; font-size: 15px; font-weight: 500;">
+                Ver página completa de ${ticker}
               </a>
             </td>
           </tr>
@@ -2026,14 +2325,14 @@ export function generateMonthlyReportEmailTemplate(params: {
           <!-- Info Box -->
           <tr>
             <td style="padding: 0 30px 30px;">
-              <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px;">
+              <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;">
                 <div style="display: flex; align-items: start; gap: 12px;">
-                  <span style="font-size: 24px; flex-shrink: 0;">💡</span>
+                  <span style="font-size: 20px; flex-shrink: 0;">💡</span>
                   <div>
-                    <h4 style="margin: 0 0 8px 0; color: #0369a1; font-size: 15px; font-weight: 700;">
+                    <h4 style="margin: 0 0 8px 0; color: #111827; font-size: 15px; font-weight: 600;">
                       Sobre os Relatórios Mensais
                     </h4>
-                    <p style="margin: 0; color: #0369a1; font-size: 14px; line-height: 1.6;">
+                    <p style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.6;">
                       Nossos relatórios mensais são gerados automaticamente usando Inteligência Artificial e incluem análise completa dos fundamentos, 
                       múltiplos modelos de valuation e insights estratégicos para ajudar você a tomar decisões de investimento mais informadas.
                     </p>
@@ -2054,19 +2353,19 @@ export function generateMonthlyReportEmailTemplate(params: {
           <tr>
             <td style="padding: 32px 30px; text-align: center;">
               <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
-                💌 Você está recebendo este email porque se inscreveu para receber atualizações sobre <strong>${ticker}</strong>
+                Você está recebendo este email porque se inscreveu para receber atualizações sobre <strong>${ticker}</strong>
               </p>
               <table role="presentation" style="margin: 0 auto;">
                 <tr>
                   <td style="padding: 0 12px;">
-                    <a href="${manageSubscriptionsUrl}" style="color: #8b5cf6; text-decoration: none; font-size: 14px; font-weight: 500;">
-                      ⚙️ Gerenciar inscrições
+                    <a href="${manageSubscriptionsUrl}" style="color: #1e293b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      Gerenciar inscrições
                     </a>
                   </td>
                   <td style="padding: 0 12px; color: #d1d5db;">|</td>
                   <td style="padding: 0 12px;">
-                    <a href="${baseUrl}/contato" style="color: #8b5cf6; text-decoration: none; font-size: 14px; font-weight: 500;">
-                      💬 Suporte
+                    <a href="${baseUrl}/contato" style="color: #1e293b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                      Suporte
                     </a>
                   </td>
                 </tr>
@@ -2076,11 +2375,11 @@ export function generateMonthlyReportEmailTemplate(params: {
 
           <!-- Footer Branding -->
           <tr>
-            <td style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%); padding: 24px; text-align: center;">
-              <p style="color: #9ca3af; font-size: 13px; margin: 0 0 8px 0; font-weight: 500;">
+            <td style="background-color: #1e293b; padding: 24px; text-align: center;">
+              <p style="color: #e2e8f0; font-size: 13px; margin: 0 0 8px 0; font-weight: 500;">
                 © ${new Date().getFullYear()} Preço Justo AI
               </p>
-              <p style="color: #6b7280; font-size: 12px; margin: 0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 Análise fundamentalista inteligente • ${baseUrl}
               </p>
             </td>

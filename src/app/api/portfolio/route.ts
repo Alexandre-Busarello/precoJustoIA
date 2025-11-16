@@ -46,60 +46,81 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     
-    // Validate required fields
-    if (!body.name || !body.startDate || !body.monthlyContribution || !body.assets) {
+    // Validate required fields (assets is optional - can be added later)
+    if (!body.name || !body.startDate || !body.monthlyContribution) {
       return NextResponse.json(
-        { error: 'Campos obrigatórios faltando: name, startDate, monthlyContribution, assets' },
+        { error: 'Campos obrigatórios faltando: name, startDate, monthlyContribution' },
         { status: 400 }
       );
     }
 
-    // Validate assets
-    if (!Array.isArray(body.assets) || body.assets.length === 0) {
+    // Validate assets array (can be empty - assets can be added later)
+    if (body.assets !== undefined && !Array.isArray(body.assets)) {
       return NextResponse.json(
-        { error: 'A carteira deve ter pelo menos um ativo' },
+        { error: 'Campo assets deve ser um array' },
         { status: 400 }
       );
     }
 
-    // Validate total allocation = 100%
-    const totalAllocation = body.assets.reduce((sum: number, a: any) => sum + (a.targetAllocation || 0), 0);
-    if (Math.abs(totalAllocation - 1.0) > 0.01) {
-      return NextResponse.json(
-        { error: `Alocação total deve ser 100%. Atual: ${(totalAllocation * 100).toFixed(2)}%` },
-        { status: 400 }
-      );
-    }
+    // Default to empty array if assets not provided
+    const assetsArray = Array.isArray(body.assets) ? body.assets : [];
 
-    // Validate all tickers before creating portfolio
-    const invalidTickers: string[] = [];
-    for (const asset of body.assets) {
-      const ticker = asset.ticker.toUpperCase().trim();
+    // Normalize allocations if there are assets
+    let normalizedAssets: any[] = [];
+    
+    if (assetsArray.length > 0) {
+      normalizedAssets = assetsArray.map((a: any) => ({
+        ticker: a.ticker.toUpperCase().trim(),
+        targetAllocation: Number(a.targetAllocation) || 0
+      }));
       
-      try {
-        await validateTicker(ticker);
+      const totalAllocation = normalizedAssets.reduce((sum: number, a: any) => sum + a.targetAllocation, 0);
+      
+      // If no allocation provided or doesn't sum to 100%, distribute equally
+      if (totalAllocation === 0 || Math.abs(totalAllocation - 1.0) > 0.01) {
+        const equalAllocation = 1 / normalizedAssets.length;
+        normalizedAssets = normalizedAssets.map((a: any) => ({
+          ...a,
+          targetAllocation: equalAllocation
+        }));
+      } else if (totalAllocation !== 1.0) {
+        // Normalize to exactly 100%
+        normalizedAssets = normalizedAssets.map((a: any) => ({
+          ...a,
+          targetAllocation: a.targetAllocation / totalAllocation
+        }));
+      }
+
+      // Validate all tickers before creating portfolio
+      const invalidTickers: string[] = [];
+      for (const asset of normalizedAssets) {
+        const ticker = asset.ticker;
         
-        // Register asset if it doesn't exist
-        const registrationResult = await AssetRegistrationService.registerAsset(ticker);
-        if (!registrationResult.success) {
+        try {
+          await validateTicker(ticker);
+          
+          // Register asset if it doesn't exist
+          const registrationResult = await AssetRegistrationService.registerAsset(ticker);
+          if (!registrationResult.success) {
+            invalidTickers.push(ticker);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Ticker inválido';
+          console.error(`❌ [PORTFOLIO CREATE] Ticker inválido: ${ticker} - ${errorMessage}`);
           invalidTickers.push(ticker);
         }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Ticker inválido';
-        console.error(`❌ [PORTFOLIO CREATE] Ticker inválido: ${ticker} - ${errorMessage}`);
-        invalidTickers.push(ticker);
       }
-    }
 
-    if (invalidTickers.length > 0) {
-      return NextResponse.json(
-        { 
-          error: `Os seguintes tickers não foram encontrados no Yahoo Finance: ${invalidTickers.join(', ')}`,
-          invalidTickers,
-          code: 'INVALID_TICKERS'
-        },
-        { status: 400 }
-      );
+      if (invalidTickers.length > 0) {
+        return NextResponse.json(
+          { 
+            error: `Os seguintes tickers não foram encontrados no Yahoo Finance: ${invalidTickers.join(', ')}`,
+            invalidTickers,
+            code: 'INVALID_TICKERS'
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Create portfolio
@@ -109,10 +130,7 @@ export async function POST(request: NextRequest) {
       startDate: new Date(body.startDate),
       monthlyContribution: Number(body.monthlyContribution),
       rebalanceFrequency: body.rebalanceFrequency || 'monthly',
-      assets: body.assets.map((a: any) => ({
-        ticker: a.ticker.toUpperCase(),
-        targetAllocation: Number(a.targetAllocation)
-      })),
+      assets: normalizedAssets,
       sourceBacktestId: body.sourceBacktestId
     });
 

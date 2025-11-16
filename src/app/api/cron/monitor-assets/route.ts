@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service';
 import { MonitoringReportService } from '@/lib/monitoring-report-service';
-import { sendAssetChangeEmail } from '@/lib/email-service';
+import { sendAssetChangeEmail, sendFreeUserAssetChangeEmail } from '@/lib/email-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
 import { toNumber } from '@/lib/strategies';
@@ -276,7 +276,14 @@ export async function GET(request: NextRequest) {
                   .substring(0, 500)
                   .trim() + '...';
 
-                for (const subscriber of subscribers) {
+                // Separar Premium/Trial de Gratuitos
+                const premiumSubscribers = subscribers.filter(sub => sub.isPremium);
+                const freeSubscribers = subscribers.filter(sub => !sub.isPremium);
+
+                console.log(`👑 ${company.ticker}: ${premiumSubscribers.length} Premium/Trial, ${freeSubscribers.length} Gratuitos`);
+
+                // Enviar emails completos para Premium/Trial
+                for (const subscriber of premiumSubscribers) {
                   try {
                     await sendAssetChangeEmail({
                       email: subscriber.email,
@@ -293,7 +300,25 @@ export async function GET(request: NextRequest) {
 
                     emailsSent++;
                   } catch (emailError) {
-                    console.error(`❌ Erro ao enviar email para ${subscriber.email}:`, emailError);
+                    console.error(`❌ Erro ao enviar email Premium para ${subscriber.email}:`, emailError);
+                    // Não falhar o processamento por causa de erro de email
+                  }
+                }
+
+                // Enviar emails de conversão para Gratuitos
+                for (const subscriber of freeSubscribers) {
+                  try {
+                    await sendFreeUserAssetChangeEmail({
+                      email: subscriber.email,
+                      userName: subscriber.name || 'Investidor',
+                      ticker: company.ticker,
+                      companyName: company.name || company.ticker,
+                      companyLogoUrl: company.logoUrl,
+                    });
+
+                    emailsSent++;
+                  } catch (emailError) {
+                    console.error(`❌ Erro ao enviar email Gratuito para ${subscriber.email}:`, emailError);
                     // Não falhar o processamento por causa de erro de email
                   }
                 }

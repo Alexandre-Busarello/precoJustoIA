@@ -67,28 +67,17 @@ export function PortfolioConfigForm({
   const [newAllocation, setNewAllocation] = useState('');
 
   const totalAllocation = assets.reduce((sum, asset) => sum + asset.targetAllocation, 0);
-  // Allow ±0.5% tolerance (between 99.5% and 100.5%)
+  // In create mode, only require name (assets and allocation are optional, can be added later)
   // In edit mode, only validate basic fields (assets are managed separately)
   const isValid = mode === 'create' 
-    ? (name && assets.length > 0 && totalAllocation >= 0.995 && totalAllocation <= 1.005)
+    ? (name && name.trim().length > 0)
     : (name && monthlyContribution > 0);
 
   const handleAddAsset = async () => {
-    if (!newTicker || !newAllocation) {
+    if (!newTicker) {
       toast({
         title: 'Erro',
-        description: 'Preencha ticker e alocação',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    const allocation = parseFloat(newAllocation) / 100;
-    
-    if (allocation <= 0 || allocation > 1) {
-      toast({
-        title: 'Erro',
-        description: 'Alocação deve estar entre 0% e 100%',
+        description: 'Preencha o ticker do ativo',
         variant: 'destructive'
       });
       return;
@@ -129,6 +118,46 @@ export function PortfolioConfigForm({
         title: 'Erro ao validar ticker',
         description: 'Não foi possível validar o ticker. Tente novamente.',
         variant: 'destructive',
+      });
+      return;
+    }
+
+    // Se alocação foi informada, validar e usar
+    // Se não foi informada, calcular distribuição igual entre todos os ativos (incluindo o novo)
+    let allocation: number;
+    
+    if (newAllocation && newAllocation.trim() !== '') {
+      const parsedAlloc = parseFloat(newAllocation) / 100;
+      
+      if (isNaN(parsedAlloc) || parsedAlloc <= 0 || parsedAlloc > 1) {
+        toast({
+          title: 'Erro',
+          description: 'Alocação deve estar entre 0% e 100%',
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      allocation = parsedAlloc;
+    } else {
+      // Distribuição igual entre todos os ativos (incluindo o novo)
+      const totalAssets = assets.length + 1;
+      allocation = 1 / totalAssets;
+      
+      // Redistribuir alocações existentes igualmente
+      const equalAllocation = allocation;
+      const updatedAssets = assets.map(a => ({
+        ...a,
+        targetAllocation: equalAllocation
+      }));
+      
+      setAssets([...updatedAssets, { ticker: tickerUpper, targetAllocation: allocation }]);
+      setNewTicker('');
+      setNewAllocation('');
+      
+      toast({
+        title: 'Ativo adicionado',
+        description: `Alocação distribuída igualmente: ${(allocation * 100).toFixed(1)}% para cada ativo`,
       });
       return;
     }
@@ -282,20 +311,43 @@ export function PortfolioConfigForm({
     if (!isValid) {
       toast({
         title: 'Erro de validação',
-        description: 'Verifique se todos os campos estão preenchidos e a alocação total é 100%',
+        description: 'Verifique se todos os campos obrigatórios estão preenchidos',
         variant: 'destructive'
       });
       return;
     }
 
     if (mode === 'create') {
+      // Normalizar alocações se necessário (distribuir igualmente se não somarem 100%)
+      // Se não há ativos, enviar array vazio (podem ser adicionados depois)
+      let normalizedAssets = [...assets];
+      
+      if (normalizedAssets.length > 0) {
+        const currentTotal = normalizedAssets.reduce((sum, a) => sum + a.targetAllocation, 0);
+        
+        // Se não há alocação informada ou não soma 100%, distribuir igualmente
+        if (currentTotal === 0 || Math.abs(currentTotal - 1.0) > 0.01) {
+          const equalAllocation = 1 / normalizedAssets.length;
+          normalizedAssets = normalizedAssets.map(a => ({
+            ...a,
+            targetAllocation: equalAllocation
+          }));
+        } else if (currentTotal !== 1.0) {
+          // Normalizar para somar exatamente 100%
+          normalizedAssets = normalizedAssets.map(a => ({
+            ...a,
+            targetAllocation: a.targetAllocation / currentTotal
+          }));
+        }
+      }
+
       createPortfolioMutation.mutate({
         name,
         description,
         startDate,
         monthlyContribution,
         rebalanceFrequency,
-        assets
+        assets: normalizedAssets
       });
     } else {
       // Edit mode - update portfolio
@@ -399,14 +451,14 @@ export function PortfolioConfigForm({
       {/* Assets */}
       {mode === 'create' && (
         <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Ativos da Carteira</CardTitle>
-              <Badge variant={totalAllocation === 1 ? 'default' : 'destructive'}>
-                {(totalAllocation * 100).toFixed(1)}% alocado
-              </Badge>
-            </div>
-          </CardHeader>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Ativos da Carteira</CardTitle>
+                <Badge variant={totalAllocation === 0 || totalAllocation === 1 ? 'default' : 'outline'}>
+                  {totalAllocation === 0 ? 'Sem alocação' : `${(totalAllocation * 100).toFixed(1)}% alocado`}
+                </Badge>
+              </div>
+            </CardHeader>
           <CardContent className="space-y-6">
             {/* Asset Input Methods */}
             <Tabs defaultValue="manual" className="w-full">
@@ -437,7 +489,7 @@ export function PortfolioConfigForm({
                   <div className="flex gap-2">
                     <Input
                       type="number"
-                      placeholder="% (ex: 25)"
+                      placeholder="% (opcional)"
                       value={newAllocation}
                       onChange={(e) => setNewAllocation(e.target.value)}
                       className="w-24 sm:w-32"
@@ -451,6 +503,9 @@ export function PortfolioConfigForm({
                     </Button>
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  💡 Se não informar a alocação, será distribuída igualmente entre todos os ativos
+                </p>
               </TabsContent>
 
               <TabsContent value="bulk" className="mt-6">
@@ -469,8 +524,8 @@ export function PortfolioConfigForm({
             {assets.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <TrendingUp className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>Adicione ativos à sua carteira</p>
-                <p className="text-sm mt-1">Use uma das opções acima para começar</p>
+                <p>Nenhum ativo adicionado ainda</p>
+                <p className="text-sm mt-1">Você pode adicionar ativos agora ou depois na aba de configurações</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -501,16 +556,22 @@ export function PortfolioConfigForm({
               </div>
             )}
 
-            {(totalAllocation < 0.995 || totalAllocation > 1.005) && assets.length > 0 && (
-              <p className="text-sm text-destructive">
-                A alocação total deve estar entre 99,5% e 100,5%. 
-                {totalAllocation < 1 ? `Faltam ${((1 - totalAllocation) * 100).toFixed(1)}%` : `Excedeu ${((totalAllocation - 1) * 100).toFixed(1)}%`}
-              </p>
-            )}
-            {totalAllocation >= 0.995 && totalAllocation <= 1.005 && totalAllocation !== 1 && assets.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                ℹ️ Alocação será ajustada automaticamente para 100% pela plataforma
-              </p>
+            {assets.length > 0 && (
+              <div className="space-y-1">
+                {totalAllocation === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    ℹ️ Nenhuma alocação informada. Será distribuída igualmente entre todos os ativos ao criar a carteira.
+                  </p>
+                ) : totalAllocation < 0.995 || totalAllocation > 1.005 ? (
+                  <p className="text-sm text-muted-foreground">
+                    ℹ️ Alocação total: {(totalAllocation * 100).toFixed(1)}%. Será normalizada para 100% ao criar a carteira.
+                  </p>
+                ) : totalAllocation !== 1 ? (
+                  <p className="text-sm text-muted-foreground">
+                    ℹ️ Alocação será ajustada automaticamente para 100% pela plataforma
+                  </p>
+                ) : null}
+              </div>
             )}
           </CardContent>
         </Card>

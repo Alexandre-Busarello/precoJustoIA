@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getCurrentUser, requirePremiumUser } from '@/lib/user-service';
+import { getCurrentUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper';
 
@@ -84,7 +84,7 @@ export async function GET(
 /**
  * POST /api/asset-subscriptions/by-ticker/[ticker]
  * Inscreve o usuário em um ticker específico
- * REQUER PREMIUM
+ * Permite usuários gratuitos (emails diferenciados)
  */
 export async function POST(
   request: NextRequest,
@@ -96,15 +96,6 @@ export async function POST(
       return NextResponse.json(
         { error: 'Autenticação necessária' },
         { status: 401 }
-      );
-    }
-
-    // Verificar Premium
-    const premiumUser = await requirePremiumUser();
-    if (!premiumUser) {
-      return NextResponse.json(
-        { error: 'Este recurso é exclusivo para assinantes Premium' },
-        { status: 403 }
       );
     }
 
@@ -188,7 +179,6 @@ export async function POST(
 /**
  * DELETE /api/asset-subscriptions/by-ticker/[ticker]
  * Cancela inscrição em um ticker específico
- * REQUER PREMIUM
  */
 export async function DELETE(
   request: NextRequest,
@@ -200,15 +190,6 @@ export async function DELETE(
       return NextResponse.json(
         { error: 'Autenticação necessária' },
         { status: 401 }
-      );
-    }
-
-    // Verificar Premium
-    const premiumUser = await requirePremiumUser();
-    if (!premiumUser) {
-      return NextResponse.json(
-        { error: 'Este recurso é exclusivo para assinantes Premium' },
-        { status: 403 }
       );
     }
 

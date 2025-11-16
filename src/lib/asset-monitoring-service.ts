@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper';
 import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
+import { isUserPremium } from '@/lib/user-service';
 
 /**
  * Serviço de Monitoramento de Ativos
@@ -120,13 +121,14 @@ export class AssetMonitoringService {
   }
 
   /**
-   * Lista emails dos usuários inscritos em um ativo
+   * Lista emails dos usuários inscritos em um ativo com status Premium/Trial
    */
   static async getSubscribersForCompany(companyId: number): Promise<
     Array<{
       userId: string;
       email: string;
       name: string | null;
+      isPremium: boolean;
     }>
   > {
     const subscriptions = await safeQueryWithParams(
@@ -146,11 +148,20 @@ export class AssetMonitoringService {
       { companyId }
     );
 
-    return (subscriptions as any[]).map((sub) => ({
-      userId: sub.user.id,
-      email: sub.user.email,
-      name: sub.user.name,
-    }));
+    // Verificar status Premium/Trial de cada usuário
+    const subscribersWithPremium = await Promise.all(
+      (subscriptions as any[]).map(async (sub) => {
+        const isPremium = await isUserPremium(sub.user.id);
+        return {
+          userId: sub.user.id,
+          email: sub.user.email,
+          name: sub.user.name,
+          isPremium,
+        };
+      })
+    );
+
+    return subscribersWithPremium;
   }
 
   /**

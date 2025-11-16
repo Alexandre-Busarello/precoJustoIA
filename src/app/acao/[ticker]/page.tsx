@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { Metadata } from 'next'
+import { Suspense } from 'react'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
@@ -15,6 +16,7 @@ import TechnicalAnalysisSection from '@/components/technical-analysis-section'
 import MarketSentimentSection from '@/components/market-sentiment-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import AssetSubscriptionButton from '@/components/asset-subscription-button'
+import { AutoSubscribeHandler } from '@/components/auto-subscribe-handler'
 import { RelatedCompanies } from '@/components/related-companies'
 import { Footer } from '@/components/footer'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
@@ -741,6 +743,17 @@ export default async function TickerPage({ params }: PageProps) {
                       </div>
                     )}
 
+                    {/* Card de Notificações - Destacado */}
+                    <div className="mb-6">
+                      <AssetSubscriptionButton
+                        ticker={ticker}
+                        companyId={companyData.id}
+                        variant="card"
+                        size="default"
+                        showLabel={true}
+                      />
+                    </div>
+
                     {/* Botões de Ação */}
                     <div className="mb-4 flex flex-wrap gap-2">
                       {smartComparatorUrl && (
@@ -759,14 +772,6 @@ export default async function TickerPage({ params }: PageProps) {
                           sector: companyData.sector || undefined,
                           currentPrice: companyData.dailyQuotes?.[0]?.price ? Number(companyData.dailyQuotes[0].price) : undefined
                         }}
-                        variant="outline"
-                        size="default"
-                        showLabel={true}
-                      />
-
-                      <AssetSubscriptionButton
-                        ticker={ticker}
-                        companyId={companyData.id}
                         variant="outline"
                         size="default"
                         showLabel={true}
@@ -1022,6 +1027,11 @@ export default async function TickerPage({ params }: PageProps) {
           }}
         />
       )}
+
+      {/* Handler para inscrição automática após login/registro */}
+      <Suspense fallback={null}>
+        <AutoSubscribeHandler ticker={ticker} />
+      </Suspense>
     </>
   )
 }

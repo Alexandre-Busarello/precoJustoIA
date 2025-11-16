@@ -22,7 +22,7 @@ import { Footer } from '@/components/footer'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
-import { getSectorCompetitors, getMixedRelatedCompanies, type CompetitorData } from '@/lib/competitor-service'
+import { getSectorCompetitors, getMixedRelatedCompanies } from '@/lib/competitor-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -475,6 +475,41 @@ export default async function TickerPage({ params }: PageProps) {
                       )}
                     </div>
 
+                    {/* Banner Calculadora de Dividend Yield - Desktop (dentro do card principal) */}
+                    {latestFinancials?.dy && Number(latestFinancials.dy) > 0 && (
+                      <div className="hidden lg:block mb-4">
+                        <Card className="border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 flex-shrink-0">
+                                  <Calculator className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-base mb-1">Calcule sua Renda Passiva</h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    Dividend Yield: <span className="font-semibold text-green-600">
+                                      {(Number(latestFinancials.dy) * 100).toFixed(2)}%
+                                    </span>
+                                  </p>
+                                </div>
+                              </div>
+                              <Button 
+                                asChild 
+                                size="sm"
+                                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white flex-shrink-0"
+                              >
+                                <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`}>
+                                  Calcular
+                                  <ArrowRight className="w-4 h-4 ml-1.5" />
+                                </Link>
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
                       {companyData.industry && (
                         <div className="flex items-center space-x-2 min-w-0">
@@ -563,9 +598,9 @@ export default async function TickerPage({ params }: PageProps) {
               userIsPremium={userIsPremium}
             />
 
-            {/* Card de Calculadora de Dividend Yield - Destacado */}
+            {/* Card de Calculadora de Dividend Yield - Mobile/Tablet (versão completa) */}
             {latestFinancials?.dy && Number(latestFinancials.dy) > 0 && (
-              <Card className="mb-6 border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20">
+              <Card className="mb-6 lg:hidden border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20">
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div className="flex-1">

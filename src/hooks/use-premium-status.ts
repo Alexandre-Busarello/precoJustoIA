@@ -20,6 +20,10 @@ export function usePremiumStatus() {
         isLoading: true,
         subscriptionTier: 'FREE' as const,
         premiumExpiresAt: null,
+        trialStartedAt: null,
+        trialEndsAt: null,
+        isTrialActive: false,
+        trialDaysRemaining: null,
         isAlfaPhase: false
       }
     }
@@ -31,12 +35,18 @@ export function usePremiumStatus() {
         isLoading: false,
         subscriptionTier: 'FREE' as const,
         premiumExpiresAt: null,
+        trialStartedAt: null,
+        trialEndsAt: null,
+        isTrialActive: false,
+        trialDaysRemaining: null,
         isAlfaPhase: alfaStats?.phase === 'ALFA'
       }
     }
 
     const tier = session.user.subscriptionTier || 'FREE'
     const expiresAt = session.user.premiumExpiresAt ? new Date(session.user.premiumExpiresAt) : null
+    const trialEndsAt = session.user.trialEndsAt ? new Date(session.user.trialEndsAt) : null
+    const trialStartedAt = session.user.trialStartedAt ? new Date(session.user.trialStartedAt) : null
     const now = new Date()
     const isAlfaPhase = alfaStats?.phase === 'ALFA'
 
@@ -44,8 +54,23 @@ export function usePremiumStatus() {
     const hasValidPremium = tier === 'PREMIUM' && (!expiresAt || expiresAt > now)
     const hasValidVip = tier === 'VIP' && (!expiresAt || expiresAt > now)
 
+    // Verificar se trial está ativo
+    // Garantir que trialEndsAt > trialStartedAt E trialEndsAt > now
+    const isTrialActive = trialStartedAt && trialEndsAt && 
+                         trialEndsAt > trialStartedAt &&
+                         trialEndsAt > now
+    
+    // Calcular dias restantes do trial
+    let trialDaysRemaining: number | null = null
+    if (isTrialActive && trialEndsAt) {
+      const diffTime = trialEndsAt.getTime() - now.getTime()
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      trialDaysRemaining = diffDays > 0 ? diffDays : null
+    }
+
     // Durante a fase ALFA, todos os usuários logados têm acesso Premium
-    const isPremium = isAlfaPhase || hasValidPremium
+    // Trial também dá acesso Premium
+    const isPremium = isAlfaPhase || hasValidPremium || isTrialActive
     const isVip = hasValidVip // VIP não é afetado pela fase ALFA
 
     return {
@@ -54,6 +79,10 @@ export function usePremiumStatus() {
       isLoading: false,
       subscriptionTier: tier as 'FREE' | 'PREMIUM' | 'VIP',
       premiumExpiresAt: expiresAt,
+      trialStartedAt,
+      trialEndsAt,
+      isTrialActive,
+      trialDaysRemaining,
       isAlfaPhase
     }
   }, [session, status, alfaStats, isLoadingAlfa])

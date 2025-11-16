@@ -27,12 +27,12 @@ export const MERCADOPAGO_CONFIG = {
       duration: 365, // dias
     },
     monthly: {
-      amount: 47.00,
+      amount: 19.90,
       description: 'Preço Justo AI - Premium Mensal',
       duration: 30, // dias
     },
     annual: {
-      amount: 497.00,
+      amount: 189.90,
       description: 'Preço Justo AI - Premium Anual',
       duration: 365, // dias
     },

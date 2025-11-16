@@ -1,10 +1,8 @@
-Bug no grafico de preço do ativo
-calculateOverallScore - Incluir o metodo Barsi com um peso que faça sentido no calculo do score, isso porque o método barsi passa geralmete em poucas empresas, para não punir muito a empresa que tenha bons fundamentos por conta de não atingir o preço teto do Barsi. Buscar por todos os lugares que usem esse método para passar a estrategia. 
+Asset Monitoring deve enviar email com o relatório apenas para usuários PREMIUM (ou que estejam em TRIAL). Usuario Gratuitos devem poder se inscrever para receber atualizações dos ativos, mas o email recebido deve ser um email indicando que houve mudança no ativo mais não indicando se foi positiva ou negativa e deve usar desse email para tentar converter o usuario para PREMIUM
 
 cron para atualizar o utltimo dividendo das empresas, fiis, etfs e bdrs
 
 Adicionar Métodos:
-- Barsi
 - Bazin
 - Peter Lynch
 

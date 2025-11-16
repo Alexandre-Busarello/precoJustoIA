@@ -27,7 +27,9 @@ import {
   Filter,
   Sparkles,
   Bell,
-  Calculator
+  Calculator,
+  Clock,
+  Gift
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -38,7 +40,7 @@ interface MobileNavProps {
 export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
-  const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
+  const { isPremium, isTrialActive, trialDaysRemaining, subscriptionTier } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
 
   // Extrair iniciais do nome ou email
   const getInitials = () => {
@@ -243,23 +245,53 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                   <p className="text-xs text-muted-foreground truncate mb-2">
                     {session.user?.email}
                   </p>
-                  <Badge 
-                    variant={isPremium ? "default" : "secondary"} 
-                    className={`text-xs ${
-                      isPremium 
-                        ? 'bg-gradient-to-r from-violet-600 to-purple-600 border-0' 
-                        : ''
-                    }`}
-                  >
-                    {isPremium ? (
-                      <>
-                        <Sparkles className="w-3 h-3 mr-1" />
-                        Premium
-                      </>
-                    ) : (
-                      'Plano Gratuito'
-                    )}
-                  </Badge>
+                  {isTrialActive && subscriptionTier === 'FREE' ? (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Badge 
+                          variant="secondary"
+                          className="text-xs bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300"
+                        >
+                          🎁 Trial Premium
+                        </Badge>
+                        <Badge 
+                          variant="default"
+                          className="text-xs bg-gradient-to-r from-violet-600 to-purple-600 border-0"
+                        >
+                          <Sparkles className="w-3 h-3 mr-1" />
+                          Ativo
+                        </Badge>
+                      </div>
+                      {trialDaysRemaining !== null && (
+                        <div className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400">
+                          <Clock className="w-3 h-3" />
+                          <span className="font-medium">
+                            {trialDaysRemaining === 1 
+                              ? 'Último dia!' 
+                              : `${trialDaysRemaining} dias restantes`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Badge 
+                      variant={isPremium ? "default" : "secondary"} 
+                      className={`text-xs ${
+                        isPremium 
+                          ? 'bg-gradient-to-r from-violet-600 to-purple-600 border-0' 
+                          : ''
+                      }`}
+                    >
+                      {isPremium ? (
+                        <>
+                          <Sparkles className="w-3 h-3 mr-1" />
+                          Premium
+                        </>
+                      ) : (
+                        'Plano Gratuito'
+                      )}
+                    </Badge>
+                  )}
                 </div>
               </div>
               

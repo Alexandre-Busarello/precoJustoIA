@@ -5,6 +5,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { Adapter } from "next-auth/adapters"
+import { startTrialForUser } from "@/lib/trial-service"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as Adapter,
@@ -61,12 +62,62 @@ export const authOptions: NextAuthOptions = {
     maxAge: 48 * 60 * 60, // 48 horas em segundos
   },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      // Após login bem-sucedido (especialmente OAuth), verificar e iniciar trial se necessário
+      if (user?.id) {
+        try {
+          // Verificar se usuário acabou de ser criado (primeiro login)
+          // O PrismaAdapter cria o usuário antes deste callback ser chamado
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: {
+              createdAt: true,
+              trialStartedAt: true,
+              trialEndsAt: true,
+              subscriptionTier: true
+            }
+          })
+
+          // Se usuário foi criado há menos de 1 minuto e não tem trial iniciado
+          // e não é Premium, iniciar trial
+          if (dbUser && !dbUser.trialStartedAt && dbUser.subscriptionTier === 'FREE') {
+            const now = new Date()
+            const userCreatedAt = dbUser.createdAt
+            const timeDiff = now.getTime() - userCreatedAt.getTime()
+            const minutesDiff = timeDiff / (1000 * 60)
+
+            // Se foi criado há menos de 1 minuto, é um novo usuário
+            if (minutesDiff < 1) {
+              await startTrialForUser(user.id)
+              // Atualizar user com dados do trial iniciado para incluir na sessão
+              const updatedUser = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: {
+                  trialStartedAt: true,
+                  trialEndsAt: true
+                }
+              })
+              if (updatedUser) {
+                user.trialStartedAt = updatedUser.trialStartedAt
+                user.trialEndsAt = updatedUser.trialEndsAt
+              }
+            }
+          }
+        } catch (error) {
+          // Não falhar o login se houver erro ao iniciar trial
+          console.error('Erro ao verificar/iniciar trial no login:', error)
+        }
+      }
+      return true
+    },
     async jwt({ token, user, trigger }) {
       // Se é um novo login, não precisa verificar expiração
       if (user) {
         token.userId = user.id // Armazenar o ID real do usuário
         token.subscriptionTier = user.subscriptionTier || "FREE"
         token.premiumExpiresAt = user.premiumExpiresAt?.toISOString()
+        token.trialStartedAt = user.trialStartedAt?.toISOString()
+        token.trialEndsAt = user.trialEndsAt?.toISOString()
         return token
       }
       
@@ -89,12 +140,16 @@ export const authOptions: NextAuthOptions = {
             select: {
               subscriptionTier: true,
               premiumExpiresAt: true,
+              trialStartedAt: true,
+              trialEndsAt: true,
             }
           })
           
           if (updatedUser) {
             token.subscriptionTier = updatedUser.subscriptionTier
             token.premiumExpiresAt = updatedUser.premiumExpiresAt?.toISOString()
+            token.trialStartedAt = updatedUser.trialStartedAt?.toISOString()
+            token.trialEndsAt = updatedUser.trialEndsAt?.toISOString()
           }
         } catch (error) {
           console.error('Erro ao atualizar token JWT:', error)
@@ -129,6 +184,8 @@ export const authOptions: NextAuthOptions = {
       session.user.id = (token.userId as string) || token.sub!
       session.user.subscriptionTier = token.subscriptionTier as string
       session.user.premiumExpiresAt = token.premiumExpiresAt as string
+      session.user.trialStartedAt = token.trialStartedAt as string
+      session.user.trialEndsAt = token.trialEndsAt as string
       
       return session
     },

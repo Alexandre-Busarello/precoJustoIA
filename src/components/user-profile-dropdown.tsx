@@ -9,7 +9,9 @@ import {
   LogOut, 
   User,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  Clock,
+  Gift
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -27,13 +29,21 @@ interface UserProfileDropdownProps {
   userName?: string | null
   userEmail?: string | null
   isPremium: boolean
+  isTrialActive?: boolean
+  trialDaysRemaining?: number | null
+  subscriptionTier?: 'FREE' | 'PREMIUM' | 'VIP'
 }
 
 export function UserProfileDropdown({ 
   userName, 
   userEmail,
-  isPremium 
+  isPremium,
+  isTrialActive = false,
+  trialDaysRemaining = null,
+  subscriptionTier = 'FREE'
 }: UserProfileDropdownProps) {
+  // Determinar se é Premium via trial ou assinatura
+  const isPremiumViaTrial = isTrialActive && subscriptionTier === 'FREE'
   // Extrair iniciais do nome ou email
   const getInitials = () => {
     if (userName) {
@@ -73,23 +83,42 @@ export function UserProfileDropdown({
             <span className="text-sm font-medium leading-none truncate max-w-[120px]">
               {displayName}
             </span>
-            <Badge 
-              variant={isPremium ? "default" : "secondary"} 
-              className={`mt-0.5 text-[10px] h-4 px-1.5 ${
-                isPremium 
-                  ? 'bg-gradient-to-r from-violet-600 to-purple-600 border-0' 
-                  : ''
-              }`}
-            >
-              {isPremium ? (
-                <>
+            {isPremiumViaTrial ? (
+              <div className="flex items-center gap-1 mt-0.5">
+                <Badge 
+                  variant="secondary"
+                  className="text-[10px] h-4 px-1.5 bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300"
+                >
+                  <Gift className="w-2.5 h-2.5 mr-0.5" />
+                  Trial
+                </Badge>
+                <Badge 
+                  variant="default"
+                  className="text-[10px] h-4 px-1.5 bg-gradient-to-r from-violet-600 to-purple-600 border-0"
+                >
                   <Sparkles className="w-2.5 h-2.5 mr-0.5" />
                   Premium
-                </>
-              ) : (
-                'Gratuito'
-              )}
-            </Badge>
+                </Badge>
+              </div>
+            ) : (
+              <Badge 
+                variant={isPremium ? "default" : "secondary"} 
+                className={`mt-0.5 text-[10px] h-4 px-1.5 ${
+                  isPremium 
+                    ? 'bg-gradient-to-r from-violet-600 to-purple-600 border-0' 
+                    : ''
+                }`}
+              >
+                {isPremium ? (
+                  <>
+                    <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                    Premium
+                  </>
+                ) : (
+                  'Gratuito'
+                )}
+              </Badge>
+            )}
           </div>
           
           <ChevronDown className="h-4 w-4 text-muted-foreground hidden xl:block" />
@@ -117,23 +146,54 @@ export function UserProfileDropdown({
               <p className="text-xs text-muted-foreground truncate">
                 {userEmail}
               </p>
-              <Badge 
-                variant={isPremium ? "default" : "secondary"} 
-                className={`mt-1 text-xs w-fit ${
-                  isPremium 
-                    ? 'bg-gradient-to-r from-violet-600 to-purple-600 border-0' 
-                    : ''
-                }`}
-              >
-                {isPremium ? (
-                  <>
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    Premium
-                  </>
-                ) : (
-                  'Plano Gratuito'
-                )}
-              </Badge>
+              {isPremiumViaTrial ? (
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <div className="flex items-center gap-1.5">
+                    <Badge 
+                      variant="secondary"
+                      className="text-xs bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300"
+                    >
+                      <Gift className="w-3 h-3 mr-1" />
+                      Trial Premium
+                    </Badge>
+                    <Badge 
+                      variant="default"
+                      className="text-xs bg-gradient-to-r from-violet-600 to-purple-600 border-0"
+                    >
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Ativo
+                    </Badge>
+                  </div>
+                  {trialDaysRemaining !== null && (
+                    <div className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400">
+                      <Clock className="w-3 h-3" />
+                      <span className="font-medium">
+                        {trialDaysRemaining === 1 
+                          ? 'Último dia!' 
+                          : `${trialDaysRemaining} dias restantes`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Badge 
+                  variant={isPremium ? "default" : "secondary"} 
+                  className={`mt-1 text-xs w-fit ${
+                    isPremium 
+                      ? 'bg-gradient-to-r from-violet-600 to-purple-600 border-0' 
+                      : ''
+                  }`}
+                >
+                  {isPremium ? (
+                    <>
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Premium
+                    </>
+                  ) : (
+                    'Plano Gratuito'
+                  )}
+                </Badge>
+              )}
             </div>
           </div>
         </DropdownMenuLabel>
@@ -165,19 +225,35 @@ export function UserProfileDropdown({
         <DropdownMenuSeparator />
         
         {/* Upgrade CTA */}
-        {!isPremium && (
+        {(!isPremium || isPremiumViaTrial) && (
           <>
             <DropdownMenuItem asChild>
               <Link 
                 href="/checkout" 
-                className="cursor-pointer bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 hover:from-violet-100 hover:to-purple-100 dark:hover:from-violet-950/50 dark:hover:to-purple-950/50"
+                className={`cursor-pointer ${
+                  isPremiumViaTrial
+                    ? 'bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 hover:from-violet-100 hover:to-purple-100 dark:hover:from-violet-950/50 dark:hover:to-purple-950/50 border border-violet-200 dark:border-violet-800'
+                    : 'bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 hover:from-violet-100 hover:to-purple-100 dark:hover:from-violet-950/50 dark:hover:to-purple-950/50'
+                }`}
               >
-                <CreditCard className="mr-2 h-4 w-4 text-violet-600" />
-                <span className="font-medium text-violet-600 dark:text-violet-400">
-                  Fazer Upgrade
+                <CreditCard className={`mr-2 h-4 w-4 ${isPremiumViaTrial ? 'text-violet-600 dark:text-violet-400' : 'text-violet-600'}`} />
+                <span className={`font-medium ${isPremiumViaTrial ? 'text-violet-600 dark:text-violet-400' : 'text-violet-600 dark:text-violet-400'}`}>
+                  {isPremiumViaTrial ? 'Converter para Premium' : 'Fazer Upgrade'}
                 </span>
               </Link>
             </DropdownMenuItem>
+            {isPremiumViaTrial && trialDaysRemaining !== null && (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  <span>
+                    {trialDaysRemaining === 1 
+                      ? 'Seu trial termina hoje!' 
+                      : `Trial expira em ${trialDaysRemaining} dias`}
+                  </span>
+                </div>
+              </div>
+            )}
             <DropdownMenuSeparator />
           </>
         )}

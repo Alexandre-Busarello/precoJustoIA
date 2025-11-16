@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { canUserRegister } from "@/lib/alfa-service"
 import { withRateLimit, RATE_LIMIT_CONFIGS, RateLimitMiddleware } from "@/lib/rate-limit-middleware"
+import { startTrialForUser } from "@/lib/trial-service"
 
 export async function POST(request: NextRequest) {
   return withRateLimit(
@@ -174,6 +175,14 @@ export async function POST(request: NextRequest) {
             acquisition: acquisition || null, // Rastrear origem do cadastro
           }
         })
+
+        // Iniciar trial automaticamente para novos usuários (se estiver em PROD e feature habilitada)
+        try {
+          await startTrialForUser(user.id)
+        } catch (error) {
+          // Não falhar o registro se houver erro ao iniciar trial
+          console.error('Erro ao iniciar trial para novo usuário:', error)
+        }
 
         // Remover a senha da resposta
         // eslint-disable-next-line @typescript-eslint/no-unused-vars

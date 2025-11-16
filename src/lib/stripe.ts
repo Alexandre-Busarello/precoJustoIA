@@ -15,13 +15,13 @@ export const STRIPE_CONFIG = {
     premium: {
       monthly: {
         priceId: process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID!,
-        amount: 4700, // R$ 47.00 em centavos
+        amount: 1990, // R$ 19.90 em centavos
         currency: 'brl',
         interval: 'month' as const,
       },
       annual: {
         priceId: process.env.STRIPE_PREMIUM_ANNUAL_PRICE_ID!,
-        amount: 49700, // R$ 497.00 em centavos
+        amount: 18990, // R$ 189.90 em centavos
         currency: 'brl',
         interval: 'year' as const,
       },

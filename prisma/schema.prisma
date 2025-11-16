@@ -73,6 +73,10 @@ model User {
   onboardingExperienceLevel String? @map("onboarding_experience_level") // Nível de experiência (Iniciante, Intermediário, Avançado)
   onboardingInvestmentFocus String? @map("onboarding_investment_focus") // Foco principal (Renda Passiva, Crescimento, Ambos, Explorar)
   
+  // Trial Premium
+  trialStartedAt     DateTime? @map("trial_started_at") // Data de início do trial
+  trialEndsAt         DateTime? @map("trial_ends_at") // Data de término do trial
+  
   // Metadata
   createdAt           DateTime  @default(now()) @map("created_at")
   

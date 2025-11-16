@@ -17,7 +17,7 @@ import { GlobalSearchBar } from "@/components/global-search-bar"
 export default function Header() {
   const { data: session, status } = useSession()
   const pathname = usePathname()
-  const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
+  const { isPremium, isTrialActive, trialDaysRemaining, subscriptionTier } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
@@ -102,7 +102,7 @@ export default function Header() {
                 )}
                 
                 {/* Dropdown de Ferramentas */}
-                <ToolsDropdown isPremium={isPremium} />
+                <ToolsDropdown isPremium={isPremium || false} />
 
                 {/* Suporte - Conversão para Premium */}
                 <Button 
@@ -126,7 +126,10 @@ export default function Header() {
               <UserProfileDropdown
                 userName={session.user?.name}
                 userEmail={session.user?.email}
-                isPremium={isPremium}
+                isPremium={isPremium || false}
+                isTrialActive={isTrialActive || false}
+                trialDaysRemaining={trialDaysRemaining || null}
+                subscriptionTier={(subscriptionTier as 'FREE' | 'PREMIUM' | 'VIP') || 'FREE'}
               />
             </div>
           ) : (

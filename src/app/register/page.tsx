@@ -10,6 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { AlfaBanner } from "@/components/alfa-banner"
 import { AlfaWaitlistForm } from "@/components/alfa-waitlist-form"
+import { Badge } from "@/components/ui/badge"
+import { Gift, Sparkles, CheckCircle } from "lucide-react"
+import { useTrialAvailable } from "@/hooks/use-trial-available"
 
 function RegisterForm() {
   const [name, setName] = useState("")
@@ -22,6 +25,7 @@ function RegisterForm() {
   const [isCheckingLimit, setIsCheckingLimit] = useState(true)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { isAvailable: isTrialAvailable } = useTrialAvailable()
   
   // Obter callbackUrl da URL ou usar dashboard como padrão
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
@@ -157,6 +161,41 @@ function RegisterForm() {
             <CardDescription className="text-center">
               Crie sua conta para começar
             </CardDescription>
+            {/* Trial Premium Banner - Só mostra se trial estiver disponível */}
+            {isTrialAvailable && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20 border border-violet-200 dark:border-violet-800 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
+                  <Gift className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant="secondary" className="bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Trial Premium
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                    <strong>7 dias grátis</strong> de acesso Premium completo! Experimente todos os recursos avançados sem compromisso.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
+                    <div className="flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3 text-violet-600" />
+                      <span>Ativação automática</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3 text-violet-600" />
+                      <span>Sem cartão de crédito</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3 text-violet-600" />
+                      <span>Cancele quando quiser</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            )}
           </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">

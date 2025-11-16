@@ -105,7 +105,7 @@ export function SEOStructuredData({
             {
               "@type": "Offer",
               "name": "Premium Mensal",
-              "price": "47.00",
+              "price": "19.90",
               "priceCurrency": "BRL",
               "billingIncrement": "P1M",
               "description": "8 modelos de valuation + análise com IA"

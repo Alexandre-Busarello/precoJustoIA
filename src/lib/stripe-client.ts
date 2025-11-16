@@ -19,7 +19,7 @@ export const getStripe = () => {
 export const PLANS = {
   monthly: {
     name: 'Premium Mensal',
-    price: 47.00,
+    price: 19.90,
     priceId: process.env.NEXT_PUBLIC_STRIPE_PREMIUM_MONTHLY_PRICE_ID!,
     interval: 'month',
     description: 'Acesso completo a todos os recursos premium',
@@ -36,15 +36,15 @@ export const PLANS = {
   },
   annual: {
     name: 'Premium Anual',
-    price: 497.00,
+    price: 189.90,
     priceId: process.env.NEXT_PUBLIC_STRIPE_PREMIUM_ANNUAL_PRICE_ID!,
     interval: 'year',
-    description: 'Plano anual com 12% de desconto',
+    description: 'Plano anual com 20% de desconto',
     originalPrice: 564.00,
     savings: 67.00,
     features: [
       'Tudo do Premium Mensal',
-      '12% de desconto',
+      '20% de desconto',
       'Acesso antecipado a novos recursos',
       'Relatórios mensais personalizados por IA',
       'Suporte VIP',

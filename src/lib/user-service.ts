@@ -11,6 +11,7 @@ import { isAlfaPhase } from '@/lib/alfa-service'
  * Este serviço centraliza toda a lógica de:
  * - Resolução de ID de usuário (sessão vs banco)
  * - Verificação de status Premium
+ * - Verificação de trial ativo
  * - Dados do usuário
  */
 
@@ -23,6 +24,8 @@ export interface UserData {
   isAdmin: boolean
   isPremium: boolean
   stripeCustomerId?: string | null
+  trialStartedAt?: Date | null
+  trialEndsAt?: Date | null
 }
 
 /**
@@ -49,7 +52,9 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
             subscriptionTier: true,
             premiumExpiresAt: true,
             isAdmin: true,
-            stripeCustomerId: true
+            stripeCustomerId: true,
+            trialStartedAt: true,
+            trialEndsAt: true
           }
       }),
       { userId: session.user.id }
@@ -69,7 +74,9 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
             subscriptionTier: true,
             premiumExpiresAt: true,
             isAdmin: true,
-            stripeCustomerId: true
+            stripeCustomerId: true,
+            trialStartedAt: true,
+            trialEndsAt: true
           }
       }),
       { email: session.user.email }
@@ -85,8 +92,15 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
   const hasValidPremium = user.subscriptionTier === 'PREMIUM' && 
                          (!user.premiumExpiresAt || user.premiumExpiresAt > now)
   
+  // Verificar se tem trial ativo
+  // Garantir que trialEndsAt > trialStartedAt E trialEndsAt > now
+  const hasTrial = user.trialStartedAt && user.trialEndsAt && 
+                   new Date(user.trialEndsAt) > new Date(user.trialStartedAt) &&
+                   new Date(user.trialEndsAt) > now
+  
   // Durante a fase Alfa, todos os usuários têm acesso Premium
-  const isPremium = isAlfaPhase() || hasValidPremium
+  // Trial também dá acesso Premium
+  const isPremium = isAlfaPhase() || hasValidPremium || hasTrial
 
   return {
     id: user.id,
@@ -96,7 +110,9 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
     premiumExpiresAt: user.premiumExpiresAt,
     isAdmin: user.isAdmin,
     isPremium,
-    stripeCustomerId: user.stripeCustomerId
+    stripeCustomerId: user.stripeCustomerId,
+    trialStartedAt: user.trialStartedAt,
+    trialEndsAt: user.trialEndsAt
   }
 }
 
@@ -138,7 +154,9 @@ export async function isUserPremium(identifier: string): Promise<boolean> {
         where: { id: identifier },
         select: {
           subscriptionTier: true,
-          premiumExpiresAt: true
+          premiumExpiresAt: true,
+          trialStartedAt: true,
+          trialEndsAt: true
         }
       }),
       { identifier, type: 'id' }
@@ -152,7 +170,9 @@ export async function isUserPremium(identifier: string): Promise<boolean> {
           where: { email: identifier },
           select: {
             subscriptionTier: true,
-            premiumExpiresAt: true
+            premiumExpiresAt: true,
+            trialStartedAt: true,
+            trialEndsAt: true
           }
         }),
         { identifier, type: 'email' }
@@ -167,8 +187,15 @@ export async function isUserPremium(identifier: string): Promise<boolean> {
     const hasValidPremium = user.subscriptionTier === 'PREMIUM' && 
                            (!user.premiumExpiresAt || user.premiumExpiresAt > now)
     
+    // Verificar se tem trial ativo
+    // Garantir que trialEndsAt > trialStartedAt E trialEndsAt > now
+    const hasTrial = user.trialStartedAt && user.trialEndsAt &&
+                     new Date(user.trialEndsAt) > new Date(user.trialStartedAt) &&
+                     new Date(user.trialEndsAt) > now
+    
     // Durante a fase Alfa, todos os usuários têm acesso Premium
-    return isAlfaPhase() || hasValidPremium
+    // Trial também dá acesso Premium
+    return isAlfaPhase() || hasValidPremium || hasTrial
   } catch (error) {
     console.error('Erro ao verificar status Premium:', error)
     return false
@@ -226,7 +253,9 @@ export async function getUserById(userId: string): Promise<UserData | null> {
             subscriptionTier: true,
             premiumExpiresAt: true,
             isAdmin: true,
-            stripeCustomerId: true
+            stripeCustomerId: true,
+            trialStartedAt: true,
+            trialEndsAt: true
           }
       }),
       { userId }
@@ -240,8 +269,15 @@ export async function getUserById(userId: string): Promise<UserData | null> {
     const hasValidPremium = user.subscriptionTier === 'PREMIUM' && 
                            (!user.premiumExpiresAt || user.premiumExpiresAt > now)
     
+    // Verificar se tem trial ativo
+    // Garantir que trialEndsAt > trialStartedAt E trialEndsAt > now
+    const hasTrial = user.trialStartedAt && user.trialEndsAt &&
+                     new Date(user.trialEndsAt) > new Date(user.trialStartedAt) &&
+                     new Date(user.trialEndsAt) > now
+    
     // Durante a fase Alfa, todos os usuários têm acesso Premium
-    const isPremium = isAlfaPhase() || hasValidPremium
+    // Trial também dá acesso Premium
+    const isPremium = isAlfaPhase() || hasValidPremium || hasTrial
 
     return {
       id: user.id,
@@ -250,7 +286,10 @@ export async function getUserById(userId: string): Promise<UserData | null> {
       subscriptionTier: user.subscriptionTier,
       premiumExpiresAt: user.premiumExpiresAt,
       isAdmin: user.isAdmin,
-      isPremium
+      isPremium,
+      stripeCustomerId: user.stripeCustomerId,
+      trialStartedAt: user.trialStartedAt,
+      trialEndsAt: user.trialEndsAt
     }
   } catch (error) {
     console.error('Erro ao buscar usuário por ID:', error)

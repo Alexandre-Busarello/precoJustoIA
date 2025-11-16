@@ -43,6 +43,8 @@ export async function POST() {
         name: user.name,
         subscriptionTier: user.subscriptionTier,
         premiumExpiresAt: user.premiumExpiresAt?.toISOString(),
+        trialStartedAt: user.trialStartedAt?.toISOString(),
+        trialEndsAt: user.trialEndsAt?.toISOString(),
         isPremium: user.isPremium,
         isAdmin: user.isAdmin
       }

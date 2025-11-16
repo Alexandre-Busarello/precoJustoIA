@@ -456,7 +456,7 @@ export default function BacktestingCarteirasPage() {
             ],
             "offers": {
               "@type": "Offer",
-              "price": "47.00",
+              "price": "19.90",
               "priceCurrency": "BRL",
               "billingIncrement": "P1M",
               "description": "Acesso completo ao backtesting profissional de carteiras"

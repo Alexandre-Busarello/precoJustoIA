@@ -78,12 +78,27 @@ export function useSessionRefresh(options: UseSessionRefreshOptions = {}) {
 
       const data = await response.json()
       
-      // Verificar se houve mudança no subscriptionTier
+      // Verificar se houve mudança no subscriptionTier ou nos campos de trial
       const currentTier = session.user.subscriptionTier
       const newTier = data.user.subscriptionTier
+      const currentTrialEndsAt = session.user.trialEndsAt
+      const newTrialEndsAt = data.user.trialEndsAt
+      const currentTrialStartedAt = session.user.trialStartedAt
+      const newTrialStartedAt = data.user.trialStartedAt
       
-      if (currentTier !== newTier) {
-        console.log('Subscription tier changed:', { from: currentTier, to: newTier })
+      const tierChanged = currentTier !== newTier
+      const trialChanged = currentTrialEndsAt !== newTrialEndsAt || currentTrialStartedAt !== newTrialStartedAt
+      
+      if (tierChanged || trialChanged) {
+        console.log('User data changed:', { 
+          tierChanged, 
+          trialChanged,
+          tier: { from: currentTier, to: newTier },
+          trial: { 
+            from: { startedAt: currentTrialStartedAt, endsAt: currentTrialEndsAt },
+            to: { startedAt: newTrialStartedAt, endsAt: newTrialEndsAt }
+          }
+        })
         
         try {
           // Forçar atualização completa da sessão NextAuth
@@ -106,7 +121,7 @@ export function useSessionRefresh(options: UseSessionRefreshOptions = {}) {
         }
       }
 
-      console.log('No subscription changes detected')
+      console.log('No user data changes detected')
       return null
     } catch (error) {
       console.error('Erro ao atualizar sessão:', error)
@@ -121,7 +136,7 @@ export function useSessionRefresh(options: UseSessionRefreshOptions = {}) {
     } finally {
       isCheckingRef.current = false
     }
-  }, [session?.user?.id, session?.user?.subscriptionTier, status, updateSession, onSessionUpdate, router])
+  }, [session?.user?.id, session?.user?.subscriptionTier, session?.user?.trialEndsAt, session?.user?.trialStartedAt, status, updateSession, onSessionUpdate, router])
 
   const startPolling = useCallback(() => {
     if (isPollingRef.current || !enablePolling) return

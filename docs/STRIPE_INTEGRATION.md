@@ -48,13 +48,13 @@ NEXT_PUBLIC_STRIPE_PREMIUM_ANNUAL_PRICE_ID="price_your_annual_price_id"
 
 #### Premium Mensal
 - Nome: "Premium Mensal"
-- Preço: R$ 47,00
+- Preço: R$ 19,90
 - Cobrança: Recorrente, mensal
 - Moeda: BRL
 
 #### Premium Anual
 - Nome: "Premium Anual"  
-- Preço: R$ 497,00
+- Preço: R$ 189,90
 - Cobrança: Recorrente, anual
 - Moeda: BRL
 

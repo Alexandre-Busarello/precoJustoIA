@@ -163,7 +163,7 @@ export function AuthModal({ isOpen, onClose, type, strategy }: AuthModalProps) {
         <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/10 dark:to-orange-900/10 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800 mb-6">
           <div className="text-center">
             <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-600 to-orange-600">
-              R$ 47,00
+              R$ 19,90
             </div>
             <div className="text-sm text-muted-foreground">por mês • PIX ou Cartão</div>
           </div>

@@ -3,16 +3,18 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { 
   Shield, 
   Zap, 
   Trophy,
   CheckCircle,
-  Headphones
+  Gift,
+  Sparkles
 } from 'lucide-react'
 import Link from 'next/link'
 import { AlfaEarlyAdopterCard } from '@/components/alfa-early-adopter-card'
-import { AlfaPremiumNotice } from '@/components/alfa-premium-notice'
+import { useTrialAvailable } from '@/hooks/use-trial-available'
 
 interface AlfaStats {
   phase: string
@@ -21,6 +23,7 @@ interface AlfaStats {
 export function AlfaPricingCards() {
   const [stats, setStats] = useState<AlfaStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const { isAvailable: isTrialAvailable } = useTrialAvailable()
 
   useEffect(() => {
     fetchAlfaStats()
@@ -65,7 +68,51 @@ export function AlfaPricingCards() {
 
   // Fora da fase Alfa: todos os planos
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 max-w-7xl mx-auto">
+    <div className="space-y-8">
+      {/* Trial Premium Banner - Só mostra se trial estiver disponível */}
+      {isTrialAvailable && (
+      <div className="max-w-3xl mx-auto">
+        <Card className="border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shrink-0">
+                <Gift className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
+                    Trial Premium de 7 Dias Grátis
+                  </h3>
+                  <Badge variant="secondary" className="bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    Automático
+                  </Badge>
+                </div>
+                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-3">
+                  Ao criar sua conta, você recebe <strong>automaticamente 7 dias de acesso Premium completo</strong> para experimentar todas as funcionalidades avançadas da plataforma sem compromisso.
+                </p>
+                <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-400">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-violet-600" />
+                    <span>Sem cartão de crédito necessário</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-violet-600" />
+                    <span>Ativação instantânea</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-violet-600" />
+                    <span>Cancele quando quiser</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 max-w-7xl mx-auto">
       {/* Free Plan */}
       <Card className="border-2 hover:shadow-xl transition-all duration-300 relative h-full flex flex-col">
         <CardContent className="p-8 flex-1 flex flex-col">
@@ -111,9 +158,11 @@ export function AlfaPricingCards() {
             </Link>
           </Button>
           
-          <p className="text-xs text-center text-muted-foreground mt-3">
-            ✅ Sem cartão de crédito • ✅ Acesso imediato
-          </p>
+          {isTrialAvailable && (
+            <p className="text-xs text-center text-muted-foreground mt-3">
+              ✨ + 7 dias Premium grátis ao criar conta
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -132,10 +181,10 @@ export function AlfaPricingCards() {
             </div>
             <h2 className="text-2xl font-bold mb-2">Premium Mensal</h2>
             <div className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent mb-2">
-              R$ 47,00
+              R$ 19,90
             </div>
             <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
-            <p className="text-xs text-green-600 font-medium mt-1">Apenas R$ 1,57 por dia</p>
+            <p className="text-xs text-green-600 font-medium mt-1">Apenas R$ 0,66 por dia</p>
           </div>
           
           <div className="space-y-4 mb-8 flex-1">
@@ -178,13 +227,15 @@ export function AlfaPricingCards() {
           </div>
 
           <Button className="w-full bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white font-bold py-3 mt-auto" asChild>
-            <Link href="/checkout?plan=monthly">
-              Começar Premium
+            <Link href={isTrialAvailable ? "/register" : "/checkout?plan=monthly"}>
+              {isTrialAvailable ? "Começar com Trial Grátis" : "Começar Premium"}
             </Link>
           </Button>
           
           <p className="text-xs text-center text-muted-foreground mt-3">
-            ✅ Ativação instantânea • ✅ Cancele quando quiser
+            {isTrialAvailable 
+              ? "🎁 7 dias Premium grátis • ✅ Ativação instantânea • ✅ Cancele quando quiser"
+              : "✅ Ativação instantânea • ✅ Cancele quando quiser"}
           </p>
         </CardContent>
       </Card>
@@ -193,7 +244,7 @@ export function AlfaPricingCards() {
       <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 hover:shadow-xl transition-all duration-300 relative h-full flex flex-col">
         <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
           <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
-            💰 ECONOMIZE 12%
+            💰 20% OFF
           </div>
         </div>
         
@@ -204,13 +255,13 @@ export function AlfaPricingCards() {
             </div>
             <h2 className="text-2xl font-bold mb-2">Premium Anual</h2>
             <div className="flex items-center justify-center gap-2 mb-2">
-              <span className="text-lg text-muted-foreground line-through">R$ 564,00</span>
+              <span className="text-lg text-muted-foreground line-through">R$ 238,80</span>
               <div className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                R$ 497,00
+                R$ 189,90
               </div>
             </div>
             <p className="text-sm text-muted-foreground">por ano • PIX ou Cartão</p>
-            <p className="text-xs text-green-600 font-medium mt-1">R$ 41,42 por mês</p>
+            <p className="text-xs text-green-600 font-medium mt-1">R$ 15,82 por mês</p>
           </div>
           
           <div className="space-y-4 mb-8 flex-1">
@@ -220,7 +271,7 @@ export function AlfaPricingCards() {
             </div>
             <div className="flex items-center gap-3 text-sm">
               <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-              <span><strong>12% de desconto</strong></span>
+              <span><strong>20% de desconto</strong></span>
             </div>
             <div className="flex items-center gap-3 text-sm">
               <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -250,17 +301,20 @@ export function AlfaPricingCards() {
             {isAlfaPhase ? (
               <span>Liberado no ALFA</span>
             ) : (
-              <Link href="/checkout?plan=annual">
-                Economizar 12%
+              <Link href={isTrialAvailable ? "/register" : "/checkout?plan=annual"}>
+                {isTrialAvailable ? "Começar com Trial Grátis" : "Economizar 12%"}
               </Link>
             )}
           </Button>
           
           <p className="text-xs text-center text-muted-foreground mt-3">
-            💰 Economia de R$ 67,00 por ano
+            {isTrialAvailable 
+              ? "🎁 7 dias Premium grátis • 💰 Economia de R$ 67,00 por ano"
+              : "💰 Economia de R$ 67,00 por ano"}
           </p>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

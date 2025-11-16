@@ -28,9 +28,9 @@ type PaymentMethod = 'pix' | 'card'
 const PLANS = {
   monthly: {
     name: 'Premium Mensal',
-    price: 47,
-    originalPrice: 97,
-    discount: '52% OFF',
+    price: 19.90,
+    originalPrice: 39.90,
+    discount: '50% OFF',
     period: '/mês',
     description: 'Acesso completo por 30 dias',
     features: [
@@ -42,8 +42,8 @@ const PLANS = {
   },
   annual: {
     name: 'Premium Anual',
-    price: 470,
-    originalPrice: 1164,
+    price: 189.90,
+    originalPrice: 478.80,
     discount: '60% OFF',
     period: '/ano',
     description: 'Melhor valor - 12 meses completos',

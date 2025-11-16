@@ -207,7 +207,16 @@ export function OnboardingProvider() {
           isOpen={showOnboarding}
           onClose={handleClose}
           onComplete={handleComplete}
-          onlyQuestions={onboardingStatus?.missingQuestions}
+          // Só passar onlyQuestions se for um onboarding parcial (já visto, mas com perguntas faltando)
+          // Quando shouldShowOnboarding === true, é onboarding novo completo - mostrar welcome
+          // Quando hasMissingQuestions === true mas shouldShowOnboarding === false, é onboarding parcial
+          onlyQuestions={
+            onboardingStatus?.shouldShowOnboarding === true
+              ? undefined // Onboarding completo novo - mostrar welcome
+              : onboardingStatus?.missingQuestions && onboardingStatus.missingQuestions.length > 0
+                ? onboardingStatus.missingQuestions // Onboarding parcial - mostrar apenas perguntas faltantes
+                : undefined
+          }
           savedData={{
             acquisitionSource: onboardingStatus?.onboardingAcquisitionSource,
             experienceLevel: onboardingStatus?.onboardingExperienceLevel,

@@ -27,12 +27,12 @@ import { AlfaEarlyAdopterCard } from "@/components/alfa-early-adopter-card"
 import { AlfaPricingCards } from "@/components/alfa-pricing-cards"
 
 export const metadata: Metadata = {
-  title: "Planos e Preços | Análise Fundamentalista Gratuita + Premium R$ 47/mês - Preço Justo AI",
-  description: "💰 Planos de análise fundamentalista: GRATUITO com Fórmula de Graham + PREMIUM R$ 47/mês com 8 modelos (Dividend Yield, Fórmula Mágica, IA). Compare funcionalidades, economize 12% no plano anual. Investir em ações da B3 nunca foi tão acessível!",
+  title: "Planos e Preços | Análise Fundamentalista Gratuita + Premium R$ 19,90/mês - Preço Justo AI",
+  description: "💰 Planos de análise fundamentalista: GRATUITO com Fórmula de Graham + PREMIUM R$ 19,90/mês com 8 modelos (Dividend Yield, Fórmula Mágica, IA). Compare funcionalidades, economize 12% no plano anual. Investir em ações da B3 nunca foi tão acessível!",
   keywords: "planos análise fundamentalista, preço análise ações, análise fundamentalista gratuita, plano premium investimentos, quanto custa análise ações, assinatura análise fundamentalista, preço justo ações custo, análise bovespa preço, investir ações barato, planos investimentos B3",
   openGraph: {
     title: "Planos e Preços - Preço Justo AI",
-    description: "Plano gratuito com Graham + Premium com 8 modelos e IA por R$ 47/mês. Análise fundamentalista completa para ações da B3.",
+    description: "Plano gratuito com Graham + Premium com 8 modelos e IA por R$ 19,90/mês. Análise fundamentalista completa para ações da B3.",
     type: "website",
     url: "https://precojusto.ai/planos",
     siteName: "Preço Justo AI",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Planos e Preços - Preço Justo AI",
-    description: "Plano gratuito com Graham + Premium com 8 modelos e IA por R$ 47/mês.",
+    description: "Plano gratuito com Graham + Premium com 8 modelos e IA por R$ 19,90/mês.",
   },
   robots: {
     index: true,
@@ -427,7 +427,7 @@ export default function PlanosPage() {
                   Qual a diferença entre os planos Premium?
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  O Premium Anual oferece 12% de desconto, acesso antecipado a novos recursos, 
+                  O Premium Anual oferece 20% de desconto, acesso antecipado a novos recursos, 
                   Relatórios mensais personalizados por IA e suporte VIP. Ideal para investidores sérios.
                 </p>
               </CardContent>
@@ -502,7 +502,7 @@ export default function PlanosPage() {
             "@context": "https://schema.org",
             "@type": "Product",
             "name": "Preço Justo AI - Análise Fundamentalista Premium",
-            "description": "Plataforma completa de análise fundamentalista com IA para ações da B3. Plano gratuito com Graham + Premium com 8 modelos por R$ 47/mês.",
+            "description": "Plataforma completa de análise fundamentalista com IA para ações da B3. Plano gratuito com Graham + Premium com 8 modelos por R$ 19,90/mês.",
             "brand": {
               "@type": "Brand",
               "name": "Preço Justo AI"
@@ -519,7 +519,7 @@ export default function PlanosPage() {
               {
                 "@type": "Offer", 
                 "name": "Premium Mensal",
-                "price": "47.00",
+                "price": "19.90",
                 "priceCurrency": "BRL",
                 "billingIncrement": "P1M",
                 "description": "8 modelos de valuation + análise com IA",
@@ -528,10 +528,10 @@ export default function PlanosPage() {
               {
                 "@type": "Offer",
                 "name": "Premium Anual", 
-                "price": "497.00",
+                "price": "189.90",
                 "priceCurrency": "BRL",
                 "billingIncrement": "P1Y",
-                "description": "Plano anual com 12% de desconto + recursos exclusivos",
+                "description": "Plano anual com 20% de desconto + recursos exclusivos",
                 "availability": "https://schema.org/InStock"
               }
             ],

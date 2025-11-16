@@ -56,7 +56,7 @@ interface CachedTopCompaniesData {
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
-  const { isPremium, subscriptionTier } = usePremiumStatus();
+  const { isPremium, subscriptionTier, isTrialActive, trialDaysRemaining } = usePremiumStatus();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -258,14 +258,36 @@ export default function Dashboard() {
                   Perfil
                 </Link>
               </Button>
-              <Badge
-                variant={isPremium ? "default" : "secondary"}
-                className={`text-xs sm:text-sm px-3 py-1 ${
-                  isPremium ? "bg-gradient-to-r from-violet-600 to-pink-600" : ""
-                }`}
-              >
-                {isPremium ? "✨ Premium" : "Gratuito"}
-              </Badge>
+              {isTrialActive && subscriptionTier === 'FREE' ? (
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className="text-xs sm:text-sm px-2 py-1 bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300"
+                  >
+                    🎁 Trial
+                  </Badge>
+                  <Badge
+                    variant="default"
+                    className="text-xs sm:text-sm px-3 py-1 bg-gradient-to-r from-violet-600 to-pink-600"
+                  >
+                    ✨ Premium
+                  </Badge>
+                  {trialDaysRemaining !== null && (
+                    <span className="text-xs text-violet-600 dark:text-violet-400 font-medium hidden sm:inline">
+                      {trialDaysRemaining === 1 ? 'Último dia!' : `${trialDaysRemaining}d restantes`}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <Badge
+                  variant={isPremium ? "default" : "secondary"}
+                  className={`text-xs sm:text-sm px-3 py-1 ${
+                    isPremium ? "bg-gradient-to-r from-violet-600 to-pink-600" : ""
+                  }`}
+                >
+                  {isPremium ? "✨ Premium" : "Gratuito"}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -273,6 +295,51 @@ export default function Dashboard() {
         {/* Early Adopter Banner - Conversão ALFA */}
         {subscriptionTier === "FREE" && (
           <EarlyAdopterDashboardBanner className="mb-6" />
+        )}
+
+        {/* Trial Premium Banner - Discreto */}
+        {isTrialActive && subscriptionTier === 'FREE' && (
+          <Card className="mb-6 border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-sm sm:text-base text-slate-900 dark:text-slate-100">
+                        Trial Premium Ativo
+                      </h3>
+                      <Badge variant="secondary" className="text-xs bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300">
+                        🎁 Trial
+                      </Badge>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                      Você está aproveitando todos os recursos Premium gratuitamente.
+                      {trialDaysRemaining !== null && (
+                        <span className="font-medium text-violet-600 dark:text-violet-400 ml-1">
+                          {trialDaysRemaining === 1 
+                            ? 'Último dia!' 
+                            : `${trialDaysRemaining} ${trialDaysRemaining === 1 ? 'dia' : 'dias'} restantes`}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  asChild
+                  size="sm"
+                  className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white shrink-0"
+                >
+                  <Link href="/checkout" className="flex items-center gap-2">
+                    Converter para Premium
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* 📊 P/L HISTÓRICO - Chamada Atrativa */}

@@ -716,180 +716,6 @@ export default async function Home() {
 
       {/* Pricing Section - Enhanced */}
       <LandingPricingSection />
-    
-      {/* Roadmap Section */}
-      <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 leading-tight">
-              Roadmap de{" "}
-              <span className="text-blue-600 block sm:inline">evolução contínua</span>
-            </h2>
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-4xl mx-auto px-2">
-              Nossa plataforma está em <strong>constante evolução</strong>. 
-              Veja o que está por vir nos próximos trimestres.
-            </p>
-          </div>
-
-          <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-              {/* Concluído */}
-              {/* <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/20 dark:to-emerald-900/20 hover:shadow-xl transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-emerald-900 dark:text-emerald-100">✅ Concluído</h3>
-                      <p className="text-xs text-emerald-700 dark:text-emerald-300">Dez 2025</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      <span><strong>Backtest de Carteiras</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      <span>Aportes Mensais</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      <span>Métricas Avançadas</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card> */}
-
-              {/* Q1 2026 */}
-              <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/20 dark:to-blue-900/20 hover:shadow-xl transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-blue-900 dark:text-blue-100">Q1 2026</h3>
-                      <p className="text-xs text-blue-700 dark:text-blue-300">Jan - Mar</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-blue-600" />
-                      <span>Inclusão de FIIs</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-blue-600" />
-                      <span>Sistema de Favoritos</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-blue-600" />
-                      <span>Alertas por email/telegram</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Q2 2025 */}
-              <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/20 dark:to-green-900/20 hover:shadow-xl transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-green-900 dark:text-green-100">Q2 2026</h3>
-                      <p className="text-xs text-green-700 dark:text-green-300">Abr - Jun</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-green-600" />
-                      <span>Cadastro de Carteiras</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-green-600" />
-                      <span>Carteiras com IA</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-green-600" />
-                      <span>Marketplace de Carteiras</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Q3 2026 */}
-              <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/20 dark:to-purple-900/20 hover:shadow-xl transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-purple-900 dark:text-purple-100">Q3 2026</h3>
-                      <p className="text-xs text-purple-700 dark:text-purple-300">Jul - Set</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-purple-600" />
-                      <span>Inclusão de ETFs</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-purple-600" />
-                      <span>App Mobile</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-purple-600" />
-                      <span>Análise Setorial IA</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Q4 2026+ */}
-              <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/20 dark:to-orange-900/20 hover:shadow-xl transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-orange-900 dark:text-orange-100">Q4 2026+</h3>
-                      <p className="text-xs text-orange-700 dark:text-orange-300">Out - Dez</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-orange-600" />
-                      <span>Inclusão de BDRs</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-orange-600" />
-                      <span>API para Desenvolvedores</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-orange-600" />
-                      <span>Expansão Internacional</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="text-center mt-12">
-              <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-full px-6 py-3">
-                <Lightbulb className="w-5 h-5 text-blue-600" />
-                <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                  💡 Tem uma sugestão? Entre em contato conosco!
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Comparador Section */}
       <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background">
@@ -1084,7 +910,7 @@ export default async function Home() {
                 <p className="text-muted-foreground leading-relaxed">
                   Temos um plano gratuito completo com rankings e análises básicas. 
                   Para recursos avançados (IA, comparações, backtesting), oferecemos 
-                  o plano premium por R$ 47,00/mês, sem fidelidade.
+                  o plano premium por R$ 19,90/mês, sem fidelidade.
                 </p>
               </CardContent>
             </Card>
@@ -1482,7 +1308,7 @@ export default async function Home() {
                 {
                   "@type": "Offer", 
                   "name": "Premium Mensal",
-                  "price": "47.00",
+                  "price": "19.90",
                   "priceCurrency": "BRL",
                   "billingIncrement": "P1M",
                   "availability": "https://schema.org/InStock",
@@ -1491,11 +1317,11 @@ export default async function Home() {
                 {
                   "@type": "Offer",
                   "name": "Premium Anual", 
-                  "price": "497.00",
+                  "price": "189.90",
                   "priceCurrency": "BRL",
                   "billingIncrement": "P1Y",
                   "availability": "https://schema.org/InStock",
-                  "description": "Plano anual com 12% de desconto e recursos exclusivos"
+                  "description": "Plano anual com 20% de desconto e recursos exclusivos"
                 }
               ],
               "featureList": [
@@ -1570,7 +1396,7 @@ export default async function Home() {
                   "name": "Preciso pagar para usar?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 47,00/mês, sem fidelidade."
+                    "text": "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 19,90/mês, sem fidelidade."
                   }
                 }
               ]

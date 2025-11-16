@@ -101,32 +101,19 @@ export class SecurityMiddleware {
       }
 
       // 3. Buscar dados completos do usuário se necessário
+      // Usar user-service.ts que é a fonte única da verdade
       let user: any = session?.user
-      if (session?.user?.email && (config.requiresPremium || config.requiresAdmin)) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: session.user.email },
-          select: {
-            id: true,
-            email: true,
-            subscriptionTier: true,
-            premiumExpiresAt: true,
-            isAdmin: true
-          }
-        })
-        
-        if (dbUser) {
-          user = {
-            ...user,
-            ...dbUser,
-            premiumExpiresAt: dbUser.premiumExpiresAt?.toISOString()
-          }
+      if (session?.user?.id && (config.requiresPremium || config.requiresAdmin)) {
+        const { getCurrentUser } = await import('@/lib/user-service')
+        const currentUser = await getCurrentUser()
+        if (currentUser) {
+          user = currentUser
         }
       }
 
-      // 4. Verificar acesso Premium
+      // 4. Verificar acesso Premium usando user-service.ts
       if (config.requiresPremium) {
-        const isPremium = this.checkPremiumAccess(user)
-        if (!isPremium) {
+        if (!user?.isPremium) {
           return {
             allowed: false,
             reason: 'PREMIUM_REQUIRED',
@@ -232,21 +219,13 @@ export class SecurityMiddleware {
   /**
    * Verifica acesso Premium
    */
+  /**
+   * DEPRECATED: Use getCurrentUser() do user-service.ts que é a fonte única da verdade
+   * Mantido para compatibilidade, mas agora usa user.isPremium diretamente
+   */
   private static checkPremiumAccess(user: any): boolean {
-    if (!user) return false
-    
-    if (user.subscriptionTier === 'PREMIUM' || user.subscriptionTier === SubscriptionTier.PREMIUM) {
-      // Verificar se não expirou
-      if (user.premiumExpiresAt) {
-        const expirationDate = typeof user.premiumExpiresAt === 'string' 
-          ? new Date(user.premiumExpiresAt)
-          : user.premiumExpiresAt
-        return expirationDate > new Date()
-      }
-      return true
-    }
-    
-    return false
+    // user.isPremium já vem calculado do user-service.ts incluindo trial
+    return user?.isPremium || false
   }
 
   /**

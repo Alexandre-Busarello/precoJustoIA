@@ -93,21 +93,13 @@ export async function syncUserSubscription(userId: string): Promise<Subscription
 
 /**
  * Verifica se um usuário tem acesso premium válido
+ * DEPRECATED: Use isUserPremium() do user-service.ts que é a fonte única da verdade
+ * Mantido para compatibilidade, mas agora usa user-service.ts internamente
  */
 export async function hasValidPremiumAccess(userId: string): Promise<boolean> {
-  try {
-    const status = await syncUserSubscription(userId)
-    
-    // Se tem assinatura ativa, tem acesso
-    if (status.isActive && status.expiresAt && status.expiresAt > new Date()) {
-      return true
-    }
-
-    return false
-  } catch (error) {
-    console.error('Erro ao verificar acesso premium:', error)
-    return false
-  }
+  // Usar a fonte única da verdade do user-service.ts
+  const { isUserPremium } = await import('@/lib/user-service')
+  return await isUserPremium(userId)
 }
 
 /**
@@ -234,11 +226,15 @@ export async function reactivateSubscription(userId: string): Promise<void> {
 
 /**
  * Middleware para verificar acesso premium em tempo real
+ * DEPRECATED: Use requirePremiumUser() do user-service.ts que é a fonte única da verdade
+ * Mantido para compatibilidade, mas agora usa user-service.ts internamente
  */
 export async function requirePremiumAccess(userId: string): Promise<boolean> {
-  const hasAccess = await hasValidPremiumAccess(userId)
+  // Usar a fonte única da verdade do user-service.ts
+  const { getUserById } = await import('@/lib/user-service')
+  const user = await getUserById(userId)
   
-  if (!hasAccess) {
+  if (!user || !user.isPremium) {
     throw new Error('Acesso premium necessário')
   }
   

@@ -174,7 +174,7 @@ export function EarlyAdopterContent() {
                 <div className="flex items-center justify-center gap-4 mb-4">
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-2 mb-2">
-                      <span className="text-2xl text-gray-400 line-through">R$ 497,00</span>
+                      <span className="text-2xl text-gray-400 line-through">R$ 189,90</span>
                     </div>
                     <div className="text-5xl font-bold text-purple-600">
                       R$ 249,00

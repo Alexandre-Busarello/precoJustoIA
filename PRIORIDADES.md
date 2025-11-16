@@ -1,4 +1,6 @@
-Asset Monitoring deve enviar email com o relatório apenas para usuários PREMIUM (ou que estejam em TRIAL). Usuario Gratuitos devem poder se inscrever para receber atualizações dos ativos, mas o email recebido deve ser um email indicando que houve mudança no ativo mais não indicando se foi positiva ou negativa e deve usar desse email para tentar converter o usuario para PREMIUM
+Relatórios de mudanças relevantes devem melhorar e só citar mudanças.
+
+HUB DE NOTICIAIS (WEB SCRAPPING)
 
 cron para atualizar o utltimo dividendo das empresas, fiis, etfs e bdrs
 

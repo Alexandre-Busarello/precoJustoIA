@@ -351,7 +351,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" />
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
               </div>
               <h1 class="header-title">Redefinir sua senha</h1>
               <p class="header-subtitle">Segurança em primeiro lugar</p>
@@ -723,7 +723,7 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" />
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
               </div>
               <h1 class="header-title">⚡ Oportunidade Perdida</h1>
               <p class="header-subtitle">Sua oferta Early Adopter está esperando</p>
@@ -1374,7 +1374,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" />
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
               </div>
               <h1 class="header-title">🎉 Bem-vindo!</h1>
               <p class="header-subtitle">${planBadge} ativado com sucesso</p>

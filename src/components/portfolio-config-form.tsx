@@ -73,7 +73,7 @@ export function PortfolioConfigForm({
     ? (name && assets.length > 0 && totalAllocation >= 0.995 && totalAllocation <= 1.005)
     : (name && monthlyContribution > 0);
 
-  const handleAddAsset = () => {
+  const handleAddAsset = async () => {
     if (!newTicker || !newAllocation) {
       toast({
         title: 'Erro',
@@ -94,13 +94,41 @@ export function PortfolioConfigForm({
       return;
     }
 
-    const tickerUpper = newTicker.toUpperCase();
+    const tickerUpper = newTicker.toUpperCase().trim();
     
     if (assets.some(a => a.ticker === tickerUpper)) {
       toast({
         title: 'Erro',
         description: 'Ativo já adicionado',
         variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validar ticker antes de adicionar
+    try {
+      const validationResponse = await fetch('/api/ticker/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker: tickerUpper }),
+      });
+
+      const validationData = await validationResponse.json();
+
+      if (!validationData.valid) {
+        toast({
+          title: 'Ticker inválido',
+          description: validationData.message || `Ticker "${tickerUpper}" não encontrado no Yahoo Finance`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Erro ao validar ticker:', error);
+      toast({
+        title: 'Erro ao validar ticker',
+        description: 'Não foi possível validar o ticker. Tente novamente.',
+        variant: 'destructive',
       });
       return;
     }

@@ -213,7 +213,7 @@ export function PortfolioAssetManager({
     }
   });
 
-  const handleAddAsset = () => {
+  const handleAddAsset = async () => {
     if (!newTicker) {
       toast({
         title: "Ticker obrigatório",
@@ -229,6 +229,34 @@ export function PortfolioAssetManager({
       toast({
         title: "Ativo já existe",
         description: "Este ativo já está na carteira",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validar ticker antes de adicionar
+    try {
+      const validationResponse = await fetch('/api/ticker/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker }),
+      });
+
+      const validationData = await validationResponse.json();
+
+      if (!validationData.valid) {
+        toast({
+          title: "Ticker inválido",
+          description: validationData.message || `Ticker "${ticker}" não encontrado no Yahoo Finance`,
+          variant: "destructive",
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Erro ao validar ticker:', error);
+      toast({
+        title: "Erro ao validar ticker",
+        description: "Não foi possível validar o ticker. Tente novamente.",
         variant: "destructive",
       });
       return;

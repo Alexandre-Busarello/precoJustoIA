@@ -11,6 +11,7 @@ import { getCurrentUser } from '@/lib/user-service';
 import { PortfolioService } from '@/lib/portfolio-service';
 import { PortfolioMetricsService } from '@/lib/portfolio-metrics-service';
 import { AssetRegistrationService } from '@/lib/asset-registration-service';
+import { validateTicker } from '@/lib/quote-service';
 import { prisma } from '@/lib/prisma';
 
 interface RouteContext {
@@ -56,9 +57,28 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       );
     }
 
+    const ticker = body.ticker.toUpperCase().trim();
+
+    // Validar ticker antes de tentar registrar
+    try {
+      await validateTicker(ticker);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Ticker inválido';
+      console.error(`❌ [PORTFOLIO ADD ASSET] Ticker inválido: ${ticker} - ${errorMessage}`);
+      return NextResponse.json(
+        { 
+          error: errorMessage.includes('not found') 
+            ? `Ticker "${ticker}" não encontrado no Yahoo Finance. Verifique se o ticker está correto.`
+            : errorMessage,
+          code: 'INVALID_TICKER'
+        },
+        { status: 400 }
+      );
+    }
+
     // NOVO: Registrar ativo se não existir
-    console.log(`📝 [PORTFOLIO ADD ASSET] Verificando cadastro de ${body.ticker}...`);
-    const registrationResult = await AssetRegistrationService.registerAsset(body.ticker);
+    console.log(`📝 [PORTFOLIO ADD ASSET] Verificando cadastro de ${ticker}...`);
+    const registrationResult = await AssetRegistrationService.registerAsset(ticker);
     
     if (!registrationResult.success) {
       return NextResponse.json(
@@ -70,7 +90,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const assetId = await PortfolioService.addAsset(
       resolvedParams.id,
       currentUser.id,
-      body.ticker,
+      ticker,
       Number(body.targetAllocation)
     );
 
@@ -154,15 +174,30 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       
       console.log(`🗑️ [AI PORTFOLIO UPDATE] ${deleteResult.count} assets deletados de ${existingAssets.length} existentes`);
       
-      // 3. Register and add all new assets
+      // 3. Validate and register all new assets
       let addedAssets = 0;
+      const invalidTickers: string[] = [];
+      
       for (const asset of body.assets) {
+        const ticker = asset.ticker.toUpperCase().trim();
+        
+        // Validar ticker antes de tentar registrar
+        try {
+          await validateTicker(ticker);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Ticker inválido';
+          console.warn(`⚠️ [AI PORTFOLIO UPDATE] Ticker inválido: ${ticker} - ${errorMessage}`);
+          invalidTickers.push(ticker);
+          continue; // Skip this asset but continue with others
+        }
+        
         // Register asset if it doesn't exist
-        console.log(`📝 [AI PORTFOLIO UPDATE] Registrando ativo ${asset.ticker}...`);
-        const registrationResult = await AssetRegistrationService.registerAsset(asset.ticker);
+        console.log(`📝 [AI PORTFOLIO UPDATE] Registrando ativo ${ticker}...`);
+        const registrationResult = await AssetRegistrationService.registerAsset(ticker);
         
         if (!registrationResult.success) {
-          console.warn(`⚠️ [AI PORTFOLIO UPDATE] Falha ao registrar ${asset.ticker}: ${registrationResult.message}`);
+          console.warn(`⚠️ [AI PORTFOLIO UPDATE] Falha ao registrar ${ticker}: ${registrationResult.message}`);
+          invalidTickers.push(ticker);
           continue; // Skip this asset but continue with others
         }
         
@@ -170,10 +205,10 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         await PortfolioService.addAsset(
           resolvedParams.id,
           currentUser.id,
-          asset.ticker,
+          ticker,
           Number(asset.targetAllocation)
         );
-        console.log(`✅ [AI PORTFOLIO UPDATE] Adicionado ${asset.ticker} com ${(asset.targetAllocation * 100).toFixed(2)}%`);
+        console.log(`✅ [AI PORTFOLIO UPDATE] Adicionado ${ticker} com ${(asset.targetAllocation * 100).toFixed(2)}%`);
         addedAssets++;
       }
       
@@ -199,13 +234,18 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       
       console.log(`✅ [AI PORTFOLIO UPDATE] Estado final da carteira:`, finalAssets);
 
+      const responseMessage = invalidTickers.length > 0
+        ? `Carteira reconstruída pela IA: ${addedAssets} ativos configurados. ${invalidTickers.length} ticker(s) inválido(s) foram ignorados: ${invalidTickers.join(', ')}. ${deletedCount} transações pendentes foram removidas.`
+        : `Carteira reconstruída pela IA: ${addedAssets} ativos configurados. ${deletedCount} transações pendentes foram removidas.`;
+
       return NextResponse.json({
         success: true,
         replacedAssets: true,
         addedAssets,
         totalAssets: body.assets.length,
+        invalidTickers: invalidTickers.length > 0 ? invalidTickers : undefined,
         deletedPendingTransactions: deletedCount,
-        message: `Carteira reconstruída pela IA: ${addedAssets} ativos configurados. ${deletedCount} transações pendentes foram removidas.`
+        message: responseMessage
       });
       
     } else {

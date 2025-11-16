@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isCurrentUserPremium } from '@/lib/user-service';
 import { PortfolioService } from '@/lib/portfolio-service';
 import { PortfolioMetricsService } from '@/lib/portfolio-metrics-service';
+import { validateTicker } from '@/lib/quote-service';
+import { AssetRegistrationService } from '@/lib/asset-registration-service';
 
 /**
  * POST /api/portfolio
@@ -65,6 +67,37 @@ export async function POST(request: NextRequest) {
     if (Math.abs(totalAllocation - 1.0) > 0.01) {
       return NextResponse.json(
         { error: `Alocação total deve ser 100%. Atual: ${(totalAllocation * 100).toFixed(2)}%` },
+        { status: 400 }
+      );
+    }
+
+    // Validate all tickers before creating portfolio
+    const invalidTickers: string[] = [];
+    for (const asset of body.assets) {
+      const ticker = asset.ticker.toUpperCase().trim();
+      
+      try {
+        await validateTicker(ticker);
+        
+        // Register asset if it doesn't exist
+        const registrationResult = await AssetRegistrationService.registerAsset(ticker);
+        if (!registrationResult.success) {
+          invalidTickers.push(ticker);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Ticker inválido';
+        console.error(`❌ [PORTFOLIO CREATE] Ticker inválido: ${ticker} - ${errorMessage}`);
+        invalidTickers.push(ticker);
+      }
+    }
+
+    if (invalidTickers.length > 0) {
+      return NextResponse.json(
+        { 
+          error: `Os seguintes tickers não foram encontrados no Yahoo Finance: ${invalidTickers.join(', ')}`,
+          invalidTickers,
+          code: 'INVALID_TICKERS'
+        },
         { status: 400 }
       );
     }

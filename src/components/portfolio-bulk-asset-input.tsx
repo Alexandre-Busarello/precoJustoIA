@@ -99,7 +99,61 @@ export function PortfolioBulkAssetInput({ onAssetsGenerated }: PortfolioBulkAsse
     }
   };
 
-  const handleApplyAssets = () => {
+  const handleApplyAssets = async () => {
+    // Validar todos os tickers antes de aplicar
+    const invalidTickers: string[] = [];
+    const validAssets: Asset[] = [];
+
+    for (const asset of parsedAssets) {
+      try {
+        const validationResponse = await fetch('/api/ticker/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker: asset.ticker }),
+        });
+
+        const validationData = await validationResponse.json();
+
+        if (!validationData.valid) {
+          invalidTickers.push(asset.ticker);
+        } else {
+          validAssets.push(asset);
+        }
+      } catch (error) {
+        console.error(`Erro ao validar ticker ${asset.ticker}:`, error);
+        invalidTickers.push(asset.ticker);
+      }
+    }
+
+    // Se há tickers inválidos, mostrar erro
+    if (invalidTickers.length > 0) {
+      toast({
+        title: 'Tickers inválidos encontrados',
+        description: `Os seguintes tickers não foram encontrados no Yahoo Finance: ${invalidTickers.join(', ')}`,
+        variant: 'destructive',
+      });
+
+      // Se há tickers válidos, atualizar a lista apenas com os válidos
+      if (validAssets.length > 0) {
+        const equalAllocation = 1 / validAssets.length;
+        const updatedAssets = validAssets.map(asset => ({
+          ...asset,
+          targetAllocation: equalAllocation
+        }));
+        setParsedAssets(updatedAssets);
+        toast({
+          title: 'Lista atualizada',
+          description: `Apenas os tickers válidos foram mantidos (${validAssets.length} ativos)`,
+        });
+      } else {
+        // Se nenhum ticker é válido, limpar tudo
+        setShowPreview(false);
+        setParsedAssets([]);
+      }
+      return;
+    }
+
+    // Todos os tickers são válidos, aplicar
     onAssetsGenerated(parsedAssets);
     setShowPreview(false);
     setTickersInput('');

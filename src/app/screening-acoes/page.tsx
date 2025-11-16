@@ -613,7 +613,7 @@ function ScreeningAcoesContent() {
                 availableSectors={sectors}
                 availableIndustries={industries}
                 isLoggedIn={isLoggedIn}
-                isPremium={isPremium}
+                isPremium={isPremium ?? false}
               />
 
               {/* Configurator Component */}
@@ -622,7 +622,7 @@ function ScreeningAcoesContent() {
                   params={params} 
                   onParamsChange={setParams}
                   showTechnicalAnalysis={true}
-                  isPremium={isPremium}
+                  isPremium={isPremium ?? false}
                   isLoggedIn={isLoggedIn}
                 />
               </div>

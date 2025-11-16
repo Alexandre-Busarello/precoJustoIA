@@ -96,7 +96,7 @@ export function usePremiumStatus() {
  */
 export function useIsPremium(): boolean {
   const { isPremium } = usePremiumStatus()
-  return isPremium
+  return isPremium ?? false
 }
 
 /**
@@ -108,6 +108,6 @@ export function useIsLoggedInPremium(): { isLoggedIn: boolean; isPremium: boolea
   
   return {
     isLoggedIn: !!session,
-    isPremium
+    isPremium: isPremium ?? false
   }
 }

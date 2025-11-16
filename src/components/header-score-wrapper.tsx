@@ -67,7 +67,7 @@ export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) 
       <CardContent className="p-6">
         <CompactScore 
           overallScore={overallScore}
-          isPremium={isPremium}
+          isPremium={isPremium ?? false}
           isLoggedIn={isLoggedIn}
           ticker={ticker}
         />

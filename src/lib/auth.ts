@@ -98,8 +98,8 @@ export const authOptions: NextAuthOptions = {
                 }
               })
               if (updatedUser) {
-                user.trialStartedAt = updatedUser.trialStartedAt
-                user.trialEndsAt = updatedUser.trialEndsAt
+                user.trialStartedAt = updatedUser.trialStartedAt ?? undefined
+                user.trialEndsAt = updatedUser.trialEndsAt ?? undefined
               }
             }
           }

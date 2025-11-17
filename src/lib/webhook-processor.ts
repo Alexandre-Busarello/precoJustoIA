@@ -527,16 +527,48 @@ export class WebhookProcessor {
       return false
     }
 
+    // Buscar ofertas ativas do banco para determinar tipo de plano
+    const offers = await prisma.offer.findMany({
+      where: {
+        is_active: true,
+      },
+      select: {
+        type: true,
+        price_in_cents: true,
+      },
+    })
+
+    // Converter amount para centavos para comparação
+    const amountInCents = Math.round(amount * 100)
+    
     let planDuration: number
     let planType: string
     
-    if (amount >= 100) {
-      // Early Adopter tem 3 anos de acesso
-      planDuration = amount <= 200 ? 365 * 3 : 365
-      planType = amount <= 200 ? 'early' : 'annual'
-    } else {
+    // Verificar se corresponde a alguma oferta do banco
+    const monthlyOffer = offers.find((o) => o.type === 'MONTHLY')
+    const annualOffer = offers.find((o) => o.type === 'ANNUAL')
+    
+    // Comparar com tolerância de 1 centavo (para arredondamentos)
+    if (monthlyOffer && Math.abs(amountInCents - monthlyOffer.price_in_cents) <= 1) {
       planDuration = 30
       planType = 'monthly'
+    } else if (annualOffer && Math.abs(amountInCents - annualOffer.price_in_cents) <= 1) {
+      planDuration = 365
+      planType = 'annual'
+    } else if (amount >= 100 && amount <= 200) {
+      // Early Adopter tem 3 anos de acesso (fallback para compatibilidade)
+      planDuration = 365 * 3
+      planType = 'early'
+    } else {
+      // Fallback: tentar determinar pelo valor
+      if (amount >= 100) {
+        planDuration = 365
+        planType = 'annual'
+      } else {
+        planDuration = 30
+        planType = 'monthly'
+      }
+      console.warn(`⚠️ Valor ${amount} não corresponde exatamente a nenhuma oferta ativa. Usando fallback: ${planType}`)
     }
 
     const expiresAt = new Date()

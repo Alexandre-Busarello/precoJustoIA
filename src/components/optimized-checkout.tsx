@@ -21,57 +21,11 @@ import {
 } from 'lucide-react'
 import { OptimizedPixPayment } from './optimized-pix-payment'
 import { OptimizedCardPayment } from './optimized-card-payment'
+import { usePricing } from '@/hooks/use-pricing'
+import { formatPrice, calculateDiscount } from '@/lib/price-utils'
 
 type PlanType = 'monthly' | 'annual' | 'early'
 type PaymentMethod = 'pix' | 'card'
-
-const PLANS = {
-  monthly: {
-    name: 'Premium Mensal',
-    price: 19.90,
-    originalPrice: 39.90,
-    discount: '50% OFF',
-    period: '/mês',
-    description: 'Acesso completo por 30 dias',
-    features: [
-      'Análises ilimitadas de ações',
-      'Comparador avançado',
-      'Alertas em tempo real',
-      'Suporte prioritário'
-    ]
-  },
-  annual: {
-    name: 'Premium Anual',
-    price: 189.90,
-    originalPrice: 478.80,
-    discount: '60% OFF',
-    period: '/ano',
-    description: 'Melhor valor - 12 meses completos',
-    features: [
-      'Tudo do plano mensal',
-      '2 meses grátis',
-      'Relatórios exclusivos',
-      'Consultoria personalizada'
-    ],
-    popular: true
-  },
-  early: {
-    name: 'Early Adopter',
-    price: 118.80,
-    originalPrice: null,
-    discount: 'CONTRIBUIÇÃO',
-    period: '/ano',
-    description: 'Apoie o projeto com uma contribuição simbólica',
-    features: [
-      'Acesso antecipado a todas as novas features',
-      'Badge exclusiva de Early Adopter',
-      'Grupo WhatsApp exclusivo com CEO',
-      'Seja reconhecido como pioneiro da plataforma'
-    ],
-    popular: true,
-    exclusive: true
-  }
-}
 
 interface OptimizedCheckoutProps {
   initialPlan?: PlanType
@@ -82,6 +36,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   const { stats: alfaStats, isLoading: isLoadingStats } = useAlfa()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { monthly, annual, isLoading: isLoadingPricing } = usePricing()
   
   const [selectedPlan, setSelectedPlan] = useState<PlanType>(
     (searchParams.get('plan') as PlanType) || initialPlan
@@ -89,6 +44,81 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [showPayment, setShowPayment] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Obter dados do plano selecionado baseado nas ofertas do backend
+  const getPlanData = (planType: PlanType) => {
+    if (planType === 'early') {
+      return {
+        name: 'Early Adopter',
+        price: 118.80,
+        originalPrice: null,
+        discount: 'CONTRIBUIÇÃO',
+        period: '/ano',
+        description: 'Apoie o projeto com uma contribuição simbólica',
+        features: [
+          'Acesso antecipado a todas as novas features',
+          'Badge exclusiva de Early Adopter',
+          'Grupo WhatsApp exclusivo com CEO',
+          'Seja reconhecido como pioneiro da plataforma'
+        ],
+        popular: true,
+        exclusive: true,
+        offerId: null,
+      }
+    }
+    
+    if (planType === 'monthly' && monthly) {
+      return {
+        name: 'Premium Mensal',
+        price: monthly.price_in_cents / 100,
+        originalPrice: null,
+        discount: null,
+        period: '/mês',
+        description: 'Acesso completo por 30 dias',
+        features: [
+          'Análises ilimitadas de ações',
+          'Comparador avançado',
+          'Alertas em tempo real',
+          'Suporte prioritário'
+        ],
+        offerId: monthly.id,
+      }
+    }
+    
+    if (planType === 'annual' && annual && monthly) {
+      const discount = calculateDiscount(monthly.price_in_cents, annual.price_in_cents)
+      return {
+        name: 'Premium Anual',
+        price: annual.price_in_cents / 100,
+        originalPrice: (monthly.price_in_cents * 12) / 100,
+        discount: `${Math.round(discount * 100)}% OFF`,
+        period: '/ano',
+        description: 'Melhor valor - 12 meses completos',
+        features: [
+          'Tudo do plano mensal',
+          '2 meses grátis',
+          'Relatórios exclusivos',
+          'Consultoria personalizada'
+        ],
+        popular: true,
+        offerId: annual.id,
+      }
+    }
+    
+    // Fallback para quando ainda está carregando
+    return {
+      name: planType === 'monthly' ? 'Premium Mensal' : 'Premium Anual',
+      price: planType === 'monthly' ? 19.90 : 189.90,
+      originalPrice: planType === 'annual' ? 238.80 : null,
+      discount: planType === 'annual' ? '20% OFF' : null,
+      period: planType === 'monthly' ? '/mês' : '/ano',
+      description: planType === 'monthly' ? 'Acesso completo por 30 dias' : 'Melhor valor - 12 meses completos',
+      features: [],
+      offerId: null,
+    }
+  }
+
+  const currentPlan = getPlanData(selectedPlan)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -127,7 +157,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
     setIsProcessing(false)
   }
 
-  if (status === 'loading' || isLoadingStats || status === 'unauthenticated') {
+  if (status === 'loading' || isLoadingStats || isLoadingPricing || status === 'unauthenticated') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -135,6 +165,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
           <p className="text-muted-foreground">
             {status === 'loading' ? 'Verificando autenticação...' : 
              status === 'unauthenticated' ? 'Redirecionando para login...' :
+             isLoadingPricing ? 'Carregando preços...' :
              'Carregando opções de planos...'}
           </p>
         </div>
@@ -177,26 +208,33 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                   ? 'grid-cols-1 max-w-md mx-auto' 
                   : 'md:grid-cols-2'
               }`}>
-                {Object.entries(PLANS)
-                  .filter(([key]) => {
-                    // Durante a fase ALFA, mostrar apenas o plano Early Adopter
-                    if (alfaStats?.phase === 'ALFA') {
-                      return key === 'early'
+                {(() => {
+                  const plansToShow: Array<{ key: PlanType; plan: ReturnType<typeof getPlanData> }> = []
+                  
+                  // Durante a fase ALFA, mostrar apenas o plano Early Adopter
+                  if (alfaStats?.phase === 'ALFA') {
+                    plansToShow.push({ key: 'early', plan: getPlanData('early') })
+                  } else {
+                    // Fora da fase ALFA, mostrar mensal e anual
+                    if (monthly) {
+                      plansToShow.push({ key: 'monthly', plan: getPlanData('monthly') })
                     }
-                    // Fora da fase ALFA, mostrar todos os planos exceto Early Adopter
-                    return key !== 'early'
-                  })
-                  .map(([key, plan]) => (
+                    if (annual) {
+                      plansToShow.push({ key: 'annual', plan: getPlanData('annual') })
+                    }
+                  }
+                  
+                  return plansToShow.map(({ key, plan }) => (
                   <Card 
                     key={key}
                     className={`relative cursor-pointer transition-all duration-200 hover:shadow-lg ${
                       selectedPlan === key 
                         ? 'ring-2 ring-blue-500 shadow-lg' 
                         : 'hover:shadow-md'
-                    } ${(plan as any).popular ? 'border-blue-500' : ''}`}
-                    onClick={() => setSelectedPlan(key as PlanType)}
+                    } ${plan.popular ? 'border-blue-500' : ''}`}
+                    onClick={() => setSelectedPlan(key)}
                   >
-                    {(plan as any).popular && (
+                    {plan.popular && (
                       <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                         <Badge className="bg-blue-500 text-white px-4 py-1">
                           <Star className="w-3 h-3 mr-1" />
@@ -210,21 +248,21 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                         <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
                         <div className="mb-2">
                           <span className="text-3xl font-bold text-blue-600">
-                            R$ {plan.price}
+                            {formatPrice(plan.price * 100)}
                           </span>
                           <span className="text-gray-500 ml-1">{plan.period}</span>
                         </div>
                         {plan.originalPrice && (
                           <div className="flex items-center justify-center gap-2 mb-2">
                             <span className="text-sm text-gray-500 line-through">
-                              R$ {plan.originalPrice}
+                              {formatPrice(plan.originalPrice * 100)}
                             </span>
                             <Badge variant="secondary" className="bg-green-100 text-green-700">
                               {plan.discount}
                             </Badge>
                           </div>
                         )}
-                        {!plan.originalPrice && (
+                        {!plan.originalPrice && plan.discount && (
                           <div className="flex items-center justify-center gap-2 mb-2">
                             <Badge variant="secondary" className="bg-blue-100 text-blue-700">
                               {plan.discount}
@@ -253,7 +291,8 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                       )}
                     </CardContent>
                   </Card>
-                ))}
+                  ))
+                })()}
               </div>
 
               {/* Payment Method Selection */}
@@ -341,14 +380,14 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                       {selectedMethod === 'pix' ? (
                         <OptimizedPixPayment
                           planType={selectedPlan}
-                          price={PLANS[selectedPlan].price}
+                          price={currentPlan.price}
                           onSuccess={handlePaymentSuccess}
                           onError={handlePaymentError}
                         />
                       ) : (
                         <OptimizedCardPayment
                           planType={selectedPlan}
-                          price={PLANS[selectedPlan].price}
+                          price={currentPlan.price}
                           onSuccess={handlePaymentSuccess}
                           onError={handlePaymentError}
                         />
@@ -365,14 +404,25 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                       
                       <div className="space-y-3 mb-4">
                         <div className="flex justify-between">
-                          <span>{PLANS[selectedPlan].name}</span>
-                          <span>R$ {PLANS[selectedPlan].price}</span>
+                          <span>{currentPlan.name}</span>
+                          <span>
+                            {currentPlan.originalPrice ? (
+                              <>
+                                <span className="text-muted-foreground line-through mr-2">
+                                  {formatPrice(currentPlan.originalPrice * 100)}
+                                </span>
+                                <span>{formatPrice(currentPlan.price * 100)}</span>
+                              </>
+                            ) : (
+                              formatPrice(currentPlan.price * 100)
+                            )}
+                          </span>
                         </div>
-                        {PLANS[selectedPlan].originalPrice && (
-                          <div className="flex justify-between text-sm text-gray-500">
-                            <span>Desconto</span>
-                            <span className="text-green-600">
-                              -R$ {PLANS[selectedPlan].originalPrice - PLANS[selectedPlan].price}
+                        {currentPlan.originalPrice && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Desconto</span>
+                            <span className="text-green-600 font-medium">
+                              -{formatPrice((currentPlan.originalPrice - currentPlan.price) * 100)}
                             </span>
                           </div>
                         )}
@@ -382,7 +432,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
 
                       <div className="flex justify-between font-semibold text-lg mb-4">
                         <span>Total</span>
-                        <span className="text-blue-600">R$ {PLANS[selectedPlan].price}</span>
+                        <span className="text-blue-600">{formatPrice(currentPlan.price * 100)}</span>
                       </div>
 
                       <div className="text-xs text-gray-500 space-y-1">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/user-service'
 import { createPixPayment } from '@/lib/mercadopago'
+import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,12 +32,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Buscar preço da tabela offers (exceto para early adopter)
+    let amount: number
+    
+    if (planType === 'early') {
+      // Early adopter tem preço fixo
+      amount = 118.80
+    } else {
+      const offerType = planType === 'monthly' ? 'MONTHLY' : 'ANNUAL'
+      const offer = await prisma.offer.findFirst({
+        where: {
+          type: offerType,
+          is_active: true,
+        },
+        select: {
+          price_in_cents: true,
+        },
+      })
+      
+      if (!offer) {
+        return NextResponse.json(
+          { error: `Oferta ${offerType} não encontrada ou inativa` },
+          { status: 404 }
+        )
+      }
+      
+      // Converter centavos para reais
+      amount = offer.price_in_cents / 100
+    }
+
     // Gerar chave de idempotência única
     const idempotencyKey = `pix-${user.id}-${planType}-${Date.now()}-${Math.random().toString(36).substring(7)}`
     
     // Criar pagamento PIX direto no MercadoPago
     const pixPayment = await createPixPayment({
-      planType: planType as 'monthly' | 'annual',
+      planType: planType as 'monthly' | 'annual' | 'early',
+      amount,
       userId: user.id,
       userEmail: userEmail || user.email,
       userName: userName || user.name || undefined,

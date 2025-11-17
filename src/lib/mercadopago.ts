@@ -18,57 +18,43 @@ const client = new MercadoPagoConfig({
 export const payment = new Payment(client)
 export const preference = new Preference(client)
 
-// Configurações dos planos
-export const MERCADOPAGO_CONFIG = {
-  plans: {
-    early: {
-      amount: 118.8,
-      description: 'Preço Justo AI - Early Adopter Anual',
-      duration: 365, // dias
-    },
-    monthly: {
-      amount: 19.90,
-      description: 'Preço Justo AI - Premium Mensal',
-      duration: 30, // dias
-    },
-    annual: {
-      amount: 189.90,
-      description: 'Preço Justo AI - Premium Anual',
-      duration: 365, // dias
-    },
-  },
-  
-  // URLs de redirecionamento
-  urls: {
-    success: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/checkout/success`,
-    failure: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/checkout/cancel`,
-    pending: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/checkout/pending`,
-  },
+// URLs de redirecionamento
+export const MERCADOPAGO_URLS = {
+  success: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/checkout/success`,
+  failure: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/checkout/cancel`,
+  pending: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/checkout/pending`,
 }
 
 // Função para criar pagamento PIX direto (seguindo documentação oficial)
 export async function createPixPayment({
   planType,
+  amount,
   userId,
   userEmail,
   userName,
   idempotencyKey,
 }: {
-  planType: 'monthly' | 'annual'
+  planType: 'monthly' | 'annual' | 'early'
+  amount: number // Preço em reais (ex: 19.90)
   userId: string
   userEmail: string
   userName?: string
   idempotencyKey?: string
 }) {
   try {
-    const plan = MERCADOPAGO_CONFIG.plans[planType]
+    // Descrições dos planos
+    const descriptions: Record<string, string> = {
+      early: 'Preço Justo AI - Early Adopter Anual',
+      monthly: 'Preço Justo AI - Premium Mensal',
+      annual: 'Preço Justo AI - Premium Anual',
+    }
     
     // Gerar uma chave de idempotência única se não fornecida
     const finalIdempotencyKey = idempotencyKey || `pix-${userId}-${planType}-${Date.now()}-${Math.random().toString(36).substring(7)}`
     
     const paymentData = {
-      transaction_amount: plan.amount,
-      description: plan.description,
+      transaction_amount: amount,
+      description: descriptions[planType] || `Preço Justo AI - ${planType}`,
       payment_method_id: 'pix',
       payer: {
         email: userEmail,

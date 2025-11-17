@@ -245,18 +245,20 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
     <Card>
       <CardHeader>
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 flex-wrap">
               <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               <span>Histórico de Rankings</span>
-              <Badge variant="secondary">{totalCount}</Badge>
-              {totalCount > MAX_ITEMS && (
-                <Badge variant="outline" className="text-xs">
-                  {MAX_ITEMS}+ resultados
-                </Badge>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary" className="text-xs">{totalCount}</Badge>
+                {totalCount > MAX_ITEMS && (
+                  <Badge variant="outline" className="text-xs">
+                    {MAX_ITEMS}+ resultados
+                  </Badge>
+                )}
+              </div>
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
@@ -381,60 +383,67 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
                 return (
                   <div
                     key={item.id}
-                    className="group relative flex items-center gap-3 p-3 border rounded-lg hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all cursor-pointer bg-white dark:bg-slate-900"
+                    className="group relative flex flex-col sm:flex-row sm:items-center gap-3 p-3 border rounded-lg hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all cursor-pointer bg-white dark:bg-slate-900"
                     onClick={() => handleLoadRanking(item.id)}
                   >
-                    {/* Ícone do Modelo */}
-                    <div className={`w-12 h-12 bg-gradient-to-br ${colorGradient} rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
-                      <Icon className="w-6 h-6 text-white" />
-                    </div>
-
-                    {/* Informações */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h4 className="font-semibold text-sm text-slate-900 dark:text-white truncate">
-                          {item.modelName}
-                        </h4>
-                        {item.model === 'ai' && (
-                          <Sparkles className="w-3 h-3 text-purple-500 flex-shrink-0" />
-                        )}
-                        {/* Badge de tipo de ativo */}
-                        {item.assetTypeFilter && item.assetTypeFilter !== 'both' && (
-                          <Badge 
-                            variant={item.assetTypeFilter === 'bdr' ? 'default' : 'secondary'}
-                            className={`text-xs flex-shrink-0 ${
-                              item.assetTypeFilter === 'bdr' 
-                                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                                : 'bg-green-600 hover:bg-green-700 text-white'
-                            }`}
-                          >
-                            {item.assetTypeFilter === 'bdr' ? '🌎 BDR' : '🇧🇷 B3'}
-                          </Badge>
-                        )}
-                        {item.assetTypeFilter === 'both' && (
-                          <Badge 
-                            variant="outline"
-                            className="text-xs flex-shrink-0 border-blue-300 text-blue-700 dark:text-blue-400"
-                          >
-                            🌍 Ambos
-                          </Badge>
-                        )}
+                    {/* Container do ícone e título - horizontal no mobile */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* Ícone do Modelo */}
+                      <div className={`w-12 h-12 sm:w-12 sm:h-12 bg-gradient-to-br ${colorGradient} rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
+                        <Icon className="w-6 h-6 text-white" />
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-1 mb-1">
-                        {item.description}
-                      </p>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <TrendingUp className="w-3 h-3" />
-                          {item.resultCount} {item.resultCount === 1 ? 'ação' : 'ações'}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatDistanceToNow(new Date(item.createdAt), {
-                            addSuffix: true,
-                            locale: ptBR
-                          })}
-                        </span>
+
+                      {/* Informações */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold text-sm text-slate-900 dark:text-white truncate">
+                              {item.modelName}
+                            </h4>
+                            {item.model === 'ai' && (
+                              <Sparkles className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                            )}
+                          </div>
+                          {/* Badge de tipo de ativo */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {item.assetTypeFilter && item.assetTypeFilter !== 'both' && (
+                              <Badge 
+                                variant={item.assetTypeFilter === 'bdr' ? 'default' : 'secondary'}
+                                className={`text-xs flex-shrink-0 ${
+                                  item.assetTypeFilter === 'bdr' 
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
+                                }`}
+                              >
+                                {item.assetTypeFilter === 'bdr' ? '🌎 BDR' : '🇧🇷 B3'}
+                              </Badge>
+                            )}
+                            {item.assetTypeFilter === 'both' && (
+                              <Badge 
+                                variant="outline"
+                                className="text-xs flex-shrink-0 border-blue-300 text-blue-700 dark:text-blue-400"
+                              >
+                                🌍 Ambos
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2 sm:line-clamp-1 mb-2 sm:mb-1">
+                          {item.description}
+                        </p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" />
+                            {item.resultCount} {item.resultCount === 1 ? 'ação' : 'ações'}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatDistanceToNow(new Date(item.createdAt), {
+                              addSuffix: true,
+                              locale: ptBR
+                            })}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -442,14 +451,15 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity w-full sm:w-auto justify-center sm:justify-start"
                       onClick={(e) => {
                         e.stopPropagation()
                         handleLoadRanking(item.id)
                       }}
                     >
                       <span className="hidden sm:inline">Abrir</span>
-                      <ChevronRight className="w-4 h-4 sm:ml-2" />
+                      <span className="sm:hidden">Abrir Ranking</span>
+                      <ChevronRight className="w-4 h-4 sm:ml-2 ml-2" />
                     </Button>
                   </div>
                 )

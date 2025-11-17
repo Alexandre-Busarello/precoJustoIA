@@ -29,7 +29,8 @@ import {
   Bell,
   Calculator,
   Clock,
-  Gift
+  Gift,
+  DollarSign
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -598,6 +599,31 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                     Fazer Upgrade
                   </Link>
                 </Button>
+              </div>
+            )}
+
+            {/* Link Preços para usuários não logados */}
+            {!session && (
+              <div className="mt-6">
+                <Link
+                  href={pathname === '/' ? '#pricing' : '/#pricing'}
+                  onClick={(e) => {
+                    if (pathname === '/') {
+                      e.preventDefault()
+                      setIsOpen(false)
+                      const pricingSection = document.getElementById('pricing')
+                      if (pricingSection) {
+                        pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }
+                    } else {
+                      setIsOpen(false)
+                    }
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                  <span className="font-medium flex-1">Preços</span>
+                </Link>
               </div>
             )}
 

@@ -214,15 +214,14 @@ function RankingContent() {
     }, 100)
   }
 
-  // Scroll para o histórico se houver ID na URL (só executar se houver assetType)
+  // Mostrar histórico se houver ID na URL (sem scroll automático)
   useEffect(() => {
     if (!assetType) return // Não executar se não houver assetType
     
     if (rankingId) {
       setShowHistory(true)
-    } else {
-      scrollToQuickRanker()
     }
+    // Removido scroll automático - o usuário pode clicar em "Novo Ranking" para scrollar
   }, [rankingId, assetType]) // Incluir assetType nas dependências
   
   // Se não houver assetType E não houver rankingId, mostrar o HUB com conteúdo SEO (DEPOIS de todos os hooks)
@@ -257,21 +256,21 @@ function RankingContent() {
       
       {/* Hero Section - Compacto para Premium */}
       <section className={`bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 ${
-        isPremium ? 'py-6 md:py-8' : 'py-12 md:py-20'
+        isPremium ? 'py-3 md:py-6 lg:py-8' : 'py-4 md:py-12 lg:py-20'
       }`}>
         <div className="container mx-auto max-w-7xl">
           {/* Breadcrumb */}
-          <div className="mb-6">
-            <Link href={isLoggedIn ? "/dashboard" : "/"} className="text-blue-100 hover:text-white text-sm">
+          <div className="mb-2 md:mb-6">
+            <Link href={isLoggedIn ? "/dashboard" : "/"} className="text-blue-100 hover:text-white text-xs md:text-sm">
               {isLoggedIn ? "Dashboard" : "Início"}
             </Link>
             <span className="text-blue-200 mx-2">/</span>
-            <span className="text-white text-sm font-medium">Rankings de Ações</span>
+            <span className="text-white text-xs md:text-sm font-medium">Rankings de Ações</span>
           </div>
 
           <div className="text-center">
             {!isPremium && (
-              <div className="flex items-center justify-center mb-6">
+              <div className="hidden md:flex items-center justify-center mb-4 md:mb-6">
                 <div className="p-4 bg-white/10 backdrop-blur-sm rounded-2xl">
                   <BarChart3 className="w-12 h-12 md:w-16 md:h-16" />
                 </div>
@@ -279,37 +278,39 @@ function RankingContent() {
             )}
             
             <h1 className={`font-bold ${
-              isPremium ? 'text-2xl md:text-3xl mb-2' : 'text-3xl md:text-5xl mb-4'
+              isPremium ? 'text-xl md:text-2xl lg:text-3xl mb-1 md:mb-2' : 'text-xl md:text-3xl lg:text-5xl mb-2 md:mb-4'
             }`}>
               Rankings de Ações B3
             </h1>
             
             {!isPremium && (
               <>
-                <p className="text-lg md:text-xl text-blue-100 mb-3 max-w-3xl mx-auto">
+                <p className="hidden md:block text-lg md:text-xl text-blue-100 mb-3 max-w-3xl mx-auto">
                   Encontre as melhores oportunidades de investimento com 8 modelos de análise fundamentalista
                 </p>
                 
-                <p className="text-base text-blue-200 max-w-2xl mx-auto mb-6">
+                <p className="hidden lg:block text-base text-blue-200 max-w-2xl mx-auto mb-6">
                   De Graham a Inteligência Artificial: escolha a estratégia ideal para seu perfil de investidor
                 </p>
               </>
             )}
 
-            <div className={`flex flex-wrap justify-center gap-3 ${isPremium ? 'mt-3' : ''}`}>
-              <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
-                <CheckCircle2 className="w-4 h-4 mr-2" />
+            <div className={`flex flex-wrap justify-center gap-2 md:gap-3 ${isPremium ? 'mt-2 md:mt-3' : 'mt-2 md:mt-0'}`}>
+              <Badge variant="secondary" className="px-2 py-1 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white text-xs md:text-sm">
+                <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                 {isLoggedIn ? 'Histórico Salvo' : 'Modelo Gratuito'}
               </Badge>
               {isPremium && (
-                <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
-                  <Crown className="w-4 h-4 mr-2" />
-                  8 Modelos Premium
+                <Badge variant="secondary" className="px-2 py-1 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white text-xs md:text-sm">
+                  <Crown className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                  <span className="hidden sm:inline">8 Modelos Premium</span>
+                  <span className="sm:hidden">8 Premium</span>
                 </Badge>
               )}
-              <Badge variant="secondary" className="px-4 py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Análise com IA
+              <Badge variant="secondary" className="px-2 py-1 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white text-xs md:text-sm">
+                <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Análise com IA</span>
+                <span className="sm:hidden">IA</span>
               </Badge>
             </div>
           </div>

@@ -14,6 +14,7 @@ import { ScrollToTop } from "@/components/scroll-to-top";
 import { LastLoginUpdater } from "@/components/last-login-updater";
 import { TrackingProvider } from "@/components/tracking-provider";
 import { OnboardingProvider } from "@/components/onboarding-provider";
+import { ExitIntentProvider } from "@/components/exit-intent-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -150,6 +151,7 @@ export default function RootLayout({
                 <TrackingProvider>
                   <LastLoginUpdater />
                   <OnboardingProvider />
+                  <ExitIntentProvider />
                   <ScrollToTop />
                   <div className="min-h-screen bg-background">
                     <Header />

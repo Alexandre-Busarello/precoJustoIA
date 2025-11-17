@@ -139,6 +139,27 @@ export default function Header() {
               <div className="flex items-center space-x-1">
                 {/* Dropdown de Ferramentas para usuários não logados */}
                 <ToolsDropdown isPremium={false} />
+                
+                {/* Link para Preços - Scroll na LP, link direto em outras páginas */}
+                {pathname === '/' ? (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      const pricingSection = document.getElementById('pricing')
+                      if (pricingSection) {
+                        pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }
+                    }}
+                  >
+                    Preços
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/#pricing">Preços</Link>
+                  </Button>
+                )}
               </div>
               
               {/* Auth Buttons */}

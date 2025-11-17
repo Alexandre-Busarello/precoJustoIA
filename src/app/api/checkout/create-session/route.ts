@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/user-service'
 import { createCheckoutSession } from '@/lib/stripe'
+import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,14 +17,33 @@ export async function POST(request: NextRequest) {
 
     const { planType, priceId } = await request.json()
 
-    // Se priceId não foi fornecido, determinar baseado no planType
+    // Se priceId não foi fornecido, buscar da tabela offers baseado no planType
     let finalPriceId = priceId
     
     if (!finalPriceId && planType) {
-      if (planType === 'monthly') {
-        finalPriceId = process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID
-      } else if (planType === 'annual') {
-        finalPriceId = process.env.STRIPE_PREMIUM_ANNUAL_PRICE_ID
+      const offerType = planType === 'monthly' ? 'MONTHLY' : planType === 'annual' ? 'ANNUAL' : null
+      
+      if (offerType) {
+        const offer = await prisma.offer.findFirst({
+          where: {
+            type: offerType,
+            is_active: true,
+          },
+          select: {
+            stripe_price_id: true,
+          },
+        })
+        
+        if (offer?.stripe_price_id) {
+          finalPriceId = offer.stripe_price_id
+        } else {
+          // Fallback para env vars se não encontrar no banco (compatibilidade)
+          if (planType === 'monthly') {
+            finalPriceId = process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID
+          } else if (planType === 'annual') {
+            finalPriceId = process.env.STRIPE_PREMIUM_ANNUAL_PRICE_ID
+          }
+        }
       }
     }
 

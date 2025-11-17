@@ -9,15 +9,24 @@ import Link from 'next/link'
 import { AlfaPremiumNotice } from '@/components/alfa-premium-notice'
 import { AlfaEarlyAdopterCard } from '@/components/alfa-early-adopter-card'
 import { useTrialAvailable } from '@/hooks/use-trial-available'
+import { usePricing } from '@/hooks/use-pricing'
+import { formatPrice } from '@/lib/price-utils'
 
 export function LandingPricingSection() {
   const { stats, isLoading } = useAlfa()
   const { isAvailable: isTrialAvailable } = useTrialAvailable()
+  const { monthly, annual, isLoading: isLoadingPricing, monthlyEquivalent, annualDiscountFormatted } = usePricing()
 
   const isAlfaPhase = !isLoading && stats?.phase === 'ALFA'
+  
+  // Calcular valores derivados
+  const monthlyPricePerDay = monthly ? (monthly.price_in_cents / 100 / 30).toFixed(2) : '0,66'
+  const annualMonthlyEquivalentFormatted = monthlyEquivalent ? formatPrice(monthlyEquivalent) : 'R$ 15,82'
+  const annualOriginalPrice = monthly && annual ? formatPrice(monthly.price_in_cents * 12) : 'R$ 238,80'
+  const annualSavings = monthly && annual ? formatPrice((monthly.price_in_cents * 12) - annual.price_in_cents) : 'R$ 67,00'
 
   return (
-    <section className="py-20 bg-white dark:bg-background">
+    <section id="pricing" className="py-20 bg-white dark:bg-background scroll-mt-20">
       <div className="container mx-auto px-4">
         <div className="text-center mb-20">
           <h2 className="text-4xl sm:text-5xl font-bold mb-6">
@@ -43,7 +52,7 @@ export function LandingPricingSection() {
 
         {/* Trial Premium Banner - Só mostra quando não é Alfa E trial está disponível */}
         {!isAlfaPhase && isTrialAvailable && (
-          <div className="mb-8 max-w-3xl mx-auto">
+          <div className="mb-8 max-w-3xl mx-auto pb-6">
             <Card className="border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
               <CardContent className="p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -89,6 +98,7 @@ export function LandingPricingSection() {
             ? 'grid-cols-1 max-w-xl' 
             : 'grid-cols-1 lg:grid-cols-3'
         }`}>
+          {/* Ordem: Gratuito, Anual (destacado), Mensal */}
           
           {/* Free Plan - Só mostra quando não é Alfa */}
           {!isAlfaPhase && (
@@ -140,12 +150,95 @@ export function LandingPricingSection() {
             </Card>
           )}
 
+          {/* Premium Annual - Disponível apenas fora da fase Alfa - MOSTRAR PRIMEIRO PARA DESTAQUE */}
+          {!isAlfaPhase && (
+            <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 hover:shadow-xl transition-all duration-300 relative h-full flex flex-col scale-105 z-10 order-2 lg:order-2">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-20">
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg animate-pulse">
+                  🔥 MELHOR VALOR
+                </div>
+              </div>
+              
+              <CardContent className="p-8 flex-1 flex flex-col">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Trophy className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-2">Premium Anual</h3>
+                  {isLoadingPricing ? (
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <div className="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
+                      <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <span className="text-lg text-muted-foreground line-through">{annualOriginalPrice}</span>
+                        <div className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                          {annual?.price_formatted || 'R$ 189,90'}
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">por ano • PIX ou Cartão</p>
+                      <p className="text-xs text-green-600 font-medium mt-1">
+                        {annualMonthlyEquivalentFormatted} por mês <span className="text-muted-foreground">(equivalente)</span>
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">
+                        <span className="text-xs font-bold text-green-700 dark:text-green-300">
+                          💰 Economize {annualSavings} por ano
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+                
+                <div className="space-y-4 mb-8 flex-1">
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Tudo do Premium Mensal</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>{annualDiscountFormatted || '37%'} de desconto</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Acesso antecipado</strong> a novos recursos</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span>Suporte VIP</span>
+                  </div>
+                </div>
+
+                <div className="mt-auto">
+                  <Button 
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-3"
+                    asChild
+                  >
+                    <Link href={isTrialAvailable ? "/register" : "/checkout?plan=annual"}>
+                      {isTrialAvailable ? "Começar com Trial Grátis" : "Economizar 37%"}
+                    </Link>
+                  </Button>
+                  
+                  <p className="text-xs text-center text-muted-foreground mt-3">
+                    {isTrialAvailable 
+                      ? `🎁 7 dias Premium grátis • 💰 Economia de ${annualSavings} por ano`
+                      : `💰 Economia de ${annualSavings} por ano`}
+                  </p>
+                  <p className="text-xs text-center text-muted-foreground/70 mt-1">
+                    Pagamento único anual • Não parcelado
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Premium Monthly - Só mostra quando não é Alfa */}
           {!isAlfaPhase && (
-            <Card className="border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20 hover:shadow-xl transition-all duration-300 relative scale-105">
+            <Card className="border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20 hover:shadow-xl transition-all duration-300 relative order-3 lg:order-3">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                 <div className="bg-gradient-to-r from-violet-600 to-pink-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
-                  🔥 MAIS POPULAR
+                  Mensal
                 </div>
               </div>
               
@@ -155,11 +248,17 @@ export function LandingPricingSection() {
                     <Shield className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl font-bold mb-2">Premium Mensal</h3>
-                  <div className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent mb-2">
-                    R$ 19,90
-                  </div>
-                  <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
-                  <p className="text-xs text-green-600 font-medium mt-1">Apenas R$ 0,66 por dia</p>
+                  {isLoadingPricing ? (
+                    <div className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent mb-2 h-12 animate-pulse bg-gray-200 rounded"></div>
+                  ) : (
+                    <>
+                      <div className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent mb-2">
+                        {monthly?.price_formatted || 'R$ 19,90'}
+                      </div>
+                      <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
+                      <p className="text-xs text-green-600 font-medium mt-1">Apenas R$ {monthlyPricePerDay} por dia</p>
+                    </>
+                  )}
                 </div>
                 
                 <div className="space-y-4 mb-8">
@@ -193,6 +292,10 @@ export function LandingPricingSection() {
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span>Relatórios mensais personalizados por IA</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                     <span>Suporte prioritário</span>
                   </div>
                 </div>
@@ -216,74 +319,6 @@ export function LandingPricingSection() {
           {isAlfaPhase && (
             <AlfaEarlyAdopterCard />
           )}
-
-          {/* Premium Annual - Disponível apenas fora da fase Alfa */}
-          {!isAlfaPhase && (
-            <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 hover:shadow-xl transition-all duration-300 relative h-full flex flex-col">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
-                  💰 20% OFF
-                </div>
-              </div>
-              
-              <CardContent className="p-8 flex-1 flex flex-col">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <Trophy className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-2xl font-bold mb-2">Premium Anual</h3>
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <span className="text-lg text-muted-foreground line-through">R$ 238,80</span>
-                    <div className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                      R$ 189,90
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">por ano • PIX ou Cartão</p>
-                  <p className="text-xs text-green-600 font-medium mt-1">R$ 15,82 por mês</p>
-                </div>
-                
-                <div className="space-y-4 mb-8 flex-1">
-                  <div className="flex items-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>Tudo do Premium Mensal</strong></span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>20% de desconto</strong></span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>Acesso antecipado</strong> a novos recursos</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Relatórios mensais personalizados por IA</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Suporte VIP</span>
-                  </div>
-                </div>
-
-                <div className="mt-auto">
-                  <Button 
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-3"
-                    asChild
-                  >
-                    <Link href={isTrialAvailable ? "/register" : "/checkout?plan=annual"}>
-                      {isTrialAvailable ? "Começar com Trial Grátis" : "Economizar 12%"}
-                    </Link>
-                  </Button>
-                  
-                  <p className="text-xs text-center text-muted-foreground mt-3">
-                    {isTrialAvailable 
-                      ? "🎁 7 dias Premium grátis • 💰 Economia de R$ 67,00 por ano"
-                      : "💰 Economia de R$ 67,00 por ano"}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Value Proposition */}
@@ -302,7 +337,13 @@ export function LandingPricingSection() {
                 <p className="text-muted-foreground">Perda média em empresa problemática</p>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-600 mb-2">+R$ 189,90</div>
+                <div className="text-2xl font-bold text-green-600 mb-2">
+                  {isLoadingPricing ? (
+                    <span className="inline-block h-8 w-32 bg-gray-200 rounded animate-pulse"></span>
+                  ) : (
+                    `+${annual?.price_formatted || 'R$ 189,90'}`
+                  )}
+                </div>
                 <p className="text-muted-foreground">Custo do Premium Anual</p>
               </div>
             </div>

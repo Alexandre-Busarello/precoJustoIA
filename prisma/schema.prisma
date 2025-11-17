@@ -1410,3 +1410,41 @@ model PlBolsaHistory {
   @@index([sector, date])
   @@map("pl_bolsa_history")
 }
+
+// ===== SISTEMA DE PREÇOS CENTRALIZADO =====
+
+enum OfferType {
+  MONTHLY
+  ANNUAL
+}
+
+model Offer {
+  id              String    @id // ex: prod_premium_monthly, prod_premium_annual
+  type            OfferType
+  price_in_cents  Int       @map("price_in_cents")
+  stripe_price_id String?   @map("stripe_price_id") // ID do preço no Stripe
+  is_active       Boolean   @default(true) @map("is_active")
+  currency        String    @default("BRL")
+  created_at      DateTime  @default(now()) @map("created_at")
+  updated_at      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([type, is_active], name: "unique_active_offer_per_type")
+  @@index([type])
+  @@index([is_active])
+  @@map("offers")
+}
+
+// ===== FEEDBACK DE EXIT INTENT =====
+
+model ExitIntentFeedback {
+  id                      String   @id @default(cuid())
+  reason                  String   // price_too_high, missing_features, just_browsing
+  suggested_price_in_cents Int?    @map("suggested_price_in_cents") // nullable, apenas se reason = price_too_high
+  page                    String   // Página onde ocorreu o exit intent
+  created_at              DateTime @default(now()) @map("created_at")
+
+  @@index([reason])
+  @@index([created_at])
+  @@index([page])
+  @@map("exit_intent_feedback")
+}

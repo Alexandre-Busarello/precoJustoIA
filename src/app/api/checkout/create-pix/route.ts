@@ -57,14 +57,15 @@ export async function POST(request: NextRequest) {
         )
       }
       
-      // Converter centavos para reais
-      amount = offer.price_in_cents / 100
+      // Converter centavos para reais e aplicar desconto de 5% para PIX
+      const priceWithPixDiscount = Math.round(offer.price_in_cents * 0.95) // 5% de desconto
+      amount = priceWithPixDiscount / 100
     }
 
     // Gerar chave de idempotência única
     const idempotencyKey = `pix-${user.id}-${planType}-${Date.now()}-${Math.random().toString(36).substring(7)}`
     
-    // Criar pagamento PIX direto no MercadoPago
+    // Criar pagamento PIX direto no MercadoPago (com desconto já aplicado)
     const pixPayment = await createPixPayment({
       planType: planType as 'monthly' | 'annual' | 'early',
       amount,

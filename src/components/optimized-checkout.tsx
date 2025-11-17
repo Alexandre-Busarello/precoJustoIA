@@ -22,7 +22,7 @@ import {
 import { OptimizedPixPayment } from './optimized-pix-payment'
 import { OptimizedCardPayment } from './optimized-card-payment'
 import { usePricing } from '@/hooks/use-pricing'
-import { formatPrice, calculateDiscount } from '@/lib/price-utils'
+import { formatPrice, calculateDiscount, calculatePixDiscount, getPixDiscountAmount } from '@/lib/price-utils'
 
 type PlanType = 'monthly' | 'annual' | 'early'
 type PaymentMethod = 'pix' | 'card'
@@ -119,6 +119,16 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   }
 
   const currentPlan = getPlanData(selectedPlan)
+  
+  // Calcular preço com desconto PIX
+  const getPixPrice = () => {
+    if (selectedPlan === 'early') return currentPlan.price
+    const priceInCents = currentPlan.price * 100
+    return calculatePixDiscount(priceInCents) / 100
+  }
+  
+  const pixPrice = getPixPrice()
+  const pixDiscountAmount = selectedPlan !== 'early' ? getPixDiscountAmount(currentPlan.price * 100) : 0
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -304,7 +314,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                     {/* PIX Option */}
                     <Button
                       variant="outline"
-                      className="h-auto p-4 flex flex-col items-center space-y-2 hover:bg-green-50 hover:border-green-300 transition-colors"
+                      className="h-auto p-4 flex flex-col items-center space-y-2 hover:bg-green-50 hover:border-green-300 transition-colors border-green-200"
                       onClick={() => handleMethodSelect('pix')}
                       disabled={isProcessing}
                     >
@@ -312,10 +322,15 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                       <div className="text-center">
                         <div className="font-medium">PIX</div>
                         <div className="text-sm text-gray-500">Aprovação instantânea</div>
-                        <Badge variant="secondary" className="mt-1 bg-green-100 text-green-700">
+                        <Badge variant="secondary" className="mt-1 bg-green-100 text-green-700 font-bold">
                           <Zap className="w-3 h-3 mr-1" />
-                          Mais rápido
+                          5% OFF
                         </Badge>
+                        {selectedPlan !== 'early' && (
+                          <div className="text-xs text-green-600 font-semibold mt-1">
+                            Economize {formatPrice(pixDiscountAmount)}
+                          </div>
+                        )}
                       </div>
                     </Button>
 
@@ -380,7 +395,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                       {selectedMethod === 'pix' ? (
                         <OptimizedPixPayment
                           planType={selectedPlan}
-                          price={currentPlan.price}
+                          price={pixPrice}
                           onSuccess={handlePaymentSuccess}
                           onError={handlePaymentError}
                         />
@@ -420,9 +435,17 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                         </div>
                         {currentPlan.originalPrice && (
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Desconto</span>
+                            <span className="text-muted-foreground">Desconto Anual</span>
                             <span className="text-green-600 font-medium">
                               -{formatPrice((currentPlan.originalPrice - currentPlan.price) * 100)}
+                            </span>
+                          </div>
+                        )}
+                        {selectedMethod === 'pix' && selectedPlan !== 'early' && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Desconto PIX</span>
+                            <span className="text-green-600 font-medium">
+                              -{formatPrice(pixDiscountAmount)}
                             </span>
                           </div>
                         )}
@@ -432,8 +455,17 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
 
                       <div className="flex justify-between font-semibold text-lg mb-4">
                         <span>Total</span>
-                        <span className="text-blue-600">{formatPrice(currentPlan.price * 100)}</span>
+                        <span className="text-blue-600">
+                          {selectedMethod === 'pix' && selectedPlan !== 'early' 
+                            ? formatPrice(pixPrice * 100)
+                            : formatPrice(currentPlan.price * 100)}
+                        </span>
                       </div>
+                      {selectedMethod === 'pix' && selectedPlan !== 'early' && (
+                        <div className="text-xs text-green-600 font-medium text-center mb-2">
+                          💰 Você economiza {formatPrice(pixDiscountAmount)} pagando com PIX!
+                        </div>
+                      )}
 
                       <div className="text-xs text-gray-500 space-y-1">
                         <p>✓ Ativação imediata após pagamento</p>

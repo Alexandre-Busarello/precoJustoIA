@@ -10,7 +10,7 @@ import { AlfaPremiumNotice } from '@/components/alfa-premium-notice'
 import { AlfaEarlyAdopterCard } from '@/components/alfa-early-adopter-card'
 import { useTrialAvailable } from '@/hooks/use-trial-available'
 import { usePricing } from '@/hooks/use-pricing'
-import { formatPrice } from '@/lib/price-utils'
+import { formatPrice, getPixDiscountAmount } from '@/lib/price-utils'
 
 export function LandingPricingSection() {
   const { stats, isLoading } = useAlfa()
@@ -24,6 +24,10 @@ export function LandingPricingSection() {
   const annualMonthlyEquivalentFormatted = monthlyEquivalent ? formatPrice(monthlyEquivalent) : 'R$ 15,82'
   const annualOriginalPrice = monthly && annual ? formatPrice(monthly.price_in_cents * 12) : 'R$ 238,80'
   const annualSavings = monthly && annual ? formatPrice((monthly.price_in_cents * 12) - annual.price_in_cents) : 'R$ 67,00'
+  
+  // Calcular descontos PIX
+  const monthlyPixDiscount = monthly ? formatPrice(getPixDiscountAmount(monthly.price_in_cents)) : 'R$ 0,00'
+  const annualPixDiscount = annual ? formatPrice(getPixDiscountAmount(annual.price_in_cents)) : 'R$ 0,00'
 
   return (
     <section id="pricing" className="py-20 bg-white dark:bg-background scroll-mt-20">
@@ -184,7 +188,12 @@ export function LandingPricingSection() {
                       </p>
                       <div className="mt-2 inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">
                         <span className="text-xs font-bold text-green-700 dark:text-green-300">
-                          💰 Economize {annualSavings} por ano
+                          💰 PIX: 5% OFF • Economize {annualPixDiscount}
+                        </span>
+                      </div>
+                      <div className="mt-1 inline-flex items-center gap-1 bg-green-50 dark:bg-green-950/30 px-3 py-1 rounded-full">
+                        <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                          + Economia de {annualSavings} no plano anual
                         </span>
                       </div>
                     </>
@@ -256,6 +265,11 @@ export function LandingPricingSection() {
                         {monthly?.price_formatted || 'R$ 19,90'}
                       </div>
                       <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
+                      <div className="mt-2 inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">
+                        <span className="text-xs font-bold text-green-700 dark:text-green-300">
+                          💰 PIX: 5% OFF • Economize {monthlyPixDiscount}
+                        </span>
+                      </div>
                       <p className="text-xs text-green-600 font-medium mt-1">Apenas R$ {monthlyPricePerDay} por dia</p>
                     </>
                   )}

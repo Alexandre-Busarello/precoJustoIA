@@ -87,7 +87,7 @@ export function PixPayment({ planType, planName, price, onSuccess, onError }: Pi
       } finally {
         setChecking(false)
       }
-    }, 3000) // Verificar a cada 3 segundos
+    }, 10000) // Verificar a cada 10 segundos
 
     // Parar verificação após 10 minutos
     setTimeout(() => {

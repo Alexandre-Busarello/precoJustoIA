@@ -12,7 +12,8 @@ import {
   Clock,
   Smartphone,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Zap
 } from 'lucide-react'
 import Image from 'next/image'
 import { usePaymentVerification } from '@/components/session-refresh-provider'
@@ -133,8 +134,8 @@ export function OptimizedPixPayment({
       }
     }
 
-    // Verificar a cada 3 segundos
-    const interval = setInterval(checkPayment, 3000)
+    // Verificar a cada 10 segundos
+    const interval = setInterval(checkPayment, 10000)
     
     // Parar após 10 minutos
     setTimeout(() => clearInterval(interval), 600000)
@@ -160,9 +161,15 @@ export function OptimizedPixPayment({
         </div>
         
         <h3 className="text-xl font-semibold mb-2">Pagamento via PIX</h3>
-        <p className="text-gray-600 dark:text-gray-300 mb-6">
+        <p className="text-gray-600 dark:text-gray-300 mb-4">
           Aprovação instantânea e segura
         </p>
+        <div className="mb-6">
+          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 inline-flex items-center">
+            <Zap className="w-3 h-3 mr-1" />
+            5% de desconto aplicado
+          </Badge>
+        </div>
 
         <Button 
           onClick={createPixPayment}

@@ -17,12 +17,17 @@ interface ExitIntentProviderProps {
 
 /**
  * Provider que gerencia exit intent em páginas específicas
- * Só exibe o modal se o usuário não estiver logado ou não for premium
+ * Só exibe o modal se:
+ * - Usuário não estiver logado OU
+ * - Estiver em trial (premium temporário) OU
+ * - Não for premium (sem trial)
+ * 
+ * Usuários premium pagos não veem o exit intent pois já são clientes.
  */
 export function ExitIntentProvider({ enabledPages = ['/planos', '/checkout'] }: ExitIntentProviderProps) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
-  const { isPremium, isLoading: isLoadingPremium } = usePremiumStatus()
+  const { isPremium, isTrialActive, isLoading: isLoadingPremium } = usePremiumStatus()
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Verificar se exit intent deve estar ativo nesta página
@@ -31,11 +36,12 @@ export function ExitIntentProvider({ enabledPages = ['/planos', '/checkout'] }: 
   // Só ativar se:
   // 1. Está em uma página habilitada
   // 2. Status não está carregando
-  // 3. Usuário não está logado OU não é premium
+  // 3. Usuário não está logado OU está em trial OU não é premium (sem trial)
+  // Nota: Usuários em trial também devem ver o exit intent pois ainda não compraram
   const shouldActivate = isEnabled && 
     status !== 'loading' && 
     !isLoadingPremium &&
-    (status === 'unauthenticated' || !isPremium)
+    (status === 'unauthenticated' || isTrialActive || !isPremium)
 
   const handleExitIntent = useCallback(() => {
     if (shouldActivate) {

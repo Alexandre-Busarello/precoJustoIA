@@ -103,6 +103,60 @@ export async function startTrialForUser(userId: string): Promise<boolean> {
 }
 
 /**
+ * Inicia trial manualmente para um usuário (sem verificar condições de fase/ENV)
+ * Útil para corrigir usuários que não receberam trial automaticamente
+ * Verifica apenas se o usuário já não tem trial ou não é Premium
+ */
+export async function startTrialManually(userId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    // Verificar se usuário existe e pode receber trial
+    const user = await safeQueryWithParams(
+      'check-user-for-manual-trial',
+      () => prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          trialStartedAt: true,
+          subscriptionTier: true
+        }
+      }),
+      { userId }
+    ) as { trialStartedAt: Date | null; subscriptionTier: string } | null
+
+    if (!user) {
+      return { success: false, message: 'Usuário não encontrado' }
+    }
+
+    if (user.subscriptionTier === 'PREMIUM') {
+      return { success: false, message: 'Usuário já é Premium - não precisa de trial' }
+    }
+
+    if (user.trialStartedAt) {
+      return { success: false, message: 'Usuário já possui trial iniciado' }
+    }
+
+    const now = new Date()
+    const trialEndsAt = new Date(now.getTime() + (TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000))
+
+    await safeWrite(
+      'start-trial-manual',
+      () => prisma.user.update({
+        where: { id: userId },
+        data: {
+          trialStartedAt: now,
+          trialEndsAt: trialEndsAt
+        }
+      }),
+      ['users']
+    )
+
+    return { success: true, message: `Trial iniciado com sucesso. Expira em ${TRIAL_DURATION_DAYS} dias.` }
+  } catch (error) {
+    console.error('Erro ao iniciar trial manualmente:', error)
+    return { success: false, message: `Erro ao iniciar trial: ${error instanceof Error ? error.message : 'Erro desconhecido'}` }
+  }
+}
+
+/**
  * Verifica se um usuário tem trial ativo
  * IMPORTANTE: Esta função sempre funciona, mesmo se ENABLE_TRIAL=false
  * Isso garante que usuários que já estão em trial não sejam afetados

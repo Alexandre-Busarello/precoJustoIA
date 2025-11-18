@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminUser } from '@/lib/user-service'
 import { getAlfaStats } from '@/lib/alfa-service'
 import { prisma } from '@/lib/prisma'
+import { startTrialManually } from '@/lib/trial-service'
 
 /**
  * API para administradores visualizarem estatísticas detalhadas da fase Alfa
@@ -126,8 +127,24 @@ export async function POST(request: NextRequest) {
       })
     }
     
+    if (action === 'start-trial') {
+      const result = await startTrialManually(userId)
+      
+      if (result.success) {
+        return NextResponse.json({
+          success: true,
+          message: result.message
+        })
+      } else {
+        return NextResponse.json(
+          { error: result.message },
+          { status: 400 }
+        )
+      }
+    }
+    
     return NextResponse.json(
-      { error: 'Ação não reconhecida' },
+      { error: 'Ação não reconhecida. Ações disponíveis: reactivate, start-trial' },
       { status: 400 }
     )
   } catch (error) {

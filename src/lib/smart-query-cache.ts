@@ -23,7 +23,7 @@ import { cache } from './cache-service'
 import crypto from 'crypto'
 
 // Configurações do cache
-const QUERY_CACHE_TTL = 60 * 60 // 1 hora em segundos
+const QUERY_CACHE_TTL = 43200 // 12 horas em segundos
 const CACHE_PREFIX = 'query'
 
 // Mapeamento de models do Prisma Client para nomes de tabelas no banco

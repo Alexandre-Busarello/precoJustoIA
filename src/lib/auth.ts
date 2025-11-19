@@ -5,7 +5,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { Adapter } from "next-auth/adapters"
-import { startTrialForUser } from "@/lib/trial-service"
+import { startTrialForUser, startTrialAfterEmailVerification } from "@/lib/trial-service"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as Adapter,
@@ -63,21 +63,27 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      // Após login bem-sucedido (especialmente OAuth), verificar e iniciar trial se necessário
+      // Após login bem-sucedido (especialmente OAuth), processar:
+      // 1. Marcar email como verificado se for OAuth (Google já verifica)
+      // 2. Registrar IP de registro/login
+      // 3. Iniciar trial se necessário
       // IMPORTANTE: Para OAuth, user.id pode ser o ID do provider (Google), não o ID do banco
       // Por isso buscamos pelo email que é único e confiável
       // O PrismaAdapter cria o usuário durante este callback, então pode haver um pequeno delay
       if (user?.email) {
         try {
+          const isOAuth = account?.provider === 'google'
+          
           // Tentar buscar o usuário com retry (o PrismaAdapter pode ainda estar criando)
           let dbUser = null
-          let retries = 3
+          let retries = 5 // Aumentado para dar mais tempo ao PrismaAdapter
           while (retries > 0 && !dbUser) {
             dbUser = await prisma.user.findUnique({
               where: { email: user.email },
               select: {
                 id: true,
                 createdAt: true,
+                emailVerified: true,
                 trialStartedAt: true,
                 trialEndsAt: true,
                 subscriptionTier: true
@@ -86,7 +92,7 @@ export const authOptions: NextAuthOptions = {
             
             if (!dbUser && retries > 1) {
               // Aguardar um pouco antes de tentar novamente
-              await new Promise(resolve => setTimeout(resolve, 100))
+              await new Promise(resolve => setTimeout(resolve, 200))
               retries--
             } else {
               break
@@ -94,53 +100,83 @@ export const authOptions: NextAuthOptions = {
           }
 
           if (!dbUser) {
-            console.warn(`[TRIAL] Usuário com email ${user.email} não encontrado no banco após ${3 - retries + 1} tentativas. Trial será verificado no callback jwt.`)
+            console.warn(`[OAUTH] Usuário com email ${user.email} não encontrado no banco após ${5 - retries + 1} tentativas. Processamento será feito no callback jwt.`)
             // Não falhar o login - vamos tentar novamente no callback jwt
             return true
           }
 
-          // Se usuário foi criado há menos de 5 minutos e não tem trial iniciado
-          // e não é Premium, tentar iniciar trial
-          if (!dbUser.trialStartedAt && dbUser.subscriptionTier === 'FREE') {
-            const now = new Date()
-            const userCreatedAt = dbUser.createdAt
-            const timeDiff = now.getTime() - userCreatedAt.getTime()
-            const minutesDiff = timeDiff / (1000 * 60)
+          // Para OAuth (Google), marcar email como verificado automaticamente
+          // O Google já verifica emails, então podemos confiar
+          if (isOAuth && !dbUser.emailVerified) {
+            console.log(`[OAUTH] Marcando email como verificado para usuário ${dbUser.id} (${user.email}) via Google OAuth`)
+            await prisma.user.update({
+              where: { id: dbUser.id },
+              data: { emailVerified: new Date() }
+            })
+            dbUser.emailVerified = new Date()
+          }
 
-            // Se foi criado há menos de 5 minutos, é um novo usuário
-            // Aumentado para 5 minutos para evitar race conditions
-            if (minutesDiff < 5) {
-              console.log(`[TRIAL] Tentando iniciar trial para novo usuário ${dbUser.id} (${user.email}) criado há ${minutesDiff.toFixed(2)} minutos`)
-              const trialStarted = await startTrialForUser(dbUser.id)
-              
-              if (trialStarted) {
-                console.log(`[TRIAL] ✅ Trial iniciado com sucesso para usuário ${dbUser.id} (${user.email})`)
-                // Atualizar user com dados do trial iniciado para incluir na sessão
-                const updatedUser = await prisma.user.findUnique({
-                  where: { id: dbUser.id },
-                  select: {
-                    trialStartedAt: true,
-                    trialEndsAt: true
-                  }
-                })
-                if (updatedUser) {
-                  user.trialStartedAt = updatedUser.trialStartedAt ?? undefined
-                  user.trialEndsAt = updatedUser.trialEndsAt ?? undefined
+          // Verificar se é novo usuário (criado há menos de 5 minutos)
+          const now = new Date()
+          const userCreatedAt = dbUser.createdAt
+          const timeDiff = now.getTime() - userCreatedAt.getTime()
+          const minutesDiff = timeDiff / (1000 * 60)
+          const isNewUser = minutesDiff < 5
+
+          // Se é novo usuário OAuth, registrar IP de registro
+          // Nota: Não temos acesso direto ao request aqui, então vamos usar um placeholder
+          // O IP real será atualizado no endpoint update-last-login
+          if (isNewUser && isOAuth) {
+            console.log(`[OAUTH] Novo usuário detectado via Google OAuth: ${dbUser.id} (${user.email})`)
+            // Criar registro em user_security se não existir
+            // O IP será atualizado no próximo login via update-last-login
+            await prisma.userSecurity.upsert({
+              where: { userId: dbUser.id },
+              create: {
+                userId: dbUser.id,
+                // registrationIp será null por enquanto, será atualizado no próximo login
+                // ou podemos tentar obter de algum header se disponível
+              },
+              update: {}
+            })
+          }
+
+          // Iniciar trial se:
+          // 1. Email está verificado (ou foi verificado agora via OAuth)
+          // 2. Não tem trial iniciado
+          // 3. Não é Premium
+          // 4. É novo usuário OU foi criado há menos de 5 minutos
+          if (dbUser.emailVerified && !dbUser.trialStartedAt && dbUser.subscriptionTier === 'FREE' && isNewUser) {
+            console.log(`[TRIAL] Tentando iniciar trial para novo usuário ${dbUser.id} (${user.email}) via ${isOAuth ? 'Google OAuth' : 'credenciais'}`)
+            const trialStarted = await startTrialAfterEmailVerification(dbUser.id)
+            
+            if (trialStarted) {
+              console.log(`[TRIAL] ✅ Trial iniciado com sucesso para usuário ${dbUser.id} (${user.email})`)
+              // Atualizar user com dados do trial iniciado para incluir na sessão
+              const updatedUser = await prisma.user.findUnique({
+                where: { id: dbUser.id },
+                select: {
+                  trialStartedAt: true,
+                  trialEndsAt: true
                 }
-              } else {
-                console.warn(`[TRIAL] ⚠️ Falha ao iniciar trial para usuário ${dbUser.id} (${user.email}). Verifique: LAUNCH_PHASE=PROD e ENABLE_TRIAL=true`)
+              })
+              if (updatedUser) {
+                user.trialStartedAt = updatedUser.trialStartedAt ?? undefined
+                user.trialEndsAt = updatedUser.trialEndsAt ?? undefined
               }
             } else {
-              console.log(`[TRIAL] Usuário ${dbUser.id} (${user.email}) criado há ${minutesDiff.toFixed(2)} minutos - não é novo usuário`)
+              console.warn(`[TRIAL] ⚠️ Falha ao iniciar trial para usuário ${dbUser.id} (${user.email}). Verifique: LAUNCH_PHASE=PROD e ENABLE_TRIAL=true`)
             }
           } else if (dbUser.trialStartedAt) {
             console.log(`[TRIAL] Usuário ${dbUser.id} (${user.email}) já possui trial iniciado`)
           } else if (dbUser.subscriptionTier === 'PREMIUM') {
             console.log(`[TRIAL] Usuário ${dbUser.id} (${user.email}) já é Premium - não precisa de trial`)
+          } else if (!dbUser.emailVerified && !isOAuth) {
+            console.log(`[TRIAL] Usuário ${dbUser.id} (${user.email}) precisa verificar email antes de iniciar trial`)
           }
         } catch (error) {
-          // Não falhar o login se houver erro ao iniciar trial
-          console.error('[TRIAL] Erro ao verificar/iniciar trial no login:', error)
+          // Não falhar o login se houver erro ao processar
+          console.error('[OAUTH] Erro ao processar login OAuth:', error)
         }
       }
       return true

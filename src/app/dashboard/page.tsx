@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { RankingHistorySection } from "@/components/ranking-history-section";
 import { Footer } from "@/components/footer";
 import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { CompanyLogo } from "@/components/company-logo";
 import { useAlfa } from "@/contexts/alfa-context";
 import { DashboardPortfolios } from "@/components/dashboard-portfolios";
@@ -296,6 +297,9 @@ export default function Dashboard() {
         {subscriptionTier === "FREE" && (
           <EarlyAdopterDashboardBanner className="mb-6" />
         )}
+
+        {/* Email Verification Banner - Discreto */}
+        <EmailVerificationBanner />
 
         {/* Trial Premium Banner - Discreto */}
         {isTrialActive && subscriptionTier === 'FREE' && (

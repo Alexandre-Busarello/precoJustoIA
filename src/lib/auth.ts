@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
-import { Adapter } from "next-auth/adapters"
+import { Adapter, AdapterUser, AdapterAccount } from "next-auth/adapters"
 import { startTrialForUser, startTrialAfterEmailVerification } from "@/lib/trial-service"
 
 export const authOptions: NextAuthOptions = {
@@ -63,6 +63,93 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
+      // Permitir linking de contas OAuth quando já existe conta com mesmo email
+      // Isso resolve o erro OAuthAccountNotLinked
+      if (account?.provider === 'google' && user?.email) {
+        try {
+          // Verificar se já existe usuário com este email
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
+            include: {
+              accounts: {
+                where: { provider: 'google' }
+              }
+            }
+          })
+
+          // Se usuário existe mas não tem Account do Google vinculado, vincular automaticamente
+          if (existingUser && existingUser.accounts.length === 0) {
+            console.log(`[OAUTH] Vinculando conta Google ao usuário existente ${existingUser.id} (${user.email})`)
+            
+            try {
+              // Criar Account vinculando Google ao usuário existente ANTES do adapter processar
+              await prisma.account.create({
+                data: {
+                  userId: existingUser.id,
+                  type: account.type,
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                  access_token: account.access_token,
+                  expires_at: account.expires_at,
+                  token_type: account.token_type,
+                  scope: account.scope,
+                  id_token: account.id_token,
+                  session_state: account.session_state,
+                  refresh_token: account.refresh_token,
+                }
+              })
+
+              // Atualizar user object para usar o ID existente
+              // Isso faz o adapter usar o usuário existente em vez de criar novo
+              user.id = existingUser.id
+              
+              // Marcar email como verificado se ainda não estiver
+              if (!existingUser.emailVerified) {
+                await prisma.user.update({
+                  where: { id: existingUser.id },
+                  data: { emailVerified: new Date() }
+                })
+              }
+
+              console.log(`[OAUTH] ✅ Conta Google vinculada com sucesso ao usuário ${existingUser.id}`)
+            } catch (linkError: any) {
+              // Se erro for de constraint única (Account já existe), ignorar (já está vinculado)
+              if (linkError?.code === 'P2002') {
+                console.log(`[OAUTH] Account Google já existe para este usuário, continuando...`)
+                user.id = existingUser.id
+              } else {
+                console.error('[OAUTH] Erro ao vincular conta Google:', linkError)
+                throw linkError
+              }
+            }
+          } else if (existingUser && existingUser.accounts.length > 0) {
+            // Usuário já tem Account do Google vinculado, usar ID existente
+            user.id = existingUser.id
+            console.log(`[OAUTH] Usuário já tem conta Google vinculada: ${existingUser.id}`)
+          }
+        } catch (error: any) {
+          // Se erro for de constraint única (usuário já existe), tentar buscar usuário existente
+          if (error?.code === 'P2002' && user?.email) {
+            const existingUser = await prisma.user.findUnique({
+              where: { email: user.email },
+              include: {
+                accounts: {
+                  where: { provider: 'google' }
+                }
+              }
+            })
+            
+            if (existingUser) {
+              user.id = existingUser.id
+              console.log(`[OAUTH] Usuário existente encontrado após erro: ${existingUser.id}`)
+            }
+          } else {
+            console.error('[OAUTH] Erro ao processar linking:', error)
+          }
+          // Continuar mesmo com erro - pode ser que já esteja vinculado
+        }
+      }
+
       // Após login bem-sucedido (especialmente OAuth), processar:
       // 1. Marcar email como verificado se for OAuth (Google já verifica)
       // 2. Registrar IP de registro/login

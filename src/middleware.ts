@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { applyGlobalApiProtection } from '@/lib/api-global-protection'
-import { requiresEmailVerification } from '@/lib/email-verification-service'
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
@@ -65,32 +64,6 @@ export async function middleware(request: NextRequest) {
     }
   }
   
-
-  
-  // Verificar se usuário precisa verificar email (após 1 dia do cadastro)
-  // Aplicar apenas em rotas que requerem autenticação (exceto /verificar-email e /login)
-  const protectedRoutes = ['/dashboard', '/api/', '/admin']
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
-  const isPublicRoute = pathname === '/verificar-email' || pathname === '/login' || pathname === '/register' || pathname.startsWith('/api/auth/')
-  
-  if (isProtectedRoute && !isPublicRoute) {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
-    
-    if (token?.userId) {
-      try {
-        const needsVerification = await requiresEmailVerification(token.userId as string)
-        if (needsVerification) {
-          // Redirecionar para página de verificação de email
-          const verifyUrl = new URL('/verificar-email', request.url)
-          verifyUrl.searchParams.set('required', 'true')
-          return NextResponse.redirect(verifyUrl)
-        }
-      } catch (error) {
-        // Em caso de erro, permitir acesso (não bloquear usuário)
-        console.error('Erro ao verificar necessidade de verificação de email:', error)
-      }
-    }
-  }
 
   // Proteger rotas administrativas
   if (pathname.startsWith('/admin')) {

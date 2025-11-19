@@ -90,9 +90,7 @@ function VerifyEmailContent() {
               </div>
               <CardTitle className="text-2xl">Verifique seu Email</CardTitle>
               <CardDescription>
-                {searchParams.get('required') === 'true' 
-                  ? 'Para continuar usando a plataforma, você precisa verificar seu email. Enviamos um link de verificação para seu email.'
-                  : 'Enviamos um link de verificação para seu email. Clique no link para ativar sua conta.'}
+                Enviamos um link de verificação para seu email. Clique no link para ativar sua conta e iniciar seu período de trial de 7 dias.
               </CardDescription>
             </>
           )}
@@ -101,10 +99,16 @@ function VerifyEmailContent() {
           {success !== 'true' && (
             <>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>Não recebeu o email?</strong>
+                <p className="text-sm text-blue-800 font-semibold mb-2">
+                  ⚠️ Importante: Seu trial de 7 dias só será ativado após verificar o email
                 </p>
-                <ul className="text-sm text-blue-700 mt-2 space-y-1 list-disc list-inside">
+                <p className="text-sm text-blue-700 mb-2">
+                  Você pode usar a plataforma normalmente, mas para ativar todas as funcionalidades Premium e iniciar seu período de trial, é necessário verificar seu email.
+                </p>
+                <p className="text-sm text-blue-800 font-semibold mt-3 mb-2">
+                  Não recebeu o email?
+                </p>
+                <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
                   <li>Verifique sua pasta de spam/lixo eletrônico</li>
                   <li>O link expira em 24 horas</li>
                   <li>Certifique-se de usar o mesmo email do cadastro</li>
@@ -173,11 +177,11 @@ function VerifyEmailContent() {
           {status === 'authenticated' && success !== 'true' && !error && (
             <div className="text-center space-y-4">
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
-                  <strong>Você já está logado!</strong>
+                <p className="text-sm text-yellow-800 font-semibold mb-2">
+                  Você já está logado!
                 </p>
-                <p className="text-sm text-yellow-700 mt-2">
-                  Você pode usar a plataforma normalmente. Verifique seu email quando possível para ativar todas as funcionalidades e não perder seu acesso.
+                <p className="text-sm text-yellow-700">
+                  Você pode usar a plataforma normalmente. Para ativar seu período de trial de 7 dias e todas as funcionalidades Premium, verifique seu email clicando no link que enviamos.
                 </p>
               </div>
               <Link href="/dashboard">

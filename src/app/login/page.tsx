@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -19,6 +19,14 @@ function LoginForm() {
   
   // Obter callbackUrl da URL ou usar dashboard como padrão
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  const oauthError = searchParams.get('error')
+
+  // Verificar erro OAuth na URL
+  useEffect(() => {
+    if (oauthError === 'OAuthAccountNotLinked') {
+      setError("Esta conta Google já está vinculada a outra conta. Faça login com email e senha primeiro para vincular sua conta Google.")
+    }
+  }, [oauthError])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,6 +55,7 @@ function LoginForm() {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
+    setError("")
     await signIn("google", { callbackUrl })
   }
 

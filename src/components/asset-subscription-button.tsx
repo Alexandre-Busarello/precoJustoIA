@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Bell, BellOff, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,7 +36,7 @@ export default function AssetSubscriptionButton({
   const queryClient = useQueryClient();
   
   // Usar hook React Query para buscar status de subscription (com cache)
-  const { data: subscriptionData, isLoading: isChecking } = useAssetSubscription(
+  const { data: subscriptionData, isLoading: isChecking, refetch: refetchSubscription } = useAssetSubscription(
     session?.user ? ticker : '' // Só buscar se usuário estiver logado
   );
   
@@ -63,9 +63,9 @@ export default function AssetSubscriptionButton({
         const data = await response.json();
 
         if (response.ok) {
-          setIsSubscribed(false);
-          // Invalidar cache de subscription
+          // Invalidar cache de subscription e refetch
           invalidateAssetSubscriptionCache(queryClient, ticker);
+          refetchSubscription();
           
           toast({
             title: 'Inscrição cancelada',
@@ -83,9 +83,9 @@ export default function AssetSubscriptionButton({
         const data = await response.json();
 
         if (response.ok) {
-          setIsSubscribed(true);
-          // Invalidar cache de subscription
+          // Invalidar cache de subscription e refetch
           invalidateAssetSubscriptionCache(queryClient, ticker);
+          refetchSubscription();
           
           toast({
             title: 'Inscrição realizada!',

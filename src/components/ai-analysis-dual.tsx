@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { AIReportFeedback } from '@/components/ai-report-feedback'
+import { useAIReports } from '@/hooks/use-company-data'
 
 interface AIReport {
   id: string
@@ -54,35 +55,22 @@ export default function AIAnalysisDual({
   userIsPremium = false,
   companyId: _companyId // eslint-disable-line @typescript-eslint/no-unused-vars
 }: AIAnalysisDualProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [monthlyReport, setMonthlyReport] = useState<AIReport | null>(null)
-  const [changeReports, setChangeReports] = useState<AIReport[]>([])
-  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'monthly' | 'changes'>('monthly')
   const [isAutoGenerating, setIsAutoGenerating] = useState(false)
+  const [isGeneratingLoading, setIsGeneratingLoading] = useState(false)
+  const [generationError, setGenerationError] = useState<string | null>(null)
   
   // Ref para evitar múltiplas chamadas simultâneas
   const isGeneratingRef = useRef(false)
-  const hasLoadedRef = useRef<string | false>(false)
-
-  // Carregar relatórios ao montar o componente
-  useEffect(() => {
-    // Evitar múltiplas chamadas no StrictMode do React apenas na primeira renderização
-    // Mas permitir recarregar quando o ticker mudar
-    const currentTicker = ticker
-    const previousTicker = hasLoadedRef.current
-    
-    // Se já carregamos para este ticker, não recarregar (evita loop no StrictMode)
-    // Mas sempre carregar na primeira vez ou quando o ticker mudar
-    if (typeof previousTicker === 'string' && previousTicker === currentTicker) {
-      console.log(`⏸️ loadReports: Já carregado para este ticker (${currentTicker}), pulando para evitar loop...`)
-      return
-    }
-    
-    hasLoadedRef.current = currentTicker
-    console.log(`🔄 loadReports: Carregando relatórios para ${currentTicker} (anterior: ${previousTicker})`)
-    loadReports()
-  }, [ticker]) // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // Usar hooks React Query para buscar relatórios (com cache)
+  const { data: monthlyData, isLoading: isLoadingMonthly, error: monthlyError, refetch: refetchMonthly } = useAIReports(ticker, 'MONTHLY_OVERVIEW')
+  const { data: changesData, isLoading: isLoadingChanges } = useAIReports(ticker, 'FUNDAMENTAL_CHANGE')
+  
+  const isLoading = isLoadingMonthly || isLoadingChanges || isGeneratingLoading
+  const monthlyReport = monthlyData?.success && monthlyData.report ? monthlyData.report as unknown as AIReport : null
+  const changeReports = changesData?.success && changesData.reports ? changesData.reports as unknown as AIReport[] : []
+  const error = generationError || (monthlyError ? (monthlyError instanceof Error ? monthlyError.message : 'Erro ao carregar relatórios') : null)
 
   // Verifica se um relatório precisa ser regenerado (mais de 30 dias)
   const needsRegeneration = (report: AIReport): boolean => {
@@ -99,101 +87,62 @@ export default function AIAnalysisDual({
     return needs
   }
 
-  const loadReports = async (skipAutoGenerate = false) => {
-    try {
-      setIsLoading(true)
-      
-      // Buscar relatório mensal
-      const monthlyResponse = await fetch(`/api/ai-reports/${ticker}?type=MONTHLY_OVERVIEW`)
-      if (monthlyResponse.ok) {
-        const monthlyData = await monthlyResponse.json()
-        if (monthlyData.success && monthlyData.report) {
-          const report = monthlyData.report
-          setMonthlyReport(report)
-          
-          // Verificar se precisa gerar automaticamente (mais de 30 dias ou primeiro relatório)
-          // Só gerar automaticamente se não estiver já gerando e se for Premium
-          console.log(`🔍 Verificando condições para auto-geração: skipAutoGenerate=${skipAutoGenerate}, userIsPremium=${userIsPremium}, isAutoGenerating=${isAutoGenerating}, isGeneratingRef=${isGeneratingRef.current}`)
-          const needsRegen = needsRegeneration(report)
-          console.log(`🔍 needsRegeneration retornou: ${needsRegen}`)
-          
-          // Verificar condições para auto-geração
-          if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current && needsRegen) {
-            console.log('🤖 Relatório mensal tem mais de 30 dias. Gerando automaticamente...')
-            // Chamar generateMonthlyReport que vai gerenciar o ref internamente
-            // Não setar o ref aqui para evitar deadlock
-            generateMonthlyReport().catch((err) => {
-              console.error('Erro ao gerar relatório mensal:', err)
-              isGeneratingRef.current = false
-              setIsAutoGenerating(false)
-            })
-            return // Não aguardar, deixar rodar em background
-          } else {
-            console.log(`⏸️ Condições não atendidas para auto-geração. skipAutoGenerate=${skipAutoGenerate}, userIsPremium=${userIsPremium}, isAutoGenerating=${isAutoGenerating}, isGeneratingRef=${isGeneratingRef.current}, needsRegeneration=${needsRegen}`)
-          }
-        } else {
-          // Não há relatório mensal - gerar automaticamente se for Premium
-          if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current) {
-            console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
-            generateMonthlyReport().catch((err) => {
-              console.error('Erro ao gerar relatório mensal:', err)
-              isGeneratingRef.current = false
-              setIsAutoGenerating(false)
-            })
-            return
-          }
-        }
-      } else if (monthlyResponse.status === 404) {
-        // Relatório não encontrado - gerar automaticamente se for Premium
-        if (!skipAutoGenerate && userIsPremium && !isAutoGenerating && !isGeneratingRef.current) {
-          console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
-          generateMonthlyReport().catch((err) => {
-            console.error('Erro ao gerar relatório mensal:', err)
-            isGeneratingRef.current = false
-            setIsAutoGenerating(false)
-          })
-          return
-        }
-      }
-
-      // Buscar relatórios de mudança
-      const changesResponse = await fetch(`/api/ai-reports/${ticker}?type=FUNDAMENTAL_CHANGE&limit=5`)
-      if (changesResponse.ok) {
-        const changesData = await changesResponse.json()
-        if (changesData.success && changesData.reports) {
-          setChangeReports(changesData.reports)
-        }
-      }
-
-    } catch (err) {
-      console.error('Erro ao carregar relatórios:', err)
-      setError(err instanceof Error ? err.message : 'Erro ao carregar relatórios')
-    } finally {
-      setIsLoading(false)
+  // Verificar se precisa gerar relatório automaticamente quando dados carregarem
+  useEffect(() => {
+    if (!monthlyReport || isLoadingMonthly || isAutoGenerating || isGeneratingRef.current) return
+    
+    const needsRegen = needsRegeneration(monthlyReport)
+    
+    // Verificar condições para auto-geração
+    if (userIsPremium && needsRegen) {
+      console.log('🤖 Relatório mensal tem mais de 30 dias. Gerando automaticamente...')
+      generateMonthlyReport().catch((err) => {
+        console.error('Erro ao gerar relatório mensal:', err)
+        isGeneratingRef.current = false
+        setIsAutoGenerating(false)
+      })
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthlyReport, isLoadingMonthly, userIsPremium, isAutoGenerating])
+  
+  // Se não há relatório mensal, gerar automaticamente se for Premium
+  useEffect(() => {
+    if (isLoadingMonthly || isAutoGenerating || isGeneratingRef.current || !userIsPremium) return
+    
+    if (!monthlyReport && monthlyData && !monthlyData.success) {
+      console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
+      generateMonthlyReport().catch((err) => {
+        console.error('Erro ao gerar relatório mensal:', err)
+        isGeneratingRef.current = false
+        setIsAutoGenerating(false)
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthlyReport, monthlyData, isLoadingMonthly, userIsPremium, isAutoGenerating])
 
   const generateMonthlyReport = async () => {
-    // O ref já deve estar setado em loadReports antes de chamar esta função
-    // Mas verificamos novamente por segurança (double-check)
+    // Verificar se já está gerando
     if (isGeneratingRef.current) {
       console.log('⚠️ Geração já em andamento. Ignorando chamada duplicada.')
       return
     }
 
     // Setar o ref IMEDIATAMENTE para bloquear outras chamadas
-    // (caso tenha sido chamado diretamente sem passar por loadReports)
     isGeneratingRef.current = true
+    setIsAutoGenerating(true)
+    setIsGeneratingLoading(true)
+    setGenerationError(null)
     
     if (!userIsPremium) {
-      setError('Análise por IA disponível apenas para usuários Premium')
+      setGenerationError('Análise por IA disponível apenas para usuários Premium')
       isGeneratingRef.current = false
       setIsAutoGenerating(false)
+      setIsGeneratingLoading(false)
       return
     }
 
-    setIsLoading(true)
-    setError(null)
+    setIsGeneratingLoading(true)
+    setGenerationError(null)
     setIsAutoGenerating(true)
     
     console.log('🚀 Iniciando chamada para API de geração de relatório...')
@@ -220,55 +169,56 @@ export default function AIAnalysisDual({
         // Se já está sendo gerado, aguardar e recarregar
         if (errorData.generating) {
           console.log('🤖 Relatório já está sendo gerado. Aguardando...')
-          setIsLoading(true)
+          setIsGeneratingLoading(true)
           setTimeout(() => {
-            loadReports(true) // skipAutoGenerate = true para evitar loop
+            refetchMonthly()
           }, 3000)
           return
         }
         // Se for erro de duplicado, apenas recarregar os relatórios
         if (errorData.duplicate || response.status === 409) {
           console.log('⏸️ Relatório duplicado detectado. Recarregando relatórios...')
-          setIsLoading(false)
-          isGeneratingRef.current = false
-          setIsAutoGenerating(false)
-          setTimeout(() => {
-            loadReports(true) // skipAutoGenerate = true para evitar loop
-          }, 1000)
-          return
+        setIsGeneratingLoading(false)
+        isGeneratingRef.current = false
+        setIsAutoGenerating(false)
+        // Invalidar cache e recarregar após 1 segundo
+        setTimeout(() => {
+          refetchMonthly()
+        }, 1000)
+        return
         }
         throw new Error(errorData.error || 'Erro ao gerar análise')
       }
 
       const data = await response.json()
       if (data.success && data.report) {
-        setMonthlyReport(data.report)
         setIsAutoGenerating(false)
-        setIsLoading(false)
+        setIsGeneratingLoading(false)
         isGeneratingRef.current = false
-        // Recarregar relatórios para garantir dados atualizados
+        // Invalidar cache e recarregar após 1 segundo
         setTimeout(() => {
-          loadReports(true) // skipAutoGenerate = true para evitar loop
+          refetchMonthly()
         }, 1000)
       } else if (data.generating) {
         // Relatório está sendo gerado em background
         console.log('🤖 Relatório está sendo gerado em background. Aguardando...')
         isGeneratingRef.current = false
         setIsAutoGenerating(false)
-        setIsLoading(true)
+        setIsGeneratingLoading(true)
         setTimeout(() => {
-          loadReports(true) // skipAutoGenerate = true para evitar loop
+          refetchMonthly()
         }, 3000)
       } else {
         setIsAutoGenerating(false)
-        setIsLoading(false)
+        setIsGeneratingLoading(false)
+        isGeneratingRef.current = false
       }
 
     } catch (err) {
       console.error('Erro ao gerar análise:', err)
-      setError(err instanceof Error ? err.message : 'Erro desconhecido')
+      setGenerationError(err instanceof Error ? err.message : 'Erro desconhecido')
       setIsAutoGenerating(false)
-      setIsLoading(false)
+      setIsGeneratingLoading(false)
       isGeneratingRef.current = false
     }
   }

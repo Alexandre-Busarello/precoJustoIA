@@ -127,6 +127,12 @@ export function PortfolioPageClient() {
   // Reload portfolios function (for use by child components)
   const reloadPortfolios = () => {
     queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+    // Disparar evento para invalidar cache do dashboard
+    window.dispatchEvent(
+      new CustomEvent('portfolio-config-updated', {
+        detail: { action: 'config' },
+      })
+    );
   };
 
   const [showCreateModal, setShowCreateModal] = useState(false);

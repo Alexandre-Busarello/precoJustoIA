@@ -10,10 +10,10 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
           queries: {
             // staleTime: dados são considerados "frescos" por 5 minutos
             // Durante esse tempo, mesmo se o componente remontar, não fará refetch
-            staleTime: 5 * 60 * 1000, // 5 minutos
+            staleTime: 5 * 60 * 1000, // 5 minutos (padrão, pode ser sobrescrito por query específica)
             // gcTime: dados permanecem no cache por 10 minutos após não serem usados
             // Isso permite que ao trocar de aba e voltar, os dados ainda estejam em cache
-            gcTime: 10 * 60 * 1000, // 10 minutos
+            gcTime: 10 * 60 * 1000, // 10 minutos (padrão, pode ser sobrescrito por query específica)
             // Retry em caso de erro
             retry: 3,
             // Não refazer quando a janela recebe foco (evita requests desnecessários)

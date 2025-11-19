@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
+import { useCompanyAnalysis } from '@/hooks/use-company-data';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
 import Link from 'next/link';
 
@@ -314,9 +314,7 @@ function StatementsAnalysisContent({ analysis }: { analysis: StatementsAnalysis 
 
 export default function StrategicAnalysisClient({ ticker, currentPrice, latestFinancials, userIsPremium: serverIsPremium }: Props) {
   const { data: session } = useSession();
-  const [analysisData, setAnalysisData] = useState<CompanyAnalysisResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: analysisData, isLoading: loading, error: queryError } = useCompanyAnalysis(ticker);
 
   const isLoggedIn = !!session?.user;
   const { isPremium: clientIsPremium } = usePremiumStatus();
@@ -332,33 +330,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
     ticker
   });
 
-  // Buscar análises estratégicas
-  useEffect(() => {
-    async function fetchStrategicAnalysis() {
-      if (!ticker) return;
-
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/company-analysis/${ticker}`);
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Erro ao buscar análises');
-        }
-
-        const data = await response.json();
-        setAnalysisData(data);
-        setError(null);
-      } catch (err) {
-        console.error('Erro ao buscar análises estratégicas:', err);
-        setError(err instanceof Error ? err.message : 'Erro desconhecido');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchStrategicAnalysis();
-  }, [ticker]);
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Erro desconhecido') : null;
 
   if (loading) {
     return (
@@ -399,7 +371,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
     return null;
   }
 
-  const { strategies } = analysisData;
+  // Type assertion para garantir que analysisData tem o tipo correto
+  const typedAnalysisData = analysisData as unknown as CompanyAnalysisResponse;
+  const { strategies } = typedAnalysisData;
 
   // Verificar se empresa está reinvestindo (para mostrar indicador global)
   const payout = latestFinancials.payout ? parseFloat(latestFinancials.payout.toString()) : null;
@@ -1992,8 +1966,8 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
             </div>
           ) : (
             <div className="space-y-6">
-              {analysisData?.overallScore?.statementsAnalysis ? (
-                <StatementsAnalysisContent analysis={analysisData.overallScore.statementsAnalysis} />
+              {typedAnalysisData?.overallScore?.statementsAnalysis ? (
+                <StatementsAnalysisContent analysis={typedAnalysisData.overallScore.statementsAnalysis} />
               ) : (
                 <Card className="border-gray-200 bg-gray-50/30">
                   <CardContent className="p-6 text-center">

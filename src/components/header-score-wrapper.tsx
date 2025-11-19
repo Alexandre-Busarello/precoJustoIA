@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent } from '@/components/ui/card';
 import CompactScore from '@/components/compact-score';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
+import { useCompanyAnalysis } from '@/hooks/use-company-data';
 
-// Interface para score geral
+interface HeaderScoreWrapperProps {
+  ticker: string;
+}
+
 interface OverallScore {
   score: number;
   grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
@@ -16,41 +19,24 @@ interface OverallScore {
   recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssima';
 }
 
-interface HeaderScoreWrapperProps {
+interface CompanyAnalysisResponse {
   ticker: string;
+  name: string;
+  sector: string | null;
+  currentPrice: number;
+  overallScore: OverallScore | null;
+  strategies: unknown;
 }
 
 export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) {
   const { data: session } = useSession();
   const { isPremium } = usePremiumStatus();
-  const [overallScore, setOverallScore] = useState<OverallScore | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: analysisData, isLoading } = useCompanyAnalysis(ticker);
   
   const isLoggedIn = !!session?.user;
+  const overallScore = (analysisData as CompanyAnalysisResponse | undefined)?.overallScore ?? null;
 
-  useEffect(() => {
-    async function fetchScore() {
-      if (!ticker) return;
-
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/company-analysis/${ticker}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          setOverallScore(data.overallScore);
-        }
-      } catch (error) {
-        console.error('Erro ao buscar score:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchScore();
-  }, [ticker]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <Card className="w-full lg:w-80">
         <CardContent className="p-4 lg:p-4 text-center">

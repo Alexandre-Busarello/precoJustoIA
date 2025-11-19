@@ -25,6 +25,7 @@ import { PortfolioAIAssistant } from '@/components/portfolio-ai-assistant';
 import { PortfolioBulkAssetInput } from '@/components/portfolio-bulk-asset-input';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
+import { dispatchPortfolioChangeEvent } from '@/hooks/use-cache-invalidation';
 
 interface Asset {
   ticker: string;
@@ -228,6 +229,7 @@ export function PortfolioConfigForm({
       // Invalidate dashboard cache
       invalidateDashboardPortfoliosCache();
       queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+      dispatchPortfolioChangeEvent('config', data.portfolioId);
 
       if (onSuccess) {
         onSuccess();
@@ -289,6 +291,7 @@ export function PortfolioConfigForm({
       queryClient.invalidateQueries({ queryKey: ['portfolios'] });
       if (initialData?.id) {
         queryClient.invalidateQueries({ queryKey: ['portfolio', initialData.id] });
+        dispatchPortfolioChangeEvent('config', initialData.id);
       }
 
       if (onSuccess) {

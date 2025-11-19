@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,17 @@ import { Badge } from '@/components/ui/badge'
 import { ChevronDown, TrendingUp, AlertTriangle, Info, Crown, Lock } from 'lucide-react'
 import PriceChart from './price-chart'
 import Link from 'next/link'
+import { useHistoricalPrices } from '@/hooks/use-company-data'
+
+interface HistoricalPricesResponse {
+  ticker: string;
+  companyName: string;
+  historicalData: HistoricalData[];
+  technicalAnalysis: TechnicalAnalysis | null;
+  dataCount: number;
+  lastUpdate: string;
+  message?: string;
+}
 
 interface HistoricalData {
   date: string
@@ -57,36 +68,25 @@ interface TechnicalAnalysisSectionProps {
 
 export default function TechnicalAnalysisSection({ ticker, userIsPremium }: TechnicalAnalysisSectionProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [data, setData] = useState<ApiResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  
+  // Usar React Query para buscar dados históricos (apenas quando aberto e Premium)
+  const { data: historicalData, isLoading: loading, error: queryError, refetch } = useHistoricalPrices(
+    isOpen && userIsPremium ? ticker : ''
+  )
 
-  const fetchTechnicalData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  // Converter dados do hook para formato esperado pelo componente
+  const typedHistoricalData = historicalData as unknown as HistoricalPricesResponse | undefined;
+  const data: ApiResponse | null = typedHistoricalData ? {
+    ticker: typedHistoricalData.ticker,
+    companyName: typedHistoricalData.companyName,
+    historicalData: typedHistoricalData.historicalData,
+    technicalAnalysis: typedHistoricalData.technicalAnalysis,
+    dataCount: typedHistoricalData.dataCount,
+    lastUpdate: typedHistoricalData.lastUpdate,
+    message: typedHistoricalData.message,
+  } : null
 
-    try {
-      const response = await fetch(`/api/historical-prices/${ticker}`)
-      
-      if (!response.ok) {
-        throw new Error('Erro ao buscar dados históricos')
-      }
-
-      const result: ApiResponse = await response.json()
-      setData(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido')
-    } finally {
-      setLoading(false)
-    }
-  }, [ticker])
-
-  // Buscar dados quando a seção for aberta (apenas para usuários Premium)
-  useEffect(() => {
-    if (isOpen && !data && !loading && userIsPremium) {
-      fetchTechnicalData()
-    }
-  }, [isOpen, data, loading, userIsPremium, fetchTechnicalData])
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Erro desconhecido') : null
 
   const getSignalColor = (signal: 'SOBRECOMPRA' | 'SOBREVENDA' | 'NEUTRO') => {
     switch (signal) {
@@ -212,7 +212,7 @@ export default function TechnicalAnalysisSection({ ticker, userIsPremium }: Tech
                     <AlertTriangle className="w-12 h-12 sm:w-16 sm:h-16 text-red-500 mx-auto mb-4 sm:mb-6" />
                     <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Erro ao carregar dados</h3>
                     <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-6 max-w-sm sm:max-w-md mx-auto leading-relaxed">{error}</p>
-                    <Button onClick={fetchTechnicalData} variant="outline" size="default" className="sm:text-base">
+                    <Button onClick={() => refetch()} variant="outline" size="default" className="sm:text-base">
                       Tentar novamente
                     </Button>
                   </div>
@@ -320,7 +320,7 @@ export default function TechnicalAnalysisSection({ ticker, userIsPremium }: Tech
                     <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-6 max-w-sm sm:max-w-md mx-auto leading-relaxed">
                       Visualize gráficos de preços e indicadores técnicos como RSI e Oscilador Estocástico
                     </p>
-                    <Button onClick={fetchTechnicalData} size="default" className="sm:text-base">
+                    <Button onClick={() => refetch()} size="default" className="sm:text-base">
                       Carregar Análise Técnica
                     </Button>
                   </div>

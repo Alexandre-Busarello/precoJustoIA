@@ -6,39 +6,22 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Mail, X } from "lucide-react"
 import Link from "next/link"
+import { useEmailVerified } from "@/hooks/use-user-data"
 
 export function EmailVerificationBanner() {
   const { data: session, status } = useSession()
   const [isDismissed, setIsDismissed] = useState(false)
-  const [emailVerified, setEmailVerified] = useState<boolean | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { data: emailVerifiedData, isLoading } = useEmailVerified()
 
   useEffect(() => {
     // Verificar se o banner foi dispensado (localStorage)
     const dismissed = localStorage.getItem('email-verification-banner-dismissed')
     if (dismissed === 'true') {
       setIsDismissed(true)
-      setIsLoading(false)
-      return
     }
+  }, [])
 
-    // Verificar status de verificação de email apenas se usuário está autenticado
-    if (status === 'authenticated' && session?.user?.id) {
-      fetch('/api/user/email-verified')
-        .then(res => res.json())
-        .then(data => {
-          setEmailVerified(data.verified === true)
-          setIsLoading(false)
-        })
-        .catch(() => {
-          // Em caso de erro, não mostrar o banner (evitar falsos positivos)
-          setEmailVerified(true)
-          setIsLoading(false)
-        })
-    } else if (status === 'unauthenticated') {
-      setIsLoading(false)
-    }
-  }, [session, status])
+  const emailVerified = emailVerifiedData?.verified ?? null
 
   const handleDismiss = () => {
     setIsDismissed(true)

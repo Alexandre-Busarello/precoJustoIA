@@ -8,6 +8,7 @@ import { CompanyLogo } from '@/components/company-logo'
 import { CompanySizeBadge } from '@/components/company-size-badge'
 import StrategicAnalysisClient from '@/components/strategic-analysis-client'
 import HeaderScoreWrapper from '@/components/header-score-wrapper'
+import { PageCacheIndicator } from '@/components/page-cache-indicator'
 import AIAnalysisDual from '@/components/ai-analysis-dual'
 import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
@@ -535,6 +536,7 @@ export default async function BdrPage({ params }: PageProps) {
 
             {/* Card do Score - Separado */}
             <div className="lg:flex-shrink-0">
+              <PageCacheIndicator ticker={ticker} />
               <HeaderScoreWrapper ticker={ticker} />
               
               {/* Card de Notificações - Destacado (apenas quando cards estão lado a lado, >= 1024px) */}

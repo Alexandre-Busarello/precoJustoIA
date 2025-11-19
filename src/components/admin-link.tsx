@@ -1,41 +1,19 @@
 "use client"
 
-import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Shield } from 'lucide-react'
+import { useAdminCheck } from '@/hooks/use-user-data'
 
 export default function AdminLink() {
   const { data: session } = useSession()
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const { data: adminData, isLoading } = useAdminCheck()
+  
+  const isAdmin = adminData?.isAdmin || false
 
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (!session?.user?.id) {
-        setLoading(false)
-        return
-      }
-
-      try {
-        const response = await fetch('/api/admin/check')
-        if (response.ok) {
-          const data = await response.json()
-          setIsAdmin(data.isAdmin)
-        }
-      } catch (error) {
-        console.error('Erro ao verificar status de admin:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    checkAdminStatus()
-  }, [session])
-
-  if (loading || !session || !isAdmin) {
+  if (isLoading || !session || !isAdmin) {
     return null
   }
 

@@ -3,21 +3,31 @@
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { CheckCircle2, XCircle, Mail, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { invalidateEmailVerifiedCache } from "@/hooks/use-user-data"
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { data: session, status } = useSession()
+  const queryClient = useQueryClient()
   const [isResending, setIsResending] = useState(false)
   const [resendMessage, setResendMessage] = useState("")
   const [resendError, setResendError] = useState("")
 
   const success = searchParams.get('success')
   const error = searchParams.get('error')
+
+  useEffect(() => {
+    // Se verificação foi bem-sucedida, invalidar cache de email verification
+    if (success === 'true') {
+      invalidateEmailVerifiedCache(queryClient)
+    }
+  }, [success, queryClient])
 
   useEffect(() => {
     // Se verificação foi bem-sucedida e usuário está logado, redirecionar após 3 segundos

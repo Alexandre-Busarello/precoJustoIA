@@ -8,6 +8,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAssetSubscription, invalidateAssetSubscriptionCache } from '@/hooks/use-company-data';
 
 interface AssetSubscriptionButtonProps {
   ticker: string;
@@ -26,35 +28,19 @@ export default function AssetSubscriptionButton({
   showLabel = true,
   compact = false,
 }: AssetSubscriptionButtonProps) {
-  const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
   const { data: session } = useSession();
   const { isLoading: isPremiumLoading } = usePremiumStatus();
   const { toast } = useToast();
   const router = useRouter();
-
-  // Verificar status da inscrição ao carregar
-  useEffect(() => {
-    if (session?.user) {
-      checkSubscriptionStatus();
-    } else {
-      setIsChecking(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, ticker]);
-
-  const checkSubscriptionStatus = async () => {
-    try {
-      const response = await fetch(`/api/asset-subscriptions/by-ticker/${ticker}`);
-      const data = await response.json();
-      setIsSubscribed(data.isSubscribed || false);
-    } catch (error) {
-      console.error('Erro ao verificar inscrição:', error);
-    } finally {
-      setIsChecking(false);
-    }
-  };
+  const queryClient = useQueryClient();
+  
+  // Usar hook React Query para buscar status de subscription (com cache)
+  const { data: subscriptionData, isLoading: isChecking } = useAssetSubscription(
+    session?.user ? ticker : '' // Só buscar se usuário estiver logado
+  );
+  
+  const isSubscribed = subscriptionData?.isSubscribed || false;
 
   const handleToggleSubscription = async () => {
     // Verificar autenticação - redirecionar para registro/login para capturar lead
@@ -78,6 +64,9 @@ export default function AssetSubscriptionButton({
 
         if (response.ok) {
           setIsSubscribed(false);
+          // Invalidar cache de subscription
+          invalidateAssetSubscriptionCache(queryClient, ticker);
+          
           toast({
             title: 'Inscrição cancelada',
             description: `Você não receberá mais notificações sobre ${ticker}`,
@@ -95,6 +84,9 @@ export default function AssetSubscriptionButton({
 
         if (response.ok) {
           setIsSubscribed(true);
+          // Invalidar cache de subscription
+          invalidateAssetSubscriptionCache(queryClient, ticker);
+          
           toast({
             title: 'Inscrição realizada!',
             description: `Você receberá notificações quando houver mudanças relevantes em ${ticker}`,

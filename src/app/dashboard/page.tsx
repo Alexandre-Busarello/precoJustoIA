@@ -2,8 +2,21 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePremiumStatus } from "@/hooks/use-premium-status";
+import { useDashboardStats, useTopCompanies, usePortfolios } from "@/hooks/use-dashboard-data";
+import { useCacheInvalidation } from "@/hooks/use-cache-invalidation";
+import { CacheIndicator } from "@/components/cache-indicator";
+
+interface TopCompany {
+  ticker: string;
+  companyName: string;
+  score: number;
+  sector: string | null;
+  currentPrice: number;
+  logoUrl: string | null;
+  recommendation: string;
+}
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,41 +42,23 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-interface DashboardStats {
-  rankingsToday: number;
-  totalRankings: number;
-  totalCompanies: number;
-  availableModels: number;
-  isPremium: boolean;
-  hasUsedBacktest: boolean;
-}
 
-interface TopCompany {
-  ticker: string;
-  companyName: string;
-  score: number;
-  sector: string | null;
-  currentPrice: number;
-  logoUrl: string | null;
-  recommendation: string;
-}
-
-interface CachedTopCompaniesData {
-  companies: TopCompany[];
-  date: string; // Data no formato YYYY-MM-DD
-}
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const { isPremium, subscriptionTier, isTrialActive, trialDaysRemaining } = usePremiumStatus();
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [hasJoinedWhatsApp, setHasJoinedWhatsApp] = useState(false);
-  const [topCompanies, setTopCompanies] = useState<TopCompany[]>([]);
-  const [companiesLoading, setCompaniesLoading] = useState(true);
-  const [companiesFromCache, setCompaniesFromCache] = useState(false);
-  const [portfolioCount, setPortfolioCount] = useState(0);
+
+  // Usar React Query hooks
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: topCompaniesData, isLoading: companiesLoading, refetch: refetchTopCompanies, dataUpdatedAt: companiesUpdatedAt } = useTopCompanies(3, 80);
+  const { data: portfoliosData } = usePortfolios();
+
+  // Monitorar mudanças de portfolio e perfil para invalidar cache
+  useCacheInvalidation();
+
+  const topCompanies = (topCompaniesData as { companies: TopCompany[] } | undefined)?.companies || [];
+  const portfolioCount = (portfoliosData as { portfolios: unknown[] } | undefined)?.portfolios?.length || 0;
 
   useEffect(() => {
     if (status === "loading") return;
@@ -72,146 +67,11 @@ export default function Dashboard() {
     }
   }, [session, status, router]);
 
-  useEffect(() => {
-    if (session) {
-      fetchStats();
-      fetchTopCompanies();
-      fetchPortfolioCount();
-    }
-  }, [session]);
-
-  // Verificar se usuário já clicou no grupo WhatsApp
-  useEffect(() => {
-    const joined = localStorage.getItem("whatsapp_group_joined");
-    setHasJoinedWhatsApp(joined === "true");
-  }, []);
-
-
-  const fetchStats = async () => {
-    try {
-      setStatsLoading(true);
-      const response = await fetch("/api/dashboard-stats");
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar estatísticas:", error);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
-
+  // Função para forçar refresh das empresas (mantida para compatibilidade)
   const fetchTopCompanies = async (forceRefresh: boolean = false) => {
-    try {
-      setCompaniesLoading(true);
-      setCompaniesFromCache(false);
-
-      // ✅ CACHE DE 1 DIA NO LOCALSTORAGE
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-      const cacheKey = "dashboard_top_companies";
-
-      // Verificar se há cache válido (mesmo dia) e se não forçou refresh
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(cacheKey);
-        if (cachedData) {
-          try {
-            const parsed: CachedTopCompaniesData = JSON.parse(cachedData);
-
-            // Se a data do cache é hoje, usar dados cacheados
-            if (
-              parsed.date === today &&
-              Array.isArray(parsed.companies) &&
-              parsed.companies.length > 0
-            ) {
-              console.log(
-                "📦 Usando empresas do cache (localStorage) - mesmo dia"
-              );
-              setTopCompanies(parsed.companies);
-              setCompaniesFromCache(true); // Indicar que veio do cache
-              setCompaniesLoading(false);
-              return;
-            } else {
-              console.log(
-                "🔄 Cache expirado ou inválido, buscando novos dados..."
-              );
-            }
-          } catch (e) {
-            console.warn("Cache inválido, ignorando:", e);
-          }
-        }
-      } else {
-        console.log(
-          "🔄 Refresh forçado, limpando cache e buscando novos dados..."
-        );
-        localStorage.removeItem(cacheKey);
-      }
-
-      // Buscar do servidor
-      const response = await fetch("/api/top-companies?limit=3&minScore=80");
-      if (response.ok) {
-        const data = await response.json();
-        const companies = data.companies || [];
-        setTopCompanies(companies);
-        setCompaniesFromCache(false); // Dados frescos
-
-        // Salvar no cache com a data de hoje
-        const cacheData: CachedTopCompaniesData = {
-          companies,
-          date: today,
-        };
-        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        console.log("💾 Empresas salvas no cache (localStorage)");
-      }
-    } catch (error) {
-      console.error("Erro ao buscar top empresas:", error);
-    } finally {
-      setCompaniesLoading(false);
+    if (forceRefresh) {
+      await refetchTopCompanies();
     }
-  };
-
-  const fetchPortfolioCount = async () => {
-    try {
-      // Tentar usar cache primeiro
-      const cacheKey = "dashboard_portfolios";
-      const cachedData = localStorage.getItem(cacheKey);
-
-      if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-
-          // Verificar se o cache é válido (tem expiresAt e não expirou)
-          if (parsed.expiresAt && new Date().getTime() < parsed.expiresAt) {
-            console.log(
-              "📦 Usando count de portfolios do cache (localStorage)"
-            );
-            setPortfolioCount(parsed.portfolios?.length || 0);
-            return; // Usar cache válido, não fazer fetch
-          } else {
-            console.log(
-              "🔄 Cache de portfolios expirado, buscando do servidor..."
-            );
-          }
-        } catch (e) {
-          console.warn("Cache de portfolios inválido, ignorando:", e);
-        }
-      }
-
-      // Se não há cache válido, buscar do servidor
-      const response = await fetch("/api/portfolio");
-      if (response.ok) {
-        const data = await response.json();
-        setPortfolioCount(data.portfolios?.length || 0);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar carteiras:", error);
-      setPortfolioCount(0); // Fallback seguro
-    }
-  };
-
-  const handleWhatsAppClick = () => {
-    localStorage.setItem("whatsapp_group_joined", "true");
-    setHasJoinedWhatsApp(true);
   };
 
   if (status === "loading") {
@@ -227,7 +87,7 @@ export default function Dashboard() {
   }
 
   // Determinar se usuário é novo ou experiente
-  const isNewUser = (stats?.totalRankings || 0) === 0;
+  const isNewUser = ((stats as { totalRankings?: number } | undefined)?.totalRankings || 0) === 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
@@ -564,7 +424,7 @@ export default function Dashboard() {
                       <Activity className="w-5 h-5 text-violet-600" />
                       Suas Análises Recentes
                       <Badge className="ml-auto bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
-                        {stats?.totalRankings || 0}
+                        {(stats as { totalRankings?: number } | undefined)?.totalRankings || 0}
                       </Badge>
                     </CardTitle>
                   </CardHeader>
@@ -679,13 +539,12 @@ export default function Dashboard() {
                       <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-blue-600" />
                         Boas Empresas para Analisar
-                        {companiesFromCache && (
-                          <Badge
-                            variant="outline"
-                            className="ml-2 text-xs bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 font-normal"
-                          >
-                            Cache
-                          </Badge>
+                        {companiesUpdatedAt && (
+                          <CacheIndicator 
+                            queryKey={['top-companies', 3, 80]}
+                            dataUpdatedAt={companiesUpdatedAt}
+                            staleTime={5 * 60 * 1000}
+                          />
                         )}
                       </CardTitle>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -729,7 +588,7 @@ export default function Dashboard() {
                               <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2">
                                   <h4 className="font-bold text-base text-slate-900 dark:text-slate-100">
-                                    {company.ticker}
+                                    {(company as { ticker: string }).ticker}
                                   </h4>
                                   <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-xs px-2 py-0.5 font-semibold">
                                     Score {company.score}
@@ -922,7 +781,7 @@ export default function Dashboard() {
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Rankings</span>
                     <span className="font-semibold">
-                      {statsLoading ? "-" : stats?.totalRankings || 0}
+                      {statsLoading ? "-" : (stats as { totalRankings?: number } | undefined)?.totalRankings || 0}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">

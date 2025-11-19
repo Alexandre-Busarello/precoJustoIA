@@ -19,6 +19,7 @@ import { EventType } from '@/lib/tracking-types';
 import { DollarSign, AlertTriangle, Plus } from 'lucide-react';
 import { invalidatePortfolioAnalyticsCache } from '@/components/portfolio-analytics';
 import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
+import { dispatchPortfolioChangeEvent } from '@/hooks/use-cache-invalidation';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -117,6 +118,9 @@ export function PortfolioTransactionForm({
       queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
       invalidatePortfolioAnalyticsCache(portfolioId);
       invalidateDashboardPortfoliosCache();
+      
+      // Disparar evento para invalidação inteligente de cache
+      dispatchPortfolioChangeEvent('transaction', portfolioId);
 
       // Dispatch event for cash flow change to trigger suggestion regeneration
       window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {

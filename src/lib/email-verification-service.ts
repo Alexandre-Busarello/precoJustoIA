@@ -194,7 +194,7 @@ export async function isEmailVerified(userId: string): Promise<boolean> {
       { userId }
     )
 
-    return user?.emailVerified !== null && user.emailVerified !== undefined
+    return user?.emailVerified !== null && user?.emailVerified !== undefined
   } catch (error) {
     console.error('Erro ao verificar status de email:', error)
     return false

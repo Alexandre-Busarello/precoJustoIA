@@ -573,6 +573,7 @@ export default function Dashboard() {
                       <Link
                         key={company.ticker}
                         href={`/acao/${company.ticker}`}
+                        prefetch={false}
                         className="block hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                       >
                         <div className="p-4 group">

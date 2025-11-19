@@ -446,7 +446,7 @@ export default async function TickerPage({ params }: PageProps) {
                     <div className="mb-4 flex flex-wrap gap-2">
                       {smartComparatorUrl && (
                         <Button asChild>
-                          <Link href={smartComparatorUrl}>
+                          <Link href={smartComparatorUrl} prefetch={false}>
                             <GitCompare className="w-4 h-4 mr-2" />
                             Comparador Inteligente
                           </Link>
@@ -467,7 +467,7 @@ export default async function TickerPage({ params }: PageProps) {
 
                       {reportsCount > 0 && (
                         <Button asChild variant="outline" size="default">
-                          <Link href={`/acao/${ticker.toLowerCase()}/relatorios`}>
+                          <Link href={`/acao/${ticker.toLowerCase()}/relatorios`} prefetch={false}>
                             <FileText className="w-4 h-4 mr-2" />
                             Relatórios ({reportsCount})
                           </Link>
@@ -499,7 +499,7 @@ export default async function TickerPage({ params }: PageProps) {
                                 size="sm"
                                 className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white flex-shrink-0"
                               >
-                                <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`}>
+                                <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`} prefetch={false}>
                                   Calcular
                                   <ArrowRight className="w-4 h-4 ml-1.5" />
                                 </Link>
@@ -523,6 +523,7 @@ export default async function TickerPage({ params }: PageProps) {
                           <Eye className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <Link 
                             href={companyData.website} 
+                            prefetch={false}
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:underline truncate"
@@ -630,7 +631,7 @@ export default async function TickerPage({ params }: PageProps) {
                       size="lg"
                       className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
                     >
-                      <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`}>
+                      <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`} prefetch={false}>
                         Calcular Agora
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </Link>

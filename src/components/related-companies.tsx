@@ -78,6 +78,7 @@ export function RelatedCompanies({
             <Link
               key={company.ticker}
               href={getAssetUrl(company.ticker, company.assetType)}
+              prefetch={false}
               className="group block"
             >
               <div className="border rounded-lg p-4 hover:shadow-md hover:border-blue-200 transition-all duration-200 group-hover:bg-blue-50/50">

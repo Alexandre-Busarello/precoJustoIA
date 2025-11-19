@@ -1195,7 +1195,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
 
                 <div className="mt-4">
                   <Button asChild variant="outline" size="sm" className="w-full">
-                    <Link href={`/acao/${company.ticker}`}>
+                    <Link href={`/acao/${company.ticker}`} prefetch={false}>
                       <Eye className="w-4 h-4 mr-2" />
                       Ver Análise Completa
                     </Link>
@@ -1587,7 +1587,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
         <div className="flex flex-wrap gap-2 sm:gap-3">
           {orderedCompanies.map((company) => (
             <Button key={company.ticker} asChild variant="outline" size="sm" className="text-xs sm:text-sm">
-              <Link href={`/acao/${company.ticker}`}>
+              <Link href={`/acao/${company.ticker}`} prefetch={false}>
                 <LineChart className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                 <span className="hidden sm:inline">Análise Completa </span>
                 {company.ticker}

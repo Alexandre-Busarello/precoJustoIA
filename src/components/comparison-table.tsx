@@ -650,7 +650,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
           <div className="flex flex-wrap gap-2">
             {companies.map((company) => (
               <Button key={company.ticker} asChild variant="outline" size="sm" className="text-xs sm:text-sm">
-                <Link href={`/acao/${company.ticker}`}>
+                <Link href={`/acao/${company.ticker}`} prefetch={false}>
                   <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                   {company.ticker}
                 </Link>

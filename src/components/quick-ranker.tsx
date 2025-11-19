@@ -1905,7 +1905,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       {/* Action Buttons */}
                       <div className="flex flex-wrap gap-2 pt-3 border-t">
                         <Button asChild variant="default" size="sm" className="flex-1">
-                          <Link href={`/acao/${result.ticker}`}>
+                          <Link href={`/acao/${result.ticker}`} prefetch={false}>
                             <Building2 className="w-4 h-4 mr-2" />
                             Ver Análise
                           </Link>

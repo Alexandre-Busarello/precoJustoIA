@@ -245,6 +245,7 @@ export function SectorAnalysisClient({ initialSectors, isPremium }: SectorAnalys
                     <div key={company.ticker} className="relative">
                       <Link
                         href={shouldBlur ? '#' : `/acao/${company.ticker.toLowerCase()}`}
+                        prefetch={false}
                         className="block"
                         onClick={(e) => {
                           if (shouldBlur) {

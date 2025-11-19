@@ -118,6 +118,7 @@ export default function SubscriptionsList({ subscriptions: initialSubscriptions 
               {/* Company Info */}
               <Link
                 href={`/acao/${subscription.company.ticker.toLowerCase()}`}
+                prefetch={false}
                 className="block group"
               >
                 <div className="flex items-start space-x-3 mb-4">

@@ -28,6 +28,8 @@ interface Portfolio {
   currentValue: number;
   cashBalance: number;
   totalInvested: number;
+  totalWithdrawn: number;
+  netInvested: number; // Capital líquido investido (totalInvested - totalWithdrawn)
   totalReturn: number;
   evolutionData: Array<{
     date: string;
@@ -246,11 +248,22 @@ export function DashboardPortfolios() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Investido: R$ {bestPortfolio.totalInvested.toLocaleString("pt-BR", {
+                  Investido líquido: R$ {bestPortfolio.netInvested.toLocaleString("pt-BR", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
                 </p>
+                {bestPortfolio.totalWithdrawn > 0 && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    (Aportes: R$ {bestPortfolio.totalInvested.toLocaleString("pt-BR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })} - Saques: R$ {bestPortfolio.totalWithdrawn.toLocaleString("pt-BR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })})
+                  </p>
+                )}
               </div>
             </div>
 

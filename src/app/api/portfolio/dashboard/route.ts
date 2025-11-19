@@ -62,12 +62,18 @@ export async function GET() {
           }
 
           // Format portfolio data for dashboard
+          const totalInvested = metrics.totalInvested || 0;
+          const totalWithdrawn = metrics.totalWithdrawn || 0;
+          const netInvested = totalInvested - totalWithdrawn;
+          
           return {
             id: portfolio.id,
             name: portfolio.name,
             currentValue: metrics.currentValue || 0,
             cashBalance: metrics.cashBalance || 0,
-            totalInvested: metrics.totalInvested || 0,
+            totalInvested,
+            totalWithdrawn,
+            netInvested,
             totalReturn: metrics.totalReturn || 0,
             evolutionData: (metrics.evolutionData || []).slice(-6), // Last 6 months
           };

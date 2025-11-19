@@ -61,6 +61,8 @@ interface Portfolio {
   metrics?: {
     currentValue: number;
     totalInvested: number;
+    totalWithdrawn: number;
+    netInvested: number;
     totalReturn: number;
     cashBalance: number;
   } | null;

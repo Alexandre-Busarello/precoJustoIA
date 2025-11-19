@@ -188,6 +188,8 @@ export async function GET() {
             metrics: metrics ? {
               currentValue: metrics.currentValue,
               totalInvested: metrics.totalInvested,
+              totalWithdrawn: metrics.totalWithdrawn || 0,
+              netInvested: metrics.netInvested || (metrics.totalInvested - (metrics.totalWithdrawn || 0)),
               totalReturn: metrics.totalReturn,
               cashBalance: metrics.cashBalance
             } : null

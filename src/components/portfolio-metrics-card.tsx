@@ -125,8 +125,13 @@ export function PortfolioMetricsCard({ metrics, loading, startDate }: PortfolioM
             {formatPercent(metrics.totalReturn)}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Investido: {formatCurrency(metrics.totalInvested)}
+            Investido líquido: {formatCurrency(metrics.netInvested || (metrics.totalInvested - metrics.totalWithdrawn))}
           </p>
+          {metrics.totalWithdrawn > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              (Aportes: {formatCurrency(metrics.totalInvested)} - Saques: {formatCurrency(metrics.totalWithdrawn)})
+            </p>
+          )}
         </CardContent>
       </Card>
 

@@ -54,6 +54,7 @@ export interface PortfolioMetricsData {
   cashBalance: number;
   totalInvested: number;
   totalWithdrawn: number;
+  netInvested: number; // Capital líquido investido (totalInvested - totalWithdrawn)
   totalDividends: number;
   totalReturn: number;
   annualizedReturn: number | null;
@@ -191,6 +192,7 @@ export class PortfolioMetricsService {
       cashBalance,
       totalInvested,
       totalWithdrawn,
+      netInvested, // Capital líquido investido (usado no cálculo do retorno)
       totalDividends,
       totalReturn,
       annualizedReturn,
@@ -1079,12 +1081,17 @@ export class PortfolioMetricsService {
       return await this.getMetrics(portfolioId, userId);
     }
 
+    const totalInvested = Number(metrics.totalInvested);
+    const totalWithdrawn = Number(metrics.totalWithdrawn);
+    const netInvested = totalInvested - totalWithdrawn;
+    
     return {
       ...metrics,
       currentValue: Number(metrics.currentValue),
       cashBalance: Number(metrics.cashBalance),
-      totalInvested: Number(metrics.totalInvested),
-      totalWithdrawn: Number(metrics.totalWithdrawn),
+      totalInvested,
+      totalWithdrawn,
+      netInvested, // Capital líquido investido (usado no cálculo do retorno)
       totalDividends: Number(metrics.totalDividends),
       totalReturn: Number(metrics.totalReturn),
       annualizedReturn: metrics.annualizedReturn ? Number(metrics.annualizedReturn) : null,

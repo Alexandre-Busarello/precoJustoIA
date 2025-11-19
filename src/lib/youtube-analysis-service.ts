@@ -644,7 +644,7 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
         tools,
       };
 
-      const model = 'gemini-2.5-flash';
+      const model = 'gemini-2.5-flash-lite';
 
       const contents = [
         {

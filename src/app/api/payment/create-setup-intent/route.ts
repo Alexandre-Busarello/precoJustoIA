@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const { planType } = await request.json()
 
-    if (!planType || !['monthly', 'annual', 'early'].includes(planType)) {
+    if (!planType || !['monthly', 'annual'].includes(planType)) {
       return NextResponse.json(
         { error: 'Tipo de plano inválido' },
         { status: 400 }
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Obter configuração do plano
-    const planConfig = STRIPE_CONFIG.products.premium[planType as 'monthly' | 'annual' | 'early']
+    const planConfig = STRIPE_CONFIG.products.premium[planType as 'monthly' | 'annual']
     
     if (!planConfig) {
       return NextResponse.json(
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         userId: user.id,
         userEmail: user.email,
-        planType: planType === 'early' ? 'annual' : planType,
+        planType: planType,
         priceId: planConfig.priceId,
       },
     })

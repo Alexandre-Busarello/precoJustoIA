@@ -193,7 +193,7 @@ export async function isUserPremium(identifier: string): Promise<boolean> {
     
     // Durante a fase Alfa, todos os usuários têm acesso Premium
     // Trial também dá acesso Premium
-    return isAlfaPhase() || hasValidPremium || hasTrial
+    return hasValidPremium || hasTrial
   } catch (error) {
     console.error('Erro ao verificar status Premium:', error)
     return false
@@ -275,7 +275,7 @@ export async function getUserById(userId: string): Promise<UserData | null> {
     
     // Durante a fase Alfa, todos os usuários têm acesso Premium
     // Trial também dá acesso Premium
-    const isPremium = isAlfaPhase() || hasValidPremium || hasTrial
+    const isPremium = hasValidPremium || hasTrial
 
     return {
       id: user.id,

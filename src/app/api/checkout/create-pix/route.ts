@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const { planType, userEmail, userName } = await request.json()
 
-    if (!planType || !['early', 'monthly', 'annual'].includes(planType)) {
+    if (!planType || !['monthly', 'annual'].includes(planType)) {
       return NextResponse.json(
         { error: 'Tipo de plano inválido' },
         { status: 400 }
@@ -32,42 +32,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Buscar preço da tabela offers (exceto para early adopter)
-    let amount: number
+    // Buscar preço da tabela offers
+    const offerType = planType === 'monthly' ? 'MONTHLY' : 'ANNUAL'
+    const offer = await prisma.offer.findFirst({
+      where: {
+        type: offerType,
+        is_active: true,
+      },
+      select: {
+        price_in_cents: true,
+      },
+    })
     
-    if (planType === 'early') {
-      // Early adopter tem preço fixo
-      amount = 118.80
-    } else {
-      const offerType = planType === 'monthly' ? 'MONTHLY' : 'ANNUAL'
-      const offer = await prisma.offer.findFirst({
-        where: {
-          type: offerType,
-          is_active: true,
-        },
-        select: {
-          price_in_cents: true,
-        },
-      })
-      
-      if (!offer) {
-        return NextResponse.json(
-          { error: `Oferta ${offerType} não encontrada ou inativa` },
-          { status: 404 }
-        )
-      }
-      
-      // Converter centavos para reais e aplicar desconto de 5% para PIX
-      const priceWithPixDiscount = Math.round(offer.price_in_cents * 0.95) // 5% de desconto
-      amount = priceWithPixDiscount / 100
+    if (!offer) {
+      return NextResponse.json(
+        { error: `Oferta ${offerType} não encontrada ou inativa` },
+        { status: 404 }
+      )
     }
+    
+    // Converter centavos para reais e aplicar desconto de 5% para PIX
+    const priceWithPixDiscount = Math.round(offer.price_in_cents * 0.95) // 5% de desconto
+    const amount = priceWithPixDiscount / 100
 
     // Gerar chave de idempotência única
     const idempotencyKey = `pix-${user.id}-${planType}-${Date.now()}-${Math.random().toString(36).substring(7)}`
     
     // Criar pagamento PIX direto no MercadoPago (com desconto já aplicado)
     const pixPayment = await createPixPayment({
-      planType: planType as 'monthly' | 'annual' | 'early',
+      planType: planType as 'monthly' | 'annual',
       amount,
       userId: user.id,
       userEmail: userEmail || user.email,

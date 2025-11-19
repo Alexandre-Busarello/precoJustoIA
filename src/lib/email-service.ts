@@ -725,8 +725,8 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
               <div class="logo-container">
                 <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
               </div>
-              <h1 class="header-title">⚡ Oportunidade Perdida</h1>
-              <p class="header-subtitle">Sua oferta Early Adopter está esperando</p>
+              <h1 class="header-title">⚡ Pagamento Não Processado</h1>
+              <p class="header-subtitle">Sua assinatura está aguardando</p>
             </div>
             
             <div class="content">
@@ -735,42 +735,9 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
               </p>
               
               <p class="main-text">
-                Infelizmente, não conseguimos processar o pagamento da sua assinatura <strong>Early Adopter</strong> no <strong>Preço Justo AI</strong>. 
+                Infelizmente, não conseguimos processar o pagamento da sua assinatura no <strong>Preço Justo AI</strong>. 
                 Mas não se preocupe, isso é mais comum do que você imagina e tem solução fácil!
               </p>
-              
-              <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin: 30px 0; text-align: center;">
-                <div style="margin-bottom: 20px;">
-                  <h3 style="color: #111827; font-weight: 600; margin: 0 0 8px 0; font-size: 20px;">Early Adopter</h3>
-                  <p style="color: #64748b; font-size: 15px; margin: 0; font-weight: 500;">Preço congelado PARA SEMPRE</p>
-                </div>
-                
-                <div style="background-color: #ffffff; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
-                  <p style="color: #111827; font-size: 15px; margin-bottom: 16px; font-weight: 600;">O que você está perdendo:</p>
-                  <div style="display: grid; gap: 12px; text-align: left;">
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
-                      <span style="font-size: 18px;">🔒</span>
-                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Preço congelado PARA SEMPRE (R$ 249/ano)</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
-                      <span style="font-size: 18px;">💬</span>
-                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Canal exclusivo WhatsApp com CEO</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
-                      <span style="font-size: 18px;">🚀</span>
-                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Acesso antecipado a novos recursos</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f9fafb; border-radius: 6px;">
-                      <span style="font-size: 18px;">💰</span>
-                      <span style="color: #1e293b; font-weight: 500; font-size: 14px;">Economia de R$ 248/ano (preço normal: R$ 497)</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div style="background-color: #fef3c7; border-radius: 6px; padding: 12px; margin-top: 16px; border: 1px solid #f59e0b;">
-                  <p style="color: #92400e; font-weight: 600; margin: 0; font-size: 13px;">Esta oferta é limitada e não voltará!</p>
-                </div>
-              </div>
               
               ${failureReason ? `
               <div class="error-section">
@@ -1521,7 +1488,6 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
 
 ${userName ? `Olá, ${userName}!` : 'Olá!'} Parabéns! Sua assinatura ${planName} foi ativada com sucesso.
 
-${isEarlyAdopter ? '👑 Parabéns, Early Adopter! Você garantiu o preço congelado para sempre!' : ''}
 
 🎯 Comece agora mesmo:
 • Dashboard: ${baseUrl}/dashboard

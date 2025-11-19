@@ -311,8 +311,6 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
           stripePriceId: subscription.items.data[0].price.id,
           stripeCurrentPeriodEnd: periodEndDate,
           premiumExpiresAt: periodEndDate,
-          earlyAdopterDate: subscription.items.data[0].price.id ? new Date() : null,
-          isEarlyAdopter: subscription.items.data[0].price.id ? true : false,
           wasPremiumBefore: true,
           firstPremiumAt: new Date(),
           lastPremiumAt: new Date(),
@@ -330,11 +328,8 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
     // Enviar email de boas-vindas
     if (userEmail) {
       try {
-        // Verificar se é Early Adopter baseado no preço
-        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 11880 // R$ 118,80
-        
-        await sendWelcomeEmail(userEmail, undefined, isEarlyAdopter)
-        console.log(`📧 Welcome email sent to ${userEmail} (Early Adopter: ${isEarlyAdopter})`)
+        await sendWelcomeEmail(userEmail, undefined, false)
+        console.log(`📧 Welcome email sent to ${userEmail}`)
       } catch (emailError) {
         console.error('❌ Failed to send welcome email:', emailError)
         // Não falhar o webhook por causa do email
@@ -511,10 +506,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
     // Verificamos se o usuário não tinha Premium antes
     if (!user.wasPremiumBefore && user.email) {
       try {
-        // Verificar se é Early Adopter baseado no preço
-        const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 11880 // R$ 118,80
-        
-        await sendWelcomeEmail(user.email, user.name || undefined, isEarlyAdopter)
+        await sendWelcomeEmail(user.email, user.name || undefined, false)
         console.log(`📧 Welcome email sent to ${user.email}`)
       } catch (emailError) {
         console.error('❌ Failed to send welcome email:', emailError)
@@ -681,7 +673,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return false
   }
 
-  if (!planType || !['early', 'monthly', 'annual'].includes(planType)) {
+  if (!planType || !['monthly', 'annual'].includes(planType)) {
     console.error('❌ Invalid plan type in payment intent metadata:', planType)
     return false
   }
@@ -693,7 +685,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     
     if (planType === 'monthly') {
       expiresAt.setMonth(expiresAt.getMonth() + 1)
-    } else if (planType === 'annual' || planType === 'early') {
+    } else {
       expiresAt.setFullYear(expiresAt.getFullYear() + 1)
     }
 

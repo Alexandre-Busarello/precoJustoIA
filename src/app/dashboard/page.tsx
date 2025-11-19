@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RankingHistorySection } from "@/components/ranking-history-section";
 import { Footer } from "@/components/footer";
-import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { CompanyLogo } from "@/components/company-logo";
 import { DashboardPortfolios } from "@/components/dashboard-portfolios";
@@ -290,11 +289,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
-        {/* Early Adopter Banner */}
-        {subscriptionTier === "FREE" && (
-          <EarlyAdopterDashboardBanner className="mb-6" />
-        )}
 
         {/* Email Verification Banner - Discreto */}
         <EmailVerificationBanner />

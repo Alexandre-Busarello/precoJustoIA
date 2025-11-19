@@ -25,12 +25,13 @@ export const STRIPE_CONFIG = {
         currency: 'brl',
         interval: 'year' as const,
       },
-      early: {
-        priceId: process.env.STRIPE_EARLY_ANNUAL_PRICE_ID!,
-        amount: 11880, // R$ 118.80 em centavos
-        currency: 'brl',
-        interval: 'year' as const,
-      },
+      // Early Adopter removido - mantido apenas para compatibilidade com usuários existentes
+      // early: {
+      //   priceId: process.env.STRIPE_EARLY_ANNUAL_PRICE_ID!,
+      //   amount: 11880, // R$ 118.80 em centavos
+      //   currency: 'brl',
+      //   interval: 'year' as const,
+      // },
     },
   },
   

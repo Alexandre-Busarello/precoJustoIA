@@ -193,8 +193,6 @@ export class WebhookProcessor {
             stripePriceId: subscription.items.data[0].price.id,
             stripeCurrentPeriodEnd: periodEndDate,
             premiumExpiresAt: periodEndDate,
-            earlyAdopterDate: subscription.items.data[0].price.id ? new Date() : null,
-            isEarlyAdopter: subscription.items.data[0].price.id ? true : false,
             wasPremiumBefore: true,
             firstPremiumAt: new Date(),
             lastPremiumAt: new Date(),
@@ -206,8 +204,7 @@ export class WebhookProcessor {
 
       if (userEmail) {
         try {
-          const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 11880
-          await sendWelcomeEmail(userEmail, undefined, isEarlyAdopter)
+          await sendWelcomeEmail(userEmail, undefined, false)
         } catch (emailError) {
           console.error('❌ Failed to send welcome email:', emailError)
         }
@@ -322,8 +319,7 @@ export class WebhookProcessor {
 
       if (!user.wasPremiumBefore && user.email) {
         try {
-          const isEarlyAdopter = subscription.items.data[0].price.unit_amount === 11880
-          await sendWelcomeEmail(user.email, user.name || undefined, isEarlyAdopter)
+          await sendWelcomeEmail(user.email, user.name || undefined, false)
         } catch (emailError) {
           console.error('❌ Failed to send welcome email:', emailError)
         }
@@ -417,7 +413,7 @@ export class WebhookProcessor {
     const userId = paymentIntent.metadata?.userId
     const planType = paymentIntent.metadata?.planType
 
-    if (!userId || !planType || !['early', 'monthly', 'annual'].includes(planType)) {
+    if (!userId || !planType || !['monthly', 'annual'].includes(planType)) {
       console.error('❌ Invalid payment intent metadata')
       return false
     }
@@ -428,7 +424,7 @@ export class WebhookProcessor {
       
       if (planType === 'monthly') {
         expiresAt.setMonth(expiresAt.getMonth() + 1)
-      } else if (planType === 'annual' || planType === 'early') {
+      } else {
         expiresAt.setFullYear(expiresAt.getFullYear() + 1)
       }
 
@@ -442,8 +438,8 @@ export class WebhookProcessor {
             wasPremiumBefore: true,
             firstPremiumAt: new Date(),
             lastPremiumAt: new Date(),
-            premiumCount: { increment: 1 },
-          },
+          premiumCount: { increment: 1 },
+        },
         }),
         ['users']
       )
@@ -555,10 +551,6 @@ export class WebhookProcessor {
     } else if (annualOffer && Math.abs(amountInCents - annualOffer.price_in_cents) <= 1) {
       planDuration = 365
       planType = 'annual'
-    } else if (amount >= 100 && amount <= 200) {
-      // Early Adopter tem 3 anos de acesso (fallback para compatibilidade)
-      planDuration = 365 * 3
-      planType = 'early'
     } else {
       // Fallback: tentar determinar pelo valor
       if (amount >= 100) {
@@ -593,11 +585,6 @@ export class WebhookProcessor {
       premiumCount: { increment: 1 },
     }
 
-    if (planType === 'early') {
-      updateData.isEarlyAdopter = true
-      updateData.earlyAdopterDate = new Date()
-    }
-
     await safeWrite(
       'mercadopago-payment-approved',
       () => prisma.user.update({
@@ -609,8 +596,7 @@ export class WebhookProcessor {
 
     if (currentUser.email) {
       try {
-        const isEarlyAdopter = planType === 'early'
-        await sendWelcomeEmail(currentUser.email, currentUser.name || undefined, isEarlyAdopter)
+        await sendWelcomeEmail(currentUser.email, currentUser.name || undefined, false)
       } catch (emailError) {
         console.error('❌ Failed to send welcome email:', emailError)
       }

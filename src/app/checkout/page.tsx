@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 interface CheckoutPageProps {
   searchParams: { 
-    plan?: 'monthly' | 'annual' | 'early'
+    plan?: 'monthly' | 'annual'
     redirect?: string
   }
 }

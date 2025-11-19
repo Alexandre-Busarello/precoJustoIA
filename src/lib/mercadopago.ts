@@ -34,7 +34,7 @@ export async function createPixPayment({
   userName,
   idempotencyKey,
 }: {
-  planType: 'monthly' | 'annual' | 'early'
+  planType: 'monthly' | 'annual'
   amount: number // Preço em reais (ex: 19.90)
   userId: string
   userEmail: string
@@ -44,7 +44,6 @@ export async function createPixPayment({
   try {
     // Descrições dos planos
     const descriptions: Record<string, string> = {
-      early: 'Preço Justo AI - Early Adopter Anual',
       monthly: 'Preço Justo AI - Premium Mensal',
       annual: 'Preço Justo AI - Premium Anual',
     }

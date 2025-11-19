@@ -181,73 +181,102 @@ export const authOptions: NextAuthOptions = {
       }
       return true
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, account }) {
       // Se é um novo login, verificar e iniciar trial se necessário
       if (user) {
-        console.log(`[TRIAL] [JWT] Novo login detectado - user.id: ${user.id}, user.email: ${user.email}`)
+        const isOAuth = account?.provider === 'google'
+        console.log(`[TRIAL] [JWT] Novo login detectado - user.id: ${user.id}, user.email: ${user.email}, isOAuth: ${isOAuth}`)
         
         // Sempre buscar pelo email para garantir que temos o ID correto do banco
         // Isso é especialmente importante para OAuth onde o user.id pode ser do provider
         if (user.email) {
           try {
-            const dbUser = await prisma.user.findUnique({
-              where: { email: user.email },
-              select: {
-                id: true,
-                createdAt: true,
-                trialStartedAt: true,
-                trialEndsAt: true,
-                subscriptionTier: true
+            // Tentar buscar usuário com retry (PrismaAdapter pode ainda estar criando)
+            let dbUser = null
+            let retries = 5
+            while (retries > 0 && !dbUser) {
+              dbUser = await prisma.user.findUnique({
+                where: { email: user.email },
+                select: {
+                  id: true,
+                  createdAt: true,
+                  emailVerified: true,
+                  trialStartedAt: true,
+                  trialEndsAt: true,
+                  subscriptionTier: true
+                }
+              })
+              
+              if (!dbUser && retries > 1) {
+                await new Promise(resolve => setTimeout(resolve, 200))
+                retries--
+              } else {
+                break
               }
-            })
+            }
 
             if (dbUser) {
-              console.log(`[TRIAL] [JWT] Usuário encontrado no banco: ${dbUser.id} (${user.email}), trialStartedAt: ${dbUser.trialStartedAt}, subscriptionTier: ${dbUser.subscriptionTier}`)
+              console.log(`[TRIAL] [JWT] Usuário encontrado no banco: ${dbUser.id} (${user.email}), emailVerified: ${dbUser.emailVerified}, trialStartedAt: ${dbUser.trialStartedAt}, subscriptionTier: ${dbUser.subscriptionTier}`)
               
               // Usar o ID real do banco
               token.userId = dbUser.id
               
+              // Para OAuth (Google), marcar email como verificado se ainda não estiver
+              if (isOAuth && !dbUser.emailVerified) {
+                console.log(`[OAUTH] [JWT] Marcando email como verificado para usuário ${dbUser.id} (${user.email}) via Google OAuth`)
+                await prisma.user.update({
+                  where: { id: dbUser.id },
+                  data: { emailVerified: new Date() }
+                })
+                dbUser.emailVerified = new Date()
+              }
+
               // Verificar se precisa iniciar trial (novo usuário sem trial)
-              if (!dbUser.trialStartedAt && dbUser.subscriptionTier === 'FREE') {
-                const now = new Date()
-                const userCreatedAt = dbUser.createdAt
-                const timeDiff = now.getTime() - userCreatedAt.getTime()
-                const minutesDiff = timeDiff / (1000 * 60)
+              const now = new Date()
+              const userCreatedAt = dbUser.createdAt
+              const timeDiff = now.getTime() - userCreatedAt.getTime()
+              const minutesDiff = timeDiff / (1000 * 60)
+              const isNewUser = minutesDiff < 5
 
-                console.log(`[TRIAL] [JWT] Usuário criado há ${minutesDiff.toFixed(2)} minutos`)
+              console.log(`[TRIAL] [JWT] Usuário criado há ${minutesDiff.toFixed(2)} minutos, emailVerified: ${dbUser.emailVerified ? 'SIM' : 'NÃO'}, isNewUser: ${isNewUser}`)
 
-                // Se foi criado há menos de 5 minutos, é um novo usuário
-                if (minutesDiff < 5) {
-                  console.log(`[TRIAL] [JWT] ✅ Novo usuário detectado! Tentando iniciar trial para ${dbUser.id} (${user.email})`)
-                  const trialStarted = await startTrialForUser(dbUser.id)
-                  
-                  if (trialStarted) {
-                    console.log(`[TRIAL] [JWT] ✅✅✅ Trial iniciado com sucesso para usuário ${dbUser.id} (${user.email})`)
-                    // Buscar dados atualizados do trial
-                    const updatedUser = await prisma.user.findUnique({
-                      where: { id: dbUser.id },
-                      select: {
-                        trialStartedAt: true,
-                        trialEndsAt: true,
-                        subscriptionTier: true
-                      }
-                    })
-                    if (updatedUser) {
-                      token.trialStartedAt = updatedUser.trialStartedAt?.toISOString()
-                      token.trialEndsAt = updatedUser.trialEndsAt?.toISOString()
-                      token.subscriptionTier = updatedUser.subscriptionTier
+              // Iniciar trial se:
+              // 1. Email está verificado (ou foi verificado agora via OAuth)
+              // 2. Não tem trial iniciado
+              // 3. Não é Premium
+              // 4. É novo usuário
+              if (dbUser.emailVerified && !dbUser.trialStartedAt && dbUser.subscriptionTier === 'FREE' && isNewUser) {
+                console.log(`[TRIAL] [JWT] ✅ Tentando iniciar trial para novo usuário ${dbUser.id} (${user.email}) via ${isOAuth ? 'Google OAuth' : 'credenciais'}`)
+                const trialStarted = await startTrialAfterEmailVerification(dbUser.id)
+                
+                if (trialStarted) {
+                  console.log(`[TRIAL] [JWT] ✅✅✅ Trial iniciado com sucesso para usuário ${dbUser.id} (${user.email})`)
+                  // Buscar dados atualizados do trial
+                  const updatedUser = await prisma.user.findUnique({
+                    where: { id: dbUser.id },
+                    select: {
+                      trialStartedAt: true,
+                      trialEndsAt: true,
+                      subscriptionTier: true
                     }
-                  } else {
-                    console.warn(`[TRIAL] [JWT] ⚠️ Falha ao iniciar trial para usuário ${dbUser.id} (${user.email}). Verifique: LAUNCH_PHASE=PROD e ENABLE_TRIAL=true`)
+                  })
+                  if (updatedUser) {
+                    token.trialStartedAt = updatedUser.trialStartedAt?.toISOString()
+                    token.trialEndsAt = updatedUser.trialEndsAt?.toISOString()
+                    token.subscriptionTier = updatedUser.subscriptionTier
                   }
                 } else {
-                  console.log(`[TRIAL] [JWT] Usuário ${dbUser.id} (${user.email}) criado há ${minutesDiff.toFixed(2)} minutos - não é novo usuário (limite: 5 minutos)`)
+                  console.warn(`[TRIAL] [JWT] ⚠️ Falha ao iniciar trial para usuário ${dbUser.id} (${user.email}). Verifique: LAUNCH_PHASE=PROD e ENABLE_TRIAL=true`)
                 }
               } else {
                 if (dbUser.trialStartedAt) {
                   console.log(`[TRIAL] [JWT] Usuário ${dbUser.id} já possui trial iniciado`)
                 } else if (dbUser.subscriptionTier === 'PREMIUM') {
                   console.log(`[TRIAL] [JWT] Usuário ${dbUser.id} já é Premium - não precisa de trial`)
+                } else if (!dbUser.emailVerified) {
+                  console.log(`[TRIAL] [JWT] Usuário ${dbUser.id} precisa verificar email antes de iniciar trial`)
+                } else if (!isNewUser) {
+                  console.log(`[TRIAL] [JWT] Usuário ${dbUser.id} criado há ${minutesDiff.toFixed(2)} minutos - não é novo usuário`)
                 }
               }
               
@@ -257,7 +286,7 @@ export const authOptions: NextAuthOptions = {
               token.trialEndsAt = dbUser.trialEndsAt?.toISOString()
               token.premiumExpiresAt = user.premiumExpiresAt?.toISOString()
             } else {
-              console.warn(`[TRIAL] [JWT] ⚠️ Usuário com email ${user.email} não encontrado no banco`)
+              console.warn(`[TRIAL] [JWT] ⚠️ Usuário com email ${user.email} não encontrado no banco após ${5 - retries + 1} tentativas`)
               // Fallback para dados do user object
               token.userId = user.id
               token.subscriptionTier = user.subscriptionTier || "FREE"

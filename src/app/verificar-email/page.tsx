@@ -90,7 +90,9 @@ function VerifyEmailContent() {
               </div>
               <CardTitle className="text-2xl">Verifique seu Email</CardTitle>
               <CardDescription>
-                Enviamos um link de verificação para seu email. Clique no link para ativar sua conta.
+                {searchParams.get('required') === 'true' 
+                  ? 'Para continuar usando a plataforma, você precisa verificar seu email. Enviamos um link de verificação para seu email.'
+                  : 'Enviamos um link de verificação para seu email. Clique no link para ativar sua conta.'}
               </CardDescription>
             </>
           )}
@@ -163,6 +165,24 @@ function VerifyEmailContent() {
               <Link href="/dashboard">
                 <Button className="w-full">
                   Ir para Dashboard
+                </Button>
+              </Link>
+            </div>
+          )}
+
+          {status === 'authenticated' && success !== 'true' && !error && (
+            <div className="text-center space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                  <strong>Você já está logado!</strong>
+                </p>
+                <p className="text-sm text-yellow-700 mt-2">
+                  Você pode usar a plataforma normalmente. Verifique seu email quando possível para ativar todas as funcionalidades e não perder seu acesso.
+                </p>
+              </div>
+              <Link href="/dashboard">
+                <Button className="w-full">
+                  Continuar para Dashboard
                 </Button>
               </Link>
             </div>

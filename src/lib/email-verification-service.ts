@@ -202,6 +202,43 @@ export async function isEmailVerified(userId: string): Promise<boolean> {
 }
 
 /**
+ * Verifica se usuário precisa verificar email (criado há mais de 1 dia sem verificação)
+ */
+export async function requiresEmailVerification(userId: string): Promise<boolean> {
+  try {
+    const user = await safeQueryWithParams(
+      'check-email-verification-required',
+      () => prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          emailVerified: true,
+          createdAt: true
+        }
+      }),
+      { userId }
+    ) as { emailVerified: Date | null; createdAt: Date } | null
+
+    if (!user) {
+      return false
+    }
+
+    // Se já está verificado, não precisa verificar
+    if (user.emailVerified) {
+      return false
+    }
+
+    // Se foi criado há menos de 1 dia, não precisa verificar ainda
+    const oneDayAgo = new Date()
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+    
+    return user.createdAt < oneDayAgo
+  } catch (error) {
+    console.error('Erro ao verificar necessidade de verificação de email:', error)
+    return false // Em caso de erro, não bloquear acesso
+  }
+}
+
+/**
  * Reenvia email de verificação (com rate limiting)
  */
 export async function resendVerificationEmail(

@@ -336,15 +336,19 @@ export class PortfolioAnalyticsService {
 
       const totalValue = assetsValue + cashBalance;
       
-      // 🔧 CORREÇÃO CRÍTICA: Cálculo correto do retorno
+      // 🔧 CORREÇÃO CRÍTICA: Cálculo correto do retorno considerando saques
       // 
-      // Retorno = (Valor Atual - Capital Líquido Investido) / Capital Líquido Investido
+      // Fórmula correta: Retorno = (Valor Atual + Saques - Investido) / Investido
       //
       // Onde:
       // - Valor Atual = Valor dos Ativos + Caixa
-      // - Capital Líquido Investido = Aportes - Saques
+      // - Saques = Total de saques (CASH_DEBIT) - dinheiro que saiu da carteira
+      // - Investido = Total de aportes (CASH_CREDIT + MONTHLY_CONTRIBUTION)
       //
-      // IMPORTANTE: Caixa FAZ PARTE do valor atual (não é lucro, é capital disponível)
+      // IMPORTANTE: 
+      // - Saques DEVEM ser somados ao valor atual no cálculo do retorno
+      //   porque representam dinheiro que você retirou mas que faz parte do retorno total
+      // - Isso garante que o retorno não aumenta artificialmente quando você saca dinheiro
       
       // Calculate total withdrawals (CASH_DEBIT only - money that left the portfolio)
       const totalWithdrawals = transactions
@@ -358,12 +362,13 @@ export class PortfolioAnalyticsService {
         .filter(tx => tx.type === 'DIVIDEND')
         .reduce((sum, tx) => sum + Number(tx.amount), 0);
       
-      // Net invested = Total invested - Withdrawals
-      const netInvested = totalInvested - totalWithdrawals;
+      // Return = (Current Value + Withdrawals - Invested) / Invested
+      // Isso garante que o retorno não aumenta artificialmente quando você saca dinheiro
+      const returnAmount = totalValue + totalWithdrawals - totalInvested;
+      const returnPercent = totalInvested > 0 ? (returnAmount / totalInvested) * 100 : 0;
       
-      // Return = (Current Value - Net Invested) / Net Invested
-      const returnAmount = totalValue - netInvested;
-      const returnPercent = netInvested > 0 ? (returnAmount / netInvested) * 100 : 0;
+      // Net invested para exibição (capital líquido investido)
+      const netInvested = totalInvested - totalWithdrawals;
       
       // Debug log para o último ponto
       if (isToday) {
@@ -386,7 +391,8 @@ export class PortfolioAnalyticsService {
           netInvested: netInvested.toFixed(2),
           totalDividends: totalDividends.toFixed(2),
           returnAmount: returnAmount.toFixed(2),
-          returnPercent: returnPercent.toFixed(2) + '%'
+          returnPercent: returnPercent.toFixed(2) + '%',
+          formula: `(${totalValue.toFixed(2)} + ${totalWithdrawals.toFixed(2)} - ${totalInvested.toFixed(2)}) / ${totalInvested.toFixed(2)} = ${returnPercent.toFixed(2)}%`
         });
       }
 

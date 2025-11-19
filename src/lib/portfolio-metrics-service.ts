@@ -115,25 +115,32 @@ export class PortfolioMetricsService {
     // Calculate current portfolio value (holdings only, NOT including cash)
     const holdingsValue = holdings.reduce((sum, h) => sum + h.currentValue, 0);
     
-    // 🔧 CORREÇÃO CRÍTICA: Cálculo SIMPLES e CORRETO do retorno total
+    // 🔧 CORREÇÃO CRÍTICA: Cálculo CORRETO do retorno total considerando saques
     // 
-    // Retorno = (Valor Atual - Capital Investido) / Capital Investido
+    // Fórmula correta: Retorno = (Valor Atual + Saques - Investido) / Investido
     // 
     // Onde:
     // - Valor Atual = Valor de mercado dos ativos + Caixa disponível
-    // - Capital Investido = Total de aportes (CASH_CREDIT)
+    // - Saques = Total de saques (CASH_DEBIT) - dinheiro que saiu da carteira
+    // - Investido = Total de aportes (CASH_CREDIT + MONTHLY_CONTRIBUTION)
     //
     // IMPORTANTE: 
-    // - Caixa FAZ PARTE do valor atual (é capital disponível)
-    // - Saques (CASH_DEBIT) reduzem o capital investido
-    // - Dividendos já estão no caixa, não precisam ser contados separadamente
+    // - Saques DEVEM ser somados ao valor atual no cálculo do retorno
+    //   porque representam dinheiro que você retirou mas que faz parte do retorno total
+    // - Se você investiu R$ 10.000, tem R$ 10.600 na carteira e sacou R$ 1.000,
+    //   seu retorno é: (10.600 + 1.000 - 10.000) / 10.000 = 16%
+    // - Se calcular sem somar saques: (10.600 - 9.000) / 9.000 = 17,78% (ERRADO!)
     
     const currentTotalValue = holdingsValue + cashBalance;
-    const netInvested = totalInvested - totalWithdrawn; // Capital líquido investido
     
-    const totalReturn = netInvested > 0 
-      ? (currentTotalValue - netInvested) / netInvested
+    // Retorno = (Valor Atual + Saques - Investido) / Investido
+    // Isso garante que o retorno não aumenta artificialmente quando você saca dinheiro
+    const totalReturn = totalInvested > 0 
+      ? (currentTotalValue + totalWithdrawn - totalInvested) / totalInvested
       : 0;
+    
+    const netInvested = totalInvested - totalWithdrawn; // Capital líquido investido (para exibição)
+    const totalGain = currentTotalValue + totalWithdrawn - totalInvested; // Ganho total incluindo saques
     
     console.log('📊 [CALCULATE RETURN]', {
       holdingsValue: holdingsValue.toFixed(2),
@@ -142,8 +149,9 @@ export class PortfolioMetricsService {
       totalInvested: totalInvested.toFixed(2),
       totalWithdrawn: totalWithdrawn.toFixed(2),
       netInvested: netInvested.toFixed(2),
-      gain: (currentTotalValue - netInvested).toFixed(2),
-      totalReturn: (totalReturn * 100).toFixed(2) + '%'
+      totalGain: totalGain.toFixed(2),
+      totalReturn: (totalReturn * 100).toFixed(2) + '%',
+      formula: `(${currentTotalValue.toFixed(2)} + ${totalWithdrawn.toFixed(2)} - ${totalInvested.toFixed(2)}) / ${totalInvested.toFixed(2)} = ${(totalReturn * 100).toFixed(2)}%`
     });
 
     // Calculate monthly evolution usando o MESMO método do Analytics

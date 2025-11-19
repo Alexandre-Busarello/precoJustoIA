@@ -21,6 +21,7 @@ interface PortfolioMetrics {
   cashBalance: number;
   totalInvested: number;
   totalWithdrawn: number;
+  netInvested?: number; // Capital líquido investido (totalInvested - totalWithdrawn)
   totalDividends: number;
   totalReturn: number;
   annualizedReturn?: number;

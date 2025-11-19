@@ -768,7 +768,7 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
                 </div>
                 
                 <div style="background-color: #fef3c7; border-radius: 6px; padding: 12px; margin-top: 16px; border: 1px solid #f59e0b;">
-                  <p style="color: #92400e; font-weight: 600; margin: 0; font-size: 13px;">Esta oferta só existe durante a Fase Alfa e não voltará!</p>
+                  <p style="color: #92400e; font-weight: 600; margin: 0; font-size: 13px;">Esta oferta é limitada e não voltará!</p>
                 </div>
               </div>
               

@@ -7,7 +7,6 @@ import { QueryProvider } from "@/providers/query-provider";
 import Header from "@/components/header";
 import { StructuredData } from "@/components/structured-data";
 import { SessionRefreshProvider } from "@/components/session-refresh-provider";
-import { AlfaProvider } from "@/contexts/alfa-context";
 import { Toaster } from "sonner";
 import AdminLink from "@/components/admin-link";
 import { ScrollToTop } from "@/components/scroll-to-top";
@@ -147,22 +146,20 @@ export default function RootLayout({
         <QueryProvider>
           <AuthProvider>
             <SessionRefreshProvider>
-              <AlfaProvider>
-                <TrackingProvider>
-                  <LastLoginUpdater />
-                  <OnboardingProvider />
-                  <ExitIntentProvider />
-                  <ScrollToTop />
-                  <div className="min-h-screen bg-background">
-                    <Header />
-                    <main>
-                      {children}
-                    </main>
-                    <AdminLink />
-                  </div>
-                  <Toaster position="top-right" />
-                </TrackingProvider>
-              </AlfaProvider>
+              <TrackingProvider>
+                <LastLoginUpdater />
+                <OnboardingProvider />
+                <ExitIntentProvider />
+                <ScrollToTop />
+                <div className="min-h-screen bg-background">
+                  <Header />
+                  <main>
+                    {children}
+                  </main>
+                  <AdminLink />
+                </div>
+                <Toaster position="top-right" />
+              </TrackingProvider>
             </SessionRefreshProvider>
           </AuthProvider>
         </QueryProvider>

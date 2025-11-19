@@ -1,6 +1,5 @@
 'use client'
 
-import { useAlfa } from '@/contexts/alfa-context'
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { 
@@ -21,84 +20,66 @@ import {
 import Link from "next/link"
 
 export function EarlyAdopterContent() {
-  const { stats, isLoading } = useAlfa()
+  // Mostra que a promoção terminou
+  return (
+    <div className="min-h-screen flex items-center justify-center py-20">
+      <div className="container mx-auto px-4">
+        <div className="max-w-2xl mx-auto text-center">
+          <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20">
+            <CardContent className="p-12">
+              <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle className="w-10 h-10 text-white" />
+              </div>
+              
+              <h1 className="text-4xl font-bold mb-4 text-gray-900 dark:text-white">
+                Promoção Early Adopter Encerrada
+              </h1>
+              
+              <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
+                A oferta especial Early Adopter já foi encerrada. 
+                Mas não se preocupe! Ainda temos ótimos planos disponíveis para você.
+              </p>
 
-  // Se ainda está carregando, mostra loading
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Carregando...</p>
+              <div className="space-y-4 mb-8">
+                <div className="flex items-center justify-center gap-3 text-sm">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <span>Análise fundamentalista completa</span>
+                </div>
+                <div className="flex items-center justify-center gap-3 text-sm">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <span>8 modelos de valuation premium</span>
+                </div>
+                <div className="flex items-center justify-center gap-3 text-sm">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <span>Análise com IA (Google Gemini)</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-bold px-8 py-4" asChild>
+                  <Link href="/planos">
+                    <Crown className="mr-2 h-5 w-5" />
+                    Ver Planos Disponíveis
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+                
+                <Button size="lg" variant="outline" className="border-2 border-gray-300 hover:bg-gray-50 font-bold px-8 py-4" asChild>
+                  <Link href="/">
+                    Voltar ao Início
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    )
-  }
+    </div>
+  )
+}
 
-  // Se não está na fase ALFA, mostra que a promoção terminou
-  if (!stats || stats.phase !== 'ALFA') {
-    return (
-      <div className="min-h-screen flex items-center justify-center py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-2xl mx-auto text-center">
-            <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20">
-              <CardContent className="p-12">
-                <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <AlertCircle className="w-10 h-10 text-white" />
-                </div>
-                
-                <h1 className="text-4xl font-bold mb-4 text-gray-900 dark:text-white">
-                  Promoção Early Adopter Encerrada
-                </h1>
-                
-                <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
-                  A oferta especial Early Adopter era exclusiva da <strong>Fase Alfa</strong> e já foi encerrada. 
-                  Mas não se preocupe! Ainda temos ótimos planos disponíveis para você.
-                </p>
-
-                <div className="space-y-4 mb-8">
-                  <div className="flex items-center justify-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Análise fundamentalista completa</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>8 modelos de valuation premium</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-3 text-sm">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Análise com IA (Google Gemini)</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-bold px-8 py-4" asChild>
-                    <Link href="/planos">
-                      <Crown className="mr-2 h-5 w-5" />
-                      Ver Planos Disponíveis
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Link>
-                  </Button>
-                  
-                  <Button size="lg" variant="outline" className="border-2 border-gray-300 hover:bg-gray-50 font-bold px-8 py-4" asChild>
-                    <Link href="/">
-                      Voltar ao Início
-                    </Link>
-                  </Button>
-                </div>
-
-                {/* <p className="text-xs text-muted-foreground mt-6">
-                  💡 Fique atento às nossas redes sociais para futuras promoções especiais!
-                </p> */}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Se está na fase ALFA, mostra o conteúdo normal da página Early Adopter
+// Conteúdo antigo removido - a promoção Early Adopter foi encerrada
+/*
   return (
     <>
       {/* Hero Section */}
@@ -132,10 +113,6 @@ export function EarlyAdopterContent() {
                 Garantir Oferta Agora
               </Link>
             </Button>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="w-4 h-4" />
-              <span>Apenas durante a Fase Alfa</span>
-            </div>
           </div>
 
           <div className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
@@ -308,7 +285,7 @@ export function EarlyAdopterContent() {
                 <div>
                   <div className="text-2xl font-bold text-orange-600 mb-2">Preço Normal</div>
                   <div className="text-4xl font-bold mb-2">R$ 497</div>
-                  <p className="text-muted-foreground text-sm">Após fase Alfa</p>
+                  <p className="text-muted-foreground text-sm">Preço atual</p>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-green-600 mb-2">Economia</div>
@@ -374,8 +351,7 @@ export function EarlyAdopterContent() {
                   Por quanto tempo essa oferta estará disponível?
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Apenas durante a Fase Alfa. Quando migrarmos para a Fase Beta, essa oferta será encerrada 
-                  e não estará mais disponível para novos usuários.
+                  Esta oferta já foi encerrada e não está mais disponível para novos usuários.
                 </p>
               </CardContent>
             </Card>

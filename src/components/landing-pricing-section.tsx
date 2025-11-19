@@ -1,23 +1,17 @@
 'use client'
 
-import { useAlfa } from '@/contexts/alfa-context'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, Zap, Shield, Trophy, Gift, Sparkles } from 'lucide-react'
 import Link from 'next/link'
-import { AlfaPremiumNotice } from '@/components/alfa-premium-notice'
-import { AlfaEarlyAdopterCard } from '@/components/alfa-early-adopter-card'
 import { useTrialAvailable } from '@/hooks/use-trial-available'
 import { usePricing } from '@/hooks/use-pricing'
 import { formatPrice, getPixDiscountAmount } from '@/lib/price-utils'
 
 export function LandingPricingSection() {
-  const { stats, isLoading } = useAlfa()
   const { isAvailable: isTrialAvailable } = useTrialAvailable()
   const { monthly, annual, isLoading: isLoadingPricing, monthlyEquivalent, annualDiscountFormatted } = usePricing()
-
-  const isAlfaPhase = !isLoading && stats?.phase === 'ALFA'
   
   // Calcular valores derivados
   const monthlyPricePerDay = monthly ? (monthly.price_in_cents / 100 / 30).toFixed(2) : '0,66'
@@ -47,15 +41,8 @@ export function LandingPricingSection() {
           </div> */}
         </div>
 
-        {/* Aviso Premium Gratuito na Fase Alfa */}
-        {isAlfaPhase && (
-          <div className="mb-12">
-            <AlfaPremiumNotice />
-          </div>
-        )}
-
-        {/* Trial Premium Banner - Só mostra quando não é Alfa E trial está disponível */}
-        {!isAlfaPhase && isTrialAvailable && (
+        {/* Trial Premium Banner - Só mostra quando trial está disponível */}
+        {isTrialAvailable && (
           <div className="mb-8 max-w-3xl mx-auto pb-6">
             <Card className="border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
               <CardContent className="p-6">
@@ -98,14 +85,14 @@ export function LandingPricingSection() {
         )}
         
         <div className={`grid gap-8 max-w-6xl mx-auto ${
-          isAlfaPhase 
+          false
             ? 'grid-cols-1 max-w-xl' 
             : 'grid-cols-1 lg:grid-cols-3'
         }`}>
           {/* Ordem: Gratuito, Anual (destacado), Mensal */}
           
-          {/* Free Plan - Só mostra quando não é Alfa */}
-          {!isAlfaPhase && (
+          {/* Free Plan */}
+          {(
             <Card className="border-2 hover:shadow-xl transition-all duration-300 relative">
               <CardContent className="p-8">
                 <div className="text-center mb-6">
@@ -154,8 +141,8 @@ export function LandingPricingSection() {
             </Card>
           )}
 
-          {/* Premium Annual - Disponível apenas fora da fase Alfa - MOSTRAR PRIMEIRO PARA DESTAQUE */}
-          {!isAlfaPhase && (
+          {/* Premium Annual - MOSTRAR PRIMEIRO PARA DESTAQUE */}
+          {(
             <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 hover:shadow-xl transition-all duration-300 relative h-full flex flex-col scale-105 z-10 order-2 lg:order-2">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-20">
                 <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg animate-pulse">
@@ -242,8 +229,8 @@ export function LandingPricingSection() {
             </Card>
           )}
 
-          {/* Premium Monthly - Só mostra quando não é Alfa */}
-          {!isAlfaPhase && (
+          {/* Premium Monthly */}
+          {(
             <Card className="border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20 hover:shadow-xl transition-all duration-300 relative order-3 lg:order-3">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                 <div className="bg-gradient-to-r from-violet-600 to-pink-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
@@ -329,10 +316,6 @@ export function LandingPricingSection() {
             </Card>
           )}
 
-          {/* Early Adopter - Só mostra na Fase Alfa (Centralizado) */}
-          {isAlfaPhase && (
-            <AlfaEarlyAdopterCard />
-          )}
         </div>
 
         {/* Value Proposition */}

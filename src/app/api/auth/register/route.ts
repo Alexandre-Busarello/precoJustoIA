@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { canUserRegister } from "@/lib/alfa-service"
 import { withRateLimit, RATE_LIMIT_CONFIGS, RateLimitMiddleware } from "@/lib/rate-limit-middleware"
 import { canRegisterFromIP, recordIPRegistration, flagAccountAsSuspicious } from "@/lib/ip-protection-service"
 import { sendVerificationEmail } from "@/lib/email-verification-service"
@@ -136,16 +135,7 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // 🔒 SEGURANÇA: Verificar se pode registrar (limite da fase Alfa)
-        // NUNCA usar valor do cliente para isEarlyAdopter - sempre false no registro
         // Early Adopters são marcados apenas via webhooks após pagamento confirmado
-        const canRegister = await canUserRegister(false)
-        if (!canRegister) {
-          return NextResponse.json(
-            { message: "Limite de usuários atingido para a fase Alfa. Entre na lista de interesse." },
-            { status: 403 }
-          )
-        }
 
         // Capturar IP do request
         const ip = RateLimitMiddleware.getClientIP(request)

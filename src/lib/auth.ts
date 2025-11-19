@@ -252,7 +252,7 @@ export const authOptions: NextAuthOptions = {
                 user.trialEndsAt = updatedUser.trialEndsAt ?? undefined
               }
             } else {
-              console.warn(`[TRIAL] ⚠️ Falha ao iniciar trial para usuário ${dbUser.id} (${user.email}). Verifique: LAUNCH_PHASE=PROD e ENABLE_TRIAL=true`)
+              console.warn(`[TRIAL] ⚠️ Falha ao iniciar trial para usuário ${dbUser.id} (${user.email}). Verifique: ENABLE_TRIAL=true`)
             }
           } else if (dbUser.trialStartedAt) {
             console.log(`[TRIAL] Usuário ${dbUser.id} (${user.email}) já possui trial iniciado`)

@@ -88,7 +88,6 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   
   // Processing
   'tickerProcessingStatus': 'ticker_processing_status',
-  'alfaWaitlist': 'alfa_waitlist',
   
   // Tracking & Analytics
   'userEvent': 'user_events',
@@ -157,8 +156,7 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'price_oscillations': ['companies', 'price_oscillations'],
   
   // Sistema de processamento
-  'ticker_processing_status': ['companies', 'ticker_processing_status'],
-  'alfa_waitlist': ['alfa_waitlist']
+  'ticker_processing_status': ['companies', 'ticker_processing_status']
 }
 
 // Padrões de queries que devem ser cacheadas

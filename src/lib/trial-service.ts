@@ -25,7 +25,7 @@ export function isTrialEnabled(): boolean {
 /**
  * Verifica se um usuário pode receber trial
  * - Trial só pode ser iniciado uma vez por usuário
- * - Trial só é iniciado quando fase PROD começar (não durante ALFA)
+ * - Trial só é iniciado quando estiver em produção
  * - Feature deve estar habilitada via ENV (mas usuários em trial continuam mesmo se desativado)
  * - Email deve estar verificado
  */

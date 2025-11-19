@@ -21,10 +21,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { Metadata } from "next"
-import { AlfaBanner } from "@/components/alfa-banner"
-import { AlfaPremiumNotice } from "@/components/alfa-premium-notice"
-import { AlfaEarlyAdopterCard } from "@/components/alfa-early-adopter-card"
-import { AlfaPricingCards } from "@/components/alfa-pricing-cards"
+import { LandingPricingSection } from "@/components/landing-pricing-section"
 
 export const metadata: Metadata = {
   title: "Planos e Preços | Análise Fundamentalista Gratuita + Premium R$ 19,90/mês - Preço Justo AI",
@@ -62,7 +59,6 @@ export const metadata: Metadata = {
 export default function PlanosPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
-      <AlfaBanner variant="landing" />
       {/* Hero Section */}
       <section className="py-20 pt-24 bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20">
         <div className="container mx-auto px-4 text-center">
@@ -95,7 +91,7 @@ export default function PlanosPage() {
       {/* Pricing Cards */}
       <section className="py-20">
         <div className="container mx-auto px-4">
-          <AlfaPricingCards />
+          <LandingPricingSection />
         </div>
       </section>
 

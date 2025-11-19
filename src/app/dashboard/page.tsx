@@ -12,7 +12,6 @@ import { Footer } from "@/components/footer";
 import { EarlyAdopterDashboardBanner } from "@/components/early-adopter-dashboard-banner";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { CompanyLogo } from "@/components/company-logo";
-import { useAlfa } from "@/contexts/alfa-context";
 import { DashboardPortfolios } from "@/components/dashboard-portfolios";
 import {
   BarChart3,
@@ -61,7 +60,6 @@ export default function Dashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const { stats: alfaStats, isLoading: alfaLoading } = useAlfa();
   const [hasJoinedWhatsApp, setHasJoinedWhatsApp] = useState(false);
   const [topCompanies, setTopCompanies] = useState<TopCompany[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
@@ -293,7 +291,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Early Adopter Banner - Conversão ALFA */}
+        {/* Early Adopter Banner */}
         {subscriptionTier === "FREE" && (
           <EarlyAdopterDashboardBanner className="mb-6" />
         )}
@@ -401,77 +399,6 @@ export default function Dashboard() {
         <div className="space-y-6">
           {/* COLUNA PRINCIPAL (Mobile: 100% | Desktop: 66%) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* 1. GRUPO WHATSAPP ALFA - Prioridade máxima se Alfa e não clicou */}
-            {!alfaLoading &&
-              alfaStats?.phase === "ALFA" &&
-              !hasJoinedWhatsApp && (
-                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border-2 border-green-400 dark:border-green-600 hover:shadow-2xl transition-all duration-300 relative overflow-hidden">
-                  <div className="absolute top-2 right-2 z-10">
-                    <Badge className="bg-gradient-to-r from-green-600 to-emerald-600 text-white text-xs px-3 py-1 shadow-lg animate-pulse">
-                      🎯 FASE ALFA
-                    </Badge>
-                  </div>
-
-                  <div className="absolute inset-0 bg-gradient-to-r from-green-600/5 via-emerald-600/5 to-teal-600/5 opacity-0 hover:opacity-100 transition-opacity duration-500"></div>
-
-                  <CardContent className="p-6 relative z-10">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
-                      <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl shadow-xl">
-                        <MessageCircle className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-xl text-green-800 dark:text-green-200 mb-1">
-                          Entre no Grupo WhatsApp Exclusivo
-                        </h3>
-                        <p className="text-sm text-green-700 dark:text-green-300">
-                          Participe ativamente para garantir{" "}
-                          <strong>3 anos de acesso Premium gratuito</strong>!
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/60 dark:bg-white/5 rounded-lg p-4 mb-4 border border-green-300 dark:border-green-700">
-                      <div className="flex items-start gap-3 mb-3">
-                        <Sparkles className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                        <div className="text-sm">
-                          <p className="text-green-800 dark:text-green-200 font-medium mb-1">
-                            Por que participar?
-                          </p>
-                          <ul className="text-green-700 dark:text-green-300 space-y-1 text-xs">
-                            <li>• Dê feedbacks e molde o produto</li>
-                            <li>• Interaja diretamente com o CEO</li>
-                            <li>• Seja reconhecido como pioneiro</li>
-                            <li>• Ganhe 3 anos de acesso Premium gratuito</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      asChild
-                      size="lg"
-                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold shadow-xl hover:shadow-2xl transition-all text-base"
-                    >
-                      <Link
-                        href="https://chat.whatsapp.com/DM9xmkTiuaWAKseVluTqOh?mode=ems_copy_t"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2"
-                        onClick={handleWhatsAppClick}
-                      >
-                        <MessageCircle className="w-5 h-5" />
-                        Entrar no Grupo Agora
-                        <ArrowRight className="w-5 h-5" />
-                      </Link>
-                    </Button>
-
-                    <p className="text-xs text-center text-green-600 dark:text-green-400 mt-3 font-medium">
-                      🔐 Grupo privado • Apenas {alfaStats.spotsAvailable}/
-                      {alfaStats.userLimit} vagas Alfa
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
 
             {/* 4. CARTEIRAS - Para usuários Premium */}
             {isPremium && (
@@ -890,9 +817,7 @@ export default function Dashboard() {
           {/* COLUNA LATERAL (Mobile: 100% | Desktop: 33%) */}
           <div className="space-y-4">
             {/* 5. GRUPO WHATSAPP - Versão compacta (já clicou) */}
-            {!alfaLoading &&
-              alfaStats?.phase === "ALFA" &&
-              hasJoinedWhatsApp && (
+            {false && (
                 <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border border-green-200 dark:border-green-700">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">

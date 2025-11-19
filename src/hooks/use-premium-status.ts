@@ -1,6 +1,5 @@
 import { useSession } from 'next-auth/react'
 import { useMemo } from 'react'
-import { useAlfa } from '@/contexts/alfa-context'
 
 /**
  * Hook centralizado para verificação de status Premium no frontend
@@ -10,10 +9,9 @@ import { useAlfa } from '@/contexts/alfa-context'
  */
 export function usePremiumStatus() {
   const { data: session, status } = useSession()
-  const { stats: alfaStats, isLoading: isLoadingAlfa } = useAlfa()
   
   const premiumStatus = useMemo(() => {
-    if (status === 'loading' || isLoadingAlfa) {
+    if (status === 'loading') {
       return {
         isPremium: false,
         isVip: false,
@@ -23,8 +21,7 @@ export function usePremiumStatus() {
         trialStartedAt: null,
         trialEndsAt: null,
         isTrialActive: false,
-        trialDaysRemaining: null,
-        isAlfaPhase: false
+        trialDaysRemaining: null
       }
     }
 
@@ -38,8 +35,7 @@ export function usePremiumStatus() {
         trialStartedAt: null,
         trialEndsAt: null,
         isTrialActive: false,
-        trialDaysRemaining: null,
-        isAlfaPhase: alfaStats?.phase === 'ALFA'
+        trialDaysRemaining: null
       }
     }
 
@@ -48,7 +44,6 @@ export function usePremiumStatus() {
     const trialEndsAt = session.user.trialEndsAt ? new Date(session.user.trialEndsAt) : null
     const trialStartedAt = session.user.trialStartedAt ? new Date(session.user.trialStartedAt) : null
     const now = new Date()
-    const isAlfaPhase = alfaStats?.phase === 'ALFA'
 
     // Verificar se Premium está ativo normalmente
     const hasValidPremium = tier === 'PREMIUM' && (!expiresAt || expiresAt > now)
@@ -68,10 +63,9 @@ export function usePremiumStatus() {
       trialDaysRemaining = diffDays > 0 ? diffDays : null
     }
 
-    // Durante a fase ALFA, todos os usuários logados têm acesso Premium
     // Trial também dá acesso Premium
-    const isPremium = isAlfaPhase || hasValidPremium || isTrialActive
-    const isVip = hasValidVip // VIP não é afetado pela fase ALFA
+    const isPremium = hasValidPremium || isTrialActive
+    const isVip = hasValidVip
 
     return {
       isPremium,
@@ -82,10 +76,9 @@ export function usePremiumStatus() {
       trialStartedAt,
       trialEndsAt,
       isTrialActive,
-      trialDaysRemaining,
-      isAlfaPhase
+      trialDaysRemaining
     }
-  }, [session, status, alfaStats, isLoadingAlfa])
+  }, [session, status])
 
   return premiumStatus
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense, useEffect } from "react"
+import { useState, Suspense } from "react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
-import { AlfaBanner } from "@/components/alfa-banner"
-import { AlfaWaitlistForm } from "@/components/alfa-waitlist-form"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Gift, Sparkles, CheckCircle } from "lucide-react"
 import { useTrialAvailable } from "@/hooks/use-trial-available"
 
@@ -19,10 +18,9 @@ function RegisterForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [canRegister, setCanRegister] = useState(true)
-  const [isCheckingLimit, setIsCheckingLimit] = useState(true)
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isAvailable: isTrialAvailable } = useTrialAvailable()
@@ -33,25 +31,6 @@ function RegisterForm() {
   const acquisition = searchParams.get('acquisition') || undefined
   // 🔒 SEGURANÇA: Removido isEarlyAdopter da URL - não deve ser controlado pelo cliente
   // Early Adopters são marcados apenas via webhooks após pagamento confirmado
-
-  useEffect(() => {
-    checkRegistrationLimit()
-  }, [])
-
-  const checkRegistrationLimit = async () => {
-    try {
-      // 🔒 SEGURANÇA: Sempre verificar como usuário normal (não early adopter)
-      const response = await fetch(`/api/alfa/register-check?earlyAdopter=false`)
-      if (response.ok) {
-        const data = await response.json()
-        setCanRegister(data.canRegister)
-      }
-    } catch (error) {
-      console.error('Erro ao verificar limite de registro:', error)
-    } finally {
-      setIsCheckingLimit(false)
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -66,6 +45,12 @@ function RegisterForm() {
 
     if (password.length < 6) {
       setError("A senha deve ter pelo menos 6 caracteres")
+      setIsLoading(false)
+      return
+    }
+
+    if (!acceptedTerms) {
+      setError("Você deve aceitar os Termos de Uso e Política de Privacidade para criar uma conta")
       setIsLoading(false)
       return
     }
@@ -87,7 +72,7 @@ function RegisterForm() {
       })
 
       if (response.ok) {
-        const data = await response.json()
+        await response.json()
         
         // Fazer login automático após registro (mesmo sem verificar email)
         const result = await signIn("credentials", {
@@ -118,43 +103,9 @@ function RegisterForm() {
     await signIn("google", { callbackUrl })
   }
 
-  if (isCheckingLimit) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Verificando disponibilidade...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!canRegister) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="w-full max-w-2xl px-4">
-          <AlfaBanner variant="landing" className="mb-6 rounded-lg" />
-          <AlfaWaitlistForm />
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Já tem uma conta?{" "}
-              <Link 
-                href={`/login${callbackUrl !== '/dashboard' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''}`}
-                className="underline underline-offset-4 hover:text-primary"
-              >
-                Faça login
-              </Link>
-            </p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md px-4">
-        <AlfaBanner variant="landing" className="mb-6 rounded-lg" />
         <Card className="w-full">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">
@@ -245,13 +196,34 @@ function RegisterForm() {
                 required
               />
             </div>
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="terms"
+                checked={acceptedTerms}
+                onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                className="mt-1"
+              />
+              <label
+                htmlFor="terms"
+                className="text-sm text-muted-foreground leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              >
+                Eu concordo com os{" "}
+                <Link href="/termos-de-uso" target="_blank" className="underline hover:text-primary">
+                  Termos de Uso
+                </Link>{" "}
+                e{" "}
+                <Link href="/lgpd" target="_blank" className="underline hover:text-primary">
+                  Política de Privacidade
+                </Link>
+              </label>
+            </div>
             {error && (
               <div className="text-sm text-red-600 text-center">{error}</div>
             )}
             <Button
               type="submit"
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || !acceptedTerms}
             >
               {isLoading ? "Criando conta..." : "Criar Conta"}
             </Button>

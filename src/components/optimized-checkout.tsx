@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAlfa } from '@/contexts/alfa-context'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,7 +32,6 @@ interface OptimizedCheckoutProps {
 
 export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckoutProps) {
   const { status } = useSession()
-  const { stats: alfaStats, isLoading: isLoadingStats } = useAlfa()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { monthly, annual, isLoading: isLoadingPricing } = usePricing()
@@ -76,10 +74,16 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
         period: '/mês',
         description: 'Acesso completo por 30 dias',
         features: [
-          'Análises ilimitadas de ações',
-          'Comparador avançado',
-          'Alertas em tempo real',
-          'Suporte prioritário'
+          'Tudo do plano gratuito',
+          '8 modelos de valuation',
+          '🤖 Análise com IA (Gemini)',
+          '🚀 Backtesting de Carteiras',
+          'Comparador completo',
+          'Rankings ilimitados',
+          'Análise individual completa',
+          'Relatórios mensais personalizados por IA',
+          'Suporte prioritário',
+          'Central de Suporte Premium'
         ],
         offerId: monthly.id,
       }
@@ -95,10 +99,11 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
         period: '/ano',
         description: 'Melhor valor - 12 meses completos',
         features: [
-          'Tudo do plano mensal',
-          '2 meses grátis',
-          'Relatórios exclusivos',
-          'Consultoria personalizada'
+          'Tudo do Premium Mensal',
+          `${Math.round(discount * 100)}% de desconto`,
+          'Acesso antecipado a novos recursos',
+          'Suporte VIP',
+          'Central de Suporte Premium'
         ],
         popular: true,
         offerId: annual.id,
@@ -136,22 +141,6 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
     }
   }, [status, router])
 
-  // Ajustar plano selecionado baseado na fase ALFA
-  useEffect(() => {
-    if (alfaStats && !isLoadingStats) {
-      if (alfaStats.phase === 'ALFA') {
-        // Na fase ALFA, forçar seleção do Early Adopter se não foi especificado
-        if (!searchParams.get('plan')) {
-          setSelectedPlan('early')
-        }
-      } else {
-        // Fora da fase ALFA, se o plano selecionado for Early Adopter, mudar para monthly
-        if (selectedPlan === 'early') {
-          setSelectedPlan('monthly')
-        }
-      }
-    }
-  }, [alfaStats, isLoadingStats, searchParams, selectedPlan])
 
   const handleMethodSelect = (method: PaymentMethod) => {
     setSelectedMethod(method)
@@ -167,7 +156,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
     setIsProcessing(false)
   }
 
-  if (status === 'loading' || isLoadingStats || isLoadingPricing || status === 'unauthenticated') {
+  if (status === 'loading' || isLoadingPricing || status === 'unauthenticated') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -199,39 +188,17 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
         <div className="max-w-4xl mx-auto">
           {!showPayment ? (
             <>
-              {/* Aviso da Fase ALFA */}
-              {alfaStats?.phase === 'ALFA' && (
-                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-6 text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <Star className="w-5 h-5 text-purple-600" />
-                    <span className="font-semibold text-purple-800">Fase Alfa - Seja um Early Adopter</span>
-                  </div>
-                  <p className="text-sm text-purple-700">
-                    Apoie o projeto com uma <strong>contribuição simbólica</strong> e ganhe acesso Premium completo + benefícios exclusivos!
-                  </p>
-                </div>
-              )}
-
               {/* Plan Selection */}
-              <div className={`grid gap-6 mb-8 ${
-                alfaStats?.phase === 'ALFA' 
-                  ? 'grid-cols-1 max-w-md mx-auto' 
-                  : 'md:grid-cols-2'
-              }`}>
+              <div className="grid gap-6 mb-8 md:grid-cols-2">
                 {(() => {
                   const plansToShow: Array<{ key: PlanType; plan: ReturnType<typeof getPlanData> }> = []
                   
-                  // Durante a fase ALFA, mostrar apenas o plano Early Adopter
-                  if (alfaStats?.phase === 'ALFA') {
-                    plansToShow.push({ key: 'early', plan: getPlanData('early') })
-                  } else {
-                    // Fora da fase ALFA, mostrar mensal e anual
-                    if (monthly) {
-                      plansToShow.push({ key: 'monthly', plan: getPlanData('monthly') })
-                    }
-                    if (annual) {
-                      plansToShow.push({ key: 'annual', plan: getPlanData('annual') })
-                    }
+                  // Mostrar mensal e anual
+                  if (monthly) {
+                    plansToShow.push({ key: 'monthly', plan: getPlanData('monthly') })
+                  }
+                  if (annual) {
+                    plansToShow.push({ key: 'annual', plan: getPlanData('annual') })
                   }
                   
                   return plansToShow.map(({ key, plan }) => (

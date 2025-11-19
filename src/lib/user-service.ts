@@ -3,7 +3,6 @@ import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import type { Session } from 'next-auth'
-import { isAlfaPhase } from '@/lib/alfa-service'
 
 /**
  * ÚNICA FONTE DA VERDADE PARA VERIFICAÇÕES DE USUÁRIO E PREMIUM
@@ -98,9 +97,8 @@ export async function resolveUserFromSession(session: Session): Promise<UserData
                    new Date(user.trialEndsAt) > new Date(user.trialStartedAt) &&
                    new Date(user.trialEndsAt) > now
   
-  // Durante a fase Alfa, todos os usuários têm acesso Premium
   // Trial também dá acesso Premium
-  const isPremium = isAlfaPhase() || hasValidPremium || hasTrial
+  const isPremium = hasValidPremium || hasTrial
 
   return {
     id: user.id,

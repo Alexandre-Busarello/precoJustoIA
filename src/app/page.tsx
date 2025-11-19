@@ -34,10 +34,7 @@ import { Metadata } from "next"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getAllPosts } from "@/lib/blog-service"
-import { AlfaBanner } from "@/components/alfa-banner"
-import { AlfaEarlyAdopterCTA } from "@/components/alfa-early-adopter-cta"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
-import { AlfaVitalicioConditions } from "@/components/alfa-vitalicio-conditions"
 
 export const metadata: Metadata = {
   title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI - Investimentos Bovespa",
@@ -102,7 +99,6 @@ export default async function Home() {
 
   return (
     <div>
-      <AlfaBanner variant="landing" />
       {/* Hero Section - Enhanced */}
       <section className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-24 sm:pt-32 lg:pt-40 pb-16 sm:pb-24 lg:pb-32">
         {/* Background Pattern */}
@@ -169,18 +165,12 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Alfa Vitalicio Conditions - Logo após Hero */}
-      <AlfaVitalicioConditions />
-
       {/* Quick Ranker Section */}
       <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-b from-white to-gray-50 dark:from-background dark:to-background/80">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <QuickRanker />
         </div>
       </section>
-
-      {/* Early Adopter CTA - Só aparece quando vagas esgotadas */}
-      <AlfaEarlyAdopterCTA />
 
       {/* User Dashboard - Only if logged in */}
       {/* {session && (
@@ -1120,9 +1110,6 @@ export default async function Home() {
           </div>
         </div>
       </section>
-
-      {/* Pricing Section - Só aparece na fase Alfa */}
-      <AlfaEarlyAdopterCTA />
 
       {/* Blog Section */}
       <section className="py-16 sm:py-20 lg:py-24 bg-white dark:bg-background">

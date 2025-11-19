@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
 import { isProdPhase } from './alfa-service'
+import { isEmailVerified } from './email-verification-service'
 
 /**
  * SERVIÇO CENTRALIZADO PARA CONTROLE DE TRIAL PREMIUM
@@ -26,6 +27,7 @@ export function isTrialEnabled(): boolean {
  * - Trial só pode ser iniciado uma vez por usuário
  * - Trial só é iniciado quando fase PROD começar (não durante ALFA)
  * - Feature deve estar habilitada via ENV (mas usuários em trial continuam mesmo se desativado)
+ * - Email deve estar verificado
  */
 export async function shouldStartTrial(userId: string): Promise<boolean> {
   // Se não está em PROD, não iniciar trial
@@ -36,6 +38,12 @@ export async function shouldStartTrial(userId: string): Promise<boolean> {
   // Se feature está desabilitada, não iniciar trial para novos usuários
   // Mas usuários que já estão em trial continuam (verificado em hasActiveTrial)
   if (!isTrialEnabled()) {
+    return false
+  }
+
+  // Verificar se email está verificado
+  const emailVerified = await isEmailVerified(userId)
+  if (!emailVerified) {
     return false
   }
 
@@ -287,6 +295,25 @@ export async function getTrialInfo(userId: string): Promise<{
       trialEndsAt: null,
       daysRemaining: null
     }
+  }
+}
+
+/**
+ * Inicia trial após verificação de email
+ * Esta função deve ser chamada após o email ser verificado
+ */
+export async function startTrialAfterEmailVerification(userId: string): Promise<boolean> {
+  try {
+    // Verificar se pode iniciar trial (inclui verificação de email)
+    if (!(await shouldStartTrial(userId))) {
+      return false
+    }
+
+    // Iniciar trial
+    return await startTrialForUser(userId)
+  } catch (error) {
+    console.error('Erro ao iniciar trial após verificação de email:', error)
+    return false
   }
 }
 

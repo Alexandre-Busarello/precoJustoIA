@@ -87,18 +87,25 @@ function RegisterForm() {
       })
 
       if (response.ok) {
-        // Login automático após registro
-        const result = await signIn("credentials", {
-          email,
-          password,
-          redirect: false,
-        })
-
-        if (result?.error) {
-          setError("Erro ao fazer login após registro")
+        const data = await response.json()
+        
+        // Se requer verificação de email, redirecionar para página de verificação
+        if (data.requiresEmailVerification) {
+          router.push('/verificar-email')
         } else {
-          // Redirecionar para callbackUrl após registro bem-sucedido
-          router.push(callbackUrl)
+          // Login automático após registro (caso não precise verificação)
+          const result = await signIn("credentials", {
+            email,
+            password,
+            redirect: false,
+          })
+
+          if (result?.error) {
+            setError("Erro ao fazer login após registro")
+          } else {
+            // Redirecionar para callbackUrl após registro bem-sucedido
+            router.push(callbackUrl)
+          }
         }
       } else {
         const data = await response.json()

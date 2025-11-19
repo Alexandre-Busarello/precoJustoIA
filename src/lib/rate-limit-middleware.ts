@@ -365,29 +365,58 @@ export class RateLimitMiddleware {
   }
   
   /**
+   * Normaliza IPs de localhost para um identificador consistente
+   */
+  private static normalizeLocalhostIP(ip: string): string {
+    // Normalizar IPv6 loopback para IPv4 loopback
+    if (ip === '::1' || ip === '::ffff:127.0.0.1') {
+      return '127.0.0.1'
+    }
+    // Normalizar IPv4 loopback
+    if (ip === '127.0.0.1' || ip === 'localhost') {
+      return '127.0.0.1'
+    }
+    return ip
+  }
+
+  /**
    * Obter IP do cliente (considerando proxies)
    */
   static getClientIP(request: NextRequest): string {
-    // Verificar headers de proxy primeiro
+    let ip: string | null = null
+
+    // Verificar headers de proxy primeiro (ordem de prioridade)
     const forwardedFor = request.headers.get('x-forwarded-for')
     if (forwardedFor) {
       // Pegar o primeiro IP da lista (IP real do cliente)
       const ips = forwardedFor.split(',').map(ip => ip.trim())
-      return ips[0] || 'unknown'
+      ip = ips[0] || null
     }
     
-    const realIP = request.headers.get('x-real-ip')
-    if (realIP) {
-      return realIP
+    if (!ip) {
+      const realIP = request.headers.get('x-real-ip')
+      if (realIP) {
+        ip = realIP
+      }
     }
     
-    // Fallback para Cloudflare ou outros proxies
-    const cfIP = request.headers.get('cf-connecting-ip')
-    if (cfIP) {
-      return cfIP
+    if (!ip) {
+      // Fallback para Cloudflare ou outros proxies
+      const cfIP = request.headers.get('cf-connecting-ip')
+      if (cfIP) {
+        ip = cfIP
+      }
     }
-    
-    return 'unknown'
+
+    // Em desenvolvimento local, pode não ter headers de proxy
+    // Nesse caso, retornar 'unknown' para evitar problemas
+    // Em produção, sempre deve ter pelo menos um header preenchido
+    if (!ip) {
+      return 'unknown'
+    }
+
+    // Normalizar IPs de localhost antes de retornar
+    return this.normalizeLocalhostIP(ip)
   }
   
   /**

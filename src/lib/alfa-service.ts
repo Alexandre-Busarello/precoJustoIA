@@ -240,6 +240,7 @@ export async function processInactiveUser(userId: string): Promise<boolean> {
 
 /**
  * Atualiza o último login do usuário e reativa se estava inativo
+ * Nota: Esta função não atualiza IP (use updateLastLoginIP separadamente se tiver acesso ao request)
  */
 export async function updateLastLogin(userId: string): Promise<void> {
   try {

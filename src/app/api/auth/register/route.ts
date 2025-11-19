@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { canUserRegister } from "@/lib/alfa-service"
 import { withRateLimit, RATE_LIMIT_CONFIGS, RateLimitMiddleware } from "@/lib/rate-limit-middleware"
-import { startTrialForUser } from "@/lib/trial-service"
+import { canRegisterFromIP, recordIPRegistration, flagAccountAsSuspicious } from "@/lib/ip-protection-service"
+import { sendVerificationEmail } from "@/lib/email-verification-service"
 
 export async function POST(request: NextRequest) {
   return withRateLimit(
@@ -146,14 +147,29 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Verificar se usuário já existe
+        // Capturar IP do request
+        const ip = RateLimitMiddleware.getClientIP(request)
+
+        // Verificar limite de contas por IP
+        const ipCheck = await canRegisterFromIP(ip, email)
+
+        if (!ipCheck.allowed) {
+          return NextResponse.json(
+            { 
+              message: ipCheck.message || "Não foi possível criar a conta. Limite de contas por IP atingido."
+            },
+            { status: 403 }
+          )
+        }
+
+        // Verificar se usuário já existe (dupla verificação)
         const existingUser = await prisma.user.findUnique({
           where: { email }
         })
 
         if (existingUser) {
           return NextResponse.json(
-            { message: "Usuário já existe com este email" },
+            { message: "Este email já está cadastrado. Tente fazer login ou recuperar sua senha." },
             { status: 400 }
           )
         }
@@ -164,6 +180,7 @@ export async function POST(request: NextRequest) {
         // 🔒 SEGURANÇA: Criar usuário com campos explícitos apenas
         // isEarlyAdopter sempre false no registro - será atualizado via webhook após pagamento
         // Campos sensíveis são definidos apenas pelo servidor/webhooks
+        // emailVerified = null inicialmente - será verificado via email
         const user = await prisma.user.create({
           data: {
             name,
@@ -173,15 +190,28 @@ export async function POST(request: NextRequest) {
             earlyAdopterDate: null, // Será definido pelo webhook se for Early Adopter
             lastLoginAt: new Date(),
             acquisition: acquisition || null, // Rastrear origem do cadastro
+            emailVerified: null, // Será verificado via email
           }
         })
 
-        // Iniciar trial automaticamente para novos usuários (se estiver em PROD e feature habilitada)
+        // Registrar IP de registro
+        await recordIPRegistration(ip, user.id)
+
+        // Marcar como suspeita se necessário (2-5 contas do mesmo IP)
+        if (ipCheck.shouldFlagAsSuspicious) {
+          await flagAccountAsSuspicious(
+            user.id,
+            `IP possui ${ipCheck.totalCount} contas cadastradas`,
+            ip
+          )
+        }
+
+        // Enviar email de verificação (NÃO iniciar trial ainda)
         try {
-          await startTrialForUser(user.id)
+          await sendVerificationEmail(user.id, email, name)
         } catch (error) {
-          // Não falhar o registro se houver erro ao iniciar trial
-          console.error('Erro ao iniciar trial para novo usuário:', error)
+          // Não falhar o registro se houver erro ao enviar email
+          console.error('Erro ao enviar email de verificação:', error)
         }
 
         // Remover a senha da resposta
@@ -190,8 +220,9 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(
           { 
-            message: "Usuário criado com sucesso",
-            user: userWithoutPassword
+            message: "Usuário criado com sucesso. Verifique seu email para ativar sua conta.",
+            user: userWithoutPassword,
+            requiresEmailVerification: true
           },
           { status: 201 }
         )

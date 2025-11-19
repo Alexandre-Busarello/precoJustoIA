@@ -92,6 +92,7 @@ model User {
   backtestConfigs  BacktestConfig[]
   assetSubscriptions UserAssetSubscription[]
   userEvents        UserEvent[]
+  userSecurity      UserSecurity?
 
   @@map("users")
 }
@@ -102,6 +103,35 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model UserSecurity {
+  id                    String   @id @default(cuid())
+  userId                String   @unique @map("user_id")
+  
+  // IP Tracking (LGPD Compliance: IPs são armazenados como SHA-256 hash, não IP direto)
+  registrationIp        String?  @map("registration_ip") // Hash SHA-256 do IP usado no registro
+  lastLoginIp           String?  @map("last_login_ip") // Hash SHA-256 do último IP usado no login
+  
+  // Conta Suspeita
+  isSuspicious          Boolean  @default(false) @map("is_suspicious")
+  suspiciousReason      String?  @map("suspicious_reason") // Motivo da marcação
+  suspiciousFlaggedAt   DateTime? @map("suspicious_flagged_at")
+  suspiciousReviewedAt  DateTime? @map("suspicious_reviewed_at")
+  suspiciousReviewedBy  String?  @map("suspicious_reviewed_by") // ID do admin
+  
+  // Metadata
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([registrationIp])
+  @@index([isSuspicious])
+  @@index([isSuspicious, suspiciousReviewedAt])
+  @@index([userId])
+  @@map("user_security")
 }
 
 model PasswordResetToken {

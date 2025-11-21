@@ -28,10 +28,11 @@ export async function GET(request: NextRequest) {
 
     // 2. Configurações
     const BATCH_SIZE = parseInt(process.env.EMAIL_BATCH_SIZE || '50')
+    const PARALLEL_BATCH_SIZE = 5 // Processar 5 emails em paralelo
     const MAX_ATTEMPTS = 3
-    const MAX_EXECUTION_TIME = 270 * 1000 // 4.5 minutos em ms (deixar buffer de 30s)
+    const MAX_EXECUTION_TIME = 50 * 1000 // 50 segundos em ms (deixar buffer de 10s)
 
-    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, MAX_ATTEMPTS=${MAX_ATTEMPTS}`)
+    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, PARALLEL_BATCH_SIZE=${PARALLEL_BATCH_SIZE}, MAX_ATTEMPTS=${MAX_ATTEMPTS}`)
 
     // 3. Buscar emails pendentes ordenados por prioridade e data de criação
     const pendingEmails = await prisma.emailQueue.findMany({
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
       take: BATCH_SIZE
     })
 
-    console.log(`📦 Encontrados ${pendingEmails.length} emails pendentes para processar`)
+    console.log(`📦 Encontrados ${pendingEmails.length} emails pendentes para processar em paralelo (${PARALLEL_BATCH_SIZE} por vez)`)
 
     if (pendingEmails.length === 0) {
       return NextResponse.json({
@@ -64,13 +65,14 @@ export async function GET(request: NextRequest) {
     let failedCount = 0
     let skippedCount = 0
 
-    // 4. Processar cada email
-    for (const emailQueue of pendingEmails) {
-      // Verificar timeout
-      if (Date.now() - startTime > MAX_EXECUTION_TIME) {
-        console.log(`⏱️ Timeout atingido. Processados ${sentCount + failedCount} de ${pendingEmails.length} emails`)
-        break
-      }
+    // Função para processar um único email
+    const processEmail = async (emailQueue: typeof pendingEmails[0]) => {
+      const stats = {
+        sent: false,
+        failed: false,
+        skipped: false,
+        error: null as string | null,
+      };
 
       try {
         // Atualizar tentativa
@@ -117,8 +119,8 @@ export async function GET(request: NextRequest) {
               errorMessage: `Tipo de email desconhecido: ${emailQueue.emailType}`
             }
           })
-          failedCount++
-          continue
+          stats.failed = true
+          return stats
         }
 
         // Marcar como enviado
@@ -130,8 +132,9 @@ export async function GET(request: NextRequest) {
           }
         })
 
-        sentCount++
+        stats.sent = true
         console.log(`✅ Email enviado: ${emailQueue.email} (${emailQueue.emailType})`)
+        return stats
 
       } catch (error) {
         console.error(`❌ Erro ao enviar email ${emailQueue.id} para ${emailQueue.email}:`, error)
@@ -148,7 +151,7 @@ export async function GET(request: NextRequest) {
               errorMessage: `Falhou após ${newAttempts} tentativas: ${errorMessage}`
             }
           })
-          failedCount++
+          stats.failed = true
         } else {
           // Manter como PENDING para nova tentativa
           await prisma.emailQueue.update({
@@ -157,7 +160,41 @@ export async function GET(request: NextRequest) {
               errorMessage: errorMessage
             }
           })
-          skippedCount++
+          stats.skipped = true
+        }
+        stats.error = errorMessage
+        return stats
+      }
+    }
+
+    // 4. Processar emails em lotes paralelos
+    for (let i = 0; i < pendingEmails.length; i += PARALLEL_BATCH_SIZE) {
+      // Verificar timeout antes de processar próximo batch
+      const elapsedTime = Date.now() - startTime
+      if (elapsedTime >= MAX_EXECUTION_TIME) {
+        console.log(`⏱️ Timeout atingido. Processados ${sentCount + failedCount + skippedCount} de ${pendingEmails.length} emails`)
+        break
+      }
+
+      const batch = pendingEmails.slice(i, i + PARALLEL_BATCH_SIZE)
+      console.log(`\n🚀 Processando batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} com ${batch.length} email(s) em paralelo...`)
+
+      // Processar batch em paralelo
+      const results = await Promise.allSettled(
+        batch.map(emailQueue => processEmail(emailQueue))
+      )
+
+      // Agregar estatísticas
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const stats = result.value
+          if (stats.sent) sentCount++
+          if (stats.failed) failedCount++
+          if (stats.skipped) skippedCount++
+        } else {
+          // Erro não tratado na função processEmail
+          failedCount++
+          console.error(`❌ Erro não tratado ao processar email:`, result.reason)
         }
       }
     }

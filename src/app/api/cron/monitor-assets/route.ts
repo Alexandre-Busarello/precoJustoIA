@@ -85,15 +85,16 @@ export async function GET(request: NextRequest) {
 
     // 2. Configurações
     const BATCH_SIZE = parseInt(process.env.MONITORING_BATCH_SIZE || '20');
+    const PARALLEL_BATCH_SIZE = 5; // Processar 5 empresas em paralelo
     const SCORE_THRESHOLD = parseFloat(process.env.MONITORING_SCORE_THRESHOLD || '5');
-    const MAX_EXECUTION_TIME = 270 * 1000; // 4.5 minutos em ms (deixar buffer de 30s)
+    const MAX_EXECUTION_TIME = 50 * 1000; // 50 segundos em ms (deixar buffer de 10s)
 
-    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, SCORE_THRESHOLD=${SCORE_THRESHOLD}`);
+    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, PARALLEL_BATCH_SIZE=${PARALLEL_BATCH_SIZE}, SCORE_THRESHOLD=${SCORE_THRESHOLD}`);
 
     // 3. Buscar próximo lote de empresas para processar
     const companies = await AssetMonitoringService.getNextBatchToProcess(BATCH_SIZE);
 
-    console.log(`📦 Processando lote de ${companies.length} empresas`);
+    console.log(`📦 Processando lote de ${companies.length} empresas em paralelo (${PARALLEL_BATCH_SIZE} por vez)`);
 
     let processedCount = 0;
     let snapshotsCreated = 0;
@@ -102,14 +103,16 @@ export async function GET(request: NextRequest) {
     let emailsSent = 0;
     const errors: string[] = [];
 
-    // 4. Loop principal com monitoramento de tempo
-    for (const company of companies) {
-      // Verificar timeout
-      const elapsedTime = Date.now() - startTime;
-      if (elapsedTime >= MAX_EXECUTION_TIME) {
-        console.log(`⏰ Tempo limite atingido (${elapsedTime}ms). Encerrando graciosamente...`);
-        break;
-      }
+    // Função para processar uma única empresa
+    const processCompany = async (company: typeof companies[0]) => {
+      const stats = {
+        processed: false,
+        snapshotCreated: false,
+        changeDetected: false,
+        reportGenerated: false,
+        emailsSent: 0,
+        error: null as string | null,
+      };
 
       try {
         console.log(`\n🔍 Processando ${company.ticker} (ID: ${company.id})...`);
@@ -129,8 +132,8 @@ export async function GET(request: NextRequest) {
         if (!scoreResult || !scoreResult.overallScore || !scoreResult.strategies) {
           console.log(`⚠️ ${company.ticker}: Score não pode ser calculado, pulando...`);
           await AssetMonitoringService.updateLastChecked(company.id);
-          processedCount++;
-          continue;
+          stats.processed = true;
+          return stats;
         }
 
         const currentScore = scoreResult.overallScore.score;
@@ -159,8 +162,8 @@ export async function GET(request: NextRequest) {
         if (!companyWithData || !companyWithData.financialData[0]) {
           console.log(`⚠️ ${company.ticker}: Dados financeiros não disponíveis, pulando...`);
           await AssetMonitoringService.updateLastChecked(company.id);
-          processedCount++;
-          continue;
+          stats.processed = true;
+          return stats;
         }
 
         const latestFinancials = companyWithData.financialData[0];
@@ -203,7 +206,7 @@ export async function GET(request: NextRequest) {
           );
 
           console.log(`✅ ${company.ticker}: Primeiro snapshot criado`);
-          snapshotsCreated++;
+          stats.snapshotCreated = true;
         } else {
           // Comparar scores
           const previousScore = toNumber(existingSnapshot.overallScore) || 0;
@@ -219,7 +222,7 @@ export async function GET(request: NextRequest) {
 
           if (comparison.hasChange && comparison.direction) {
             console.log(`🚨 ${company.ticker}: Mudança ${comparison.direction} detectada!`);
-            changesDetected++;
+            stats.changeDetected = true;
 
             // Verificar se há inscritos antes de gerar relatório
             const hasSubscribers = await AssetMonitoringService.hasSubscribers(company.id);
@@ -248,6 +251,7 @@ export async function GET(request: NextRequest) {
                 currentScore,
                 scoreComposition
               );
+              stats.snapshotCreated = true;
             } else {
               // Criar novo snapshot primeiro
               // Ajustar scores das estratégias para refletir os scores ajustados usados no cálculo final
@@ -272,6 +276,7 @@ export async function GET(request: NextRequest) {
               );
 
               console.log(`📸 ${company.ticker}: Novo snapshot criado (ID: ${snapshotId})`);
+              stats.snapshotCreated = true;
 
               // Gerar relatório com IA
               const currentData = {
@@ -313,7 +318,7 @@ export async function GET(request: NextRequest) {
                 });
 
                 console.log(`💾 ${company.ticker}: Relatório salvo (ID: ${reportId})`);
-                reportsGenerated++;
+                stats.reportGenerated = true;
 
                 // Buscar inscritos e enviar emails
                 const subscribers = await AssetMonitoringService.getSubscribersForCompany(
@@ -337,8 +342,8 @@ export async function GET(request: NextRequest) {
 
                 console.log(`👑 ${company.ticker}: ${premiumSubscribers.length} Premium/Trial, ${freeSubscribers.length} Gratuitos`);
 
-                // Enviar emails completos para Premium/Trial
-                for (const subscriber of premiumSubscribers) {
+                // Enviar emails completos para Premium/Trial em paralelo
+                const premiumEmailPromises = premiumSubscribers.map(async (subscriber) => {
                   try {
                     await sendAssetChangeEmail({
                       email: subscriber.email,
@@ -346,22 +351,21 @@ export async function GET(request: NextRequest) {
                       ticker: company.ticker,
                       companyName: company.name || company.ticker,
                       companyLogoUrl: company.logoUrl,
-                      changeDirection: comparison.direction,
+                      changeDirection: comparison.direction!, // Já verificado acima que não é null
                       previousScore,
                       currentScore,
                       reportSummary,
                       reportUrl,
                     });
-
-                    emailsSent++;
+                    return true;
                   } catch (emailError) {
                     console.error(`❌ Erro ao enviar email Premium para ${subscriber.email}:`, emailError);
-                    // Não falhar o processamento por causa de erro de email
+                    return false;
                   }
-                }
+                });
 
-                // Enviar emails de conversão para Gratuitos
-                for (const subscriber of freeSubscribers) {
+                // Enviar emails de conversão para Gratuitos em paralelo
+                const freeEmailPromises = freeSubscribers.map(async (subscriber) => {
                   try {
                     await sendFreeUserAssetChangeEmail({
                       email: subscriber.email,
@@ -370,18 +374,24 @@ export async function GET(request: NextRequest) {
                       companyName: company.name || company.ticker,
                       companyLogoUrl: company.logoUrl,
                     });
-
-                    emailsSent++;
+                    return true;
                   } catch (emailError) {
                     console.error(`❌ Erro ao enviar email Gratuito para ${subscriber.email}:`, emailError);
-                    // Não falhar o processamento por causa de erro de email
+                    return false;
                   }
-                }
+                });
 
-                console.log(`✅ ${company.ticker}: ${emailsSent} emails enviados`);
+                const emailResults = await Promise.allSettled([
+                  ...premiumEmailPromises,
+                  ...freeEmailPromises,
+                ]);
+
+                const successfulEmails = emailResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
+                stats.emailsSent = successfulEmails;
+                console.log(`✅ ${company.ticker}: ${successfulEmails} emails enviados`);
               } catch (reportError) {
                 console.error(`❌ ${company.ticker}: Erro ao gerar/enviar relatório:`, reportError);
-                errors.push(`${company.ticker}: ${(reportError as Error).message}`);
+                stats.error = `${company.ticker}: ${(reportError as Error).message}`;
               }
             }
           } else {
@@ -391,16 +401,53 @@ export async function GET(request: NextRequest) {
 
         // 9. Atualizar lastCheckedAt
         await AssetMonitoringService.updateLastChecked(company.id);
-        processedCount++;
+        stats.processed = true;
+        return stats;
       } catch (error) {
         console.error(`❌ Erro ao processar ${company.ticker}:`, error);
-        errors.push(`${company.ticker}: ${(error as Error).message}`);
+        stats.error = `${company.ticker}: ${(error as Error).message}`;
 
         // Atualizar lastCheckedAt mesmo com erro para não travar o ativo
         try {
           await AssetMonitoringService.updateLastChecked(company.id);
         } catch (updateError) {
           console.error(`❌ Erro ao atualizar lastCheckedAt de ${company.ticker}:`, updateError);
+        }
+        stats.processed = true;
+        return stats;
+      }
+    };
+
+    // 4. Processar empresas em lotes paralelos
+    for (let i = 0; i < companies.length; i += PARALLEL_BATCH_SIZE) {
+      // Verificar timeout antes de processar próximo batch
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime >= MAX_EXECUTION_TIME) {
+        console.log(`⏰ Tempo limite atingido (${elapsedTime}ms). Encerrando graciosamente...`);
+        break;
+      }
+
+      const batch = companies.slice(i, i + PARALLEL_BATCH_SIZE);
+      console.log(`\n🚀 Processando batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} com ${batch.length} empresa(s) em paralelo...`);
+
+      // Processar batch em paralelo
+      const results = await Promise.allSettled(
+        batch.map(company => processCompany(company))
+      );
+
+      // Agregar estatísticas
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const stats = result.value;
+          if (stats.processed) processedCount++;
+          if (stats.snapshotCreated) snapshotsCreated++;
+          if (stats.changeDetected) changesDetected++;
+          if (stats.reportGenerated) reportsGenerated++;
+          emailsSent += stats.emailsSent;
+          if (stats.error) errors.push(stats.error);
+        } else {
+          // Erro não tratado na função processCompany
+          errors.push(`Erro não tratado: ${result.reason}`);
         }
       }
     }

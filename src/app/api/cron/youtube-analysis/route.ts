@@ -34,19 +34,20 @@ export async function GET(request: NextRequest) {
 
     // 2. Configurações
     const BATCH_SIZE = parseInt(process.env.YOUTUBE_ANALYSIS_BATCH_SIZE || '30');
-    const DELAY_BETWEEN_CALLS = parseInt(
+    const PARALLEL_BATCH_SIZE = 5; // Processar 5 empresas em paralelo
+    const DELAY_BETWEEN_BATCHES = parseInt(
       process.env.YOUTUBE_ANALYSIS_DELAY_MS || '2000'
     );
-    const MAX_EXECUTION_TIME = 1270 * 1000; // 4.5 minutos em ms (deixar buffer de 30s)
+    const MAX_EXECUTION_TIME = 50 * 1000; // 50 segundos em ms (deixar buffer de 10s)
 
     console.log(
-      `📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, DELAY=${DELAY_BETWEEN_CALLS}ms`
+      `📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, PARALLEL_BATCH_SIZE=${PARALLEL_BATCH_SIZE}, DELAY=${DELAY_BETWEEN_BATCHES}ms`
     );
 
     // 3. Buscar próximo lote de empresas para processar
     const companies = await YouTubeAnalysisService.getNextBatchToProcess(BATCH_SIZE);
 
-    console.log(`📦 Processando lote de ${companies.length} empresas`);
+    console.log(`📦 Processando lote de ${companies.length} empresas em paralelo (${PARALLEL_BATCH_SIZE} por vez)`);
 
     let processedCount = 0;
     let newAnalysesCount = 0;
@@ -54,16 +55,15 @@ export async function GET(request: NextRequest) {
     let skippedCount = 0;
     const errors: string[] = [];
 
-    // 4. Loop principal com monitoramento de tempo
-    for (const company of companies) {
-      // Verificar timeout
-      const elapsedTime = Date.now() - startTime;
-      if (elapsedTime >= MAX_EXECUTION_TIME) {
-        console.log(
-          `⏰ Tempo limite atingido (${elapsedTime}ms). Encerrando graciosamente...`
-        );
-        break;
-      }
+    // Função para processar uma única empresa
+    const processCompany = async (company: typeof companies[0]) => {
+      const stats = {
+        processed: false,
+        newAnalysis: false,
+        updatedAnalysis: false,
+        skipped: false,
+        error: null as string | null,
+      };
 
       try {
         console.log(`\n🔍 Processando ${company.ticker} (ID: ${company.id})...`);
@@ -93,11 +93,11 @@ export async function GET(request: NextRequest) {
             );
 
             await YouTubeAnalysisService.updateLastChecked(company.id);
-            processedCount++;
-            newAnalysesCount++;
+            stats.processed = true;
+            stats.newAnalysis = true;
             
             console.log(`✅ ${company.ticker}: Análise copiada com sucesso!`);
-            continue;
+            return stats;
           } else {
             console.log(`⚠️ ${company.ticker}: Empresa relacionada não encontrada, processando normalmente...`);
           }
@@ -141,9 +141,9 @@ export async function GET(request: NextRequest) {
               // Análise ainda está fresca (menos de 1 semana)
               console.log(`✅ ${company.ticker}: Mantendo análise web recente (criada há ${Math.floor((Date.now() - analysisDate.getTime()) / (1000 * 60 * 60 * 24))} dias)`);
               await YouTubeAnalysisService.updateLastChecked(company.id);
-              processedCount++;
-              skippedCount++;
-              continue;
+              stats.processed = true;
+              stats.skipped = true;
+              return stats;
             }
             
             // Análise tem mais de 1 semana - fazer nova análise e comparar
@@ -183,14 +183,14 @@ export async function GET(request: NextRequest) {
               console.log(`✅ ${company.ticker}: Análise web atualizada salva (ID: ${analysisId}, Score: ${webAnalysis.score}/100)`);
               
               if (existingAnalysis) {
-                updatedAnalysesCount++;
+                stats.updatedAnalysis = true;
               } else {
-                newAnalysesCount++;
+                stats.newAnalysis = true;
               }
               
               await YouTubeAnalysisService.updateLastChecked(company.id);
-              processedCount++;
-              continue;
+              stats.processed = true;
+              return stats;
             } else {
               // Sem informações relevantes na web também
               console.log(`⚠️ ${company.ticker}: Sem cobertura adequada (YouTube e Web)`);
@@ -206,9 +206,9 @@ export async function GET(request: NextRequest) {
           }
           
           await YouTubeAnalysisService.updateLastChecked(company.id);
-          processedCount++;
-          skippedCount++;
-          continue;
+          stats.processed = true;
+          stats.skipped = true;
+          return stats;
         }
 
         const videoIds = videoSearchResult.videoIds;
@@ -231,9 +231,9 @@ export async function GET(request: NextRequest) {
               `✅ ${company.ticker}: Nenhum vídeo novo encontrado, mantendo análise anterior`
             );
             await YouTubeAnalysisService.updateLastChecked(company.id);
-            processedCount++;
-            skippedCount++;
-            continue;
+            stats.processed = true;
+            stats.skipped = true;
+            return stats;
           } else {
             // Há vídeos novos! Refazer análise
             console.log(
@@ -256,11 +256,11 @@ export async function GET(request: NextRequest) {
           // Tratar erro específico de vídeo muito longo
           if (analysisError?.message?.includes('Vídeo muito longo')) {
             console.error(`🎥 ${company.ticker}: Vídeo muito longo - pulando esta empresa`);
-            errors.push(`${company.ticker}: Vídeo excede limite de processamento (muito longo)`);
+            stats.error = `${company.ticker}: Vídeo excede limite de processamento (muito longo)`;
             await YouTubeAnalysisService.updateLastChecked(company.id);
-            processedCount++;
-            skippedCount++;
-            continue;
+            stats.processed = true;
+            stats.skipped = true;
+            return stats;
           }
           // Outros erros de análise
           throw analysisError;
@@ -308,23 +308,18 @@ export async function GET(request: NextRequest) {
         console.log(`💾 ${company.ticker}: Análise salva (ID: ${analysisId})`);
 
         if (existingAnalysis) {
-          updatedAnalysesCount++;
+          stats.updatedAnalysis = true;
         } else {
-          newAnalysesCount++;
+          stats.newAnalysis = true;
         }
 
         // 11. Atualizar lastCheckedAt
         await YouTubeAnalysisService.updateLastChecked(company.id);
-        processedCount++;
-
-        // 12. Delay antes da próxima empresa (para evitar rate limit)
-        if (processedCount < companies.length) {
-          console.log(`⏱️  Aguardando ${DELAY_BETWEEN_CALLS}ms antes da próxima...`);
-          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_CALLS));
-        }
+        stats.processed = true;
+        return stats;
       } catch (error) {
         console.error(`❌ Erro ao processar ${company.ticker}:`, error);
-        errors.push(`${company.ticker}: ${(error as Error).message}`);
+        stats.error = `${company.ticker}: ${(error as Error).message}`;
 
         // Atualizar lastCheckedAt mesmo com erro para não travar o ativo
         try {
@@ -335,6 +330,49 @@ export async function GET(request: NextRequest) {
             updateError
           );
         }
+        stats.processed = true;
+        return stats;
+      }
+    };
+
+    // 4. Processar empresas em lotes paralelos
+    for (let i = 0; i < companies.length; i += PARALLEL_BATCH_SIZE) {
+      // Verificar timeout antes de processar próximo batch
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime >= MAX_EXECUTION_TIME) {
+        console.log(
+          `⏰ Tempo limite atingido (${elapsedTime}ms). Encerrando graciosamente...`
+        );
+        break;
+      }
+
+      const batch = companies.slice(i, i + PARALLEL_BATCH_SIZE);
+      console.log(`\n🚀 Processando batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} com ${batch.length} empresa(s) em paralelo...`);
+
+      // Processar batch em paralelo
+      const results = await Promise.allSettled(
+        batch.map(company => processCompany(company))
+      );
+
+      // Agregar estatísticas
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const stats = result.value;
+          if (stats.processed) processedCount++;
+          if (stats.newAnalysis) newAnalysesCount++;
+          if (stats.updatedAnalysis) updatedAnalysesCount++;
+          if (stats.skipped) skippedCount++;
+          if (stats.error) errors.push(stats.error);
+        } else {
+          // Erro não tratado na função processCompany
+          errors.push(`Erro não tratado: ${result.reason}`);
+        }
+      }
+
+      // Delay entre batches (exceto no último batch)
+      if (i + PARALLEL_BATCH_SIZE < companies.length) {
+        console.log(`⏱️  Aguardando ${DELAY_BETWEEN_BATCHES}ms antes do próximo batch...`);
+        await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
       }
     }
 

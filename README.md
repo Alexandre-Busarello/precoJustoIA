@@ -25,7 +25,7 @@ Uma plataforma SaaS que simplifica a análise fundamentalista de ações para in
 git clone <repository-url>
 cd analisador-acoes
 npm install
-```
+``` 
 
 2. **Configure as variáveis de ambiente:**
 Crie um arquivo `.env` na raiz do projeto baseado no `env.example`:

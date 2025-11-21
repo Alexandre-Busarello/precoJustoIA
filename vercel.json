@@ -2,8 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/fetch-ward",
-      "schedule": "0 2 * * *",
-      "maxDuration": 60
+      "schedule": "0 2 * * *"
     }
   ],
   "functions": {

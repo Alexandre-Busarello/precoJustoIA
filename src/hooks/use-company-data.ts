@@ -357,6 +357,16 @@ async function fetchAIReports(
   type: 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE' | null = 'MONTHLY_OVERVIEW'
 ): Promise<AIReportsResponse> {
   const response = await fetch(`/api/ai-reports/${ticker}?type=${type || 'MONTHLY_OVERVIEW'}`);
+  
+  // Se for 404, retornar resposta válida indicando que não há relatório (não é um erro)
+  if (response.status === 404) {
+    const errorData = await response.json().catch(() => ({ error: 'Nenhum relatório encontrado para este ativo' }));
+    return {
+      success: false,
+      error: errorData.error || 'Nenhum relatório encontrado para este ativo'
+    };
+  }
+  
   if (!response.ok) {
     throw new Error(`Failed to fetch AI reports for ${ticker}`);
   }

@@ -109,8 +109,20 @@ export default function AIAnalysisDual({
   useEffect(() => {
     if (isLoadingMonthly || isAutoGenerating || isGeneratingRef.current || !userIsPremium) return
     
-    if (!monthlyReport && monthlyData && !monthlyData.success) {
-      console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...')
+    // Verificar se não há relatório: quando não há monthlyReport e monthlyData indica que não existe
+    const hasNoReport = !monthlyReport && (
+      // monthlyData existe mas success é false (404 tratado como resposta válida)
+      (monthlyData && monthlyData.success === false) ||
+      // Ou monthlyData não existe mas não há erro (caso edge)
+      (!monthlyData && !monthlyError)
+    )
+    
+    if (hasNoReport) {
+      console.log('🤖 Nenhum relatório mensal encontrado. Gerando automaticamente...', {
+        monthlyReport,
+        monthlyData,
+        monthlyError: monthlyError?.message
+      })
       generateMonthlyReport().catch((err) => {
         console.error('Erro ao gerar relatório mensal:', err)
         isGeneratingRef.current = false
@@ -118,7 +130,7 @@ export default function AIAnalysisDual({
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthlyReport, monthlyData, isLoadingMonthly, userIsPremium, isAutoGenerating])
+  }, [monthlyReport, monthlyData, monthlyError, isLoadingMonthly, userIsPremium, isAutoGenerating])
 
   const generateMonthlyReport = async () => {
     // Verificar se já está gerando

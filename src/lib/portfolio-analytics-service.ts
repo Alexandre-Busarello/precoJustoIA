@@ -20,7 +20,8 @@ import { fetchBenchmarkData, alignBenchmarkDates, type BenchmarkData } from './b
 export interface EvolutionPoint {
   date: string; // YYYY-MM-DD
   value: number; // Valor total da carteira
-  invested: number; // Total investido até a data
+  invested: number; // Capital líquido investido (aportes - saques) para exibição no gráfico
+  totalInvested: number; // Total bruto investido (aportes totais) para cálculos de benchmarks
   cashBalance: number; // Saldo em caixa
   return: number; // Retorno total (%)
   returnAmount: number; // Retorno em reais
@@ -404,6 +405,7 @@ export class PortfolioAnalyticsService {
           date: this.formatDateUTC(date),
           value: totalValue,
           invested: netInvested, // 🔧 Capital líquido investido (aportes - saques) para exibição correta no gráfico
+          totalInvested: totalInvested, // 🔧 Total bruto investido (aportes totais) para cálculos de benchmarks
           cashBalance,
           return: returnPercent, // 🔧 Retorno calculado com totalInvested (considerando saques no numerador)
           returnAmount
@@ -632,14 +634,15 @@ export class PortfolioAnalyticsService {
       
       // Calcular aportes mensais médios baseado na evolução
       // O primeiro ponto tem o investimento inicial, depois calculamos diferenças
-      let previousInvested = sortedEvolution[0].invested || 0;
+      // 🔧 IMPORTANTE: Usar totalInvested (bruto) para benchmarks, não invested (líquido)
+      let previousTotalInvested = sortedEvolution[0].totalInvested || 0;
       const monthlyContributions: number[] = [0]; // Primeiro mês não tem aporte adicional
       
       for (let i = 1; i < sortedEvolution.length; i++) {
-        const currentInvested = sortedEvolution[i].invested || 0;
-        const contribution = Math.max(0, currentInvested - previousInvested);
+        const currentTotalInvested = sortedEvolution[i].totalInvested || 0;
+        const contribution = Math.max(0, currentTotalInvested - previousTotalInvested);
         monthlyContributions.push(contribution);
-        previousInvested = currentInvested;
+        previousTotalInvested = currentTotalInvested;
       }
       
       // Simular investimento no CDI com aportes mensais
@@ -685,7 +688,8 @@ export class PortfolioAnalyticsService {
         }
         
         // Simular investimento com aportes mensais
-        let accumulatedValue = sortedEvolution[0].invested || 0;
+        // 🔧 IMPORTANTE: Usar totalInvested (bruto) para simulação de benchmarks
+        let accumulatedValue = sortedEvolution[0].totalInvested || 0;
         const results: number[] = [accumulatedValue];
         
         for (let i = 1; i < sortedEvolution.length; i++) {
@@ -726,7 +730,8 @@ export class PortfolioAnalyticsService {
         if (ibovData.length === 0 || sortedEvolution.length === 0) return [];
         
         // IBOV é índice de preço, calculamos variação percentual mês a mês
-        let accumulatedValue = sortedEvolution[0].invested || 0;
+        // 🔧 IMPORTANTE: Usar totalInvested (bruto) para simulação de benchmarks
+        let accumulatedValue = sortedEvolution[0].totalInvested || 0;
         const results: number[] = [accumulatedValue];
         
         for (let i = 1; i < sortedEvolution.length; i++) {
@@ -761,21 +766,23 @@ export class PortfolioAnalyticsService {
       // Calcular retornos acumulados em percentual para cada ponto
       for (let i = 0; i < sortedEvolution.length; i++) {
         const point = sortedEvolution[i];
-        const totalInvested = point.invested || 1; // Evitar divisão por zero
+        // 🔧 IMPORTANTE: Usar totalInvested (bruto) para cálculos de benchmarks
+        // Isso garante que benchmarks sejam comparados com o total investido, não com o líquido
+        const totalInvestedBruto = point.totalInvested || 1; // Evitar divisão por zero
         
         // Retorno da carteira já está calculado em point.return
         const portfolioReturn = point.return;
         
         // Calcular retorno acumulado do CDI
-        const cdiValue = cdiValues[i] || totalInvested;
-        const cdiReturn = totalInvested > 0 
-          ? ((cdiValue - totalInvested) / totalInvested) * 100 
+        const cdiValue = cdiValues[i] || totalInvestedBruto;
+        const cdiReturn = totalInvestedBruto > 0 
+          ? ((cdiValue - totalInvestedBruto) / totalInvestedBruto) * 100 
           : 0;
         
         // Calcular retorno acumulado do IBOV
-        const ibovValue = ibovValues[i] || totalInvested;
-        const ibovReturn = totalInvested > 0 
-          ? ((ibovValue - totalInvested) / totalInvested) * 100 
+        const ibovValue = ibovValues[i] || totalInvestedBruto;
+        const ibovReturn = totalInvestedBruto > 0 
+          ? ((ibovValue - totalInvestedBruto) / totalInvestedBruto) * 100 
           : 0;
         
         comparison.push({

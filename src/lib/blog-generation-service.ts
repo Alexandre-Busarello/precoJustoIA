@@ -430,12 +430,66 @@ LINKS INTERNOS (OBRIGATÓRIO incluir pelo menos 3):
 - Link para backtesting de carteiras: [texto do link](${INTERNAL_LINKS.backtest})
 - Link para carteira de investimentos: [texto do link](${INTERNAL_LINKS.carteira})
 - Link para outros posts do blog: [texto do link](${INTERNAL_LINKS.blog})
-- Link para análises individuais dos ativos: [texto do link](${INTERNAL_LINKS.acao.replace('[ticker]', 'PETR4')}) (substitua PETR4 pelo ticker relevante)
 
-LINKS EXTERNOS (OBRIGATÓRIO incluir pelo menos 2):
-- Links para fontes confiáveis sobre o assunto
-- Links para notícias relevantes da B3
-- Links para dados oficiais quando apropriado
+REGRA CRÍTICA PARA TICKERS DE AÇÕES:
+**SEMPRE que mencionar um ticker de ação no artigo, você DEVE criar um link interno para a página da ação.**
+
+FORMATO OBRIGATÓRIO:
+- Primeira menção: [Nome da Empresa (TICKER)](/acao/TICKER)
+- Menções subsequentes: [TICKER](/acao/TICKER) ou [Nome da Empresa](/acao/TICKER)
+
+EXEMPLOS:
+- "A [Petrobras (PETR4)](/acao/PETR4) anunciou..."
+- "A [Vale (VALE3)](/acao/VALE3) está negociando..."
+- "Empresas como [Itaú (ITUB4)](/acao/ITUB4) e [Bradesco (BBDC4)](/acao/BBDC4)..."
+
+TICKERS MENCIONADOS NO TÓPICO:
+${mainTopic.target_ticker.map(ticker => `- ${ticker}`).join('\n')}
+
+**IMPORTANTE:** 
+- Use o ticker EXATO como aparece na lista acima (ex: VALE3, PETR4, ITUB4)
+- SEMPRE inclua o link na primeira menção do ticker
+- O formato do link é: /acao/TICKER (em maiúsculas, sem .SA ou sufixos)
+- Se mencionar outros tickers além dos listados, também crie links para eles
+
+LINKS EXTERNOS (OBRIGATÓRIO incluir pelo menos 3-5 links no conteúdo):
+Você DEVE usar a ferramenta de busca do Gemini para encontrar fontes confiáveis e incluir links externos diretamente no conteúdo do artigo.
+
+FORMATO CORRETO DE LINKS EM MARKDOWN:
+- Formato inline: [Texto do link](https://exemplo.com.br)
+- Formato de referência: [Texto do link][1] e depois [1]: https://exemplo.com.br
+- SEMPRE use URLs completas (https://) e válidas
+- NÃO use placeholders ou links fictícios
+
+TIPOS DE FONTES OBRIGATÓRIAS:
+1. **Fontes Oficiais:**
+   - B3 (https://www.b3.com.br)
+   - CVM (https://www.gov.br/cvm)
+   - Banco Central (https://www.bcb.gov.br)
+   - IBGE (https://www.ibge.gov.br)
+
+2. **Notícias e Análises Confiáveis:**
+   - Valor Econômico (https://valor.globo.com)
+   - InfoMoney (https://www.infomoney.com.br)
+   - Investing.com Brasil (https://br.investing.com)
+   - Exame (https://exame.com)
+
+3. **Dados Financeiros:**
+   - Fundamentus (https://www.fundamentus.com.br)
+   - Status Invest (https://statusinvest.com.br)
+   - TradingView (https://br.tradingview.com)
+
+4. **Relatórios e Dados das Empresas:**
+   - RI (Relações com Investidores) das empresas mencionadas
+   - Demonstrações financeiras oficiais
+
+REGRAS CRÍTICAS PARA LINKS EXTERNOS:
+- Use a ferramenta de busca do Gemini para encontrar URLs reais e atuais
+- Inclua os links naturalmente no texto, não apenas em uma lista no final
+- Cite as fontes quando usar dados específicos (ex: "Segundo dados da B3...")
+- Verifique que as URLs estão completas e funcionais
+- Prefira fontes brasileiras quando possível
+- Links devem estar formatados corretamente em markdown: [texto](url)
 
 OBJETIVO:
 Transformar dados técnicos frios em uma leitura agradável, educativa e que passe autoridade, incentivando o leitor a ter cautela e foco no longo prazo.
@@ -469,7 +523,13 @@ REQUISITOS DO CONTEÚDO:
 - Use o tom de voz de um investidor experiente e calejado, não um acadêmico.
 - Seja opinativo e use emoção para engajar o leitor.
 - Escreva o artigo completo em Markdown com formatação adequada.
-- Busque através da ferramente de busca do Gemini para obter informações mais recentes para fundamentar o artigo.
+- **OBRIGATÓRIO:** Use a ferramenta de busca do Gemini (googleSearch) para encontrar informações recentes e fontes confiáveis.
+- **OBRIGATÓRIO:** Inclua pelo menos 3-5 links externos formatados corretamente em markdown no conteúdo do artigo.
+- **OBRIGATÓRIO:** Todos os links devem estar no formato markdown correto: [texto do link](https://url-completa.com.br)
+- **OBRIGATÓRIO:** Links devem ser de fontes reais e verificáveis (B3, CVM, sites de notícias financeiras, etc.)
+- **OBRIGATÓRIO:** Cite as fontes quando usar dados específicos ou estatísticas.
+- **CRÍTICO:** SEMPRE que mencionar um ticker de ação, crie um link interno no formato: [Nome da Empresa (TICKER)](/acao/TICKER)
+- **CRÍTICO:** Use o ticker exato em maiúsculas (ex: VALE3, PETR4, ITUB4) no link, sem sufixos como .SA
 
 INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
@@ -565,6 +625,70 @@ function validateGeneratedPost(post: GeneratedPost): void {
 
   if (!hasInternalLinks) {
     throw new Error('Conteúdo deve incluir links internos');
+  }
+
+  // Verificar se tem links externos formatados corretamente em markdown
+  // Padrão: [texto](https://url) ou [texto][ref] seguido de [ref]: https://url
+  const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+  const referenceLinkPattern = /\[([^\]]+)\]\[(\d+)\]/g;
+  const referenceDefinitionPattern = /\[(\d+)\]:\s*(https?:\/\/[^\s]+)/g;
+  
+  const inlineLinks = Array.from(post.content.matchAll(markdownLinkPattern));
+  const referenceLinks = Array.from(post.content.matchAll(referenceLinkPattern));
+  const referenceDefinitions = Array.from(post.content.matchAll(referenceDefinitionPattern));
+  
+  // Contar links externos (excluir links internos que começam com /)
+  const externalLinks = inlineLinks.filter(match => {
+    const url = match[2];
+    return url.startsWith('http://') || url.startsWith('https://');
+  });
+  
+  const totalExternalLinks = externalLinks.length + referenceDefinitions.length;
+  
+  if (totalExternalLinks < 3) {
+    console.warn(`⚠️ Artigo tem apenas ${totalExternalLinks} links externos. Mínimo recomendado: 3`);
+    // Não falhar, apenas avisar - pode ser que a IA não tenha encontrado fontes suficientes
+  }
+  
+  // Validar formato dos links
+  const invalidLinks: string[] = [];
+  inlineLinks.forEach(match => {
+    const url = match[2];
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      invalidLinks.push(`Link inválido: ${url}`);
+    }
+  });
+  
+  if (invalidLinks.length > 0) {
+    console.warn('⚠️ Links com formato inválido encontrados:', invalidLinks);
+  }
+  
+  // Log para debug
+  console.log(`📊 Validação de links: ${totalExternalLinks} links externos encontrados`);
+  if (totalExternalLinks > 0) {
+    console.log(`   Exemplos: ${externalLinks.slice(0, 3).map(m => m[2]).join(', ')}`);
+  }
+
+  // Verificar se tickers mencionados têm links internos
+  // Padrão para detectar tickers: 4 letras maiúsculas seguidas de 1-2 dígitos (ex: PETR4, VALE3, ITUB4)
+  const tickerPattern = /\b([A-Z]{4}\d{1,2})\b/g;
+  const tickerLinksPattern = /\[([^\]]*\(([A-Z]{4}\d{1,2})\)[^\]]*)\]\(\/acao\/\2\)/g;
+  
+  const mentionedTickers = Array.from(post.content.matchAll(tickerPattern))
+    .map(match => match[1])
+    .filter((ticker, index, self) => self.indexOf(ticker) === index); // Remover duplicatas
+  
+  const linkedTickers = Array.from(post.content.matchAll(tickerLinksPattern))
+    .map(match => match[2])
+    .filter((ticker, index, self) => self.indexOf(ticker) === index); // Remover duplicatas
+  
+  const unlinkedTickers = mentionedTickers.filter(ticker => !linkedTickers.includes(ticker));
+  
+  if (unlinkedTickers.length > 0) {
+    console.warn(`⚠️ Tickers mencionados sem link interno: ${unlinkedTickers.join(', ')}`);
+    console.warn(`   Formato esperado: [Nome da Empresa (TICKER)](/acao/TICKER)`);
+  } else if (mentionedTickers.length > 0) {
+    console.log(`✅ Todos os ${mentionedTickers.length} tickers mencionados têm links internos`);
   }
 }
 

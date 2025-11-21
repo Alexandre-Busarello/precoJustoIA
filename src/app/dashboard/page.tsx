@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { usePremiumStatus } from "@/hooks/use-premium-status";
-import { useDashboardStats, useTopCompanies, usePortfolios } from "@/hooks/use-dashboard-data";
+import { useDashboardStats, useTopCompanies, useDashboardPortfolios } from "@/hooks/use-dashboard-data";
 import { useCacheInvalidation } from "@/hooks/use-cache-invalidation";
 import { CacheIndicator } from "@/components/cache-indicator";
 
@@ -52,13 +52,13 @@ export default function Dashboard() {
   // Usar React Query hooks
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: topCompaniesData, isLoading: companiesLoading, refetch: refetchTopCompanies, dataUpdatedAt: companiesUpdatedAt } = useTopCompanies(3, 80);
-  const { data: portfoliosData } = usePortfolios();
+  const { data: dashboardPortfoliosData } = useDashboardPortfolios();
 
   // Monitorar mudanças de portfolio e perfil para invalidar cache
   useCacheInvalidation();
 
   const topCompanies = (topCompaniesData as { companies: TopCompany[] } | undefined)?.companies || [];
-  const portfolioCount = (portfoliosData as { portfolios: unknown[] } | undefined)?.portfolios?.length || 0;
+  const portfolioCount = (dashboardPortfoliosData as { portfolios: unknown[] } | undefined)?.portfolios?.length || 0;
 
   useEffect(() => {
     if (status === "loading") return;

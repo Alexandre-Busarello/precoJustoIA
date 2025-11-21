@@ -456,9 +456,6 @@ export function analyzeFinancialStatements(
   // Detectar se é BDR para ajustar benchmarks
   const isBDR = isBDRTicker(company?.ticker);
   const benchmarks = getSectorBenchmarks(sectorContext, sizeContext, isBDR);
-  if (isBDR) {
-    console.log("🌎 BDR detectado - usando benchmarks ajustados para mercado internacional");
-  }
 
   // === SISTEMA DE PONTUAÇÃO NORMALIZADO ===
   // Definir pesos normalizados (soma = 1.0)
@@ -599,15 +596,15 @@ export function analyzeFinancialStatements(
   if (incomeCompositionAnalysis.scoreAdjustment <= -300) {
     // Dependência excessiva de resultados não operacionais - penalização mínima de 25 pontos
     finalScore = Math.max(0, finalScore - 25);
-    console.log(
-      "Aplicada penalização crítica: -25 pontos por dependência excessiva de resultados não operacionais"
-    );
+    // console.log(
+    //   "Aplicada penalização crítica: -25 pontos por dependência excessiva de resultados não operacionais"
+    // );
   } else if (incomeCompositionAnalysis.scoreAdjustment <= -50) {
     // Qualidade dos lucros questionável - penalização mínima de 15 pontos
     finalScore = Math.max(0, finalScore - 15);
-    console.log(
-      "Aplicada penalização moderada: -15 pontos por qualidade dos lucros questionável"
-    );
+    // console.log(
+    //   "Aplicada penalização moderada: -15 pontos por qualidade dos lucros questionável"
+    // );
   }
 
   // === DETERMINAR FORÇA DA EMPRESA BASEADA NAS MÉDIAS ===
@@ -640,10 +637,6 @@ export function analyzeFinancialStatements(
   // Combinação CRÍTICA 1: Endividamento alto + Lucros em queda + Rentabilidade baixa
   if (hasCriticalDebt && hasFallingProfits && hasLowProfitability) {
     if (finalScore > 40) {
-      console.log(
-        `🚨 LIMITAÇÃO DE SCORE: Combinação crítica detectada (endividamento + lucros em queda + baixa rentabilidade)`
-      );
-      console.log(`   Score limitado de ${finalScore} para 40`);
       finalScore = 40;
     }
   }
@@ -651,29 +644,17 @@ export function analyzeFinancialStatements(
   // Combinação CRÍTICA 2: Margens baixas + Lucros em queda + Instabilidade
   if (hasLowMargins && hasFallingProfits && hasUnstableProfits) {
     if (finalScore > 45) {
-      console.log(
-        `🚨 LIMITAÇÃO DE SCORE: Combinação crítica detectada (margens baixas + lucros em queda + instabilidade)`
-      );
-      console.log(`   Score limitado de ${finalScore} para 45`);
       finalScore = 45;
     }
   }
 
   // Se tem 6+ alertas, score máximo deve ser 50
   if (redFlags.length >= 6 && finalScore > 50) {
-    console.log(
-      `🚨 LIMITAÇÃO DE SCORE: ${redFlags.length} alertas graves - score máximo permitido: 50`
-    );
-    console.log(`   Score limitado de ${finalScore} para 50`);
     finalScore = 50;
   }
 
   // Se tem 8+ alertas, score máximo deve ser 35
   if (redFlags.length >= 8 && finalScore > 35) {
-    console.log(
-      `🚨 LIMITAÇÃO DE SCORE: ${redFlags.length} alertas graves - score máximo permitido: 35`
-    );
-    console.log(`   Score limitado de ${finalScore} para 35`);
     finalScore = 35;
   }
 
@@ -900,11 +881,11 @@ function calculateAverageMetrics(
           metrics.roe += roe;
           periodContributedMetrics = true;
         } else {
-          console.warn(
-            `ROE extremo detectado: ${(roe * 100).toFixed(
-              1
-            )}% - ignorando para evitar distorção`
-          );
+          // console.warn(
+          //   `ROE extremo detectado: ${(roe * 100).toFixed(
+          //     1
+          //   )}% - ignorando para evitar distorção`
+          // );
           // Usar ROA como proxy se disponível
           if (Math.abs(roa) <= 1) {
             metrics.roe += roa; // ROA como fallback conservador
@@ -916,16 +897,16 @@ function calculateAverageMetrics(
           // ROA não deve exceder 100%
           metrics.roa += roa;
         } else {
-          console.warn(
-            `ROA extremo detectado: ${(roa * 100).toFixed(
-              1
-            )}% - ignorando para evitar distorção`
-          );
+          // console.warn(
+          //   `ROA extremo detectado: ${(roa * 100).toFixed(
+          //     1
+          //   )}% - ignorando para evitar distorção`
+          // );
         }
       } else {
-        console.warn(
-          `Patrimônio líquido inválido: ${totalEquity} - pulando cálculos de rentabilidade`
-        );
+        // console.warn(
+        //   `Patrimônio líquido inválido: ${totalEquity} - pulando cálculos de rentabilidade`
+        // );
         // Para empresas com PL problemático, usar valores neutros
         metrics.roe += 0;
         metrics.roa += 0;
@@ -946,26 +927,26 @@ function calculateAverageMetrics(
         // Margem não deve exceder 200%
         metrics.netMargin += netMargin;
       } else if (revenue <= 0) {
-        console.warn(
-          `Receita inválida para cálculo de margem: ${revenue} - não calculando margem para este período`
-        );
+        // console.warn(
+        //   `Receita inválida para cálculo de margem: ${revenue} - não calculando margem para este período`
+        // );
       } else if (Math.abs(netMargin) > 2) {
-        console.warn(
-          `Margem líquida extrema detectada: ${(netMargin * 100).toFixed(
-            1
-          )}% - ignorando`
-        );
+        // console.warn(
+        //   `Margem líquida extrema detectada: ${(netMargin * 100).toFixed(
+        //     1
+        //   )}% - ignorando`
+        // );
       }
 
       if (Math.abs(grossMargin) <= 2) {
         // Margem bruta não deve exceder 200%
         metrics.grossMargin += grossMargin;
       } else {
-        console.warn(
-          `Margem bruta extrema detectada: ${(grossMargin * 100).toFixed(
-            1
-          )}% - ignorando`
-        );
+        // console.warn(
+        //   `Margem bruta extrema detectada: ${(grossMargin * 100).toFixed(
+        //     1
+        //   )}% - ignorando`
+        // );
       }
 
       // Calcular margem operacional corretamente
@@ -981,11 +962,11 @@ function calculateAverageMetrics(
         // Margem operacional não deve exceder 200%
         metrics.operatingMargin += operatingMargin;
       } else {
-        console.warn(
-          `Margem operacional extrema detectada: ${(
-            operatingMargin * 100
-          ).toFixed(1)}% - ignorando`
-        );
+        // console.warn(
+        //   `Margem operacional extrema detectada: ${(
+        //     operatingMargin * 100
+        //   ).toFixed(1)}% - ignorando`
+        // );
       }
 
       // Liquidez - só calcular se temos passivos válidos
@@ -998,31 +979,31 @@ function calculateAverageMetrics(
           // Current ratio não deve exceder 1000x
           metrics.currentRatio += currentRatio;
         } else {
-          console.warn(
-            `Current ratio extremo detectado: ${currentRatio.toFixed(
-              1
-            )}x - ignorando`
-          );
+          // console.warn(
+          //   `Current ratio extremo detectado: ${currentRatio.toFixed(
+          //     1
+          //   )}x - ignorando`
+          // );
           metrics.currentRatio += 1; // Valor neutro
         }
 
         if (quickRatio <= 1000) {
           metrics.quickRatio += quickRatio;
         } else {
-          console.warn(
-            `Quick ratio extremo detectado: ${quickRatio.toFixed(
-              1
-            )}x - ignorando`
-          );
+          // console.warn(
+          //   `Quick ratio extremo detectado: ${quickRatio.toFixed(
+          //     1
+          //   )}x - ignorando`
+          // );
           metrics.quickRatio += 0.8; // Valor neutro
         }
 
         if (cashRatio <= 100) {
           metrics.cashRatio += cashRatio;
         } else {
-          console.warn(
-            `Cash ratio extremo detectado: ${cashRatio.toFixed(1)}x - ignorando`
-          );
+          // console.warn(
+          //   `Cash ratio extremo detectado: ${cashRatio.toFixed(1)}x - ignorando`
+          // );
           metrics.cashRatio += 0.1; // Valor neutro
         }
       } else {
@@ -1041,11 +1022,11 @@ function calculateAverageMetrics(
         // Asset turnover não deve exceder 20x
         metrics.assetTurnover += assetTurnover;
       } else {
-        console.warn(
-          `Asset turnover extremo detectado: ${assetTurnover.toFixed(
-            1
-          )}x - ignorando`
-        );
+        // console.warn(
+        //   `Asset turnover extremo detectado: ${assetTurnover.toFixed(
+        //     1
+        //   )}x - ignorando`
+        // );
         metrics.assetTurnover += 1; // Valor neutro
       }
 
@@ -1056,11 +1037,11 @@ function calculateAverageMetrics(
           // Não deve exceder 365x (1 dia)
           metrics.receivablesTurnover += receivablesTurnover;
         } else {
-          console.warn(
-            `Receivables turnover extremo detectado: ${receivablesTurnover.toFixed(
-              1
-            )}x - usando valor neutro`
-          );
+          // console.warn(
+          //   `Receivables turnover extremo detectado: ${receivablesTurnover.toFixed(
+          //     1
+          //   )}x - usando valor neutro`
+          // );
           metrics.receivablesTurnover += 6; // Valor neutro (60 dias)
         }
       } else {
@@ -1077,11 +1058,11 @@ function calculateAverageMetrics(
             // Não deve exceder 365x (1 dia)
             metrics.inventoryTurnover += inventoryTurnover;
           } else {
-            console.warn(
-              `Inventory turnover extremo detectado: ${inventoryTurnover.toFixed(
-                1
-              )}x - usando valor neutro`
-            );
+            // console.warn(
+            //   `Inventory turnover extremo detectado: ${inventoryTurnover.toFixed(
+            //     1
+            //   )}x - usando valor neutro`
+            // );
             metrics.inventoryTurnover += 4; // Valor neutro
           }
         } else {
@@ -1100,11 +1081,11 @@ function calculateAverageMetrics(
           // Debt-to-equity não deve exceder 100x
           metrics.debtToEquity += debtToEquity;
         } else {
-          console.warn(
-            `Debt-to-equity extremo detectado: ${debtToEquity.toFixed(
-              1
-            )}x - usando debt-to-assets como proxy`
-          );
+          // console.warn(
+          //   `Debt-to-equity extremo detectado: ${debtToEquity.toFixed(
+          //     1
+          //   )}x - usando debt-to-assets como proxy`
+          // );
           // Usar debt-to-assets como proxy mais conservador
           metrics.debtToEquity += Math.min(debtToAssets * 2, 10); // Máximo 10x
         }
@@ -1113,11 +1094,11 @@ function calculateAverageMetrics(
           // Debt-to-assets não deve exceder 10x
           metrics.debtToAssets += debtToAssets;
         } else {
-          console.warn(
-            `Debt-to-assets extremo detectado: ${debtToAssets.toFixed(
-              1
-            )}x - usando valor máximo`
-          );
+          // console.warn(
+          //   `Debt-to-assets extremo detectado: ${debtToAssets.toFixed(
+          //     1
+          //   )}x - usando valor máximo`
+          // );
           metrics.debtToAssets += 2; // Valor alto mas não extremo
         }
       } else {
@@ -1148,20 +1129,6 @@ function calculateAverageMetrics(
             "BBDC4",
           ].includes(ticker.toUpperCase()));
 
-      // Debug para bancos específicos
-      if (
-        ticker &&
-        ["BBSE3", "ITUB4", "BBAS3"].includes(ticker.toUpperCase())
-      ) {
-        console.log(`🏦 DEBUG COBERTURA JUROS ${ticker}:`, {
-          isLikelyBank,
-          netIncome,
-          interestExpense,
-          ebit,
-          period: i,
-        });
-      }
-
       if (isLikelyBank) {
         // Para bancos, usar lucro líquido ao invés de EBIT para cobertura de juros
         if (interestExpense > 0 && netIncome > 0) {
@@ -1187,11 +1154,11 @@ function calculateAverageMetrics(
             // Cobertura não deve exceder 1000x
             metrics.interestCoverage += interestCoverage;
           } else {
-            console.warn(
-              `Interest coverage extremo detectado: ${interestCoverage.toFixed(
-                1
-              )}x - usando valor máximo`
-            );
+            // console.warn(
+            //   `Interest coverage extremo detectado: ${interestCoverage.toFixed(
+            //     1
+            //   )}x - usando valor máximo`
+            // );
             metrics.interestCoverage += 50; // Valor alto mas não extremo
           }
         } else {
@@ -1207,11 +1174,11 @@ function calculateAverageMetrics(
         // Margem de FCO não deve exceder 500%
         metrics.operatingCashFlowMargin += operatingCashFlowMargin;
       } else {
-        console.warn(
-          `Operating cash flow margin extrema detectada: ${(
-            operatingCashFlowMargin * 100
-          ).toFixed(1)}% - ignorando`
-        );
+        // console.warn(
+        //   `Operating cash flow margin extrema detectada: ${(
+        //     operatingCashFlowMargin * 100
+        //   ).toFixed(1)}% - ignorando`
+        // );
         metrics.operatingCashFlowMargin += 0.1; // Valor neutro
       }
 
@@ -1219,11 +1186,11 @@ function calculateAverageMetrics(
         // Margem de FCL não deve exceder 500%
         metrics.freeCashFlowMargin += freeCashFlowMargin;
       } else {
-        console.warn(
-          `Free cash flow margin extrema detectada: ${(
-            freeCashFlowMargin * 100
-          ).toFixed(1)}% - ignorando`
-        );
+        // console.warn(
+        //   `Free cash flow margin extrema detectada: ${(
+        //     freeCashFlowMargin * 100
+        //   ).toFixed(1)}% - ignorando`
+        // );
         metrics.freeCashFlowMargin += 0.05; // Valor neutro
       }
 
@@ -1234,11 +1201,11 @@ function calculateAverageMetrics(
           // Conversão não deve exceder 20x
           metrics.cashConversionRatio += cashConversionRatio;
         } else {
-          console.warn(
-            `Cash conversion ratio extremo detectado: ${cashConversionRatio.toFixed(
-              1
-            )}x - usando valor neutro`
-          );
+          // console.warn(
+          //   `Cash conversion ratio extremo detectado: ${cashConversionRatio.toFixed(
+          //     1
+          //   )}x - usando valor neutro`
+          // );
           metrics.cashConversionRatio += 1; // Neutro
         }
       } else {
@@ -1302,9 +1269,6 @@ function calculateAverageMetrics(
       (metrics.roe === 0 || isNaN(metrics.roe)) &&
       fallbackMetrics.roe !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para ROE: ${metrics.roe} → ${fallbackMetrics.roe}`
-      );
       metrics.roe = fallbackMetrics.roe;
       fallbacksApplied++;
     }
@@ -1313,9 +1277,6 @@ function calculateAverageMetrics(
       (metrics.roa === 0 || isNaN(metrics.roa)) &&
       fallbackMetrics.roa !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para ROA: ${metrics.roa} → ${fallbackMetrics.roa}`
-      );
       metrics.roa = fallbackMetrics.roa;
       fallbacksApplied++;
     }
@@ -1324,9 +1285,6 @@ function calculateAverageMetrics(
       (metrics.netMargin === 0 || isNaN(metrics.netMargin)) &&
       fallbackMetrics.netMargin !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Net Margin: ${metrics.netMargin} → ${fallbackMetrics.netMargin}`
-      );
       metrics.netMargin = fallbackMetrics.netMargin;
       fallbacksApplied++;
     }
@@ -1335,9 +1293,6 @@ function calculateAverageMetrics(
       (metrics.grossMargin === 0 || isNaN(metrics.grossMargin)) &&
       fallbackMetrics.grossMargin !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Gross Margin: ${metrics.grossMargin} → ${fallbackMetrics.grossMargin}`
-      );
       metrics.grossMargin = fallbackMetrics.grossMargin;
       fallbacksApplied++;
     }
@@ -1346,9 +1301,6 @@ function calculateAverageMetrics(
       (metrics.operatingMargin === 0 || isNaN(metrics.operatingMargin)) &&
       fallbackMetrics.operatingMargin !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Operating Margin: ${metrics.operatingMargin} → ${fallbackMetrics.operatingMargin}`
-      );
       metrics.operatingMargin = fallbackMetrics.operatingMargin;
       fallbacksApplied++;
     }
@@ -1357,9 +1309,6 @@ function calculateAverageMetrics(
       (metrics.currentRatio === 0 || isNaN(metrics.currentRatio)) &&
       fallbackMetrics.currentRatio !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Current Ratio: ${metrics.currentRatio} → ${fallbackMetrics.currentRatio}`
-      );
       metrics.currentRatio = fallbackMetrics.currentRatio;
       fallbacksApplied++;
     }
@@ -1368,9 +1317,6 @@ function calculateAverageMetrics(
       (metrics.quickRatio === 0 || isNaN(metrics.quickRatio)) &&
       fallbackMetrics.quickRatio !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Quick Ratio: ${metrics.quickRatio} → ${fallbackMetrics.quickRatio}`
-      );
       metrics.quickRatio = fallbackMetrics.quickRatio;
       fallbacksApplied++;
     }
@@ -1379,9 +1325,6 @@ function calculateAverageMetrics(
       (metrics.debtToEquity === 0 || isNaN(metrics.debtToEquity)) &&
       fallbackMetrics.debtToEquity !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Debt-to-Equity: ${metrics.debtToEquity} → ${fallbackMetrics.debtToEquity}`
-      );
       metrics.debtToEquity = fallbackMetrics.debtToEquity;
       fallbacksApplied++;
     }
@@ -1390,9 +1333,6 @@ function calculateAverageMetrics(
       (metrics.assetTurnover === 0 || isNaN(metrics.assetTurnover)) &&
       fallbackMetrics.assetTurnover !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Asset Turnover: ${metrics.assetTurnover} → ${fallbackMetrics.assetTurnover}`
-      );
       metrics.assetTurnover = fallbackMetrics.assetTurnover;
       fallbacksApplied++;
     }
@@ -1402,9 +1342,6 @@ function calculateAverageMetrics(
       (metrics.revenueGrowth === 0 || isNaN(metrics.revenueGrowth)) &&
       fallbackMetrics.revenueGrowth !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Revenue Growth: ${metrics.revenueGrowth} → ${fallbackMetrics.revenueGrowth}`
-      );
       metrics.revenueGrowth = fallbackMetrics.revenueGrowth;
       fallbacksApplied++;
     }
@@ -1413,9 +1350,6 @@ function calculateAverageMetrics(
       (metrics.netIncomeGrowth === 0 || isNaN(metrics.netIncomeGrowth)) &&
       fallbackMetrics.netIncomeGrowth !== undefined
     ) {
-      console.log(
-        `Aplicando fallback para Net Income Growth: ${metrics.netIncomeGrowth} → ${fallbackMetrics.netIncomeGrowth}`
-      );
       metrics.netIncomeGrowth = fallbackMetrics.netIncomeGrowth;
       fallbacksApplied++;
     }
@@ -1448,9 +1382,6 @@ function calculateAverageMetrics(
         
         if (avgAtivoTotal > 0) {
           const fallbackWorkingCapitalRatio = (avgAtivoCirculante - avgPassivoCirculante) / avgAtivoTotal;
-          console.log(
-            `Aplicando fallback para Working Capital Ratio: ${metrics.workingCapitalRatio} → ${fallbackWorkingCapitalRatio}`
-          );
           metrics.workingCapitalRatio = fallbackWorkingCapitalRatio;
           fallbacksApplied++;
         }
@@ -1477,9 +1408,6 @@ function calculateAverageMetrics(
         
         if (avgPassivoCirculante > 0) {
           const fallbackCurrentRatio = avgAtivoCirculante / avgPassivoCirculante;
-          console.log(
-            `Aplicando fallback para Current Ratio: ${metrics.currentRatio} → ${fallbackCurrentRatio}`
-          );
           metrics.currentRatio = fallbackCurrentRatio;
           fallbacksApplied++;
         }
@@ -1499,9 +1427,6 @@ function calculateAverageMetrics(
       if (margemEbitda.length > 0) {
         const avgMargemEbitda = margemEbitda.reduce((sum, val) => sum + (val as number), 0) / margemEbitda.length;
         if (avgMargemEbitda > 0) {
-          console.log(
-            `Aplicando fallback para Operating Margin: ${metrics.operatingMargin} → ${avgMargemEbitda} (usando margem EBITDA)`
-          );
           metrics.operatingMargin = avgMargemEbitda;
           fallbacksApplied++;
         }
@@ -1519,18 +1444,15 @@ function calculateAverageMetrics(
           isNaN(currentValue) ||
           currentValue === undefined)
       ) {
-        console.log(
-          `Aplicando fallback adicional para ${key}: ${currentValue} → ${fallbackValue}`
-        );
         (metrics as any)[key] = fallbackValue;
         fallbacksApplied++;
       }
     });
 
     if (fallbacksApplied > 0) {
-      console.log(
-        `Total de ${fallbacksApplied} fallbacks aplicados usando dados do financial_data`
-      );
+      // console.log(
+      //   `Total de ${fallbacksApplied} fallbacks aplicados usando dados do financial_data`
+      // );
     }
   }
 
@@ -1663,9 +1585,7 @@ function calculateFallbackMetrics(
   if (isArrayData) {
     // Calcular médias dos arrays de dados históricos
     if (fallbackData.roe && Array.isArray(fallbackData.roe)) {
-      console.log(`calculateFallbackMetrics - ROE: ${fallbackData.roe}`);
       const avgRoe = calculateAverage(fallbackData.roe);
-      console.log(`calculateFallbackMetrics - AVG ROE: ${avgRoe}`);
       // ROE será aplicado apenas se necessário no fallback específico, não aqui
     }
 
@@ -3419,23 +3339,6 @@ function getSectorContext(
       marginExpectation: "MEDIUM" as const,
       cashIntensive: true,
     };
-    if (
-      ticker &&
-      [
-        "ITUB4",
-        "BBAS3",
-        "BBSE3",
-        "SANB11",
-        "PETR4",
-        "VALE3",
-        "MGLU3",
-        "WEGE3",
-      ].includes(ticker.toUpperCase())
-    ) {
-      console.log(
-        `✅ SETOR DETECTADO ${ticker}: ${result.type} (por setor/indústria)`
-      );
-    }
     return result;
   }
 
@@ -3967,7 +3870,6 @@ export function calculateOverallScore(
       fundamentalist: 0.25, // 25% (vs 20% Brasil) - análise fundamentalista mais relevante
       statements: 0.26,    // 26% (vs 20% Brasil) - demonstrações financeiras mais importantes
     };
-    console.log("🌎 BDR detectado - ajustando pesos das estratégias para mercado internacional");
   }
 
   // Distribuir peso das estratégias de dividendos entre dividendYield, barsi e gordon

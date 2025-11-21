@@ -2,12 +2,14 @@
   "crons": [
     {
       "path": "/api/cron/fetch-ward",
-      "schedule": "0 2 * * *"
+      "schedule": "0 2 * * *",
+      "maxDuration": 60
     }
   ],
   "functions": {
     "src/app/api/**": {
-      "memory": 1024
+      "memory": 1024,
+      "maxDuration": 60
     },
     "src/app/api/fetch-ward-data/route.ts": {
       "maxDuration": 60

@@ -39,7 +39,8 @@ ${blogPosts.map(post => {
     return new NextResponse(sitemap, {
       headers: {
         'Content-Type': 'application/xml',
-        'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+        // Cache reduzido para atualização mais rápida: 1 hora no CDN, pode servir stale por até 6 horas
+        'Cache-Control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=21600',
       },
     })
   } catch (error) {

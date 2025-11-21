@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { requireAdminUser } from '@/lib/user-service';
 import { PrismaClient } from '@prisma/client';
 import { clearPostsCache } from '@/lib/blog-service';
+import { revalidatePath } from 'next/cache';
 
 const prisma = new PrismaClient();
 
@@ -107,8 +108,14 @@ export async function PUT(
       data,
     });
 
-    // Limpar cache
+    // Limpar cache de posts
     clearPostsCache();
+
+    // Revalidar sitemap se post foi publicado ou despublicado
+    if (data.status === 'PUBLISHED' || (post.status === 'PUBLISHED' && data.status === 'DRAFT')) {
+      revalidatePath('/sitemap-blog.xml');
+      revalidatePath('/sitemap.xml');
+    }
 
     return NextResponse.json({ post });
   } catch (error: any) {

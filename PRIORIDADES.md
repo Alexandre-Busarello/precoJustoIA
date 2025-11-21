@@ -1,6 +1,5 @@
-Na LP principal, em "/planos", em "/checkout" e em todos outros lugares que houver venda precisamos obter as ofertas do backend que por sua vez irá ler do banco. Isso faz parte de uma iniciativa para flexebilizar e me permitir alterar os preços de forma fácil em toda a plataforma. Teremos sempre uma oferta mensal de valor X e uma anual de valor (X * 12) - Y% de desconto.
-
-Relatórios de mudanças relevantes devem melhorar e só citar mudanças.
+Utilizar premissas de WACC e crescimento que reflitam a realidade atual da Vale e do mercado de minério de ferro.
+Relatórios de mudanças relevantes devem melhorar e só citar mudanças. (FCD, usar IA pra chegar nesse dado?)
 
 HUB DE NOTICIAIS (WEB SCRAPPING)
 

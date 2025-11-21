@@ -262,11 +262,20 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     const terminalValue = terminalCashflow / (discountRate - growthRate);
     const presentValueTerminal = terminalValue / Math.pow(1 + discountRate, yearsProjection);
     
-    // 5. Valor Total da Empresa
+    // 5. Valor Total da Empresa (Enterprise Value)
+    // IMPORTANTE: No modelo DCF, o Enterprise Value calculado já representa o valor total da empresa.
+    // A dívida já está implícita no cálculo porque:
+    // - Os fluxos de caixa livre (FCFF) já são calculados após pagamento de juros
+    // - A taxa de desconto (WACC) já considera o custo da dívida
+    // Portanto, NÃO devemos subtrair a dívida líquida novamente (seria dupla contagem)
     const enterpriseValue = presentValueCashflows + presentValueTerminal;
     
-    // 6. Preço Justo por Ação
-    return enterpriseValue / sharesOutstanding;
+    console.log(`[FCD DEBUG calculateFCDFairValue] Enterprise Value:`, enterpriseValue);
+    
+    // 6. Preço Justo por Ação = Enterprise Value / Número de Ações
+    const pricePerShare = enterpriseValue / sharesOutstanding;
+    console.log(`[FCD DEBUG calculateFCDFairValue] Preço por ação:`, pricePerShare, '(EV:', enterpriseValue, '/ Shares:', sharesOutstanding, ')');
+    return pricePerShare;
   }
   
   // Filtrar empresas por tamanho (Market Cap)

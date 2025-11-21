@@ -31,6 +31,12 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     // Ajustar taxa de desconto para BDRs (mercado internacional tem WACC diferente)
     const defaultDiscountRate = isBDR ? 0.12 : 0.10; // 12% para BDRs (mercado americano), 10% para Brasil
     
+    // IMPORTANTE: No modelo DCF, não subtraímos a dívida líquida do Enterprise Value porque:
+    // - O Enterprise Value calculado pelo DCF já representa o valor total da empresa
+    // - A dívida já está implícita nos fluxos de caixa (juros já foram descontados)
+    // - A taxa de desconto (WACC) já considera o custo da dívida
+    // Subtrair a dívida novamente seria dupla contagem
+    
     const fairValue = this.calculateFCDFairValue(
       ebitda, 
       fluxoCaixaLivre, 
@@ -157,6 +163,11 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
 
       // === CÁLCULO DO FCD ===
+      // IMPORTANTE: No modelo DCF, não subtraímos a dívida líquida do Enterprise Value porque:
+      // - O Enterprise Value calculado pelo DCF já representa o valor total da empresa
+      // - A dívida já está implícita nos fluxos de caixa (juros já foram descontados)
+      // - A taxa de desconto (WACC) já considera o custo da dívida
+      // Subtrair a dívida novamente seria dupla contagem
       
       // 1. Fluxo de Caixa Base
       let fcffBase: number;
@@ -192,13 +203,14 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       const terminalValue = terminalCashflow / (effectiveDiscountRate - growthRate);
       const presentValueTerminal = terminalValue / Math.pow(1 + effectiveDiscountRate, yearsProjection);
 
-      // 5. Valor Total da Empresa
+      // 5. Valor Total da Empresa (Enterprise Value)
+      // O Enterprise Value do DCF já representa o valor total da empresa
       const enterpriseValue = presentValueCashflows + presentValueTerminal;
 
-      // 6. Preço Justo por Ação
+      // 6. Preço Justo por Ação = Enterprise Value / Número de Ações
       const fairValuePerShare = enterpriseValue / sharesOutstanding;
 
-      // 7. Calcular Margem de Segurança
+      // 8. Calcular Margem de Segurança
       const marginOfSafetyActual = (fairValuePerShare / currentPrice) - 1;
 
       // Ajustar critérios para BDRs

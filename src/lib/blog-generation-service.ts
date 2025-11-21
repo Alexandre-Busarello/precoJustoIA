@@ -469,6 +469,7 @@ REQUISITOS DO CONTEÚDO:
 - Use o tom de voz de um investidor experiente e calejado, não um acadêmico.
 - Seja opinativo e use emoção para engajar o leitor.
 - Escreva o artigo completo em Markdown com formatação adequada.
+- Busque através da ferramente de busca do Gemini para obter informações mais recentes para fundamentar o artigo.
 
 INÍCIO DA RESPOSTA (comece diretamente com {):`;
 

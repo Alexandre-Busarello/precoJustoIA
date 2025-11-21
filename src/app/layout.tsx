@@ -130,17 +130,22 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* Google Analytics */}
+        {/* Google Analytics & Google Ads */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-G7T3PKSEY4"
           strategy="afterInteractive"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=AW-17611977676"
+          strategy="afterInteractive"
+        />
+        <Script id="google-tags" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
             gtag('config', 'G-G7T3PKSEY4');
+            gtag('config', 'AW-17611977676');
           `}
         </Script>
         <QueryProvider>

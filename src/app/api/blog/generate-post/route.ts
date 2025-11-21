@@ -36,6 +36,9 @@ export async function POST(request: NextRequest) {
     // Gerar post
     const { post, topics, slug } = await generateDailyPost();
 
+    // Calcular tempo de leitura
+    const readTime = calculateReadTime(post.content);
+
     // Salvar no banco como DRAFT
     const blogPost = await (prisma as any).blogPost.create({
       data: {
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest) {
         title: post.title,
         excerpt: post.excerpt,
         category: post.category,
-        readTime: post.readTime,
+        readTime,
         author: 'Equipe Preço Justo AI',
         featured: false,
         seoTitle: post.seoTitle,

@@ -95,7 +95,7 @@ export default async function Home() {
   const session = await getServerSession(authOptions)
   
   // Pegar os 3 posts mais recentes para exibir na homepage
-  const blogPosts = getAllPosts()
+  const blogPosts = await getAllPosts()
   const recentPosts = blogPosts.slice(0, 3)
 
   return (

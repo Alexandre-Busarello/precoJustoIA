@@ -6,7 +6,7 @@ export async function GET() {
   
   try {
     // Carregar todos os posts
-    const blogPosts = getAllPosts()
+    const blogPosts = await getAllPosts()
     
     // Obter a data mais recente de atualização
     const lastModDate = blogPosts.length > 0 

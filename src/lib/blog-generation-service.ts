@@ -395,14 +395,10 @@ export async function generateDailyPost(): Promise<{
   const slug = await generateUniqueSlug(post.title);
   console.log(`✅ Slug gerado: ${slug}`);
 
-  const readTime = calculateReadTime(post.content);
-  console.log(`⏱️ Tempo de leitura estimado: ${readTime}`);
+  console.log(`⏱️ Tempo de leitura será calculado ao salvar`);
 
   return {
-    post: {
-      ...post,
-      readTime,
-    } as GeneratedPost & { readTime: string },
+    post,
     topics,
     slug,
   };

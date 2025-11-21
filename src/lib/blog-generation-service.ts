@@ -55,6 +55,75 @@ const CATEGORIES = [
 ];
 
 /**
+ * Extrai JSON de uma string de resposta do Gemini
+ * Lida com múltiplos formatos: markdown, texto puro, etc.
+ */
+function extractJSON<T>(response: string): T {
+  let jsonString = response.trim();
+  
+  // Estratégia 1: Remover markdown code blocks
+  jsonString = jsonString.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+  
+  // Estratégia 2: Remover texto antes do primeiro {
+  const firstBrace = jsonString.indexOf('{');
+  if (firstBrace === -1) {
+    console.error('Nenhum { encontrado na resposta');
+    console.error('Resposta (primeiros 1000 chars):', response.substring(0, 1000));
+    throw new Error('Resposta não contém JSON válido - nenhum { encontrado');
+  }
+  
+  if (firstBrace > 0) {
+    jsonString = jsonString.substring(firstBrace);
+  }
+  
+  // Estratégia 3: Encontrar o JSON completo contando chaves
+  let braceCount = 0;
+  let endIdx = -1;
+  
+  for (let i = 0; i < jsonString.length; i++) {
+    if (jsonString[i] === '{') {
+      braceCount++;
+    } else if (jsonString[i] === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        endIdx = i;
+        break;
+      }
+    }
+  }
+  
+  if (endIdx === -1 || braceCount !== 0) {
+    console.error('JSON malformado - chaves não balanceadas');
+    console.error('Resposta (primeiros 2000 chars):', response.substring(0, 2000));
+    throw new Error('Resposta não contém JSON válido - chaves não balanceadas');
+  }
+  
+  jsonString = jsonString.substring(0, endIdx + 1);
+  
+  // Tentar fazer parse
+  try {
+    const parsed = JSON.parse(jsonString) as T;
+    return parsed;
+  } catch (parseError) {
+    // Se falhou, tentar limpar mais
+    // Remover possíveis caracteres invisíveis ou problemas de encoding
+    jsonString = jsonString.replace(/[\u200B-\u200D\uFEFF]/g, ''); // Remove zero-width spaces
+    jsonString = jsonString.replace(/\n\s*\n/g, '\n'); // Remove linhas vazias
+    
+    try {
+      const parsed = JSON.parse(jsonString) as T;
+      return parsed;
+    } catch (secondParseError) {
+      console.error('Erro ao fazer parse do JSON (tentativa 1):', parseError);
+      console.error('Erro ao fazer parse do JSON (tentativa 2):', secondParseError);
+      console.error('JSON extraído (primeiros 1500 chars):', jsonString.substring(0, 1500));
+      console.error('JSON extraído (últimos 500 chars):', jsonString.substring(Math.max(0, jsonString.length - 500)));
+      throw new Error(`Erro ao fazer parse do JSON: ${secondParseError instanceof Error ? secondParseError.message : 'Erro desconhecido'}`);
+    }
+  }
+}
+
+/**
  * Busca tópicos recentes e quentes sobre investimentos/B3 usando Gemini
  */
 export async function searchHotTopics(): Promise<TopicSearchResult> {
@@ -86,8 +155,18 @@ RESTRIÇÕES DE QUALIDADE:
 - Os tópicos devem ser acionáveis (ex: "Por que a ação X caiu e abriu oportunidade" ao invés de "Ação X caiu").
 - As palavras-chave devem ter intenção de busca informacional ou transacional.
 
-FORMATO DE SAÍDA (IMPORTANTE):
-Você deve retornar APENAS um objeto JSON válido, minificado ou formatado, sem blocos de código markdown (\`\`\`json), sem introdução e sem conclusão. A estrutura deve ser EXATAMENTE esta:
+FORMATO DE SAÍDA (CRÍTICO - LEIA COM ATENÇÃO):
+Você DEVE retornar APENAS e EXCLUSIVAMENTE um objeto JSON válido. 
+
+REGRAS ABSOLUTAS:
+- NÃO use markdown code blocks (\`\`\`json ou \`\`\`)
+- NÃO adicione explicações antes ou depois do JSON
+- NÃO adicione texto introdutório ou conclusivo
+- NÃO use aspas simples, apenas aspas duplas
+- Comece diretamente com { e termine com }
+- O JSON deve ser válido e parseável
+
+A estrutura deve ser EXATAMENTE esta:
 
 {
   "market_context": "Resumo de 1 frase sobre o sentimento atual do mercado (ex: Bullish com cautela fiscal)",
@@ -105,7 +184,9 @@ Você deve retornar APENAS um objeto JSON válido, minificado ou formatado, sem 
   ]
 }
 
-IMPORTANTE: Retorne pelo menos 3-5 trending_topics relevantes e bem estruturados.`;
+IMPORTANTE: Retorne pelo menos 3-5 trending_topics relevantes e bem estruturados.
+
+INÍCIO DA RESPOSTA (comece aqui):`;
 
   const model = 'gemini-2.5-flash-lite';
   const tools = [{ googleSearch: {} }];
@@ -124,32 +205,60 @@ IMPORTANTE: Retorne pelo menos 3-5 trending_topics relevantes e bem estruturados
     },
   ];
 
-  try {
-    const response = await ai.models.generateContentStream({
-      model,
-      config,
-      contents,
-    });
+  const maxRetries = 2;
+  let lastError: Error | null = null;
 
-    let fullResponse = '';
-    for await (const chunk of response) {
-      if (chunk.text) {
-        fullResponse += chunk.text;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContentStream({
+        model,
+        config,
+        contents,
+      });
+
+      let fullResponse = '';
+      for await (const chunk of response) {
+        if (chunk.text) {
+          fullResponse += chunk.text;
+        }
+      }
+
+      // Log da resposta completa para debug (apenas na primeira tentativa)
+      if (attempt === 0 && fullResponse.length > 0) {
+        console.log('📥 Resposta do Gemini (primeiros 500 chars):', fullResponse.substring(0, 500));
+      }
+
+      // Extrair JSON da resposta usando função auxiliar
+      const result = extractJSON<TopicSearchResult>(fullResponse);
+      
+      // Validar estrutura básica
+      if (!result.market_context || !result.trending_topics || !Array.isArray(result.trending_topics)) {
+        console.error('JSON inválido - estrutura incorreta:', result);
+        throw new Error('Estrutura JSON inválida: faltam campos obrigatórios');
+      }
+      
+      // Validar que tem pelo menos um tópico
+      if (result.trending_topics.length === 0) {
+        console.warn('Nenhum tópico encontrado');
+        throw new Error('Nenhum tópico encontrado na resposta');
+      }
+      
+      console.log(`✅ JSON extraído com sucesso: ${result.trending_topics.length} tópicos encontrados`);
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`❌ Erro ao buscar tópicos (tentativa ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
+      
+      if (attempt < maxRetries) {
+        // Aguardar antes de tentar novamente
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+        console.log(`🔄 Tentando novamente...`);
       }
     }
-
-    // Extrair JSON da resposta
-    const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Resposta não contém JSON válido');
-    }
-
-    const result = JSON.parse(jsonMatch[0]) as TopicSearchResult;
-    return result;
-  } catch (error) {
-    console.error('Erro ao buscar tópicos:', error);
-    throw error;
   }
+
+  // Se chegou aqui, todas as tentativas falharam
+  throw lastError || new Error('Erro ao buscar tópicos após múltiplas tentativas');
 }
 
 /**
@@ -280,7 +389,19 @@ LINKS EXTERNOS (OBRIGATÓRIO incluir pelo menos 2):
 OBJETIVO:
 Transformar dados técnicos frios em uma leitura agradável, educativa e que passe autoridade, incentivando o leitor a ter cautela e foco no longo prazo.
 
-Retorne APENAS um JSON válido (sem markdown, sem explicações) com esta estrutura:
+FORMATO DE RESPOSTA (CRÍTICO):
+Você DEVE retornar APENAS e EXCLUSIVAMENTE um objeto JSON válido.
+
+REGRAS ABSOLUTAS:
+- NÃO use markdown code blocks (\`\`\`json ou \`\`\`)
+- NÃO adicione explicações antes ou depois do JSON
+- NÃO adicione texto introdutório ou conclusivo
+- NÃO use aspas simples, apenas aspas duplas
+- Comece diretamente com { e termine com }
+- O JSON deve ser válido e parseável
+
+A estrutura deve ser EXATAMENTE esta:
+
 {
   "title": "Título magnético otimizado para SEO",
   "excerpt": "Resumo cativante de 150-200 caracteres",
@@ -292,11 +413,13 @@ Retorne APENAS um JSON válido (sem markdown, sem explicações) com esta estrut
   "keywords": ["palavra-chave 1", "palavra-chave 2"]
 }
 
-IMPORTANTE: 
+REQUISITOS DO CONTEÚDO:
 - O conteúdo deve ser original, útil e otimizado para busca orgânica.
 - Use o tom de voz de um investidor experiente e calejado, não um acadêmico.
 - Seja opinativo e use emoção para engajar o leitor.
-- Escreva o artigo completo em Markdown com formatação adequada.`;
+- Escreva o artigo completo em Markdown com formatação adequada.
+
+INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
   const model = 'gemini-2.5-flash-lite';
   const tools = [{ googleSearch: {} }];
@@ -315,36 +438,51 @@ IMPORTANTE:
     },
   ];
 
-  try {
-    const response = await ai.models.generateContentStream({
-      model,
-      config,
-      contents,
-    });
+  const maxRetries = 2;
+  let lastError: Error | null = null;
 
-    let fullResponse = '';
-    for await (const chunk of response) {
-      if (chunk.text) {
-        fullResponse += chunk.text;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContentStream({
+        model,
+        config,
+        contents,
+      });
+
+      let fullResponse = '';
+      for await (const chunk of response) {
+        if (chunk.text) {
+          fullResponse += chunk.text;
+        }
+      }
+
+      // Log da resposta completa para debug (apenas na primeira tentativa)
+      if (attempt === 0 && fullResponse.length > 0) {
+        console.log('📥 Resposta do Gemini (primeiros 500 chars):', fullResponse.substring(0, 500));
+      }
+
+      // Extrair JSON da resposta usando função auxiliar
+      const result = extractJSON<GeneratedPost>(fullResponse);
+      
+      // Validar conteúdo gerado
+      validateGeneratedPost(result);
+
+      console.log(`✅ Post gerado com sucesso: "${result.title}"`);
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`❌ Erro ao gerar post (tentativa ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
+      
+      if (attempt < maxRetries) {
+        // Aguardar antes de tentar novamente
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+        console.log(`🔄 Tentando gerar post novamente...`);
       }
     }
-
-    // Extrair JSON da resposta
-    const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Resposta não contém JSON válido');
-    }
-
-    const result = JSON.parse(jsonMatch[0]) as GeneratedPost;
-    
-    // Validar conteúdo gerado
-    validateGeneratedPost(result);
-
-    return result;
-  } catch (error) {
-    console.error('Erro ao gerar post:', error);
-    throw error;
   }
+
+  // Se chegou aqui, todas as tentativas falharam
+  throw lastError || new Error('Erro ao gerar post após múltiplas tentativas');
 }
 
 /**

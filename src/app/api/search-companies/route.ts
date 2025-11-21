@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
+import { cache } from '@/lib/cache-service';
+
+const CACHE_TTL = 24 * 60 * 60; // 24 horas em segundos
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,6 +11,15 @@ export async function GET(request: NextRequest) {
     
     if (!query || query.length < 1) {
       return NextResponse.json({ companies: [] });
+    }
+
+    // Criar chave de cache considerando o parâmetro de busca
+    const cacheKey = `search-companies:${query.toLowerCase()}`;
+
+    // Verificar cache
+    const cachedData = await cache.get(cacheKey);
+    if (cachedData) {
+      return NextResponse.json(cachedData);
     }
     
     // Buscar empresas por ticker ou nome (case insensitive)
@@ -70,7 +82,7 @@ export async function GET(request: NextRequest) {
       return a.ticker.localeCompare(b.ticker);
     });
 
-    return NextResponse.json({ 
+    const response = { 
       companies: sortedCompanies.map(company => ({
         id: company.id,
         ticker: company.ticker,
@@ -79,7 +91,12 @@ export async function GET(request: NextRequest) {
         logoUrl: company.logoUrl,
         assetType: company.assetType // Mantido para compatibilidade futura
       }))
-    });
+    };
+
+    // Salvar no cache
+    await cache.set(cacheKey, response, { ttl: CACHE_TTL });
+
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('Erro na API search-companies:', error);

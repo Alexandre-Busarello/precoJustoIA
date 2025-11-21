@@ -456,7 +456,6 @@ export function analyzeFinancialStatements(
   // Detectar se é BDR para ajustar benchmarks
   const isBDR = isBDRTicker(company?.ticker);
   const benchmarks = getSectorBenchmarks(sectorContext, sizeContext, isBDR);
-  console.log("Data validation results:", dataValidation);
   if (isBDR) {
     console.log("🌎 BDR detectado - usando benchmarks ajustados para mercado internacional");
   }
@@ -535,7 +534,6 @@ export function analyzeFinancialStatements(
     // Nova lógica: Score começa em 100 e é reduzido por penalidades
     // scoreAdjustment positivo = bônus, scoreAdjustment negativo = penalidade
     // Score base = 100, ajustado pelo scoreAdjustment
-    console.log(`${key} Analysis:`, analysis);
     let normalizedScore = 100 + analysis.scoreAdjustment;
 
     // Garantir que o score fique entre 0 e 100
@@ -543,16 +541,7 @@ export function analyzeFinancialStatements(
 
     const weight = weights[key as keyof typeof weights];
     weightedScore += normalizedScore * weight;
-
-    console.log(`${key} Analysis:`, {
-      scoreAdjustment: analysis.scoreAdjustment,
-      normalizedScore: normalizedScore.toFixed(1),
-      weight: weight,
-      contribution: (normalizedScore * weight).toFixed(1),
-    });
   });
-
-  console.log("Final weighted score:", weightedScore.toFixed(1));
 
   // === GARANTIR QUE O SCORE ESTÁ ENTRE 0-100 ===
   let finalScore = Math.max(0, Math.min(100, Math.round(weightedScore)));
@@ -564,49 +553,21 @@ export function analyzeFinancialStatements(
   const totalSignals = redFlags.length + reconciledPositiveSignals.length;
   const alertRatio = totalSignals > 0 ? redFlags.length / totalSignals : 0;
 
-  console.log(
-    `📊 Proporção de Alertas: ${
-      redFlags.length
-    } alertas / ${totalSignals} sinais totais = ${(alertRatio * 100).toFixed(
-      1
-    )}%`
-  );
-
   let additionalPenalty = 0;
 
   // PENALIZAÇÃO POR ALTA PROPORÇÃO DE ALERTAS
   if (alertRatio >= 0.85 && redFlags.length >= 6) {
     // 85%+ de alertas com 6+ problemas = Empresa Péssima
     additionalPenalty = 30;
-    console.log(
-      `🚨 Empresa Péssima: ${(alertRatio * 100).toFixed(0)}% de alertas (${
-        redFlags.length
-      } problemas) - penalização crítica de -30 pontos`
-    );
   } else if (alertRatio >= 0.75 && redFlags.length >= 5) {
     // 75%+ de alertas com 5+ problemas = empresa fraca
     additionalPenalty = 25;
-    console.log(
-      `⚠️ EMPRESA FRACA: ${(alertRatio * 100).toFixed(0)}% de alertas (${
-        redFlags.length
-      } problemas) - penalização severa de -25 pontos`
-    );
   } else if (alertRatio >= 0.65 && redFlags.length >= 4) {
     // 65%+ de alertas com 4+ problemas = empresa problemática
     additionalPenalty = 20;
-    console.log(
-      `⚠️ EMPRESA PROBLEMÁTICA: ${(alertRatio * 100).toFixed(0)}% de alertas (${
-        redFlags.length
-      } problemas) - penalização de -20 pontos`
-    );
   } else if (alertRatio >= 0.5 && redFlags.length >= 3) {
     // 50%+ de alertas com 3+ problemas = empresa mediana com problemas
     additionalPenalty = 15;
-    console.log(
-      `⚠️ PROBLEMAS SIGNIFICATIVOS: ${(alertRatio * 100).toFixed(
-        0
-      )}% de alertas (${redFlags.length} problemas) - penalização de -15 pontos`
-    );
   }
 
   // PENALIZAÇÃO POR CONTRADIÇÕES REMOVIDAS
@@ -616,21 +577,12 @@ export function analyzeFinancialStatements(
     if (contradictionsRemoved >= 5) {
       // 5+ contradições: empresa com sérios problemas estruturais mascarados
       contradictionPenalty = 20;
-      console.log(
-        `⚠️ PENALIZAÇÃO SEVERA: ${contradictionsRemoved} contradições removidas indicam problemas graves mascarados`
-      );
     } else if (contradictionsRemoved >= 3) {
       // 3-4 contradições: problemas significativos
       contradictionPenalty = 15;
-      console.log(
-        `⚠️ PENALIZAÇÃO MODERADA: ${contradictionsRemoved} contradições removidas`
-      );
     } else if (contradictionsRemoved >= 1) {
       // 1-2 contradições: problemas menores
       contradictionPenalty = 10;
-      console.log(
-        `⚠️ PENALIZAÇÃO LEVE: ${contradictionsRemoved} contradições removidas`
-      );
     }
 
     additionalPenalty += contradictionPenalty;
@@ -639,9 +591,6 @@ export function analyzeFinancialStatements(
   // APLICAR PENALIZAÇÃO TOTAL
   if (additionalPenalty > 0) {
     finalScore = Math.max(0, finalScore - additionalPenalty);
-    console.log(
-      `Score ajustado após análise de proporção: ${finalScore} (penalização total: -${additionalPenalty} pontos)`
-    );
   }
 
   // === PENALIZAÇÕES CRÍTICAS DIRETAS ===
@@ -667,7 +616,6 @@ export function analyzeFinancialStatements(
     benchmarks,
     sectorContext
   );
-  console.log("Company Strength:", companyStrength);
 
   // === VERIFICAÇÃO DE PROBLEMAS CRÍTICOS COMBINADOS ===
   // Certas combinações de problemas são tão graves que o score deve ser limitado
@@ -745,20 +693,6 @@ export function analyzeFinancialStatements(
   } else if (finalScore < 70 || redFlags.length >= 4) {
     riskLevel = "MEDIUM";
   }
-
-  console.log("Final analysis result:", {
-    finalScore,
-    riskLevel,
-    companyStrength,
-    redFlagsCount: redFlags.length,
-    positiveSignalsCount: positiveSignals.length,
-    reconciledPositiveSignalsCount: reconciledPositiveSignals.length,
-    contradictionsRemoved: contradictionsRemoved,
-    scoreAdjustment:
-      contradictionsRemoved > 0
-        ? `Penalizado por ${contradictionsRemoved} contradições`
-        : "Nenhuma contradição",
-  });
 
   return {
     score: finalScore,
@@ -1928,7 +1862,6 @@ function calculateFallbackMetrics(
   // Calcular indicadores derivados apenas se temos dados base válidos
   // Não inventar valores se não conseguimos calcular
 
-  console.log("Fallback metrics calculated:", metrics);
   return metrics;
 }
 
@@ -2417,11 +2350,6 @@ function analyzeLiquidityMetrics(
     redFlags: [],
     positiveSignals: [],
   };
-
-  console.log("metrics", metrics);
-  console.log("benchmarks", benchmarks);
-  console.log("sectorContext", sectorContext);
-  console.log("dataValidation", dataValidation);
 
   const isFinancialSector = sectorContext.type === "FINANCIAL";
 
@@ -3216,9 +3144,6 @@ function assessCompanyStrengthFromAverages(
   if (metrics.roe >= benchmarks.excellentROE) strengthScore += 40;
   else if (metrics.roe >= benchmarks.goodROE) strengthScore += 25;
   else if (metrics.roe >= benchmarks.minROE) strengthScore += 15;
-  console.log(
-    `assessCompanyStrengthFromAverages - Rentabilidade: ${metrics.roe} - ${strengthScore}`
-  );
 
   // Liquidez (25% do peso)
   if (
@@ -3238,9 +3163,6 @@ function assessCompanyStrengthFromAverages(
   )
     strengthScore -= 10;
   else if (!metrics.currentRatio) strengthScore += 5;
-  console.log(
-    `assessCompanyStrengthFromAverages - Liquidez: ${metrics.currentRatio} - ${strengthScore}`
-  );
 
   // Endividamento (20% do peso)
   if (metrics.debtToEquity <= benchmarks.maxDebtToEquity * 0.5)
@@ -3248,17 +3170,11 @@ function assessCompanyStrengthFromAverages(
   else if (metrics.debtToEquity <= benchmarks.maxDebtToEquity)
     strengthScore += 10;
   else strengthScore -= 15;
-  console.log(
-    `assessCompanyStrengthFromAverages - Endividamento: ${metrics.debtToEquity} - ${strengthScore}`
-  );
 
   // Estabilidade (15% do peso)
   if (metrics.revenueStability >= 0.7 && metrics.marginStability >= 0.6)
     strengthScore += 15;
   else if (metrics.revenueStability >= 0.5) strengthScore += 8;
-  console.log(
-    `assessCompanyStrengthFromAverages - Estabilidade: ${metrics.revenueStability} - ${strengthScore}`
-  );
 
   if (strengthScore >= 80) return "VERY_STRONG";
   if (strengthScore >= 60) return "STRONG";

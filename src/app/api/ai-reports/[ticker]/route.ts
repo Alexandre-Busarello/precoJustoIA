@@ -5,6 +5,9 @@ import { getCurrentUser } from '@/lib/user-service'
 import { AIReportsService } from '@/lib/ai-reports-service'
 import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { prisma } from '@/lib/prisma'
+import { cache } from '@/lib/cache-service'
+
+const CACHE_TTL = 4 * 60 * 60; // 4 horas em segundos
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +26,22 @@ export async function GET(
     const session = await getServerSession(authOptions)
     const userId = session?.user?.id
 
+    // Verificar se usuário é Premium para conteúdo completo
+    let userIsPremium = false
+    if (userId) {
+      const user = await getCurrentUser()
+      userIsPremium = user?.isPremium || false
+    }
+
+    // Criar chave de cache considerando todos os parâmetros
+    const cacheKey = `ai-reports:${ticker}:${type || 'default'}:${limit || 'single'}:${userIsPremium ? 'premium' : 'free'}`;
+
+    // Verificar cache
+    const cachedData = await cache.get(cacheKey);
+    if (cachedData) {
+      return NextResponse.json(cachedData);
+    }
+
     // Buscar empresa
     const company = await safeQueryWithParams(
       'company-by-ticker-ai-reports-route',
@@ -37,13 +56,6 @@ export async function GET(
         { error: 'Empresa não encontrada' },
         { status: 404 }
       )
-    }
-
-    // Verificar se usuário é Premium para conteúdo completo
-    let userIsPremium = false
-    if (userId) {
-      const user = await getCurrentUser()
-      userIsPremium = user?.isPremium || false
     }
 
     // Se tipo for FUNDAMENTAL_CHANGE ou limit especificado, buscar múltiplos relatórios
@@ -86,11 +98,16 @@ export async function GET(
         isPreview: !userIsPremium
       }))
 
-      return NextResponse.json({
+      const response = {
         success: true,
         reports: processedReports,
         count: reports.length
-      })
+      };
+
+      // Salvar no cache
+      await cache.set(cacheKey, response, { ttl: CACHE_TTL });
+
+      return NextResponse.json(response)
     }
 
     // Buscar relatório único (comportamento padrão para MONTHLY_OVERVIEW)
@@ -133,24 +150,34 @@ export async function GET(
 
     // Para usuários não Premium, retornar apenas preview
     if (!userIsPremium) {
-      return NextResponse.json({
+      const response = {
         success: true,
         report: {
           ...report,
           content: AIReportsService.generatePreview(report.content),
           isPreview: true
         }
-      })
+      };
+
+      // Salvar no cache
+      await cache.set(cacheKey, response, { ttl: CACHE_TTL });
+
+      return NextResponse.json(response)
     }
 
     // Para usuários Premium, retornar conteúdo completo
-    return NextResponse.json({
+    const response = {
       success: true,
       report: {
         ...report,
         isPreview: false
       }
-    })
+    };
+
+    // Salvar no cache
+    await cache.set(cacheKey, response, { ttl: CACHE_TTL });
+
+    return NextResponse.json(response)
 
   } catch (error) {
     console.error('Erro ao buscar relatório:', error)

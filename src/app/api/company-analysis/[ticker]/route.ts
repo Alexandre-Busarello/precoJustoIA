@@ -3,7 +3,9 @@ import { getCurrentUser } from '@/lib/user-service';
 import { StrategyAnalysis } from '@/lib/strategies';
 import { OverallScore } from '@/lib/strategies/overall-score';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
+import { cache } from '@/lib/cache-service';
 
+const CACHE_TTL = 4 * 60 * 60; // 4 horas em segundos
 
 // Interface para resposta da API
 interface CompanyAnalysisResponse {
@@ -39,6 +41,15 @@ export async function GET(
     const user = await getCurrentUser();
     const isLoggedIn = !!user;
     const isPremium = user?.isPremium || false;
+
+    // Criar chave de cache considerando ticker e status do usuário
+    const cacheKey = `company-analysis:${ticker}:${isLoggedIn ? 'logged' : 'anon'}:${isPremium ? 'premium' : 'free'}`;
+
+    // Verificar cache
+    const cachedData = await cache.get<CompanyAnalysisResponse>(cacheKey);
+    if (cachedData) {
+      return NextResponse.json(cachedData);
+    }
 
     // ✅ USAR SERVIÇO CENTRALIZADO - Garantia de cálculo idêntico ao Dashboard
     const analysisResult = await calculateCompanyOverallScore(ticker, {
@@ -134,6 +145,9 @@ export async function GET(
         }
       }
     };
+
+    // Salvar no cache
+    await cache.set(cacheKey, response, { ttl: CACHE_TTL });
 
     return NextResponse.json(response);
 

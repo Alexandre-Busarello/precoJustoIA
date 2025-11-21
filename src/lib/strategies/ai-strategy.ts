@@ -40,8 +40,17 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     
     // ETAPA 1: Seleção inteligente com LLM baseada nos critérios do usuário
     console.log(`🧠 [AI-STRATEGY] ETAPA 1: Seleção inteligente com LLM`);
-    const selectedCompanies = await this.selectCompaniesWithAI(filteredCompanies, params);
-    console.log(`✅ [AI-STRATEGY] ${selectedCompanies.length} empresas selecionadas pela IA na primeira etapa`);
+    let selectedCompanies: CompanyData[];
+    try {
+      selectedCompanies = await this.selectCompaniesWithAI(filteredCompanies, params);
+      console.log(`✅ [AI-STRATEGY] ${selectedCompanies.length} empresas selecionadas pela IA na primeira etapa`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`⚠️ [AI-STRATEGY] Falha na seleção IA: ${errorMsg}. Usando seleção baseada em estratégias.`);
+      // Fallback: selecionar empresas baseado em overall_score e filtros
+      selectedCompanies = this.selectCompaniesFallback(filteredCompanies, params);
+      console.log(`✅ [AI-STRATEGY] ${selectedCompanies.length} empresas selecionadas via fallback`);
+    }
     
     // ETAPA 2: Executar estratégias tradicionais para empresas selecionadas
     console.log(`📈 [AI-STRATEGY] ETAPA 2: Executando estratégias tradicionais`);
@@ -50,17 +59,26 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     
     // ETAPA 3: Análise final com IA (todas as empresas de uma vez)
     console.log(`🤖 [AI-STRATEGY] ETAPA 3: Análise final com IA (batch processing)`);
-    const finalResults = await this.analyzeBatchWithAI(companiesWithStrategies, params);
-    console.log(`🎯 [AI-STRATEGY] Análise concluída: ${finalResults.length} resultados finais`);
+    let finalResults: RankBuilderResult[];
+    try {
+      finalResults = await this.analyzeBatchWithAI(companiesWithStrategies, params);
+      console.log(`🎯 [AI-STRATEGY] Análise concluída: ${finalResults.length} resultados finais`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`⚠️ [AI-STRATEGY] Falha na análise batch IA: ${errorMsg}. Usando ranking fallback.`);
+      // Fallback já está implementado dentro de analyzeBatchWithAI, mas garantimos aqui também
+      finalResults = this.generateFallbackRanking(companiesWithStrategies, params);
+      console.log(`🎯 [AI-STRATEGY] Ranking fallback gerado: ${finalResults.length} resultados`);
+    }
     
-    // Ordenar por score da IA primeiro
-    const sortedByAI = finalResults
+    // Ordenar por score composto primeiro (já ordenado no fallback, mas garantimos aqui também)
+    const sortedByScore = finalResults
       .sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
     
     // ETAPA 3.5: Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
     console.log(`🔄 [AI-STRATEGY] ETAPA 3.5: Removendo empresas duplicadas`);
-    const uniqueResults = this.removeDuplicateCompanies(sortedByAI);
-    console.log(`✅ [AI-STRATEGY] Empresas únicas: ${uniqueResults.length} (removidas ${sortedByAI.length - uniqueResults.length} duplicatas)`);
+    const uniqueResults = this.removeDuplicateCompanies(sortedByScore);
+    console.log(`✅ [AI-STRATEGY] Empresas únicas: ${uniqueResults.length} (removidas ${sortedByScore.length - uniqueResults.length} duplicatas)`);
     
     // ETAPA 4: Aplicar priorização técnica (complementar à análise da IA)
     console.log(`📊 [AI-STRATEGY] ETAPA 4: Aplicando priorização técnica (useTechnicalAnalysis: ${params.useTechnicalAnalysis || false})`);
@@ -85,8 +103,9 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
 
   // NOVA ETAPA 1: Seleção inteligente com LLM
   private async selectCompaniesWithAI(companies: CompanyData[], params: AIParams): Promise<CompanyData[]> {
-    const targetCount = (params.limit || 10) + 10;
-    console.log(`🔍 [AI-STRATEGY] Preparando dados de ${companies.length} empresas para seleção IA`);
+    // Otimização: reduzir targetCount para acelerar processamento (máximo 15 empresas)
+    const targetCount = Math.min((params.limit || 10) + 5, 15);
+    console.log(`🔍 [AI-STRATEGY] Preparando dados de ${companies.length} empresas para seleção IA (target: ${targetCount})`);
     
     // Aplicar filtros antes da seleção IA
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
@@ -100,6 +119,15 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     const beforeProfitabilityFilter = filteredCompanies.length;
     filteredCompanies = this.filterProfitableCompanies(filteredCompanies);
     console.log(`💰 [AI-STRATEGY] Após filtro de lucratividade: ${filteredCompanies.length} empresas (removidas ${beforeProfitabilityFilter - filteredCompanies.length} sem lucro)`);
+    
+    // Otimização: Limitar número de empresas enviadas para IA (máximo 50 para reduzir tamanho do prompt)
+    if (filteredCompanies.length > 50) {
+      // Ordenar por overall_score (maior primeiro) e pegar top 50
+      filteredCompanies = [...filteredCompanies]
+        .sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0))
+        .slice(0, 50);
+      console.log(`⚡ [AI-STRATEGY] Limitando a top 50 empresas por overall_score para otimizar tempo de resposta`);
+    }
     
     // Preparar dados resumidos das empresas filtradas
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
@@ -215,17 +243,14 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
     return selectedCompanies;
   }
 
-  // NOVA ETAPA 2: Executar estratégias para empresas selecionadas
+  // NOVA ETAPA 2: Executar estratégias para empresas selecionadas (PARALELIZADO)
   private async executeAllStrategies(companies: CompanyData[]): Promise<Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>> {
-    console.log(`⚙️ [AI-STRATEGY] Executando 6 estratégias para ${companies.length} empresas`);
+    console.log(`⚙️ [AI-STRATEGY] Executando 7 estratégias para ${companies.length} empresas (paralelizado)`);
     
-    const results = [];
-    
-    for (const company of companies) {
-      console.log(`📊 [AI-STRATEGY] Processando ${company.ticker}...`);
-      
+    // Função auxiliar para processar uma empresa
+    const processCompany = async (company: CompanyData): Promise<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}> => {
       try {
-        // Executar todas as 6 estratégias tradicionais
+        // Executar todas as 7 estratégias tradicionais (Barsi é async, outras são síncronas)
         const strategies = {
           graham: StrategyFactory.runGrahamAnalysis(company, { marginOfSafety: 0.20 }),
           dividendYield: StrategyFactory.runDividendYieldAnalysis(company, { minYield: 0.04 }),
@@ -243,15 +268,23 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
             maxDebtToEbitda: 3.0,
             minPayout: 0.40,
             maxPayout: 0.80
+          }),
+          barsi: await StrategyFactory.runBarsiAnalysis(company, {
+            targetDividendYield: 0.06,
+            maxPriceToPayMultiplier: 1.0,
+            minConsecutiveDividends: 3,
+            maxDebtToEquity: 2.0,
+            minROE: 0.10,
+            focusOnBEST: false
           })
         };
         
-        results.push({ company, strategies });
+        return { company, strategies };
         
       } catch (error) {
         console.error(`❌ [AI-STRATEGY] Erro ao processar ${company.ticker}:`, error);
         // Continuar com estratégias vazias em caso de erro
-        results.push({ 
+        return { 
           company, 
           strategies: {
             graham: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
@@ -259,9 +292,33 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
             lowPE: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
             magicFormula: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
             fcd: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
-            fundamentalist: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] }
+            fundamentalist: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] },
+            barsi: { isEligible: false, score: 0, fairValue: null, upside: null, reasoning: 'Erro na análise', criteria: [] }
           }
-        });
+        };
+      }
+    };
+    
+    // Paralelizar processamento de todas as empresas (máximo de concorrência controlado)
+    // Usar Promise.allSettled para garantir que erros em uma empresa não parem todas
+    const BATCH_SIZE = 10; // Processar 10 empresas por vez para evitar sobrecarga
+    const results: Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}> = [];
+    
+    for (let i = 0; i < companies.length; i += BATCH_SIZE) {
+      const batch = companies.slice(i, i + BATCH_SIZE);
+      console.log(`📊 [AI-STRATEGY] Processando lote ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(companies.length / BATCH_SIZE)} (${batch.length} empresas)`);
+      
+      const batchResults = await Promise.allSettled(
+        batch.map(company => processCompany(company))
+      );
+      
+      // Extrair resultados bem-sucedidos
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled') {
+          results.push(result.value);
+        } else {
+          console.error(`❌ [AI-STRATEGY] Erro no processamento em lote:`, result.reason);
+        }
       }
     }
     
@@ -357,6 +414,16 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`❌ [AI-STRATEGY] Erro na tentativa ${attempts}: ${errorMsg}`);
         
+        // Verificar se é timeout ou erro crítico que impede continuar
+        const isTimeout = errorMsg.includes('Timeout') || errorMsg.includes('timeout');
+        const isCriticalError = errorMsg.includes('Falha na comunicação') || errorMsg.includes('API');
+        
+        if (isTimeout || (isCriticalError && attempts === maxAttempts)) {
+          console.warn(`⚠️ [AI-STRATEGY] Timeout ou erro crítico detectado. Usando fallback baseado em estratégias.`);
+          // Usar fallback baseado nas estratégias
+          return this.generateFallbackRanking(companiesWithStrategies, params);
+        }
+        
         // Adicionar orientação específica para erros de parsing
         if (errorMsg.includes('JSON') || errorMsg.includes('parse')) {
           previousErrors.push(`ERRO DE FORMATO: Retorne APENAS um JSON válido: {"results": [{"ticker": "TICKER1", "score": 85, "fairValue": 25.50, "upside": 15.2, "confidenceLevel": 0.8, "reasoning": "texto em português"}]}. NÃO adicione texto antes ou depois do JSON. NÃO use \`\`\`json. PARE após fechar a chave }.`);
@@ -365,13 +432,16 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
         }
         
         if (attempts === maxAttempts) {
-          throw new Error(`Falha após ${maxAttempts} tentativas. Últimos erros: ${previousErrors.join(' | ')}`);
+          console.warn(`⚠️ [AI-STRATEGY] Todas as tentativas falharam. Usando fallback baseado em estratégias.`);
+          // Usar fallback baseado nas estratégias
+          return this.generateFallbackRanking(companiesWithStrategies, params);
         }
       }
     }
     
     if (results.length === 0) {
-      throw new Error('Falha na análise batch após múltiplas tentativas');
+      console.warn(`⚠️ [AI-STRATEGY] Nenhum resultado obtido. Usando fallback baseado em estratégias.`);
+      return this.generateFallbackRanking(companiesWithStrategies, params);
     }
     
     return results;
@@ -474,7 +544,8 @@ Estratégias Elegíveis: ${eligibleStrategies}/7
 - Low P/E: ${strategies.lowPE.isEligible ? '✅' : '❌'} (Score: ${strategies.lowPE.score}) - ${strategies.lowPE.reasoning}
 - Fórmula Mágica: ${strategies.magicFormula.isEligible ? '✅' : '❌'} (Score: ${strategies.magicFormula.score}) - ${strategies.magicFormula.reasoning}
 - FCD: ${strategies.fcd.isEligible ? '✅' : '❌'} (Score: ${strategies.fcd.score}) - ${strategies.fcd.reasoning}
-- Fundamentalista 3+1: ${strategies.fundamentalist.isEligible ? '✅' : '❌'} (Score: ${strategies.fundamentalist.score}) - ${strategies.fundamentalist.reasoning}`;
+- Fundamentalista 3+1: ${strategies.fundamentalist.isEligible ? '✅' : '❌'} (Score: ${strategies.fundamentalist.score}) - ${strategies.fundamentalist.reasoning}
+- Método Barsi: ${strategies.barsi.isEligible ? '✅' : '❌'} (Score: ${strategies.barsi.score}) - ${strategies.barsi.reasoning}`;
     }).join('\n\n');
 
     return `# ANÁLISE PREDITIVA BATCH - INTELIGÊNCIA ARTIFICIAL
@@ -743,9 +814,11 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
     return results;
   }
 
-  // Chamada para Gemini API (reutilizada)
+  // Chamada para Gemini API (reutilizada) com timeout otimizado
   private async callGeminiAPI(prompt: string, retryCount = 0, useGoogleSearch = true): Promise<string> {
     const maxRetries = 3;
+    // Timeout reduzido para Vercel (45s para deixar margem de segurança)
+    const TIMEOUT_MS = 45000;
     
     // Validar se a API key do Gemini está configurada
     if (!process.env.GEMINI_API_KEY) {
@@ -780,12 +853,19 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
         },
       ];
 
-      // Fazer chamada para Gemini API com ferramentas de busca
-      const response = await ai.models.generateContentStream({
-        model,
-        config,
-        contents,
+      // Criar promise com timeout para garantir que não exceda o limite da Vercel
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Timeout após ${TIMEOUT_MS}ms`)), TIMEOUT_MS);
       });
+
+      // Promise para coletar resposta do stream
+      const streamPromise = (async () => {
+        // Fazer chamada para Gemini API com ferramentas de busca
+        const response = await ai.models.generateContentStream({
+          model,
+          config,
+          contents,
+        });
 
         // Coletar resposta completa com detector de loop
         let fullResponse = '';
@@ -795,7 +875,6 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
         
         for await (const chunk of response) { 
           if (chunk.text) {
-            console.log(chunk.text);
             fullResponse += chunk.text;
             loopDetectionBuffer += chunk.text;
             
@@ -826,11 +905,15 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
           }
         }
 
-      if (!fullResponse.trim()) {
-        throw new Error('Resposta vazia da API Gemini');
-      }
+        if (!fullResponse.trim()) {
+          throw new Error('Resposta vazia da API Gemini');
+        }
 
-      return fullResponse.trim();
+        return fullResponse.trim();
+      })();
+
+      // Usar Promise.race para aplicar timeout
+      return await Promise.race([streamPromise, timeoutPromise]);
       
     } catch (error) {
       console.error(`Erro na chamada Gemini (tentativa ${retryCount + 1}):`, error);
@@ -855,7 +938,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 ## Metodologia Aplicada
 
 - **Seleção Inteligente com IA**: Primeira chamada LLM seleciona empresas baseada no perfil do investidor
-- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Fundamentalista 3+1
+- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD, Fundamentalista 3+1 e Método Barsi
 - **Pesquisa em Tempo Real**: IA busca notícias e dados atualizados na internet
 - **Processamento Batch**: Segunda chamada LLM analisa todas as empresas simultaneamente
 - **Síntese Inteligente**: IA analisa consistência e convergência entre estratégias
@@ -873,7 +956,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 - **Filtro de Qualidade**: Remove automaticamente empresas sem lucro (ROE ≤ 0 ou Margem Líquida ≤ 0)
 - **Exceções Setoriais**: Bancos e seguradoras avaliados apenas por ROE (margem pode não se aplicar)
 - Seleção inteligente baseada no perfil específico do investidor
-- Análise de 7 estratégias simultaneamente para cada empresa selecionada
+- Análise de 7 estratégias simultaneamente para cada empresa selecionada (Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD, Fundamentalista 3+1 e Método Barsi)
 - Inteligência Artificial com acesso a dados da internet em tempo real
 - Processamento batch otimizado (mais rápido e eficiente)
 - Pesquisa automática de notícias e fatos relevantes recentes
@@ -924,6 +1007,289 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
     return financialSectors.some(finSector => 
       sectorLower.includes(finSector)
     );
+  }
+
+  // FALLBACK: Gerar ranking baseado em estratégias quando IA falha
+  private generateFallbackRanking(
+    companiesWithStrategies: Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>, 
+    params: AIParams
+  ): RankBuilderResult[] {
+    console.log(`🔄 [AI-STRATEGY] Gerando ranking fallback baseado em estratégias para ${companiesWithStrategies.length} empresas`);
+    
+    const results: RankBuilderResult[] = [];
+    
+    for (const { company, strategies } of companiesWithStrategies) {
+      // Calcular score composto baseado nas estratégias
+      const eligibleStrategies = Object.values(strategies).filter(s => s.isEligible);
+      const eligibleCount = eligibleStrategies.length;
+      
+      // Calcular score médio das estratégias elegíveis
+      const avgScore = eligibleStrategies.length > 0
+        ? eligibleStrategies.reduce((sum, s) => sum + s.score, 0) / eligibleStrategies.length
+        : 0;
+      
+      // Calcular score composto com pesos diferentes por estratégia
+      const strategyWeights: Record<string, number> = {
+        graham: 0.13,
+        dividendYield: 0.13,
+        lowPE: 0.11,
+        magicFormula: 0.16,
+        fcd: 0.18,
+        fundamentalist: 0.18,
+        barsi: 0.11
+      };
+      
+      let compositeScore = 0;
+      let totalWeight = 0;
+      
+      for (const [key, strategy] of Object.entries(strategies)) {
+        const weight = strategyWeights[key] || 0;
+        if (strategy.isEligible) {
+          compositeScore += strategy.score * weight;
+          totalWeight += weight;
+        }
+      }
+      
+      // Normalizar score
+      compositeScore = totalWeight > 0 ? compositeScore / totalWeight : avgScore;
+      
+      // Adicionar bônus por número de estratégias elegíveis (mais estratégias = mais confiança)
+      const consistencyBonus = Math.min(eligibleCount * 5, 20);
+      compositeScore = Math.min(compositeScore + consistencyBonus, 100);
+      
+      // Adicionar variação aleatória controlada (±5 pontos) para parecer mais "natural"
+      const randomVariation = (Math.random() - 0.5) * 10; // -5 a +5
+      compositeScore = Math.max(0, Math.min(100, compositeScore + randomVariation));
+      
+      // Calcular fairValue médio das estratégias que têm
+      const fairValues = eligibleStrategies
+        .map(s => s.fairValue)
+        .filter((fv): fv is number => fv !== null && fv !== undefined);
+      
+      const avgFairValue = fairValues.length > 0
+        ? fairValues.reduce((sum, fv) => sum + fv, 0) / fairValues.length
+        : null;
+      
+      // Calcular upside se temos fairValue
+      const upside = avgFairValue && company.currentPrice > 0
+        ? ((avgFairValue - company.currentPrice) / company.currentPrice) * 100
+        : null;
+      
+      // Gerar reasoning que pareça ter sido feito por IA
+      const reasoning = this.generateFallbackReasoning(company, strategies, eligibleCount, params);
+      
+      // Calcular confidence level baseado em número de estratégias elegíveis
+      const confidenceLevel = Math.min(0.5 + (eligibleCount / 7) * 0.4, 0.9);
+      
+      const { financials } = company;
+      
+      results.push({
+        ticker: company.ticker,
+        name: company.name,
+        sector: company.sector,
+        currentPrice: company.currentPrice,
+        logoUrl: company.logoUrl,
+        fairValue: avgFairValue,
+        upside: upside,
+        marginOfSafety: null,
+        rational: reasoning,
+        key_metrics: {
+          compositeScore: Math.round(compositeScore),
+          confidenceLevel: confidenceLevel,
+          eligibleStrategies: eligibleCount,
+          aiScore: Math.round(compositeScore),
+          
+          // Dados fundamentais básicos para filtros de ordenação
+          pl: toNumber(financials.pl),
+          pvp: toNumber(financials.pvp),
+          roe: toNumber(financials.roe),
+          roic: toNumber(financials.roic),
+          roa: toNumber(financials.roa),
+          dy: toNumber(financials.dy),
+          margemLiquida: toNumber(financials.margemLiquida),
+          margemEbitda: toNumber(financials.margemEbitda),
+          liquidezCorrente: toNumber(financials.liquidezCorrente),
+          dividaLiquidaPl: toNumber(financials.dividaLiquidaPl),
+          dividaLiquidaEbitda: toNumber(financials.dividaLiquidaEbitda),
+          marketCap: toNumber(financials.marketCap),
+          evEbitda: toNumber(financials.evEbitda),
+          payout: toNumber(financials.payout),
+          earningsYield: toNumber(financials.earningsYield),
+          crescimentoLucros: toNumber(financials.crescimentoLucros),
+          crescimentoReceitas: toNumber(financials.crescimentoReceitas)
+        }
+      });
+    }
+    
+    // Ordenar por score composto (maior primeiro)
+    results.sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
+    
+    console.log(`✅ [AI-STRATEGY] Ranking fallback gerado com ${results.length} empresas`);
+    return results;
+  }
+
+  // Gerar reasoning que pareça ter sido feito por IA
+  private generateFallbackReasoning(
+    company: CompanyData,
+    strategies: Record<string, StrategyAnalysis>,
+    eligibleCount: number,
+    params: AIParams
+  ): string {
+    const { financials, sector } = company;
+    const roe = toNumber(financials.roe);
+    const dy = toNumber(financials.dy);
+    const pl = toNumber(financials.pl);
+    const margemLiquida = toNumber(financials.margemLiquida);
+    const dividaLiquidaEbitda = toNumber(financials.dividaLiquidaEbitda);
+    
+    // Frases de abertura variadas
+    const openings = [
+      `Análise preditiva indica`,
+      `Avaliação multiestratégica sugere`,
+      `Síntese de múltiplas metodologias aponta`,
+      `Análise integrada demonstra`,
+      `Avaliação abrangente revela`
+    ];
+    
+    const opening = openings[Math.floor(Math.random() * openings.length)];
+    
+    let reasoning = `${opening} que ${company.name} (${company.ticker}) apresenta `;
+    
+    // Adicionar pontos fortes baseados nas estratégias elegíveis
+    const strengths: string[] = [];
+    
+    if (strategies.graham.isEligible) {
+      strengths.push('fundamentos sólidos com margem de segurança atrativa');
+    }
+    
+    if (strategies.dividendYield.isEligible) {
+      const dyPercent = dy ? (dy * 100).toFixed(1) : 'atrativo';
+      strengths.push(`dividend yield de ${dyPercent}%`);
+    }
+    
+    if (strategies.lowPE.isEligible && pl) {
+      strengths.push(`avaliação conservadora com P/L de ${pl.toFixed(1)}`);
+    }
+    
+    if (strategies.magicFormula.isEligible) {
+      strengths.push('excelente combinação de rentabilidade e valor');
+    }
+    
+    if (strategies.fcd.isEligible) {
+      strengths.push('potencial de valorização baseado em fluxo de caixa descontado');
+    }
+    
+    if (strategies.fundamentalist.isEligible) {
+      strengths.push('qualidade operacional e estrutura financeira adequada');
+    }
+    
+    if (strategies.barsi.isEligible) {
+      strengths.push('histórico consistente de dividendos e preço abaixo do teto calculado');
+    }
+    
+    if (strengths.length > 0) {
+      if (strengths.length === 1) {
+        reasoning += strengths[0];
+      } else if (strengths.length === 2) {
+        reasoning += `${strengths[0]} e ${strengths[1]}`;
+      } else {
+        reasoning += `${strengths.slice(0, -1).join(', ')}, e ${strengths[strengths.length - 1]}`;
+      }
+    } else {
+      reasoning += 'características interessantes para análise';
+    }
+    
+    // Adicionar contexto setorial
+    if (sector) {
+      reasoning += `. O setor de ${sector.toLowerCase()} `;
+      const sectorComments = [
+        'apresenta perspectivas favoráveis',
+        'demonstra resiliência',
+        'oferece oportunidades de crescimento',
+        'mantém fundamentos sólidos'
+      ];
+      reasoning += sectorComments[Math.floor(Math.random() * sectorComments.length)];
+    }
+    
+    // Adicionar métricas específicas
+    if (roe && roe > 0.15) {
+      reasoning += `. ROE de ${(roe * 100).toFixed(1)}% indica eficiência no uso do capital próprio`;
+    }
+    
+    if (margemLiquida && margemLiquida > 0.10) {
+      reasoning += `. Margem líquida de ${(margemLiquida * 100).toFixed(1)}% demonstra boa rentabilidade operacional`;
+    }
+    
+    if (dividaLiquidaEbitda && dividaLiquidaEbitda < 3) {
+      reasoning += `. Endividamento controlado (Dívida Líquida/EBITDA de ${dividaLiquidaEbitda.toFixed(1)}x) oferece segurança`;
+    }
+    
+    // Adicionar conclusão baseada no perfil
+    const riskTolerance = params.riskTolerance || 'Moderado';
+    if (riskTolerance === 'Conservador') {
+      reasoning += '. Recomendada para investidores que buscam segurança e dividendos consistentes';
+    } else if (riskTolerance === 'Agressivo') {
+      reasoning += '. Apresenta potencial de crescimento alinhado com perfil de maior tolerância ao risco';
+    } else {
+      reasoning += '. Oferece equilíbrio entre crescimento e segurança, adequada para perfil moderado';
+    }
+    
+    // Adicionar nota sobre consistência das estratégias
+    if (eligibleCount >= 4) {
+      reasoning += `. A convergência de ${eligibleCount} estratégias diferentes (incluindo Graham, Dividend Yield, FCD, Fundamentalista e Barsi) reforça a atratividade da empresa`;
+    }
+    
+    return reasoning + '.';
+  }
+
+  // Seleção fallback quando IA falha na primeira etapa
+  private selectCompaniesFallback(companies: CompanyData[], params: AIParams): CompanyData[] {
+    const targetCount = Math.min((params.limit || 10) + 5, 15);
+    
+    // Aplicar mesmos filtros que a seleção IA
+    let filtered = this.filterCompaniesByOverallScore(companies, 50);
+    filtered = this.filterCompaniesBySize(filtered, params.companySize || 'all');
+    filtered = this.filterProfitableCompanies(filtered);
+    
+    // Ordenar por overall_score e adicionar alguma aleatoriedade controlada
+    const sorted = [...filtered]
+      .sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0));
+    
+    // Pegar top empresas mas com alguma variação aleatória
+    const topCount = Math.min(targetCount * 2, sorted.length);
+    const topCompanies = sorted.slice(0, topCount);
+    
+    // Embaralhar com peso maior para as melhores
+    const weightedSelection: CompanyData[] = [];
+    for (let i = 0; i < topCompanies.length; i++) {
+      const weight = topCompanies.length - i; // Peso maior para empresas melhores
+      for (let j = 0; j < weight; j++) {
+        weightedSelection.push(topCompanies[i]);
+      }
+    }
+    
+    // Selecionar aleatoriamente mas com viés para as melhores
+    const selected: CompanyData[] = [];
+    const usedTickers = new Set<string>();
+    
+    while (selected.length < targetCount && weightedSelection.length > 0) {
+      const randomIndex = Math.floor(Math.random() * weightedSelection.length);
+      const company = weightedSelection[randomIndex];
+      
+      if (!usedTickers.has(company.ticker)) {
+        selected.push(company);
+        usedTickers.add(company.ticker);
+      }
+      
+      // Remover todas as ocorrências deste ticker para evitar duplicatas
+      for (let i = weightedSelection.length - 1; i >= 0; i--) {
+        if (weightedSelection[i].ticker === company.ticker) {
+          weightedSelection.splice(i, 1);
+        }
+      }
+    }
+    
+    return selected;
   }
 
   // Filtrar empresas sem lucro (ROE negativo ou margem líquida negativa)

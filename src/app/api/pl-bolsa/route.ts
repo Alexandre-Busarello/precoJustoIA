@@ -7,6 +7,9 @@ import {
   getPLStatistics,
   PLBolsaFilters,
 } from '@/lib/pl-bolsa-service'
+import { cache } from '@/lib/cache-service'
+
+const CACHE_TTL = 4 * 60 * 60; // 4 horas em segundos
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 3600 // Revalidar a cada hora
@@ -78,6 +81,24 @@ export async function GET(request: NextRequest) {
     const excludeUnprofitable =
       excludeUnprofitableStr === 'true' || excludeUnprofitableStr === '1'
 
+    // Criar chave de cache considerando todos os parâmetros
+    const cacheKeyParts = [
+      'pl-bolsa',
+      startDateStr || 'no-start',
+      endDateStr || 'no-end',
+      sector || 'all-sectors',
+      minScoreStr || 'no-min-score',
+      excludeUnprofitable ? 'exclude-unprofitable' : 'include-all',
+      isLoggedIn ? 'logged' : 'anon',
+    ]
+    const cacheKey = cacheKeyParts.join(':')
+
+    // Verificar cache
+    const cachedData = await cache.get(cacheKey)
+    if (cachedData) {
+      return NextResponse.json(cachedData)
+    }
+
     // Montar filtros
     const filters: PLBolsaFilters = {
       startDate,
@@ -94,7 +115,7 @@ export async function GET(request: NextRequest) {
       getAvailableSectors(),
     ])
 
-    return NextResponse.json({
+    const response = {
       data,
       statistics,
       sectors,
@@ -106,7 +127,12 @@ export async function GET(request: NextRequest) {
         excludeUnprofitable,
       },
       requiresLogin: !isLoggedIn && (!endDateStr || new Date(endDateStr) > lastYearEnd),
-    })
+    }
+
+    // Salvar no cache
+    await cache.set(cacheKey, response, { ttl: CACHE_TTL })
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('Erro ao buscar P/L histórico da bolsa:', error)
     return NextResponse.json(

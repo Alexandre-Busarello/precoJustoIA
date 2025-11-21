@@ -4,11 +4,60 @@ import { MonitoringReportService } from '@/lib/monitoring-report-service';
 import { sendAssetChangeEmail, sendFreeUserAssetChangeEmail } from '@/lib/email-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
-import { toNumber } from '@/lib/strategies';
+import { toNumber, StrategyAnalysis } from '@/lib/strategies';
 import { prisma } from '@/lib/prisma';
 
 // Configurar timeout para 5 minutos (máximo da Vercel)
 export const maxDuration = 300;
+
+/**
+ * Ajusta os scores das estratégias no snapshotData para refletir os scores ajustados
+ * usados no cálculo final (conforme score_composition).
+ * 
+ * Isso garante consistência entre snapshot_data e score_composition.
+ */
+function adjustStrategiesScoresForSnapshot(
+  strategies: Record<string, StrategyAnalysis | null>,
+  scoreComposition: ScoreComposition | null
+): Record<string, StrategyAnalysis | null> {
+  if (!scoreComposition) {
+    return strategies;
+  }
+
+  const adjustedStrategies = { ...strategies };
+
+  // Mapear nomes das estratégias para os nomes no score_composition
+  const strategyNameMap: Record<string, string> = {
+    fcd: 'Fluxo de Caixa Descontado',
+    graham: 'Graham (Valor Intrínseco)',
+    gordon: 'Gordon (Dividendos)',
+    barsi: 'Método Barsi',
+    dividendYield: 'Dividend Yield',
+    lowPE: 'Low P/E',
+    magicFormula: 'Fórmula Mágica',
+    fundamentalist: 'Fundamentalista 3+1',
+  };
+
+  // Ajustar cada estratégia que tem correspondência no score_composition
+  Object.entries(strategyNameMap).forEach(([strategyKey, compositionName]) => {
+    const strategy = adjustedStrategies[strategyKey];
+    if (!strategy) return;
+
+    const compositionComponent = scoreComposition.contributions.find(
+      c => c.name === compositionName
+    );
+
+    if (compositionComponent && compositionComponent.score !== strategy.score) {
+      // Atualizar o score para refletir o score ajustado usado no cálculo final
+      adjustedStrategies[strategyKey] = {
+        ...strategy,
+        score: compositionComponent.score,
+      };
+    }
+  });
+
+  return adjustedStrategies;
+}
 
 /**
  * Cron Job para Monitoramento de Ativos
@@ -132,12 +181,14 @@ export async function GET(request: NextRequest) {
 
         if (!existingSnapshot) {
           // Criar primeiro snapshot
+          // Ajustar scores das estratégias para refletir os scores ajustados usados no cálculo final
+          const adjustedStrategies = adjustStrategiesScoresForSnapshot(strategies, scoreComposition);
           const snapshotData = {
             ticker: company.ticker,
             name: company.name,
             sector: company.sector,
             currentPrice,
-            strategies,
+            strategies: adjustedStrategies,
             overallScore: overallScoreResult,
             financials: latestFinancials,
             youtubeAnalysis: youtubeAnalysisData,
@@ -177,12 +228,14 @@ export async function GET(request: NextRequest) {
               console.log(`⚠️ ${company.ticker}: Sem inscritos, pulando geração de relatório`);
               
               // Criar snapshot mesmo sem inscritos (para evitar detectar a mesma mudança novamente)
+              // Ajustar scores das estratégias para refletir os scores ajustados usados no cálculo final
+              const adjustedStrategies = adjustStrategiesScoresForSnapshot(strategies, scoreComposition);
               const snapshotData = {
                 ticker: company.ticker,
                 name: company.name,
                 sector: company.sector,
                 currentPrice,
-                strategies,
+                strategies: adjustedStrategies,
                 overallScore: overallScoreResult,
                 financials: latestFinancials,
                 youtubeAnalysis: youtubeAnalysisData,
@@ -197,12 +250,14 @@ export async function GET(request: NextRequest) {
               );
             } else {
               // Criar novo snapshot primeiro
+              // Ajustar scores das estratégias para refletir os scores ajustados usados no cálculo final
+              const adjustedStrategies = adjustStrategiesScoresForSnapshot(strategies, scoreComposition);
               const snapshotData = {
                 ticker: company.ticker,
                 name: company.name,
                 sector: company.sector,
                 currentPrice,
-                strategies,
+                strategies: adjustedStrategies,
                 overallScore: overallScoreResult,
                 financials: latestFinancials,
                 youtubeAnalysis: youtubeAnalysisData,

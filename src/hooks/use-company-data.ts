@@ -4,7 +4,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { getPlaceholderData, getInitialData, saveQueryCache } from '@/lib/react-query-persister';
+import { getPlaceholderData, getInitialData, saveQueryCache, removeQueryCache } from '@/lib/react-query-persister';
 
 // ===== Company Analysis =====
 
@@ -422,9 +422,16 @@ export function useAIReports(
 
 /**
  * Função helper para invalidar cache de subscription quando usuário se inscreve/cancela
+ * Remove tanto o cache do React Query quanto do localStorage
  */
 export function invalidateAssetSubscriptionCache(queryClient: ReturnType<typeof useQueryClient>, ticker: string) {
-  queryClient.invalidateQueries({ queryKey: ['asset-subscription', ticker.toUpperCase()] });
+  const queryKey = ['asset-subscription', ticker.toUpperCase()];
+  
+  // Invalidar cache do React Query
+  queryClient.invalidateQueries({ queryKey });
+  
+  // Remover cache do localStorage também
+  removeQueryCache(queryKey);
 }
 
 /**

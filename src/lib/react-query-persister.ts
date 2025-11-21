@@ -26,6 +26,43 @@ export function getCacheKey(queryKey: unknown[]): string {
 }
 
 /**
+ * Validate if data should be cached
+ * Only cache data that has actual values (e.g., portfolios array with items)
+ */
+function shouldCacheData<T>(data: T, queryKey: unknown[]): boolean {
+  if (data === null || data === undefined) {
+    return false;
+  }
+
+  // Check for portfolios - only cache if array has items
+  const keyString = JSON.stringify(queryKey);
+  if (keyString.includes('portfolios') || keyString.includes('portfolio')) {
+    if (typeof data === 'object' && 'portfolios' in data) {
+      const portfolios = (data as { portfolios: unknown[] }).portfolios;
+      if (!Array.isArray(portfolios) || portfolios.length === 0) {
+        return false;
+      }
+    }
+    // If data itself is an array (like in portfolio-page-client)
+    if (Array.isArray(data) && data.length === 0) {
+      return false;
+    }
+  }
+
+  // Check for companies - only cache if array has items
+  if (keyString.includes('companies') || keyString.includes('top-companies')) {
+    if (typeof data === 'object' && 'companies' in data) {
+      const companies = (data as { companies: unknown[] }).companies;
+      if (!Array.isArray(companies) || companies.length === 0) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
  * Save query data to localStorage
  * @param queryKey - Query key array
  * @param data - Data to save
@@ -33,6 +70,18 @@ export function getCacheKey(queryKey: unknown[]): string {
  */
 export function saveQueryCache<T>(queryKey: unknown[], data: T, forceUpdate: boolean = false): void {
   if (typeof window === 'undefined') return;
+
+  // Only cache if data has actual values
+  if (!shouldCacheData(data, queryKey)) {
+    // Remove cache if data is empty/invalid
+    const cacheKey = getCacheKey(queryKey);
+    try {
+      localStorage.removeItem(cacheKey);
+    } catch {
+      // Ignore errors when removing
+    }
+    return;
+  }
 
   try {
     const cacheKey = getCacheKey(queryKey);

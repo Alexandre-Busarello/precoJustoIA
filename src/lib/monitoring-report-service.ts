@@ -58,6 +58,18 @@ export class MonitoringReportService {
   }
 
   /**
+   * Mapeia categorias técnicas para nomes amigáveis usados na plataforma
+   */
+  private static getCategoryDisplayName(category: string): string {
+    const categoryMap: Record<string, string> = {
+      'strategy': 'Estratégias de Investimento',
+      'statements': 'Demonstrações Financeiras',
+      'youtube': 'Sentimento de Mercado',
+    };
+    return categoryMap[category] || category;
+  }
+
+  /**
    * Constrói o prompt para comparação com IA
    */
   private static buildComparisonPrompt(params: {
@@ -92,19 +104,44 @@ export class MonitoringReportService {
       const comparison = compareScoreCompositions(previousScoreComposition, currentScoreComposition, 1);
       
       if (comparison.significantChanges.length > 0) {
+        // Agrupar mudanças por categoria para melhor organização
+        const changesByCategory: Record<string, Array<{
+          component: string;
+          previousScore: number;
+          currentScore: number;
+          previousPoints: number;
+          currentPoints: number;
+          impact: number;
+          category: string;
+        }>> = {};
+        comparison.significantChanges.forEach(change => {
+          const categoryName = this.getCategoryDisplayName(change.category);
+          if (!changesByCategory[categoryName]) {
+            changesByCategory[categoryName] = [];
+          }
+          changesByCategory[categoryName].push(change);
+        });
+
         scoreAnalysis = `
 
 **ANÁLISE DETALHADA DAS MUDANÇAS NO SCORE:**
 
 As principais mudanças que impactaram o score foram:
-${comparison.significantChanges.slice(0, 5).map(change => 
-  `- **${change.component}**: ${change.previousScore.toFixed(1)} → ${change.currentScore.toFixed(1)} pontos (impacto: ${change.impact > 0 ? '+' : ''}${change.impact.toFixed(1)} pontos)`
-).join('\n')}
 
-**Mudanças por categoria:**
+${Object.entries(changesByCategory).slice(0, 3).map(([categoryName, changes]) => 
+  `**${categoryName}:**
+${changes.slice(0, 3).map(change => 
+  `- **${change.component}**: ${change.previousScore.toFixed(1)} → ${change.currentScore.toFixed(1)} pontos (impacto: ${change.impact > 0 ? '+' : ''}${change.impact.toFixed(1)} pontos)`
+).join('\n')}`
+).join('\n\n')}
+
+**Resumo das mudanças por categoria:**
 ${Object.entries(comparison.categoryChanges)
   .filter(([, change]) => Math.abs(change) >= 0.5)
-  .map(([category, change]) => `- ${category}: ${change > 0 ? '+' : ''}${change.toFixed(1)} pontos`)
+  .map(([category, change]) => {
+    const categoryName = this.getCategoryDisplayName(category);
+    return `- **${categoryName}**: ${change > 0 ? '+' : ''}${change.toFixed(1)} pontos`;
+  })
   .join('\n')}
 
 ${comparison.penaltyChanges ? `
@@ -122,6 +159,28 @@ A empresa ${name} (${ticker}) teve uma **${changeTerm}** no seu Score Geral de *
 
 Escreva um relatório claro e acessível explicando o que aconteceu.${scoreAnalysis}
 
+**CONTEXTO SOBRE AS CATEGORIAS DO SCORE:**
+
+O Score Geral é composto por três categorias principais:
+
+1. **Estratégias de Investimento**: Abrange todas as estratégias da aba "Análises Fundamentalista", incluindo:
+   - Graham (Valor Intrínseco)
+   - Fluxo de Caixa Descontado (FCD)
+   - Gordon (Dividendos)
+   - Método Barsi
+   - Dividend Yield
+   - Low P/E (Value Investing)
+   - Fórmula Mágica
+   - Fundamentalista 3+1
+   
+   **IMPORTANTE**: "Estratégias de Investimento" é o nome coletivo para todas essas estratégias de análise fundamentalista. NÃO é uma categoria separada, mas sim o agrupamento de todas essas metodologias de avaliação.
+
+2. **Demonstrações Financeiras**: Análise profunda dos balanços, DRE e demonstrações de fluxo de caixa
+
+3. **Sentimento de Mercado**: Análise agregada de múltiplas fontes especializadas (YouTube, blogs, etc.)
+
+Quando mencionar "Estratégias de Investimento", você está se referindo ao conjunto de todas essas estratégias de análise fundamentalista listadas acima.
+
 **DADOS FINANCEIROS ANTERIORES:**
 \`\`\`json
 ${JSON.stringify(this.extractRelevantData(previousData), null, 2)}
@@ -138,6 +197,7 @@ ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
    - Explique de forma simples o que causou a mudança no score
    - Foque nos 2-3 indicadores que mais mudaram
    - Use linguagem acessível (evite jargões técnicos)
+   - Use os nomes exatos das categorias e estratégias conforme listados acima
 
 2. **Por que isso importa?** (1-2 parágrafos)
    - Explique o impacto prático dessas mudanças
@@ -156,7 +216,9 @@ ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
 - Se um indicador mudou pouco (<5%), não o mencione
 - Use **negrito** apenas para números importantes
 - Explique siglas na primeira vez (ex: ROE - Retorno sobre Patrimônio)
-- Mantenha tom neutro e informativo`;
+- Mantenha tom neutro e informativo
+- **IMPORTANTE**: Use APENAS os nomes exatos das categorias e estratégias listados acima. NÃO invente nomes como "categoria de estratégia" ou "categoria estratégia"
+- **IMPORTANTE**: Quando mencionar "Estratégias de Investimento", você está se referindo ao conjunto de todas as estratégias de análise fundamentalista (Graham, FCD, Gordon, Barsi, Dividend Yield, Low P/E, Fórmula Mágica, Fundamentalista 3+1). NÃO é uma categoria separada, mas sim o nome coletivo para todas essas estratégias`;
   }
 
   /**

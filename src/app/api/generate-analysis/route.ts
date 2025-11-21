@@ -5,12 +5,17 @@ import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 
 // Importar estratégias para análises comparativas
 import { GrahamStrategy } from '@/lib/strategies/graham-strategy';
+import { FCDStrategy } from '@/lib/strategies/fcd-strategy';
+import { GordonStrategy } from '@/lib/strategies/gordon-strategy';
+import { BarsiStrategy } from '@/lib/strategies/barsi-strategy';
 import { DividendYieldStrategy } from '@/lib/strategies/dividend-yield-strategy';
 import { LowPEStrategy } from '@/lib/strategies/lowpe-strategy';
 import { MagicFormulaStrategy } from '@/lib/strategies/magic-formula-strategy';
+import { FundamentalistStrategy } from '@/lib/strategies/fundamentalist-strategy';
 import { CompanyData, CompanyFinancialData } from '@/lib/strategies/types';
 import { toNumber, formatCurrency, formatPercent } from '@/lib/strategies/base-strategy';
 import { analyzeFinancialStatements, FinancialStatementsData } from '@/lib/strategies/overall-score';
+import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config';
 
 // Validar se a API key do Gemini está configurada
 function validateGeminiConfig() {
@@ -72,13 +77,13 @@ interface StrategicAnalysisResult {
 }
 
 // Executar análises estratégicas
-function runStrategicAnalyses(companyData: CompanyData) {
+async function runStrategicAnalyses(companyData: CompanyData) {
   const analyses: Record<string, StrategicAnalysisResult> = {};
 
   try {
     // Graham Analysis
     const grahamStrategy = new GrahamStrategy();
-    const grahamAnalysis = grahamStrategy.runAnalysis(companyData);
+    const grahamAnalysis = grahamStrategy.runAnalysis(companyData, STRATEGY_CONFIG.graham);
     analyses.graham = {
       fairValue: grahamAnalysis.fairValue,
       upside: grahamAnalysis.upside,
@@ -92,7 +97,7 @@ function runStrategicAnalyses(companyData: CompanyData) {
   try {
     // Dividend Yield Analysis
     const dividendStrategy = new DividendYieldStrategy();
-    const dividendAnalysis = dividendStrategy.runAnalysis(companyData, { minYield: 0.06 });
+    const dividendAnalysis = dividendStrategy.runAnalysis(companyData, STRATEGY_CONFIG.dividendYield);
     analyses.dividendYield = {
       eligible: dividendAnalysis.isEligible,
       score: dividendAnalysis.score,
@@ -105,7 +110,7 @@ function runStrategicAnalyses(companyData: CompanyData) {
   try {
     // Low P/E Analysis  
     const lowPEStrategy = new LowPEStrategy();
-    const lowPEAnalysis = lowPEStrategy.runAnalysis(companyData, { maxPE: 15, minROE: 0.12 });
+    const lowPEAnalysis = lowPEStrategy.runAnalysis(companyData, STRATEGY_CONFIG.lowPE);
     analyses.lowPE = {
       eligible: lowPEAnalysis.isEligible,
       score: lowPEAnalysis.score,
@@ -118,13 +123,67 @@ function runStrategicAnalyses(companyData: CompanyData) {
   try {
     // Magic Formula Analysis
     const magicStrategy = new MagicFormulaStrategy();
-    const magicAnalysis = magicStrategy.runAnalysis(companyData, { minROIC: 0.15, minEY: 0.08 });
+    const magicAnalysis = magicStrategy.runAnalysis(companyData, STRATEGY_CONFIG.magicFormula);
     analyses.magicFormula = {
       eligible: magicAnalysis.isEligible,
       score: magicAnalysis.score
     };
   } catch {
     analyses.magicFormula = { error: 'Dados insuficientes' };
+  }
+
+  try {
+    // FCD Analysis
+    const fcdStrategy = new FCDStrategy();
+    const fcdAnalysis = fcdStrategy.runAnalysis(companyData, STRATEGY_CONFIG.fcd);
+    analyses.fcd = {
+      fairValue: fcdAnalysis.fairValue,
+      upside: fcdAnalysis.upside,
+      eligible: fcdAnalysis.isEligible,
+      score: fcdAnalysis.score
+    };
+  } catch {
+    analyses.fcd = { error: 'Dados insuficientes' };
+  }
+
+  try {
+    // Gordon Analysis
+    const gordonStrategy = new GordonStrategy();
+    const gordonAnalysis = gordonStrategy.runAnalysis(companyData, STRATEGY_CONFIG.gordon);
+    analyses.gordon = {
+      fairValue: gordonAnalysis.fairValue,
+      upside: gordonAnalysis.upside,
+      eligible: gordonAnalysis.isEligible,
+      score: gordonAnalysis.score
+    };
+  } catch {
+    analyses.gordon = { error: 'Dados insuficientes' };
+  }
+
+  try {
+    // Barsi Analysis
+    const barsiStrategy = new BarsiStrategy();
+    const barsiAnalysis = await barsiStrategy.runAnalysis(companyData, STRATEGY_CONFIG.barsi);
+    analyses.barsi = {
+      fairValue: barsiAnalysis.fairValue,
+      upside: barsiAnalysis.upside,
+      eligible: barsiAnalysis.isEligible,
+      score: barsiAnalysis.score
+    };
+  } catch {
+    analyses.barsi = { error: 'Dados insuficientes' };
+  }
+
+  try {
+    // Fundamentalista 3+1 Analysis
+    const fundamentalistStrategy = new FundamentalistStrategy();
+    const fundamentalistAnalysis = fundamentalistStrategy.runAnalysis(companyData, STRATEGY_CONFIG.fundamentalist);
+    analyses.fundamentalist = {
+      eligible: fundamentalistAnalysis.isEligible,
+      score: fundamentalistAnalysis.score
+    };
+  } catch {
+    analyses.fundamentalist = { error: 'Dados insuficientes' };
   }
 
   return analyses;
@@ -403,16 +462,42 @@ ${youtubeAnalysis.negativePoints.map((point: string) => `  ⚠️ ${point}`).joi
 ⚠️ **IMPORTANTE:** Na sua análise mensal, leve em consideração esta mudança fundamental recente. Avalie se os fatores que causaram esta mudança ainda estão presentes e como eles afetam a tese de investimento atual.
 ` : '';
   
+  // Mapear nomes das estratégias para nomes amigáveis
+  const strategyDisplayNames: Record<string, string> = {
+    graham: 'Graham (Valor Intrínseco)',
+    fcd: 'Fluxo de Caixa Descontado (FCD)',
+    gordon: 'Gordon (Método dos Dividendos)',
+    barsi: 'Método Barsi',
+    dividendYield: 'Dividend Yield',
+    lowPE: 'Low P/E (Value Investing)',
+    magicFormula: 'Fórmula Mágica',
+    fundamentalist: 'Fundamentalista 3+1',
+  };
+
   const strategicSummary = Object.entries(strategicAnalyses)
     .map(([strategy, result]) => {
-      if (result.error) return `${strategy}: ${result.error}`;
-      if (strategy === 'graham') {
-        return `Graham (Preço Justo): ${result.fairValue ? formatCurrency(result.fairValue) : 'N/A'} (${result.eligible ? 'Elegível' : 'Não elegível'})`;
+      if (result.error) {
+        const displayName = strategyDisplayNames[strategy] || strategy;
+        return `${displayName}: ${result.error}`;
       }
-      if (strategy === 'gordon') {
-        return `Gordon (Método dos Dividendos): ${result.fairValue ? formatCurrency(result.fairValue) : 'N/A'} (${result.eligible ? 'Elegível' : 'Não elegível'})`;
+      
+      const displayName = strategyDisplayNames[strategy] || strategy;
+      const status = result.eligible ? 'Elegível' : 'Não elegível';
+      
+      // Estratégias com fairValue e upside
+      if (result.fairValue !== undefined && result.fairValue !== null) {
+        const fairValueStr = formatCurrency(result.fairValue);
+        const upsideStr = result.upside !== undefined && result.upside !== null 
+          ? ` (Upside: ${result.upside.toFixed(1)}%)`
+          : '';
+        return `${displayName}: Preço Justo ${fairValueStr}${upsideStr} (${status})`;
       }
-      return `${strategy}: Score ${result.score?.toFixed(1) || 'N/A'} (${result.eligible ? 'Elegível' : 'Não elegível'})`;
+      
+      // Estratégias apenas com score
+      const scoreStr = result.score !== undefined && result.score !== null
+        ? `Score ${result.score.toFixed(1)}/100`
+        : 'Score N/A';
+      return `${displayName}: ${scoreStr} (${status})`;
     })
     .join('\n  ');
 
@@ -580,7 +665,7 @@ export async function generateAnalysisInternal(params: {
   }
 
   // Executar análises estratégicas
-  const strategicAnalyses = runStrategicAnalyses(companyData)
+  const strategicAnalyses = await runStrategicAnalyses(companyData)
 
   // Buscar análise de demonstrativos se solicitado
   let statementsAnalysis = null

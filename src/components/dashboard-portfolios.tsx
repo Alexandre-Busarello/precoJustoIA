@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import {
   YAxis,
   Tooltip as RechartsTooltip,
 } from "recharts";
+import { useDashboardPortfolios } from "@/hooks/use-dashboard-data";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Portfolio {
   id: string;
@@ -37,93 +39,50 @@ interface Portfolio {
   }>;
 }
 
-interface CachedPortfolioData {
-  portfolios: Portfolio[];
-  timestamp: number;
-  expiresAt: number;
-}
-
 /**
  * Invalidate dashboard portfolios cache
  * Call this when portfolio data changes (transactions, config updates, etc.)
+ * This invalidates both React Query cache and old localStorage cache
  */
 export function invalidateDashboardPortfoliosCache() {
-  localStorage.removeItem('dashboard_portfolios');
+  // Remove old localStorage cache if it exists
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('dashboard_portfolios');
+    
+    // Invalidate React Query cache
+    // Note: This will work if called from a component with access to QueryClient
+    // For components without QueryClient, they should use useQueryClient hook
+    const event = new CustomEvent('invalidate-dashboard-portfolios');
+    window.dispatchEvent(event);
+  }
   console.log('🗑️ [DASHBOARD PORTFOLIOS] Cache invalidated');
 }
 
 export function DashboardPortfolios() {
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fromCache, setFromCache] = useState(false);
+  const queryClient = useQueryClient();
+  const { data, isLoading: loading, refetch, dataUpdatedAt } = useDashboardPortfolios();
+  
+  const portfolios = data?.portfolios || [];
+  
+  // Check if data is from cache (if dataUpdatedAt is old, it's likely from cache)
+  const isFromCache = dataUpdatedAt && (Date.now() - dataUpdatedAt) > 1000;
 
-  useEffect(() => {
-    fetchPortfolios();
-  }, []);
-
-  const fetchPortfolios = async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-      setFromCache(false);
-
-      // 🚀 CACHE DE 1 HORA NO LOCALSTORAGE
-      const cacheKey = 'dashboard_portfolios';
-      const now = Date.now();
-      
-      // Verificar se há cache válido (1 hora) e se não forçou refresh
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(cacheKey);
-        if (cachedData) {
-          try {
-            const parsed: CachedPortfolioData = JSON.parse(cachedData);
-            
-            // Se o cache ainda é válido (menos de 1 hora)
-            if (now < parsed.expiresAt && Array.isArray(parsed.portfolios)) {
-              console.log('📦 [DASHBOARD PORTFOLIOS] Usando dados do cache (1 hora)');
-              setPortfolios(parsed.portfolios);
-              setFromCache(true);
-              setLoading(false);
-              return;
-            } else {
-              console.log('🔄 [DASHBOARD PORTFOLIOS] Cache expirado, buscando novos dados...');
-              localStorage.removeItem(cacheKey);
-            }
-          } catch (e) {
-            console.warn('Cache inválido, ignorando:', e);
-            localStorage.removeItem(cacheKey);
-          }
-        }
-      } else {
-        console.log('🔄 [DASHBOARD PORTFOLIOS] Refresh forçado, limpando cache...');
-        localStorage.removeItem(cacheKey);
-      }
-
-      // Buscar do servidor - endpoint único que retorna tudo pronto
-      const response = await fetch("/api/portfolio/dashboard");
-      if (!response.ok) throw new Error("Failed to fetch portfolios");
-
-      const data = await response.json();
-      
-      // Dados já vêm ordenados e formatados do servidor
-      const portfoliosData = data.portfolios || [];
-      setPortfolios(portfoliosData);
-      setFromCache(false);
-
-      // Salvar no cache com expiração de 1 hora
-      const cacheData: CachedPortfolioData = {
-        portfolios: portfoliosData,
-        timestamp: now,
-        expiresAt: now + (60 * 60 * 1000), // 1 hora
-      };
-      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-      console.log('💾 [DASHBOARD PORTFOLIOS] Dados salvos no cache (1 hora)');
-      
-    } catch (error) {
-      console.error("Error fetching portfolios:", error);
-    } finally {
-      setLoading(false);
-    }
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard-portfolios'] });
+    refetch();
   };
+
+  // Listen for cache invalidation events
+  useEffect(() => {
+    const handleInvalidate = () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-portfolios'] });
+    };
+    
+    window.addEventListener('invalidate-dashboard-portfolios', handleInvalidate);
+    return () => {
+      window.removeEventListener('invalidate-dashboard-portfolios', handleInvalidate);
+    };
+  }, [queryClient]);
 
   if (loading) {
     return (
@@ -170,7 +129,7 @@ export function DashboardPortfolios() {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold">Suas Carteiras</h3>
         <div className="flex items-center gap-2">
-          {fromCache && (
+          {isFromCache && (
             <Badge variant="outline" className="text-xs bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
               Cache
             </Badge>
@@ -178,9 +137,9 @@ export function DashboardPortfolios() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => fetchPortfolios(true)}
+            onClick={handleRefresh}
             disabled={loading}
-            title="Atualizar carteiras (limpar cache)"
+            title="Atualizar carteiras"
             className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />

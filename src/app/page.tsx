@@ -35,6 +35,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getAllPosts } from "@/lib/blog-service"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
+import { InnerLinkButton } from "@/components/inner-link-button"
 
 export const metadata: Metadata = {
   title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI - Investimentos Bovespa",
@@ -610,9 +611,9 @@ export default async function Home() {
                           Testar carteira agora
                           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
                         </div>
-                        <Link href="/backtesting-carteiras" className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 underline transition-colors">
+                        <InnerLinkButton href="/backtesting-carteiras" className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 underline transition-colors cursor-pointer">
                           Saiba mais sobre Backtesting →
-                        </Link>
+                        </InnerLinkButton>
                       </div>
                     </div>
                   </div>

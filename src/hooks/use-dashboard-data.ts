@@ -205,6 +205,7 @@ export function usePortfolios() {
   });
 
   // Persist to localStorage only after a successful fetch (not from initialData)
+  // Only cache if portfolios array has items
   const previousDataUpdatedAtRef = useRef<number | undefined>(initialCacheData?.updatedAt);
   const isInitialMountRef = useRef(true);
   
@@ -226,7 +227,90 @@ export function usePortfolios() {
       query.dataUpdatedAt !== previousDataUpdatedAtRef.current;
     
     if (hasNewFetch) {
-      // Houve um fetch real, salvar no cache
+      // Houve um fetch real, salvar no cache (saveQueryCache já valida se tem dados)
+      saveQueryCache(queryKey, query.data, true);
+      previousDataUpdatedAtRef.current = query.dataUpdatedAt;
+    }
+  }, [query.data, query.dataUpdatedAt, queryKey, initialCacheData]);
+
+  return query;
+}
+
+// ===== Dashboard Portfolios =====
+
+interface DashboardPortfolio {
+  id: string;
+  name: string;
+  currentValue: number;
+  cashBalance: number;
+  totalInvested: number;
+  totalWithdrawn: number;
+  netInvested: number;
+  totalReturn: number;
+  evolutionData: Array<{
+    date: string;
+    value: number;
+  }>;
+}
+
+interface DashboardPortfoliosResponse {
+  portfolios: DashboardPortfolio[];
+}
+
+async function fetchDashboardPortfolios(): Promise<DashboardPortfoliosResponse> {
+  const response = await fetch('/api/portfolio/dashboard');
+  if (!response.ok) {
+    throw new Error('Failed to fetch dashboard portfolios');
+  }
+  return response.json();
+}
+
+/**
+ * Hook para buscar portfolios da dashboard com métricas
+ * Cache: 5 minutos
+ */
+export function useDashboardPortfolios() {
+  const queryKey = ['dashboard-portfolios'];
+  const staleTime = 5 * 60 * 1000; // 5 minutos
+  const gcTime = 30 * 60 * 1000; // 30 minutos
+
+  const initialCacheData = getInitialData<DashboardPortfoliosResponse>(queryKey, staleTime);
+  
+  const query = useQuery<DashboardPortfoliosResponse>({
+    queryKey,
+    queryFn: fetchDashboardPortfolios,
+    staleTime,
+    gcTime,
+    refetchOnMount: initialCacheData ? false : true,
+    initialData: initialCacheData?.data,
+    initialDataUpdatedAt: initialCacheData?.updatedAt,
+    placeholderData: initialCacheData ? undefined : () => getPlaceholderData<DashboardPortfoliosResponse>(queryKey, staleTime),
+  });
+
+  // Persist to localStorage only after a successful fetch (not from initialData)
+  // Only cache if portfolios array has items (handled by saveQueryCache)
+  const previousDataUpdatedAtRef = useRef<number | undefined>(initialCacheData?.updatedAt);
+  const isInitialMountRef = useRef(true);
+  
+  useEffect(() => {
+    if (!query.data) return;
+    
+    // Na primeira montagem, se temos initialData, não salvar (já está no cache)
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      if (initialCacheData) {
+        // Dados vieram do cache, não salvar novamente
+        previousDataUpdatedAtRef.current = query.dataUpdatedAt;
+        return;
+      }
+    }
+    
+    // Se dataUpdatedAt mudou desde a última vez, significa que houve um fetch
+    const hasNewFetch = query.dataUpdatedAt && 
+      query.dataUpdatedAt !== previousDataUpdatedAtRef.current;
+    
+    if (hasNewFetch) {
+      // Houve um fetch real, salvar no cache (saveQueryCache já valida se tem dados)
       saveQueryCache(queryKey, query.data, true);
       previousDataUpdatedAtRef.current = query.dataUpdatedAt;
     }

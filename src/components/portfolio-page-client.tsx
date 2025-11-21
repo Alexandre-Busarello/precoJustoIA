@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,12 +73,29 @@ interface Portfolio {
  */
 // Fetch function for portfolios
 const fetchPortfolios = async (): Promise<Portfolio[]> => {
-  const response = await fetch("/api/portfolio");
-  if (!response.ok) {
-    throw new Error("Erro ao carregar carteiras");
+  try {
+    const response = await fetch("/api/portfolio");
+    if (!response.ok) {
+      throw new Error("Erro ao carregar carteiras");
+    }
+    const data = await response.json();
+    
+    // Ensure portfolios is always an array
+    if (!data || typeof data !== 'object') {
+      console.warn("API retornou dados inválidos:", data);
+      return [];
+    }
+    
+    const portfolios = data.portfolios;
+    if (!Array.isArray(portfolios)) {
+      console.warn("API retornou portfolios que não é um array:", portfolios);
+      return [];
+    }
+    return portfolios;
+  } catch (error) {
+    console.error("Erro ao buscar portfolios:", error);
+    return [];
   }
-  const data = await response.json();
-  return data.portfolios || [];
 };
 
 export function PortfolioPageClient() {
@@ -89,14 +106,23 @@ export function PortfolioPageClient() {
   const queryClient = useQueryClient();
 
   // Use React Query for portfolios
+  // Always refetch on mount to ensure fresh data when navigating from dashboard
   const {
-    data: portfolios = [],
+    data: portfoliosData,
     isLoading: loading,
     error: portfoliosError,
+    refetch,
   } = useQuery({
     queryKey: ["portfolios"],
     queryFn: fetchPortfolios,
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    staleTime: 0, // Consider data stale immediately to force fresh fetch
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
+
+  // Ensure portfolios is always an array
+  const portfolios = Array.isArray(portfoliosData) ? portfoliosData : [];
 
   const [selectedPortfolio, setSelectedPortfolio] = useState<string | null>(
     null
@@ -112,6 +138,18 @@ export function PortfolioPageClient() {
       });
     }
   }, [portfoliosError, toast]);
+
+  // Force refetch if portfolios is empty after initial load (e.g., navigating from dashboard)
+  // This handles cases where React Query cache might have stale empty data
+  const hasRefetchedRef = useRef(false);
+  useEffect(() => {
+    // Only refetch once if we have no portfolios and we're not loading
+    if (!loading && portfolios.length === 0 && !portfoliosError && !hasRefetchedRef.current) {
+      console.log("🔄 [PORTFOLIO PAGE] Portfolios vazio após carregamento inicial, forçando refetch...");
+      hasRefetchedRef.current = true;
+      refetch();
+    }
+  }, [loading, portfolios.length, portfoliosError, refetch]);
 
   // Auto-select portfolio from URL or first one
   useEffect(() => {
@@ -268,7 +306,10 @@ export function PortfolioPageClient() {
     );
   }
 
-  const currentPortfolio = portfolios.find((p) => p.id === selectedPortfolio);
+  // Ensure portfolios is an array before using .find()
+  const currentPortfolio = Array.isArray(portfolios) 
+    ? portfolios.find((p) => p.id === selectedPortfolio)
+    : null;
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
@@ -588,8 +629,9 @@ function PortfolioOverview({
     setRefreshKey((prev) => prev + 1);
     // Invalidate metrics query to reload
     queryClient.invalidateQueries({ queryKey: ["portfolio-metrics", portfolioId] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-portfolios"] }); // Invalidate dashboard cache
     onUpdate(); // Notify parent to update portfolio selector badges
-    invalidateDashboardPortfoliosCache(); // Invalidate dashboard cache
+    invalidateDashboardPortfoliosCache(); // Also invalidate old localStorage cache
   };
 
   // Reload metrics when refreshKey changes
@@ -823,8 +865,9 @@ function PortfolioTransactions({
     setRefreshKey((prev) => prev + 1);
     // Invalidate metrics query to reload
     queryClient.invalidateQueries({ queryKey: ["portfolio-metrics", portfolioId] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-portfolios"] }); // Invalidate dashboard cache
     onUpdate(); // Notify parent to update portfolio selector badges only
-    invalidateDashboardPortfoliosCache(); // Invalidate dashboard cache
+    invalidateDashboardPortfoliosCache(); // Also invalidate old localStorage cache
   };
 
   // Detectar hash e fazer scroll quando dados carregarem

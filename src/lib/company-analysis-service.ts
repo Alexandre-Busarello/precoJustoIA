@@ -339,14 +339,117 @@ export async function executeCompanyAnalysis(
   const includeBreakdown = options.includeBreakdown || false;
   const overallScore = isPremium ? calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData, includeBreakdown) : null;
 
+  // Ajustar scores das estratégias baseado no breakdown se disponível
+  // Isso garante que os scores exibidos na interface sejam os mesmos usados no cálculo final
+  let adjustedStrategies = strategies;
+  if (overallScore && includeBreakdown && 'contributions' in overallScore && overallScore.contributions && Array.isArray(overallScore.contributions)) {
+    adjustedStrategies = adjustStrategiesScoresFromBreakdown(strategies, overallScore.contributions);
+  }
+
   return {
     ticker: companyData.ticker,
     name: companyData.name,
     sector: companyData.sector,
     currentPrice: companyData.currentPrice,
     overallScore,
-    strategies
+    strategies: adjustedStrategies
   };
+}
+
+/**
+ * Ajusta os scores das estratégias para refletir os scores ajustados usados no cálculo final
+ * Isso garante consistência entre o que é exibido na interface e o que foi usado no cálculo do overall score
+ */
+function adjustStrategiesScoresFromBreakdown(
+  strategies: {
+    graham: StrategyAnalysis | null;
+    dividendYield: StrategyAnalysis | null;
+    lowPE: StrategyAnalysis | null;
+    magicFormula: StrategyAnalysis | null;
+    fcd: StrategyAnalysis | null;
+    gordon: StrategyAnalysis | null;
+    fundamentalist: StrategyAnalysis | null;
+    barsi: StrategyAnalysis | null;
+  },
+  contributions: Array<{ name: string; score: number }>
+): {
+  graham: StrategyAnalysis | null;
+  dividendYield: StrategyAnalysis | null;
+  lowPE: StrategyAnalysis | null;
+  magicFormula: StrategyAnalysis | null;
+  fcd: StrategyAnalysis | null;
+  gordon: StrategyAnalysis | null;
+  fundamentalist: StrategyAnalysis | null;
+  barsi: StrategyAnalysis | null;
+} {
+  const adjustedStrategies = { ...strategies };
+
+  // Ajustar cada estratégia que tem correspondência no breakdown
+  // FCD
+  if (adjustedStrategies.fcd) {
+    const contribution = contributions.find(c => c.name === 'Fluxo de Caixa Descontado');
+    if (contribution && contribution.score !== adjustedStrategies.fcd.score) {
+      adjustedStrategies.fcd = { ...adjustedStrategies.fcd, score: contribution.score };
+    }
+  }
+  
+  // Graham
+  if (adjustedStrategies.graham) {
+    const contribution = contributions.find(c => c.name === 'Graham (Valor Intrínseco)');
+    if (contribution && contribution.score !== adjustedStrategies.graham.score) {
+      adjustedStrategies.graham = { ...adjustedStrategies.graham, score: contribution.score };
+    }
+  }
+  
+  // Gordon
+  if (adjustedStrategies.gordon) {
+    const contribution = contributions.find(c => c.name === 'Gordon (Dividendos)');
+    if (contribution && contribution.score !== adjustedStrategies.gordon.score) {
+      adjustedStrategies.gordon = { ...adjustedStrategies.gordon, score: contribution.score };
+    }
+  }
+  
+  // Barsi
+  if (adjustedStrategies.barsi) {
+    const contribution = contributions.find(c => c.name === 'Método Barsi');
+    if (contribution && contribution.score !== adjustedStrategies.barsi.score) {
+      adjustedStrategies.barsi = { ...adjustedStrategies.barsi, score: contribution.score };
+    }
+  }
+  
+  // Dividend Yield
+  if (adjustedStrategies.dividendYield) {
+    const contribution = contributions.find(c => c.name === 'Dividend Yield');
+    if (contribution && contribution.score !== adjustedStrategies.dividendYield.score) {
+      adjustedStrategies.dividendYield = { ...adjustedStrategies.dividendYield, score: contribution.score };
+    }
+  }
+  
+  // Low P/E
+  if (adjustedStrategies.lowPE) {
+    const contribution = contributions.find(c => c.name === 'Low P/E');
+    if (contribution && contribution.score !== adjustedStrategies.lowPE.score) {
+      adjustedStrategies.lowPE = { ...adjustedStrategies.lowPE, score: contribution.score };
+    }
+  }
+  
+  // Magic Formula
+  if (adjustedStrategies.magicFormula) {
+    const contribution = contributions.find(c => c.name === 'Fórmula Mágica');
+    if (contribution && contribution.score !== adjustedStrategies.magicFormula.score) {
+      adjustedStrategies.magicFormula = { ...adjustedStrategies.magicFormula, score: contribution.score };
+    }
+  }
+  
+  // Fundamentalist
+  if (adjustedStrategies.fundamentalist) {
+    const contribution = contributions.find(c => c.name === 'Fundamentalista 3+1');
+    if (contribution && contribution.score !== adjustedStrategies.fundamentalist.score) {
+      adjustedStrategies.fundamentalist = { ...adjustedStrategies.fundamentalist, score: contribution.score };
+    }
+  }
+
+  return adjustedStrategies;
 }
 
 // Função helper para executar análise de múltiplas empresas (para página de comparação)

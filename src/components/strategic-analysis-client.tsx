@@ -111,6 +111,38 @@ function formatPercent(value: unknown): string {
   return `${(numValue * 100).toFixed(2)}%`;
 }
 
+/**
+ * Calcula a porcentagem real de critérios atendidos e verifica se o score foi ajustado
+ * Retorna um objeto com a porcentagem real e se houve ajuste
+ * 
+ * Estratégias como FCD, Graham, Gordon e Barsi podem ter seus scores ajustados para valores
+ * fixos (20 ou 25) quando o upside é insuficiente, mesmo que atendam mais critérios.
+ */
+function getCriteriaPercentage(strategy: StrategyAnalysis | null): {
+  realPercentage: number;
+  wasAdjusted: boolean;
+  adjustedScore: number | null;
+} {
+  if (!strategy || !strategy.criteria || strategy.criteria.length === 0) {
+    return { realPercentage: 0, wasAdjusted: false, adjustedScore: null };
+  }
+
+  const passedCriteria = strategy.criteria.filter(c => c.value).length;
+  const realPercentage = (passedCriteria / strategy.criteria.length) * 100;
+  
+  // Verificar se o score foi ajustado por penalização
+  // Scores ajustados geralmente são valores fixos baixos (20 ou 25) quando há penalização
+  // por upside insuficiente, mesmo que a porcentagem real de critérios seja maior
+  const isAdjustedValue = strategy.score === 20 || strategy.score === 25;
+  const wasAdjusted = isAdjustedValue && strategy.score < realPercentage - 5; // Margem de 5% para considerar ajuste
+  
+  return {
+    realPercentage,
+    wasAdjusted,
+    adjustedScore: wasAdjusted ? strategy.score : null
+  };
+}
+
 // Componente inline para registro
 function RegisterPrompt({ strategy }: { strategy: string }) {
   return (
@@ -515,7 +547,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                             : ""
                         }`}>Benjamin Graham</span>
                         <Badge variant={strategies.graham?.isEligible ? "default" : "secondary"}>
-                          {strategies.graham?.score?.toFixed(0) || 0}% dos critérios
+                          {(() => {
+                            const criteriaInfo = getCriteriaPercentage(strategies.graham);
+                            return `${criteriaInfo.realPercentage.toFixed(0)}% dos critérios`;
+                          })()}
                         </Badge>
                       </div>
                       <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
@@ -561,6 +596,26 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <div className="bg-muted p-4 rounded-lg mb-4">
                         <MarkdownRenderer content={strategies.graham?.reasoning || ''} />
                       </div>
+
+                      {(() => {
+                        const criteriaInfo = getCriteriaPercentage(strategies.graham);
+                        if (criteriaInfo.wasAdjusted) {
+                          return (
+                            <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4 flex items-start space-x-2">
+                              <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                                  Score Ajustado
+                                </p>
+                                <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
+                                  A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.graham?.upside?.toFixed(1)}% &lt; 10%).
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
 
                       <div className="space-y-2">
                         <h4 className="font-medium">Critérios Avaliados:</h4>
@@ -696,7 +751,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                               : ""
                           }`}>Fluxo de Caixa Descontado (FCD)</span>
                           <Badge variant={strategies.fcd?.isEligible ? "default" : "secondary"}>
-                            {strategies.fcd?.score?.toFixed(0) || 0}% dos critérios
+                            {(() => {
+                              const criteriaInfo = getCriteriaPercentage(strategies.fcd);
+                              return `${criteriaInfo.realPercentage.toFixed(0)}% dos critérios`;
+                            })()}
                           </Badge>
                         </div>
                         <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
@@ -742,6 +800,26 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                         <div className="bg-muted p-4 rounded-lg mb-4">
                           <MarkdownRenderer content={strategies.fcd?.reasoning || ''} />
                         </div>
+
+                        {(() => {
+                          const criteriaInfo = getCriteriaPercentage(strategies.fcd);
+                          if (criteriaInfo.wasAdjusted) {
+                            return (
+                              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4 flex items-start space-x-2">
+                                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                                    Score Ajustado
+                                  </p>
+                                  <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
+                                    A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.fcd?.upside?.toFixed(1)}% &lt; 10%).
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         <div className="space-y-2">
                           <h4 className="font-medium">Critérios Premium:</h4>
@@ -879,7 +957,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                               : ""
                           }`}>Fórmula de Gordon (Método dos Dividendos)</span>
                           <Badge variant={strategies.gordon?.isEligible ? "default" : "secondary"}>
-                            {strategies.gordon?.score?.toFixed(0) || 0}% dos critérios
+                            {(() => {
+                              const criteriaInfo = getCriteriaPercentage(strategies.gordon);
+                              return `${criteriaInfo.realPercentage.toFixed(0)}% dos critérios`;
+                            })()}
                           </Badge>
                         </div>
                         <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
@@ -925,6 +1006,26 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                         <div className="bg-muted p-4 rounded-lg mb-4">
                           <MarkdownRenderer content={strategies.gordon?.reasoning || ''} />
                         </div>
+
+                        {(() => {
+                          const criteriaInfo = getCriteriaPercentage(strategies.gordon);
+                          if (criteriaInfo.wasAdjusted) {
+                            return (
+                              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4 flex items-start space-x-2">
+                                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                                    Score Ajustado
+                                  </p>
+                                  <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
+                                    A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.gordon?.upside?.toFixed(1)}% &lt; 15%).
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         <div className="space-y-2">
                           <h4 className="font-medium">Critérios Avaliados:</h4>
@@ -1062,7 +1163,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                               : ""
                           }`}>Método Barsi (Buy-and-Hold Dividendos)</span>
                           <Badge variant={strategies.barsi?.isEligible ? "default" : "secondary"}>
-                            {strategies.barsi?.score?.toFixed(0) || 0}% dos critérios
+                            {(() => {
+                              const criteriaInfo = getCriteriaPercentage(strategies.barsi);
+                              return `${criteriaInfo.realPercentage.toFixed(0)}% dos critérios`;
+                            })()}
                           </Badge>
                         </div>
                         <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
@@ -1108,6 +1212,26 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                         <div className="bg-muted p-4 rounded-lg mb-4">
                           <MarkdownRenderer content={strategies.barsi?.reasoning || ''} />
                         </div>
+
+                        {(() => {
+                          const criteriaInfo = getCriteriaPercentage(strategies.barsi);
+                          if (criteriaInfo.wasAdjusted) {
+                            return (
+                              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4 flex items-start space-x-2">
+                                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                                    Score Ajustado
+                                  </p>
+                                  <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
+                                    A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.barsi?.upside?.toFixed(1)}% &lt; 10%).
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         <div className="space-y-2">
                           <h4 className="font-medium">Critérios dos 5 Passos do Barsi:</h4>
@@ -1787,7 +1911,10 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                             : ""
                         }`}>Método Barsi</span>
                         <Badge variant={strategies.barsi?.isEligible ? "default" : "secondary"}>
-                          {strategies.barsi?.score?.toFixed(0) || 0}% dos critérios
+                          {(() => {
+                            const criteriaInfo = getCriteriaPercentage(strategies.barsi);
+                            return `${criteriaInfo.realPercentage.toFixed(0)}% dos critérios`;
+                          })()}
                         </Badge>
                       </div>
                       <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
@@ -1833,6 +1960,26 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <div className="bg-muted p-4 rounded-lg mb-4">
                         <MarkdownRenderer content={strategies.barsi?.reasoning || ''} />
                       </div>
+
+                      {(() => {
+                        const criteriaInfo = getCriteriaPercentage(strategies.barsi);
+                        if (criteriaInfo.wasAdjusted) {
+                          return (
+                            <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4 flex items-start space-x-2">
+                              <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                                  Score Ajustado
+                                </p>
+                                <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
+                                  A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.barsi?.upside?.toFixed(1)}% &lt; 10%).
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
 
                       <div className="space-y-2">
                         <h4 className="font-medium">Os 5 Passos do Barsi:</h4>

@@ -157,11 +157,13 @@ export async function calculateCompanyOverallScore(
 
     // === 5. EXECUTAR ANÁLISE COMPLETA ===
     // Exatamente como no original, usando o serviço centralizado
+    // IMPORTANTE: Se includeStrategies é true, também incluir breakdown para ajustar scores das estratégias
+    const shouldIncludeBreakdown = includeBreakdown || includeStrategies;
     const analysisResult = await executeCompanyAnalysis(companyAnalysisData, {
       isLoggedIn,
       isPremium,
       includeStatements, // Incluir demonstrações baseado em isPremium
-      includeBreakdown, // Incluir breakdown se solicitado
+      includeBreakdown: shouldIncludeBreakdown, // Incluir breakdown se solicitado ou se precisamos ajustar scores das estratégias
       companyId: companyId || String(companyData.id),
       industry: industry !== undefined ? industry : companyData.industry
     });

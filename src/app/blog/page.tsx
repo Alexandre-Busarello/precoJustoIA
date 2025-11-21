@@ -13,11 +13,11 @@ export const metadata = {
   description: "Artigos completos sobre estratégias de investimento, análise de empresas e como usar nossa plataforma para encontrar as melhores oportunidades na B3.",
 }
 
-export default function BlogPage() {
+export default async function BlogPage() {
   // Carregar dados do servidor
-  const allPosts = getAllPosts()
-  const categories = getCategoryCounts()
-  const featuredPost = getFeaturedPost()
+  const allPosts = await getAllPosts()
+  const categories = await getCategoryCounts()
+  const featuredPost = await getFeaturedPost()
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/20 dark:to-background">

@@ -25,7 +25,7 @@ interface BlogPostPageProps {
 
 // Gerar parâmetros estáticos para todas as rotas de posts
 export async function generateStaticParams() {
-  const slugs = getAllPostSlugs()
+  const slugs = await getAllPostSlugs()
   return slugs.map((slug) => ({
     slug,
   }))
@@ -34,7 +34,7 @@ export async function generateStaticParams() {
 // Metadados otimizados para SEO
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params
-  const post = getPostBySlug(slug)
+  const post = await getPostBySlug(slug)
   
   if (!post) {
     return {
@@ -107,14 +107,14 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
-  const post = getPostBySlug(slug)
+  const post = await getPostBySlug(slug)
   
   if (!post) {
     notFound()
   }
 
   // Posts relacionados (mesma categoria, excluindo o atual)
-  const relatedPosts = getRelatedPosts(slug, 3)
+  const relatedPosts = await getRelatedPosts(slug, 3)
 
   // URL base para compartilhamento
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://precojusto.ai'

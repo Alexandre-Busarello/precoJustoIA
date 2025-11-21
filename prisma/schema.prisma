@@ -1478,3 +1478,59 @@ model ExitIntentFeedback {
   @@index([page])
   @@map("exit_intent_feedback")
 }
+
+// ===== SISTEMA DE BLOG =====
+
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model BlogPost {
+  id                String          @id @default(cuid())
+  slug              String          @unique
+  
+  // Metadados básicos
+  title             String
+  excerpt           String          @db.Text
+  category          String
+  readTime          String          @map("read_time")
+  publishDate       DateTime?       @map("publish_date") @db.Date
+  author            String          @default("Equipe Preço Justo AI")
+  featured          Boolean         @default(false)
+  
+  // SEO
+  seoTitle          String?         @map("seo_title")
+  seoDescription    String?         @map("seo_description") @db.Text
+  image             String?
+  imageAlt          String?         @map("image_alt")
+  canonicalUrl      String?         @map("canonical_url")
+  
+  // Conteúdo
+  content           String          @db.Text // Markdown completo
+  
+  // Status
+  status            BlogPostStatus  @default(DRAFT)
+  
+  // Tags (array JSON)
+  tags              Json            @default("[]")
+  
+  // Metadata
+  lastModified      DateTime?       @map("last_modified") @db.Date
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  
+  // Rastreamento de geração
+  generatedBy       String          @default("manual") @map("generated_by") // "AI" ou "manual"
+  generationPrompt  String?         @map("generation_prompt") @db.Text
+  sourceTopics      Json?           @map("source_topics") // Tópicos encontrados na web
+  
+  @@index([status])
+  @@index([status, publishDate])
+  @@index([category])
+  @@index([slug])
+  @@index([featured])
+  @@index([createdAt])
+  @@index([publishDate])
+  @@map("blog_posts")
+}

@@ -1,11 +1,12 @@
 import 'server-only'
-import fs from 'fs'
-import path from 'path'
-import matter from 'gray-matter'
+import { PrismaClient } from '@prisma/client'
+import { BlogPostStatus } from '@prisma/client'
 
-// Interface para metadados do post
+const prisma = new PrismaClient()
+
+// Interface para metadados do post (compatível com a interface anterior)
 export interface BlogPostMetadata {
-  id: number
+  id: number | string
   slug: string
   title: string
   excerpt: string
@@ -28,25 +29,53 @@ export interface BlogPost extends BlogPostMetadata {
   content: string
 }
 
-// Caminho para o diretório de posts
-const postsDirectory = path.join(process.cwd(), 'blog', 'data', 'posts')
+// Cache simples em memória (para performance)
+let postsCache: BlogPostMetadata[] | null = null
+let cacheTimestamp: number = 0
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+// Helper para converter do banco para a interface
+function dbToBlogPostMetadata(dbPost: any): BlogPostMetadata {
+  return {
+    id: dbPost.id,
+    slug: dbPost.slug,
+    title: dbPost.title,
+    excerpt: dbPost.excerpt,
+    category: dbPost.category,
+    readTime: dbPost.readTime,
+    publishDate: dbPost.publishDate ? dbPost.publishDate.toISOString().split('T')[0] : '',
+    author: dbPost.author,
+    featured: dbPost.featured,
+    tags: Array.isArray(dbPost.tags) ? dbPost.tags : [],
+    seoTitle: dbPost.seoTitle || undefined,
+    seoDescription: dbPost.seoDescription || undefined,
+    image: dbPost.image || undefined,
+    imageAlt: dbPost.imageAlt || undefined,
+    canonicalUrl: dbPost.canonicalUrl || undefined,
+    lastModified: dbPost.lastModified ? dbPost.lastModified.toISOString().split('T')[0] : undefined
+  }
+}
+
+// Helper para converter do banco para BlogPost completo
+function dbToBlogPost(dbPost: any): BlogPost {
+  return {
+    ...dbToBlogPostMetadata(dbPost),
+    content: dbPost.content
+  }
+}
 
 /**
- * Obtém todos os slugs dos posts disponíveis
+ * Obtém todos os slugs dos posts disponíveis (apenas publicados)
  */
-export function getAllPostSlugs(): string[] {
+export async function getAllPostSlugs(): Promise<string[]> {
   try {
-    const fileNames = fs.readdirSync(postsDirectory)
-    return fileNames
-      .filter(fileName => {
-        // Filtrar apenas arquivos .md e ignorar README e outros arquivos especiais
-        return fileName.endsWith('.md') && 
-               !fileName.startsWith('README') && 
-               !fileName.startsWith('.')
-      })
-      .map(fileName => fileName.replace(/\.md$/, ''))
+    const posts = await (prisma as any).blogPost.findMany({
+      where: { status: 'PUBLISHED' },
+      select: { slug: true }
+    })
+    return posts.map((p: any) => p.slug)
   } catch (error) {
-    console.error('Erro ao ler diretório de posts:', error)
+    console.error('Erro ao buscar slugs de posts:', error)
     return []
   }
 }
@@ -54,23 +83,38 @@ export function getAllPostSlugs(): string[] {
 /**
  * Obtém metadados de um post pelo slug (sem o conteúdo completo)
  */
-export function getPostMetadata(slug: string): BlogPostMetadata | null {
+export async function getPostMetadata(slug: string): Promise<BlogPostMetadata | null> {
   try {
-    const fullPath = path.join(postsDirectory, `${slug}.md`)
-    
-    if (!fs.existsSync(fullPath)) {
+    const post = await (prisma as any).blogPost.findUnique({
+      where: { slug },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        excerpt: true,
+        category: true,
+        readTime: true,
+        publishDate: true,
+        author: true,
+        featured: true,
+        tags: true,
+        seoTitle: true,
+        seoDescription: true,
+        image: true,
+        imageAlt: true,
+        canonicalUrl: true,
+        lastModified: true,
+        status: true
+      }
+    })
+
+    if (!post || post.status !== 'PUBLISHED') {
       return null
     }
 
-    const fileContents = fs.readFileSync(fullPath, 'utf8')
-    const { data } = matter(fileContents)
-
-    return {
-      slug,
-      ...data
-    } as BlogPostMetadata
+    return dbToBlogPostMetadata(post)
   } catch (error) {
-    console.error(`Erro ao ler metadados do post ${slug}:`, error)
+    console.error(`Erro ao buscar metadados do post ${slug}:`, error)
     return null
   }
 }
@@ -78,49 +122,60 @@ export function getPostMetadata(slug: string): BlogPostMetadata | null {
 /**
  * Obtém um post completo pelo slug (metadados + conteúdo)
  */
-export function getPostBySlug(slug: string): BlogPost | null {
+export async function getPostBySlug(slug: string): Promise<BlogPost | null> {
   try {
-    const fullPath = path.join(postsDirectory, `${slug}.md`)
-    
-    if (!fs.existsSync(fullPath)) {
+    const post = await (prisma as any).blogPost.findUnique({
+      where: { slug }
+    })
+
+    if (!post || post.status !== 'PUBLISHED') {
       return null
     }
 
-    const fileContents = fs.readFileSync(fullPath, 'utf8')
-    const { data, content } = matter(fileContents)
-
-    return {
-      slug,
-      content,
-      ...data
-    } as BlogPost
+    return dbToBlogPost(post)
   } catch (error) {
-    console.error(`Erro ao ler post ${slug}:`, error)
+    console.error(`Erro ao buscar post ${slug}:`, error)
     return null
   }
 }
 
 /**
- * Obtém todos os posts (apenas metadados)
+ * Obtém todos os posts (apenas metadados) - com cache
  */
-export function getAllPosts(): BlogPostMetadata[] {
-  const slugs = getAllPostSlugs()
-  const posts = slugs
-    .map(slug => getPostMetadata(slug))
-    .filter((post): post is BlogPostMetadata => post !== null)
-    .sort((a, b) => {
-      // Ordenar por data de publicação (mais recente primeiro)
-      return new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
+export async function getAllPosts(): Promise<BlogPostMetadata[]> {
+  // Verificar cache
+  const now = Date.now()
+  if (postsCache && (now - cacheTimestamp) < CACHE_TTL) {
+    return postsCache
+  }
+
+  try {
+    const posts = await (prisma as any).blogPost.findMany({
+      where: { status: 'PUBLISHED' },
+      orderBy: [
+        { publishDate: 'desc' },
+        { createdAt: 'desc' }
+      ]
     })
 
-  return posts
+    const metadata = posts.map(dbToBlogPostMetadata)
+
+    // Atualizar cache
+    postsCache = metadata
+    cacheTimestamp = now
+
+    return metadata
+  } catch (error) {
+    console.error('Erro ao buscar todos os posts:', error)
+    return []
+  }
 }
 
 /**
  * Obtém posts por categoria
  */
-export function getPostsByCategory(category: string): BlogPostMetadata[] {
-  const allPosts = getAllPosts()
+export async function getPostsByCategory(category: string): Promise<BlogPostMetadata[]> {
+  const allPosts = await getAllPosts()
   
   if (category === 'Todos') {
     return allPosts
@@ -132,8 +187,8 @@ export function getPostsByCategory(category: string): BlogPostMetadata[] {
 /**
  * Busca posts por termo
  */
-export function searchPosts(searchTerm: string): BlogPostMetadata[] {
-  const allPosts = getAllPosts()
+export async function searchPosts(searchTerm: string): Promise<BlogPostMetadata[]> {
+  const allPosts = await getAllPosts()
   const term = searchTerm.toLowerCase()
   
   return allPosts.filter(post => 
@@ -147,33 +202,62 @@ export function searchPosts(searchTerm: string): BlogPostMetadata[] {
 /**
  * Obtém o post em destaque
  */
-export function getFeaturedPost(): BlogPostMetadata | null {
-  const allPosts = getAllPosts()
-  return allPosts.find(post => post.featured) || null
+export async function getFeaturedPost(): Promise<BlogPostMetadata | null> {
+  try {
+    const post = await (prisma as any).blogPost.findFirst({
+      where: {
+        status: 'PUBLISHED',
+        featured: true
+      },
+      orderBy: [
+        { publishDate: 'desc' },
+        { createdAt: 'desc' }
+      ]
+    })
+
+    return post ? dbToBlogPostMetadata(post) : null
+  } catch (error) {
+    console.error('Erro ao buscar post em destaque:', error)
+    return null
+  }
 }
 
 /**
  * Obtém posts relacionados (mesma categoria, excluindo o post atual)
  */
-export function getRelatedPosts(slug: string, limit: number = 3): BlogPostMetadata[] {
-  const currentPost = getPostMetadata(slug)
+export async function getRelatedPosts(slug: string, limit: number = 3): Promise<BlogPostMetadata[]> {
+  const currentPost = await getPostMetadata(slug)
   
   if (!currentPost) {
     return []
   }
 
-  const allPosts = getAllPosts()
-  
-  return allPosts
-    .filter(post => post.slug !== slug && post.category === currentPost.category)
-    .slice(0, limit)
+  try {
+    const posts = await (prisma as any).blogPost.findMany({
+      where: {
+        status: 'PUBLISHED',
+        category: currentPost.category,
+        slug: { not: slug }
+      },
+      take: limit,
+      orderBy: [
+        { publishDate: 'desc' },
+        { createdAt: 'desc' }
+      ]
+    })
+
+    return posts.map(dbToBlogPostMetadata)
+  } catch (error) {
+    console.error('Erro ao buscar posts relacionados:', error)
+    return []
+  }
 }
 
 /**
  * Obtém contadores de posts por categoria
  */
-export function getCategoryCounts(): { name: string; count: number }[] {
-  const allPosts = getAllPosts()
+export async function getCategoryCounts(): Promise<{ name: string; count: number }[]> {
+  const allPosts = await getAllPosts()
   
   const categories = new Map<string, number>()
   
@@ -195,12 +279,15 @@ export function getCategoryCounts(): { name: string; count: number }[] {
 }
 
 /**
- * Valida se um post existe
+ * Valida se um post existe (e está publicado)
  */
-export function postExists(slug: string): boolean {
+export async function postExists(slug: string): Promise<boolean> {
   try {
-    const fullPath = path.join(postsDirectory, `${slug}.md`)
-    return fs.existsSync(fullPath)
+    const post = await (prisma as any).blogPost.findUnique({
+      where: { slug },
+      select: { status: true }
+    })
+    return post?.status === 'PUBLISHED'
   } catch {
     return false
   }
@@ -209,15 +296,25 @@ export function postExists(slug: string): boolean {
 /**
  * Obtém estatísticas do blog
  */
-export function getBlogStats() {
-  const allPosts = getAllPosts()
+export async function getBlogStats() {
+  const allPosts = await getAllPosts()
+  const categories = await getCategoryCounts()
+  const featuredPost = await getFeaturedPost()
   
   return {
     totalPosts: allPosts.length,
-    categories: getCategoryCounts().filter(c => c.name !== 'Todos').length,
-    featuredPost: getFeaturedPost(),
+    categories: categories.filter(c => c.name !== 'Todos').length,
+    featuredPost,
     latestPosts: allPosts.slice(0, 5),
     lastUpdated: allPosts.length > 0 ? allPosts[0].publishDate : null
   }
+}
+
+/**
+ * Limpa o cache de posts (útil após atualizações)
+ */
+export function clearPostsCache() {
+  postsCache = null
+  cacheTimestamp = 0
 }
 

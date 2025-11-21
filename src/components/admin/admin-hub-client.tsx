@@ -22,6 +22,7 @@ import {
   TrendingDown,
   Settings,
   ArrowRight,
+  FileText,
 } from 'lucide-react';
 
 interface AdminHubClientProps {
@@ -34,6 +35,8 @@ interface QuickStats {
   openTickets?: number;
   totalEvents?: number;
   uniqueUsers?: number;
+  totalPosts?: number;
+  draftPosts?: number;
 }
 
 export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
@@ -72,6 +75,17 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
             uniqueUsers: analyticsData.metrics?.uniqueUsers || 0,
           }));
         }
+
+        // Buscar estatísticas de posts do blog
+        const blogResponse = await fetch('/api/admin/blog-posts');
+        if (blogResponse.ok) {
+          const blogData = await blogResponse.json();
+          setStats(prev => ({
+            ...prev,
+            totalPosts: blogData.stats?.total || 0,
+            draftPosts: blogData.stats?.draft || 0,
+          }));
+        }
       } catch (error) {
         console.error('Erro ao buscar estatísticas:', error);
       } finally {
@@ -102,6 +116,16 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       color: 'bg-purple-500',
       badge: stats.totalEvents ? `${(stats.totalEvents / 1000).toFixed(1)}k eventos` : undefined,
       badgeVariant: 'secondary' as const,
+    },
+    {
+      id: 'blog',
+      title: 'Gerenciar Blog',
+      description: 'Revise rascunhos gerados por IA, edite e publique posts',
+      icon: FileText,
+      href: '/admin/blog',
+      color: 'bg-orange-500',
+      badge: stats.draftPosts ? `${stats.draftPosts} rascunhos` : undefined,
+      badgeVariant: 'default' as const,
     },
     {
       id: 'cache-monitor',
@@ -202,13 +226,15 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-            <Shield className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Posts do Blog</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">Ativo</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : stats.totalPosts?.toLocaleString() || '0'}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Sistema operacional
+              {stats.draftPosts ? `${stats.draftPosts} aguardando revisão` : 'Carregando...'}
             </p>
           </CardContent>
         </Card>

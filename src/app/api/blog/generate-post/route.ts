@@ -55,10 +55,10 @@ export async function POST(request: NextRequest) {
         status: 'DRAFT',
         tags: post.tags,
         generatedBy: 'AI',
-        generationPrompt: `Tópicos: ${topics.topics.join(', ')}\nKeywords: ${post.keywords.join(', ')}`,
+        generationPrompt: `Contexto de Mercado: ${topics.market_context}\nTópico Principal: ${topics.trending_topics[0]?.title || 'N/A'}\nKeywords: ${post.keywords.join(', ')}`,
         sourceTopics: {
-          topics: topics.topics,
-          keywords: topics.keywords,
+          market_context: topics.market_context,
+          trending_topics: topics.trending_topics,
           sources: topics.sources,
         },
       },
@@ -77,7 +77,12 @@ export async function POST(request: NextRequest) {
         title: blogPost.title,
         status: blogPost.status,
       },
-      topics: topics.topics,
+      market_context: topics.market_context,
+      trending_topics: topics.trending_topics.map(t => ({
+        title: t.title,
+        angle: t.angle,
+        tickers: t.target_ticker,
+      })),
       keywords: post.keywords,
     });
 

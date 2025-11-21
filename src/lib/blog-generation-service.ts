@@ -4,10 +4,23 @@ import { slugify } from '@/lib/utils';
 
 const prisma = new PrismaClient();
 
+interface TrendingTopic {
+  title: string;
+  summary: string;
+  angle: string;
+  target_ticker: string[];
+  seo_keywords: string[];
+}
+
+interface Source {
+  name: string;
+  url: string;
+}
+
 interface TopicSearchResult {
-  topics: string[];
-  keywords: string[];
-  sources: string[];
+  market_context: string;
+  trending_topics: TrendingTopic[];
+  sources: Source[];
 }
 
 interface GeneratedPost {
@@ -53,31 +66,46 @@ export async function searchHotTopics(): Promise<TopicSearchResult> {
     apiKey: process.env.GEMINI_API_KEY,
   });
 
-  const prompt = `Você é um especialista em análise de mercado financeiro brasileiro e SEO.
+  const prompt = `ATUE COMO: Sênior Market Analyst e Estrategista de SEO focado no mercado financeiro brasileiro (B3).
 
-Busque na internet os tópicos mais quentes e recentes sobre:
-- Investimentos na B3 (Bolsa de Valores brasileira)
-- Análise fundamentalista de ações
-- Dividendos e renda passiva
-- Mercado de ações brasileiro
-- Empresas listadas na B3
-- Tendências de investimento em 2025
+TAREFA:
+Realize uma varredura profunda na internet (web browsing) para identificar as oportunidades de conteúdo mais quentes do momento. Seu objetivo é alimentar um blog de investimentos focado em Value Investing e Dividendos.
 
-IMPORTANTE:
-- Foque em tópicos que sejam relevantes para investidores brasileiros
-- Priorize assuntos que estão em alta nas últimas semanas
-- Inclua notícias sobre empresas específicas, setores em alta, e tendências de mercado
+CRITÉRIOS DE BUSCA:
 
-Retorne APENAS um JSON válido (sem markdown, sem explicações) com esta estrutura:
+1. TÓPICOS QUENTES (Últimos 7-15 dias): Notícias que estão movendo o Ibovespa agora (ex: fusões, balanços trimestrais surpreendentes, mudanças regulatórias, decisões do COPOM/FED).
+
+2. TENDÊNCIAS 2025: Relatórios recentes de grandes casas (BTG, XP, Itaú) sobre projeções setoriais e macroeconômicas.
+
+3. DIVIDENDOS: Anúncios recentes de proventos (Data Com) ou empresas que se tornaram descontadas (valuation atrativo).
+
+4. SETORES ESPECÍFICOS: Energia, Saneamento, Bancos, Frigoríficos e Commodities.
+
+RESTRIÇÕES DE QUALIDADE:
+- Ignore "day trade" ou criptomoedas. Foco total em Análise Fundamentalista e Buy & Hold.
+- Os tópicos devem ser acionáveis (ex: "Por que a ação X caiu e abriu oportunidade" ao invés de "Ação X caiu").
+- As palavras-chave devem ter intenção de busca informacional ou transacional.
+
+FORMATO DE SAÍDA (IMPORTANTE):
+Você deve retornar APENAS um objeto JSON válido, minificado ou formatado, sem blocos de código markdown (\`\`\`json), sem introdução e sem conclusão. A estrutura deve ser EXATAMENTE esta:
+
 {
-  "topics": ["tópico 1", "tópico 2", "tópico 3"],
-  "keywords": ["palavra-chave 1", "palavra-chave 2", "palavra-chave 3"],
-  "sources": ["fonte 1", "fonte 2"]
+  "market_context": "Resumo de 1 frase sobre o sentimento atual do mercado (ex: Bullish com cautela fiscal)",
+  "trending_topics": [
+    {
+      "title": "Título sugerido para o tópico (atraente)",
+      "summary": "Resumo breve do fato relevante (o que aconteceu)",
+      "angle": "O ângulo da análise (ex: Oportunidade de Compra, Alerta de Risco, Renda Passiva)",
+      "target_ticker": ["TICKER1", "TICKER2"],
+      "seo_keywords": ["keyword 1", "keyword 2", "long tail keyword"]
+    }
+  ],
+  "sources": [
+    {"name": "Nome da Fonte", "url": "URL direta"}
+  ]
 }
 
-Os tópicos devem ser específicos e acionáveis (ex: "Ibovespa bate recorde histórico", "Setor de energia elétrica em alta", "Melhores ações para dividendos em 2025").
-As palavras-chave devem ser otimizadas para SEO e busca orgânica.
-As fontes devem ser URLs ou nomes de fontes confiáveis.`;
+IMPORTANTE: Retorne pelo menos 3-5 trending_topics relevantes e bem estruturados.`;
 
   const model = 'gemini-2.5-flash-lite';
   const tools = [{ googleSearch: {} }];
@@ -171,64 +199,92 @@ export async function generateBlogPost(
   const examplePosts = await getExamplePosts(3);
 
   // Escolher categoria baseada nos tópicos
-  const category = selectCategory(topics.topics);
+  const allTopicTexts = topics.trending_topics.map(t => `${t.title} ${t.summary} ${t.angle}`).join(' ');
+  const category = selectCategory(allTopicTexts);
 
-  const prompt = `Você é um redator especializado em conteúdo sobre investimentos na B3 e análise fundamentalista.
+  // Coletar todas as palavras-chave dos tópicos
+  const allKeywords = topics.trending_topics.flatMap(t => t.seo_keywords);
+  const uniqueKeywords = [...new Set(allKeywords)];
 
-TAREFA: Criar um artigo completo e otimizado para SEO sobre os tópicos quentes encontrados.
+  // Selecionar o tópico principal (primeiro da lista)
+  const mainTopic = topics.trending_topics[0];
 
-TÓPICOS QUENTES ENCONTRADOS:
-${topics.topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+  const prompt = `Aja como um Editor Sênior e Investidor Experiente de um blog de finanças popular no Brasil (estilo Suno Research, Nord Research ou Primo Rico).
+
+Sua tarefa é escrever um artigo de blog otimizado para SEO e altamente engajador.
+
+CONTEXTO DE MERCADO ATUAL:
+${topics.market_context}
+
+TÓPICO PRINCIPAL PARA O ARTIGO:
+Título: ${mainTopic.title}
+Resumo: ${mainTopic.summary}
+Ângulo de Análise: ${mainTopic.angle}
+Tickers Relacionados: ${mainTopic.target_ticker.join(', ')}
+
+OUTROS TÓPICOS QUENTES DO MOMENTO:
+${topics.trending_topics.slice(1).map((t, i) => `
+${i + 2}. ${t.title}
+   Resumo: ${t.summary}
+   Ângulo: ${t.angle}
+   Tickers: ${t.target_ticker.join(', ')}
+`).join('\n')}
 
 PALAVRAS-CHAVE PARA OTIMIZAÇÃO SEO:
-${topics.keywords.join(', ')}
+${uniqueKeywords.join(', ')}
+
+CONTEXTO E TOM DE VOZ:
+
+1. **Persona:** Você não é um robô e nem um acadêmico chato. Você é um investidor "calejado" que entende a dor do pequeno investidor. Você fala a língua do mercado financeiro, mas traduz para o português claro.
+
+2. **Linguagem:** Use gírias de mercado com naturalidade (ex: "Faria Lima", "Sardinha", "Porto Seguro", "Vacas Leiteiras", "Pimentinha", "Perder o bonde"). Use analogias simples (futebol, carros, dia a dia) para explicar conceitos complexos.
+
+3. **Emoção:** Seja opinativo. Não diga "o mercado subiu", diga "a euforia tomou conta". Use perguntas retóricas para puxar o leitor para a conversa. Demonstre ceticismo saudável ("cuidado com a dica quente").
+
+4. **Formatação:** Use parágrafos curtos (3-4 linhas no máximo). Use negrito (**bold**) para destacar as frases de impacto, não apenas as palavras-chave.
+
+ESTRUTURA DO ARTIGO:
+
+1. **Título:** Deve ser magnético, prometendo um benefício ou resolvendo uma dor (ex: "Como ganhar dinheiro com...", "O Guia Definitivo..."). Inclua palavras-chave principais para SEO.
+
+2. **Intro:** Comece com um gancho forte sobre o cenário atual (data atual: Novembro de 2025). Conecte-se com o sentimento do leitor (medo ou ganância). Use o contexto de mercado fornecido.
+
+3. **Corpo:**
+   - Divida em H2 e H3 claros.
+   - Foque em Análise Fundamentalista (Lucro, Dívida, Caixa, Dividendos).
+   - Sempre explique o "Porquê" por trás do movimento da ação/setor.
+   - Use o ângulo de análise fornecido (${mainTopic.angle}).
+   - Inclua avisos de risco (Disclaimer).
+   - Mínimo de 2000 palavras.
+
+4. **Call to Action (CTA):** Termine com uma pergunta para gerar comentários e sugira um próximo passo prático.
+
+5. **Links:** Insira placeholders para links internos no formato Markdown [texto do link](/caminho-do-link).
 
 EXEMPLOS DE POSTS EXISTENTES (use como referência de estilo e estrutura):
 ${examplePosts.join('\n')}
 
-REQUISITOS OBRIGATÓRIOS:
+LINKS INTERNOS (OBRIGATÓRIO incluir pelo menos 3):
+- Link para calculadora de dividend yield: [texto do link](${INTERNAL_LINKS.calculadora})
+- Link para rankings de ações: [texto do link](${INTERNAL_LINKS.ranking})
+- Link para comparação de empresas: [texto do link](${INTERNAL_LINKS.comparacao})
+- Link para análise de ações: [texto do link](${INTERNAL_LINKS.analise})
+- Link para outros posts do blog: [texto do link](${INTERNAL_LINKS.blog})
+- Link para análises individuais dos ativos: [texto do link](${INTERNAL_LINKS.acao.replace('[ticker]', 'PETR4')}) (substitua PETR4 pelo ticker relevante)
 
-1. ESTRUTURA DO ARTIGO:
-- Título otimizado para SEO (inclua palavras-chave principais)
-- Resumo/excerpt cativante (150-200 caracteres)
-- Introdução envolvente
-- Seções bem organizadas com subtítulos H2 e H3
-- Conclusão com call-to-action
-- Mínimo de 2000 palavras
-
-2. LINKS INTERNOS (OBRIGATÓRIO incluir pelo menos 3):
-- Link para calculadora de dividend yield: ${INTERNAL_LINKS.calculadora}
-- Link para rankings de ações: ${INTERNAL_LINKS.ranking}
-- Link para comparação de empresas: ${INTERNAL_LINKS.comparacao}
-- Link para análise de ações: ${INTERNAL_LINKS.analise}
-- Link para outros posts do blog: ${INTERNAL_LINKS.blog}
-- Link para analises individuais dos ativos: ${INTERNAL_LINKS.acao} ([ticker] = ao ticker da açao que se quer linkar)
-
-3. LINKS EXTERNOS (OBRIGATÓRIO incluir pelo menos 2):
+LINKS EXTERNOS (OBRIGATÓRIO incluir pelo menos 2):
 - Links para fontes confiáveis sobre o assunto
 - Links para notícias relevantes da B3
 - Links para dados oficiais quando apropriado
 
-4. OTIMIZAÇÃO SEO:
-- Use as palavras-chave naturalmente ao longo do texto
-- Título deve conter a palavra-chave principal
-- Subtítulos devem incluir variações das palavras-chave
-- Meta description otimizada (150-160 caracteres)
-
-5. ESTILO E TOM:
-- Linguagem acessível mas profissional
-- Exemplos práticos e casos reais
-- Dados e números quando possível
-- Formatação markdown correta
-
-6. TAGS:
-- Gere 5-8 tags relevantes baseadas no conteúdo e palavras-chave
+OBJETIVO:
+Transformar dados técnicos frios em uma leitura agradável, educativa e que passe autoridade, incentivando o leitor a ter cautela e foco no longo prazo.
 
 Retorne APENAS um JSON válido (sem markdown, sem explicações) com esta estrutura:
 {
-  "title": "Título otimizado para SEO",
+  "title": "Título magnético otimizado para SEO",
   "excerpt": "Resumo cativante de 150-200 caracteres",
-  "content": "Conteúdo completo em markdown com pelo menos 2000 palavras, incluindo links internos e externos",
+  "content": "Conteúdo completo em markdown com pelo menos 2000 palavras, incluindo links internos e externos, parágrafos curtos, negritos para impacto, e tom opinativo",
   "category": "${category}",
   "tags": ["tag1", "tag2", "tag3"],
   "seoTitle": "Título otimizado para SEO (60 caracteres)",
@@ -236,7 +292,11 @@ Retorne APENAS um JSON válido (sem markdown, sem explicações) com esta estrut
   "keywords": ["palavra-chave 1", "palavra-chave 2"]
 }
 
-IMPORTANTE: O conteúdo deve ser original, útil e otimizado para busca orgânica.`;
+IMPORTANTE: 
+- O conteúdo deve ser original, útil e otimizado para busca orgânica.
+- Use o tom de voz de um investidor experiente e calejado, não um acadêmico.
+- Seja opinativo e use emoção para engajar o leitor.
+- Escreva o artigo completo em Markdown com formatação adequada.`;
 
   const model = 'gemini-2.5-flash-lite';
   const tools = [{ googleSearch: {} }];
@@ -290,22 +350,22 @@ IMPORTANTE: O conteúdo deve ser original, útil e otimizado para busca orgânic
 /**
  * Seleciona categoria baseada nos tópicos
  */
-function selectCategory(topics: string[]): string {
-  const topicText = topics.join(' ').toLowerCase();
+function selectCategory(topicText: string): string {
+  const text = topicText.toLowerCase();
 
-  if (topicText.includes('dividendo') || topicText.includes('renda passiva')) {
+  if (text.includes('dividendo') || text.includes('renda passiva') || text.includes('renda passiva')) {
     return 'Renda Passiva';
   }
-  if (topicText.includes('calculadora') || topicText.includes('ferramenta')) {
+  if (text.includes('calculadora') || text.includes('ferramenta')) {
     return 'Ferramentas';
   }
-  if (topicText.includes('setor') || topicText.includes('setorial')) {
+  if (text.includes('setor') || text.includes('setorial')) {
     return 'Análise Setorial';
   }
-  if (topicText.includes('estratégia') || topicText.includes('método')) {
+  if (text.includes('estratégia') || text.includes('método')) {
     return 'Estratégias de Investimento';
   }
-  if (topicText.includes('iniciante') || topicText.includes('como')) {
+  if (text.includes('iniciante') || text.includes('como')) {
     return 'Educação Financeira';
   }
 
@@ -385,7 +445,8 @@ export async function generateDailyPost(): Promise<{
 }> {
   console.log('🔍 Buscando tópicos quentes...');
   const topics = await searchHotTopics();
-  console.log(`✅ Encontrados ${topics.topics.length} tópicos`);
+  console.log(`✅ Encontrados ${topics.trending_topics.length} tópicos quentes`);
+  console.log(`📊 Contexto de mercado: ${topics.market_context}`);
 
   console.log('✍️ Gerando post com IA...');
   const post = await generateBlogPost(topics);

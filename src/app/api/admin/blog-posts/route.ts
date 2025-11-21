@@ -112,9 +112,38 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'ID do post é obrigatório' }, { status: 400 });
     }
 
-    // Se está publicando, definir publishDate se não existir
-    if (data.status === 'PUBLISHED' && !data.publishDate) {
+    // Converter publishDate para Date se for string
+    if (data.publishDate) {
+      if (typeof data.publishDate === 'string') {
+        // Se for apenas data (YYYY-MM-DD), converter para Date
+        if (data.publishDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // Formato YYYY-MM-DD - criar Date em UTC para evitar problemas de timezone
+          const [year, month, day] = data.publishDate.split('-').map(Number);
+          data.publishDate = new Date(Date.UTC(year, month - 1, day));
+        } else if (data.publishDate.includes('T')) {
+          // Formato ISO completo
+          data.publishDate = new Date(data.publishDate);
+        } else {
+          // Tentar parsear como está
+          data.publishDate = new Date(data.publishDate);
+        }
+      }
+    } else if (data.status === 'PUBLISHED') {
+      // Se está publicando e não tem publishDate, usar data atual
       data.publishDate = new Date();
+    }
+
+    // Converter lastModified para Date se for string
+    if (data.lastModified && typeof data.lastModified === 'string') {
+      if (data.lastModified.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Formato YYYY-MM-DD - criar Date em UTC
+        const [year, month, day] = data.lastModified.split('-').map(Number);
+        data.lastModified = new Date(Date.UTC(year, month - 1, day));
+      } else if (data.lastModified.includes('T')) {
+        data.lastModified = new Date(data.lastModified);
+      } else {
+        data.lastModified = new Date(data.lastModified);
+      }
     }
 
     const post = await (prisma as any).blogPost.update({

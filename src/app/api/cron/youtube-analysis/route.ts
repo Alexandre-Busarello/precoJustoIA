@@ -34,11 +34,11 @@ export async function GET(request: NextRequest) {
 
     // 2. Configurações
     const BATCH_SIZE = parseInt(process.env.YOUTUBE_ANALYSIS_BATCH_SIZE || '30');
-    const PARALLEL_BATCH_SIZE = 5; // Processar 5 empresas em paralelo
+    const PARALLEL_BATCH_SIZE = 10; // Processar 5 empresas em paralelo
     const DELAY_BETWEEN_BATCHES = parseInt(
-      process.env.YOUTUBE_ANALYSIS_DELAY_MS || '2000'
+      process.env.YOUTUBE_ANALYSIS_DELAY_MS || '500'
     );
-    const MAX_EXECUTION_TIME = 50 * 1000; // 50 segundos em ms (deixar buffer de 10s)
+    const MAX_EXECUTION_TIME = 60 * 1000; // 50 segundos em ms (deixar buffer de 10s)
 
     console.log(
       `📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, PARALLEL_BATCH_SIZE=${PARALLEL_BATCH_SIZE}, DELAY=${DELAY_BETWEEN_BATCHES}ms`

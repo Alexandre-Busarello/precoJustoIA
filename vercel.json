@@ -10,13 +10,13 @@
       "memory": 1024
     },
     "src/app/api/fetch-ward-data/route.ts": {
-      "maxDuration": 300
+      "maxDuration": 60
     },
     "src/app/api/cron/fetch-ward/route.ts": {
-      "maxDuration": 300
+      "maxDuration": 60
     },
     "src/app/api/cron/monitor-assets/route.ts": {
-      "maxDuration": 300
+      "maxDuration": 60
     }
   },
   "env": {

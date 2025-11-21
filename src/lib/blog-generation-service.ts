@@ -19,6 +19,7 @@ interface Source {
 
 interface TopicSearchResult {
   market_context: string;
+  category: string; // Categoria escolhida pela IA
   trending_topics: TrendingTopic[];
   sources: Source[];
 }
@@ -39,7 +40,9 @@ const INTERNAL_LINKS = {
   calculadora: '/calculadoras/dividend-yield',
   ranking: '/ranking',
   comparacao: '/comparacao',
-  analise: '/analise',
+  plBolsa: '/pl-bolsa',
+  backtest: '/backtest',
+  carteira: '/carteira',
   blog: '/blog',
   acao: '/acao/[ticker]'
 };
@@ -124,6 +127,23 @@ function extractJSON<T>(response: string): T {
 }
 
 /**
+ * Busca a última categoria publicada para evitar repetição
+ */
+async function getLastPublishedCategory(): Promise<string | null> {
+  try {
+    const lastPost = await (prisma as any).blogPost.findFirst({
+      where: { status: 'PUBLISHED' },
+      orderBy: { publishDate: 'desc' },
+      select: { category: true },
+    });
+    return lastPost?.category || null;
+  } catch (error) {
+    console.warn('Erro ao buscar última categoria:', error);
+    return null;
+  }
+}
+
+/**
  * Busca tópicos recentes e quentes sobre investimentos/B3 usando Gemini
  */
 export async function searchHotTopics(): Promise<TopicSearchResult> {
@@ -134,6 +154,12 @@ export async function searchHotTopics(): Promise<TopicSearchResult> {
   const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
   });
+
+  // Buscar última categoria publicada
+  const lastCategory = await getLastPublishedCategory();
+  const categoryHint = lastCategory 
+    ? `\n\nIMPORTANTE - SELEÇÃO DE CATEGORIA:\nA última categoria publicada foi "${lastCategory}". PREFIRA escolher uma categoria DIFERENTE para diversificar o conteúdo. Se não houver alternativa adequada, pode usar a mesma, mas priorize diversidade.`
+    : '\n\nIMPORTANTE - SELEÇÃO DE CATEGORIA:\nNão há posts publicados recentemente. Escolha a categoria mais adequada aos tópicos encontrados.';
 
   const prompt = `ATUE COMO: Sênior Market Analyst e Estrategista de SEO focado no mercado financeiro brasileiro (B3).
 
@@ -155,6 +181,14 @@ RESTRIÇÕES DE QUALIDADE:
 - Os tópicos devem ser acionáveis (ex: "Por que a ação X caiu e abriu oportunidade" ao invés de "Ação X caiu").
 - As palavras-chave devem ter intenção de busca informacional ou transacional.
 
+CATEGORIAS VÁLIDAS (OBRIGATÓRIO usar EXATAMENTE uma delas):
+- "Análise Setorial"
+- "Educação"
+- "Estratégias"
+- "Ferramentas"
+- "Renda Passiva"
+${categoryHint}
+
 FORMATO DE SAÍDA (CRÍTICO - LEIA COM ATENÇÃO):
 Você DEVE retornar APENAS e EXCLUSIVAMENTE um objeto JSON válido. 
 
@@ -170,6 +204,7 @@ A estrutura deve ser EXATAMENTE esta:
 
 {
   "market_context": "Resumo de 1 frase sobre o sentimento atual do mercado (ex: Bullish com cautela fiscal)",
+  "category": "Nome da categoria (DEVE ser EXATAMENTE uma das categorias válidas listadas acima)",
   "trending_topics": [
     {
       "title": "Título sugerido para o tópico (atraente)",
@@ -237,6 +272,20 @@ INÍCIO DA RESPOSTA (comece aqui):`;
         throw new Error('Estrutura JSON inválida: faltam campos obrigatórios');
       }
       
+      // Validar categoria
+      const validCategories = [
+        'Análise Setorial',
+        'Educação',
+        'Estratégias',
+        'Ferramentas',
+        'Renda Passiva'
+      ];
+      
+      if (!result.category || !validCategories.includes(result.category)) {
+        console.warn(`Categoria inválida ou ausente: "${result.category}". Usando padrão: "Análise Setorial"`);
+        result.category = 'Análise Setorial';
+      }
+      
       // Validar que tem pelo menos um tópico
       if (result.trending_topics.length === 0) {
         console.warn('Nenhum tópico encontrado');
@@ -244,6 +293,7 @@ INÍCIO DA RESPOSTA (comece aqui):`;
       }
       
       console.log(`✅ JSON extraído com sucesso: ${result.trending_topics.length} tópicos encontrados`);
+      console.log(`📂 Categoria selecionada: ${result.category}`);
       return result;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -307,9 +357,8 @@ export async function generateBlogPost(
   // Obter posts de exemplo
   const examplePosts = await getExamplePosts(3);
 
-  // Escolher categoria baseada nos tópicos
-  const allTopicTexts = topics.trending_topics.map(t => `${t.title} ${t.summary} ${t.angle}`).join(' ');
-  const category = selectCategory(allTopicTexts);
+  // Usar categoria retornada pela IA na busca de tópicos
+  const category = topics.category || 'Análise Setorial';
 
   // Coletar todas as palavras-chave dos tópicos
   const allKeywords = topics.trending_topics.flatMap(t => t.seo_keywords);
@@ -377,7 +426,9 @@ LINKS INTERNOS (OBRIGATÓRIO incluir pelo menos 3):
 - Link para calculadora de dividend yield: [texto do link](${INTERNAL_LINKS.calculadora})
 - Link para rankings de ações: [texto do link](${INTERNAL_LINKS.ranking})
 - Link para comparação de empresas: [texto do link](${INTERNAL_LINKS.comparacao})
-- Link para análise de ações: [texto do link](${INTERNAL_LINKS.analise})
+- Link para P/L histórico da Bolsa: [texto do link](${INTERNAL_LINKS.plBolsa})
+- Link para backtesting de carteiras: [texto do link](${INTERNAL_LINKS.backtest})
+- Link para carteira de investimentos: [texto do link](${INTERNAL_LINKS.carteira})
 - Link para outros posts do blog: [texto do link](${INTERNAL_LINKS.blog})
 - Link para análises individuais dos ativos: [texto do link](${INTERNAL_LINKS.acao.replace('[ticker]', 'PETR4')}) (substitua PETR4 pelo ticker relevante)
 
@@ -483,31 +534,6 @@ INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
   // Se chegou aqui, todas as tentativas falharam
   throw lastError || new Error('Erro ao gerar post após múltiplas tentativas');
-}
-
-/**
- * Seleciona categoria baseada nos tópicos
- */
-function selectCategory(topicText: string): string {
-  const text = topicText.toLowerCase();
-
-  if (text.includes('dividendo') || text.includes('renda passiva') || text.includes('renda passiva')) {
-    return 'Renda Passiva';
-  }
-  if (text.includes('calculadora') || text.includes('ferramenta')) {
-    return 'Ferramentas';
-  }
-  if (text.includes('setor') || text.includes('setorial')) {
-    return 'Análise Setorial';
-  }
-  if (text.includes('estratégia') || text.includes('método')) {
-    return 'Estratégias de Investimento';
-  }
-  if (text.includes('iniciante') || text.includes('como')) {
-    return 'Educação Financeira';
-  }
-
-  return 'Mercado de Ações';
 }
 
 /**

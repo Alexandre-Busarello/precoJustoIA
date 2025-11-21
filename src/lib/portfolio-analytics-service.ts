@@ -403,9 +403,9 @@ export class PortfolioAnalyticsService {
         evolution.push({
           date: this.formatDateUTC(date),
           value: totalValue,
-          invested: totalInvested, // 🔧 Total de aportes acumulados (para exibição)
+          invested: netInvested, // 🔧 Capital líquido investido (aportes - saques) para exibição correta no gráfico
           cashBalance,
-          return: returnPercent, // 🔧 Retorno calculado com netInvested
+          return: returnPercent, // 🔧 Retorno calculado com totalInvested (considerando saques no numerador)
           returnAmount
         });
       }

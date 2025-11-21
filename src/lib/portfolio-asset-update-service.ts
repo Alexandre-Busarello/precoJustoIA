@@ -69,36 +69,67 @@ export class PortfolioAssetUpdateService {
         return summary;
       }
 
-      // 2. Processar cada ticker sequencialmente
-      for (let i = 0; i < tickers.length; i++) {
-        const ticker = tickers[i];
-        console.log(
-          `\n[${i + 1}/${tickers.length}] 🔄 Processando ${ticker}...`
-        );
+      // 2. Processar tickers em lotes paralelos (5 por vez)
+      const PARALLEL_BATCH_SIZE = 5;
+      console.log(`🚀 Processando ${tickers.length} tickers em lotes paralelos de ${PARALLEL_BATCH_SIZE}`);
 
-        try {
-          const tickerSummary = await this.updateSingleAsset(ticker);
+      for (let i = 0; i < tickers.length; i += PARALLEL_BATCH_SIZE) {
+        const batch = tickers.slice(i, i + PARALLEL_BATCH_SIZE);
+        console.log(`\n📦 Processando batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} com ${batch.length} ticker(s)...`);
 
-          summary.processedTickers++;
-          summary.updatedHistoricalPrices +=
-            tickerSummary.historicalPricesUpdated;
-          summary.updatedDividends += tickerSummary.dividendsUpdated;
-          summary.updatedAssets += tickerSummary.assetUpdated ? 1 : 0;
+        // Processar batch em paralelo
+        const batchPromises = batch.map(async (ticker, index) => {
+          const globalIndex = i + index + 1;
+          console.log(`\n[${globalIndex}/${tickers.length}] 🔄 Processando ${ticker}...`);
 
-          console.log(
-            `✅ [${ticker}] Atualizado: ${tickerSummary.historicalPricesUpdated} preços, ${tickerSummary.dividendsUpdated} dividendos`
-          );
-        } catch (error) {
-          const errorMsg =
-            error instanceof Error ? error.message : "Unknown error";
-          console.error(`❌ [${ticker}] Erro ao atualizar:`, errorMsg);
+          try {
+            const tickerSummary = await this.updateSingleAsset(ticker);
 
-          summary.failedTickers.push(ticker);
-          summary.errors.push({ ticker, error: errorMsg });
+            console.log(
+              `✅ [${ticker}] Atualizado: ${tickerSummary.historicalPricesUpdated} preços, ${tickerSummary.dividendsUpdated} dividendos`
+            );
+
+            return {
+              success: true,
+              ticker,
+              summary: tickerSummary,
+            };
+          } catch (error) {
+            const errorMsg =
+              error instanceof Error ? error.message : "Unknown error";
+            console.error(`❌ [${ticker}] Erro ao atualizar:`, errorMsg);
+
+            return {
+              success: false,
+              ticker,
+              error: errorMsg,
+            };
+          }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+
+        // Agregar estatísticas do batch
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            const data = result.value;
+            if (data.success && data.summary) {
+              summary.processedTickers++;
+              summary.updatedHistoricalPrices += data.summary.historicalPricesUpdated;
+              summary.updatedDividends += data.summary.dividendsUpdated;
+              summary.updatedAssets += data.summary.assetUpdated ? 1 : 0;
+            } else {
+              summary.failedTickers.push(data.ticker);
+              summary.errors.push({ ticker: data.ticker, error: data.error || 'Unknown error' });
+            }
+          } else {
+            // Erro não tratado
+            summary.errors.push({ ticker: 'unknown', error: String(result.reason) });
+          }
         }
 
-        // Aguardar 1 segundo entre tickers para não sobrecarregar APIs externas
-        if (i < tickers.length - 1) {
+        // Pequeno delay entre batches para não sobrecarregar APIs externas
+        if (i + PARALLEL_BATCH_SIZE < tickers.length) {
           await this.delay(1000);
         }
       }
@@ -439,30 +470,64 @@ export class PortfolioAssetUpdateService {
       const tickers = await this.getDistinctPortfolioTickers();
       summary.totalTickers = tickers.length;
 
-      for (const ticker of tickers) {
-        try {
-          const company = await prisma.company.findUnique({
-            where: { ticker: ticker.toUpperCase() },
-          });
+      // Processar em lotes paralelos (5 por vez)
+      const PARALLEL_BATCH_SIZE = 5;
+      console.log(`🚀 Processando ${tickers.length} tickers em lotes paralelos de ${PARALLEL_BATCH_SIZE}`);
 
-          if (!company) continue;
+      for (let i = 0; i < tickers.length; i += PARALLEL_BATCH_SIZE) {
+        const batch = tickers.slice(i, i + PARALLEL_BATCH_SIZE);
 
-          const pricesUpdated = await this.updateHistoricalPricesIncremental(
-            company.id,
-            ticker
-          );
+        const batchPromises = batch.map(async (ticker) => {
+          try {
+            const company = await prisma.company.findUnique({
+              where: { ticker: ticker.toUpperCase() },
+            });
 
-          summary.updatedHistoricalPrices += pricesUpdated;
-          summary.processedTickers++;
-        } catch (error) {
-          summary.failedTickers.push(ticker);
-          summary.errors.push({
-            ticker,
-            error: error instanceof Error ? error.message : "Unknown error",
-          });
+            if (!company) {
+              return { success: false, ticker, error: 'Company not found', pricesUpdated: 0 };
+            }
+
+            const pricesUpdated = await this.updateHistoricalPricesIncremental(
+              company.id,
+              ticker
+            );
+
+            return { success: true, ticker, pricesUpdated };
+          } catch (error) {
+            return {
+              success: false,
+              ticker,
+              error: error instanceof Error ? error.message : "Unknown error",
+              pricesUpdated: 0,
+            };
+          }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+
+        // Agregar estatísticas
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            const data = result.value;
+            if (data.success) {
+              summary.updatedHistoricalPrices += data.pricesUpdated;
+              summary.processedTickers++;
+            } else {
+              if (data.error !== 'Company not found') {
+                summary.failedTickers.push(data.ticker);
+                summary.errors.push({
+                  ticker: data.ticker,
+                  error: data.error || 'Unknown error',
+                });
+              }
+            }
+          }
         }
 
-        await this.delay(500); // Menor delay para apenas preços
+        // Pequeno delay entre batches
+        if (i + PARALLEL_BATCH_SIZE < tickers.length) {
+          await this.delay(500);
+        }
       }
 
       summary.duration = Date.now() - startTime;
@@ -503,20 +568,50 @@ export class PortfolioAssetUpdateService {
       const tickers = await this.getDistinctPortfolioTickers();
       summary.totalTickers = tickers.length;
 
-      for (const ticker of tickers) {
-        try {
-          const result = await DividendService.fetchAndSaveDividends(ticker);
-          summary.updatedDividends += result.dividendsCount;
-          summary.processedTickers++;
-        } catch (error) {
-          summary.failedTickers.push(ticker);
-          summary.errors.push({
-            ticker,
-            error: error instanceof Error ? error.message : "Unknown error",
-          });
+      // Processar em lotes paralelos (5 por vez)
+      const PARALLEL_BATCH_SIZE = 5;
+      console.log(`🚀 Processando ${tickers.length} tickers em lotes paralelos de ${PARALLEL_BATCH_SIZE}`);
+
+      for (let i = 0; i < tickers.length; i += PARALLEL_BATCH_SIZE) {
+        const batch = tickers.slice(i, i + PARALLEL_BATCH_SIZE);
+
+        const batchPromises = batch.map(async (ticker) => {
+          try {
+            const result = await DividendService.fetchAndSaveDividends(ticker);
+            return { success: true, ticker, dividendsCount: result.dividendsCount };
+          } catch (error) {
+            return {
+              success: false,
+              ticker,
+              error: error instanceof Error ? error.message : "Unknown error",
+              dividendsCount: 0,
+            };
+          }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+
+        // Agregar estatísticas
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            const data = result.value;
+            if (data.success) {
+              summary.updatedDividends += data.dividendsCount;
+              summary.processedTickers++;
+            } else {
+              summary.failedTickers.push(data.ticker);
+              summary.errors.push({
+                ticker: data.ticker,
+                error: data.error || 'Unknown error',
+              });
+            }
+          }
         }
 
-        await this.delay(500);
+        // Pequeno delay entre batches
+        if (i + PARALLEL_BATCH_SIZE < tickers.length) {
+          await this.delay(500);
+        }
       }
 
       summary.duration = Date.now() - startTime;
@@ -558,33 +653,54 @@ export class PortfolioAssetUpdateService {
 
       console.log(`📊 [BDR UPDATE] ${bdrTickers.length} BDRs únicos encontrados`);
 
-      for (let i = 0; i < bdrTickers.length; i++) {
-        const ticker = bdrTickers[i];
-        console.log(`\n[${i + 1}/${bdrTickers.length}] 🌎 Processando BDR ${ticker}...`);
+      // Processar em lotes paralelos (5 por vez)
+      const PARALLEL_BATCH_SIZE = 5;
+      console.log(`🚀 Processando ${bdrTickers.length} BDRs em lotes paralelos de ${PARALLEL_BATCH_SIZE}`);
 
-        try {
-          const success = await BDRDataService.processBDR(ticker); // Modo básico
-          
-          if (success) {
-            summary.processedTickers++;
-            summary.updatedAssets++;
-            console.log(`✅ [${ticker}] BDR processado com sucesso`);
-          } else {
-            summary.failedTickers.push(ticker);
-            console.log(`❌ [${ticker}] Falha no processamento`);
+      for (let i = 0; i < bdrTickers.length; i += PARALLEL_BATCH_SIZE) {
+        const batch = bdrTickers.slice(i, i + PARALLEL_BATCH_SIZE);
+        console.log(`\n📦 Processando batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} com ${batch.length} BDR(s)...`);
+
+        const batchPromises = batch.map(async (ticker, index) => {
+          const globalIndex = i + index + 1;
+          console.log(`\n[${globalIndex}/${bdrTickers.length}] 🌎 Processando BDR ${ticker}...`);
+
+          try {
+            const success = await BDRDataService.processBDR(ticker); // Modo básico
+            
+            if (success) {
+              console.log(`✅ [${ticker}] BDR processado com sucesso`);
+              return { success: true, ticker };
+            } else {
+              console.log(`❌ [${ticker}] Falha no processamento`);
+              return { success: false, ticker, error: 'Processamento falhou' };
+            }
+          } catch (error: any) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            console.error(`❌ [${ticker}] Erro ao processar BDR:`, errorMsg);
+            return { success: false, ticker, error: errorMsg };
           }
+        });
 
-        } catch (error: any) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`❌ [${ticker}] Erro ao processar BDR:`, errorMsg);
-          
-          summary.failedTickers.push(ticker);
-          summary.errors.push({ ticker, error: errorMsg });
+        const batchResults = await Promise.allSettled(batchPromises);
+
+        // Agregar estatísticas
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            const data = result.value;
+            if (data.success) {
+              summary.processedTickers++;
+              summary.updatedAssets++;
+            } else {
+              summary.failedTickers.push(data.ticker);
+              summary.errors.push({ ticker: data.ticker, error: data.error || 'Unknown error' });
+            }
+          }
         }
 
-        // Delay entre BDRs para evitar rate limiting e reduzir carga no banco
-        if (i < bdrTickers.length - 1) {
-          await this.delay(3000); // Aumentado para 3 segundos
+        // Delay entre batches para evitar rate limiting
+        if (i + PARALLEL_BATCH_SIZE < bdrTickers.length) {
+          await this.delay(3000);
         }
       }
 
@@ -633,35 +749,56 @@ export class PortfolioAssetUpdateService {
       console.log(`📊 [BDR COMPLETE] ${bdrTickers.length} BDRs únicos encontrados`);
       console.log(`⚠️ [BDR COMPLETE] Modo completo: inclui históricos, preços e dividendos`);
 
-      for (let i = 0; i < bdrTickers.length; i++) {
-        const ticker = bdrTickers[i];
-        console.log(`\n[${i + 1}/${bdrTickers.length}] 🌎 Processando BDR completo ${ticker}...`);
+      // Processar em lotes paralelos (5 por vez)
+      const PARALLEL_BATCH_SIZE = 5;
+      console.log(`🚀 Processando ${bdrTickers.length} BDRs em lotes paralelos de ${PARALLEL_BATCH_SIZE}`);
 
-        try {
-          const success = await BDRDataService.processBDR(ticker, true); // Modo completo
-          
-          if (success) {
-            summary.processedTickers++;
-            summary.updatedAssets++;
-            summary.updatedHistoricalPrices++; // Inclui preços históricos
-            summary.updatedDividends++; // Inclui dividendos históricos
-            console.log(`✅ [${ticker}] BDR completo processado com sucesso`);
-          } else {
-            summary.failedTickers.push(ticker);
-            console.log(`❌ [${ticker}] Falha no processamento completo`);
+      for (let i = 0; i < bdrTickers.length; i += PARALLEL_BATCH_SIZE) {
+        const batch = bdrTickers.slice(i, i + PARALLEL_BATCH_SIZE);
+        console.log(`\n📦 Processando batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} com ${batch.length} BDR(s)...`);
+
+        const batchPromises = batch.map(async (ticker, index) => {
+          const globalIndex = i + index + 1;
+          console.log(`\n[${globalIndex}/${bdrTickers.length}] 🌎 Processando BDR completo ${ticker}...`);
+
+          try {
+            const success = await BDRDataService.processBDR(ticker, true); // Modo completo
+            
+            if (success) {
+              console.log(`✅ [${ticker}] BDR completo processado com sucesso`);
+              return { success: true, ticker };
+            } else {
+              console.log(`❌ [${ticker}] Falha no processamento completo`);
+              return { success: false, ticker, error: 'Processamento falhou' };
+            }
+          } catch (error: any) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            console.error(`❌ [${ticker}] Erro ao processar BDR completo:`, errorMsg);
+            return { success: false, ticker, error: errorMsg };
           }
+        });
 
-        } catch (error: any) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`❌ [${ticker}] Erro ao processar BDR completo:`, errorMsg);
-          
-          summary.failedTickers.push(ticker);
-          summary.errors.push({ ticker, error: errorMsg });
+        const batchResults = await Promise.allSettled(batchPromises);
+
+        // Agregar estatísticas
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            const data = result.value;
+            if (data.success) {
+              summary.processedTickers++;
+              summary.updatedAssets++;
+              summary.updatedHistoricalPrices++; // Inclui preços históricos
+              summary.updatedDividends++; // Inclui dividendos históricos
+            } else {
+              summary.failedTickers.push(data.ticker);
+              summary.errors.push({ ticker: data.ticker, error: data.error || 'Unknown error' });
+            }
+          }
         }
 
-        // Delay maior entre BDRs completos para evitar rate limiting e carga no banco
-        if (i < bdrTickers.length - 1) {
-          await this.delay(5000); // Aumentado para 5 segundos
+        // Delay entre batches para evitar rate limiting
+        if (i + PARALLEL_BATCH_SIZE < bdrTickers.length) {
+          await this.delay(5000);
         }
       }
 

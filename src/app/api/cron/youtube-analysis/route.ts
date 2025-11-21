@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { YouTubeAnalysisService } from '@/lib/youtube-analysis-service';
 import { prisma } from '@/lib/prisma';
 
-// Configurar timeout para 5 minutos (máximo da Vercel)
-export const maxDuration = 300;
+// Configurar timeout para 60 segundos (máximo do plano hobby da Vercel)
+export const maxDuration = 60;
 
 /**
  * Cron Job para Análise de Vídeos do YouTube

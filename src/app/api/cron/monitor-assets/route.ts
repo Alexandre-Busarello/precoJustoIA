@@ -7,8 +7,8 @@ import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composi
 import { toNumber, StrategyAnalysis } from '@/lib/strategies';
 import { prisma } from '@/lib/prisma';
 
-// Configurar timeout para 5 minutos (máximo da Vercel)
-export const maxDuration = 300;
+// Configurar timeout para 60 segundos (máximo do plano hobby da Vercel)
+export const maxDuration = 60;
 
 /**
  * Ajusta os scores das estratégias no snapshotData para refletir os scores ajustados

@@ -179,7 +179,7 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
         <TechnicalAnalysisPage
           ticker={ticker}
           companyName={companyData?.name || company.name}
-          sector={companyData?.sector}
+          sector={companyData?.sector ?? null}
           currentPrice={currentPrice}
         />
       </div>

@@ -2285,7 +2285,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   </div>
 
                   {/* Análise Técnica - Preços da IA */}
-                  <TechnicalAnalysisPrices ticker={ticker} isPremium={isPremium} />
+                  <TechnicalAnalysisPrices ticker={ticker} isPremium={isPremium!} />
                 </div>
               </CardContent>
             </Card>

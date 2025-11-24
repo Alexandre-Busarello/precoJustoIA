@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -14,8 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { AlertTriangle, TrendingUp, TrendingDown, Scale, RefreshCw } from "lucide-react";
-import { portfolioCache } from "@/lib/portfolio-cache";
+import { AlertTriangle, TrendingUp, TrendingDown, Scale } from "lucide-react";
 
 interface Holding {
   ticker: string;
@@ -44,6 +44,7 @@ export function PortfolioHoldingsTable({
   portfolioId,
   onNavigateToTransactions,
 }: PortfolioHoldingsTableProps) {
+  const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -157,80 +158,6 @@ export function PortfolioHoldingsTable({
     };
   }, [portfolioId, queryClient]);
 
-  // Mutation for generating rebalancing suggestions
-  const generateRebalancingMutation = useMutation({
-    mutationFn: async () => {
-      // Delete existing rebalancing suggestions first
-      const pendingResponse = await fetch(
-        `/api/portfolio/${portfolioId}/transactions?status=PENDING`
-      );
-      
-      if (pendingResponse.ok) {
-        const pendingData = await pendingResponse.json();
-        const rebalancingTx = (pendingData.transactions || []).filter(
-          (tx: any) => tx.type === 'SELL_REBALANCE' || tx.type === 'BUY_REBALANCE'
-        );
-        
-        // Delete each rebalancing transaction
-        await Promise.all(
-          rebalancingTx.map((tx: any) =>
-            fetch(`/api/portfolio/${portfolioId}/transactions/${tx.id}`, {
-              method: 'DELETE'
-            }).catch(() => {})
-          )
-        );
-      }
-
-      // Generate new rebalancing suggestions
-      const generateResponse = await fetch(
-        `/api/portfolio/${portfolioId}/transactions/suggestions/rebalancing`,
-        { method: 'POST' }
-      );
-
-      if (!generateResponse.ok) {
-        throw new Error('Erro ao gerar sugestões de rebalanceamento');
-      }
-
-      return generateResponse.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Sugestões geradas',
-        description: 'Sugestões de rebalanceamento geradas com sucesso'
-      });
-
-      // Invalidate cache
-      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
-      queryClient.invalidateQueries({ queryKey: ['portfolio-holdings', portfolioId] });
-      queryClient.invalidateQueries({ queryKey: ['portfolio-pending-contributions', portfolioId] });
-      queryClient.invalidateQueries({ queryKey: ['portfolio-rebalancing-check', portfolioId] });
-      portfolioCache.invalidateAll(portfolioId);
-
-      // Navigate to transactions tab
-      if (onNavigateToTransactions) {
-        // Small delay to ensure transactions are created
-        setTimeout(() => {
-          onNavigateToTransactions();
-        }, 300);
-      } else {
-        // Fallback: navigate using URL
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', 'transactions');
-        window.history.pushState({}, '', url.toString());
-        // Trigger page reload or tab change
-        window.location.reload();
-      }
-    },
-    onError: (error: Error) => {
-      console.error('Erro ao gerar sugestões:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível gerar sugestões de rebalanceamento',
-        variant: 'destructive'
-      });
-    }
-  });
-
   const handleGenerateRebalancing = () => {
     // Don't allow if there are pending contributions
     if (hasPendingContributions) {
@@ -242,7 +169,8 @@ export function PortfolioHoldingsTable({
       return;
     }
 
-    generateRebalancingMutation.mutate();
+    // Redirect to suggestions page where dynamic suggestions are calculated
+    router.push(`/carteira/${portfolioId}/sugestoes`);
   };
 
   // Show error toast if holdings query fails
@@ -257,7 +185,6 @@ export function PortfolioHoldingsTable({
   }, [holdingsError, toast]);
 
   const loading = loadingHoldings;
-  const generatingRebalancing = generateRebalancingMutation.isPending;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -491,23 +418,14 @@ export function PortfolioHoldingsTable({
               </div>
               <Button
                 onClick={handleGenerateRebalancing}
-                disabled={generatingRebalancing || hasPendingContributions}
+                disabled={hasPendingContributions}
                 size="sm"
                 variant="default"
                 className="w-full sm:w-auto flex-shrink-0 bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                title={hasPendingContributions ? `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"` : ''}
+                title={hasPendingContributions ? `Complete primeiro as ${pendingContributionsCount} transação(ões) pendente(s) em "Aportes e Compras"` : 'Ver sugestões de rebalanceamento'}
               >
-                {generatingRebalancing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Gerando...
-                  </>
-                ) : (
-                  <>
-                    <Scale className="h-4 w-4 mr-2" />
-                    Gerar Sugestões
-                  </>
-                )}
+                <Scale className="h-4 w-4 mr-2" />
+                Ver Sugestões
               </Button>
             </div>
           </div>

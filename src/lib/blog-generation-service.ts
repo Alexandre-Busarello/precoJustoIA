@@ -369,6 +369,14 @@ export async function generateBlogPost(
 
   const prompt = `Aja como um Editor Sênior e Investidor Experiente de um blog de finanças popular no Brasil (estilo Suno Research, Nord Research ou Primo Rico).
 
+⚠️ INSTRUÇÃO CRÍTICA ANTES DE COMEÇAR:
+Você TEM ACESSO à ferramenta googleSearch. Você DEVE usar essa ferramenta ANTES de escrever o artigo para:
+1. Buscar informações recentes sobre o tópico
+2. Encontrar URLs reais de fontes confiáveis (B3, CVM, sites de notícias)
+3. Coletar dados atualizados para embasar o artigo
+
+NÃO escreva o artigo sem primeiro usar a ferramenta de busca para encontrar fontes reais com URLs válidas.
+
 Sua tarefa é escrever um artigo de blog otimizado para SEO e altamente engajador.
 
 CONTEXTO DE MERCADO ATUAL:
@@ -452,14 +460,32 @@ ${mainTopic.target_ticker.map(ticker => `- ${ticker}`).join('\n')}
 - O formato do link é: /acao/TICKER (em maiúsculas, sem .SA ou sufixos)
 - Se mencionar outros tickers além dos listados, também crie links para eles
 
-LINKS EXTERNOS (OBRIGATÓRIO incluir pelo menos 3-5 links no conteúdo):
-Você DEVE usar a ferramenta de busca do Gemini para encontrar fontes confiáveis e incluir links externos diretamente no conteúdo do artigo.
+LINKS EXTERNOS (CRÍTICO - OBRIGATÓRIO incluir pelo menos 3-5 links no conteúdo):
+
+⚠️ PASSO A PASSO OBRIGATÓRIO ANTES DE ESCREVER O ARTIGO:
+
+1. **USE A FERRAMENTA DE BUSCA (googleSearch) ANTES DE ESCREVER:**
+   - Busque por: "notícias sobre ${mainTopic.title} novembro 2025"
+   - Busque por: "dados B3 ${mainTopic.target_ticker.join(' ')}"
+   - Busque por: "análise ${mainTopic.title} mercado brasileiro"
+   - Busque por informações sobre cada empresa mencionada
+
+2. **EXTRAIA URLs REAIS DOS RESULTADOS DA BUSCA:**
+   - Copie URLs completas dos sites encontrados
+   - Prefira fontes oficiais (B3, CVM) e sites de notícias confiáveis
+   - NÃO invente URLs ou use placeholders
+
+3. **INCLUA OS LINKS NO CONTEÚDO:**
+   - Insira os links naturalmente no texto quando citar dados ou informações
+   - Formato: [Texto descritivo](URL_COMPLETA)
+   - Mínimo de 3 links externos, idealmente 5 ou mais
 
 FORMATO CORRETO DE LINKS EM MARKDOWN:
 - Formato inline: [Texto do link](https://exemplo.com.br)
 - Formato de referência: [Texto do link][1] e depois [1]: https://exemplo.com.br
-- SEMPRE use URLs completas (https://) e válidas
-- NÃO use placeholders ou links fictícios
+- SEMPRE use URLs completas (https://) e válidas obtidas da busca
+- NÃO use placeholders, links fictícios ou "exemplo.com"
+- NÃO escreva o artigo sem primeiro buscar informações reais
 
 TIPOS DE FONTES OBRIGATÓRIAS:
 1. **Fontes Oficiais:**
@@ -518,27 +544,52 @@ A estrutura deve ser EXATAMENTE esta:
   "keywords": ["palavra-chave 1", "palavra-chave 2"]
 }
 
-REQUISITOS DO CONTEÚDO:
-- O conteúdo deve ser original, útil e otimizado para busca orgânica.
-- Use o tom de voz de um investidor experiente e calejado, não um acadêmico.
-- Seja opinativo e use emoção para engajar o leitor.
-- Escreva o artigo completo em Markdown com formatação adequada.
-- **OBRIGATÓRIO:** Use a ferramenta de busca do Gemini (googleSearch) para encontrar informações recentes e fontes confiáveis.
-- **OBRIGATÓRIO:** Inclua pelo menos 3-5 links externos formatados corretamente em markdown no conteúdo do artigo.
-- **OBRIGATÓRIO:** Todos os links devem estar no formato markdown correto: [texto do link](https://url-completa.com.br)
-- **OBRIGATÓRIO:** Links devem ser de fontes reais e verificáveis (B3, CVM, sites de notícias financeiras, etc.)
-- **OBRIGATÓRIO:** Cite as fontes quando usar dados específicos ou estatísticas.
+REQUISITOS DO CONTEÚDO (LEIA COM ATENÇÃO):
+
+⚠️ PROCESSO OBRIGATÓRIO:
+
+1. **PRIMEIRO:** Use a ferramenta googleSearch para buscar informações sobre:
+   - O tópico principal: "${mainTopic.title}"
+   - As empresas mencionadas: ${mainTopic.target_ticker.join(', ')}
+   - Notícias recentes sobre o assunto
+   - Dados oficiais da B3 ou CVM
+
+2. **SEGUNDO:** Extraia URLs reais dos resultados da busca (mínimo 3-5 URLs)
+
+3. **TERCEIRO:** Escreva o artigo incluindo esses links externos naturalmente no texto
+
+REGRAS ABSOLUTAS:
+- **NÃO escreva o artigo sem usar a ferramenta de busca primeiro**
+- **NÃO invente URLs ou use placeholders como "exemplo.com"**
+- **NÃO escreva links fictícios - use apenas URLs reais da busca**
+- O conteúdo deve ser original, útil e otimizado para busca orgânica
+- Use o tom de voz de um investidor experiente e calejado, não um acadêmico
+- Seja opinativo e use emoção para engajar o leitor
+- Escreva o artigo completo em Markdown com formatação adequada
+
+LINKS EXTERNOS (CRÍTICO):
+- **MÍNIMO 3 links externos obrigatórios no conteúdo**
+- Formato markdown: [texto descritivo](https://url-real-da-busca.com.br)
+- Links devem ser de fontes reais obtidas da busca (B3, CVM, sites de notícias, etc.)
+- Cite as fontes quando usar dados específicos: "Segundo dados da [B3](https://www.b3.com.br)..."
+- Inclua links naturalmente no texto, não apenas em uma lista no final
+
+LINKS INTERNOS PARA TICKERS:
 - **CRÍTICO:** SEMPRE que mencionar um ticker de ação, crie um link interno no formato: [Nome da Empresa (TICKER)](/acao/TICKER)
-- **CRÍTICO:** Use o ticker exato em maiúsculas (ex: VALE3, PETR4, ITUB4) no link, sem sufixos como .SA
+- Use o ticker exato em maiúsculas (ex: VALE3, PETR4, ITUB4) no link, sem sufixos como .SA
 
 INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
   const model = 'gemini-2.5-flash-lite';
-  const tools = [{ googleSearch: {} }];
+  // Configurar ferramentas de busca para garantir que a IA use para encontrar links externos
+  const tools = [
+    { googleSearch: {} },
+    { urlContext: {} }, // Permite que a IA use contexto de URLs encontradas
+  ];
 
   const config = {
     thinkingConfig: {
-      thinkingBudget: 0,
+      thinkingBudget: -1, // -1 permite mais processamento para usar ferramentas
     },
     tools,
   };
@@ -646,8 +697,9 @@ function validateGeneratedPost(post: GeneratedPost): void {
   const totalExternalLinks = externalLinks.length + referenceDefinitions.length;
   
   if (totalExternalLinks < 3) {
-    console.warn(`⚠️ Artigo tem apenas ${totalExternalLinks} links externos. Mínimo recomendado: 3`);
-    // Não falhar, apenas avisar - pode ser que a IA não tenha encontrado fontes suficientes
+    const errorMsg = `Artigo tem apenas ${totalExternalLinks} links externos. Mínimo obrigatório: 3. O artigo DEVE incluir links externos para fontes confiáveis obtidas através da busca do Gemini.`;
+    console.error(`❌ ${errorMsg}`);
+    throw new Error(errorMsg);
   }
   
   // Validar formato dos links

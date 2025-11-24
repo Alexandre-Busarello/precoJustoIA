@@ -35,6 +35,15 @@ interface PortfolioTransactionFormProps {
   portfolioId: string;
   onSuccess?: () => void;
   onCancel?: () => void;
+  initialData?: {
+    type?: string;
+    date?: string;
+    ticker?: string;
+    amount?: string;
+    price?: string;
+    quantity?: string;
+    notes?: string;
+  };
 }
 
 const TRANSACTION_TYPES = [
@@ -48,7 +57,8 @@ const TRANSACTION_TYPES = [
 export function PortfolioTransactionForm({
   portfolioId,
   onSuccess,
-  onCancel
+  onCancel,
+  initialData,
 }: PortfolioTransactionFormProps) {
   const { toast } = useToast();
   const { trackEvent } = useTracking();
@@ -61,14 +71,14 @@ export function PortfolioTransactionForm({
   } | null>(null);
   const [pendingTransactionData, setPendingTransactionData] = useState<any>(null);
 
-  // Form state
-  const [type, setType] = useState('CASH_CREDIT');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [ticker, setTicker] = useState('');
-  const [amount, setAmount] = useState('');
-  const [price, setPrice] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [notes, setNotes] = useState('');
+  // Form state - initialize with initialData if provided
+  const [type, setType] = useState(initialData?.type || 'CASH_CREDIT');
+  const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
+  const [ticker, setTicker] = useState(initialData?.ticker || '');
+  const [amount, setAmount] = useState(initialData?.amount || '');
+  const [price, setPrice] = useState(initialData?.price || '');
+  const [quantity, setQuantity] = useState(initialData?.quantity || '');
+  const [notes, setNotes] = useState(initialData?.notes || '');
 
   const selectedType = TRANSACTION_TYPES.find(t => t.value === type);
   const requiresAsset = selectedType?.requiresAsset || false;

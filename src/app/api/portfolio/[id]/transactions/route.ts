@@ -150,33 +150,21 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     // Recalculate metrics
     await PortfolioMetricsService.updateMetrics(resolvedParams.id, currentUser.id);
 
-    // 🔄 REGENERAR SUGESTÕES AUTOMATICAMENTE
-    // Sempre que uma nova transação é criada, as sugestões devem ser atualizadas
+    // 🔄 SUGESTÕES SÃO AGORA DINÂMICAS
+    // Não precisamos mais criar transações PENDING ou deletar antigas
+    // As sugestões são calculadas em tempo real quando solicitadas via /api/portfolio/[id]/suggestions
+    // Apenas invalidamos o cache para que as sugestões sejam recalculadas na próxima requisição
     try {
-      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-      
-      // Deletar transações pendentes antigas (que podem estar desatualizadas)
-      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/pending`, {
-        method: 'DELETE'
-      }).catch(() => {});
-      
-      // Invalidate lastSuggestionsGeneratedAt to force regeneration
-      // This ensures suggestions are regenerated when manual transactions affect cash flow
       const { prisma } = await import('@/lib/prisma');
       await prisma.portfolioConfig.update({
         where: { id: resolvedParams.id },
         data: { lastSuggestionsGeneratedAt: null }, // Reset to force regeneration
       }).catch(() => {});
       
-      // Gerar novas sugestões de contribuição baseadas no novo estado da carteira
-      await fetch(`${baseUrl}/api/portfolio/${resolvedParams.id}/transactions/suggestions/contributions`, {
-        method: 'POST'
-      }).catch(() => {});
-      
-      console.log('✅ Sugestões de contribuição recalculadas após criação de transação manual');
+      console.log('✅ Cache de sugestões invalidado após criação de transação manual');
     } catch (suggestionError) {
-      console.error('⚠️ Erro ao recalcular sugestões:', suggestionError);
-      // Não falhar a criação por erro nas sugestões
+      console.error('⚠️ Erro ao invalidar cache de sugestões:', suggestionError);
+      // Não falhar a criação por erro no cache
     }
 
     return NextResponse.json({

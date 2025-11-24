@@ -50,6 +50,26 @@ export interface SuggestedTransaction {
   cashBalanceAfter: number;
 }
 
+export interface CombinedRebalancingSuggestion {
+  date: Date;
+  type: 'REBALANCING_COMBINED';
+  sellTransaction: {
+    ticker?: string;
+    amount: number;
+    price?: number;
+    quantity?: number;
+    reason?: string;
+  } | null;
+  sellTransactions?: SuggestedTransaction[]; // All individual sell transactions
+  buyTransactions: SuggestedTransaction[];
+  totalSold: number;
+  totalBought: number;
+  netCashChange: number;
+  reason: string;
+  cashBalanceBefore: number;
+  cashBalanceAfter: number;
+}
+
 /**
  * Portfolio Transaction Service
  */
@@ -176,7 +196,7 @@ export class PortfolioTransactionService {
     }
 
     // Get data in parallel
-    const [holdings, prices, nextDates, existingTransactions, cashBalance, pendingBuyCount] =
+    const [holdings, prices, nextDates, existingTransactions, cashBalance] =
       await Promise.all([
         this.getCurrentHoldings(portfolioId),
         this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
@@ -184,8 +204,7 @@ export class PortfolioTransactionService {
         prisma.portfolioTransaction.findMany({
           where: {
             portfolioId,
-            status: { in: ["PENDING", "CONFIRMED", "REJECTED"] },
-            isAutoSuggested: true,
+            status: { in: ["CONFIRMED", "EXECUTED"] },
           },
           select: {
             date: true,
@@ -197,20 +216,11 @@ export class PortfolioTransactionService {
           },
         }),
         this.getCurrentCashBalance(portfolioId),
-        // Check if there are already PENDING buy transactions
-        prisma.portfolioTransaction.count({
-          where: {
-            portfolioId,
-            status: 'PENDING',
-            type: 'BUY',
-            isAutoSuggested: true
-          }
-        })
       ]);
 
     const suggestions: SuggestedTransaction[] = [];
 
-    // Check if there's a monthly contribution for current month (any status)
+    // Check if there's a monthly contribution for current month (CONFIRMED or EXECUTED only)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfCurrentMonth = new Date(
@@ -220,11 +230,12 @@ export class PortfolioTransactionService {
     );
     startOfCurrentMonth.setHours(0, 0, 0, 0);
 
-    // Check if there's a monthly contribution in current month (any status)
+    // Check if there's a monthly contribution already executed/confirmed in current month
     const currentMonthContribution = existingTransactions.find(
       (tx) =>
         ((tx.type as string) === "MONTHLY_CONTRIBUTION" || tx.type === "CASH_CREDIT") &&
-        new Date(tx.date).getTime() >= startOfCurrentMonth.getTime()
+        new Date(tx.date).getTime() >= startOfCurrentMonth.getTime() &&
+        (tx.status === "CONFIRMED" || tx.status === "EXECUTED")
     );
 
     console.log(
@@ -234,16 +245,15 @@ export class PortfolioTransactionService {
         : 'No contribution found in current month'
     );
 
-    // Monthly contribution is "decided" only if it's CONFIRMED, REJECTED, or EXECUTED
-    // PENDING means user hasn't decided yet, so we don't suggest buy transactions
-    const monthlyContributionDecided = currentMonthContribution && 
-      (currentMonthContribution.status === "CONFIRMED" || 
-       currentMonthContribution.status === "REJECTED" ||
-       currentMonthContribution.status === "EXECUTED");
+    // Monthly contribution is "decided" if it's CONFIRMED or EXECUTED
+    const monthlyContributionDecided = !!currentMonthContribution;
 
     console.log(
       `📅 [SUGGESTION_LOGIC] nextDates.length=${nextDates.length}, monthlyContributionDecided=${monthlyContributionDecided}, cashBalance=${cashBalance.toFixed(2)}, portfolioAssets=${portfolio.assets?.length || 0}, holdings=${holdings.size}, prices=${prices.size}`
     );
+
+    // Always generate buy suggestions when there's cash available (from sales or contributions)
+    // This ensures that any cash in the account gets investment suggestions
 
     // 1. Generate monthly contribution suggestions FIRST (if not already decided)
     if (nextDates.length > 0 && !monthlyContributionDecided) {
@@ -317,23 +327,21 @@ export class PortfolioTransactionService {
       );
     }
 
-    // 2. Generate buy suggestions when there's cash available AND no pending buy suggestions
-    // Avoid infinite loops: if there are already PENDING buy transactions, don't generate more
-    // User wants to invest available cash, but we should wait for pending transactions to be confirmed/rejected
+    // 2. ALWAYS generate buy suggestions when there's cash available (from sales or contributions)
+    // This ensures that any cash in the account gets investment suggestions
     console.log(`🔍 [BUY_LOGIC_CHECK] Checking conditions:`, {
       cashBalance: cashBalance.toFixed(2),
       cashBalanceCheck: cashBalance >= 100,
-      pendingBuyCount,
       monthlyContributionDecided,
       nextDatesLength: nextDates.length,
-      shouldGenerateBuys: cashBalance >= 100 && pendingBuyCount === 0
+      shouldGenerateBuys: cashBalance >= 100
     });
 
-    const shouldGenerateBuys = cashBalance >= 100 && pendingBuyCount === 0; // Generate buys only if cash >= R$ 100 and no pending buy suggestions exist
+    const shouldGenerateBuys = cashBalance >= 100; // Always generate buys if cash >= R$ 100
 
     if (shouldGenerateBuys) {
       const reason = monthlyContributionDecided 
-        ? 'monthly contribution already decided - investing available cash' 
+        ? 'monthly contribution already executed - investing available cash' 
         : nextDates.length > 0 
           ? 'monthly contribution pending but investing available cash anyway'
           : 'no monthly contribution pending - investing available cash';
@@ -359,14 +367,9 @@ export class PortfolioTransactionService {
     } else {
       if (cashBalance < 100) {
         console.log(`⏸️ [NO_CASH] Insufficient cash for buy suggestions (R$ ${cashBalance.toFixed(2)}, minimum R$ 100.00)`);
-      } else if (pendingBuyCount > 0) {
-        console.log(
-          `⏸️ [BUY_PENDING] Cash available (R$ ${cashBalance.toFixed(2)}) but ${pendingBuyCount} pending buy suggestion(s) already exist - waiting for confirmation/rejection to avoid infinite loop`
-        );
       } else {
         console.log(`⏸️ [BUY_NOT_GENERATED] Unexpected condition:`, {
           cashBalance: cashBalance.toFixed(2),
-          pendingBuyCount,
           monthlyContributionDecided,
           nextDatesLength: nextDates.length
         });
@@ -402,8 +405,7 @@ export class PortfolioTransactionService {
       nextDatesLength: nextDates.length,
       monthlyContributionDecided,
       cashBalance,
-      pendingBuyCount,
-      shouldGenerateBuys: cashBalance > 0.01 && pendingBuyCount === 0,
+      shouldGenerateBuys: cashBalance >= 100,
       portfolioAssets: portfolio.assets?.length || 0,
       holdingsCount: holdings.size,
       pricesCount: prices.size,
@@ -412,7 +414,9 @@ export class PortfolioTransactionService {
       currentMonthContribution: currentMonthContribution ? {
         type: currentMonthContribution.type,
         status: currentMonthContribution.status,
-        date: currentMonthContribution.date.toISOString().split("T")[0]
+        date: currentMonthContribution.date instanceof Date 
+          ? currentMonthContribution.date.toISOString().split("T")[0]
+          : new Date(currentMonthContribution.date).toISOString().split("T")[0]
       } : null
     };
     
@@ -461,25 +465,10 @@ export class PortfolioTransactionService {
     const startTime = Date.now();
 
     // Get data in parallel
-    const [holdings, prices, existingTransactions] = await Promise.all([
+    // Note: We no longer check for PENDING transactions since suggestions are dynamic
+    const [holdings, prices] = await Promise.all([
       this.getCurrentHoldings(portfolioId),
       this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
-      prisma.portfolioTransaction.findMany({
-        where: {
-          portfolioId,
-          status: { in: ["PENDING", "CONFIRMED", "REJECTED"] },
-          isAutoSuggested: true,
-          type: { in: ["SELL_REBALANCE", "BUY_REBALANCE"] },
-        },
-        select: {
-          date: true,
-          type: true,
-          ticker: true,
-          status: true,
-          amount: true,
-          quantity: true,
-        },
-      }),
     ]);
 
     const today = new Date();
@@ -502,18 +491,15 @@ export class PortfolioTransactionService {
       today
     );
 
-    // Filter duplicates
-    const filteredSuggestions = this.filterDuplicateSuggestions(
-      rebalanceSuggestions,
-      existingTransactions
-    );
+    // Note: No longer filtering duplicates against PENDING transactions
+    // Suggestions are now dynamic and calculated on-demand
 
     const totalTime = Date.now() - startTime;
     console.log(
-      `✅ [REBALANCING SUGGESTIONS] ${filteredSuggestions.length} suggestions generated (${totalTime}ms)`
+      `✅ [REBALANCING SUGGESTIONS] ${rebalanceSuggestions.length} suggestions generated (${totalTime}ms)`
     );
 
-    return filteredSuggestions;
+    return rebalanceSuggestions;
   }
 
   /**
@@ -1581,14 +1567,15 @@ export class PortfolioTransactionService {
     const startTime = Date.now();
 
     // Get data in parallel
+    // Note: We no longer check for PENDING transactions since suggestions are dynamic
+    // Only check CONFIRMED/EXECUTED to avoid suggesting dividends already registered
     const [holdings, prices, existingTransactions] = await Promise.all([
       this.getCurrentHoldings(portfolioId),
       this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
       prisma.portfolioTransaction.findMany({
         where: {
           portfolioId,
-          status: { in: ["PENDING", "CONFIRMED", "REJECTED"] },
-          isAutoSuggested: true,
+          status: { in: ["CONFIRMED", "EXECUTED"] },
           type: "DIVIDEND",
         },
         select: {
@@ -2212,6 +2199,66 @@ export class PortfolioTransactionService {
     return suggestions;
   }
 
+  /**
+   * Combine rebalancing suggestions into unified transactions (sell + buy together)
+   * This prevents the cash from sales from generating new buy suggestions before the rebalancing buy is executed
+   */
+  static combineRebalancingSuggestions(
+    suggestions: SuggestedTransaction[]
+  ): CombinedRebalancingSuggestion[] {
+    const sells = suggestions.filter(s => s.type === 'SELL_REBALANCE');
+    const buys = suggestions.filter(s => s.type === 'BUY_REBALANCE');
+
+    // If there are no sells or buys, return empty array
+    if (sells.length === 0 && buys.length === 0) {
+      return [];
+    }
+
+    // Calculate initial cash balance (from first sell or buy)
+    const firstTransaction = sells.length > 0 ? sells[0] : buys[0];
+    const initialCashBalance = firstTransaction.cashBalanceBefore;
+
+    // Calculate final cash balance after all transactions
+    let runningCashBalance = initialCashBalance;
+    for (const sell of sells) {
+      runningCashBalance += sell.amount;
+    }
+    for (const buy of buys) {
+      runningCashBalance -= buy.amount;
+    }
+    const finalCashBalance = runningCashBalance;
+
+    // Calculate totals
+    const totalSold = sells.reduce((sum, s) => sum + s.amount, 0);
+    const totalBought = buys.reduce((sum, s) => sum + s.amount, 0);
+    const netCashChange = totalSold - totalBought;
+
+    // Create combined suggestion with all sells and buys
+    const combined: CombinedRebalancingSuggestion = {
+      date: firstTransaction.date,
+      type: 'REBALANCING_COMBINED',
+      sellTransaction: sells.length > 0 ? {
+        // Summary for display
+        ticker: sells.length === 1 ? sells[0].ticker : undefined, // Single ticker or undefined for multiple
+        amount: totalSold,
+        price: sells.length === 1 ? sells[0].price : undefined,
+        quantity: sells.length === 1 ? sells[0].quantity : undefined,
+        reason: sells.length === 1 
+          ? sells[0].reason 
+          : `Venda de ${sells.length} ativos para rebalanceamento`,
+      } : null,
+      sellTransactions: sells, // Keep all individual sell transactions for execution
+      buyTransactions: buys,
+      totalSold,
+      totalBought,
+      netCashChange,
+      reason: `Rebalanceamento combinado: ${sells.length > 0 ? `venda de ${sells.length} ativo(s)` : ''}${sells.length > 0 && buys.length > 0 ? ' e ' : ''}${buys.length > 0 ? `compra de ${buys.length} ativo(s)` : ''}`,
+      cashBalanceBefore: initialCashBalance,
+      cashBalanceAfter: finalCashBalance,
+    };
+
+    return [combined];
+  }
 
   /**
    * Update holdings with suggested transactions (for multi-month simulation)

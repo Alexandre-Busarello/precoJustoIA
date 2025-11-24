@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export function PortfolioPendingTransactionsCTA({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   refreshKey: _refreshKey, // Mantido para compatibilidade com key do componente pai, mas não usado internamente
 }: PortfolioPendingTransactionsCTAProps) {
+  const router = useRouter();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [generatingSuggestions, setGeneratingSuggestions] = useState(false);
@@ -221,7 +223,13 @@ export function PortfolioPendingTransactionsCTA({
               Inicie o acompanhamento para receber sugestões mensais automáticas de transações.
             </p>
             <Button 
-              onClick={onGoToTransactions}
+              onClick={() => {
+                if (onGoToTransactions) {
+                  onGoToTransactions();
+                } else {
+                  router.push(`/carteira/${portfolioId}/transacoes`);
+                }
+              }}
               size="sm"
               variant="outline"
               className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:hover:bg-blue-950/40"
@@ -284,7 +292,13 @@ export function PortfolioPendingTransactionsCTA({
             </div>
           </div>
           <Button
-            onClick={onGoToTransactions}
+            onClick={() => {
+              if (onGoToTransactions) {
+                onGoToTransactions();
+              } else {
+                router.push(`/carteira/${portfolioId}/transacoes`);
+              }
+            }}
             size="sm"
             className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0 w-full sm:w-auto"
           >

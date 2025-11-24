@@ -445,10 +445,10 @@ enum TransactionType {
 }
 
 enum TransactionStatus {
-  PENDING              // Suggested, awaiting confirmation
+  PENDING              // @deprecated - No longer used. Suggestions are now dynamic and calculated on-demand.
   CONFIRMED            // User confirmed
   EXECUTED             // Manually entered as executed
-  REJECTED             // User rejected the suggestion
+  REJECTED             // @deprecated - No longer used. Users no longer reject suggestions, they simply don't confirm them.
 }
 
 model PortfolioTransaction {

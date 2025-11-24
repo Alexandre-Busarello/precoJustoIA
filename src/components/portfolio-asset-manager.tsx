@@ -71,7 +71,19 @@ export function PortfolioAssetManager({
     }
 
     const data = await response.json();
-    return data.portfolio.assets || [];
+    const portfolioAssets = data.portfolio?.assets;
+    
+    // Ensure we return an array and map to the expected format
+    if (!Array.isArray(portfolioAssets)) {
+      return [];
+    }
+    
+    return portfolioAssets.map((asset: any) => ({
+      id: asset.id || `${asset.ticker}-${Date.now()}`,
+      ticker: asset.ticker,
+      targetAllocation: Number(asset.targetAllocation) || 0,
+      isActive: asset.isActive !== undefined ? asset.isActive : true,
+    }));
   };
 
   const {
@@ -79,7 +91,7 @@ export function PortfolioAssetManager({
     isLoading: loading,
     error: assetsError
   } = useQuery({
-    queryKey: ['portfolio', portfolioId],
+    queryKey: ['portfolio-assets', portfolioId],
     queryFn: fetchPortfolio,
   });
 
@@ -137,7 +149,11 @@ export function PortfolioAssetManager({
 
   // Sync local assets with query data
   useEffect(() => {
-    setLocalAssets(assets);
+    if (Array.isArray(assets)) {
+      setLocalAssets(assets);
+    } else {
+      setLocalAssets([]);
+    }
   }, [assets]);
 
   const updateAllocation = (index: number, value: string) => {
@@ -147,7 +163,12 @@ export function PortfolioAssetManager({
   };
 
   // Use localAssets for display/editing, fallback to assets from query
-  const displayAssets = localAssets.length > 0 ? localAssets : assets;
+  // Ensure displayAssets is always an array
+  const displayAssets = Array.isArray(localAssets) && localAssets.length > 0 
+    ? localAssets 
+    : Array.isArray(assets) 
+    ? assets 
+    : [];
 
   const totalAllocation = displayAssets.reduce(
     (sum: number, a: Asset) => sum + a.targetAllocation,

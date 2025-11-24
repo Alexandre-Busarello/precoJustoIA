@@ -157,8 +157,26 @@ export function PortfolioTransactionAI({
     onSuccess: (data) => {
       // Sucesso - invalidar cache para atualizar interface
       queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-metrics', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
       portfolioCache.invalidateAll(portfolioId);
       invalidateDashboardPortfoliosCache();
+      
+      // Dispatch events for auto-refresh in suggestions page
+      window.dispatchEvent(
+        new CustomEvent('portfolio-transaction-updated', {
+          detail: { portfolioId, action: 'transaction' },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('transaction-cash-flow-changed', {
+          detail: {
+            transactionType: 'MIXED',
+            portfolioId: portfolioId,
+            action: 'created',
+          },
+        })
+      );
       
       if (result) {
         onTransactionsGenerated(result.transactions);

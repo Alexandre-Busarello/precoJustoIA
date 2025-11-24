@@ -5,7 +5,7 @@
 
 import { Metadata } from 'next';
 import { Suspense } from 'react';
-import { PortfolioPageClient } from '@/components/portfolio-page-client';
+import { PortfolioListPage } from '@/components/portfolio-list-page';
 
 export const metadata: Metadata = {
   title: 'Minhas Carteiras | Preço Justo',
@@ -19,7 +19,7 @@ export default function CarteiraPage() {
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     }>
-      <PortfolioPageClient />
+      <PortfolioListPage />
     </Suspense>
   );
 }

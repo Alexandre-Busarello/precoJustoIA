@@ -10,19 +10,19 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Briefcase,
   Plus,
-  BarChart3,
   Crown,
   TrendingUp,
   Receipt,
   Settings,
-  ArrowRight,
   LineChart,
+  Trash2,
 } from 'lucide-react';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { PortfolioTutorialBanner } from '@/components/portfolio-tutorial-banner';
 import { PortfolioEmptyState } from '@/components/portfolio-empty-state';
 import { ConvertBacktestModal } from '@/components/convert-backtest-modal';
 import { PortfolioCardSuggestionsButton } from '@/components/portfolio-card-suggestions-button';
+import { DeletePortfolioDialog } from '@/components/delete-portfolio-dialog';
 import {
   Dialog,
   DialogContent,
@@ -99,6 +99,15 @@ export function PortfolioListPage() {
 
   const portfolios = Array.isArray(portfoliosData) ? portfoliosData : [];
   const [showConvertBacktestModal, setShowConvertBacktestModal] = useState(false);
+  const [deleteDialogState, setDeleteDialogState] = useState<{
+    open: boolean;
+    portfolioId: string;
+    portfolioName: string;
+  }>({
+    open: false,
+    portfolioId: '',
+    portfolioName: '',
+  });
   const hasRefetchedRef = useRef(false);
 
   useEffect(() => {
@@ -260,18 +269,36 @@ export function PortfolioListPage() {
                         </p>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-shrink-0 ml-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/carteira/${portfolio.id}/config`);
-                      }}
-                      title="Configurações"
-                    >
-                      <Settings className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/carteira/${portfolio.id}/config`);
+                        }}
+                        title="Configurações"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteDialogState({
+                            open: true,
+                            portfolioId: portfolio.id,
+                            portfolioName: portfolio.name,
+                          });
+                        }}
+                        title="Excluir carteira"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Métricas */}
@@ -402,6 +429,24 @@ export function PortfolioListPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Portfolio Dialog */}
+      <DeletePortfolioDialog
+        open={deleteDialogState.open}
+        onOpenChange={(open) => {
+          setDeleteDialogState({
+            open,
+            portfolioId: deleteDialogState.portfolioId,
+            portfolioName: deleteDialogState.portfolioName,
+          });
+          if (!open) {
+            // Invalidate queries when dialog closes (after deletion)
+            queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+          }
+        }}
+        portfolioId={deleteDialogState.portfolioId}
+        portfolioName={deleteDialogState.portfolioName}
+      />
     </>
   );
 }

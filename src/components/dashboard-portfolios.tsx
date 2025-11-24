@@ -160,7 +160,7 @@ export function DashboardPortfolios() {
               <CardTitle className="text-2xl">{bestPortfolio.name}</CardTitle>
             </div>
             <Button asChild variant="ghost" size="sm">
-              <Link href={`/carteira?id=${bestPortfolio.id}`}>
+              <Link href={`/carteira/${bestPortfolio.id}`}>
                 Ver Detalhes
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -328,7 +328,7 @@ export function DashboardPortfolios() {
                 )}
 
                 <Button asChild variant="outline" size="sm" className="w-full">
-                  <Link href={`/carteira?id=${portfolio.id}`}>
+                  <Link href={`/carteira/${portfolio.id}`}>
                     Ver Carteira
                     <ArrowRight className="ml-2 h-3 w-3" />
                   </Link>

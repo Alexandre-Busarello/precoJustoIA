@@ -202,6 +202,7 @@ model Company {
   lastCheckedAt   DateTime? @map("last_checked_at")
   youtubeLastCheckedAt DateTime? @map("youtube_last_checked_at")
   yahooLastUpdatedAt DateTime? @map("yahoo_last_updated_at")
+  technicalAnalyses AssetTechnicalAnalysis[]
 
   @@index([sector])
   @@index([industry])
@@ -1533,4 +1534,71 @@ model BlogPost {
   @@index([createdAt])
   @@index([publishDate])
   @@map("blog_posts")
+}
+
+// ===== ANÁLISE TÉCNICA DE ATIVOS =====
+
+model AssetTechnicalAnalysis {
+  id                    String   @id @default(cuid())
+  companyId             Int      @map("company_id")
+  
+  // Indicadores Técnicos Calculados
+  rsi                   Decimal? @db.Decimal(5, 2)
+  stochasticK           Decimal? @map("stochastic_k") @db.Decimal(5, 2)
+  stochasticD           Decimal? @map("stochastic_d") @db.Decimal(5, 2)
+  macd                  Decimal? @db.Decimal(10, 4)
+  macdSignal            Decimal? @map("macd_signal") @db.Decimal(10, 4)
+  macdHistogram         Decimal? @map("macd_histogram") @db.Decimal(10, 4)
+  
+  // Médias Móveis
+  sma20                 Decimal? @map("sma_20") @db.Decimal(10, 4)
+  sma50                 Decimal? @map("sma_50") @db.Decimal(10, 4)
+  sma200                Decimal? @map("sma_200") @db.Decimal(10, 4)
+  ema12                 Decimal? @map("ema_12") @db.Decimal(10, 4)
+  ema26                 Decimal? @map("ema_26") @db.Decimal(10, 4)
+  
+  // Bollinger Bands
+  bbUpper               Decimal? @map("bb_upper") @db.Decimal(10, 4)
+  bbMiddle              Decimal? @map("bb_middle") @db.Decimal(10, 4)
+  bbLower               Decimal? @map("bb_lower") @db.Decimal(10, 4)
+  bbWidth               Decimal? @map("bb_width") @db.Decimal(10, 4)
+  
+  // Fibonacci Retracement (níveis principais)
+  fib236                Decimal? @map("fib_236") @db.Decimal(10, 4)
+  fib382                Decimal? @map("fib_382") @db.Decimal(10, 4)
+  fib500                Decimal? @map("fib_500") @db.Decimal(10, 4)
+  fib618                Decimal? @map("fib_618") @db.Decimal(10, 4)
+  fib786                Decimal? @map("fib_786") @db.Decimal(10, 4)
+  
+  // Ichimoku Cloud
+  tenkanSen             Decimal? @map("tenkan_sen") @db.Decimal(10, 4)
+  kijunSen              Decimal? @map("kijun_sen") @db.Decimal(10, 4)
+  senkouSpanA           Decimal? @map("senkou_span_a") @db.Decimal(10, 4)
+  senkouSpanB           Decimal? @map("senkou_span_b") @db.Decimal(10, 4)
+  chikouSpan            Decimal? @map("chikou_span") @db.Decimal(10, 4)
+  
+  // Suporte e Resistência
+  supportLevels         Json?    @map("support_levels") // Array de níveis de suporte
+  resistanceLevels      Json?    @map("resistance_levels") // Array de níveis de resistência
+  psychologicalLevels   Json?    @map("psychological_levels") // Níveis psicológicos (preços redondos)
+  
+  // Análise de IA (Previsão 30 dias)
+  aiMinPrice            Decimal? @map("ai_min_price") @db.Decimal(10, 4) // Preço mínimo previsto
+  aiMaxPrice            Decimal? @map("ai_max_price") @db.Decimal(10, 4) // Preço máximo previsto
+  aiFairEntryPrice      Decimal? @map("ai_fair_entry_price") @db.Decimal(10, 4) // Preço justo de entrada ideal
+  aiAnalysis            String?  @map("ai_analysis") @db.Text // Explicação da IA
+  aiConfidence          Decimal? @map("ai_confidence") @db.Decimal(5, 2) // Confiança da análise (0-100)
+  
+  // Metadata
+  calculatedAt          DateTime @default(now()) @map("calculated_at")
+  expiresAt             DateTime @map("expires_at") // 30 dias após calculatedAt
+  isActive              Boolean  @default(true) @map("is_active")
+  
+  company               Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@unique([companyId, calculatedAt])
+  @@index([companyId, isActive])
+  @@index([companyId, expiresAt])
+  @@index([expiresAt])
+  @@map("asset_technical_analysis")
 }

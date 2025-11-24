@@ -37,6 +37,7 @@ import {
   Activity,
   BarChart3
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 // Interface para análise estratégica
 interface StrategyAnalysis {
@@ -101,6 +102,81 @@ function formatCurrency(value: number | null): string {
     style: 'currency',
     currency: 'BRL'
   }).format(value);
+}
+
+// Componente para exibir preços da análise técnica
+function TechnicalAnalysisPrices({ ticker, isPremium }: { ticker: string; isPremium: boolean }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['technical-analysis-prices', ticker],
+    queryFn: async () => {
+      const response = await fetch(`/api/technical-analysis/${ticker}`)
+      if (!response.ok) {
+        return null
+      }
+      return response.json()
+    },
+    enabled: isPremium, // Só buscar se for premium
+    staleTime: 1000 * 60 * 30, // Cache por 30 minutos
+    retry: false
+  })
+
+  if (!isPremium) {
+    return (
+      <>
+        <div className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
+          <div>
+            <span className="font-medium">Análise Técnica (IA)</span>
+            <Crown className="w-3 h-3 ml-1 inline text-yellow-500" />
+          </div>
+          <span className="text-lg font-bold text-purple-600">🔒 Premium</span>
+        </div>
+      </>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
+        <span className="font-medium">Análise Técnica (IA)</span>
+        <span className="text-sm text-muted-foreground">Carregando...</span>
+      </div>
+    )
+  }
+
+  const analysis = data?.analysis
+  if (!analysis?.aiFairEntryPrice) {
+    return null
+  }
+
+  return (
+    <>
+      {/* Preço Justo de Entrada */}
+      <div className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
+        <div>
+          <span className="font-medium">Análise Técnica - Preço Justo</span>
+          <Crown className="w-3 h-3 ml-1 inline text-yellow-500" />
+        </div>
+        <span className="text-lg font-bold text-purple-600">
+          {formatCurrency(analysis.aiFairEntryPrice)}
+        </span>
+      </div>
+
+      {/* Preço Mínimo e Máximo na mesma linha */}
+      {analysis.aiMinPrice && analysis.aiMaxPrice && (
+        <div className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
+          <span className="font-medium text-sm text-muted-foreground">Faixa Prevista (30 dias)</span>
+          <div className="flex items-center space-x-4">
+            <span className="text-sm font-semibold text-red-600">
+              Min: {formatCurrency(analysis.aiMinPrice)}
+            </span>
+            <span className="text-sm font-semibold text-green-600">
+              Max: {formatCurrency(analysis.aiMaxPrice)}
+            </span>
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
 
 // Função para formatar valores como percentual
@@ -2207,6 +2283,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       }
                     </span>
                   </div>
+
+                  {/* Análise Técnica - Preços da IA */}
+                  <TechnicalAnalysisPrices ticker={ticker} isPremium={isPremium} />
                 </div>
               </CardContent>
             </Card>

@@ -89,6 +89,9 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   // Processing
   'tickerProcessingStatus': 'ticker_processing_status',
   
+  // Análise Técnica
+  'assetTechnicalAnalysis': 'asset_technical_analysis',
+  
   // Tracking & Analytics
   'userEvent': 'user_events',
   
@@ -152,8 +155,11 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'fii_data': ['companies', 'fii_data'],
   
   // Dados de mercado
-  'historical_prices': ['companies', 'historical_prices'],
+  'historical_prices': ['companies', 'historical_prices', 'asset_technical_analysis'],
   'price_oscillations': ['companies', 'price_oscillations'],
+  
+  // Análise Técnica
+  'asset_technical_analysis': ['companies', 'asset_technical_analysis'],
   
   // Sistema de processamento
   'ticker_processing_status': ['companies', 'ticker_processing_status']

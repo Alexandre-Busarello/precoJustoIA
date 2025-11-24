@@ -20,6 +20,7 @@
     "fetch:ward:remote": "node scripts/run-fetch-ward.js",
     "fetch:ward:reset": "node scripts/run-fetch-ward.js --reset",
     "fetch:historical:brapi": "tsx scripts/fetch-historical-prices-brapi.ts",
+    "debug:technical": "tsx scripts/debug-technical-analysis.ts",
     "update:profiles": "tsx scripts/update-company-profiles.ts",
     "update:profiles:dry": "tsx scripts/update-company-profiles.ts --dry-run",
     "update:financial-data": "tsx scripts/update-financial-data-brapi.ts",

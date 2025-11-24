@@ -317,8 +317,8 @@ export default function TechnicalAnalysisPage({
           {data.historicalData && data.historicalData.length > 0 ? (
             <SupportResistanceChart
               historicalData={data.historicalData}
-              supportLevels={analysis.supportLevels}
-              resistanceLevels={analysis.resistanceLevels}
+              supportLevels={analysis.supportLevels as Array<{ price: number; strength: number; type: 'support' | 'resistance' | 'psychological'; touches: number }>}
+              resistanceLevels={analysis.resistanceLevels as Array<{ price: number; strength: number; type: 'support' | 'resistance' | 'psychological'; touches: number }>}
               fibonacciLevels={analysis.fib236 ? {
                 fib236: analysis.fib236,
                 fib382: analysis.fib382,

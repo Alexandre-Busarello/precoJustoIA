@@ -15,10 +15,11 @@ interface HistoricalDividend {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { ticker: string } }
+  { params }: { params: Promise<{ ticker: string }> }
 ) {
   try {
-    const ticker = params.ticker.toUpperCase();
+    const { ticker: tickerParam } = await params;
+    const ticker = tickerParam.toUpperCase();
 
     // Buscar ou gerar projeções
     const projections = await DividendRadarService.getOrGenerateProjections(ticker);

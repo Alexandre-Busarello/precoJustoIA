@@ -5,13 +5,14 @@ import { DividendRadarTickerPageContent } from '@/components/dividend-radar-tick
 import { DividendRadarService } from '@/lib/dividend-radar-service'
 
 interface PageProps {
-  params: {
+  params: Promise<{
     ticker: string
-  }
+  }>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const ticker = params.ticker.toUpperCase()
+  const { ticker: tickerParam } = await params
+  const ticker = tickerParam.toUpperCase()
 
   const company = await prisma.company.findUnique({
     where: { ticker },
@@ -50,7 +51,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function RadarDividendosTickerPage({ params }: PageProps) {
-  const ticker = params.ticker.toUpperCase()
+  const { ticker: tickerParam } = await params
+  const ticker = tickerParam.toUpperCase()
 
   const company = await prisma.company.findUnique({
     where: { ticker },

@@ -9,7 +9,7 @@ import { requireAdminUser } from '@/lib/user-service';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { ticker: string } }
+  { params }: { params: Promise<{ ticker: string }> }
 ) {
   try {
     // Verificar se é admin (opcional - pode ser chamado pelo sistema também)
@@ -20,7 +20,8 @@ export async function POST(
       // (pode adicionar verificação de API key aqui se necessário)
     }
 
-    const ticker = params.ticker.toUpperCase();
+    const { ticker: tickerParam } = await params;
+    const ticker = tickerParam.toUpperCase();
 
     // Forçar geração de novas projeções
     const projections = await DividendRadarService.generateProjections(ticker);

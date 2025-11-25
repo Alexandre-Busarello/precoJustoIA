@@ -178,7 +178,7 @@ export function PortfolioDetailPage({ portfolioId }: PortfolioDetailPageProps) {
                     </div>
                   </div>
                   <Button
-                    onClick={() => router.push(`/carteira/${portfolioId}/transacoes`)}
+                    onClick={() => router.push(`/carteira/${portfolioId}/sugestoes`)}
                     className="bg-green-600 hover:bg-green-700 text-white"
                   >
                     Ver Sugestões

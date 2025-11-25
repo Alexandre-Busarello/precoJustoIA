@@ -8,6 +8,7 @@
 import { prisma } from "@/lib/prisma";
 import { safeWrite, safeQueryWithParams } from "@/lib/prisma-wrapper";
 import { GoogleGenAI } from '@google/genai';
+import { Prisma } from "@prisma/client";
 
 export interface DividendProjection {
   month: number; // 1-12
@@ -103,7 +104,7 @@ export class DividendRadarService {
       
       if (hoursSinceProcessed < 24) {
         console.log(`📦 [DIVIDEND RADAR] ${ticker}: Retornando projeções do cache`);
-        return company.dividendRadarProjections as DividendProjection[];
+        return company.dividendRadarProjections as unknown as DividendProjection[];
       }
     }
 
@@ -115,7 +116,7 @@ export class DividendRadarService {
 
     // Se tem projeções antigas, retornar
     if (company.dividendRadarProjections) {
-      return company.dividendRadarProjections as DividendProjection[];
+      return company.dividendRadarProjections as unknown as DividendProjection[];
     }
 
     // Gerar novas projeções
@@ -499,7 +500,7 @@ CRÍTICO: Inclua APENAS meses onde há padrão histórico claro E confiança >= 
         prisma.company.update({
           where: { ticker },
           data: {
-            dividendRadarProjections: projections,
+            dividendRadarProjections: projections as unknown as Prisma.InputJsonValue,
             dividendRadarLastProcessedAt: new Date(),
             dividendRadarLastDividendDate: lastDividendDate,
           },

@@ -14,14 +14,22 @@ interface TechnicalAnalysisLinkProps {
   ticker: string
   userIsPremium: boolean
   currentPrice: number
+  assetType?: 'STOCK' | 'BDR' | 'FII' | 'ETF'
 }
 
 export default function TechnicalAnalysisLink({
   ticker,
   userIsPremium,
-  currentPrice
+  currentPrice,
+  assetType = 'STOCK'
 }: TechnicalAnalysisLinkProps) {
   const [isOpen, setIsOpen] = useState(false)
+  
+  // Determinar o prefixo da rota baseado no tipo de asset
+  const routePrefix = assetType === 'BDR' ? 'bdr' : 
+                      assetType === 'FII' ? 'fii' : 
+                      assetType === 'ETF' ? 'etf' : 
+                      'acao'
 
   if (!userIsPremium) {
     return (
@@ -88,7 +96,7 @@ export default function TechnicalAnalysisLink({
                 <TechnicalAnalysisTrafficLight ticker={ticker} currentPrice={currentPrice} compact />
               </div>
               <Button asChild className="flex-shrink-0">
-                <Link href={`/acao/${ticker.toLowerCase()}/analise-tecnica`}>
+                <Link href={`/${routePrefix}/${ticker.toLowerCase()}/analise-tecnica`}>
                   Ver Completa
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>

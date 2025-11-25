@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { calculateRadarScore } from '@/lib/radar-service';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { cache } from '@/lib/cache-service';
+import { getLatestPrices } from '@/lib/quote-service';
 
 const EXPLORE_LIMIT = 50;
 const CACHE_TTL = 60 * 60 * 24; // 24 horas em segundos
@@ -72,6 +73,12 @@ export async function GET(request: NextRequest) {
       {}
     ) as any[];
 
+    // Extrair tickers e atualizar preços do Yahoo Finance
+    const tickers = companies.map((c: any) => c.ticker);
+    console.log(`💰 [RADAR EXPLORE] Atualizando preços para ${tickers.length} tickers do Yahoo Finance...`);
+    const updatedPrices = await getLatestPrices(tickers);
+    console.log(`✅ [RADAR EXPLORE] Preços atualizados para ${updatedPrices.size} tickers`);
+
     // Processar empresas em paralelo (limitado para não sobrecarregar)
     const results: Array<{
       ticker: string;
@@ -114,7 +121,11 @@ export async function GET(request: NextRequest) {
               return null;
             }
 
-            const { overallScore, strategies, currentPrice } = analysisResult;
+            const { overallScore, strategies, currentPrice: analysisPrice } = analysisResult;
+            
+            // Usar preço atualizado do Yahoo Finance se disponível, senão usar do analysis
+            const updatedPrice = updatedPrices.get(ticker.toUpperCase());
+            const currentPrice = updatedPrice?.price ?? analysisPrice;
 
             // Filtrar por score mínimo
             if (overallScore.score < 60) {

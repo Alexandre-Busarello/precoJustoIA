@@ -186,20 +186,42 @@ export function RadarGrid({
 
                 {/* Análise Técnica */}
                 <td className="p-3 text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <RadarStatusIndicator
-                      status={asset.technical.status}
-                      label="Entry"
-                      value={asset.technical.label}
-                    />
-                    <Link
-                      href={`/acao/${asset.ticker.toLowerCase()}/analise-tecnica`}
-                      className="text-muted-foreground hover:text-primary transition-colors shrink-0"
-                      onClick={(e) => e.stopPropagation()}
-                      title="Ver análise técnica completa"
-                    >
-                      <TrendingUp className="w-3.5 h-3.5" />
-                    </Link>
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <RadarStatusIndicator
+                        status={asset.technical.status}
+                        label="Entry"
+                        value={asset.technical.label}
+                      />
+                      <Link
+                        href={`/acao/${asset.ticker.toLowerCase()}/analise-tecnica`}
+                        className="text-muted-foreground hover:text-primary transition-colors shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Ver análise técnica completa"
+                      >
+                        <TrendingUp className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                    {asset.technical.fairEntryPrice !== null && (
+                      <div className="flex flex-col gap-0.5 text-xs">
+                        <div className="text-muted-foreground">
+                          Atual: R$ {asset.currentPrice.toFixed(2)}
+                        </div>
+                        <div className="font-medium text-primary">
+                          Justo: R$ {asset.technical.fairEntryPrice.toFixed(2)}
+                        </div>
+                        {asset.currentPrice < asset.technical.fairEntryPrice && (
+                          <div className="text-green-600 font-medium">
+                            ↓ {((asset.technical.fairEntryPrice - asset.currentPrice) / asset.currentPrice * 100).toFixed(1)}% abaixo
+                          </div>
+                        )}
+                        {asset.currentPrice > asset.technical.fairEntryPrice && (
+                          <div className="text-red-600 font-medium">
+                            ↑ {((asset.currentPrice - asset.technical.fairEntryPrice) / asset.technical.fairEntryPrice * 100).toFixed(1)}% acima
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </td>
 
@@ -288,20 +310,42 @@ export function RadarGrid({
                   label="Upside"
                   value={asset.valuation.upside ?? undefined}
                 />
-                <div className="flex items-center justify-between">
-                  <RadarStatusIndicator
-                    status={asset.technical.status}
-                    label="Entry Point"
-                    value={asset.technical.label}
-                  />
-                  <Link
-                    href={`/acao/${asset.ticker.toLowerCase()}/analise-tecnica`}
-                    className="text-muted-foreground hover:text-primary transition-colors shrink-0 ml-2"
-                    onClick={(e) => e.stopPropagation()}
-                    title="Ver análise técnica completa"
-                  >
-                    <TrendingUp className="w-4 h-4" />
-                  </Link>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <RadarStatusIndicator
+                      status={asset.technical.status}
+                      label="Entry Point"
+                      value={asset.technical.label}
+                    />
+                    <Link
+                      href={`/acao/${asset.ticker.toLowerCase()}/analise-tecnica`}
+                      className="text-muted-foreground hover:text-primary transition-colors shrink-0 ml-2"
+                      onClick={(e) => e.stopPropagation()}
+                      title="Ver análise técnica completa"
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                    </Link>
+                  </div>
+                  {asset.technical.fairEntryPrice !== null && (
+                    <div className="flex flex-col gap-0.5 text-xs text-left">
+                      <div className="text-muted-foreground">
+                        Atual: R$ {asset.currentPrice.toFixed(2)}
+                      </div>
+                      <div className="font-medium text-primary">
+                        Justo: R$ {asset.technical.fairEntryPrice.toFixed(2)}
+                      </div>
+                      {asset.currentPrice < asset.technical.fairEntryPrice && (
+                        <div className="text-green-600 font-medium">
+                          ↓ {((asset.technical.fairEntryPrice - asset.currentPrice) / asset.currentPrice * 100).toFixed(1)}% abaixo
+                        </div>
+                      )}
+                      {asset.currentPrice > asset.technical.fairEntryPrice && (
+                        <div className="text-red-600 font-medium">
+                          ↑ {((asset.currentPrice - asset.technical.fairEntryPrice) / asset.technical.fairEntryPrice * 100).toFixed(1)}% acima
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <RadarStatusIndicator
                   status={asset.sentiment.status}

@@ -12,7 +12,7 @@ import { PageCacheIndicator } from '@/components/page-cache-indicator'
 import AIAnalysisDual from '@/components/ai-analysis-dual'
 import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
-import TechnicalAnalysisSection from '@/components/technical-analysis-section'
+import TechnicalAnalysisLink from '@/components/technical-analysis-link'
 import MarketSentimentSection from '@/components/market-sentiment-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import AssetSubscriptionButton from '@/components/asset-subscription-button'
@@ -574,9 +574,11 @@ export default async function BdrPage({ params }: PageProps) {
             />
 
             {/* Análise Técnica */}
-            <TechnicalAnalysisSection 
+            <TechnicalAnalysisLink 
               ticker={ticker} 
               userIsPremium={userIsPremium}
+              currentPrice={currentPrice}
+              assetType="BDR"
             />
 
             {/* Indicadores Financeiros com Gráficos */}

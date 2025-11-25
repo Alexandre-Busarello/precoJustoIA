@@ -4,6 +4,7 @@ import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-serv
 import { getOrCalculateTechnicalAnalysis } from '@/lib/technical-analysis-service';
 import { prisma } from '@/lib/prisma';
 import { getRadarStatusColor, getTechnicalEntryStatus, getSentimentStatus, getValuationStatus } from '@/lib/radar-service';
+import { getLatestPrices } from '@/lib/quote-service';
 
 /**
  * POST /api/radar/data - Buscar dados consolidados para array de tickers
@@ -32,6 +33,11 @@ export async function POST(request: NextRequest) {
     const isPremium = currentUser.isPremium;
     const isLoggedIn = true;
 
+    // Atualizar preços do Yahoo Finance antes de processar
+    console.log(`💰 [RADAR] Atualizando preços para ${tickers.length} tickers do Yahoo Finance...`);
+    const updatedPrices = await getLatestPrices(tickers);
+    console.log(`✅ [RADAR] Preços atualizados para ${updatedPrices.size} tickers`);
+
     // Buscar dados para cada ticker em paralelo
     const dataPromises = tickers.map(async (ticker: string) => {
       try {
@@ -47,7 +53,11 @@ export async function POST(request: NextRequest) {
           return null;
         }
 
-        const { ticker: companyTicker, companyName, sector, currentPrice, logoUrl, overallScore, strategies } = analysisResult;
+        const { ticker: companyTicker, companyName, sector, currentPrice: analysisPrice, logoUrl, overallScore, strategies } = analysisResult;
+        
+        // Usar preço atualizado do Yahoo Finance se disponível, senão usar do analysis
+        const updatedPrice = updatedPrices.get(ticker.toUpperCase());
+        const currentPrice = updatedPrice?.price ?? analysisPrice;
 
         // Buscar análise técnica
         const technicalAnalysis = await getOrCalculateTechnicalAnalysis(ticker, false, false);

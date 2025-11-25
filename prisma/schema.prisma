@@ -94,6 +94,7 @@ model User {
   userEvents        UserEvent[]
   userSecurity      UserSecurity?
   featureUsage      FeatureUsage[]
+  radarConfig       RadarConfig?
 
   @@map("users")
 }
@@ -1622,4 +1623,19 @@ model FeatureUsage {
   @@index([userId, feature, year, month])
   @@index([feature, year, month])
   @@map("feature_usage")
+}
+
+// ===== RADAR DE OPORTUNIDADES =====
+
+model RadarConfig {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  tickers   Json     // Array de strings (tickers)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@map("radar_configs")
 }

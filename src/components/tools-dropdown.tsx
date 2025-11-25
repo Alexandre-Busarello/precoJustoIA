@@ -13,7 +13,8 @@ import {
   Wrench,
   Building2,
   Search,
-  Calculator
+  Calculator,
+  Radar
 } from "lucide-react"
 
 interface ToolsDropdownProps {
@@ -44,10 +45,18 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
     setIsOpen(false)
   }, [pathname])
 
-  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras', '/pl-bolsa'].includes(pathname)
+  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras', '/pl-bolsa', '/radar'].includes(pathname)
 
   // Agrupar ferramentas por categoria
   const analysisTools = [
+    {
+      href: '/radar',
+      icon: <Radar className="w-4 h-4" />,
+      title: 'Radar de Oportunidades',
+      description: 'Visão consolidada e visual de ativos',
+      isPremium: false,
+      isNew: true
+    },
     {
       href: '/ranking',
       icon: <BarChart3 className="w-4 h-4" />,

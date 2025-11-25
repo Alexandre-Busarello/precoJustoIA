@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 export interface FeatureLimit {
   feature: string
   freeLimit: number // Limite para usuários gratuitos (por mês)
-  premiumLimit?: number // Limite para usuários premium (opcional, null = ilimitado)
+  premiumLimit?: number | null // Limite para usuários premium (opcional, null = ilimitado)
 }
 
 // Configuração de limites por feature
@@ -94,7 +94,7 @@ export async function checkFeatureUsage(
   }
 
   // Aplicar limite apropriado
-  const limit = isPremium && limitConfig.premiumLimit !== null 
+  const limit = isPremium && limitConfig.premiumLimit !== null && limitConfig.premiumLimit !== undefined
     ? limitConfig.premiumLimit 
     : limitConfig.freeLimit
 
@@ -104,7 +104,7 @@ export async function checkFeatureUsage(
   return {
     allowed,
     remaining,
-    limit,
+    limit: limit ?? -1,
     currentUsage
   }
 }
@@ -123,12 +123,16 @@ export async function recordFeatureUsage(
   const year = now.getFullYear()
 
   // Usar upsert para evitar duplicatas (graças ao unique constraint)
+  // Prisma espera null explicitamente para campos opcionais no where
+  const resourceIdForWhere = resourceId ?? null
+  const resourceIdForData = resourceId ?? null
+  
   await prisma.featureUsage.upsert({
     where: {
       feature_usage_unique: {
         userId,
         feature,
-        resourceId: resourceId || null,
+        resourceId: resourceIdForWhere as string,
         month,
         year
       }
@@ -136,15 +140,15 @@ export async function recordFeatureUsage(
     create: {
       userId,
       feature,
-      resourceId: resourceId || null,
+      resourceId: resourceIdForData,
       usedAt: now,
       month,
       year,
-      metadata: metadata || null
+      metadata: metadata ?? undefined
     },
     update: {
       usedAt: now, // Atualizar timestamp se já existir
-      metadata: metadata || null
+      metadata: metadata ?? undefined
     }
   })
 }

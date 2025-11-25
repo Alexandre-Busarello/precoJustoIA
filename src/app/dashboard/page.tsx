@@ -25,6 +25,7 @@ import { Footer } from "@/components/footer";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { CompanyLogo } from "@/components/company-logo";
 import { DashboardPortfolios } from "@/components/dashboard-portfolios";
+import { DashboardRadarSection } from "@/components/dashboard-radar-section";
 import {
   BarChart3,
   TrendingUp,
@@ -248,6 +249,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Link>
+
+        {/* RADAR DE OPORTUNIDADES */}
+        <DashboardRadarSection />
 
         {/* Layout Principal */}
         <div className="space-y-6">

@@ -17,7 +17,6 @@ import {
   Shield, 
   LogOut,
   User,
-  Settings,
   CreditCard,
   GitCompare,
   Headphones,
@@ -29,8 +28,8 @@ import {
   Bell,
   Calculator,
   Clock,
-  Gift,
-  DollarSign
+  DollarSign,
+  Radar
 } from "lucide-react"
 
 interface MobileNavProps {
@@ -100,6 +99,14 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
   ]
 
   const analysisItems = [
+    {
+      title: "Radar de Oportunidades",
+      href: "/radar", 
+      icon: <Radar className="w-5 h-5" />,
+      show: true,
+      description: "Visão consolidada e visual",
+      isNew: true
+    },
     {
       title: "Rankings",
       href: "/ranking", 

@@ -257,17 +257,20 @@ export default async function BdrPage({ params }: PageProps) {
   }
 
   // Processar dividendos e projeções sob demanda (em background, não bloqueia página)
-  // Isso garante que sempre temos dados atualizados quando a página é aberta
-  Promise.all([
-    DividendService.fetchAndSaveDividends(ticker).catch((error) => {
-      console.error(`[${ticker}] Erro ao carregar dividendos sob demanda:`, error);
-    }),
-    DividendRadarService.getOrGenerateProjections(ticker).catch((error) => {
-      console.error(`[${ticker}] Erro ao gerar projeções sob demanda:`, error);
-    })
-  ]).catch(() => {
-    // Ignorar erros silenciosamente - não bloquear carregamento da página
-  });
+  // IMPORTANTE: Carregar dividendos PRIMEIRO, depois gerar projeções
+  // Isso garante que novos dividendos sejam detectados antes de gerar/reprocessar projeções
+  (async () => {
+    try {
+      // 1. Carregar dividendos atualizados primeiro
+      await DividendService.fetchAndSaveDividends(ticker);
+      
+      // 2. Depois gerar/reprocessar projeções (detecta novos dividendos automaticamente)
+      await DividendRadarService.getOrGenerateProjections(ticker);
+    } catch (error) {
+      console.error(`[${ticker}] Erro ao processar dividendos/projeções sob demanda:`, error);
+      // Ignorar erros silenciosamente - não bloquear carregamento da página
+    }
+  })();
 
   // Buscar dados da empresa
   const [companyData, comprehensiveData, reportsCount, youtubeAnalysis] = await Promise.all([

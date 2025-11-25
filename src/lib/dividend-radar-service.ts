@@ -97,21 +97,25 @@ export class DividendRadarService {
       throw new Error(`Company ${ticker} not found`);
     }
 
+    // SEMPRE verificar se precisa reprocessar (novos dividendos) ANTES de retornar do cache
+    // Isso garante que novos dividendos sejam sempre detectados e projeções recalculadas
+    const needsReprocessing = await this.shouldReprocessProjections(ticker);
+    
+    if (needsReprocessing) {
+      console.log(`🔄 [DIVIDEND RADAR] ${ticker}: Novo dividendo detectado, reprocessando projeções...`);
+      return await this.generateProjections(ticker);
+    }
+
     // Se já tem projeções e foram processadas recentemente (últimas 24h), retornar
+    // Só retornar do cache se NÃO houver novos dividendos (já verificado acima)
     if (company.dividendRadarProjections && company.dividendRadarLastProcessedAt) {
       const lastProcessed = new Date(company.dividendRadarLastProcessedAt);
       const hoursSinceProcessed = (Date.now() - lastProcessed.getTime()) / (1000 * 60 * 60);
       
       if (hoursSinceProcessed < 24) {
-        console.log(`📦 [DIVIDEND RADAR] ${ticker}: Retornando projeções do cache`);
+        console.log(`📦 [DIVIDEND RADAR] ${ticker}: Retornando projeções do cache (sem novos dividendos)`);
         return company.dividendRadarProjections as unknown as DividendProjection[];
       }
-    }
-
-    // Verificar se precisa reprocessar
-    if (await this.shouldReprocessProjections(ticker)) {
-      console.log(`🔄 [DIVIDEND RADAR] ${ticker}: Reprocessando projeções...`);
-      return await this.generateProjections(ticker);
     }
 
     // Se tem projeções antigas, retornar

@@ -184,18 +184,22 @@ export async function GET(request: NextRequest) {
     const companiesToProcess = paginatedCompanies.filter((c: any) => !c.dividendRadarProjections);
     
     // Iniciar processamento em background para empresas sem projeções (não bloqueia resposta)
+    // IMPORTANTE: Carregar dividendos PRIMEIRO, depois gerar projeções
+    // Isso garante que novos dividendos sejam detectados antes de gerar/reprocessar projeções
     if (companiesToProcess.length > 0) {
       Promise.all(
-        companiesToProcess.map((company: any) =>
-          Promise.all([
-            DividendService.fetchAndSaveDividends(company.ticker).catch((error) => {
-              console.error(`[GRID] Erro ao carregar dividendos para ${company.ticker}:`, error);
-            }),
-            DividendRadarService.getOrGenerateProjections(company.ticker).catch((error) => {
-              console.error(`[GRID] Erro ao gerar projeções para ${company.ticker}:`, error);
-            })
-          ])
-        )
+        companiesToProcess.map(async (company: any) => {
+          try {
+            // 1. Carregar dividendos atualizados primeiro
+            await DividendService.fetchAndSaveDividends(company.ticker);
+            
+            // 2. Depois gerar/reprocessar projeções (detecta novos dividendos automaticamente)
+            await DividendRadarService.getOrGenerateProjections(company.ticker);
+          } catch (error) {
+            console.error(`[GRID] Erro ao processar ${company.ticker}:`, error);
+            // Ignorar erros silenciosamente - processamento em background
+          }
+        })
       ).catch(() => {
         // Ignorar erros silenciosamente - processamento em background
       });

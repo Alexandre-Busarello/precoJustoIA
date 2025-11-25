@@ -106,7 +106,7 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'companies': ['companies', 'financial_data', 'daily_quotes', 'key_statistics', 'dividend_history'],
   'financial_data': ['companies', 'financial_data', 'key_statistics'],
   'daily_quotes': ['companies', 'daily_quotes', 'key_statistics'],
-  'dividend_history': ['companies', 'dividend_history'],
+  'dividend_history': ['companies', 'dividend_history'], // Quando dividendos são atualizados, pode afetar projeções do radar em companies
   'key_statistics': ['companies', 'key_statistics'],
   
   // Demonstrações financeiras

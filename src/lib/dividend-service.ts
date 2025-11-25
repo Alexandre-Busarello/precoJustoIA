@@ -8,6 +8,7 @@
 import { prisma } from "@/lib/prisma";
 import { safeWrite, safeQueryWithParams } from "@/lib/prisma-wrapper";
 import { cache } from "@/lib/cache-service";
+import { DividendRadarService } from "@/lib/dividend-radar-service";
 
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
@@ -231,6 +232,12 @@ export class DividendService {
       console.log(
         `💾 [DIVIDENDS CACHE SET] ${ticker}: Resultado cacheado por 4 horas`
       );
+
+      // Verificar se precisa reprocessar radar de dividendos
+      // (executar em background para não bloquear resposta)
+      DividendRadarService.detectAndReprocessIfNeeded(ticker).catch((error) => {
+        console.error(`⚠️ [DIVIDEND RADAR] Erro ao verificar reprocessamento para ${ticker}:`, error);
+      });
 
       return result;
     } catch (error) {

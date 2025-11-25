@@ -180,6 +180,11 @@ model Company {
   ultimoDividendo     Decimal?  @map("ultimo_dividendo") @db.Decimal(15, 6)
   dataUltimoDividendo DateTime? @map("data_ultimo_dividendo") @db.Date
   
+  // Dividend Radar (AI projections)
+  dividendRadarProjections     Json?     @map("dividend_radar_projections") // Projeções dos próximos 12 meses
+  dividendRadarLastProcessedAt DateTime? @map("dividend_radar_last_processed_at") // Última vez que radar foi processado
+  dividendRadarLastDividendDate DateTime? @map("dividend_radar_last_dividend_date") @db.Date // Data do último dividendo usado no cálculo
+  
   // BDR tracking (Yahoo Finance updates)
   yahooLastBdrUpdatedAt DateTime? @map("yahoo_last_bdr_updated_at")
   

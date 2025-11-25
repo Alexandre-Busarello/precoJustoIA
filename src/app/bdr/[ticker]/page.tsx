@@ -20,6 +20,7 @@ import { Footer } from '@/components/footer'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import { getSectorCompetitors } from '@/lib/competitor-service'
+import { DividendRadarCompact } from '@/components/dividend-radar-compact'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -580,6 +581,14 @@ export default async function BdrPage({ params }: PageProps) {
               currentPrice={currentPrice}
               assetType="BDR"
             />
+
+            {/* Radar de Dividendos */}
+            <div className="mb-6">
+              <DividendRadarCompact 
+                ticker={ticker}
+                companyName={companyData.name}
+              />
+            </div>
 
             {/* Indicadores Financeiros com Gráficos */}
             <FinancialIndicators 

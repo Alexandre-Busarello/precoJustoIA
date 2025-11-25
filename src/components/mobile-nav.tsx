@@ -108,6 +108,14 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       isNew: true
     },
     {
+      title: "Radar de Dividendos",
+      href: "/radar-dividendos", 
+      icon: <DollarSign className="w-5 h-5" />,
+      show: true,
+      description: "Projeções de dividendos com IA",
+      isNew: true
+    },
+    {
       title: "Rankings",
       href: "/ranking", 
       icon: <BarChart3 className="w-5 h-5" />,
@@ -162,8 +170,6 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       isPremiumFeature: !isPremium
     }
   ]
-
-  const toolsItems = [...analysisItems, ...marketItems, ...comparisonItems, ...simulationItems]
 
   const supportItems = [
     {

@@ -14,7 +14,8 @@ import {
   Building2,
   Search,
   Calculator,
-  Radar
+  Radar,
+  DollarSign
 } from "lucide-react"
 
 interface ToolsDropdownProps {
@@ -45,7 +46,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
     setIsOpen(false)
   }, [pathname])
 
-  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras', '/pl-bolsa', '/radar'].includes(pathname)
+  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras', '/pl-bolsa', '/radar', '/radar-dividendos'].includes(pathname)
 
   // Agrupar ferramentas por categoria
   const analysisTools = [
@@ -54,6 +55,14 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       icon: <Radar className="w-4 h-4" />,
       title: 'Radar de Oportunidades',
       description: 'Visão consolidada e visual de ativos',
+      isPremium: false,
+      isNew: true
+    },
+    {
+      href: '/radar-dividendos',
+      icon: <DollarSign className="w-4 h-4" />,
+      title: 'Radar de Dividendos',
+      description: 'Projeções de dividendos com IA',
       isPremium: false,
       isNew: true
     },

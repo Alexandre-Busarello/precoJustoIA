@@ -24,6 +24,7 @@ import { TrackingAssetView } from '@/components/tracking-asset-view'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import { getSectorCompetitors, getMixedRelatedCompanies } from '@/lib/competitor-service'
+import { DividendRadarCompact } from '@/components/dividend-radar-compact'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -600,6 +601,14 @@ export default async function TickerPage({ params }: PageProps) {
               userIsPremium={userIsPremium}
               currentPrice={currentPrice}
             />
+
+            {/* Radar de Dividendos */}
+            <div className="mb-6">
+              <DividendRadarCompact 
+                ticker={ticker}
+                companyName={companyData.name}
+              />
+            </div>
 
             {/* Card de Calculadora de Dividend Yield - Mobile/Tablet (versão completa) */}
             {latestFinancials?.dy && Number(latestFinancials.dy) > 0 && (

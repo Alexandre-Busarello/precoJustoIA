@@ -613,6 +613,8 @@ export class YahooFinanceComplementService {
       }
       
       // Batch upsert (50 per batch to avoid connection pool issues)
+      // Upsert baseado em companyId + exDate + amount
+      // Permite múltiplos dividendos na mesma data (ex: JCP e dividendos ordinários)
       const BATCH_SIZE = 50;
       for (let i = 0; i < dividendsToSave.length; i += BATCH_SIZE) {
         const batch = dividendsToSave.slice(i, i + BATCH_SIZE);

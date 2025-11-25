@@ -357,7 +357,7 @@ model DividendHistory {
   
   company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   
-  @@unique([companyId, exDate, amount]) // Evitar duplicatas
+  @@unique([companyId, exDate, amount]) // Evitar duplicatas - permite JCP e dividendos na mesma data
   @@index([companyId, exDate])
   @@index([exDate])
   @@index([companyId, paymentDate])

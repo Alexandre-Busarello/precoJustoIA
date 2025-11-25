@@ -2,7 +2,7 @@
  * DIVIDEND SERVICE
  *
  * Gerencia a extração, armazenamento e processamento de dividendos históricos
- * usando yahoo-finance2 para todos os tipos de ativos.
+ * Yahoo Finance
  */
 
 import { prisma } from "@/lib/prisma";
@@ -25,11 +25,14 @@ async function getYahooFinance() {
 }
 
 /**
- * Interface para dividendos extraídos do Yahoo Finance
+ * Interface para dividendos extraídos de fontes externas (Yahoo Finance)
  */
 export interface DividendData {
-  date: Date;
+  date: Date; // exDate (data ex-dividendo)
   amount: number;
+  paymentDate?: Date; // Data de pagamento (disponível no BRAPI)
+  type?: string; // Tipo: "JCP", "DIVIDENDO", etc (disponível no BRAPI)
+  source?: string; // Fonte: "brapi" ou "yahoo"
 }
 
 /**
@@ -253,7 +256,7 @@ export class DividendService {
       return errorResult;
     }
   }
-
+  
   /**
    * Extrai dividendos históricos do Yahoo Finance
    * Usa o módulo chart() que inclui eventos de dividendos
@@ -443,6 +446,7 @@ export class DividendService {
               dividends.push({
                 date: divDate,
                 amount: Number(div.amount),
+                source: 'yahoo'
               });
             } else {
               // Log dividendos que foram filtrados
@@ -466,6 +470,7 @@ export class DividendService {
               dividends.push({
                 date: divDate,
                 amount: Number(divData.amount),
+                source: 'yahoo'
               });
             }
           }
@@ -518,7 +523,8 @@ export class DividendService {
 
   /**
    * Salva múltiplos dividendos no banco de dados
-   * Usa upsert para evitar duplicatas
+   * Usa upsert para evitar duplicatas baseado em companyId + exDate + amount
+   * Permite múltiplos dividendos na mesma data (ex: JCP e dividendos ordinários)
    */
   static async saveDividendsToDatabase(
     companyId: number,
@@ -527,54 +533,34 @@ export class DividendService {
     if (dividends.length === 0) return;
 
     try {
-      // First, get existing dividends to avoid unnecessary writes
-      const existingDividends = await prisma.dividendHistory.findMany({
-        where: {
-          companyId: companyId,
-        },
-        select: {
-          exDate: true,
-          amount: true,
-        },
-      });
-
-      // Create a Set of existing dividend keys for fast lookup
-      const existingKeys = new Set(
-        existingDividends.map(
-          (div) =>
-            `${div.exDate.toISOString().split("T")[0]}_${Number(
-              div.amount
-            ).toFixed(6)}`
-        )
-      );
-
-      // Filter out dividends that already exist
-      const newDividends = dividends.filter((dividend) => {
-        const key = `${
-          dividend.date.toISOString().split("T")[0]
-        }_${dividend.amount.toFixed(6)}`;
-        return !existingKeys.has(key);
-      });
-
-      if (newDividends.length === 0) {
-        console.log(
-          `✅ [DB] Todos os ${dividends.length} dividendos já existem no banco`
-        );
-        return;
-      }
-
-      // Save only new dividends
+      // Usar upsert para cada dividendo baseado em companyId + exDate + amount
+      // Isso permite ter JCP e dividendos ordinários na mesma data (com amounts diferentes)
       await Promise.all(
-        newDividends.map((dividend) =>
+        dividends.map((dividend) =>
           safeWrite(
-            "create-dividend_history",
+            "upsert-dividend_history",
             () =>
-              prisma.dividendHistory.create({
-                data: {
+              prisma.dividendHistory.upsert({
+                where: {
+                  companyId_exDate_amount: {
+                    companyId: companyId,
+                    exDate: dividend.date,
+                    amount: dividend.amount,
+                  },
+                },
+                update: {
+                  paymentDate: dividend.paymentDate || null,
+                  type: dividend.type || null,
+                  source: dividend.source || "yahoo",
+                  updatedAt: new Date(),
+                },
+                create: {
                   companyId: companyId,
                   exDate: dividend.date,
                   amount: dividend.amount,
-                  source: "yahoo",
+                  paymentDate: dividend.paymentDate || null,
+                  type: dividend.type || null,
+                  source: dividend.source || "yahoo",
                 },
               }),
             ["dividend_history"]
@@ -583,9 +569,7 @@ export class DividendService {
       );
 
       console.log(
-        `✅ [DB] Salvos ${newDividends.length} novos dividendos (${
-          dividends.length - newDividends.length
-        } já existiam)`
+        `✅ [DB] Processados ${dividends.length} dividendos (upsert por exDate + amount)`
       );
     } catch (error) {
       console.error("❌ [DB] Erro ao salvar dividendos:", error);

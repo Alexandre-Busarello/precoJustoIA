@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
-import { DividendRadarService, DividendProjection } from '@/lib/dividend-radar-service';
+import { DividendProjection, DividendRadarService } from '@/lib/dividend-radar-service';
+import { DividendService } from '@/lib/dividend-service';
 import { cache } from '@/lib/cache-service';
 
 interface HistoricalDividend {
@@ -179,20 +180,37 @@ export async function GET(request: NextRequest) {
     // Calcular data de corte para histórico (4 meses atrás)
     const historicalCutoffDate = new Date(now.getFullYear(), now.getMonth() - 4, 1);
 
+    // Processar empresas e iniciar carregamento sob demanda em background para empresas sem projeções
+    const companiesToProcess = paginatedCompanies.filter((c: any) => !c.dividendRadarProjections);
+    
+    // Iniciar processamento em background para empresas sem projeções (não bloqueia resposta)
+    if (companiesToProcess.length > 0) {
+      Promise.all(
+        companiesToProcess.map((company: any) =>
+          Promise.all([
+            DividendService.fetchAndSaveDividends(company.ticker).catch((error) => {
+              console.error(`[GRID] Erro ao carregar dividendos para ${company.ticker}:`, error);
+            }),
+            DividendRadarService.getOrGenerateProjections(company.ticker).catch((error) => {
+              console.error(`[GRID] Erro ao gerar projeções para ${company.ticker}:`, error);
+            })
+          ])
+        )
+      ).catch(() => {
+        // Ignorar erros silenciosamente - processamento em background
+      });
+    }
+
     for (const company of paginatedCompanies) {
       let projections: DividendProjection[] = [];
 
-      // Se tem projeções no banco, usar
+      // Usar projeções que já existem no banco
       if ((company as any).dividendRadarProjections) {
         projections = (company as any).dividendRadarProjections as DividendProjection[];
       } else {
-        // Gerar projeções se não existirem (apenas para empresas da página atual)
-        try {
-          projections = await DividendRadarService.getOrGenerateProjections(company.ticker);
-        } catch (error) {
-          console.error(`⚠️ [DIVIDEND RADAR] Erro ao gerar projeções para ${company.ticker}:`, error);
-          continue; // Pular empresa se não conseguir gerar projeções
-        }
+        // Se não tem projeções, iniciar processamento em background e pular por enquanto
+        // Na próxima requisição (ou após processamento), a empresa já terá projeções
+        continue;
       }
 
       // Filtrar projeções futuras (apenas meses futuros) E confiança >= 60%

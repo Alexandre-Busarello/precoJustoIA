@@ -25,6 +25,8 @@ import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import { getSectorCompetitors, getMixedRelatedCompanies } from '@/lib/competitor-service'
 import { DividendRadarCompact } from '@/components/dividend-radar-compact'
+import { DividendService } from '@/lib/dividend-service'
+import { DividendRadarService } from '@/lib/dividend-radar-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -240,6 +242,19 @@ export default async function TickerPage({ params }: PageProps) {
     const user = await getCurrentUser()
     userIsPremium = user?.isPremium || false
   }
+
+  // Processar dividendos e projeções sob demanda (em background, não bloqueia página)
+  // Isso garante que sempre temos dados atualizados quando a página é aberta
+  Promise.all([
+    DividendService.fetchAndSaveDividends(ticker).catch((error) => {
+      console.error(`[${ticker}] Erro ao carregar dividendos sob demanda:`, error);
+    }),
+    DividendRadarService.getOrGenerateProjections(ticker).catch((error) => {
+      console.error(`[${ticker}] Erro ao gerar projeções sob demanda:`, error);
+    })
+  ]).catch(() => {
+    // Ignorar erros silenciosamente - não bloquear carregamento da página
+  });
 
   // Buscar dados da empresa e dados financeiros completos em paralelo (incluindo dados históricos)
   const [companyData, comprehensiveData, reportsCount, youtubeAnalysis] = await Promise.all([

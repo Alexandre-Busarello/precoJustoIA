@@ -204,10 +204,24 @@ export async function GET(request: NextRequest) {
               currentPrice
             );
 
-            // Determinar status de entrada técnico
-            const technicalStatus = technicalAnalysis?.aiFairEntryPrice 
-              ? (currentPrice <= technicalAnalysis.aiFairEntryPrice ? 'compra' : 'neutro')
-              : 'neutro';
+            // Determinar status de entrada técnico (considerando score fundamentalista)
+            // Não recomendar compra se score fundamentalista < 50
+            const hasMinimumFundamentalScore = overallScore.score >= 50;
+            let technicalStatus = 'neutro';
+            let technicalLabel = 'Neutro';
+            
+            if (technicalAnalysis?.aiFairEntryPrice && currentPrice > 0) {
+              const fairPrice = technicalAnalysis.aiFairEntryPrice;
+              const priceDiff = ((currentPrice - fairPrice) / fairPrice) * 100;
+              
+              if (priceDiff <= 0 && hasMinimumFundamentalScore) {
+                technicalStatus = 'compra';
+                technicalLabel = 'Compra';
+              } else {
+                technicalStatus = 'neutro';
+                technicalLabel = 'Neutro';
+              }
+            }
 
             // Estratégias aprovadas
             const approvedStrategiesList: string[] = [];
@@ -234,7 +248,7 @@ export async function GET(request: NextRequest) {
               approvedStrategies: approvedStrategiesList,
               strategies: strategies || {},
               technicalStatus,
-              technicalLabel: technicalStatus === 'compra' ? 'Compra' : 'Neutro',
+              technicalLabel,
               technicalFairEntryPrice: technicalAnalysis?.aiFairEntryPrice || null,
               sentimentScore: youtubeScore,
               sentimentStatus: youtubeScore !== null 

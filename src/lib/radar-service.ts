@@ -128,10 +128,12 @@ export function getRadarStatusColor(score: number): 'green' | 'yellow' | 'red' {
 
 /**
  * Determina status de entrada baseado em análise técnica
+ * IMPORTANTE: Não recomenda compra se score fundamentalista < 50
  */
 export function getTechnicalEntryStatus(
   technicalAnalysis: TechnicalAnalysisData | null,
-  currentPrice: number
+  currentPrice: number,
+  overallScore?: number | null
 ): { status: 'green' | 'yellow' | 'red'; label: string } {
   if (!technicalAnalysis?.aiFairEntryPrice || currentPrice <= 0) {
     return { status: 'yellow', label: 'Neutro' };
@@ -140,10 +142,23 @@ export function getTechnicalEntryStatus(
   const fairPrice = technicalAnalysis.aiFairEntryPrice;
   const priceDiff = ((currentPrice - fairPrice) / fairPrice) * 100;
 
+  // Se score fundamentalista é baixo (< 50), não recomendar compra mesmo que técnico seja favorável
+  const hasMinimumFundamentalScore = overallScore !== null && overallScore !== undefined && overallScore >= 50;
+
   if (priceDiff <= -5) {
-    return { status: 'green', label: 'Compra' };
+    // Preço muito abaixo do justo técnico
+    if (hasMinimumFundamentalScore) {
+      return { status: 'green', label: 'Compra' };
+    } else {
+      return { status: 'yellow', label: 'Neutro' }; // Score fundamentalista baixo
+    }
   } else if (priceDiff <= 0) {
-    return { status: 'green', label: 'Bom' };
+    // Preço abaixo ou igual ao justo técnico
+    if (hasMinimumFundamentalScore) {
+      return { status: 'green', label: 'Compra' };
+    } else {
+      return { status: 'yellow', label: 'Neutro' }; // Score fundamentalista baixo
+    }
   } else if (priceDiff <= 10) {
     return { status: 'yellow', label: 'Neutro' };
   } else if (priceDiff <= 20) {

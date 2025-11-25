@@ -97,8 +97,8 @@ export async function POST(request: NextRequest) {
         }
         const bestUpside = upsides.length > 0 ? Math.max(...upsides) : null;
 
-        // Determinar status de entrada técnico
-        const technicalStatus = getTechnicalEntryStatus(technicalAnalysis, currentPrice);
+        // Determinar status de entrada técnico (considerando score fundamentalista)
+        const technicalStatus = getTechnicalEntryStatus(technicalAnalysis, currentPrice, overallScore?.score);
 
         // Determinar status de sentimento
         const sentimentStatus = getSentimentStatus(youtubeScore);

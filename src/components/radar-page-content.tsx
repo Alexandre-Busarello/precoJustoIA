@@ -395,8 +395,11 @@ export function RadarPageContent() {
                   <p className="text-sm text-muted-foreground ml-5">
                     Ponto de entrada baseado em análise técnica com IA. Mostra preço atual vs. preço justo técnico.
                     <span className="block mt-1">
-                      <span className="text-green-600 font-medium">Verde</span>: Zona de compra (preço atual ≤ preço justo) | 
-                      <span className="text-yellow-600 font-medium"> Amarelo</span>: Neutro
+                      <span className="text-green-600 font-medium">Verde (Compra)</span>: Zona de compra (preço atual ≤ preço justo técnico) <strong>E</strong> score fundamentalista ≥ 50 | 
+                      <span className="text-yellow-600 font-medium"> Amarelo (Neutro)</span>: Preço acima do justo técnico ou score fundamentalista &lt; 50
+                    </span>
+                    <span className="block mt-1 text-xs italic">
+                      ⚠️ Não recomendamos compra se o score fundamentalista for baixo, mesmo que a análise técnica seja favorável.
                     </span>
                     <span className="block mt-1 text-xs">
                       Clique no ícone <TrendingUp className="w-3 h-3 inline" /> para ver análise completa

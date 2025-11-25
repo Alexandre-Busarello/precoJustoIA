@@ -44,49 +44,79 @@ export default function TechnicalAnalysisTrafficLight({
   }
 
   const analysis = data.analysis
+  const minPrice = analysis.aiMinPrice
+  const maxPrice = analysis.aiMaxPrice
   const fairPrice = analysis.aiFairEntryPrice!
-  const diffPercent = ((currentPrice - fairPrice) / fairPrice) * 100
 
-  // Verde: dentro de 5% do preço justo (para baixo ou até 2% acima)
+  if (!minPrice || !maxPrice) {
+    return null
+  }
+
+  // Calcular status baseado na faixa mínima e máxima
   let trafficLightColor: 'green' | 'yellow' | 'red' = 'red'
   let trafficLightLabel = 'Fora do Ideal'
+  let trafficLightDescription = 'Preço abaixo da faixa mínima prevista. Pode indicar movimento atípico no mercado.'
   
-  if (diffPercent >= -5 && diffPercent <= 2) {
+  // Verde: dentro da faixa mínima e máxima (seguro)
+  if (currentPrice >= minPrice && currentPrice <= maxPrice) {
     trafficLightColor = 'green'
     trafficLightLabel = 'Ideal para Compra'
-  } else if ((diffPercent > 2 && diffPercent <= 10) || (diffPercent < -5 && diffPercent >= -10)) {
+    trafficLightDescription = 'Preço dentro da faixa prevista. Região segura para entrada considerando análise técnica.'
+  }
+  // Amarelo: próximo da faixa mínima (dentro de 5% abaixo) OU acima da máxima
+  else if ((currentPrice < minPrice && currentPrice >= minPrice * 0.95) || currentPrice > maxPrice) {
     trafficLightColor = 'yellow'
-    trafficLightLabel = 'Próximo do Ideal'
+    trafficLightLabel = 'Atenção'
+    if (currentPrice < minPrice && currentPrice >= minPrice * 0.95) {
+      trafficLightDescription = 'Preço próximo da faixa mínima. Pode indicar movimento atípico no mercado.'
+    } else {
+      trafficLightDescription = 'Preço acima da faixa máxima prevista. Avalie se há fundamentos que justifiquem.'
+    }
+  }
+  // Vermelho: abaixo da faixa mínima (mais de 5% abaixo)
+  else if (currentPrice < minPrice * 0.95) {
+    trafficLightColor = 'red'
+    trafficLightLabel = 'Alerta'
+    trafficLightDescription = 'Preço abaixo da faixa mínima prevista. Pode indicar movimento atípico no mercado.'
   }
 
   // Versão compacta para header
   if (compact) {
     return (
-      <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${
+      <div className={`flex flex-col gap-2 px-3 py-2 rounded-lg border ${
         trafficLightColor === 'green' ? 'border-green-500 bg-green-50 dark:bg-green-950' :
         trafficLightColor === 'yellow' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
         'border-red-500 bg-red-50 dark:bg-red-950'
       }`}>
-        <div className={`w-3 h-3 rounded-full animate-pulse ${
-          trafficLightColor === 'green' ? 'bg-green-500' :
-          trafficLightColor === 'yellow' ? 'bg-yellow-500' :
-          'bg-red-500'
-        }`} />
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium ${
-            trafficLightColor === 'green' ? 'text-green-700 dark:text-green-300' :
-            trafficLightColor === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
-            'text-red-700 dark:text-red-300'
-          }`}>
-            {trafficLightLabel}
-          </p>
-        </div>
-        {analysis.aiFairEntryPrice && (
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">Preço Justo</p>
-            <p className="text-sm font-semibold">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
+        <div className="flex items-center gap-3">
+          <div className={`w-3 h-3 rounded-full animate-pulse ${
+            trafficLightColor === 'green' ? 'bg-green-500' :
+            trafficLightColor === 'yellow' ? 'bg-yellow-500' :
+            'bg-red-500'
+          }`} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-medium ${
+              trafficLightColor === 'green' ? 'text-green-700 dark:text-green-300' :
+              trafficLightColor === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
+              'text-red-700 dark:text-red-300'
+            }`}>
+              {trafficLightLabel}
+            </p>
           </div>
-        )}
+          {analysis.aiFairEntryPrice && (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Preço Justo</p>
+              <p className="text-sm font-semibold">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
+            </div>
+          )}
+        </div>
+        <p className={`text-xs ${
+          trafficLightColor === 'green' ? 'text-green-600 dark:text-green-400' :
+          trafficLightColor === 'yellow' ? 'text-yellow-600 dark:text-yellow-400' :
+          'text-red-600 dark:text-red-400'
+        }`}>
+          {trafficLightDescription}
+        </p>
       </div>
     )
   }
@@ -99,33 +129,44 @@ export default function TechnicalAnalysisTrafficLight({
       'border-red-500 bg-red-50 dark:bg-red-950'
     }`}>
       <CardContent className="pt-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center space-x-4">
-            <div className={`w-4 h-4 rounded-full animate-pulse ${
-              trafficLightColor === 'green' ? 'bg-green-500' :
-              trafficLightColor === 'yellow' ? 'bg-yellow-500' :
-              'bg-red-500'
-            }`} />
-            <div>
-              <p className="font-semibold text-lg">
-                Preço Atual: R$ {currentPrice.toFixed(2)}
-              </p>
-              <p className={`text-sm font-medium ${
-                trafficLightColor === 'green' ? 'text-green-700 dark:text-green-300' :
-                trafficLightColor === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
-                'text-red-700 dark:text-red-300'
-              }`}>
-                {trafficLightLabel}
-              </p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center space-x-4">
+              <div className={`w-4 h-4 rounded-full animate-pulse ${
+                trafficLightColor === 'green' ? 'bg-green-500' :
+                trafficLightColor === 'yellow' ? 'bg-yellow-500' :
+                'bg-red-500'
+              }`} />
+              <div>
+                <p className="font-semibold text-lg">
+                  Preço Atual: R$ {currentPrice.toFixed(2)}
+                </p>
+                <p className={`text-sm font-medium ${
+                  trafficLightColor === 'green' ? 'text-green-700 dark:text-green-300' :
+                  trafficLightColor === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
+                  'text-red-700 dark:text-red-300'
+                }`}>
+                  {trafficLightLabel}
+                </p>
+              </div>
             </div>
+            {analysis.aiFairEntryPrice && (
+              <div className="text-right">
+                <p className="text-sm text-muted-foreground">Preço Justo de Entrada</p>
+                <p className="font-semibold text-lg">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
+              </div>
+            )}
           </div>
-          {analysis.aiFairEntryPrice && (
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Preço Justo de Entrada</p>
-              <p className="font-semibold text-lg">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground">
-                Diferença: {diffPercent.toFixed(1)}%
-              </p>
+          <div className={`text-sm pt-2 border-t ${
+            trafficLightColor === 'green' ? 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' :
+            trafficLightColor === 'yellow' ? 'border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300' :
+            'border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+          }`}>
+            {trafficLightDescription}
+          </div>
+          {minPrice && maxPrice && (
+            <div className="text-xs text-muted-foreground pt-2">
+              Faixa prevista: R$ {minPrice.toFixed(2)} - R$ {maxPrice.toFixed(2)}
             </div>
           )}
         </div>

@@ -1,21 +1,32 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { 
-  TrendingUp, 
   Info, 
-  BarChart3, 
-  Activity,
   AlertTriangle,
-  Target,
   Zap,
-  Circle
+  Circle,
+  RefreshCw,
+  History,
+  Loader2
 } from 'lucide-react'
-import PriceChart from './price-chart'
+import { usePremiumStatus } from '@/hooks/use-premium-status'
+import { useAdminStatus } from '@/hooks/use-admin-status'
+import { useToast } from '@/hooks/use-toast'
 import SupportResistanceChart from './support-resistance-chart'
 
 interface TechnicalAnalysisPageProps {
@@ -78,22 +89,142 @@ interface ApiResponse {
   cached: boolean
 }
 
+interface HistoryItem {
+  id: string
+  calculatedAt: string
+  expiresAt: string
+}
+
+interface HistoryResponse {
+  ticker: string
+  history: HistoryItem[]
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
+}
+
+interface UsageResponse {
+  ticker: string
+  isPremium: boolean
+  allowed: boolean
+  remaining: number
+  limit: number
+  currentUsage: number
+  monthlyUsage?: number
+}
+
 export default function TechnicalAnalysisPage({
   ticker,
   companyName,
   sector,
   currentPrice
 }: TechnicalAnalysisPageProps) {
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  const { isPremium } = usePremiumStatus()
+  const { isAdmin } = useAdminStatus()
+  const canUpdate = isPremium || isAdmin
+
+  // Query para análise atual ou selecionada
+  const analysisQueryKey = selectedAnalysisId 
+    ? ['technical-analysis', ticker, selectedAnalysisId]
+    : ['technical-analysis', ticker]
+  
   const { data, isLoading, error } = useQuery<ApiResponse>({
-    queryKey: ['technical-analysis', ticker],
+    queryKey: analysisQueryKey,
     queryFn: async () => {
-      const response = await fetch(`/api/technical-analysis/${ticker}`)
+      const url = selectedAnalysisId
+        ? `/api/technical-analysis/${ticker}?id=${selectedAnalysisId}`
+        : `/api/technical-analysis/${ticker}`
+      const response = await fetch(url)
       if (!response.ok) {
-        throw new Error('Erro ao carregar análise técnica')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Erro ao carregar análise técnica')
       }
       return response.json()
     }
   })
+
+  // Query para histórico com paginação
+  const { data: historyData, isLoading: historyLoading } = useQuery<HistoryResponse>({
+    queryKey: ['technical-analysis-history', ticker, historyPage],
+    queryFn: async (): Promise<HistoryResponse> => {
+      const response = await fetch(`/api/technical-analysis/${ticker}/history?page=${historyPage}&pageSize=20`)
+      if (!response.ok) {
+        throw new Error('Erro ao carregar histórico')
+      }
+      return response.json()
+    },
+    enabled: historyOpen,
+    placeholderData: (previousData) => previousData
+  })
+
+  // Resetar página quando modal abrir
+  const handleHistoryOpenChange = (open: boolean) => {
+    setHistoryOpen(open)
+    if (open) {
+      setHistoryPage(1)
+    }
+  }
+
+  // Query para uso (apenas usuários gratuitos)
+  const { data: usageData } = useQuery<UsageResponse>({
+    queryKey: ['technical-analysis-usage', ticker],
+    queryFn: async () => {
+      const response = await fetch(`/api/technical-analysis/${ticker}/usage`)
+      if (!response.ok) {
+        throw new Error('Erro ao verificar uso')
+      }
+      return response.json()
+    },
+    enabled: !isPremium
+  })
+
+  // Mutation para atualizar análise
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/technical-analysis/${ticker}`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Erro ao atualizar análise técnica')
+      }
+      return response.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['technical-analysis', ticker] })
+      queryClient.invalidateQueries({ queryKey: ['technical-analysis-history', ticker] })
+      setSelectedAnalysisId(null) // Voltar para análise atual
+      toast({
+        title: data.recalculated ? 'Análise atualizada com sucesso!' : 'Análise já existe para hoje',
+        description: data.message || 'A análise técnica foi atualizada.'
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro ao atualizar análise',
+        description: error.message,
+        variant: 'destructive'
+      })
+    }
+  })
+
+  const handleHistorySelect = (analysisId: string) => {
+    setSelectedAnalysisId(analysisId)
+    setHistoryOpen(false)
+  }
+
+  const handleLoadCurrent = () => {
+    setSelectedAnalysisId(null)
+    queryClient.invalidateQueries({ queryKey: ['technical-analysis', ticker] })
+  }
 
   if (isLoading) {
     return (
@@ -128,30 +259,219 @@ export default function TechnicalAnalysisPage({
 
   const analysis = data.analysis
 
-  // Calcular status do semáforo baseado no preço atual vs preço justo
+  // Calcular status do semáforo baseado na faixa mínima e máxima
   const getTrafficLightStatus = () => {
-    if (!analysis?.aiFairEntryPrice) return null
+    if (!analysis?.aiFairEntryPrice || !analysis?.aiMinPrice || !analysis?.aiMaxPrice) return null
     
-    const fairPrice = analysis.aiFairEntryPrice
+    const minPrice = analysis.aiMinPrice
+    const maxPrice = analysis.aiMaxPrice
     const current = analysis.currentPrice
-    const diffPercent = ((current - fairPrice) / fairPrice) * 100
     
-    // Verde: dentro de 5% do preço justo (para baixo ou até 2% acima)
-    if (diffPercent >= -5 && diffPercent <= 2) {
-      return { color: 'green', label: 'Ideal para Compra', icon: Circle }
+    // Verde: dentro da faixa mínima e máxima (seguro)
+    if (current >= minPrice && current <= maxPrice) {
+      return { 
+        color: 'green', 
+        label: 'Ideal para Compra', 
+        icon: Circle,
+        description: 'Preço dentro da faixa prevista. Região segura para entrada considerando análise técnica.'
+      }
     }
-    // Amarelo: entre 2% e 10% acima do preço justo, ou entre 5% e 10% abaixo
-    if ((diffPercent > 2 && diffPercent <= 10) || (diffPercent < -5 && diffPercent >= -10)) {
-      return { color: 'yellow', label: 'Próximo do Ideal', icon: AlertTriangle }
+    // Amarelo: próximo da faixa mínima (dentro de 5% abaixo) OU acima da máxima
+    if ((current < minPrice && current >= minPrice * 0.95) || current > maxPrice) {
+      let description = ''
+      if (current < minPrice && current >= minPrice * 0.95) {
+        description = 'Preço próximo da faixa mínima. Pode indicar movimento atípico no mercado.'
+      } else {
+        description = 'Preço acima da faixa máxima prevista. Avalie se há fundamentos que justifiquem.'
+      }
+      return { 
+        color: 'yellow', 
+        label: 'Atenção', 
+        icon: AlertTriangle,
+        description
+      }
     }
-    // Vermelho: mais de 10% acima ou mais de 10% abaixo
-    return { color: 'red', label: 'Fora do Ideal', icon: AlertTriangle }
+    // Vermelho: abaixo da faixa mínima (mais de 5% abaixo)
+    return { 
+      color: 'red', 
+      label: 'Alerta', 
+      icon: AlertTriangle,
+      description: 'Preço abaixo da faixa mínima prevista. Pode indicar movimento atípico no mercado.'
+    }
   }
 
   const trafficLight = getTrafficLightStatus()
 
   return (
     <div className="space-y-6">
+      {/* Header com controles */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex-1">
+          {selectedAnalysisId && (
+            <Alert className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Visualizando análise histórica. 
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto ml-2"
+                  onClick={handleLoadCurrent}
+                >
+                  Carregar análise atual
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {!isPremium && usageData && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Você já visualizou {usageData.currentUsage} de {usageData.limit} análises técnicas este mês.
+                {usageData.remaining > 0 ? ` Restam ${usageData.remaining} análises.` : ' Faça upgrade para acesso ilimitado.'}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Botão de Histórico */}
+          <Dialog open={historyOpen} onOpenChange={handleHistoryOpenChange}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <History className="w-4 h-4 mr-2" />
+                Histórico
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Histórico de Análises Técnicas</DialogTitle>
+                <DialogDescription>
+                  Selecione uma análise anterior para visualizar
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-8 flex-1">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
+                ) : historyData && historyData.history && historyData.history.length > 0 ? (
+                  <>
+                    <div className="space-y-2 flex-1 overflow-y-auto min-h-0 pr-2">
+                      {historyData.history.map((item) => (
+                        <Card 
+                          key={item.id} 
+                          className="cursor-pointer hover:bg-muted transition-colors"
+                          onClick={() => handleHistorySelect(item.id)}
+                        >
+                          <CardContent className="p-3 sm:p-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm sm:text-base truncate">
+                                  {new Date(item.calculatedAt).toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                                <p className="text-xs sm:text-sm text-muted-foreground">
+                                  Válida até: {new Date(item.expiresAt).toLocaleDateString('pt-BR')}
+                                </p>
+                              </div>
+                              {selectedAnalysisId === item.id && (
+                                <Badge variant="default" className="self-start sm:self-center">Atual</Badge>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                    {/* Controles de Paginação */}
+                    {historyData?.pagination && historyData.pagination.totalPages > 1 && (
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 mt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Mostrando {((historyData.pagination.page - 1) * historyData.pagination.pageSize) + 1} - {Math.min(historyData.pagination.page * historyData.pagination.pageSize, historyData.pagination.total)} de {historyData.pagination.total}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                            disabled={historyData.pagination.page === 1 || historyLoading}
+                          >
+                            Anterior
+                          </Button>
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, historyData.pagination.totalPages) }, (_, i) => {
+                              let pageNum: number
+                              if (historyData.pagination.totalPages <= 5) {
+                                pageNum = i + 1
+                              } else if (historyData.pagination.page <= 3) {
+                                pageNum = i + 1
+                              } else if (historyData.pagination.page >= historyData.pagination.totalPages - 2) {
+                                pageNum = historyData.pagination.totalPages - 4 + i
+                              } else {
+                                pageNum = historyData.pagination.page - 2 + i
+                              }
+                              
+                              return (
+                                <Button
+                                  key={pageNum}
+                                  variant={historyData.pagination.page === pageNum ? "default" : "outline"}
+                                  size="sm"
+                                  className="w-8 h-8 p-0"
+                                  onClick={() => setHistoryPage(pageNum)}
+                                  disabled={historyLoading}
+                                >
+                                  {pageNum}
+                                </Button>
+                              )
+                            })}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setHistoryPage(p => Math.min(historyData.pagination.totalPages, p + 1))}
+                            disabled={historyData.pagination.page === historyData.pagination.totalPages || historyLoading}
+                          >
+                            Próxima
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground flex-1 flex items-center justify-center">
+                    Nenhuma análise histórica encontrada
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Botão de Atualizar (apenas Premium/Admin) */}
+          {canUpdate && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => updateMutation.mutate()}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Atualizando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Atualizar Análise
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
       {/* Indicador de Semáforo */}
       {trafficLight && (
         <Card className={`border-2 ${
@@ -160,33 +480,44 @@ export default function TechnicalAnalysisPage({
           'border-red-500 bg-red-50 dark:bg-red-950'
         }`}>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center space-x-4">
-                <div className={`w-4 h-4 rounded-full animate-pulse ${
-                  trafficLight.color === 'green' ? 'bg-green-500' :
-                  trafficLight.color === 'yellow' ? 'bg-yellow-500' :
-                  'bg-red-500'
-                }`} />
-                <div>
-                  <p className="font-semibold text-lg">
-                    Preço Atual: R$ {analysis.currentPrice.toFixed(2)}
-                  </p>
-                  <p className={`text-sm font-medium ${
-                    trafficLight.color === 'green' ? 'text-green-700 dark:text-green-300' :
-                    trafficLight.color === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
-                    'text-red-700 dark:text-red-300'
-                  }`}>
-                    {trafficLight.label}
-                  </p>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-4 h-4 rounded-full animate-pulse ${
+                    trafficLight.color === 'green' ? 'bg-green-500' :
+                    trafficLight.color === 'yellow' ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`} />
+                  <div>
+                    <p className="font-semibold text-lg">
+                      Preço Atual: R$ {analysis.currentPrice.toFixed(2)}
+                    </p>
+                    <p className={`text-sm font-medium ${
+                      trafficLight.color === 'green' ? 'text-green-700 dark:text-green-300' :
+                      trafficLight.color === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
+                      'text-red-700 dark:text-red-300'
+                    }`}>
+                      {trafficLight.label}
+                    </p>
+                  </div>
                 </div>
+                {analysis.aiFairEntryPrice && (
+                  <div className="text-right">
+                    <p className="text-sm text-muted-foreground">Preço Justo de Entrada</p>
+                    <p className="font-semibold text-lg">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
+                  </div>
+                )}
               </div>
-              {analysis.aiFairEntryPrice && (
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">Preço Justo de Entrada</p>
-                  <p className="font-semibold text-lg">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Diferença: {((analysis.currentPrice - analysis.aiFairEntryPrice) / analysis.aiFairEntryPrice * 100).toFixed(1)}%
-                  </p>
+              <div className={`text-sm pt-2 border-t ${
+                trafficLight.color === 'green' ? 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' :
+                trafficLight.color === 'yellow' ? 'border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300' :
+                'border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+              }`}>
+                {trafficLight.description}
+              </div>
+              {analysis.aiMinPrice && analysis.aiMaxPrice && (
+                <div className="text-xs text-muted-foreground pt-2">
+                  Faixa prevista: R$ {analysis.aiMinPrice.toFixed(2)} - R$ {analysis.aiMaxPrice.toFixed(2)}
                 </div>
               )}
             </div>

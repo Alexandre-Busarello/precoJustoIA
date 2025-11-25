@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePremiumUser } from '@/lib/user-service'
-import { getOrCalculateTechnicalAnalysis } from '@/lib/technical-analysis-service'
+import { getCurrentUser, requirePremiumUser } from '@/lib/user-service'
+import { 
+  getOrCalculateTechnicalAnalysis, 
+  getTechnicalAnalysisByDate,
+  getTechnicalAnalysisById,
+  checkSameDayAnalysis
+} from '@/lib/technical-analysis-service'
+import { checkFeatureUsage, recordFeatureUsage } from '@/lib/feature-usage-service'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(
@@ -8,20 +14,82 @@ export async function GET(
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   try {
-    // Verificar Premium - análise técnica é feature premium
-    const user = await requirePremiumUser()
+    // Verificar se usuário está logado (não apenas Premium)
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json(
-        { error: 'Análise técnica é uma feature Premium. Faça upgrade para acessar.' },
-        { status: 403 }
+        { error: 'Você precisa estar logado para visualizar análise técnica.' },
+        { status: 401 }
       )
     }
 
     const resolvedParams = await params
     const ticker = resolvedParams.ticker.toUpperCase()
+    const { searchParams } = new URL(request.url)
+    const dateParam = searchParams.get('date')
+    const idParam = searchParams.get('id')
 
-    // Buscar ou calcular análise técnica
-    const analysis = await getOrCalculateTechnicalAnalysis(ticker, false)
+    // Se for usuário gratuito, verificar limite antes de continuar
+    if (!user.isPremium) {
+      const usageCheck = await checkFeatureUsage(user.id, 'technical_analysis', ticker)
+      if (!usageCheck.allowed) {
+        return NextResponse.json(
+          { 
+            error: 'Limite de análises técnicas atingido para este mês.',
+            limit: usageCheck.limit,
+            currentUsage: usageCheck.currentUsage,
+            remaining: 0
+          },
+          { status: 429 }
+        )
+      }
+    }
+
+    let analysis
+
+    // Buscar análise por ID se fornecido
+    if (idParam) {
+      analysis = await getTechnicalAnalysisById(ticker, idParam)
+      if (!analysis) {
+        return NextResponse.json(
+          { error: 'Análise técnica não encontrada' },
+          { status: 404 }
+        )
+      }
+    }
+    // Buscar análise por data se fornecido
+    else if (dateParam) {
+      const targetDate = new Date(dateParam)
+      if (isNaN(targetDate.getTime())) {
+        return NextResponse.json(
+          { error: 'Data inválida. Use o formato YYYY-MM-DD' },
+          { status: 400 }
+        )
+      }
+      analysis = await getTechnicalAnalysisByDate(ticker, targetDate)
+      if (!analysis) {
+        return NextResponse.json(
+          { error: 'Nenhuma análise técnica encontrada para esta data' },
+          { status: 404 }
+        )
+      }
+    }
+    // Buscar análise atual (padrão)
+    else {
+      analysis = await getOrCalculateTechnicalAnalysis(ticker, false)
+    }
+
+    if (!analysis) {
+      return NextResponse.json(
+        { error: 'Dados históricos insuficientes para análise técnica' },
+        { status: 404 }
+      )
+    }
+
+    // Registrar uso para usuários gratuitos
+    if (!user.isPremium) {
+      await recordFeatureUsage(user.id, 'technical_analysis', ticker, { ticker })
+    }
 
     if (!analysis) {
       return NextResponse.json(
@@ -152,11 +220,23 @@ export async function GET(
     
     console.log(`[DEBUG] Total final de pontos no gráfico: ${historicalData.length}`)
 
+    // Buscar informações de uso para usuários gratuitos
+    let usageInfo = null
+    if (!user.isPremium) {
+      const usageCheck = await checkFeatureUsage(user.id, 'technical_analysis', ticker)
+      usageInfo = {
+        remaining: usageCheck.remaining,
+        limit: usageCheck.limit,
+        currentUsage: usageCheck.currentUsage
+      }
+    }
+
     return NextResponse.json({
       ticker,
       analysis,
       historicalData,
-      cached: analysis.expiresAt > new Date()
+      cached: analysis.expiresAt > new Date(),
+      usage: usageInfo
     })
   } catch (error: any) {
     console.error('Erro ao buscar análise técnica:', error)
@@ -172,11 +252,18 @@ export async function POST(
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   try {
-    // Verificar Premium - análise técnica é feature premium
-    const user = await requirePremiumUser()
+    // Verificar se usuário é Premium ou Admin
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json(
-        { error: 'Análise técnica é uma feature Premium. Faça upgrade para acessar.' },
+        { error: 'Você precisa estar logado para atualizar análise técnica.' },
+        { status: 401 }
+      )
+    }
+
+    if (!user.isPremium && !user.isAdmin) {
+      return NextResponse.json(
+        { error: 'Apenas usuários Premium ou Admin podem atualizar análises técnicas.' },
         { status: 403 }
       )
     }
@@ -184,8 +271,35 @@ export async function POST(
     const resolvedParams = await params
     const ticker = resolvedParams.ticker.toUpperCase()
 
-    // Forçar recálculo
-    const analysis = await getOrCalculateTechnicalAnalysis(ticker, true)
+    // Buscar empresa para verificar se já existe análise do dia atual
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      select: { id: true }
+    })
+
+    if (!company) {
+      return NextResponse.json(
+        { error: 'Empresa não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Verificar se já existe análise para o dia atual
+    const sameDayExists = await checkSameDayAnalysis(company.id)
+
+    if (sameDayExists) {
+      // Retornar análise existente do dia atual
+      const todayAnalysis = await getOrCalculateTechnicalAnalysis(ticker, false)
+      return NextResponse.json({
+        ticker,
+        analysis: todayAnalysis,
+        recalculated: false,
+        message: 'Já existe uma análise técnica para o dia atual.'
+      })
+    }
+
+    // Gerar nova análise (permitir mesmo dia para Premium/Admin)
+    const analysis = await getOrCalculateTechnicalAnalysis(ticker, true, true)
 
     if (!analysis) {
       return NextResponse.json(

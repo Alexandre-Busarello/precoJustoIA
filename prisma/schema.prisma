@@ -93,6 +93,7 @@ model User {
   assetSubscriptions UserAssetSubscription[]
   userEvents        UserEvent[]
   userSecurity      UserSecurity?
+  featureUsage      FeatureUsage[]
 
   @@map("users")
 }
@@ -1601,4 +1602,24 @@ model AssetTechnicalAnalysis {
   @@index([companyId, expiresAt])
   @@index([expiresAt])
   @@map("asset_technical_analysis")
+}
+
+// ===== USO DE FEATURES (GENÉRICO) =====
+
+model FeatureUsage {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  feature     String   // Ex: "technical_analysis", "ai_report", "backtest", etc.
+  resourceId  String?  @map("resource_id") // Opcional: ticker, reportId, etc.
+  usedAt      DateTime @default(now()) @map("used_at")
+  month       Int      // 1-12
+  year        Int      // YYYY
+  metadata    Json?    // Dados adicionais flexíveis (ex: { ticker: "PETR4" })
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, feature, resourceId, month, year], name: "feature_usage_unique")
+  @@index([userId, feature, year, month])
+  @@index([feature, year, month])
+  @@map("feature_usage")
 }

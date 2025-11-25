@@ -2,9 +2,10 @@ import { notFound, redirect } from 'next/navigation'
 import { Metadata } from 'next'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getCurrentUser, isCurrentUserPremium } from '@/lib/user-service'
+import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import TechnicalAnalysisPage from '@/components/technical-analysis-page'
+import TechnicalAnalysisPageLimited from '@/components/technical-analysis-page-limited'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,21 +23,76 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   
   const company = await prisma.company.findUnique({
     where: { ticker },
-    select: { name: true }
+    select: { 
+      name: true,
+      sector: true,
+      dailyQuotes: {
+        orderBy: { date: 'desc' },
+        take: 1,
+        select: { price: true }
+      }
+    }
   })
 
   if (!company) {
     return {
-      title: `${ticker} - Análise Técnica | Preço Justo AI`
+      title: `${ticker} - Análise Técnica | Preço Justo AI`,
+      description: `Análise técnica completa de ${ticker} com indicadores avançados: RSI, MACD, Bollinger Bands, Fibonacci, Ichimoku e previsão de preços com IA.`,
+      robots: {
+        index: true,
+        follow: true
+      }
     }
   }
 
+  const currentPrice = company.dailyQuotes[0]?.price
+    ? Number(company.dailyQuotes[0].price).toFixed(2)
+    : null
+
+  const description = currentPrice
+    ? `Análise técnica completa de ${ticker} (${company.name})${company.sector ? ` - Setor: ${company.sector}` : ''}. Preço atual: R$ ${currentPrice}. Indicadores avançados: RSI, MACD, Bollinger Bands, Fibonacci, Ichimoku e previsão de preços com IA.`
+    : `Análise técnica completa de ${ticker} (${company.name})${company.sector ? ` - Setor: ${company.sector}` : ''}. Indicadores avançados: RSI, MACD, Bollinger Bands, Fibonacci, Ichimoku e previsão de preços com IA.`
+
   return {
     title: `Análise Técnica - ${ticker} (${company.name}) | Preço Justo AI`,
-    description: `Análise técnica completa de ${ticker} com indicadores avançados: RSI, MACD, Bollinger Bands, Fibonacci, Ichimoku e previsão de preços com IA.`,
+    description,
+    keywords: [
+      `análise técnica ${ticker}`,
+      `${ticker} análise técnica`,
+      `indicadores técnicos ${ticker}`,
+      `RSI ${ticker}`,
+      `MACD ${ticker}`,
+      `Bollinger Bands ${ticker}`,
+      `Fibonacci ${ticker}`,
+      `Ichimoku ${ticker}`,
+      `previsão preço ${ticker}`,
+      company.name,
+      company.sector || ''
+    ].filter(Boolean).join(', '),
+    openGraph: {
+      title: `Análise Técnica - ${ticker} (${company.name})`,
+      description,
+      type: 'website',
+      siteName: 'Preço Justo AI'
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `Análise Técnica - ${ticker} (${company.name})`,
+      description
+    },
     robots: {
       index: true,
-      follow: true
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-video-preview': -1,
+        'max-image-preview': 'large',
+        'max-snippet': -1
+      }
+    },
+    alternates: {
+      canonical: `https://precojusto.ai/acao/${ticker.toLowerCase()}/analise-tecnica`
     }
   }
 }
@@ -65,9 +121,64 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
     redirect(`/acao/${tickerParam.toLowerCase()}`)
   }
 
-  // Verificar Premium
+  // Verificar se usuário está logado
   const session = await getServerSession(authOptions)
-  const userIsPremium = session ? await isCurrentUserPremium() : false
+  const user = session ? await getCurrentUser() : null
+  const userIsPremium = user?.isPremium || false
+
+  // Buscar dados da empresa (necessário para ambas versões)
+  const companyData = await prisma.company.findUnique({
+    where: { ticker },
+    select: {
+      id: true,
+      name: true,
+      sector: true,
+      logoUrl: true,
+      dailyQuotes: {
+        orderBy: { date: 'desc' },
+        take: 1,
+        select: { price: true }
+      }
+    }
+  })
+
+  const currentPrice = companyData?.dailyQuotes[0]?.price
+    ? Number(companyData.dailyQuotes[0].price)
+    : 0
+
+  // Se não estiver logado, mostrar versão limitada para SEO
+  if (!user) {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-6">
+            <Button asChild variant="ghost" className="mb-4">
+              <Link href={`/acao/${tickerParam.toLowerCase()}`}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Voltar para página do ativo
+              </Link>
+            </Button>
+            <div className="flex items-center space-x-4">
+              <div>
+                <h1 className="text-3xl font-bold">Análise Técnica</h1>
+                <p className="text-muted-foreground mt-1">
+                  {ticker} - {companyData?.name || company.name}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Versão Limitada para SEO */}
+          <TechnicalAnalysisPageLimited
+            ticker={ticker}
+            companyName={companyData?.name || company.name}
+            currentPrice={currentPrice}
+          />
+        </div>
+      </div>
+    )
+  }
 
   // Se não for premium, mostrar CTA de upgrade
   if (!userIsPremium) {
@@ -133,26 +244,6 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
       </div>
     )
   }
-
-  // Buscar dados da empresa para passar ao componente
-  const companyData = await prisma.company.findUnique({
-    where: { ticker },
-    select: {
-      id: true,
-      name: true,
-      sector: true,
-      logoUrl: true,
-      dailyQuotes: {
-        orderBy: { date: 'desc' },
-        take: 1,
-        select: { price: true }
-      }
-    }
-  })
-
-  const currentPrice = companyData?.dailyQuotes[0]?.price
-    ? Number(companyData.dailyQuotes[0].price)
-    : 0
 
   return (
     <div className="container mx-auto py-8 px-4">

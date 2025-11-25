@@ -23,6 +23,10 @@ export async function GET() {
     <loc>${baseUrl}/sitemap-comparisons.xml</loc>
     <lastmod>2025-09-15</lastmod>
   </sitemap>
+  <sitemap>
+    <loc>${baseUrl}/sitemap-technical-analysis.xml</loc>
+    <lastmod>${currentDate}</lastmod>
+  </sitemap>
 </sitemapindex>`
 
   return new NextResponse(sitemapIndex, {

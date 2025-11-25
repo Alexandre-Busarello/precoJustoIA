@@ -56,11 +56,36 @@ export interface TechnicalAnalysisData {
 }
 
 /**
+ * Verifica se já existe uma análise técnica para o dia atual
+ */
+export async function checkSameDayAnalysis(
+  companyId: number
+): Promise<boolean> {
+  const now = new Date()
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const endOfDay = new Date(startOfDay)
+  endOfDay.setHours(23, 59, 59, 999)
+
+  const existing = await (prisma as any).assetTechnicalAnalysis.findFirst({
+    where: {
+      companyId,
+      calculatedAt: {
+        gte: startOfDay,
+        lte: endOfDay
+      }
+    }
+  })
+
+  return !!existing
+}
+
+/**
  * Busca análise técnica do cache ou recalcula se necessário
  */
 export async function getOrCalculateTechnicalAnalysis(
   ticker: string,
-  forceRecalculate: boolean = false
+  forceRecalculate: boolean = false,
+  allowSameDay: boolean = false
 ): Promise<TechnicalAnalysisData | null> {
   const tickerUpper = ticker.toUpperCase();
   
@@ -72,6 +97,30 @@ export async function getOrCalculateTechnicalAnalysis(
   
   if (!company) {
     return null;
+  }
+  
+  // Se allowSameDay é false e já existe análise para hoje, verificar cache válido
+  if (!allowSameDay && !forceRecalculate) {
+    const sameDayExists = await checkSameDayAnalysis(company.id)
+    if (sameDayExists) {
+      // Buscar análise do dia atual
+      const todayAnalysis = await (prisma as any).assetTechnicalAnalysis.findFirst({
+        where: {
+          companyId: company.id,
+          calculatedAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            lte: new Date(new Date().setHours(23, 59, 59, 999))
+          }
+        },
+        orderBy: {
+          calculatedAt: 'desc'
+        }
+      })
+      
+      if (todayAnalysis) {
+        return await convertToTechnicalAnalysisData(todayAnalysis, tickerUpper);
+      }
+    }
   }
   
   // Verificar cache válido (usar any temporariamente até migração do Prisma)
@@ -91,6 +140,30 @@ export async function getOrCalculateTechnicalAnalysis(
     
     if (cached) {
       return await convertToTechnicalAnalysisData(cached, tickerUpper);
+    }
+  }
+  
+  // Se allowSameDay é false, verificar se já existe análise para hoje antes de recalcular
+  if (!allowSameDay) {
+    const sameDayExists = await checkSameDayAnalysis(company.id)
+    if (sameDayExists) {
+      // Retornar análise existente do dia
+      const todayAnalysis = await (prisma as any).assetTechnicalAnalysis.findFirst({
+        where: {
+          companyId: company.id,
+          calculatedAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            lte: new Date(new Date().setHours(23, 59, 59, 999))
+          }
+        },
+        orderBy: {
+          calculatedAt: 'desc'
+        }
+      })
+      
+      if (todayAnalysis) {
+        return await convertToTechnicalAnalysisData(todayAnalysis, tickerUpper);
+      }
     }
   }
   
@@ -344,5 +417,155 @@ async function convertToTechnicalAnalysisData(
     expiresAt: data.expiresAt,
     currentPrice
   };
+}
+
+/**
+ * Busca histórico das últimas análises técnicas de um ticker com paginação
+ */
+export async function getTechnicalAnalysisHistory(
+  ticker: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<{
+  analyses: Array<{
+    id: string
+    calculatedAt: Date
+    expiresAt: Date
+  }>
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}> {
+  const tickerUpper = ticker.toUpperCase()
+  
+  const company = await prisma.company.findUnique({
+    where: { ticker: tickerUpper },
+    select: { id: true }
+  })
+  
+  if (!company) {
+    return {
+      analyses: [],
+      total: 0,
+      page,
+      pageSize,
+      totalPages: 0
+    }
+  }
+  
+  // Contar total de análises
+  const total = await (prisma as any).assetTechnicalAnalysis.count({
+    where: {
+      companyId: company.id
+    }
+  })
+  
+  // Buscar análises com paginação
+  const skip = (page - 1) * pageSize
+  const analyses = await (prisma as any).assetTechnicalAnalysis.findMany({
+    where: {
+      companyId: company.id
+    },
+    orderBy: {
+      calculatedAt: 'desc'
+    },
+    skip,
+    take: pageSize,
+    select: {
+      id: true,
+      calculatedAt: true,
+      expiresAt: true
+    }
+  })
+  
+  const totalPages = Math.ceil(total / pageSize)
+  
+  return {
+    analyses: analyses.map((a: any) => ({
+      id: a.id,
+      calculatedAt: a.calculatedAt,
+      expiresAt: a.expiresAt
+    })),
+    total,
+    page,
+    pageSize,
+    totalPages
+  }
+}
+
+/**
+ * Busca análise técnica por data específica
+ */
+export async function getTechnicalAnalysisByDate(
+  ticker: string,
+  date: Date
+): Promise<TechnicalAnalysisData | null> {
+  const tickerUpper = ticker.toUpperCase()
+  
+  const company = await prisma.company.findUnique({
+    where: { ticker: tickerUpper },
+    select: { id: true }
+  })
+  
+  if (!company) {
+    return null
+  }
+  
+  const startOfDay = new Date(date)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(date)
+  endOfDay.setHours(23, 59, 59, 999)
+  
+  const analysis = await (prisma as any).assetTechnicalAnalysis.findFirst({
+    where: {
+      companyId: company.id,
+      calculatedAt: {
+        gte: startOfDay,
+        lte: endOfDay
+      }
+    },
+    orderBy: {
+      calculatedAt: 'desc'
+    }
+  })
+  
+  if (!analysis) {
+    return null
+  }
+  
+  return await convertToTechnicalAnalysisData(analysis, tickerUpper)
+}
+
+/**
+ * Busca análise técnica por ID
+ */
+export async function getTechnicalAnalysisById(
+  ticker: string,
+  analysisId: string
+): Promise<TechnicalAnalysisData | null> {
+  const tickerUpper = ticker.toUpperCase()
+  
+  const company = await prisma.company.findUnique({
+    where: { ticker: tickerUpper },
+    select: { id: true }
+  })
+  
+  if (!company) {
+    return null
+  }
+  
+  const analysis = await (prisma as any).assetTechnicalAnalysis.findFirst({
+    where: {
+      id: analysisId,
+      companyId: company.id
+    }
+  })
+  
+  if (!analysis) {
+    return null
+  }
+  
+  return await convertToTechnicalAnalysisData(analysis, tickerUpper)
 }
 

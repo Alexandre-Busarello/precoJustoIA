@@ -276,11 +276,13 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     // Graham Upside (Margem de Segurança)
     if (params.grahamUpsideFilter?.enabled) {
       const grahamUpside = this.calculateGrahamUpside(companyData);
-      const inRange = this.isValueInRange(grahamUpside, params.grahamUpsideFilter);
+      // Se o filtro está ativo e o valor é null, a empresa NÃO passa (reprova)
+      // Se o valor existe, verifica se está no range
+      const inRange = grahamUpside !== null ? this.isValueInRange(grahamUpside, params.grahamUpsideFilter) : false;
       criteria.push({
         label: 'Graham Upside',
         value: inRange,
-        description: `${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''} (atual: ${grahamUpside?.toFixed(1)}% ou N/A)`
+        description: `${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''} (atual: ${grahamUpside !== null ? grahamUpside.toFixed(1) + '%' : 'N/A - reprovado'})`
       });
     }
     
@@ -421,7 +423,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       // Remover empresas duplicadas (ex: SAPR3, SAPR4, SAPR11 - mantém apenas a primeira)
       const uniqueResults = this.removeDuplicateCompanies(allResults);
       
-      return uniqueResults.slice(0, params.limit || 20);
+      return uniqueResults.slice(0, params.limit || 100);
     }
 
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
@@ -469,7 +471,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     // Remover empresas duplicadas (ex: SAPR3, SAPR4, SAPR11 - mantém apenas a primeira)
     const uniqueResults = this.removeDuplicateCompanies(results);
 
-    return uniqueResults.slice(0, params.limit || 20);
+    return uniqueResults.slice(0, params.limit || 100);
   }
 
   private generateIndividualRational(

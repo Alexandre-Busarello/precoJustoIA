@@ -238,6 +238,7 @@ export interface RankBuilderResult {
   marginOfSafety: number | null; // Margem de segurança em %
   rational: string; // Explicação detalhada da estratégia e critérios aplicados
   key_metrics?: Record<string, number | null>; // Métricas relevantes para o modelo
+  fairValueModel?: string | null; // Modelo usado para calcular o preço justo (ex: "Graham", "FCD", "Gordon")
 }
 
 // Interface base para todas as estratégias

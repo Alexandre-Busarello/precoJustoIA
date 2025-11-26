@@ -21,7 +21,6 @@ import {
   DollarSign,
   LineChart,
   Activity,
-  Lightbulb,
   Calendar,
   BookOpen,
   TrendingUp,
@@ -36,11 +35,16 @@ import { authOptions } from "@/lib/auth"
 import { getAllPosts } from "@/lib/blog-service"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
 import { InnerLinkButton } from "@/components/inner-link-button"
+import { LandingHero } from "@/components/landing/landing-hero"
+import { CTASection } from "@/components/landing/cta-section"
+import { FAQSection } from "@/components/landing/faq-section"
+import { SocialProof } from "@/components/landing/social-proof"
+import { FloatingCTA } from "@/components/landing/floating-cta"
 
 export const metadata: Metadata = {
   title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI - Investimentos Bovespa",
-  description: "Análise fundamentalista gratuita de ações B3 com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 5 modelos. Rankings de +350 empresas. Comece grátis!",
-  keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, valuation ações, como investir em ações, melhores ações B3, análise de ações grátis, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações, comparador ações bovespa, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
+  description: "Descubra as melhores ações da Bovespa com análise fundamentalista automatizada e IA. 8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica) em +350 empresas B3. Rankings instantâneos, comparador de ações e backtesting. Comece grátis!",
+  keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, valuation ações, como investir em ações, melhores ações B3, análise de ações grátis, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações, comparador ações bovespa, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista, backtesting carteiras, screening ações B3",
   authors: [{ name: "Alexandre Busarello", url: "https://precojusto.ai/fundador" }],
   creator: "Alexandre Busarello",
   publisher: "Preço Justo AI",
@@ -100,71 +104,55 @@ export default async function Home() {
 
   return (
     <div>
-      {/* Hero Section - Enhanced */}
-      <section className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-6 lg:pt-32 pb-16 sm:pb-24 lg:pb-32">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))]"></div>
-        
-        <div className="relative text-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-background/80 backdrop-blur-sm border border-border/50 rounded-full px-4 sm:px-6 py-2 sm:py-3 mb-6 sm:mb-8 shadow-lg">
-            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
-            <span className="text-xs sm:text-sm font-semibold">🚀 Centenas de análises já realizadas</span>
-            <Badge variant="secondary" className="ml-1 sm:ml-2 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs px-2 py-0.5">
-              Novo
-            </Badge>
-          </div>
-          
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl 2xl:text-8xl font-bold tracking-tight mb-6 sm:mb-8 leading-tight">
+      {/* Floating CTA - Aparece após scroll */}
+      {!session && (
+        <FloatingCTA 
+          text="Começar análise gratuita"
+          href="/register"
+          showAfterScroll={300}
+        />
+      )}
+
+      {/* Hero Section - Enhanced com componente reutilizável */}
+      <LandingHero
+        headline={
+          <>
             <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent block sm:inline">
-              Análise Fundamentalista
+              Encontre as Melhores Ações
             </span>{" "}
-            <span className="text-foreground block sm:inline">de</span>{" "}
+            <span className="text-foreground block sm:inline">da B3 com</span>{" "}
             <span className="bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent block sm:inline">
-              Ações B3 com IA
+              Análise Fundamentalista + IA
             </span>
-          </h1>
-          
-          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground mb-8 sm:mb-12 max-w-5xl mx-auto leading-relaxed px-2">
-            <strong>Descubra as melhores ações da Bovespa</strong> com análise fundamentalista automatizada e IA. 
-            Use modelos consagrados como <strong>Graham, Dividend Yield, Fórmula Mágica</strong> e mais 5 estratégias em <strong>+350 empresas da B3</strong>. Investir em ações nunca foi tão fácil!
-          </p>
-
-          {/* Social Proof */}
-          <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 lg:gap-8 mb-8 sm:mb-12 text-xs sm:text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 flex-shrink-0" />
-              <span>+350 empresas B3</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 flex-shrink-0" />
-              <span>8 modelos + Backtest</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Brain className="w-4 h-4 flex-shrink-0" />
-              <span>Powered by IA</span>
-            </div>
-          </div>
-          
-          {!session && (
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center mb-6 sm:mb-8 px-4">
-              <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 shadow-xl hover:shadow-2xl transition-all w-full sm:w-auto" asChild>
-                <Link href="/register" className="flex items-center justify-center gap-2 sm:gap-3">
-                  <Rocket className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                  <span className="truncate">Começar análise gratuita</span>
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" className="text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 border-2 hover:bg-blue-50 dark:hover:bg-blue-950/20 w-full sm:w-auto" asChild>
-                <Link href="/ranking">Ver demonstração</Link>
-              </Button>
-            </div>
-          )}
-
-          <p className="text-xs sm:text-sm text-muted-foreground px-4">
-            ✅ Grátis para sempre • ✅ Sem cartão de crédito • ✅ Acesso imediato
-          </p>
-        </div>
-      </section>
+          </>
+        }
+        subheadline={
+          <>
+            <strong>8 modelos de valuation automatizados</strong> analisam <strong>+350 empresas da Bovespa</strong> em segundos. 
+            Use <strong>Graham, Dividend Yield, Fórmula Mágica</strong> e mais 5 estratégias consagradas. 
+            <strong> Evite decisões ruins</strong> e encontre ações subvalorizadas com dados reais.
+          </>
+        }
+        badge={!session ? {
+          text: "🚀 Centenas de análises já realizadas",
+          iconName: "Sparkles"
+        } : undefined}
+        primaryCTA={!session ? {
+          text: "Começar análise gratuita",
+          href: "/register",
+          iconName: "Rocket"
+        } : undefined}
+        secondaryCTA={!session ? {
+          text: "Ver demonstração",
+          href: "/ranking"
+        } : undefined}
+        socialProof={!session ? [
+          { iconName: "Building2", text: "+350 empresas B3" },
+          { iconName: "BarChart3", text: "8 modelos + Backtest" },
+          { iconName: "Brain", text: "Powered by IA" }
+        ] : undefined}
+        showQuickAccess={!session}
+      />
 
       {/* Quick Ranker Section */}
       <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-b from-white to-gray-50 dark:from-background dark:to-background/80">
@@ -219,91 +207,157 @@ export default async function Home() {
         </section>
       )} */}
 
-      {/* Problem/Solution Section */}
+      {/* Benefits Section - Transformada de Problemas/Soluções para Benefícios Concretos */}
       <section className="py-16 sm:py-20 lg:py-24 bg-white dark:bg-background">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-5xl mx-auto text-center mb-12 sm:mb-16 lg:mb-20">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 leading-tight">
-              Pare de perder dinheiro com{" "}
-              <span className="text-red-600">decisões emocionais</span>
+              Por que escolher{" "}
+              <span className="text-blue-600">Preço Justo AI?</span>
             </h2>
             <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-4xl mx-auto px-2">
-              <strong>87% dos investidores pessoa física</strong> perdem dinheiro na bolsa por falta de análise fundamentalista. 
-              Nossa plataforma resolve isso com <strong>análise automatizada e IA</strong>.
+              <strong>Economize tempo e evite erros custosos</strong> com análise fundamentalista automatizada. 
+              <strong> 87% dos investidores</strong> perdem dinheiro por falta de análise adequada. 
+              Nossa plataforma resolve isso com <strong>dados reais e metodologias comprovadas</strong>.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 max-w-6xl mx-auto">
-            {/* Problems */}
-            <div className="space-y-6 sm:space-y-8">
-              <h3 className="text-xl sm:text-2xl font-bold text-red-600 mb-4 sm:mb-6 text-center lg:text-left">❌ Problemas comuns:</h3>
-              <div className="space-y-4 sm:space-y-6">
-                <div className="group flex items-start gap-3 sm:gap-4 p-4 sm:p-6 bg-red-50 dark:bg-red-950/20 rounded-xl sm:rounded-2xl border border-red-200 dark:border-red-800 hover:shadow-lg hover:border-red-300 dark:hover:border-red-700 transition-all duration-300">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                    <span className="text-red-600 text-lg sm:text-xl font-bold">✗</span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto mb-12">
+            {/* Benefício 1 */}
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-6 sm:p-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Clock className="w-8 h-8 text-white" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-red-900 dark:text-red-100 mb-2 text-base sm:text-lg">Análise manual demorada</h4>
-                    <p className="text-sm sm:text-base text-red-700 dark:text-red-200 leading-relaxed">Horas analisando planilhas e relatórios sem garantia de precisão</p>
+                <h3 className="text-xl font-bold mb-3">Análise em Segundos</h3>
+                <p className="text-muted-foreground leading-relaxed mb-4">
+                  <strong>Economize horas</strong> de análise manual. Rankings automáticos com 8 modelos 
+                  de valuation em <strong>tempo real</strong> para +350 empresas da B3.
+                </p>
+                <div className="text-2xl font-bold text-blue-600">100x mais rápido</div>
+                <p className="text-xs text-muted-foreground mt-1">que análise manual</p>
+              </CardContent>
+            </Card>
+
+            {/* Benefício 2 */}
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-6 sm:p-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Shield className="w-8 h-8 text-white" />
                   </div>
+                <h3 className="text-xl font-bold mb-3">Evite Armadilhas</h3>
+                <p className="text-muted-foreground leading-relaxed mb-4">
+                  <strong>Filtros anti-armadilha</strong> eliminam automaticamente empresas problemáticas, 
+                  dividend traps e indicadores enganosos antes que você invista.
+                </p>
+                <div className="text-2xl font-bold text-green-600">-R$ 5.000</div>
+                <p className="text-xs text-muted-foreground mt-1">economia média por erro evitado</p>
+              </CardContent>
+            </Card>
+
+            {/* Benefício 3 */}
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-6 sm:p-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Target className="w-8 h-8 text-white" />
                 </div>
-                <div className="group flex items-start gap-3 sm:gap-4 p-4 sm:p-6 bg-red-50 dark:bg-red-950/20 rounded-xl sm:rounded-2xl border border-red-200 dark:border-red-800 hover:shadow-lg hover:border-red-300 dark:hover:border-red-700 transition-all duration-300">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                    <span className="text-red-600 text-lg sm:text-xl font-bold">✗</span>
+                <h3 className="text-xl font-bold mb-3">Metodologia Comprovada</h3>
+                <p className="text-muted-foreground leading-relaxed mb-4">
+                  Use os mesmos modelos que <strong>Benjamin Graham, Joel Greenblatt</strong> e outros 
+                  mestres do value investing. <strong>Base científica e acadêmica</strong>.
+                </p>
+                <div className="text-2xl font-bold text-purple-600">8 modelos</div>
+                <p className="text-xs text-muted-foreground mt-1">de valuation consagrados</p>
+              </CardContent>
+            </Card>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-red-900 dark:text-red-100 mb-2 text-base sm:text-lg">Armadilhas de valor</h4>
-                    <p className="text-sm sm:text-base text-red-700 dark:text-red-200 leading-relaxed">Cair em &quot;dividend traps&quot; e empresas com indicadores enganosos</p>
+
+          {/* CTA Contextual */}
+          {!session && (
+            <div className="text-center">
+              <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-lg px-8 py-4 shadow-xl" asChild>
+                <Link href="/register" className="flex items-center justify-center gap-2">
+                  <Rocket className="w-5 h-5" />
+                  Começar a economizar tempo e dinheiro
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              </Button>
                   </div>
+          )}
                 </div>
-                <div className="group flex items-start gap-3 sm:gap-4 p-4 sm:p-6 bg-red-50 dark:bg-red-950/20 rounded-xl sm:rounded-2xl border border-red-200 dark:border-red-800 hover:shadow-lg hover:border-red-300 dark:hover:border-red-700 transition-all duration-300">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                    <span className="text-red-600 text-lg sm:text-xl font-bold">✗</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-red-900 dark:text-red-100 mb-2 text-base sm:text-lg">Falta de metodologia</h4>
-                    <p className="text-sm sm:text-base text-red-700 dark:text-red-200 leading-relaxed">Investir sem critérios claros e modelos comprovados</p>
-                  </div>
-                </div>
-              </div>
+      </section>
+
+      {/* Social Proof Section - Adicionada - Apenas para SEO (usuários não logados) */}
+      {!session && (
+        <SocialProof
+          stats={[
+            { value: "+350", label: "Empresas Analisadas", iconName: "Building2" },
+            { value: "8", label: "Modelos de Valuation", iconName: "BarChart3" },
+            { value: "65+", label: "Indicadores por Empresa", iconName: "TrendingUp" },
+            { value: "100%", label: "Dados Confiáveis", iconName: "Shield" }
+          ]}
+          badges={[
+            { text: "Dados Oficiais B3", iconName: "CheckCircle" },
+            { text: "Metodologias Consagradas", iconName: "CheckCircle" },
+            { text: "Análise com IA", iconName: "Brain" }
+          ]}
+        />
+      )}
+
+      {/* Internal Linking Estratégico - Links para páginas satélite - Apenas para SEO (usuários não logados) */}
+      {!session && (
+      <section className="py-12 sm:py-16 bg-gradient-to-b from-white to-gray-50 dark:from-background dark:to-background/80">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-3">
+              Explore Nossas{" "}
+              <span className="text-blue-600">Ferramentas</span>
+            </h2>
+            <p className="text-muted-foreground">
+              Descubra todas as funcionalidades disponíveis na plataforma
+            </p>
             </div>
 
-            {/* Solutions */}
-            <div className="space-y-6 sm:space-y-8">
-              <h3 className="text-xl sm:text-2xl font-bold text-green-600 mb-4 sm:mb-6 text-center lg:text-left">✅ Nossa solução:</h3>
-              <div className="space-y-4 sm:space-y-6">
-                <div className="group flex items-start gap-3 sm:gap-4 p-4 sm:p-6 bg-green-50 dark:bg-green-950/20 rounded-xl sm:rounded-2xl border border-green-200 dark:border-green-800 hover:shadow-lg hover:border-green-300 dark:hover:border-green-700 transition-all duration-300">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-green-900 dark:text-green-100 mb-2 text-base sm:text-lg">Análise em segundos</h4>
-                    <p className="text-sm sm:text-base text-green-700 dark:text-green-200 leading-relaxed">Rankings automáticos com 8 modelos de valuation em tempo real</p>
-                  </div>
-                </div>
-                <div className="group flex items-start gap-3 sm:gap-4 p-4 sm:p-6 bg-green-50 dark:bg-green-950/20 rounded-xl sm:rounded-2xl border border-green-200 dark:border-green-800 hover:shadow-lg hover:border-green-300 dark:hover:border-green-700 transition-all duration-300">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-green-900 dark:text-green-100 mb-2 text-base sm:text-lg">Filtros anti-armadilha</h4>
-                    <p className="text-sm sm:text-base text-green-700 dark:text-green-200 leading-relaxed">Algoritmos que eliminam empresas problemáticas automaticamente</p>
-                  </div>
-                </div>
-                <div className="group flex items-start gap-3 sm:gap-4 p-4 sm:p-6 bg-green-50 dark:bg-green-950/20 rounded-xl sm:rounded-2xl border border-green-200 dark:border-green-800 hover:shadow-lg hover:border-green-300 dark:hover:border-green-700 transition-all duration-300">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-green-900 dark:text-green-100 mb-2 text-base sm:text-lg">Metodologia comprovada</h4>
-                    <p className="text-sm sm:text-base text-green-700 dark:text-green-200 leading-relaxed">Graham, Greenblatt, Gordon e outros mestres do value investing</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl mx-auto">
+            <Link href="/comparador" className="group">
+              <Card className="border-0 shadow-md hover:shadow-xl transition-all h-full text-center">
+                <CardContent className="p-4">
+                  <BarChart3 className="w-8 h-8 mx-auto mb-2 text-blue-600 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-sm font-semibold group-hover:text-blue-600 transition-colors">Comparador</h3>
+                </CardContent>
+              </Card>
+            </Link>
+            
+            <Link href="/screening-acoes" className="group">
+              <Card className="border-0 shadow-md hover:shadow-xl transition-all h-full text-center">
+                <CardContent className="p-4">
+                  <Target className="w-8 h-8 mx-auto mb-2 text-green-600 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-sm font-semibold group-hover:text-green-600 transition-colors">Screening</h3>
+                </CardContent>
+              </Card>
+            </Link>
+            
+            <Link href="/analise-setorial" className="group">
+              <Card className="border-0 shadow-md hover:shadow-xl transition-all h-full text-center">
+                <CardContent className="p-4">
+                  <Building2 className="w-8 h-8 mx-auto mb-2 text-purple-600 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-sm font-semibold group-hover:text-purple-600 transition-colors">Setorial</h3>
+                </CardContent>
+              </Card>
+            </Link>
+            
+            <Link href="/backtest" className="group">
+              <Card className="border-0 shadow-md hover:shadow-xl transition-all h-full text-center">
+                <CardContent className="p-4">
+                  <TrendingUp className="w-8 h-8 mx-auto mb-2 text-orange-600 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-sm font-semibold group-hover:text-orange-600 transition-colors">Backtest</h3>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
         </div>
       </section>
+      )}
 
       {/* Features Section - Enhanced */}
       <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background">
@@ -839,119 +893,57 @@ export default async function Home() {
             <p className="text-muted-foreground mb-4 sm:mb-6 text-sm sm:text-base px-2">
               Ou crie sua própria comparação personalizada
             </p>
-            <Button size="lg" variant="outline" className="text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto" asChild>
+            <Button size="lg" variant="outline" className="text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto border-2 hover:bg-blue-50 dark:hover:bg-blue-950/20" asChild>
               <Link href="/comparador" className="flex items-center justify-center gap-2 sm:gap-3">
                 <Calculator className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                 <span className="truncate">Criar Comparação Personalizada</span>
                 <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
               </Link>
             </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section className="py-16 sm:py-20 lg:py-24 bg-white dark:bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4 leading-tight">
-              Perguntas{" "}
-              <span className="text-violet-600">Frequentes</span>
-            </h2>
-            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground px-2">
-              Tire suas dúvidas sobre nossa plataforma de análise fundamentalista
+            <p className="text-xs text-muted-foreground mt-3">
+              Compare até 6 ações simultaneamente • <Link href="/comparador" className="text-blue-600 hover:underline">Saiba mais sobre o comparador</Link>
             </p>
           </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto">
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Lightbulb className="w-6 h-6 text-yellow-600" />
-                  Como funciona a análise fundamentalista?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Nossa plataforma aplica automaticamente os 8 principais modelos de valuation 
-                  (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, 
-                  calculando um preço justo baseado nos fundamentos financeiros.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Shield className="w-6 h-6 text-green-600" />
-                  Os dados são confiáveis?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Sim! Utilizamos dados fornecidos pela BRAPI, que consolida informações oficiais 
-                  da B3 e demonstrações financeiras auditadas. Nossos algoritmos são baseados em 
-                  metodologias consagradas por investidores como Benjamin Graham e Joel Greenblatt.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <DollarSign className="w-6 h-6 text-blue-600" />
-                  Preciso pagar para usar?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Temos um plano gratuito completo com rankings e análises básicas. 
-                  Para recursos avançados (IA, comparações, backtesting), oferecemos 
-                  o plano premium por R$ 19,90/mês, sem fidelidade.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Brain className="w-6 h-6 text-purple-600" />
-                  Como funciona a análise com IA?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Nossa IA (Google Gemini) analisa demonstrações financeiras, notícias e 
-                  contexto macroeconômico para gerar insights qualitativos que complementam 
-                  a análise quantitativa tradicional.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Clock className="w-6 h-6 text-orange-600" />
-                  Com que frequência os dados são atualizados?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Os preços e indicadores financeiros são atualizados 3 vezes ao dia 
-                  (09:00, 13:00 e 20:00). Como trabalhamos com análise fundamentalista 
-                  de longo prazo, não precisamos de atualizações em tempo real. Os dados 
-                  fundamentalistas são atualizados trimestralmente após a divulgação 
-                  dos resultados pelas empresas.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Target className="w-6 h-6 text-red-600" />
-                  Posso confiar 100% nas recomendações?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Nossa plataforma é uma ferramenta de apoio à decisão. Sempre faça sua 
-                  própria análise e considere seu perfil de risco. Investimentos envolvem 
-                  riscos e rentabilidade passada não garante resultados futuros.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </section>
+
+      {/* FAQ Section - Usando componente reutilizável - Apenas para SEO (usuários não logados) */}
+      <FAQSection
+          title="Perguntas Frequentes"
+          description="Tire suas dúvidas sobre nossa plataforma de análise fundamentalista"
+          faqs={[
+            {
+              question: "Como funciona a análise fundamentalista?",
+              answer: "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros.",
+              iconName: "Lightbulb"
+            },
+            {
+              question: "Os dados são confiáveis?",
+              answer: "Sim! Utilizamos dados fornecidos pela BRAPI, que consolida informações oficiais da B3 e demonstrações financeiras auditadas. Nossos algoritmos são baseados em metodologias consagradas por investidores como Benjamin Graham e Joel Greenblatt.",
+              iconName: "Shield"
+            },
+            {
+              question: "Preciso pagar para usar?",
+              answer: "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 19,90/mês, sem fidelidade.",
+              iconName: "DollarSign"
+            },
+            {
+              question: "Como funciona a análise com IA?",
+              answer: "Nossa IA (Google Gemini) analisa demonstrações financeiras, notícias e contexto macroeconômico para gerar insights qualitativos que complementam a análise quantitativa tradicional.",
+              iconName: "Brain"
+            },
+            {
+              question: "Com que frequência os dados são atualizados?",
+              answer: "Os preços e indicadores financeiros são atualizados 3 vezes ao dia (09:00, 13:00 e 20:00). Como trabalhamos com análise fundamentalista de longo prazo, não precisamos de atualizações em tempo real. Os dados fundamentalistas são atualizados trimestralmente após a divulgação dos resultados pelas empresas.",
+              iconName: "Clock"
+            },
+            {
+              question: "Posso confiar 100% nas recomendações?",
+              answer: "Nossa plataforma é uma ferramenta de apoio à decisão. Sempre faça sua própria análise e considere seu perfil de risco. Investimentos envolvem riscos e rentabilidade passada não garante resultados futuros.",
+              iconName: "Target"
+            }
+          ]}
+        />
 
       {/* Fundador Section */}
       <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background">
@@ -1209,52 +1201,34 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Final CTA Section */}
-      <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-r from-blue-600 to-violet-600 text-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-4 sm:mb-6 leading-tight">
-            Pronto para encontrar as melhores ações da B3?
-          </h2>
-          <p className="text-base sm:text-lg lg:text-xl mb-6 sm:mb-8 max-w-4xl mx-auto opacity-90 px-2">
+      {/* Final CTA Section - Usando componente reutilizável */}
+      {!session && (
+        <CTASection
+          title="Pronto para encontrar as melhores ações da B3?"
+          description={
+            <>
             Junte-se a <strong>centenas de investidores</strong> que já descobriram ações subvalorizadas 
             com nossa análise fundamentalista automatizada.
-          </p>
-          
-          {!session && (
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center px-4">
-              <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 font-bold shadow-xl w-full sm:w-auto" asChild>
-                <Link href="/register" className="flex items-center justify-center gap-2 sm:gap-3">
-                  <Rocket className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                  <span className="truncate">Começar análise gratuita</span>
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" className="border-2 border-white hover:bg-white hover:text-blue-600 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto" asChild>
-                <Link href="/ranking">Ver demonstração</Link>
-              </Button>
-            </div>
-          )}
-
-          <div className="mt-6 sm:mt-8 flex flex-wrap justify-center items-center gap-4 sm:gap-6 lg:gap-8 text-xs sm:text-sm opacity-80 px-2">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Grátis para sempre</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Sem cartão de crédito</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Acesso imediato</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Cancele quando quiser</span>
-            </div>
-          </div>
-        </div>
-      </section>
+            </>
+          }
+          primaryCTA={{
+            text: "Começar análise gratuita",
+            href: "/register",
+            icon: <Rocket className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+          }}
+          secondaryCTA={{
+            text: "Ver demonstração",
+            href: "/ranking"
+          }}
+          variant="gradient"
+          benefits={[
+            "Grátis para sempre",
+            "Sem cartão de crédito",
+            "Acesso imediato",
+            "Cancele quando quiser"
+          ]}
+        />
+      )}
 
       {/* Footer */}
       <Footer />
@@ -1314,14 +1288,20 @@ export default async function Home() {
               ],
               "featureList": [
                 "Análise fundamentalista automatizada",
-                "8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, DCF, Gordon, etc.)",
-                "Análise preditiva com Inteligência Artificial",
+                "8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, DCF, Gordon, Low P/E, IA)",
+                "Análise preditiva com Inteligência Artificial (Google Gemini)",
                 "Mais de 350 empresas da B3 analisadas",
-                "Filtros anti-armadilha",
-                "Comparador de ações",
-                "Rankings personalizados",
-                "Histórico de análises",
-                "Backtesting de carteiras"
+                "65+ indicadores fundamentalistas por empresa",
+                "Filtros anti-armadilha automatizados",
+                "Comparador de até 6 ações lado a lado",
+                "Screening customizável de ações",
+                "Análise setorial completa",
+                "Radar de dividendos com projeções IA",
+                "Rankings personalizados ilimitados",
+                "Histórico de análises salvas",
+                "Backtesting de carteiras com métricas avançadas",
+                "Gestão completa de carteiras",
+                "Dados atualizados 3x ao dia"
               ],
               "aggregateRating": {
                 "@type": "AggregateRating",

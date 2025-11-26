@@ -638,7 +638,7 @@ INÍCIO DA RESPOSTA (comece diretamente com {):`;
       
       if (attempt < maxRetries) {
         // Aguardar antes de tentar novamente
-        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
         console.log(`🔄 Tentando gerar post novamente...`);
       }
     }

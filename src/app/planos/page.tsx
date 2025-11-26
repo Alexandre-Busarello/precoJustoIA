@@ -22,6 +22,9 @@ import {
 import Link from "next/link"
 import { Metadata } from "next"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
+import { LandingHero } from "@/components/landing/landing-hero"
+import { CTASection } from "@/components/landing/cta-section"
+import { FAQSection } from "@/components/landing/faq-section"
 
 export const metadata: Metadata = {
   title: "Planos e Preços | Análise Fundamentalista Gratuita + Premium R$ 19,90/mês - Preço Justo AI",
@@ -59,37 +62,40 @@ export const metadata: Metadata = {
 export default function PlanosPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
-      {/* Hero Section */}
-      <section className="py-20 pt-24 bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20">
-        <div className="container mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-background/80 backdrop-blur-sm border border-border/50 rounded-full px-6 py-3 mb-8 shadow-lg">
-            <Sparkles className="w-5 h-5 text-blue-600" />
-            <span className="text-sm font-semibold">💰 Planos flexíveis para todos os perfis</span>
-          </div>
-          
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-8">
+      {/* Hero Section - Usando componente reutilizável */}
+      <LandingHero
+        headline={
+          <>
             <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-              Escolha seu plano
-            </span>{" "}
-            <span className="text-foreground">ideal</span>
-          </h1>
-          
-          <p className="text-2xl text-muted-foreground mb-12 max-w-4xl mx-auto leading-relaxed">
+              Escolha seu plano ideal
+            </span>
+          </>
+        }
+        subheadline={
+          <>
             Do <strong>gratuito para sempre</strong> ao <strong>premium com IA</strong>. 
             Encontre o plano perfeito para sua jornada de investimentos na B3.
-          </p>
-
-          <div className="inline-flex items-center gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-full px-6 py-3">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            <span className="text-sm font-medium text-green-700 dark:text-green-400">
-              💳 PIX ou Cartão • Ativação instantânea • Cancele quando quiser
-            </span>
-          </div>
-        </div>
-      </section>
+          </>
+        }
+        badge={{
+          text: "💰 Planos flexíveis para todos os perfis",
+          iconName: "Sparkles"
+        }}
+        socialProof={[
+          { iconName: "CheckCircle", text: "PIX ou Cartão" },
+          { iconName: "Zap", text: "Ativação instantânea" },
+          { iconName: "Shield", text: "Cancele quando quiser" }
+        ]}
+        primaryCTA={{
+          text: "Ver Planos",
+          href: "#planos",
+          iconName: "Rocket"
+        }}
+        showQuickAccess={false}
+      />
 
       {/* Pricing Cards */}
-      <section className="py-20">
+      <section id="planos" className="py-20">
         <div className="container mx-auto px-4">
           <LandingPricingSection />
         </div>
@@ -334,161 +340,84 @@ export default function PlanosPage() {
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="py-20 bg-white dark:bg-background">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Perguntas{" "}
-              <span className="text-violet-600">Frequentes</span>
-            </h2>
-            <p className="text-xl text-muted-foreground">
-              Tire suas dúvidas sobre nossos planos e funcionalidades
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <HelpCircle className="w-6 h-6 text-blue-600" />
-                  Posso cancelar a qualquer momento?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Sim! Não há fidelidade. Você pode cancelar sua assinatura a qualquer momento 
-                  e continuar usando até o final do período pago. Sem taxas de cancelamento.
-                </p>
-              </CardContent>
-            </Card>
+      {/* FAQ Section - Usando componente reutilizável */}
+      <FAQSection
+        title="Perguntas Frequentes sobre Planos"
+        description="Tire suas dúvidas sobre nossos planos e funcionalidades"
+        faqs={[
+          {
+            question: "Posso cancelar a qualquer momento?",
+            answer: "Sim! Não há fidelidade. Você pode cancelar sua assinatura a qualquer momento e continuar usando até o final do período pago. Sem taxas de cancelamento.",
+            iconName: "HelpCircle"
+          },
+          {
+            question: "Quais formas de pagamento aceitam?",
+            answer: "Aceitamos PIX (instantâneo e sem taxas) e cartão de crédito/débito. O PIX é nossa forma recomendada por ser 100% brasileiro e ativar na hora.",
+            iconName: "DollarSign"
+          },
+          {
+            question: "Como funciona a análise com IA?",
+            answer: "Nossa IA (Google Gemini) analisa demonstrações financeiras, busca notícias na internet e contexto macroeconômico para gerar insights qualitativos que complementam a análise quantitativa tradicional.",
+            iconName: "Brain"
+          },
+          {
+            question: "Os dados são confiáveis?",
+            answer: "Sim! Utilizamos dados da BRAPI, que consolida informações oficiais da B3 e demonstrações financeiras auditadas. Nossos algoritmos são baseados em metodologias consagradas por grandes investidores.",
+            iconName: "Shield"
+          },
+          {
+            question: "Com que frequência os dados são atualizados?",
+            answer: "Preços e indicadores são atualizados 3x ao dia. Dados fundamentalistas são atualizados trimestralmente após divulgação dos resultados. Perfeito para análise de longo prazo.",
+            iconName: "Clock"
+          },
+          {
+            question: "Qual a diferença entre os planos Premium?",
+            answer: "O Premium Anual oferece 20% de desconto, acesso antecipado a novos recursos, Relatórios mensais personalizados por IA e suporte VIP. Ideal para investidores sérios.",
+            iconName: "Star"
+          }
+        ]}
+      />
 
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <DollarSign className="w-6 h-6 text-green-600" />
-                  Quais formas de pagamento aceitam?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Aceitamos PIX (instantâneo e sem taxas) e cartão de crédito/débito. 
-                  O PIX é nossa forma recomendada por ser 100% brasileiro e ativar na hora.
-                </p>
-              </CardContent>
-            </Card>
+      {/* Contact CTA */}
+      <div className="text-center py-12 bg-white dark:bg-background">
+        <p className="text-muted-foreground mb-6">
+          Não encontrou a resposta que procurava?
+        </p>
+        <Button size="lg" variant="outline" asChild>
+          <Link href="/contato" className="flex items-center gap-3">
+            <Mail className="w-5 h-5" />
+            Entre em Contato Conosco
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+        </Button>
+      </div>
 
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Brain className="w-6 h-6 text-purple-600" />
-                  Como funciona a análise com IA?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Nossa IA (Google Gemini) analisa demonstrações financeiras, busca notícias 
-                  na internet e contexto macroeconômico para gerar insights qualitativos 
-                  que complementam a análise quantitativa tradicional.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Shield className="w-6 h-6 text-red-600" />
-                  Os dados são confiáveis?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Sim! Utilizamos dados da BRAPI, que consolida informações oficiais da B3 
-                  e demonstrações financeiras auditadas. Nossos algoritmos são baseados em 
-                  metodologias consagradas por grandes investidores.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Clock className="w-6 h-6 text-orange-600" />
-                  Com que frequência os dados são atualizados?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Preços e indicadores são atualizados 3x ao dia. Dados fundamentalistas 
-                  são atualizados trimestralmente após divulgação dos resultados. 
-                  Perfeito para análise de longo prazo.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
-                  <Star className="w-6 h-6 text-yellow-600" />
-                  Qual a diferença entre os planos Premium?
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  O Premium Anual oferece 20% de desconto, acesso antecipado a novos recursos, 
-                  Relatórios mensais personalizados por IA e suporte VIP. Ideal para investidores sérios.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="text-center mt-12">
-            <p className="text-muted-foreground mb-6">
-              Não encontrou a resposta que procurava?
-            </p>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/contato" className="flex items-center gap-3">
-                <Mail className="w-5 h-5" />
-                Entre em Contato Conosco
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-violet-600 text-white">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-4xl sm:text-5xl font-bold mb-6">
-            Pronto para encontrar as melhores ações da B3?
-          </h2>
-          <p className="text-xl mb-8 max-w-3xl mx-auto opacity-90">
+      {/* Final CTA - Usando componente reutilizável */}
+      <CTASection
+        title="Pronto para encontrar as melhores ações da B3?"
+        description={
+          <>
             Junte-se a <strong>centenas de investidores</strong> que já descobriram ações subvalorizadas 
             com nossa análise fundamentalista automatizada.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-6 justify-center">
-            <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-4 font-bold shadow-xl" asChild>
-              <Link href="/register" className="flex items-center gap-3">
-                <Rocket className="w-5 h-5" />
-                Começar análise gratuita
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-            </Button>
-            <Button variant="outline" size="lg" className="border-2 border-white hover:bg-white hover:text-blue-600 text-lg px-8 py-4" asChild>
-              <Link href="/ranking">Ver demonstração</Link>
-            </Button>
-          </div>
-
-          <div className="mt-8 flex flex-wrap justify-center items-center gap-8 text-sm opacity-80">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Grátis para sempre</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Sem cartão de crédito</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Ativação instantânea</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Cancele quando quiser</span>
-            </div>
-          </div>
-        </div>
-      </section>
+          </>
+        }
+        primaryCTA={{
+          text: "Começar análise gratuita",
+          href: "/register",
+          iconName: "Rocket"
+        }}
+        secondaryCTA={{
+          text: "Ver demonstração",
+          href: "/ranking"
+        }}
+        variant="gradient"
+        benefits={[
+          "Grátis para sempre",
+          "Sem cartão de crédito",
+          "Ativação instantânea",
+          "Cancele quando quiser"
+        ]}
+      />
 
       {/* Structured Data for SEO */}
       <script

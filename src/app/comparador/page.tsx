@@ -29,6 +29,9 @@ import {
   Crown
 } from 'lucide-react'
 import Link from 'next/link'
+import { CTASection } from '@/components/landing/cta-section'
+import { FAQSection } from '@/components/landing/faq-section'
+import { Rocket } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Comparador de Ações B3 Gratuito | Compare Ações da Bovespa com IA - Preço Justo',
@@ -422,69 +425,34 @@ export default function ComparadorPage() {
         </div>
         </SEOSectionWrapper>
 
-        {/* FAQs - Oculto para Premium */}
+        {/* FAQs - Usando componente reutilizável */}
         <SEOSectionWrapper>
-        <div className="mb-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
-              Perguntas Frequentes
-            </h2>
-            <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-              Tudo que você precisa saber sobre nosso comparador de ações
-            </p>
-          </div>
-
-          <div className="max-w-4xl mx-auto space-y-4">
-            {faqs.map((faq, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-start gap-3">
-                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-                      <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <span>{faq.question}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed pl-14">
-                    {faq.answer}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
+          <FAQSection
+            title="Perguntas Frequentes"
+            description="Tudo que você precisa saber sobre nosso comparador de ações"
+            faqs={faqs.map(faq => ({
+              question: faq.question,
+              answer: faq.answer,
+              iconName: "HelpCircle" // Usar nome do ícone ao invés do componente
+            }))}
+          />
         </SEOSectionWrapper>
 
-        {/* CTA Final */}
-        <div className="text-center">
-          <Card className="border-0 shadow-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white overflow-hidden relative">
-            <div className="absolute inset-0 bg-black/10"></div>
-            <CardContent className="p-12 relative z-10">
-              <Sparkles className="w-16 h-16 mx-auto mb-4 opacity-90" />
-              <h3 className="text-3xl md:text-4xl font-bold mb-4">
-                Pronto para Comparar Suas Ações?
-              </h3>
-              <p className="text-blue-100 text-lg mb-8 max-w-2xl mx-auto">
-                Use nossa ferramenta gratuita e descubra quais ações oferecem o melhor potencial de retorno para seu portfólio
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button asChild size="lg" variant="secondary" className="font-semibold text-base">
-                  <Link href="#comparador">
-                    <BarChart3 className="w-5 h-5 mr-2" />
-                    Começar Comparação
-                  </Link>
-                </Button>
-                <Button asChild size="lg" variant="outline" className="bg-white/10 hover:bg-white/20 border-white/30 text-white font-semibold text-base">
-                  <Link href="/ranking">
-                    <TrendingUp className="w-5 h-5 mr-2" />
-                    Ver Rankings
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* CTA Final - Usando componente reutilizável */}
+        <CTASection
+          title="Pronto para Comparar Suas Ações?"
+          description="Use nossa ferramenta gratuita e descubra quais ações oferecem o melhor potencial de retorno para seu portfólio"
+          primaryCTA={{
+            text: "Começar Comparação",
+            href: "#comparador",
+            icon: <BarChart3 className="w-5 h-5" />
+          }}
+          secondaryCTA={{
+            text: "Ver Rankings",
+            href: "/ranking"
+          }}
+          variant="gradient"
+        />
       </div>
 
       {/* Schema Structured Data for FAQs */}

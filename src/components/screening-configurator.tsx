@@ -2,7 +2,6 @@
 
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Slider } from "@/components/ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { 
@@ -227,27 +226,32 @@ export function ScreeningConfigurator({
       {/* Análise Técnica */}
       <TechnicalAnalysisControl />
 
-      {/* Número de Resultados */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">Número de Resultados</Label>
-          <Badge variant="outline" className="font-mono">
-            {params.limit || 20} empresas
-          </Badge>
+      {/* Número de Resultados - Apenas informativo */}
+      {!isPremium ? (
+        <div className="space-y-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Número de Resultados</Label>
+            <Badge variant="outline" className="font-mono bg-white dark:bg-gray-800">
+              3 empresas
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Plano gratuito mostra até 3 resultados. <Link href="/planos" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">Upgrade para Premium</Link> e veja todos os resultados encontrados.
+          </p>
         </div>
-        <Slider
-          value={[params.limit || 20]}
-          onValueChange={(value) => setParams({ ...params, limit: value[0] })}
-          max={50}
-          min={5}
-          step={5}
-          className="w-full"
-        />
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Top 5</span>
-          <span>Top 50</span>
+      ) : (
+        <div className="space-y-2 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Número de Resultados</Label>
+            <Badge variant="outline" className="font-mono bg-white dark:bg-gray-800 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700">
+              Ilimitado
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Como usuário Premium, você verá todos os resultados encontrados que atendem aos seus critérios.
+          </p>
         </div>
-      </div>
+      )}
 
       {/* Aviso sobre filtros */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">

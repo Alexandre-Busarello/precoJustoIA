@@ -15,56 +15,72 @@ import {
   DollarSign,
   BookOpen,
   Award,
-  LineChart
+  LineChart,
+  Rocket
 } from "lucide-react"
 import Link from "next/link"
+import { LandingHero } from "@/components/landing/landing-hero"
+import { CTASection } from "@/components/landing/cta-section"
+import { Breadcrumbs } from "@/components/landing/breadcrumbs"
 
 export const metadata: Metadata = {
   title: "Metodologia de Análise Fundamentalista | Fórmula de Graham, Dividend Yield, Fórmula Mágica - Preço Justo AI",
-  description: "📚 Metodologia completa de análise fundamentalista de ações: Fórmula de Graham, Dividend Yield, Fórmula Mágica de Greenblatt, Fundamentalista 3+1, FCD, Gordon + IA. Base científica e acadêmica para investir em ações da B3/Bovespa.",
-  keywords: "metodologia análise fundamentalista, como fazer análise fundamentalista, fórmula benjamin graham, dividend yield como calcular, fórmula mágica joel greenblatt, fluxo caixa descontado FCD, modelo gordon dividendos, valuation ações metodologia, análise fundamentalista passo a passo, como analisar ações bovespa",
+  description: "📚 Metodologia completa de análise fundamentalista de ações: Fórmula de Graham, Dividend Yield, Fórmula Mágica de Greenblatt, Fundamentalista 3+1, FCD, Gordon + IA. Base científica e acadêmica para investir em ações da B3/Bovespa. 8 modelos consagrados explicados em detalhes.",
+  keywords: "metodologia análise fundamentalista, como fazer análise fundamentalista, fórmula benjamin graham, dividend yield como calcular, fórmula mágica joel greenblatt, fluxo caixa descontado FCD, modelo gordon dividendos, valuation ações metodologia, análise fundamentalista passo a passo, como analisar ações bovespa, modelos valuation ações",
+  openGraph: {
+    title: "Metodologia de Análise Fundamentalista | Preço Justo AI",
+    description: "8 modelos de valuation consagrados explicados em detalhes: Graham, Dividend Yield, Fórmula Mágica, FCD, Gordon e mais.",
+    type: "website",
+    url: "https://precojusto.ai/metodologia",
+  },
+  alternates: {
+    canonical: "https://precojusto.ai/metodologia",
+  },
 }
 
 export default function MetodologiaPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/20 dark:to-background">
-      {/* Hero Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-4 py-2 rounded-full text-sm font-medium mb-6">
-              <BookOpen className="w-4 h-4" />
-              Base Científica
-            </div>
-            
-            <h1 className="text-4xl sm:text-5xl font-bold mb-6">
-              Nossa{" "}
-              <span className="text-blue-600">Metodologia</span>
-            </h1>
-            
-            <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
-              Conheça em detalhes os modelos de valuation e metodologias de análise 
-              fundamentalista que utilizamos, baseados em décadas de pesquisa acadêmica 
-              e resultados comprovados no mercado.
-            </p>
+      {/* Breadcrumbs */}
+      <div className="container mx-auto px-4 pt-6">
+        <Breadcrumbs items={[{ label: "Metodologia" }]} />
+      </div>
 
-            <div className="flex flex-wrap justify-center gap-4 mb-12">
-              <Badge variant="outline" className="text-green-600 border-green-600 px-4 py-2">
-                <Award className="w-4 h-4 mr-2" />
-                Metodologias Consagradas
-              </Badge>
-              <Badge variant="outline" className="text-blue-600 border-blue-600 px-4 py-2">
-                <BookOpen className="w-4 h-4 mr-2" />
-                Base Acadêmica
-              </Badge>
-              <Badge variant="outline" className="text-purple-600 border-purple-600 px-4 py-2">
-                <TrendingUp className="w-4 h-4 mr-2" />
-                Resultados Comprovados
-              </Badge>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Hero Section - Usando componente reutilizável */}
+      <LandingHero
+        headline={
+          <>
+            Nossa{" "}
+            <span className="text-blue-600">Metodologia</span>
+          </>
+        }
+        subheadline={
+          <>
+            Conheça em detalhes os <strong>8 modelos de valuation</strong> e metodologias de análise 
+            fundamentalista que utilizamos, baseados em <strong>décadas de pesquisa acadêmica</strong> 
+            e <strong>resultados comprovados</strong> no mercado.
+          </>
+        }
+        badge={{
+          text: "Base Científica",
+          icon: <BookOpen className="w-4 h-4" />
+        }}
+        socialProof={[
+          { icon: <Award className="w-4 h-4 text-green-600" />, text: "Metodologias Consagradas" },
+          { icon: <BookOpen className="w-4 h-4 text-blue-600" />, text: "Base Acadêmica" },
+          { icon: <TrendingUp className="w-4 h-4 text-purple-600" />, text: "Resultados Comprovados" }
+        ]}
+        primaryCTA={{
+          text: "Testar Metodologias",
+          href: "/ranking",
+          icon: <Rocket className="w-4 h-4" />
+        }}
+        secondaryCTA={{
+          text: "Ver Rankings",
+          href: "/ranking"
+        }}
+        showQuickAccess={false}
+      />
 
       {/* Fundamentos da Análise */}
       <section className="py-20 bg-white dark:bg-background">
@@ -177,6 +193,17 @@ export default function MetodologiaPage() {
                         <CheckCircle className="w-5 h-5 text-green-600" />
                         <span>Crescimento consistente dos lucros</span>
                       </div>
+                    </div>
+                    
+                    {/* CTA Contextual */}
+                    <div className="mt-6">
+                      <Button variant="outline" className="w-full border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white" asChild>
+                        <Link href="/ranking?model=graham" className="flex items-center justify-center gap-2">
+                          <Calculator className="w-4 h-4" />
+                          Testar esta metodologia
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
+                      </Button>
                     </div>
                   </div>
                   
@@ -768,31 +795,21 @@ export default function MetodologiaPage() {
         </div>
       </section> */}
 
-      {/* CTA Final */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-violet-600 text-white">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-            Experimente Nossa Metodologia
-          </h2>
-          <p className="text-xl mb-8 max-w-2xl mx-auto opacity-90">
-            Veja na prática como nossas metodologias consagradas podem 
-            ajudar você a encontrar ações subvalorizadas na B3.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-6 justify-center">
-            <Button size="lg" className="bg-white text-blue-600 hover:bg-white hover:bg-gray-100 text-lg px-8 py-4" asChild>
-              <Link href="/register" className="flex items-center gap-3">
-                <Calculator className="w-5 h-5" />
-                Testar Metodologia - Grátis
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-            </Button>
-            <Button variant="outline" size="lg" className="border-2 border-white text-blue-600 hover:bg-white hover:bg-gray-100 text-lg px-8 py-4" asChild>
-              <Link href="/ranking">Ver Rankings</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+      {/* CTA Final - Usando componente reutilizável */}
+      <CTASection
+        title="Experimente Nossa Metodologia"
+        description="Veja na prática como nossas metodologias consagradas podem ajudar você a encontrar ações subvalorizadas na B3."
+        primaryCTA={{
+          text: "Testar Metodologia - Grátis",
+          href: "/register",
+          icon: <Calculator className="w-5 h-5" />
+        }}
+        secondaryCTA={{
+          text: "Ver Rankings",
+          href: "/ranking"
+        }}
+        variant="gradient"
+      />
 
       <Footer />
     </div>

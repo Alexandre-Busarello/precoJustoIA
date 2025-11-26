@@ -6,27 +6,36 @@ import { useSearchParams } from "next/navigation"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { ScreeningConfigurator } from "@/components/screening-configurator"
 import { ScreeningAIAssistant } from "@/components/screening-ai-assistant"
 import { CompanyLogo } from "@/components/company-logo"
-import { AddToBacktestButton } from "@/components/add-to-backtest-button"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
-import { AssetTypeHubWrapper } from "@/components/asset-type-hub-wrapper"
+import { Footer } from "@/components/footer"
+import { LandingHero } from "@/components/landing/landing-hero"
+import { CTASection } from "@/components/landing/cta-section"
+import { FAQSection } from "@/components/landing/faq-section"
+import { FeatureCard } from "@/components/landing/feature-card"
+import { Breadcrumbs } from "@/components/landing/breadcrumbs"
 import { 
   Search, 
   Loader2, 
   TrendingUp, 
   Building2, 
   Target,
-  Sparkles,
-  Filter,
-  ArrowRight,
   Crown,
-  RefreshCw
+  Brain,
+  Zap,
+  CheckCircle,
+  User,
+  DollarSign,
+  Shield,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react"
 import Link from "next/link"
-import Head from "next/head"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { signIn } from "next-auth/react"
 
 interface ScreeningFilter {
   enabled: boolean;
@@ -69,6 +78,7 @@ interface RankingResult {
   marginOfSafety: number | null;
   rational: string;
   key_metrics?: Record<string, number | null>;
+  fairValueModel?: string | null;
 }
 
 interface RankingResponse {
@@ -88,7 +98,7 @@ function ScreeningAcoesContent() {
   const assetTypeFilter = assetType || 'both'
 
   const [params, setParams] = useState<ScreeningParams>({
-    limit: 20,
+    // Não definir limit aqui - o backend sempre aplica o limite correto baseado no status Premium
     companySize: 'all',
     useTechnicalAnalysis: true,
     assetTypeFilter
@@ -98,112 +108,76 @@ function ScreeningAcoesContent() {
   const [error, setError] = useState<string | null>(null)
   const [sectors, setSectors] = useState<string[]>([])
   const [industries, setIndustries] = useState<string[]>([])
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
+  const [showRegisterModal, setShowRegisterModal] = useState(false)
+  const [anonymousScreeningsCount, setAnonymousScreeningsCount] = useState(0)
 
   const isLoggedIn = !!session
+  const MAX_ANONYMOUS_SCREENINGS = 2
 
-  // Atualizar assetTypeFilter quando assetType mudar
+  // Carregar contador de screenings anônimos do localStorage
   useEffect(() => {
-    if (assetType) {
-      setParams(prev => ({
-        ...prev,
-        assetTypeFilter: assetType
-      }))
+    if (!isLoggedIn && typeof window !== 'undefined') {
+      const count = parseInt(localStorage.getItem('anonymousScreeningsCount') || '0', 10)
+      setAnonymousScreeningsCount(count)
+      
+      // Se já atingiu o limite, mostrar modal após um pequeno delay para garantir renderização
+      if (count >= MAX_ANONYMOUS_SCREENINGS) {
+        setTimeout(() => {
+          setShowRegisterModal(true)
+        }, 100)
+      }
+    } else if (isLoggedIn) {
+      // Se logou, limpar o contador
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('anonymousScreeningsCount')
+      }
+      setAnonymousScreeningsCount(0)
+      setShowRegisterModal(false)
     }
-  }, [assetType])
+  }, [isLoggedIn])
 
-  // Buscar setores e indústrias
   useEffect(() => {
-    const fetchSectorsIndustries = async () => {
+    // Carregar setores e indústrias
+    const fetchSectors = async () => {
       try {
-        const response = await fetch('/api/sectors-industries')
+        const response = await fetch('/api/sectors')
         if (response.ok) {
           const data = await response.json()
           setSectors(data.sectors || [])
-          // Pegar todas as indústrias únicas de todos os setores
-          const allIndustries = Object.values(data.industriesBySector || {}).flat() as string[]
-          setIndustries([...new Set(allIndustries)])
+          setIndustries(data.industries || [])
         }
-      } catch (error) {
-        console.error('Erro ao buscar setores/indústrias:', error)
+      } catch (err) {
+        console.error('Erro ao carregar setores:', err)
       }
     }
-    fetchSectorsIndustries()
+    fetchSectors()
   }, [])
 
-  // Carregar parâmetros salvos do sessionStorage (do histórico)
-  useEffect(() => {
-    const savedParams = sessionStorage.getItem('screeningParams');
-    if (savedParams) {
-      try {
-        const parsed = JSON.parse(savedParams);
-        setParams(prev => ({
-          ...prev,
-          ...parsed,
-          assetTypeFilter: assetType || 'both' // Manter assetTypeFilter atual
-        }));
-        // Limpar sessionStorage após usar
-        sessionStorage.removeItem('screeningParams');
-      } catch (error) {
-        console.error('Erro ao carregar parâmetros salvos:', error);
-        sessionStorage.removeItem('screeningParams');
-      }
-    }
-  }, [assetType])
-  
-  // Se não houver assetType, mostrar o HUB com conteúdo SEO
-  if (!assetType) {
-    return (
-      <AssetTypeHubWrapper
-        pageType="screening"
-        title="Screening de Ações"
-        description="Escolha o tipo de ativo que deseja analisar: apenas ações B3, apenas BDRs ou ambos juntos."
-      />
-    )
-  }
-
-  const handleAIParametersGenerated = (aiParams: any) => {
-    // Mesclar parâmetros gerados pela IA com os parâmetros atuais
-    setParams((prevParams) => ({
-      ...prevParams,
-      ...aiParams
-    }))
-    
-    // Scroll suave para o configurador
-    setTimeout(() => {
-      const configuratorElement = document.getElementById('screening-configurator')
-      if (configuratorElement) {
-        configuratorElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
-    }, 100)
-  }
-
-  const handleNewConfiguration = () => {
-    // Limpar resultados
-    setResults(null)
-    setError(null)
-    
-    // Resetar parâmetros mantendo assetTypeFilter
-    setParams({
-      limit: 20,
-      companySize: 'all',
-      useTechnicalAnalysis: true,
-      assetTypeFilter: assetType || 'both'
-    })
-    
-    // Scroll para área de parâmetros
-    setTimeout(() => {
-      const aiElement = document.getElementById('ai-assistant')
-      if (aiElement) {
-        aiElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
-    }, 100)
+  const handleAIParametersGenerated = (generatedParams: ScreeningParams) => {
+    setParams(generatedParams)
   }
 
   const handleGenerateScreening = async () => {
+    // Verificar se usuário anônimo já atingiu o limite
+    if (!isLoggedIn && anonymousScreeningsCount >= MAX_ANONYMOUS_SCREENINGS) {
+      // Usar setTimeout para garantir que o estado seja atualizado antes de mostrar o modal
+    setTimeout(() => {
+        setShowRegisterModal(true)
+      }, 0)
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
+      // Remover limit do params - backend sempre controla o limite baseado no status Premium
+      const { limit, ...paramsWithoutLimit } = params;
+      
       const response = await fetch("/api/rank-builder", {
         method: "POST",
         headers: {
@@ -212,9 +186,10 @@ function ScreeningAcoesContent() {
         body: JSON.stringify({
           model: 'screening',
           params: {
-            ...params,
+            ...paramsWithoutLimit,
             includeBDRs: assetType === 'both' || assetType === 'bdr',
             assetTypeFilter: assetType
+            // limit não é enviado - backend sempre aplica o limite correto
           },
         }),
       })
@@ -226,8 +201,36 @@ function ScreeningAcoesContent() {
       const data: RankingResponse = await response.json()
       setResults(data)
       
-      // Scroll para o topo da página para visualizar os resultados
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      // Incrementar contador de screenings anônimos após sucesso
+      if (!isLoggedIn && typeof window !== 'undefined') {
+        const newCount = anonymousScreeningsCount + 1
+        setAnonymousScreeningsCount(newCount)
+        localStorage.setItem('anonymousScreeningsCount', newCount.toString())
+        
+        // Se atingiu o limite, mostrar modal
+        if (newCount >= MAX_ANONYMOUS_SCREENINGS) {
+          setShowRegisterModal(true)
+        }
+      }
+      
+      // Scroll até a tabela de resultados após um pequeno delay para garantir que foi renderizada
+      setTimeout(() => {
+        const resultsSection = document.getElementById('results-section')
+        if (resultsSection) {
+          // Scroll suave até a seção de resultados
+          resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        } else {
+          // Fallback: tentar novamente após mais tempo se não encontrou
+          setTimeout(() => {
+            const retrySection = document.getElementById('results-section')
+            if (retrySection) {
+              retrySection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+          }, 500)
+        }
+      }, 300)
+      
+      setCurrentPage(1) // Resetar página ao gerar novos resultados
     } catch (err) {
       console.error("Erro ao gerar screening:", err)
       setError("Erro ao gerar screening. Tente novamente.")
@@ -298,325 +301,694 @@ function ScreeningAcoesContent() {
       'marketCapBi': 'Market Cap (R$ Bi)'
     };
     
-    return translations[key] || key.replace(/([A-Z])/g, ' $1').trim();
+    return translations[key] || key;
   }
 
-  // Contar filtros ativos
-  const countActiveFilters = () => {
-    let count = 0;
-    Object.keys(params).forEach(key => {
-      if (key.endsWith('Filter')) {
-        const filter = params[key as keyof ScreeningParams] as ScreeningFilter | undefined;
-        if (filter?.enabled) count++;
-      }
-    });
-    return count;
-  };
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
 
-  const activeFiltersCount = countActiveFilters();
+  const getSortedResults = (): RankingResult[] => {
+    if (!results) return []
+    
+    let sortedResults = [...results.results]
+    
+    // Aplicar ordenação se houver
+    if (sortColumn) {
+      sortedResults = sortedResults.sort((a, b) => {
+        let aValue: any
+        let bValue: any
 
+        switch (sortColumn) {
+          case 'ticker':
+            aValue = a.ticker
+            bValue = b.ticker
+            break
+          case 'name':
+            aValue = a.name
+            bValue = b.name
+            break
+          case 'currentPrice':
+            aValue = a.currentPrice ?? 0
+            bValue = b.currentPrice ?? 0
+            break
+          case 'fairValue':
+            aValue = a.fairValue ?? 0
+            bValue = b.fairValue ?? 0
+            break
+          case 'upside':
+            aValue = a.upside ?? 0
+            bValue = b.upside ?? 0
+            break
+          default:
+            // Métricas do key_metrics
+            aValue = a.key_metrics?.[sortColumn] ?? 0
+            bValue = b.key_metrics?.[sortColumn] ?? 0
+            break
+        }
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc' 
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue)
+        }
+
+        const numA = Number(aValue) || 0
+        const numB = Number(bValue) || 0
+
+        return sortDirection === 'asc' ? numA - numB : numB - numA
+      })
+    }
+    
+    return sortedResults
+  }
+
+  const getPaginatedResults = (): RankingResult[] => {
+    const sortedResults = getSortedResults()
+    
+    // Se não for premium, não paginar (mostrar todos os 3 resultados)
+    if (!isPremium) {
+      return sortedResults
+    }
+    
+    // Paginação para premium
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return sortedResults.slice(startIndex, endIndex)
+  }
+
+  const totalPages = isPremium 
+    ? Math.ceil((results?.results.length || 0) / itemsPerPage)
+    : 1
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="w-4 h-4 ml-1 inline" />
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-4 h-4 ml-1 inline" />
+      : <ArrowDown className="w-4 h-4 ml-1 inline" />
+  }
+
+  // Se usuário está logado, mostrar Hero + ferramenta diretamente
+  if (isLoggedIn) {
   return (
-    <>
-      <Head>
-        <title>Screening de Ações B3 - Filtro Customizável de Ações | Preço Justo AI</title>
-        <meta name="description" content="Screening de ações B3 com filtros customizáveis. Encontre ações por valuation (P/L, P/VP), rentabilidade (ROE, ROIC), crescimento, dividendos e endividamento. Filtre +350 empresas da Bolsa brasileira e BDRs com critérios personalizados. Análise fundamentalista gratuita." />
-        <meta name="keywords" content="screening ações, filtro ações B3, análise fundamentalista, buscar ações, screening ações B3, filtro ações bolsa, valuation ações, dividendos ações, ROE ações, P/L ações, P/VP ações, screening fundamentalista, encontrar ações, ações subvalorizadas, filtro ações customizado, análise ações B3, screening BDR, filtro BDR" />
-        <meta property="og:title" content="Screening de Ações B3 - Filtro Customizável | Preço Justo AI" />
-        <meta property="og:description" content="Configure filtros personalizados e encontre as melhores ações da B3 e BDRs baseado em seus critérios de investimento. Valuation, rentabilidade, crescimento e dividendos." />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://precojusto.ai/screening-acoes" />
-        <meta property="og:site_name" content="Preço Justo AI" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Screening de Ações B3 - Filtro Customizável | Preço Justo AI" />
-        <meta name="twitter:description" content="Configure filtros personalizados e encontre as melhores ações da B3 e BDRs baseado em seus critérios de investimento." />
-        <link rel="canonical" href="https://precojusto.ai/screening-acoes" />
-        <meta name="robots" content="index, follow" />
-      </Head>
-      
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-background dark:via-background dark:to-background">
-        {/* Loading Overlay */}
-      {loading && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 w-full max-w-md shadow-2xl">
-            <div className="text-center space-y-6">
-              <div className="relative w-20 h-20 mx-auto">
-                <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <Search className="absolute inset-0 m-auto w-8 h-8 text-blue-600" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                  Processando filtros...
-                </h3>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Analisando empresas da B3 com seus critérios
-                </p>
-              </div>
-              
-              <div className="flex items-center justify-center gap-1">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="text-center space-y-4 mb-8">
-          <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-full px-4 py-2">
-            <Search className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium">Screening Customizável</span>
-            <Badge variant="secondary" className="bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs">
-              🚀 Novo
-            </Badge>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
+        {/* Breadcrumbs */}
+        <div className="container mx-auto px-4 pt-6">
+          <Breadcrumbs items={[
+            { label: "Ferramentas", href: "/ranking" },
+            { label: "Screening de Ações" }
+          ]} />
           </div>
           
-          <h1 className="text-4xl sm:text-5xl font-bold">
+        {/* Hero Section Compacto para usuários logados */}
+        <LandingHero
+          headline={
+            <>
             Screening de{" "}
-            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              Ações
+              <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+                Ações B3
             </span>
-          </h1>
-          
-          <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-            Configure filtros personalizados por categoria e encontre exatamente as empresas que você procura. 
-            Total controle sobre <strong>valuation, rentabilidade, crescimento, dividendos e endividamento</strong>.
-          </p>
-        </div>
+            </>
+          }
+          subheadline={
+            <>
+              Use <strong>filtros customizáveis</strong> para encontrar ações que atendem seus critérios exatos.
+            </>
+          }
+          showQuickAccess={false}
+        />
+
+        {/* Screening Tool */}
+        <section className="py-8 bg-white dark:bg-background">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
+            <Card className="border-0 shadow-xl">
+              <CardContent className="p-6">
+                {/* AI Assistant */}
+                {isPremium && (
+                  <ScreeningAIAssistant 
+                    onParametersGenerated={handleAIParametersGenerated}
+                    availableSectors={sectors}
+                    availableIndustries={industries}
+                    isLoggedIn={isLoggedIn}
+                    isPremium={isPremium}
+                  />
+                )}
+
+                {/* Configurator */}
+                <div id="screening-configurator">
+                  <ScreeningConfigurator 
+                    params={params} 
+                    onParamsChange={setParams}
+                    showTechnicalAnalysis={true}
+                    isPremium={isPremium ?? false}
+                    isLoggedIn={isLoggedIn}
+                  />
+              </div>
+              
+                {/* Generate Button */}
+                <div className="flex justify-center pt-6">
+                  <Button
+                    onClick={handleGenerateScreening} 
+                    disabled={loading}
+                    size="lg"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 px-8 py-6 text-lg font-semibold shadow-lg"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+                  Processando filtros...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-6 h-6 mr-2" />
+                        Buscar Empresas
+                      </>
+                    )}
+                  </Button>
+              </div>
+              
+                {error && (
+                  <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-red-800 dark:text-red-200">{error}</p>
+              </div>
+                )}
+              </CardContent>
+            </Card>
+            </div>
+        </section>
 
         {/* Results Section */}
         {results && (
-          <div className="mb-8 space-y-6">
-            {/* Results Header */}
-            <Card className="border-0 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 shadow-lg">
-              <CardContent className="p-6">
-                {/* Botão Nova Configuração */}
-                <div className="mb-6 flex justify-end">
-                  <Button
-                    onClick={handleNewConfiguration}
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Nova Configuração
-                  </Button>
-                </div>
+          <section id="results-section" className="py-16 bg-white dark:bg-background">
+            <div className="container mx-auto px-4 max-w-7xl">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold mb-2">
+                  Resultados ({results.count} empresas encontradas)
+                </h2>
+                {results.rational && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                    <MarkdownRenderer content={results.rational} />
+          </div>
+                )}
+        </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-500 rounded-xl flex items-center justify-center">
-                      <Target className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">Resultados do Screening</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {results.count} empresas encontradas • {activeFiltersCount} filtros ativos
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant="default" className="text-lg px-4 py-2">
-                    {results.results.length} resultados
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Results List */}
-            {results.results.length > 0 ? (
-              <div className="grid gap-4">
-                {results.results.map((result, index) => (
-                  <Card 
-                    key={result.ticker} 
-                    className="border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80"
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        <div className="flex items-start gap-4 flex-1">
-                          <div className="relative">
-                            <CompanyLogo 
-                              logoUrl={result.logoUrl}
-                              companyName={result.name}
-                              ticker={result.ticker}
-                              size={48}
-                            />
-                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-xs border-2 border-white dark:border-background">
-                              {index + 1}
-                            </div>
+              {/* Results Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 dark:bg-gray-800">
+                      <th 
+                        className="p-3 text-left cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                        onClick={() => handleSort('ticker')}
+                      >
+                        <div className="flex items-center">
+                          Empresa
+                          <SortIcon column="ticker" />
+                        </div>
+                      </th>
+                      <th 
+                        className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                        onClick={() => handleSort('currentPrice')}
+                      >
+                        <div className="flex items-center justify-end">
+                          Preço
+                          <SortIcon column="currentPrice" />
+                        </div>
+                      </th>
+                      <th 
+                        className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                        onClick={() => handleSort('fairValue')}
+                      >
+                        <div className="flex items-center justify-end">
+                          Preço Justo
+                          {results.results[0]?.fairValueModel && (
+                            <span className="text-xs ml-1 text-muted-foreground">({results.results[0].fairValueModel})</span>
+                          )}
+                          <SortIcon column="fairValue" />
+                        </div>
+                      </th>
+                      <th 
+                        className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                        onClick={() => handleSort('upside')}
+                      >
+                        <div className="flex items-center justify-end">
+                          Potencial
+                          <SortIcon column="upside" />
+                        </div>
+                      </th>
+                      {results.results[0]?.key_metrics && Object.keys(results.results[0].key_metrics).map(key => (
+                        <th 
+                          key={key} 
+                          className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                          onClick={() => handleSort(key)}
+                        >
+                          <div className="flex items-center justify-end">
+                            {translateMetricName(key)}
+                            <SortIcon column={key} />
                           </div>
-                          <div className="flex-1">
-                            <h3 className="text-xl font-bold mb-1">{result.ticker}</h3>
-                            <p className="text-muted-foreground font-medium text-sm mb-2">
-                              {result.name}
-                            </p>
-                            {result.sector && (
-                              <Badge variant="outline" className="text-xs">
-                                {result.sector}
-                              </Badge>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getPaginatedResults().map((result, index) => (
+                      <tr key={index} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="p-3">
+                          <Link href={`/acao/${result.ticker}`} className="flex items-center gap-2 hover:text-blue-600 transition-colors">
+                            <CompanyLogo ticker={result.ticker} logoUrl={result.logoUrl} size={32} companyName={result.name} />
+                            <div>
+                              <div className="font-semibold">{result.ticker}</div>
+                              <div className="text-sm text-muted-foreground">{result.name}</div>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="p-3 text-right">{formatCurrency(result.currentPrice)}</td>
+                        <td className="p-3 text-right">
+                          <div className="flex flex-col items-end">
+                            <span>{formatCurrency(result.fairValue)}</span>
+                            {result.fairValueModel && (
+                              <span className="text-xs text-muted-foreground">({result.fairValueModel})</span>
                             )}
                           </div>
+                        </td>
+                        <td className={`p-3 text-right font-semibold ${result.upside && result.upside > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {result.upside ? `${result.upside.toFixed(1)}%` : 'N/A'}
+                        </td>
+                        {result.key_metrics && Object.entries(result.key_metrics).map(([key, value]) => (
+                          <td key={key} className="p-3 text-right">
+                            {formatMetricValue(key, value as number)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              {isPremium && totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </Button>
+                  
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = currentPage - 2 + i
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className="min-w-[40px]"
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Próxima
+                  </Button>
+                  
+                  <span className="text-sm text-muted-foreground ml-4">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+                            )}
+        
+        {/* Modal de Registro para Usuários Anônimos */}
+        <Dialog open={showRegisterModal} onOpenChange={setShowRegisterModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <div className="flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full mx-auto mb-4">
+                <User className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+          </div>
+              <DialogTitle className="text-center text-xl">
+                Crie sua Conta para Continuar
+              </DialogTitle>
+              <DialogDescription className="text-center text-base">
+                Você já realizou {MAX_ANONYMOUS_SCREENINGS} screenings gratuitos. Crie sua conta gratuita para continuar usando o screening ilimitado.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 my-6">
+              <div className="flex items-center space-x-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <span className="text-sm text-green-800 dark:text-green-200">
+                  Screening ilimitado
+            </span>
+              </div>
+              
+              <div className="flex items-center space-x-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <span className="text-sm text-green-800 dark:text-green-200">
+                  Histórico de screenings salvos
+                </span>
+        </div>
+
+              {!isPremium && (
+                <div className="flex items-center space-x-3 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg">
+                  <Crown className="w-5 h-5 text-violet-600" />
+                  <span className="text-sm text-violet-800 dark:text-violet-200">
+                    Upgrade para Premium e desbloqueie todos os filtros avançados
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col space-y-3">
+                  <Button
+                onClick={() => {
+                  window.location.href = '/register?redirect=' + encodeURIComponent(window.location.pathname)
+                }}
+                className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              >
+                <User className="w-4 h-4" />
+                <span>Criar Conta Gratuita</span>
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                onClick={() => signIn()}
+                className="w-full text-sm"
+              >
+                Já tenho conta - Entrar
+                  </Button>
+                </div>
+          </DialogContent>
+        </Dialog>
+                          </div>
+    )
+  }
+
+  // Landing Page para usuários não logados
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
+      {/* Breadcrumbs */}
+      <div className="container mx-auto px-4 pt-6">
+        <Breadcrumbs items={[
+          { label: "Ferramentas", href: "/ranking" },
+          { label: "Screening de Ações" }
+        ]} />
+                    </div>
+                        
+      {/* Hero Section */}
+      <LandingHero
+        headline={
+          <>
+            Encontre Ações{" "}
+            <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+              Específicas na B3
+            </span>{" "}
+            com Filtros Avançados
+          </>
+        }
+        subheadline={
+          <>
+            Use <strong>filtros customizáveis</strong> para encontrar ações que atendem seus critérios exatos. 
+            Busque por <strong>P/L, ROE, Dividend Yield, crescimento</strong> e mais de <strong>15 indicadores</strong>. 
+            <strong> Assistente de IA</strong> ajuda a criar filtros personalizados automaticamente.
+          </>
+        }
+        badge={{
+          text: "Ferramenta 100% Gratuita",
+          iconName: "Sparkles"
+        }}
+        socialProof={[
+          { iconName: "Filter", text: "+15 filtros disponíveis" },
+          { iconName: "Brain", text: "Assistente IA Premium" },
+          { iconName: "Building2", text: "B3 + BDRs" }
+        ]}
+        primaryCTA={{
+          text: "Começar Screening Gratuito",
+          href: "#screening-tool",
+          iconName: "Search"
+        }}
+        secondaryCTA={{
+          text: "Ver Demonstração",
+          href: "#como-funciona"
+        }}
+        showQuickAccess={true}
+      />
+
+      {/* Value Proposition */}
+      <section className="py-16 sm:py-20 bg-white dark:bg-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              Por que usar{" "}
+              <span className="text-blue-600">Screening de Ações?</span>
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+              Encontre ações que atendem critérios específicos em segundos, sem precisar analisar centenas de empresas manualmente.
+                      </p>
+                    </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <FeatureCard
+              icon={<Target className="w-6 h-6 text-white" />}
+              title="Filtros Precisos"
+              description="Encontre ações com P/L < 10, ROE > 15%, Dividend Yield > 6% e muito mais. Combine múltiplos filtros para resultados exatos."
+              iconBgClass="bg-blue-600"
+            />
+            <FeatureCard
+              icon={<Brain className="w-6 h-6 text-white" />}
+              title="Assistente de IA"
+              description="Não sabe quais filtros usar? Nossa IA Premium sugere filtros personalizados baseados em seus objetivos de investimento."
+              isPremium={true}
+              badge={{ text: "Premium", className: "bg-violet-600 text-white" }}
+              iconBgClass="bg-violet-600"
+            />
+            <FeatureCard
+              icon={<Zap className="w-6 h-6 text-white" />}
+              title="Resultados Instantâneos"
+              description="Busque em +350 empresas da B3 e BDRs em segundos. Veja indicadores completos e compare empresas lado a lado."
+              iconBgClass="bg-green-600"
+            />
+                            </div>
+                          </div>
+      </section>
+
+      {/* How It Works */}
+      <section id="como-funciona" className="py-16 sm:py-20 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              Como{" "}
+              <span className="text-blue-600">Funciona</span>
+            </h2>
                         </div>
                         
-                        <div className="text-right">
-                          <div className="flex items-center justify-end gap-2 mb-2">
-                            <span className="text-2xl font-bold">
-                              {formatCurrency(result.currentPrice)}
-                            </span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-white">1</span>
                           </div>
-                          {result.upside !== null && (
-                            <div className="flex items-center justify-end gap-1">
-                              <TrendingUp className="w-4 h-4 text-green-600" />
-                              <span className="text-sm font-medium text-green-600">
-                                +{formatPercentage(result.upside)} potencial
-                              </span>
+              <h3 className="text-xl font-bold mb-2">Configure Filtros</h3>
+              <p className="text-muted-foreground">
+                Selecione os critérios desejados: valuation, rentabilidade, crescimento, dividendos ou endividamento.
+              </p>
                             </div>
-                          )}
+            <div className="text-center">
+              <div className="w-16 h-16 bg-violet-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-white">2</span>
                         </div>
-                      </div>
-                      
-                      {/* Key Metrics */}
-                      {result.key_metrics && (
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/10 dark:to-indigo-950/10 rounded-lg">
-                          {Object.entries(result.key_metrics)
-                            .filter(([, value]) => value !== null && value !== undefined)
-                            .slice(0, 4)
-                            .map(([key, value]) => (
-                              <div key={key} className="text-center">
-                                <p className="text-xs text-muted-foreground mb-1 truncate">
-                                  {translateMetricName(key)}
+              <h3 className="text-xl font-bold mb-2">Busque Empresas</h3>
+              <p className="text-muted-foreground">
+                Nossa plataforma analisa +350 empresas da B3 e BDRs em segundos, retornando apenas as que atendem seus critérios.
                                 </p>
-                                <p className="font-semibold text-sm">
-                                  {formatMetricValue(key, value as number)}
+                      </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-white">3</span>
+                        </div>
+              <h3 className="text-xl font-bold mb-2">Analise Resultados</h3>
+              <p className="text-muted-foreground">
+                Veja indicadores completos, compare empresas e exporte resultados para análise detalhada.
                                 </p>
                               </div>
-                            ))}
                         </div>
-                      )}
-                      
-                      {/* Rational */}
-                      <div className="border-t pt-4 mb-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Sparkles className="w-4 h-4 text-blue-600" />
-                          <h5 className="font-semibold text-sm text-blue-600">Por que esta empresa?</h5>
-                        </div>
-                        <MarkdownRenderer content={result.rational} className="text-sm leading-relaxed" />
+        </div>
+      </section>
+
+      {/* Use Cases */}
+      <section className="py-16 sm:py-20 bg-white dark:bg-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              Casos de{" "}
+              <span className="text-blue-600">Uso Populares</span>
+            </h2>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-2 pt-4 border-t">
-                        <Button asChild variant="default" size="sm" className="flex-1">
-                          <Link href={`/acao/${result.ticker}`} prefetch={false}>
-                            <Building2 className="w-4 h-4 mr-2" />
-                            Ver Análise Completa
-                          </Link>
-                        </Button>
-                        
-                        <AddToBacktestButton
-                          asset={{
-                            ticker: result.ticker,
-                            companyName: result.name,
-                            sector: result.sector || undefined,
-                            currentPrice: result.currentPrice
-                          }}
-                          variant="outline"
-                          size="sm"
-                          showLabel={false}
-                        />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl mx-auto">
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <TrendingUp className="w-8 h-8 text-blue-600" />
+                  <h3 className="text-xl font-bold">Ações em Crescimento</h3>
                       </div>
+                <p className="text-muted-foreground mb-4">
+                  Encontre empresas com crescimento sustentável:
+                </p>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    CAGR Lucros 5 anos &gt; 10%
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    ROE &gt; 15%
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    P/L &lt; 20
+                  </li>
+                </ul>
                     </CardContent>
                   </Card>
-                ))}
+
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <DollarSign className="w-8 h-8 text-green-600" />
+                  <h3 className="text-xl font-bold">Renda Passiva</h3>
               </div>
-            ) : (
-              <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20">
-                <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Filter className="w-8 h-8 text-yellow-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">Nenhuma empresa encontrada</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Tente ajustar os filtros para encontrar mais oportunidades. Reduzir filtros ativos ou ampliar ranges pode ajudar.
-                  </p>
+                <p className="text-muted-foreground mb-4">
+                  Ações pagadoras de dividendos sustentáveis:
+                </p>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Dividend Yield &gt; 6%
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Payout Ratio &lt; 80%
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Dívida Líquida/PL &lt; 100%
+                  </li>
+                </ul>
                 </CardContent>
               </Card>
-            )}
-          </div>
-        )}
 
-        {/* Error Message */}
-        {error && (
-          <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 mb-8">
+            <Card className="border-0 shadow-lg">
             <CardContent className="p-6">
-              <div className="flex items-center gap-3 text-red-700 dark:text-red-400">
-                <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                  <Filter className="w-4 h-4" />
+                <div className="flex items-center gap-3 mb-4">
+                  <Shield className="w-8 h-8 text-purple-600" />
+                  <h3 className="text-xl font-bold">Value Investing</h3>
                 </div>
-                <div>
-                  <h4 className="font-semibold">Erro na análise</h4>
-                  <p className="text-sm">{error}</p>
-                </div>
-              </div>
+                <p className="text-muted-foreground mb-4">
+                  Ações subvalorizadas com fundamentos sólidos:
+                </p>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    P/L &lt; 15
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    P/VP &lt; 1.5
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    ROE &gt; 12%
+                  </li>
+                </ul>
             </CardContent>
           </Card>
-        )}
 
-        {/* Configuration Card */}
-        <Card className="border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 dark:from-background dark:to-background/80">
-          <CardContent className="p-8">
-            <div className="space-y-8">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
-                    <Filter className="w-6 h-6 text-white" />
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Building2 className="w-8 h-8 text-orange-600" />
+                  <h3 className="text-xl font-bold">Blue Chips</h3>
                   </div>
-                  <div>
-                    <h2 className="text-2xl font-bold">Configure seus Filtros</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {activeFiltersCount > 0 
-                        ? `${activeFiltersCount} filtro${activeFiltersCount > 1 ? 's' : ''} ativo${activeFiltersCount > 1 ? 's' : ''}`
-                        : 'Nenhum filtro ativo - todas as empresas serão exibidas'
-                      }
-                    </p>
+                <p className="text-muted-foreground mb-4">
+                  Grandes empresas com estabilidade:
+                </p>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Market Cap &gt; R$ 10 Bi
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Liquidez Corrente &gt; 1.2
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Margem Líquida &gt; 5%
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
                   </div>
                 </div>
+      </section>
 
-                {!isLoggedIn && (
-                  <Card className="border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <Crown className="w-5 h-5 text-violet-600" />
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-sm">Faça login para salvar</h4>
-                          <p className="text-xs text-muted-foreground">
-                            Salve seus screenings favoritos
-                          </p>
-                        </div>
-                        <Button size="sm" className="bg-gradient-to-r from-violet-600 to-pink-600" asChild>
-                          <Link href="/register">
-                            Criar Conta
-                            <ArrowRight className="w-3 h-3 ml-1" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+      {/* Screening Tool */}
+      <section id="screening-tool" className="py-16 sm:py-20 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              Experimente o{" "}
+              <span className="text-blue-600">Screening</span>
+            </h2>
+            <p className="text-lg text-muted-foreground">
+              Configure seus filtros e encontre ações que atendem seus critérios
+            </p>
               </div>
 
+          <Card className="border-0 shadow-xl">
+            <CardContent className="p-6">
               {/* AI Assistant */}
+              {isPremium && (
               <ScreeningAIAssistant 
                 onParametersGenerated={handleAIParametersGenerated}
                 availableSectors={sectors}
                 availableIndustries={industries}
                 isLoggedIn={isLoggedIn}
-                isPremium={isPremium ?? false}
+                  isPremium={isPremium}
               />
+              )}
 
-              {/* Configurator Component */}
+              {/* Configurator */}
               <div id="screening-configurator">
                 <ScreeningConfigurator 
                   params={params} 
@@ -628,7 +1000,7 @@ function ScreeningAcoesContent() {
               </div>
 
               {/* Generate Button */}
-              <div className="flex justify-center pt-4">
+              <div className="flex justify-center pt-6">
                 <Button 
                   onClick={handleGenerateScreening} 
                   disabled={loading}
@@ -649,109 +1021,306 @@ function ScreeningAcoesContent() {
                 </Button>
               </div>
 
-              {/* Info Footer */}
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1 text-sm">
-                      💡 Dica: Combine filtros para resultados precisos
-                    </h4>
-                    <p className="text-xs text-blue-800 dark:text-blue-200">
-                      Você pode ativar múltiplos filtros simultaneamente. Apenas empresas que atendem <strong>TODOS</strong> os 
-                      critérios selecionados serão exibidas. Comece com poucos filtros e vá refinando conforme necessário.
-                    </p>
-                  </div>
+              {error && (
+                <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <p className="text-red-800 dark:text-red-200">{error}</p>
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Bottom CTA */}
-        {!isLoggedIn && (
-          <Card className="mt-8 border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-4 w-full">
-                <div className="flex items-center gap-3 min-w-0 flex-shrink w-full sm:w-auto">
-                  <Crown className="w-8 h-8 text-violet-600 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <h4 className="font-semibold text-sm sm:text-base">Crie uma conta gratuita</h4>
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                      Salve seus screenings, crie rankings personalizados e muito mais
-                    </p>
-                  </div>
-                </div>
-                <Button size="lg" className="bg-gradient-to-r from-violet-600 to-pink-600 w-full sm:w-auto whitespace-nowrap flex-shrink-0" asChild>
-                  <Link href="/register" className="flex items-center justify-center gap-2">
-                    Começar Grátis
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </Button>
-              </div>
+              )}
             </CardContent>
           </Card>
-        )}
+        </div>
+      </section>
 
+      {/* Results Section */}
+      {results && (
+        <section id="results-section" className="py-16 bg-white dark:bg-background">
+          <div className="container mx-auto px-4 max-w-7xl">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-2">
+                Resultados ({results.count} empresas encontradas)
+              </h2>
+              {results.rational && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                  <MarkdownRenderer content={results.rational} />
+                </div>
+              )}
+            </div>
 
-        {/* Schema Markup para SEO */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "WebApplication",
-              "name": "Screening de Ações B3 - Preço Justo AI",
-              "description": "Ferramenta de screening fundamentalista com filtros customizáveis para encontrar ações na B3 e BDRs baseado em critérios de valuation, rentabilidade, crescimento e dividendos",
-              "url": "https://precojusto.ai/screening-acoes",
-              "applicationCategory": "FinanceApplication",
-              "operatingSystem": "Web",
-              "offers": {
-                "@type": "AggregateOffer",
-                "lowPrice": "0",
-                "highPrice": "39.90",
-                "priceCurrency": "BRL"
-              },
-              "featureList": [
-                "Filtros customizáveis de valuation (P/L, P/VP, EV/EBITDA)",
-                "Filtros de rentabilidade (ROE, ROIC, ROA)",
-                "Filtros de crescimento (CAGR)",
-                "Filtros de dividendos (Dividend Yield, Payout)",
-                "Filtros de endividamento",
-                "Screening de ações B3 e BDRs",
-                "Assistente com IA para gerar filtros",
-                "Análise fundamentalista profissional"
-              ]
-            })
-          }}
-        />
+            {/* Results Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-gray-800">
+                    <th 
+                      className="p-3 text-left cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                      onClick={() => handleSort('ticker')}
+                    >
+                      Empresa <SortIcon column="ticker" />
+                    </th>
+                    <th 
+                      className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                      onClick={() => handleSort('currentPrice')}
+                    >
+                      Preço <SortIcon column="currentPrice" />
+                    </th>
+                    <th 
+                      className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                      onClick={() => handleSort('fairValue')}
+                    >
+                      Preço Justo <SortIcon column="fairValue" />
+                    </th>
+                    <th 
+                      className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                      onClick={() => handleSort('upside')}
+                    >
+                      Potencial <SortIcon column="upside" />
+                    </th>
+                    {results.results[0]?.key_metrics && Object.keys(results.results[0].key_metrics).map(key => (
+                      <th 
+                        key={key} 
+                        className="p-3 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
+                        onClick={() => handleSort(key)}
+                      >
+                        {translateMetricName(key)} <SortIcon column={key} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {getPaginatedResults().map((result, index) => (
+                    <tr key={index} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="p-3">
+                        <Link href={`/acao/${result.ticker}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                          <CompanyLogo ticker={result.ticker} logoUrl={result.logoUrl} size={32} companyName={result.name} />
+                  <div>
+                            <div className="font-semibold hover:text-blue-600 dark:hover:text-blue-400 transition-colors">{result.ticker}</div>
+                            <div className="text-sm text-muted-foreground">{result.name}</div>
+                  </div>
+                        </Link>
+                      </td>
+                      <td className="p-3 text-right">{formatCurrency(result.currentPrice)}</td>
+                      <td className="p-3 text-right">
+                        <div className="flex flex-col items-end">
+                          <span>{formatCurrency(result.fairValue)}</span>
+                          {result.fairValueModel && (
+                            <span className="text-xs text-muted-foreground">({result.fairValueModel})</span>
+                          )}
+                </div>
+                      </td>
+                      <td className={`p-3 text-right font-semibold ${result.upside && result.upside > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {result.upside ? `${result.upside.toFixed(1)}%` : 'N/A'}
+                      </td>
+                      {result.key_metrics && Object.entries(result.key_metrics).map(([key, value]) => (
+                        <td key={key} className="p-3 text-right">
+                          {formatMetricValue(key, value as number)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
 
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "BreadcrumbList",
-              "itemListElement": [
-                {
-                  "@type": "ListItem",
-                  "position": 1,
-                  "name": "Início",
-                  "item": "https://precojusto.ai"
-                },
-                {
-                  "@type": "ListItem",
-                  "position": 2,
-                  "name": "Screening de Ações",
-                  "item": "https://precojusto.ai/screening-acoes"
-                }
-              ]
-            })
-          }}
-        />
-      </div>
+            {/* Pagination - Apenas para Premium */}
+            {isPremium && results.results.length > itemsPerPage && (
+              <div className="mt-6 flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, results.results.length)} de {results.results.length} resultados
+            </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let pageNum: number
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = currentPage - 2 + i
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className="min-w-[40px]"
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Próxima
+                </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Mensagem para usuários gratuitos sobre limite */}
+            {!isPremium && results.results.length >= 3 && (
+              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Crown className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                      Upgrade para Premium e veja todos os resultados
+                    </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                      Você está vendo apenas 3 resultados. Com Premium, veja todos os resultados encontrados e tenha acesso ao Assistente de IA.
+                    </p>
+                    <Link href="/planos">
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                        Ver Planos Premium
+                </Button>
+                    </Link>
+              </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* FAQ Section */}
+      <FAQSection
+        title="Perguntas Frequentes sobre Screening"
+        description="Tire suas dúvidas sobre nossa ferramenta de screening de ações"
+        faqs={[
+          {
+            question: "Quantos filtros posso usar simultaneamente?",
+            answer: "Você pode usar quantos filtros quiser! A ferramenta retorna apenas empresas que atendem TODOS os critérios selecionados. Recomendamos começar com poucos filtros e ir refinando conforme necessário.",
+            iconName: "Filter"
+          },
+          {
+            question: "O screening é gratuito?",
+            answer: "Sim! A ferramenta básica de screening é 100% gratuita e mostra até 3 resultados. Usuários Premium têm acesso ao Assistente de IA que sugere filtros personalizados automaticamente e podem ver todos os resultados encontrados sem limite.",
+            iconName: "DollarSign"
+          },
+          {
+            question: "Posso salvar meus screenings favoritos?",
+            answer: "Sim! Usuários Premium podem salvar screenings favoritos para reutilizar depois. Isso economiza tempo ao buscar ações com critérios similares.",
+            iconName: "Crown"
+          },
+          {
+            question: "Quais indicadores estão disponíveis?",
+            answer: "Temos mais de 15 indicadores: P/L, P/VP, EV/EBITDA, ROE, ROIC, ROA, margem líquida, margem EBITDA, CAGR de lucros/receitas, Dividend Yield, Payout Ratio, endividamento, liquidez corrente e market cap.",
+            iconName: "BarChart3"
+          },
+          {
+            question: "Posso filtrar por setor ou indústria?",
+            answer: "Sim! Você pode filtrar por tamanho de empresa (small caps, mid caps, blue chips) e também por setor e indústria específicos. Isso ajuda a encontrar oportunidades dentro de segmentos específicos.",
+            iconName: "Building2"
+          },
+          {
+            question: "Os dados são atualizados?",
+            answer: "Sim! Nossos dados são atualizados regularmente com base nas informações mais recentes da B3 e dos balanços financeiros das empresas. Trabalhamos para garantir que você sempre tenha acesso aos números mais atuais.",
+            iconName: "RefreshCw"
+          }
+        ]}
+      />
+
+      {/* Final CTA */}
+      <CTASection
+        title="Pronto para Encontrar Suas Ações Ideais?"
+        description="Use nosso screening gratuito e descubra ações que atendem seus critérios exatos em segundos."
+        primaryCTA={{
+          text: "Começar Screening Gratuito",
+          href: "#screening-tool",
+          iconName: "Search"
+        }}
+        secondaryCTA={{
+          text: "Ver Todos os Rankings",
+          href: "/ranking"
+        }}
+        variant="gradient"
+        benefits={[
+          "100% Gratuito",
+          "Sem cadastro necessário",
+          "Resultados instantâneos",
+          "+350 empresas B3"
+        ]}
+      />
+
+      <Footer />
+      
+      {/* Modal de Registro para Usuários Anônimos */}
+      <Dialog open={showRegisterModal} onOpenChange={setShowRegisterModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full mx-auto mb-4">
+              <User className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <DialogTitle className="text-center text-xl">
+              Crie sua Conta para Continuar
+            </DialogTitle>
+            <DialogDescription className="text-center text-base">
+              Você já realizou {MAX_ANONYMOUS_SCREENINGS} screenings gratuitos. Crie sua conta gratuita para continuar usando o screening ilimitado.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 my-6">
+            <div className="flex items-center space-x-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-sm text-green-800 dark:text-green-200">
+                Screening ilimitado
+              </span>
+            </div>
+            
+            <div className="flex items-center space-x-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-sm text-green-800 dark:text-green-200">
+                Histórico de screenings salvos
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-3 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg">
+              <Crown className="w-5 h-5 text-violet-600" />
+              <span className="text-sm text-violet-800 dark:text-violet-200">
+                Upgrade para Premium e desbloqueie todos os filtros avançados
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col space-y-3">
+            <Button 
+              onClick={() => {
+                window.location.href = '/register?redirect=' + encodeURIComponent(window.location.pathname)
+              }}
+              className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+            >
+              <User className="w-4 h-4" />
+              <span>Criar Conta Gratuita</span>
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              onClick={() => signIn()}
+              className="w-full text-sm"
+            >
+              Já tenho conta - Entrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
-    </>
   )
 }
 
@@ -759,14 +1328,10 @@ export default function ScreeningAcoesPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Carregando screening...</p>
-        </div>
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     }>
       <ScreeningAcoesContent />
     </Suspense>
   )
 }
-

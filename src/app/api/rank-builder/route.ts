@@ -412,11 +412,11 @@ export async function POST(request: NextRequest) {
       const user = session?.user?.id ? await getCurrentUser() : null;
       const isPremium = user?.isPremium || false;
 
-      // Se não for Premium, limitar apenas aos parâmetros de Valuation
+      // Se não for Premium (incluindo deslogados), limitar apenas aos parâmetros de Valuation
       if (!isPremium) {
         const screeningParams = params as ScreeningParams;
 
-        // Limpar todos os filtros exceto Valuation
+        // Limpar todos os filtros exceto Valuation e Graham Upside (Graham é gratuito)
         const restrictedParams: ScreeningParams = {
           // Permitir apenas filtros de Valuation
           plFilter: screeningParams.plFilter,
@@ -424,10 +424,15 @@ export async function POST(request: NextRequest) {
           evEbitdaFilter: screeningParams.evEbitdaFilter,
           psrFilter: screeningParams.psrFilter,
 
+          // Permitir Graham Upside (estratégia Graham é gratuita)
+          grahamUpsideFilter: screeningParams.grahamUpsideFilter,
+
           // Manter parâmetros básicos
-          limit: screeningParams.limit || 20,
+          // Backend sempre aplica limite de 3 para não-Premium (não confiar no frontend)
+          limit: 3,
           companySize: screeningParams.companySize || "all",
           useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
+          assetTypeFilter: screeningParams.assetTypeFilter,
 
           // Remover todos os outros filtros (ficam undefined)
           roeFilter: undefined,
@@ -444,18 +449,26 @@ export async function POST(request: NextRequest) {
           dividaLiquidaEbitdaFilter: undefined,
           marketCapFilter: undefined,
           overallScoreFilter: undefined,
-          grahamUpsideFilter: undefined,
           selectedSectors: undefined,
           selectedIndustries: undefined,
         };
 
         // Substituir params com os parâmetros restritos
         body.params = restrictedParams;
+      } else {
+        // Para Premium, garantir que não há limite (remover se vier do frontend)
+        const screeningParams = params as ScreeningParams;
+        body.params = {
+          ...screeningParams,
+          limit: undefined // Premium sempre sem limite
+        };
       }
     }
 
     // Buscar dados de todas as empresas (com filtro de tipo de ativo se fornecido)
-    const assetTypeFilter = (params as any).assetTypeFilter as 'b3' | 'bdr' | 'both' | undefined;
+    // Usar body.params se foi modificado, senão usar params original
+    const finalParams = (body.params || params) as any;
+    const assetTypeFilter = finalParams.assetTypeFilter as 'b3' | 'bdr' | 'both' | undefined;
     const companies = await getCompaniesData(assetTypeFilter);
 
     // Debug: verificar quantas empresas têm dados técnicos
@@ -511,57 +524,76 @@ export async function POST(request: NextRequest) {
     // }
 
     let results: RankBuilderResult[] = [];
+    
+    // Usar body.params se foi modificado (para screening não-Premium), senão usar params original
+    const executionParams = body.params || params;
 
     switch (model) {
       case "graham":
         results = StrategyFactory.runGrahamRanking(
           companies,
-          params as GrahamParams
+          executionParams as GrahamParams
         );
         break;
       case "dividendYield":
         results = StrategyFactory.runDividendYieldRanking(
           companies,
-          params as DividendYieldParams
+          executionParams as DividendYieldParams
         );
         break;
       case "lowPE":
         results = StrategyFactory.runLowPERanking(
           companies,
-          params as LowPEParams
+          executionParams as LowPEParams
         );
         break;
       case "magicFormula":
         results = StrategyFactory.runMagicFormulaRanking(
           companies,
-          params as MagicFormulaParams
+          executionParams as MagicFormulaParams
         );
         break;
       case "fcd":
-        results = StrategyFactory.runFCDRanking(companies, params as FCDParams);
+        results = StrategyFactory.runFCDRanking(companies, executionParams as FCDParams);
         break;
       case "gordon":
         results = StrategyFactory.runGordonRanking(
           companies,
-          params as GordonParams
+          executionParams as GordonParams
         );
         break;
       case "fundamentalist":
         results = StrategyFactory.runFundamentalistRanking(
           companies,
-          params as FundamentalistParams
+          executionParams as FundamentalistParams
         );
         break;
       case "ai":
         results = await StrategyFactory.runAIRanking(
           companies,
-          params as AIParams
+          executionParams as AIParams
         );
         break;
       case "screening":
+        const screeningParams = executionParams as ScreeningParams;
+        
+        // Verificar status Premium do usuário (pode ser null se deslogado)
+        const screeningUser = session?.user?.id ? await getCurrentUser() : null;
+        const screeningIsPremium = screeningUser?.isPremium || false;
+        
+        // Backend SEMPRE aplica o limite correto baseado no status Premium
+        // Não confiar no limite enviado pelo frontend
+        const finalScreeningParams: ScreeningParams = {
+          ...screeningParams,
+          // Premium: sem limite (undefined). Não-Premium (incluindo deslogados): sempre 3
+          limit: screeningIsPremium ? undefined : 3
+        };
+        
+        console.log(`[SCREENING] Premium: ${screeningIsPremium}, Limit aplicado: ${finalScreeningParams.limit}, User: ${screeningUser?.email || 'deslogado'}`);
+        
         results = StrategyFactory.runScreeningRanking(
           companies,
-          params as ScreeningParams
+          finalScreeningParams
         );
         break;
       case "barsi":
@@ -579,10 +611,11 @@ export async function POST(request: NextRequest) {
 
     // Enriquecer resultados com múltiplos upsides (Graham, FCD, Gordon)
     // Isso permite que o usuário veja diferentes perspectivas de valor justo
-    if (results.length > 0 && session?.user?.id) {
+    // Calcular preço justo para TODOS os usuários (Graham sempre disponível, mesmo deslogados)
+    if (results.length > 0) {
       try {
-        // Buscar status Premium do usuário
-        const currentUser = await getCurrentUser();
+        // Buscar status Premium do usuário (pode ser null se deslogado)
+        const currentUser = session?.user?.id ? await getCurrentUser() : null;
         const userIsPremium = currentUser?.isPremium || false;
 
         results = results.map((result) => {
@@ -592,14 +625,18 @@ export async function POST(request: NextRequest) {
 
           const enrichedKeyMetrics = { ...(result.key_metrics || {}) };
           let mainUpside = result.upside;
+          let mainFairValue = result.fairValue;
+          let fairValueModel: string | null = null;
 
-          // Para estratégias sem preço justo, calcular o maior upside entre Graham, FCD e Gordon
+          // Para estratégias sem preço justo (como screening), calcular o maior upside entre Graham, FCD e Gordon
+          // Para screening, sempre calcular preço justo (Graham para todos, FCD/Gordon para Premium)
           const strategiesWithFairValue = ["graham", "fcd", "gordon"];
-          if (
-            !strategiesWithFairValue.includes(model) &&
-            (mainUpside === null || mainUpside === undefined)
-          ) {
-            const upsides: number[] = [];
+          const shouldCalculateFairValue = 
+            !strategiesWithFairValue.includes(model) || // Screening não tem preço justo próprio
+            (mainUpside === null || mainUpside === undefined || mainFairValue === null || mainFairValue === undefined);
+          
+          if (shouldCalculateFairValue) {
+            const valuations: Array<{ upside: number; fairValue: number; model: string }> = [];
 
             // Graham (sempre disponível)
             try {
@@ -609,9 +646,15 @@ export async function POST(request: NextRequest) {
               );
               if (
                 grahamAnalysis.upside !== null &&
-                grahamAnalysis.upside !== undefined
+                grahamAnalysis.upside !== undefined &&
+                grahamAnalysis.fairValue !== null &&
+                grahamAnalysis.fairValue !== undefined
               ) {
-                upsides.push(grahamAnalysis.upside);
+                valuations.push({
+                  upside: grahamAnalysis.upside,
+                  fairValue: grahamAnalysis.fairValue,
+                  model: "Graham"
+                });
                 enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
               }
             } catch (_) {
@@ -627,9 +670,15 @@ export async function POST(request: NextRequest) {
                 );
                 if (
                   fcdAnalysis.upside !== null &&
-                  fcdAnalysis.upside !== undefined
+                  fcdAnalysis.upside !== undefined &&
+                  fcdAnalysis.fairValue !== null &&
+                  fcdAnalysis.fairValue !== undefined
                 ) {
-                  upsides.push(fcdAnalysis.upside);
+                  valuations.push({
+                    upside: fcdAnalysis.upside,
+                    fairValue: fcdAnalysis.fairValue,
+                    model: "FCD"
+                  });
                   enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
                 }
               } catch (_) {
@@ -646,9 +695,15 @@ export async function POST(request: NextRequest) {
                 );
                 if (
                   gordonAnalysis.upside !== null &&
-                  gordonAnalysis.upside !== undefined
+                  gordonAnalysis.upside !== undefined &&
+                  gordonAnalysis.fairValue !== null &&
+                  gordonAnalysis.fairValue !== undefined
                 ) {
-                  upsides.push(gordonAnalysis.upside);
+                  valuations.push({
+                    upside: gordonAnalysis.upside,
+                    fairValue: gordonAnalysis.fairValue,
+                    model: "Gordon"
+                  });
                   enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
                 }
               } catch (_) {
@@ -656,9 +711,14 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            // Usar o maior upside encontrado
-            if (upsides.length > 0) {
-              mainUpside = Math.max(...upsides);
+            // Usar o maior upside encontrado (maior margem de segurança)
+            if (valuations.length > 0) {
+              const bestValuation = valuations.reduce((best, current) => 
+                current.upside > best.upside ? current : best
+              );
+              mainUpside = bestValuation.upside;
+              mainFairValue = bestValuation.fairValue;
+              fairValueModel = bestValuation.model;
             }
           } else {
             // Para estratégias com preço justo, apenas enriquecer os upsides adicionais
@@ -735,6 +795,8 @@ export async function POST(request: NextRequest) {
           return {
             ...result,
             upside: mainUpside, // Atualizar upside principal se necessário
+            fairValue: mainFairValue, // Atualizar preço justo principal se necessário
+            fairValueModel: fairValueModel || result.fairValueModel || null, // Indicar qual modelo foi usado
             key_metrics: enrichedKeyMetrics,
           };
         });
@@ -747,8 +809,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Gerar racional para o modelo usado
-    const rational = generateRational(model, params);
+    // Gerar racional para o modelo usado (usar executionParams que pode ter sido modificado)
+    const rational = generateRational(model, executionParams);
 
     // Salvar no histórico se o usuário estiver logado (COM transação pois é INSERT)
     if (session?.user?.id) {
@@ -764,7 +826,7 @@ export async function POST(request: NextRequest) {
                 data: {
                   userId: currentUser.id,
                   model,
-                  params: JSON.parse(JSON.stringify(params)), // Conversão para Json type
+                  params: JSON.parse(JSON.stringify(executionParams)), // Conversão para Json type (usar params executados)
                   results: JSON.parse(JSON.stringify(results)), // Cache dos resultados como Json
                   resultCount: results.length,
                 },
@@ -782,7 +844,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       model,
-      params,
+      params: executionParams, // Retornar os params usados (pode ter sido modificado para não-Premium)
       rational,
       results,
       count: results.length,

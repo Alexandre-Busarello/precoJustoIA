@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Configurações
     const BATCH_SIZE = parseInt(process.env.YOUTUBE_ANALYSIS_BATCH_SIZE || '30');
-    const PARALLEL_BATCH_SIZE = 10; // Processar 5 empresas em paralelo
+    const PARALLEL_BATCH_SIZE = 10; // Processar 10 empresas em paralelo
     const DELAY_BETWEEN_BATCHES = parseInt(
       process.env.YOUTUBE_ANALYSIS_DELAY_MS || '500'
     );
@@ -174,23 +174,49 @@ export async function GET(request: NextRequest) {
                 negativePoints: webAnalysis.negativePoints,
               };
 
-              const analysisId = await YouTubeAnalysisService.saveAnalysis(
-                company.id,
-                [], // Sem vídeos
-                webAnalysisResult
-              );
-
-              console.log(`✅ ${company.ticker}: Análise web atualizada salva (ID: ${analysisId}, Score: ${webAnalysis.score}/100)`);
-              
-              if (existingAnalysis) {
-                stats.updatedAnalysis = true;
-              } else {
-                stats.newAnalysis = true;
+              // Validar análise antes de salvar
+              if (!YouTubeAnalysisService.isValidAnalysis(webAnalysisResult)) {
+                console.warn(`⚠️ ${company.ticker}: Análise web inválida - mantendo última análise válida`);
+                console.warn(`   Summary: "${webAnalysisResult.summary}"`);
+                console.warn(`   Pontos positivos: ${webAnalysisResult.positivePoints?.length || 0}`);
+                console.warn(`   Pontos negativos: ${webAnalysisResult.negativePoints?.length || 0}`);
+                
+                // Não criar nova versão - manter a última válida
+                // NÃO atualizar lastCheckedAt para que seja reprocessada na próxima execução
+                stats.processed = true;
+                stats.skipped = true;
+                return stats;
               }
-              
-              await YouTubeAnalysisService.updateLastChecked(company.id);
-              stats.processed = true;
-              return stats;
+
+              try {
+                const analysisId = await YouTubeAnalysisService.saveAnalysis(
+                  company.id,
+                  [], // Sem vídeos
+                  webAnalysisResult
+                );
+
+                console.log(`✅ ${company.ticker}: Análise web atualizada salva (ID: ${analysisId}, Score: ${webAnalysis.score}/100)`);
+                
+                if (existingAnalysis) {
+                  stats.updatedAnalysis = true;
+                } else {
+                  stats.newAnalysis = true;
+                }
+                
+                await YouTubeAnalysisService.updateLastChecked(company.id);
+                stats.processed = true;
+                return stats;
+              } catch (saveError: any) {
+                // Se erro ao salvar (ex: análise inválida), manter última válida
+                if (saveError?.message?.includes('Análise inválida')) {
+                  console.warn(`⚠️ ${company.ticker}: Erro ao salvar análise web inválida - mantendo última análise válida`);
+                  // NÃO atualizar lastCheckedAt para que seja reprocessada na próxima execução
+                  stats.processed = true;
+                  stats.skipped = true;
+                  return stats;
+                }
+                throw saveError;
+              }
             } else {
               // Sem informações relevantes na web também
               console.log(`⚠️ ${company.ticker}: Sem cobertura adequada (YouTube e Web)`);
@@ -257,7 +283,7 @@ export async function GET(request: NextRequest) {
           if (analysisError?.message?.includes('Vídeo muito longo')) {
             console.error(`🎥 ${company.ticker}: Vídeo muito longo - pulando esta empresa`);
             stats.error = `${company.ticker}: Vídeo excede limite de processamento (muito longo)`;
-            await YouTubeAnalysisService.updateLastChecked(company.id);
+            // NÃO atualizar lastCheckedAt - não salvamos análise válida, deve ser reprocessada
             stats.processed = true;
             stats.skipped = true;
             return stats;
@@ -298,7 +324,21 @@ export async function GET(request: NextRequest) {
           finalAnalysisResult = analysisResult;
         }
 
-        // 10. Salvar análise final
+        // 10. Validar análise antes de salvar
+        if (!YouTubeAnalysisService.isValidAnalysis(finalAnalysisResult)) {
+          console.warn(`⚠️ ${company.ticker}: Análise inválida detectada - mantendo última análise válida`);
+          console.warn(`   Summary: "${finalAnalysisResult.summary}"`);
+          console.warn(`   Pontos positivos: ${finalAnalysisResult.positivePoints?.length || 0}`);
+          console.warn(`   Pontos negativos: ${finalAnalysisResult.negativePoints?.length || 0}`);
+          
+          // Não criar nova versão - manter a última válida
+          // NÃO atualizar lastCheckedAt para que seja reprocessada na próxima execução
+          stats.processed = true;
+          stats.skipped = true;
+          return stats;
+        }
+
+        // 11. Salvar análise final
         const analysisId = await YouTubeAnalysisService.saveAnalysis(
           company.id,
           videoIds,
@@ -313,7 +353,7 @@ export async function GET(request: NextRequest) {
           stats.newAnalysis = true;
         }
 
-        // 11. Atualizar lastCheckedAt
+        // 12. Atualizar lastCheckedAt
         await YouTubeAnalysisService.updateLastChecked(company.id);
         stats.processed = true;
         return stats;
@@ -321,15 +361,8 @@ export async function GET(request: NextRequest) {
         console.error(`❌ Erro ao processar ${company.ticker}:`, error);
         stats.error = `${company.ticker}: ${(error as Error).message}`;
 
-        // Atualizar lastCheckedAt mesmo com erro para não travar o ativo
-        try {
-          await YouTubeAnalysisService.updateLastChecked(company.id);
-        } catch (updateError) {
-          console.error(
-            `❌ Erro ao atualizar lastCheckedAt de ${company.ticker}:`,
-            updateError
-          );
-        }
+        // NÃO atualizar lastCheckedAt quando há erro - não salvamos análise válida
+        // A empresa será reprocessada na próxima execução
         stats.processed = true;
         return stats;
       }

@@ -509,6 +509,15 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
         ? parsedResult.negativePoints
         : [];
 
+      // Validar se a análise é válida antes de retornar
+      if (!this.isValidAnalysis(parsedResult)) {
+        console.error(`❌ ${ticker}: Análise retornada pelo Gemini é inválida:`);
+        console.error(`   Summary: "${parsedResult.summary}"`);
+        console.error(`   Pontos positivos: ${parsedResult.positivePoints.length}`);
+        console.error(`   Pontos negativos: ${parsedResult.negativePoints.length}`);
+        throw new Error('Análise retornada pelo Gemini não atende aos critérios de validação (summary inválido ou sem pontos positivos/negativos)');
+      }
+
       console.log(`✅ Análise concluída para ${ticker}: Score ${parsedResult.score}/100`);
 
       return parsedResult;
@@ -959,6 +968,41 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
   }
 
   /**
+   * Valida se uma análise é válida para ser salva
+   */
+  static isValidAnalysis(analysisResult: YouTubeAnalysisResult): boolean {
+    // Verificar se summary é válido (não pode ser "Vídeos encontrados" ou valores inválidos)
+    const invalidSummaries = ['Vídeos encontrados', 'Vídeos encontrados.', 'Videos encontrados'];
+    if (invalidSummaries.includes(analysisResult.summary?.trim())) {
+      console.warn(`⚠️ Análise inválida: summary contém valor inválido "${analysisResult.summary}"`);
+      return false;
+    }
+
+    // Verificar se summary existe e não está vazio
+    if (!analysisResult.summary || analysisResult.summary.trim().length === 0) {
+      console.warn(`⚠️ Análise inválida: summary vazio ou ausente`);
+      return false;
+    }
+
+    // Verificar se há pelo menos pontos positivos OU negativos
+    const hasPositivePoints = Array.isArray(analysisResult.positivePoints) && analysisResult.positivePoints.length > 0;
+    const hasNegativePoints = Array.isArray(analysisResult.negativePoints) && analysisResult.negativePoints.length > 0;
+    
+    if (!hasPositivePoints && !hasNegativePoints) {
+      console.warn(`⚠️ Análise inválida: sem pontos positivos ou negativos`);
+      return false;
+    }
+
+    // Verificar se score é válido
+    if (typeof analysisResult.score !== 'number' || analysisResult.score < 0 || analysisResult.score > 100) {
+      console.warn(`⚠️ Análise inválida: score inválido (${analysisResult.score})`);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Salva análise no banco de dados (marca anterior como inativa)
    */
   static async saveAnalysis(
@@ -967,6 +1011,11 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
     analysisResult: YouTubeAnalysisResult
   ): Promise<string> {
     try {
+      // Validar análise antes de salvar
+      if (!this.isValidAnalysis(analysisResult)) {
+        throw new Error('Análise inválida: não atende aos critérios de validação');
+      }
+
       // Marcar análises anteriores como inativas
       await safeWrite(
         'deactivate-previous-youtube-analyses',

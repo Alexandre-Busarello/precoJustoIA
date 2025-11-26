@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
 
     console.log('🚀 Iniciando geração de post diário...');
 
-    // Gerar post
-    const { post, topics, slug } = await generateDailyPost();
+    // Gerar post (agora em duas etapas: pesquisa + escrita)
+    const { post, topics, research, slug } = await generateDailyPost();
 
     // Calcular tempo de leitura
     const readTime = calculateReadTime(post.content);
@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
           market_context: topics.market_context,
           trending_topics: topics.trending_topics,
           sources: topics.sources,
+          research_sources: research.sources,
+          research_data: research.researchData,
         },
       },
     });

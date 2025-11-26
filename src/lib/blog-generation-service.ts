@@ -17,6 +17,11 @@ interface Source {
   url: string;
 }
 
+interface ResearchResult {
+  sources: Source[];
+  researchData: string; // Resumo dos dados encontrados
+}
+
 interface TopicSearchResult {
   market_context: string;
   category: string; // Categoria escolhida pela IA
@@ -341,10 +346,135 @@ Conteúdo (primeiros 500 caracteres): ${post.content.substring(0, 500)}...
 }
 
 /**
- * Gera um post completo usando IA baseado em tópicos encontrados
+ * ETAPA 1: Pesquisa e coleta de fontes usando googleSearch
+ * Esta função apenas faz a busca e retorna URLs reais encontradas
+ */
+export async function researchTopicSources(
+  mainTopic: TrendingTopic
+): Promise<ResearchResult> {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY não configurada');
+  }
+
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+  });
+
+  const researchPrompt = `Você é um pesquisador especializado em mercado financeiro brasileiro.
+
+TAREFA: Use a ferramenta googleSearch para pesquisar informações sobre o tópico abaixo e coletar URLs reais de fontes confiáveis.
+
+TÓPICO PARA PESQUISAR:
+Título: ${mainTopic.title}
+Resumo: ${mainTopic.summary}
+Tickers: ${mainTopic.target_ticker.join(', ')}
+
+INSTRUÇÕES:
+1. Use a ferramenta googleSearch para fazer pelo menos 4-5 buscas diferentes sobre este tópico
+2. Busque por: "${mainTopic.title} novembro 2025"
+3. Busque por: "${mainTopic.target_ticker.join(' ')} B3 dados proventos"
+4. Busque por: "notícias ${mainTopic.title} mercado brasileiro"
+5. Busque por informações sobre cada empresa mencionada
+
+OBJETIVO:
+- Coletar URLs REAIS de fontes confiáveis (B3, CVM, sites de notícias)
+- Prefira fontes oficiais: B3, CVM, Banco Central, IBGE
+- Prefira sites confiáveis: Valor Econômico, InfoMoney, Exame, Investing.com
+- Mínimo 5 URLs, idealmente 8-10 URLs
+
+FORMATO DE RESPOSTA:
+Você DEVE retornar APENAS um objeto JSON válido (sem markdown, sem explicações):
+
+{
+  "sources": [
+    {"name": "Nome da Fonte", "url": "https://url-completa.com.br"},
+    {"name": "Nome da Fonte 2", "url": "https://url-completa-2.com.br"}
+  ],
+  "researchData": "Resumo breve dos dados encontrados nas pesquisas (2-3 parágrafos)"
+}
+
+REGRAS ABSOLUTAS:
+- NÃO invente URLs - use APENAS URLs reais obtidas da busca
+- URLs devem ser completas (começar com https://)
+- Mínimo 5 URLs obrigatórias
+- Retorne APENAS o JSON, sem markdown ou explicações
+
+INÍCIO DA RESPOSTA (comece diretamente com {):`;
+
+  const model = 'gemini-2.5-flash-lite';
+  const tools = [{ googleSearch: {} }];
+
+  const config = {
+    thinkingConfig: {
+      thinkingBudget: -1,
+    },
+    tools,
+  };
+
+  const contents = [
+    {
+      role: 'user',
+      parts: [{ text: researchPrompt }],
+    },
+  ];
+
+  const maxRetries = 2;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContentStream({
+        model,
+        config,
+        contents,
+      });
+
+      let fullResponse = '';
+      for await (const chunk of response) {
+        if (chunk.text) {
+          fullResponse += chunk.text;
+        }
+      }
+
+      if (attempt === 0 && fullResponse.length > 0) {
+        console.log('📥 Resposta da pesquisa (primeiros 500 chars):', fullResponse.substring(0, 500));
+      }
+
+      const result = extractJSON<ResearchResult>(fullResponse);
+
+      // Validar que temos URLs suficientes
+      if (!result.sources || result.sources.length < 3) {
+        throw new Error(`Apenas ${result.sources?.length || 0} URLs encontradas. Mínimo obrigatório: 3`);
+      }
+
+      // Validar formato das URLs
+      const invalidUrls = result.sources.filter(s => !s.url.startsWith('http://') && !s.url.startsWith('https://'));
+      if (invalidUrls.length > 0) {
+        throw new Error(`URLs inválidas encontradas: ${invalidUrls.map(s => s.url).join(', ')}`);
+      }
+
+      console.log(`✅ Pesquisa concluída: ${result.sources.length} fontes encontradas`);
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`❌ Erro na pesquisa (tentativa ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
+
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+        console.log(`🔄 Tentando pesquisa novamente...`);
+      }
+    }
+  }
+
+  throw lastError || new Error('Erro ao pesquisar fontes após múltiplas tentativas');
+}
+
+/**
+ * ETAPA 2: Gera um post completo usando IA baseado em tópicos encontrados e fontes coletadas
  */
 export async function generateBlogPost(
-  topics: TopicSearchResult
+  topics: TopicSearchResult,
+  research: ResearchResult
 ): Promise<GeneratedPost> {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY não configurada');
@@ -367,17 +497,36 @@ export async function generateBlogPost(
   // Selecionar o tópico principal (primeiro da lista)
   const mainTopic = topics.trending_topics[0];
 
+  // Preparar lista de fontes para o prompt
+  const sourcesList = research.sources.map((source, idx) => 
+    `${idx + 1}. ${source.name}: ${source.url}`
+  ).join('\n');
+
   const prompt = `Aja como um Editor Sênior e Investidor Experiente de um blog de finanças popular no Brasil (estilo Suno Research, Nord Research ou Primo Rico).
 
-⚠️ INSTRUÇÃO CRÍTICA ANTES DE COMEÇAR:
-Você TEM ACESSO à ferramenta googleSearch. Você DEVE usar essa ferramenta ANTES de escrever o artigo para:
-1. Buscar informações recentes sobre o tópico
-2. Encontrar URLs reais de fontes confiáveis (B3, CVM, sites de notícias)
-3. Coletar dados atualizados para embasar o artigo
+Sua tarefa é escrever um artigo de blog otimizado para SEO e altamente engajador usando as fontes de pesquisa já coletadas.
 
-NÃO escreva o artigo sem primeiro usar a ferramenta de busca para encontrar fontes reais com URLs válidas.
+═══════════════════════════════════════════════════════════════
+📚 FONTES DE PESQUISA DISPONÍVEIS (USE ESTAS URLs):
+═══════════════════════════════════════════════════════════════
 
-Sua tarefa é escrever um artigo de blog otimizado para SEO e altamente engajador.
+${sourcesList}
+
+DADOS DA PESQUISA:
+${research.researchData}
+
+⚠️⚠️⚠️ REGRA CRÍTICA PARA LINKS EXTERNOS ⚠️⚠️⚠️
+
+Você DEVE incluir pelo menos 3-5 links externos no artigo usando as URLs acima.
+- Use as URLs EXATAS da lista acima
+- Formato markdown: [Texto descritivo](URL_COMPLETA)
+- Inclua os links naturalmente no texto quando citar informações
+- Exemplo: "Segundo dados da [B3](https://www.b3.com.br/...), a empresa..."
+
+❌ NÃO invente URLs - use APENAS as URLs da lista acima!
+❌ O artigo será REJEITADO se não tiver pelo menos 3 links externos das fontes acima!
+
+═══════════════════════════════════════════════════════════════
 
 CONTEXTO DE MERCADO ATUAL:
 ${topics.market_context}
@@ -460,25 +609,30 @@ ${mainTopic.target_ticker.map(ticker => `- ${ticker}`).join('\n')}
 - O formato do link é: /acao/TICKER (em maiúsculas, sem .SA ou sufixos)
 - Se mencionar outros tickers além dos listados, também crie links para eles
 
-LINKS EXTERNOS (CRÍTICO - OBRIGATÓRIO incluir pelo menos 3-5 links no conteúdo):
+🚨🚨🚨 LINKS EXTERNOS - REGRA CRÍTICA 🚨🚨🚨
 
-⚠️ PASSO A PASSO OBRIGATÓRIO ANTES DE ESCREVER O ARTIGO:
+**OBRIGATÓRIO: MÍNIMO 3 LINKS EXTERNOS REAIS NO CONTEÚDO**
 
-1. **USE A FERRAMENTA DE BUSCA (googleSearch) ANTES DE ESCREVER:**
-   - Busque por: "notícias sobre ${mainTopic.title} novembro 2025"
-   - Busque por: "dados B3 ${mainTopic.target_ticker.join(' ')}"
-   - Busque por: "análise ${mainTopic.title} mercado brasileiro"
-   - Busque por informações sobre cada empresa mencionada
+⚠️⚠️⚠️ VOCÊ DEVE FAZER ISSO AGORA MESMO ⚠️⚠️⚠️
 
-2. **EXTRAIA URLs REAIS DOS RESULTADOS DA BUSCA:**
-   - Copie URLs completas dos sites encontrados
-   - Prefira fontes oficiais (B3, CVM) e sites de notícias confiáveis
-   - NÃO invente URLs ou use placeholders
+**PASSO 1 - USE A FERRAMENTA googleSearch (FAÇA ISSO PRIMEIRO!):**
+Execute estas buscas usando a ferramenta googleSearch:
+- Busque: "${mainTopic.title} novembro 2025"
+- Busque: "${mainTopic.target_ticker.join(' ')} B3 dados proventos"
+- Busque: "notícias ${mainTopic.title} mercado brasileiro investimentos"
+- Busque: "análise ${mainTopic.target_ticker.join(' ')} dividendos"
 
-3. **INCLUA OS LINKS NO CONTEÚDO:**
-   - Insira os links naturalmente no texto quando citar dados ou informações
-   - Formato: [Texto descritivo](URL_COMPLETA)
-   - Mínimo de 3 links externos, idealmente 5 ou mais
+**PASSO 2 - EXTRAIA URLs REAIS:**
+- Copie URLs COMPLETAS dos resultados da busca
+- Prefira fontes oficiais: B3, CVM, Banco Central, IBGE
+- Prefira sites confiáveis: Valor Econômico, InfoMoney, Exame, Investing.com
+- NÃO invente URLs - use APENAS URLs reais da busca
+
+**PASSO 3 - INCLUA OS LINKS NO ARTIGO:**
+- Formato markdown: [Texto descritivo](https://url-real-da-busca.com.br)
+- Mínimo 3 links externos, idealmente 5 ou mais
+- Inclua naturalmente no texto quando citar informações
+- Exemplo: "Segundo dados da [B3](https://www.b3.com.br/...), a empresa..."
 
 FORMATO CORRETO DE LINKS EM MARKDOWN:
 - Formato inline: [Texto do link](https://exemplo.com.br)
@@ -544,35 +698,27 @@ A estrutura deve ser EXATAMENTE esta:
   "keywords": ["palavra-chave 1", "palavra-chave 2"]
 }
 
-REQUISITOS DO CONTEÚDO (LEIA COM ATENÇÃO):
+🚨🚨🚨 REQUISITOS CRÍTICOS DO CONTEÚDO 🚨🚨🚨
 
-⚠️ PROCESSO OBRIGATÓRIO:
+**LINKS EXTERNOS OBRIGATÓRIOS:**
 
-1. **PRIMEIRO:** Use a ferramenta googleSearch para buscar informações sobre:
-   - O tópico principal: "${mainTopic.title}"
-   - As empresas mencionadas: ${mainTopic.target_ticker.join(', ')}
-   - Notícias recentes sobre o assunto
-   - Dados oficiais da B3 ou CVM
+✅ O ARTIGO DEVE TER:
+- Mínimo 3 links externos REAIS usando as URLs da lista de fontes acima
+- Formato markdown: [texto descritivo](URL_COMPLETA)
+- Links incluídos naturalmente no texto quando citar informações
+- Use as URLs EXATAS da lista de fontes fornecida acima
 
-2. **SEGUNDO:** Extraia URLs reais dos resultados da busca (mínimo 3-5 URLs)
+🚨 REGRAS ABSOLUTAS - O ARTIGO SERÁ REJEITADO SE:
+- ❌ O artigo tiver MENOS de 3 links externos das fontes acima
+- ❌ Você inventar URLs ou usar URLs que não estão na lista
+- ❌ Os links não forem URLs reais da lista de fontes fornecida
 
-3. **TERCEIRO:** Escreva o artigo incluindo esses links externos naturalmente no texto
-
-REGRAS ABSOLUTAS:
-- **NÃO escreva o artigo sem usar a ferramenta de busca primeiro**
-- **NÃO invente URLs ou use placeholders como "exemplo.com"**
-- **NÃO escreva links fictícios - use apenas URLs reais da busca**
-- O conteúdo deve ser original, útil e otimizado para busca orgânica
-- Use o tom de voz de um investidor experiente e calejado, não um acadêmico
-- Seja opinativo e use emoção para engajar o leitor
-- Escreva o artigo completo em Markdown com formatação adequada
-
-LINKS EXTERNOS (CRÍTICO):
-- **MÍNIMO 3 links externos obrigatórios no conteúdo**
-- Formato markdown: [texto descritivo](https://url-real-da-busca.com.br)
-- Links devem ser de fontes reais obtidas da busca (B3, CVM, sites de notícias, etc.)
-- Cite as fontes quando usar dados específicos: "Segundo dados da [B3](https://www.b3.com.br)..."
-- Inclua links naturalmente no texto, não apenas em uma lista no final
+📝 OUTROS REQUISITOS:
+- Conteúdo original, útil e otimizado para SEO
+- Tom de voz de investidor experiente e calejado
+- Seja opinativo e use emoção para engajar
+- Artigo completo em Markdown com formatação adequada
+- Mínimo 2000 palavras
 
 LINKS INTERNOS PARA TICKERS:
 - **CRÍTICO:** SEMPRE que mencionar um ticker de ação, crie um link interno no formato: [Nome da Empresa (TICKER)](/acao/TICKER)
@@ -581,17 +727,11 @@ LINKS INTERNOS PARA TICKERS:
 INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
   const model = 'gemini-2.5-flash-lite';
-  // Configurar ferramentas de busca para garantir que a IA use para encontrar links externos
-  const tools = [
-    { googleSearch: {} },
-    { urlContext: {} }, // Permite que a IA use contexto de URLs encontradas
-  ];
-
+  // Não precisamos mais de ferramentas de busca aqui, pois já temos as fontes
   const config = {
     thinkingConfig: {
-      thinkingBudget: -1, // -1 permite mais processamento para usar ferramentas
+      thinkingBudget: 0,
     },
-    tools,
   };
 
   const contents = [
@@ -603,13 +743,68 @@ INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
   const maxRetries = 2;
   let lastError: Error | null = null;
+  let retryPrompt = prompt;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // Nas retentativas, adicionar feedback sobre o erro anterior
+      if (attempt > 0 && lastError) {
+        const errorMessage = lastError.message.toLowerCase();
+        
+        if (errorMessage.includes('links externos')) {
+          retryPrompt = `${prompt}
+
+═══════════════════════════════════════════════════════════════
+🚨🚨🚨 ERRO CRÍTICO DA TENTATIVA ANTERIOR 🚨🚨🚨
+═══════════════════════════════════════════════════════════════
+
+O artigo gerado foi REJEITADO porque NÃO continha links externos suficientes.
+
+❌ ERRO ESPECÍFICO: ${lastError.message}
+
+═══════════════════════════════════════════════════════════════
+⚠️⚠️⚠️ AÇÃO OBRIGATÓRIA - USE AS FONTES ACIMA ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════
+
+Você DEVE incluir pelo menos 3-5 links externos no artigo usando as URLs da lista de fontes fornecida acima.
+
+FORMATO OBRIGATÓRIO DOS LINKS:
+- Use markdown: [Texto descritivo](URL_COMPLETA)
+- Use as URLs EXATAS da lista de fontes acima
+- Inclua os links naturalmente no texto quando citar informações
+
+EXEMPLOS DE COMO INCLUIR LINKS:
+"Segundo dados da [B3](https://www.b3.com.br/...), a empresa..."
+"Conforme reportado pelo [Valor Econômico](https://valor.globo.com/...), os investidores..."
+"De acordo com informações da [CVM](https://www.gov.br/cvm/...), o setor..."
+
+❌ NÃO INVENTE URLs - USE APENAS AS URLs DA LISTA DE FONTES ACIMA!
+❌ O ARTIGO SERÁ REJEITADO NOVAMENTE SE NÃO TIVER PELO MENOS 3 LINKS EXTERNOS!
+
+═══════════════════════════════════════════════════════════════`;
+        } else {
+          retryPrompt = `${prompt}
+
+🚨 ERRO DA TENTATIVA ANTERIOR:
+${lastError.message}
+
+Por favor, corrija o problema acima e gere o artigo novamente seguindo TODAS as instruções.`;
+        }
+      }
+
+      const contentsToUse = attempt > 0 
+        ? [
+            {
+              role: 'user',
+              parts: [{ text: retryPrompt }],
+            },
+          ]
+        : contents;
+
       const response = await ai.models.generateContentStream({
         model,
         config,
-        contents,
+        contents: contentsToUse,
       });
 
       let fullResponse = '';
@@ -638,7 +833,7 @@ INÍCIO DA RESPOSTA (comece diretamente com {):`;
       
       if (attempt < maxRetries) {
         // Aguardar antes de tentar novamente
-        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
         console.log(`🔄 Tentando gerar post novamente...`);
       }
     }
@@ -777,11 +972,12 @@ export async function generateUniqueSlug(title: string): Promise<string> {
 }
 
 /**
- * Função principal: busca tópicos e gera post completo
+ * Função principal: busca tópicos, pesquisa fontes e gera post completo
  */
 export async function generateDailyPost(): Promise<{
   post: GeneratedPost;
   topics: TopicSearchResult;
+  research: ResearchResult;
   slug: string;
 }> {
   console.log('🔍 Buscando tópicos quentes...');
@@ -789,8 +985,18 @@ export async function generateDailyPost(): Promise<{
   console.log(`✅ Encontrados ${topics.trending_topics.length} tópicos quentes`);
   console.log(`📊 Contexto de mercado: ${topics.market_context}`);
 
-  console.log('✍️ Gerando post com IA...');
-  const post = await generateBlogPost(topics);
+  // Selecionar o tópico principal
+  const mainTopic = topics.trending_topics[0];
+  console.log(`📌 Tópico principal selecionado: "${mainTopic.title}"`);
+
+  // ETAPA 1: Pesquisar e coletar fontes
+  console.log('🔎 Pesquisando fontes e coletando URLs...');
+  const research = await researchTopicSources(mainTopic);
+  console.log(`✅ Pesquisa concluída: ${research.sources.length} fontes coletadas`);
+
+  // ETAPA 2: Gerar post usando as fontes coletadas
+  console.log('✍️ Gerando post com IA usando as fontes coletadas...');
+  const post = await generateBlogPost(topics, research);
   console.log(`✅ Post gerado: "${post.title}"`);
 
   console.log('🔗 Gerando slug único...');
@@ -802,6 +1008,7 @@ export async function generateDailyPost(): Promise<{
   return {
     post,
     topics,
+    research,
     slug,
   };
 }

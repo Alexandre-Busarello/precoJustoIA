@@ -160,9 +160,53 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
   }
 }
 
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Obtém a URL da logo para usar nos templates de email
+ * 
+ * Prioridade:
+ * 1. EMAIL_LOGO_URL (URL completa configurada manualmente)
+ * 2. EMAIL_LOGO_PATH (caminho relativo, será combinado com baseUrl)
+ * 3. Padrão: /logo-preco-justo.png
+ * 
+ * Exemplos de configuração:
+ * - EMAIL_LOGO_URL=https://cdn.exemplo.com/logo.png (URL completa)
+ * - EMAIL_LOGO_PATH=/images/logo.png (caminho relativo)
+ */
+export function getEmailLogoUrl(): string {
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai'
+  
+  // Se tiver URL completa configurada, usar ela
+  if (process.env.EMAIL_LOGO_URL) {
+    return process.env.EMAIL_LOGO_URL
+  }
+  
+  // Se tiver caminho relativo configurado, combinar com baseUrl
+  if (process.env.EMAIL_LOGO_PATH) {
+    return `${baseUrl}${process.env.EMAIL_LOGO_PATH}`
+  }
+  
+  // Padrão: logo-preco-justo.png
+  return `${baseUrl}/logo-preco-justo.png`
+}
+
+/**
+ * Obtém a URL base para links nos emails
+ */
+export function getEmailBaseUrl(): string {
+  return process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai'
+}
+
+// ============================================
+// TEMPLATES DE EMAIL
+// ============================================
+
 export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
-  const logoUrl = `${baseUrl}/logo-preco-justo.png`
+  const baseUrl = getEmailBaseUrl()
+  const logoUrl = getEmailLogoUrl()
   
   return {
     subject: 'Redefinir sua senha - Preço Justo AI',
@@ -229,12 +273,15 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
             z-index: 2;
             margin-bottom: 20px;
             text-align: center;
+            background-color: #ffffff;
+            padding: 16px;
+            border-radius: 12px;
+            display: inline-block;
           }
           
           .logo {
             max-width: 200px;
             height: auto;
-            filter: brightness(0) invert(1);
             display: block;
             margin: 0 auto;
           }
@@ -450,7 +497,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto;" />
               </div>
               <h1 class="header-title">Redefinir sua senha</h1>
               <p class="header-subtitle">Segurança em primeiro lugar</p>
@@ -539,8 +586,8 @@ export async function sendPasswordResetEmail(email: string, resetUrl: string, us
 }
 
 export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?: string, failureReason?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
-  const logoUrl = `${baseUrl}/logo-preco-justo.png`
+  const baseUrl = getEmailBaseUrl()
+  const logoUrl = getEmailLogoUrl()
   
   return {
     subject: 'Problema com seu pagamento - Preço Justo AI',
@@ -607,12 +654,15 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
             z-index: 2;
             margin-bottom: 20px;
             text-align: center;
+            background-color: #ffffff;
+            padding: 16px;
+            border-radius: 12px;
+            display: inline-block;
           }
           
           .logo {
             max-width: 200px;
             height: auto;
-            filter: brightness(0) invert(1);
             display: block;
             margin: 0 auto;
           }
@@ -822,7 +872,7 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto;" />
               </div>
               <h1 class="header-title">⚡ Pagamento Não Processado</h1>
               <p class="header-subtitle">Sua assinatura está aguardando</p>
@@ -963,8 +1013,8 @@ export async function sendPaymentFailureEmail(email: string, retryUrl: string, u
 }
 
 export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: boolean = false) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
-  const logoUrl = `${baseUrl}/logo-preco-justo.png`
+  const baseUrl = getEmailBaseUrl()
+  const logoUrl = getEmailLogoUrl()
   
   const planName = isEarlyAdopter ? 'Early Adopter' : 'Premium'
   const planBadge = isEarlyAdopter ? '👑 Early Adopter' : '⭐ Premium'
@@ -1440,7 +1490,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto;" />
               </div>
               <h1 class="header-title">🎉 Bem-vindo!</h1>
               <p class="header-subtitle">${planBadge} ativado com sucesso</p>
@@ -1655,7 +1705,8 @@ export function generateAssetChangeEmailTemplate(params: {
   const arrow = isPositive ? '↑' : '↓';
   const changeVerb = isPositive ? 'melhorou' : 'piorou';
   
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
+  const baseUrl = getEmailBaseUrl();
+  const logoUrl = getEmailLogoUrl();
   const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
@@ -1704,7 +1755,9 @@ export function generateAssetChangeEmailTemplate(params: {
               <table role="presentation" style="width: 100%; margin: 0 auto;">
                 <tr>
                   <td style="text-align: center;">
-                    <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto 20px; filter: brightness(0) invert(1);" />
+                    <div style="background-color: #ffffff; padding: 12px; border-radius: 8px; display: inline-block;">
+                      <img src="${logoUrl}" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto;" />
+                    </div>
                   </td>
                 </tr>
               </table>
@@ -1931,7 +1984,8 @@ export function generateFreeUserAssetChangeEmailTemplate(params: {
     companyLogoUrl,
   } = params;
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
+  const baseUrl = getEmailBaseUrl();
+  const logoUrl = getEmailLogoUrl();
   const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
   const upgradeUrl = `${baseUrl}/planos`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
@@ -1975,7 +2029,9 @@ export function generateFreeUserAssetChangeEmailTemplate(params: {
               <table role="presentation" style="width: 100%; margin: 0 auto;">
                 <tr>
                   <td style="text-align: center;">
-                    <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto 20px; filter: brightness(0) invert(1);" />
+                    <div style="background-color: #ffffff; padding: 12px; border-radius: 8px; display: inline-block;">
+                      <img src="${logoUrl}" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto;" />
+                    </div>
                   </td>
                 </tr>
               </table>
@@ -2238,7 +2294,8 @@ export function generateMonthlyReportEmailTemplate(params: {
     reportUrl,
   } = params;
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
+  const baseUrl = getEmailBaseUrl();
+  const logoUrl = getEmailLogoUrl();
   const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
@@ -2281,7 +2338,9 @@ export function generateMonthlyReportEmailTemplate(params: {
               <table role="presentation" style="width: 100%; margin: 0 auto;">
                 <tr>
                   <td style="text-align: center;">
-                    <img src="${baseUrl}/logo-preco-justo.png" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto 20px; filter: brightness(0) invert(1);" />
+                    <div style="background-color: #ffffff; padding: 12px; border-radius: 8px; display: inline-block;">
+                      <img src="${logoUrl}" alt="Preço Justo AI" style="height: 32px; width: auto; display: block; margin: 0 auto;" />
+                    </div>
                   </td>
                 </tr>
               </table>
@@ -2505,8 +2564,8 @@ export async function sendMonthlyReportEmail(params: {
 }
 
 export function generateEmailVerificationTemplate(verificationUrl: string, userName?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
-  const logoUrl = `${baseUrl}/logo-preco-justo.png`
+  const baseUrl = getEmailBaseUrl()
+  const logoUrl = getEmailLogoUrl()
   
   return {
     subject: 'Verifique seu email - Preço Justo AI',
@@ -2573,12 +2632,15 @@ export function generateEmailVerificationTemplate(verificationUrl: string, userN
             z-index: 2;
             margin-bottom: 20px;
             text-align: center;
+            background-color: #ffffff;
+            padding: 16px;
+            border-radius: 12px;
+            display: inline-block;
           }
           
           .logo {
             max-width: 200px;
             height: auto;
-            filter: brightness(0) invert(1);
             display: block;
             margin: 0 auto;
           }
@@ -2778,7 +2840,7 @@ export function generateEmailVerificationTemplate(verificationUrl: string, userN
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; filter: brightness(0) invert(1); display: block; margin: 0 auto;" />
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto;" />
               </div>
               <h1 class="header-title">Verifique seu email</h1>
               <p class="header-subtitle">Confirme sua conta para começar</p>

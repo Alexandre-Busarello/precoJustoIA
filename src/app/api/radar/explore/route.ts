@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/user-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 import { getOrCalculateTechnicalAnalysis } from '@/lib/technical-analysis-service';
 import { prisma } from '@/lib/prisma';
-import { calculateRadarScore } from '@/lib/radar-service';
+import { calculateRadarScore, getTechnicalEntryStatus } from '@/lib/radar-service';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { cache } from '@/lib/cache-service';
 import { getLatestPrices } from '@/lib/quote-service';
@@ -204,24 +204,16 @@ export async function GET(request: NextRequest) {
               currentPrice
             );
 
-            // Determinar status de entrada técnico (considerando score fundamentalista)
-            // Não recomendar compra se score fundamentalista < 50
-            const hasMinimumFundamentalScore = overallScore.score >= 50;
-            let technicalStatus = 'neutro';
-            let technicalLabel = 'Neutro';
+            // Determinar status de entrada técnico usando função centralizada
+            const technicalStatusResult = getTechnicalEntryStatus(
+              technicalAnalysis,
+              currentPrice,
+              overallScore.score
+            );
             
-            if (technicalAnalysis?.aiFairEntryPrice && currentPrice > 0) {
-              const fairPrice = technicalAnalysis.aiFairEntryPrice;
-              const priceDiff = ((currentPrice - fairPrice) / fairPrice) * 100;
-              
-              if (priceDiff <= 0 && hasMinimumFundamentalScore) {
-                technicalStatus = 'compra';
-                technicalLabel = 'Compra';
-              } else {
-                technicalStatus = 'neutro';
-                technicalLabel = 'Neutro';
-              }
-            }
+            // Converter status para formato esperado pelo frontend
+            const technicalStatus = technicalStatusResult.status === 'green' ? 'compra' : 'neutro';
+            const technicalLabel = technicalStatusResult.label;
 
             // Estratégias aprovadas
             const approvedStrategiesList: string[] = [];

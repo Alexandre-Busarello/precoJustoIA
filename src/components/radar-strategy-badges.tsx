@@ -84,18 +84,18 @@ export function RadarStrategyBadges({
 
   // Modo completo: badges com nomes
   return (
-    <div className={cn('flex flex-wrap gap-1', className)}>
+    <div className={cn('flex flex-wrap gap-1.5', className)}>
       {strategyList.map((item) => (
         <Badge
           key={item.key}
           variant={item.analysis?.isEligible ? 'default' : 'destructive'}
           className={cn(
-            'text-xs',
+            'text-xs px-2 py-1',
             item.analysis?.isEligible
-              ? 'bg-green-500 hover:bg-green-600'
-              : 'bg-red-500 hover:bg-red-600'
+              ? 'bg-green-500 hover:bg-green-600 text-white'
+              : 'bg-red-500 hover:bg-red-600 text-white'
           )}
-          title={`${strategyLabels[item.key]}: Score ${item.analysis?.score?.toFixed(0) || 0}`}
+          title={`${strategyLabels[item.key]}: Score ${item.analysis?.score?.toFixed(0) || 0} - ${item.analysis?.isEligible ? 'Aprovado' : 'Reprovado'}`}
         >
           {strategyLabels[item.key]}
         </Badge>

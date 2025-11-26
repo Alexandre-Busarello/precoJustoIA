@@ -337,7 +337,7 @@ export default function ContatoPage() {
                 <h3 className="text-lg font-bold mb-3">Como funciona o período de teste?</h3>
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   Oferecemos acesso gratuito permanente aos recursos básicos. 
-                  Para recursos premium, você pode testar por 7 dias gratuitamente 
+                  Para recursos premium, você pode testar por 1 dia gratuitamente 
                   antes de decidir pela assinatura.
                 </p>
               </CardContent>

@@ -2,14 +2,14 @@
  * Script para corrigir trials com datas incorretas
  * 
  * Este script corrige trials onde trialEndsAt < trialStartedAt
- * Recalcula trialEndsAt como trialStartedAt + 7 dias
+ * Recalcula trialEndsAt como trialStartedAt + 1 dia
  * 
  * Uso: npx tsx scripts/fix-trial-dates.ts
  */
 
 import { prisma } from '../src/lib/prisma'
 
-const TRIAL_DURATION_DAYS = 7
+const TRIAL_DURATION_DAYS = 1
 
 async function fixTrialDates() {
   console.log('🔍 Buscando trials com datas incorretas...')
@@ -50,7 +50,7 @@ async function fixTrialDates() {
       console.log(`⚠️  Corrigindo trial para ${user.email}`)
       console.log(`   Antes: startedAt=${trialStartedAt.toISOString()}, endsAt=${trialEndsAt.toISOString()}`)
 
-      // Recalcular trialEndsAt como trialStartedAt + 7 dias
+      // Recalcular trialEndsAt como trialStartedAt + 1 dia
       const correctedEndsAt = new Date(trialStartedAt.getTime() + (TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000))
 
       try {

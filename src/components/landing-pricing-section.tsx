@@ -53,7 +53,7 @@ export function LandingPricingSection() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
-                        Trial Premium de 7 Dias Grátis
+                        Trial Premium de 1 Dia Grátis
                       </h3>
                       <Badge variant="secondary" className="bg-gradient-to-r from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300">
                         <Sparkles className="w-3 h-3 mr-1" />
@@ -61,7 +61,7 @@ export function LandingPricingSection() {
                       </Badge>
                     </div>
                     <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-3">
-                      Ao criar sua conta, você recebe <strong>automaticamente 7 dias de acesso Premium completo</strong> para experimentar todas as funcionalidades avançadas da plataforma sem compromisso.
+                      Ao criar sua conta, você recebe <strong>automaticamente 1 dia de acesso Premium completo</strong> para experimentar todas as funcionalidades avançadas da plataforma sem compromisso.
                     </p>
                     <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-400">
                       <div className="flex items-center gap-1.5">
@@ -134,7 +134,7 @@ export function LandingPricingSection() {
                 </Button>
                 {isTrialAvailable && (
                   <p className="text-xs text-center text-muted-foreground mt-2">
-                    ✨ + 7 dias Premium grátis ao criar conta
+                    ✨ + 1 dia Premium grátis ao criar conta
                   </p>
                 )}
               </CardContent>
@@ -218,7 +218,7 @@ export function LandingPricingSection() {
                   
                   <p className="text-xs text-center text-muted-foreground mt-3">
                     {isTrialAvailable 
-                      ? `🎁 7 dias Premium grátis • 💰 Economia de ${annualSavings} por ano`
+                      ? `🎁 1 dia Premium grátis • 💰 Economia de ${annualSavings} por ano`
                       : `💰 Economia de ${annualSavings} por ano`}
                   </p>
                   <p className="text-xs text-center text-muted-foreground/70 mt-1">
@@ -309,7 +309,7 @@ export function LandingPricingSection() {
                 
                 <p className="text-xs text-center text-muted-foreground mt-3">
                   {isTrialAvailable 
-                    ? "🎁 7 dias Premium grátis • ✅ Ativação instantânea • ✅ Cancele quando quiser"
+                    ? "🎁 1 dia Premium grátis • ✅ Ativação instantânea • ✅ Cancele quando quiser"
                     : "✅ Ativação instantânea • ✅ Cancele quando quiser"}
                 </p>
               </CardContent>

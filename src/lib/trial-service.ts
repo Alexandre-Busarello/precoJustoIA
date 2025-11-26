@@ -6,14 +6,14 @@ import { isEmailVerified } from './email-verification-service'
 /**
  * SERVIÇO CENTRALIZADO PARA CONTROLE DE TRIAL PREMIUM
  * 
- * Gerencia todas as funcionalidades relacionadas ao trial de 7 dias:
+ * Gerencia todas as funcionalidades relacionadas ao trial de 1 dia:
  * - Início de trial para novos usuários
  * - Verificação de trial ativo
  * - Cálculo de dias restantes
  * - Controle via variável de ambiente
  */
 
-const TRIAL_DURATION_DAYS = 7
+const TRIAL_DURATION_DAYS = 1
 
 /**
  * Verifica se a feature de trial está habilitada via ENV
@@ -78,7 +78,7 @@ export async function shouldStartTrial(userId: string): Promise<boolean> {
 }
 
 /**
- * Inicia trial de 7 dias para um usuário
+ * Inicia trial de 1 dia para um usuário
  */
 export async function startTrialForUser(userId: string): Promise<boolean> {
   try {

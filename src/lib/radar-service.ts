@@ -127,45 +127,118 @@ export function getRadarStatusColor(score: number): 'green' | 'yellow' | 'red' {
 }
 
 /**
+ * Determina status do semáforo baseado em análise técnica
+ * 
+ * Lógica:
+ * - VERMELHO: Preço fora dos limites (abaixo de aiMinPrice OU acima de aiMaxPrice)
+ * - VERDE: Preço dentro dos limites E abaixo/igual ao preço justo
+ * - AMARELO: Preço dentro dos limites mas acima do preço justo
+ * 
+ * IMPORTANTE: Não recomenda compra se score fundamentalista < 50
+ */
+export function getTechnicalTrafficLightStatus(
+  technicalAnalysis: TechnicalAnalysisData | null,
+  currentPrice: number,
+  overallScore?: number | null
+): { status: 'green' | 'yellow' | 'red'; label: string; description: string } {
+  // Validações básicas
+  if (!technicalAnalysis?.aiFairEntryPrice || currentPrice <= 0) {
+    return { 
+      status: 'yellow', 
+      label: 'Neutro',
+      description: 'Dados de análise técnica não disponíveis.'
+    };
+  }
+
+  const fairPrice = technicalAnalysis.aiFairEntryPrice;
+  const minPrice = technicalAnalysis.aiMinPrice;
+  const maxPrice = technicalAnalysis.aiMaxPrice;
+
+  // Se não temos limites mínimo e máximo, usar lógica simplificada baseada apenas no preço justo
+  if (!minPrice || !maxPrice) {
+    const priceDiff = ((currentPrice - fairPrice) / fairPrice) * 100;
+    const hasMinimumFundamentalScore = overallScore !== null && overallScore !== undefined && overallScore >= 50;
+
+    if (priceDiff <= 0 && hasMinimumFundamentalScore) {
+      return { 
+        status: 'green', 
+        label: 'Compra',
+        description: 'Preço abaixo ou igual ao preço justo técnico.'
+      };
+    } else if (priceDiff <= 10) {
+      return { 
+        status: 'yellow', 
+        label: 'Neutro',
+        description: 'Preço próximo do preço justo técnico.'
+      };
+    } else {
+      return { 
+        status: 'red', 
+        label: 'Caro',
+        description: 'Preço acima do preço justo técnico.'
+      };
+    }
+  }
+
+  // Verificar se está fora dos limites (VERMELHO)
+  if (currentPrice < minPrice) {
+    return { 
+      status: 'red', 
+      label: 'Abaixo do Limite',
+      description: `Preço abaixo do limite mínimo previsto (R$ ${minPrice.toFixed(2)}). Pode indicar movimento atípico no mercado.`
+    };
+  }
+
+  if (currentPrice > maxPrice) {
+    return { 
+      status: 'red', 
+      label: 'Acima do Limite',
+      description: `Preço acima do limite máximo previsto (R$ ${maxPrice.toFixed(2)}). Avalie se há fundamentos que justifiquem.`
+    };
+  }
+
+  // Dentro dos limites - verificar relação com preço justo
+  const hasMinimumFundamentalScore = overallScore !== null && overallScore !== undefined && overallScore >= 50;
+
+  if (currentPrice <= fairPrice) {
+    // Preço abaixo ou igual ao justo e dentro dos limites
+    if (hasMinimumFundamentalScore) {
+      return { 
+        status: 'green', 
+        label: 'Compra',
+        description: `Preço dentro da faixa prevista (R$ ${minPrice.toFixed(2)} - R$ ${maxPrice.toFixed(2)}) e abaixo ou igual ao preço justo técnico (R$ ${fairPrice.toFixed(2)}). Região segura para entrada.`
+      };
+    } else {
+      return { 
+        status: 'yellow', 
+        label: 'Neutro',
+        description: 'Preço técnico favorável, mas score fundamentalista abaixo do mínimo recomendado.'
+      };
+    }
+  } else {
+    // Preço acima do justo mas dentro dos limites (AMARELO)
+    const priceDiff = ((currentPrice - fairPrice) / fairPrice) * 100;
+    return { 
+      status: 'yellow', 
+      label: 'Atenção',
+      description: `Preço dentro da faixa prevista, mas ${priceDiff.toFixed(1)}% acima do preço justo técnico (R$ ${fairPrice.toFixed(2)}). Aguarde melhor oportunidade de entrada.`
+    };
+  }
+}
+
+/**
  * Determina status de entrada baseado em análise técnica
  * IMPORTANTE: Não recomenda compra se score fundamentalista < 50
+ * 
+ * @deprecated Use getTechnicalTrafficLightStatus para lógica completa com limites
  */
 export function getTechnicalEntryStatus(
   technicalAnalysis: TechnicalAnalysisData | null,
   currentPrice: number,
   overallScore?: number | null
 ): { status: 'green' | 'yellow' | 'red'; label: string } {
-  if (!technicalAnalysis?.aiFairEntryPrice || currentPrice <= 0) {
-    return { status: 'yellow', label: 'Neutro' };
-  }
-
-  const fairPrice = technicalAnalysis.aiFairEntryPrice;
-  const priceDiff = ((currentPrice - fairPrice) / fairPrice) * 100;
-
-  // Se score fundamentalista é baixo (< 50), não recomendar compra mesmo que técnico seja favorável
-  const hasMinimumFundamentalScore = overallScore !== null && overallScore !== undefined && overallScore >= 50;
-
-  if (priceDiff <= -5) {
-    // Preço muito abaixo do justo técnico
-    if (hasMinimumFundamentalScore) {
-      return { status: 'green', label: 'Compra' };
-    } else {
-      return { status: 'yellow', label: 'Neutro' }; // Score fundamentalista baixo
-    }
-  } else if (priceDiff <= 0) {
-    // Preço abaixo ou igual ao justo técnico
-    if (hasMinimumFundamentalScore) {
-      return { status: 'green', label: 'Compra' };
-    } else {
-      return { status: 'yellow', label: 'Neutro' }; // Score fundamentalista baixo
-    }
-  } else if (priceDiff <= 10) {
-    return { status: 'yellow', label: 'Neutro' };
-  } else if (priceDiff <= 20) {
-    return { status: 'yellow', label: 'Atenção' };
-  } else {
-    return { status: 'red', label: 'Caro' };
-  }
+  const result = getTechnicalTrafficLightStatus(technicalAnalysis, currentPrice, overallScore);
+  return { status: result.status, label: result.label };
 }
 
 /**

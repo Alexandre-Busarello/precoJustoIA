@@ -54,7 +54,7 @@ export function EmailVerificationBanner() {
             <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                Verifique seu email para ativar seu trial de 7 dias
+                Verifique seu email para ativar seu trial de 1 dia
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
                 Seu período de trial Premium só será ativado após verificar seu email. Você pode usar a plataforma normalmente, mas algumas funcionalidades Premium estarão limitadas.

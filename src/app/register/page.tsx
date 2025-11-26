@@ -129,7 +129,7 @@ function RegisterForm() {
                     </Badge>
                   </div>
                   <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                    <strong>7 dias grátis</strong> de acesso Premium completo! Experimente todos os recursos avançados sem compromisso.
+                    <strong>1 dia grátis</strong> de acesso Premium completo! Experimente todos os recursos avançados sem compromisso.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
                     <div className="flex items-center gap-1">

@@ -87,8 +87,8 @@ export function RadarGrid({
   return (
     <div className={cn('space-y-2', className)}>
       {/* Desktop: Tabela */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full">
+      <div className="hidden md:block overflow-x-auto -mx-4 px-4">
+        <table className="w-full min-w-[800px]">
           <thead>
             <tr className="border-b">
               <th className="text-left p-3 text-xs font-medium text-muted-foreground">
@@ -266,15 +266,15 @@ export function RadarGrid({
       </div>
 
       {/* Mobile: Cards */}
-      <div className="md:hidden space-y-3">
+      <div className="md:hidden space-y-4">
         {data.map((asset) => (
           <Card key={asset.ticker} className="overflow-hidden">
-            <CardContent className="p-4">
+            <CardContent className="p-4 sm:p-5">
               <Link
                 href={`/acao/${asset.ticker.toLowerCase()}`}
-                className="block"
+                className="block mb-4"
               >
-                <div className="flex items-start gap-3 mb-4">
+                <div className="flex items-start gap-3">
                   <CompanyLogo
                     logoUrl={asset.logoUrl}
                     companyName={asset.name}
@@ -283,10 +283,10 @@ export function RadarGrid({
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold">{asset.ticker}</span>
-                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-bold text-base">{asset.ticker}</span>
+                      <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
                     </div>
-                    <div className="text-sm text-muted-foreground truncate mb-2">
+                    <div className="text-sm text-muted-foreground break-words mb-2">
                       {asset.name}
                     </div>
                     {asset.sector && (
@@ -299,7 +299,7 @@ export function RadarGrid({
               </Link>
 
               {/* Indicadores em grid para mobile */}
-              <div className="grid grid-cols-2 gap-3 mt-4">
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <RadarStatusIndicator
                   status={asset.overallStatus}
                   label="Score Geral"
@@ -310,7 +310,7 @@ export function RadarGrid({
                   label="Upside"
                   value={asset.valuation.upside ?? undefined}
                 />
-                <div className="flex flex-col gap-1.5">
+                <div className="col-span-2 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <RadarStatusIndicator
                       status={asset.technical.status}
@@ -327,7 +327,7 @@ export function RadarGrid({
                     </Link>
                   </div>
                   {asset.technical.fairEntryPrice !== null && (
-                    <div className="flex flex-col gap-0.5 text-xs text-left">
+                    <div className="flex flex-col gap-0.5 text-xs text-left pl-1">
                       <div className="text-muted-foreground">
                         Atual: R$ {asset.currentPrice.toFixed(2)}
                       </div>
@@ -355,13 +355,13 @@ export function RadarGrid({
               </div>
 
               {/* Estratégias */}
-              <div className="mt-4 pt-4 border-t">
-                <div className="text-xs text-muted-foreground mb-2">
+              <div className="pt-4 border-t">
+                <div className="text-xs font-semibold text-foreground mb-3">
                   Estratégias Aprovadas
                 </div>
                 <RadarStrategyBadges
                   strategies={asset.strategies.all}
-                  compact={true}
+                  compact={false}
                 />
               </div>
 
@@ -369,7 +369,7 @@ export function RadarGrid({
               {showAddButton && (
                 <div className="mt-4 pt-4 border-t">
                   {radarTickers.includes(asset.ticker) ? (
-                    <Badge variant="outline" className="w-full justify-center">
+                    <Badge variant="outline" className="w-full justify-center py-2">
                       <Check className="w-4 h-4 mr-2" />
                       Já está no Radar
                     </Badge>

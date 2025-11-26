@@ -2709,7 +2709,7 @@ export function generateEmailVerificationTemplate(verificationUrl: string, userN
                 <span class="info-icon">ℹ️</span>
                 <div class="info-title">Por que preciso verificar meu email?</div>
                 <div class="info-text">
-                  A verificação de email garante a segurança da sua conta e permite que você tenha acesso completo às funcionalidades Premium, incluindo o período de trial de 7 dias.
+                  A verificação de email garante a segurança da sua conta e permite que você tenha acesso completo às funcionalidades Premium, incluindo o período de trial de 1 dia.
                 </div>
               </div>
             </div>
@@ -2747,7 +2747,7 @@ Clique no link abaixo para verificar seu email:
 ${verificationUrl}
 
 Por que preciso verificar meu email?
-A verificação de email garante a segurança da sua conta e permite que você tenha acesso completo às funcionalidades Premium, incluindo o período de trial de 7 dias.
+A verificação de email garante a segurança da sua conta e permite que você tenha acesso completo às funcionalidades Premium, incluindo o período de trial de 1 dia.
 
 IMPORTANTE:
 - Este link expira em 24 horas

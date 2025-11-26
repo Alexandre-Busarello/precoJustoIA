@@ -2,7 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent } from '@/components/ui/card'
-import { Circle, AlertTriangle } from 'lucide-react'
+import { useCompanyAnalysis } from '@/hooks/use-company-data'
+import { getTechnicalTrafficLightStatus } from '@/lib/radar-service'
+import { TechnicalAnalysisData } from '@/lib/technical-analysis-service'
 
 interface TechnicalAnalysisTrafficLightProps {
   ticker: string
@@ -10,12 +12,7 @@ interface TechnicalAnalysisTrafficLightProps {
   compact?: boolean // Versão compacta para header
 }
 
-interface TechnicalAnalysisData {
-  aiFairEntryPrice: number | null
-  aiMinPrice: number | null
-  aiMaxPrice: number | null
-  currentPrice: number
-}
+// TechnicalAnalysisData é importado de @/lib/technical-analysis-service
 
 interface ApiResponse {
   analysis: TechnicalAnalysisData
@@ -39,46 +36,28 @@ export default function TechnicalAnalysisTrafficLight({
     retry: false
   })
 
+  // Query para obter overallScore (necessário para o TrafficLight)
+  const { data: companyAnalysisData } = useCompanyAnalysis(ticker)
+  const overallScore = companyAnalysisData?.overallScore?.score ?? null
+
   if (isLoading || !data?.analysis?.aiFairEntryPrice) {
     return null
   }
 
-  const analysis = data.analysis
+  const analysis = data.analysis as TechnicalAnalysisData
+  
+  // Usar função centralizada para calcular status do semáforo
+  const trafficLightStatus = getTechnicalTrafficLightStatus(
+    analysis,
+    currentPrice,
+    overallScore // Passar overallScore obtido do hook useCompanyAnalysis
+  )
+
+  const trafficLightColor = trafficLightStatus.status
+  const trafficLightLabel = trafficLightStatus.label
+  const trafficLightDescription = trafficLightStatus.description
   const minPrice = analysis.aiMinPrice
   const maxPrice = analysis.aiMaxPrice
-  const fairPrice = analysis.aiFairEntryPrice!
-
-  if (!minPrice || !maxPrice) {
-    return null
-  }
-
-  // Calcular status baseado na faixa mínima e máxima
-  let trafficLightColor: 'green' | 'yellow' | 'red' = 'red'
-  let trafficLightLabel = 'Fora do Ideal'
-  let trafficLightDescription = 'Preço abaixo da faixa mínima prevista. Pode indicar movimento atípico no mercado.'
-  
-  // Verde: dentro da faixa mínima e máxima (seguro)
-  if (currentPrice >= minPrice && currentPrice <= maxPrice) {
-    trafficLightColor = 'green'
-    trafficLightLabel = 'Ideal para Compra'
-    trafficLightDescription = 'Preço dentro da faixa prevista. Região segura para entrada considerando análise técnica.'
-  }
-  // Amarelo: próximo da faixa mínima (dentro de 5% abaixo) OU acima da máxima
-  else if ((currentPrice < minPrice && currentPrice >= minPrice * 0.95) || currentPrice > maxPrice) {
-    trafficLightColor = 'yellow'
-    trafficLightLabel = 'Atenção'
-    if (currentPrice < minPrice && currentPrice >= minPrice * 0.95) {
-      trafficLightDescription = 'Preço próximo da faixa mínima. Pode indicar movimento atípico no mercado.'
-    } else {
-      trafficLightDescription = 'Preço acima da faixa máxima prevista. Avalie se há fundamentos que justifiquem.'
-    }
-  }
-  // Vermelho: abaixo da faixa mínima (mais de 5% abaixo)
-  else if (currentPrice < minPrice * 0.95) {
-    trafficLightColor = 'red'
-    trafficLightLabel = 'Alerta'
-    trafficLightDescription = 'Preço abaixo da faixa mínima prevista. Pode indicar movimento atípico no mercado.'
-  }
 
   // Versão compacta para header
   if (compact) {

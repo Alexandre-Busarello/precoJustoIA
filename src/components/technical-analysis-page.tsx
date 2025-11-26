@@ -27,7 +27,9 @@ import {
 import { usePremiumStatus } from '@/hooks/use-premium-status'
 import { useAdminStatus } from '@/hooks/use-admin-status'
 import { useToast } from '@/hooks/use-toast'
+import { useCompanyAnalysis } from '@/hooks/use-company-data'
 import SupportResistanceChart from './support-resistance-chart'
+import { getTechnicalTrafficLightStatus } from '@/lib/radar-service'
 
 interface TechnicalAnalysisPageProps {
   ticker: string
@@ -130,6 +132,10 @@ export default function TechnicalAnalysisPage({
   const { isPremium } = usePremiumStatus()
   const { isAdmin } = useAdminStatus()
   const canUpdate = isPremium || isAdmin
+
+  // Query para obter overallScore (necessário para o TrafficLight)
+  const { data: companyAnalysisData } = useCompanyAnalysis(ticker)
+  const overallScore = companyAnalysisData?.overallScore?.score ?? null
 
   // Query para análise atual ou selecionada
   const analysisQueryKey = selectedAnalysisId 
@@ -259,48 +265,20 @@ export default function TechnicalAnalysisPage({
 
   const analysis = data.analysis
 
-  // Calcular status do semáforo baseado na faixa mínima e máxima
-  const getTrafficLightStatus = () => {
-    if (!analysis?.aiFairEntryPrice || !analysis?.aiMinPrice || !analysis?.aiMaxPrice) return null
-    
-    const minPrice = analysis.aiMinPrice
-    const maxPrice = analysis.aiMaxPrice
-    const current = analysis.currentPrice
-    
-    // Verde: dentro da faixa mínima e máxima (seguro)
-    if (current >= minPrice && current <= maxPrice) {
-      return { 
-        color: 'green', 
-        label: 'Ideal para Compra', 
-        icon: Circle,
-        description: 'Preço dentro da faixa prevista. Região segura para entrada considerando análise técnica.'
-      }
-    }
-    // Amarelo: próximo da faixa mínima (dentro de 5% abaixo) OU acima da máxima
-    if ((current < minPrice && current >= minPrice * 0.95) || current > maxPrice) {
-      let description = ''
-      if (current < minPrice && current >= minPrice * 0.95) {
-        description = 'Preço próximo da faixa mínima. Pode indicar movimento atípico no mercado.'
-      } else {
-        description = 'Preço acima da faixa máxima prevista. Avalie se há fundamentos que justifiquem.'
-      }
-      return { 
-        color: 'yellow', 
-        label: 'Atenção', 
-        icon: AlertTriangle,
-        description
-      }
-    }
-    // Vermelho: abaixo da faixa mínima (mais de 5% abaixo)
-    return { 
-      color: 'red', 
-      label: 'Alerta', 
-      icon: AlertTriangle,
-      description: 'Preço abaixo da faixa mínima prevista. Pode indicar movimento atípico no mercado.'
-    }
-  }
+  // Usar função centralizada para calcular status do semáforo
+  // A função aceita TechnicalAnalysisData com campos opcionais para calculatedAt/expiresAt
+  const trafficLightResult = getTechnicalTrafficLightStatus(
+    analysis as any, // Converter para compatibilidade com tipos
+    analysis.currentPrice,
+    overallScore // Passar overallScore obtido do hook useCompanyAnalysis
+  )
 
-  const trafficLight = getTrafficLightStatus()
+  const trafficLight = trafficLightResult ? {
+    color: trafficLightResult.status,
+    label: trafficLightResult.label,
+    icon: trafficLightResult.status === 'green' ? Circle : AlertTriangle,
+    description: trafficLightResult.description
+  } : null
 
   return (
     <div className="space-y-6">

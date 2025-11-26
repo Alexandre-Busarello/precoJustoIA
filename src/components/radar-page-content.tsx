@@ -26,7 +26,6 @@ export function RadarPageContent() {
     loadingConfig,
     loadingData,
     saveRadar,
-    isSaving,
   } = useRadar()
 
   const {
@@ -127,7 +126,7 @@ export function RadarPageContent() {
   }))
 
   return (
-    <div className="container mx-auto px-4 py-6 sm:py-8 max-w-7xl">
+    <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:py-8 overflow-x-hidden mobile-safe">
       {/* Header */}
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-3 sm:gap-4">
@@ -325,25 +324,25 @@ export function RadarPageContent() {
 
       {/* Legenda */}
       <Card className="mt-8 border-muted">
-        <Collapsible>
-          <CollapsibleTrigger className="w-full">
-            <CardHeader className="hover:bg-muted/50 transition-colors cursor-pointer">
-              <CardTitle className="flex items-center gap-3 text-lg font-semibold pb-6" style={{ width: '100vw' }}>
+        <Collapsible defaultOpen={true}>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="px-4 sm:px-6 pb-4 hover:bg-muted/50 transition-colors cursor-pointer w-full">
+              <CardTitle className="flex items-center gap-3 text-lg font-semibold w-full">
                 <HelpCircle className="w-5 h-5 text-muted-foreground shrink-0" />
-                Legenda - Entenda as Colunas do Radar
+                <span className="flex-1">Legenda - Entenda as Colunas do Radar</span>
               </CardTitle>
             </CardHeader>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <CardContent className="pt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Score Geral */}
-                <div className="space-y-2">
+            <CardContent className="px-4 sm:px-6 pt-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            {/* Score Geral */}
+            <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-green-500" />
                     <h4 className="font-semibold">Score Geral</h4>
                   </div>
-                  <p className="text-sm text-muted-foreground ml-5">
+                  <p className="text-sm text-muted-foreground ml-5 break-words">
                     Nota consolidada de solidez da empresa (0-100). 
                     <span className="block mt-1">
                       <span className="text-green-600 font-medium">Verde (≥70)</span>: Excelente | 
@@ -351,15 +350,15 @@ export function RadarPageContent() {
                       <span className="text-red-600 font-medium"> Vermelho (&lt;50)</span>: Cuidado
                     </span>
                   </p>
-                </div>
+            </div>
 
-                {/* Estratégias */}
-                <div className="space-y-2">
+            {/* Estratégias */}
+            <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="bg-green-500 text-white">G</Badge>
                     <h4 className="font-semibold">Estratégias Aprovadas</h4>
                   </div>
-                  <p className="text-sm text-muted-foreground ml-5">
+                  <p className="text-sm text-muted-foreground ml-5 break-words">
                     Estratégias de investimento onde o ativo se qualifica: Graham, Bazin, Dividend Yield, 
                     Low P/E, Magic Formula, FCD, Gordon, Fundamentalista. 
                     <span className="block mt-1 text-xs">
@@ -367,15 +366,15 @@ export function RadarPageContent() {
                       <span className="text-red-600"> Vermelho</span> = Reprovado
                     </span>
                   </p>
-                </div>
+            </div>
 
-                {/* Valuation */}
-                <div className="space-y-2">
+            {/* Valuation */}
+            <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-green-500" />
                     <h4 className="font-semibold">Valuation (Upside)</h4>
                   </div>
-                  <p className="text-sm text-muted-foreground ml-5">
+                  <p className="text-sm text-muted-foreground ml-5 break-words">
                     Potencial de valorização baseado no melhor modelo de preço justo (Graham, FCD ou Gordon). 
                     <span className="block mt-1">
                       <span className="text-green-600 font-medium">Verde (&gt;10%)</span>: Alto potencial | 
@@ -383,37 +382,37 @@ export function RadarPageContent() {
                       <span className="text-red-600 font-medium"> Vermelho (&lt;0%)</span>: Caro
                     </span>
                   </p>
-                </div>
+            </div>
 
-                {/* Análise Técnica */}
-                <div className="space-y-2">
+            {/* Análise Técnica */}
+            <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-green-500" />
                     <TrendingUp className="w-4 h-4 text-muted-foreground" />
                     <h4 className="font-semibold">Análise Técnica</h4>
                   </div>
-                  <p className="text-sm text-muted-foreground ml-5">
+                  <p className="text-sm text-muted-foreground ml-5 break-words">
                     Ponto de entrada baseado em análise técnica com IA. Mostra preço atual vs. preço justo técnico.
                     <span className="block mt-1">
                       <span className="text-green-600 font-medium">Verde (Compra)</span>: Zona de compra (preço atual ≤ preço justo técnico) <strong>E</strong> score fundamentalista ≥ 50 | 
                       <span className="text-yellow-600 font-medium"> Amarelo (Neutro)</span>: Preço acima do justo técnico ou score fundamentalista &lt; 50
                     </span>
-                    <span className="block mt-1 text-xs italic">
+                    <span className="block mt-1 text-xs italic break-words">
                       ⚠️ Não recomendamos compra se o score fundamentalista for baixo, mesmo que a análise técnica seja favorável.
                     </span>
-                    <span className="block mt-1 text-xs">
+                    <span className="block mt-1 text-xs break-words">
                       Clique no ícone <TrendingUp className="w-3 h-3 inline" /> para ver análise completa
                     </span>
                   </p>
-                </div>
+            </div>
 
-                {/* Sentimento */}
-                <div className="space-y-2">
+            {/* Sentimento */}
+            <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-yellow-500" />
                     <h4 className="font-semibold">Sentimento de Mercado</h4>
                   </div>
-                  <p className="text-sm text-muted-foreground ml-5">
+                  <p className="text-sm text-muted-foreground ml-5 break-words">
                     Análise de sentimento baseada em notícias e discussões do YouTube sobre o ativo (0-100).
                     <span className="block mt-1">
                       <span className="text-green-600 font-medium">Verde (≥70)</span>: Positivo | 
@@ -421,21 +420,21 @@ export function RadarPageContent() {
                       <span className="text-red-600 font-medium"> Vermelho (&lt;50)</span>: Negativo
                     </span>
                   </p>
-                </div>
+            </div>
 
-                {/* Informações Gerais */}
-                <div className="space-y-2">
+            {/* Informações Gerais */}
+            <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Info className="w-4 h-4 text-muted-foreground" />
                     <h4 className="font-semibold">Informações Gerais</h4>
                   </div>
-                  <ul className="text-sm text-muted-foreground ml-5 space-y-1 list-disc list-inside">
+                  <ul className="text-sm text-muted-foreground ml-5 space-y-1 list-disc list-inside break-words">
                     <li>Clique no ticker para ver página completa do ativo</li>
                     <li>Preços são atualizados automaticamente do Yahoo Finance ao abrir o Radar</li>
                     <li>Modo Explorar considera apenas estratégia Graham para usuários Free</li>
                     <li>Premium tem acesso a todas as 8 estratégias de análise</li>
                   </ul>
-                </div>
+            </div>
               </div>
             </CardContent>
           </CollapsibleContent>

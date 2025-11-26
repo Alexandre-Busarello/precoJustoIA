@@ -100,7 +100,7 @@ function VerifyEmailContent() {
               </div>
               <CardTitle className="text-2xl">Verifique seu Email</CardTitle>
               <CardDescription>
-                Enviamos um link de verificação para seu email. Clique no link para ativar sua conta e iniciar seu período de trial de 7 dias.
+                Enviamos um link de verificação para seu email. Clique no link para ativar sua conta e iniciar seu período de trial de 1 dia.
               </CardDescription>
             </>
           )}
@@ -110,7 +110,7 @@ function VerifyEmailContent() {
             <>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800 font-semibold mb-2">
-                  ⚠️ Importante: Seu trial de 7 dias só será ativado após verificar o email
+                  ⚠️ Importante: Seu trial de 1 dia só será ativado após verificar o email
                 </p>
                 <p className="text-sm text-blue-700 mb-2">
                   Você pode usar a plataforma normalmente, mas para ativar todas as funcionalidades Premium e iniciar seu período de trial, é necessário verificar seu email.
@@ -174,7 +174,7 @@ function VerifyEmailContent() {
           {success === 'true' && (
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-4">
-                Seu período de trial de 7 dias foi iniciado automaticamente!
+                Seu período de trial de 1 dia foi iniciado automaticamente!
               </p>
               <Link href="/dashboard">
                 <Button className="w-full">
@@ -191,7 +191,7 @@ function VerifyEmailContent() {
                   Você já está logado!
                 </p>
                 <p className="text-sm text-yellow-700">
-                  Você pode usar a plataforma normalmente. Para ativar seu período de trial de 7 dias e todas as funcionalidades Premium, verifique seu email clicando no link que enviamos.
+                  Você pode usar a plataforma normalmente. Para ativar seu período de trial de 1 dia e todas as funcionalidades Premium, verifique seu email clicando no link que enviamos.
                 </p>
               </div>
               <Link href="/dashboard">

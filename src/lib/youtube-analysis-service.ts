@@ -362,7 +362,7 @@ Assista ao(s) vídeo(s) fornecido(s) sobre a empresa ${companyName} (${ticker}) 
 - Você deve garantir que sua resposta esteja em Português Brasileiro
 
 **⚠️ CRÍTICO - FOCO EXCLUSIVO NA EMPRESA:**
-- Extraia informações APENAS sobre ${companyName} (${ticker})
+- Você DEVE EXTRAIR informações APENAS sobre ${companyName} (${ticker}) - Ignore informações de outras empresas
 - Se o vídeo mencionar múltiplas empresas (ex: carteiras, comparações, rankings), IGNORE informações de outras empresas
 - NÃO inclua dados, métricas ou análises de PETR3, PETR4, VALE3, ITUB4, BBDC4, CXSE3 ou QUALQUER outro ticker que NÃO seja ${ticker}
 - Se o vídeo não tiver informações suficientes ESPECIFICAMENTE sobre ${ticker}, retorne score 50 com resumo indicando "Informações insuficientes sobre ${ticker} no vídeo"

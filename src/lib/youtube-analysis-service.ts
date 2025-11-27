@@ -863,6 +863,7 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
 
   /**
    * Copia análise de empresa relacionada para a empresa atual
+   * Só copia se a análise fonte for válida
    */
   static async copyAnalysisFromRelated(
     targetCompanyId: number,
@@ -872,6 +873,19 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
   ): Promise<string> {
     try {
       console.log(`📋 ${targetTicker}: Copiando análise de ${sourceTicker}...`);
+      
+      // Validar análise fonte antes de copiar
+      const sourceAnalysisResult: YouTubeAnalysisResult = {
+        score: sourceAnalysis.score,
+        summary: sourceAnalysis.summary,
+        positivePoints: (sourceAnalysis.positivePoints || []) as string[],
+        negativePoints: (sourceAnalysis.negativePoints || []) as string[],
+      };
+      
+      if (!this.isValidAnalysis(sourceAnalysisResult)) {
+        console.warn(`⚠️ ${targetTicker}: Análise fonte de ${sourceTicker} é inválida - não copiando`);
+        throw new Error(`Análise fonte inválida: não atende aos critérios de validação`);
+      }
       
       // Marcar análises anteriores como inativas
       await safeWrite(
@@ -889,7 +903,7 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
         ['youtube_analyses']
       );
 
-      // Criar cópia da análise
+      // Criar cópia da análise (já validada)
       const copiedAnalysis = await safeWrite(
         'copy-youtube-analysis',
         () =>
@@ -898,8 +912,12 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
               companyId: targetCompanyId,
               score: sourceAnalysis.score,
               summary: sourceAnalysis.summary,
-              positivePoints: sourceAnalysis.positivePoints || undefined,
-              negativePoints: sourceAnalysis.negativePoints || undefined,
+              positivePoints: sourceAnalysis.positivePoints && Array.isArray(sourceAnalysis.positivePoints) && sourceAnalysis.positivePoints.length > 0
+                ? sourceAnalysis.positivePoints 
+                : undefined,
+              negativePoints: sourceAnalysis.negativePoints && Array.isArray(sourceAnalysis.negativePoints) && sourceAnalysis.negativePoints.length > 0
+                ? sourceAnalysis.negativePoints 
+                : undefined,
               videoIds: sourceAnalysis.videoIds,
               isActive: true,
             },
@@ -916,80 +934,64 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
     }
   }
 
-  /**
-   * Salva análise vazia quando não há vídeos (para evitar reprocessamento)
-   */
-  static async saveEmptyAnalysis(
-    companyId: number,
-    reason: string
-  ): Promise<string> {
-    try {
-      // Marcar análises anteriores como inativas
-      await safeWrite(
-        'deactivate-previous-youtube-analyses',
-        () =>
-          prisma.youTubeAnalysis.updateMany({
-            where: {
-              companyId,
-              isActive: true,
-            },
-            data: {
-              isActive: false,
-            },
-          }),
-        ['youtube_analyses']
-      );
-
-      // Criar análise vazia com score neutro
-      const emptyAnalysis = await safeWrite(
-        'create-empty-youtube-analysis',
-        () =>
-          prisma.youTubeAnalysis.create({
-            data: {
-              companyId,
-              score: 50, // Score neutro
-              summary: reason,
-              positivePoints: undefined,
-              negativePoints: undefined,
-              videoIds: [], // Array vazio
-              isActive: true,
-            },
-          }),
-        ['youtube_analyses']
-      );
-
-      console.log(`💾 Análise vazia salva para companyId ${companyId} (sem vídeos disponíveis)`);
-
-      return (emptyAnalysis as any).id;
-    } catch (error) {
-      console.error(`❌ Erro ao salvar análise vazia para companyId ${companyId}:`, error);
-      throw error;
-    }
-  }
+ 
 
   /**
    * Valida se uma análise é válida para ser salva
+   * Uma análise válida DEVE ter:
+   * - Summary com pelo menos 50 caracteres e conteúdo significativo
+   * - Pelo menos um ponto positivo OU negativo válido
+   * - Score válido entre 0 e 100
    */
   static isValidAnalysis(analysisResult: YouTubeAnalysisResult): boolean {
     // Verificar se summary é válido (não pode ser "Vídeos encontrados" ou valores inválidos)
-    const invalidSummaries = ['Vídeos encontrados', 'Vídeos encontrados.', 'Videos encontrados'];
-    if (invalidSummaries.includes(analysisResult.summary?.trim())) {
-      console.warn(`⚠️ Análise inválida: summary contém valor inválido "${analysisResult.summary}"`);
+    const invalidSummaries = [
+      'Vídeos encontrados', 
+      'Vídeos encontrados.', 
+      'Videos encontrados',
+      'Vídeos encontrados.',
+      'Empresa sem cobertura adequada',
+      'Erro ao buscar informações'
+    ];
+    
+    const summaryTrimmed = analysisResult.summary?.trim() || '';
+    
+    // Verificar se summary contém valores inválidos
+    if (invalidSummaries.some(invalid => summaryTrimmed.toLowerCase().includes(invalid.toLowerCase()))) {
+      console.warn(`⚠️ Análise inválida: summary contém valor inválido "${summaryTrimmed}"`);
       return false;
     }
 
-    // Verificar se summary existe e não está vazio
-    if (!analysisResult.summary || analysisResult.summary.trim().length === 0) {
-      console.warn(`⚠️ Análise inválida: summary vazio ou ausente`);
+    // Verificar se summary existe e tem tamanho mínimo significativo (pelo menos 50 caracteres)
+    if (!summaryTrimmed || summaryTrimmed.length < 50) {
+      console.warn(`⚠️ Análise inválida: summary muito curto ou ausente (${summaryTrimmed.length} caracteres)`);
       return false;
     }
 
-    // Verificar se há pelo menos pontos positivos OU negativos
-    const hasPositivePoints = Array.isArray(analysisResult.positivePoints) && analysisResult.positivePoints.length > 0;
-    const hasNegativePoints = Array.isArray(analysisResult.negativePoints) && analysisResult.negativePoints.length > 0;
+    // Verificar se summary não é apenas uma mensagem genérica
+    const genericPatterns = [
+      /^videos? encontrados/i,
+      /^empresa sem/i,
+      /^erro ao/i,
+      /^sem cobertura/i,
+      /^não há/i
+    ];
+    
+    if (genericPatterns.some(pattern => pattern.test(summaryTrimmed))) {
+      console.warn(`⚠️ Análise inválida: summary contém padrão genérico "${summaryTrimmed}"`);
+      return false;
+    }
+
+    // Verificar se há pelo menos pontos positivos OU negativos válidos
+    const hasPositivePoints = Array.isArray(analysisResult.positivePoints) && 
+                              analysisResult.positivePoints.length > 0 &&
+                              analysisResult.positivePoints.some((p: string) => p && p.trim().length > 10);
+    const hasNegativePoints = Array.isArray(analysisResult.negativePoints) && 
+                              analysisResult.negativePoints.length > 0 &&
+                              analysisResult.negativePoints.some((p: string) => p && p.trim().length > 10);
     
     if (!hasPositivePoints && !hasNegativePoints) {
-      console.warn(`⚠️ Análise inválida: sem pontos positivos ou negativos`);
+      console.warn(`⚠️ Análise inválida: sem pontos positivos ou negativos válidos`);
       return false;
     }
 

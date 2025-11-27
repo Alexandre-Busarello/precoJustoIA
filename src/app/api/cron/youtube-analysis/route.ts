@@ -221,14 +221,13 @@ export async function GET(request: NextRequest) {
               // Sem informações relevantes na web também
               console.log(`⚠️ ${company.ticker}: Sem cobertura adequada (YouTube e Web)`);
               const reason = 'Empresa sem cobertura adequada em vídeos do YouTube ou fontes web profissionais';
-              await YouTubeAnalysisService.saveEmptyAnalysis(company.id, reason);
-              console.log(`💾 ${company.ticker}: Análise vazia salva (aguardar 1 semana para nova tentativa)`);
+              console.log(`⚠️ ${company.ticker}: Mantendo última análise válida ativa (se existir)`);
             }
           } catch (webError) {
             console.error(`❌ ${company.ticker}: Erro na análise web`, webError);
-            // Salvar análise vazia em caso de erro
+            // Não criar análise inválida - manter última válida ativa
             const reason = videoSearchResult.reason || 'Erro ao buscar informações (YouTube e Web indisponíveis)';
-            await YouTubeAnalysisService.saveEmptyAnalysis(company.id, reason);
+            console.log(`⚠️ ${company.ticker}: Mantendo última análise válida ativa (se existir)`);
           }
           
           await YouTubeAnalysisService.updateLastChecked(company.id);

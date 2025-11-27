@@ -27,6 +27,7 @@ import { getSectorCompetitors, getMixedRelatedCompanies } from '@/lib/competitor
 import { DividendRadarCompact } from '@/components/dividend-radar-compact'
 import { DividendService } from '@/lib/dividend-service'
 import { DividendRadarService } from '@/lib/dividend-radar-service'
+import { ensureTodayPrice } from '@/lib/quote-service'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -241,6 +242,26 @@ export default async function TickerPage({ params }: PageProps) {
   if (session?.user?.id) {
     const user = await getCurrentUser()
     userIsPremium = user?.isPremium || false
+  }
+
+  // Atualizar preço do dia atual ANTES de buscar dados (com timeout para não bloquear muito)
+  // Isso garante que a página já carregue com o preço correto
+  try {
+    const priceUpdatePromise = ensureTodayPrice(ticker);
+    const timeoutPromise = new Promise<boolean>((resolve) => 
+      setTimeout(() => {
+        console.log(`[${ticker}] Timeout ao atualizar preço, continuando...`);
+        resolve(false);
+      }, 3000) // Timeout de 3 segundos
+    );
+    
+    // Aguardar atualização ou timeout, o que acontecer primeiro
+    // Se a atualização completar em até 3 segundos, aguardamos
+    // Se passar de 3 segundos, continuamos mesmo assim para não bloquear
+    await Promise.race([priceUpdatePromise, timeoutPromise]);
+  } catch (error) {
+    console.error(`[${ticker}] Erro ao atualizar preço do dia:`, error);
+    // Continuar mesmo se falhar - não bloquear carregamento da página
   }
 
   // Processar dividendos e projeções sob demanda (em background, não bloqueia página)

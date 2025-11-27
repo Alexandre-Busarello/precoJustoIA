@@ -231,6 +231,76 @@ export function pricesToNumberMap(priceMap: Map<string, StockPrice>): Map<string
 }
 
 /**
+ * Ensure price is updated for today if missing
+ * Checks if today's price exists, if not, fetches and updates it
+ * Returns true if update was needed and completed, false otherwise
+ */
+export async function ensureTodayPrice(ticker: string): Promise<boolean> {
+  try {
+    // 1. Find the company by ticker
+    const company = await prisma.company.findUnique({
+      where: { ticker: ticker.toUpperCase() },
+      select: { id: true, ticker: true }
+    });
+
+    if (!company) {
+      console.log(`  📝 ${ticker}: Company not found in database, skipping price update`);
+      return false;
+    }
+
+    // 2. Get today's date (without time)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 3. Check if today's quote already exists
+    const todayQuote = await prisma.dailyQuote.findUnique({
+      where: {
+        companyId_date: {
+          companyId: company.id,
+          date: today
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    // 4. If today's quote exists, no need to update
+    if (todayQuote) {
+      console.log(`  ✅ ${ticker}: Price for today already exists, skipping update`);
+      return false;
+    }
+
+    // 5. If no quote for today, fetch and update
+    // getTickerPrice will automatically update the database when it successfully fetches from Yahoo Finance
+    console.log(`  🔄 ${ticker}: No price for today, fetching from Yahoo Finance...`);
+    const priceData = await getTickerPrice(ticker);
+    
+    if (priceData && priceData.source === 'yahoo') {
+      console.log(`  ✅ ${ticker}: Price updated successfully for today`);
+      return true;
+    } else {
+      console.log(`  ⚠️ ${ticker}: Price update attempted but may not have succeeded`);
+      return false;
+    }
+  } catch (error) {
+    // Log but don't throw - price update is best-effort
+    console.error(`  ❌ ${ticker}: Error ensuring today's price:`, error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+/**
+ * Ensure price is updated for today if missing (background version)
+ * Non-blocking version that doesn't wait for completion
+ */
+export async function ensureTodayPriceBackground(ticker: string): Promise<void> {
+  ensureTodayPrice(ticker).catch(error => {
+    console.error(`  ❌ ${ticker}: Background price update failed:`, error);
+  });
+}
+
+/**
  * Update database with latest price from Yahoo Finance
  * Creates or updates the daily_quote for today
  */

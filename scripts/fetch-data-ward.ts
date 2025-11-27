@@ -4170,12 +4170,18 @@ async function processWithTickerManagement(
   tickerManager: TickerProcessingManager
 ): Promise<void> {
   
-  const maxProcessingTime = 50 * 1000; // 50 segundos em ms (buffer de 10s do limite de 60s da Vercel)
+  const maxProcessingTime = 55 * 1000; // 55 segundos em ms (buffer de 10s do limite de 60s da Vercel)
   const startTime = Date.now();
   let processedCount = 0;
   let errorCount = 0;
   
-  console.log(`⏱️  Tempo máximo de processamento: 50 segundos\n`);
+  // Aumentar paralelismo para processar mais empresas
+  const MAX_CONCURRENT = 10; // Aumentado de 5 para 10 empresas simultâneas
+  const ESTIMATED_TIME_PER_TICKER = 6 * 1000; // Reduzido de 10s para 6s (com mais paralelismo, cada um é mais rápido)
+  const MAX_BATCH_SIZE = 12; // Aumentado de 5 para 12 tickers por batch
+  
+  console.log(`⏱️  Tempo máximo de processamento: 55 segundos`);
+  console.log(`🚀 Paralelismo: ${MAX_CONCURRENT} empresas simultâneas\n`);
   
   while (true) {
     // Verificar se ainda temos tempo
@@ -4187,9 +4193,9 @@ async function processWithTickerManagement(
     
     // Buscar próximos tickers para processar
     const remainingTime = maxProcessingTime - elapsedTime;
-    const estimatedTimePerTicker = 10 * 1000; // 10s por ticker (com paralelismo)
-    const maxBatchSize = Math.floor(remainingTime / estimatedTimePerTicker);
-    const batchSize = Math.min(Math.max(1, maxBatchSize), 5); // Entre 1 e 5 tickers
+    // Com mais paralelismo, podemos processar mais tickers no mesmo tempo
+    const maxBatchSize = Math.floor(remainingTime / ESTIMATED_TIME_PER_TICKER);
+    const batchSize = Math.min(Math.max(1, maxBatchSize), MAX_BATCH_SIZE); // Entre 1 e MAX_BATCH_SIZE tickers
     
     console.log(`⏱️  Tempo restante: ${Math.round(remainingTime / 1000)}s, lote: ${batchSize} tickers`);
     
@@ -4213,8 +4219,8 @@ async function processWithTickerManagement(
     });
     console.log('');
     
-    // Processar lote em paralelo (5 empresas simultâneas)
-    const concurrencyManager = new ConcurrencyManager(5);
+    // Processar lote em paralelo (MAX_CONCURRENT empresas simultâneas)
+    const concurrencyManager = new ConcurrencyManager(MAX_CONCURRENT);
     const batchStartTime = Date.now();
     
     const tickerPromises = tickers.map((tickerInfo, index) => 
@@ -4236,13 +4242,13 @@ async function processWithTickerManagement(
             console.log(`📊 ${tickerInfo.ticker} precisa apenas de atualização TTM`);
             await executeWithTimeout(
               () => processCompanyTTMOnly(tickerInfo.ticker, tickerManager),
-              8000 // 8 segundos timeout para TTM apenas (dentro do limite de 60s)
+              6000 // 6 segundos timeout para TTM apenas (otimizado com mais paralelismo)
             );
           } else {
             // Processar completo com timeout
             await executeWithTimeout(
               () => processCompanyWithTracking(tickerInfo.ticker, enableBrapiComplement, shouldProcessHistorical, tickerManager),
-              10000 // 10 segundos timeout por ticker (dentro do limite de 60s com paralelismo)
+              7000 // 7 segundos timeout por ticker (otimizado com mais paralelismo)
             );
           }
           
@@ -4260,7 +4266,8 @@ async function processWithTickerManagement(
     );
     
     // Aguardar todas os tickers do lote com timeout geral
-    const batchTimeout = Math.min(maxProcessingTime - (Date.now() - startTime) - 5000, 15000); // Máximo 15s por batch
+    // Com mais paralelismo, podemos ter batches maiores, mas ainda precisamos de buffer
+    const batchTimeout = Math.min(maxProcessingTime - (Date.now() - startTime) - 3000, 20000); // Máximo 20s por batch (aumentado)
     
     try {
       const results = await executeWithTimeout(

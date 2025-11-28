@@ -693,7 +693,7 @@ export class PortfolioTransactionService {
       
       // Calcular score de oportunidade técnica
       let technicalOpportunityScore = 1.0; // Neutro por padrão
-      if (techAnalysis?.fairPrice !== null) {
+      if (techAnalysis?.fairPrice !== null && techAnalysis?.fairPrice !== undefined) {
         if (techAnalysis.isAttractive) {
           technicalOpportunityScore = 1.5; // Preço abaixo/igual ao justo = alta prioridade
         } else {

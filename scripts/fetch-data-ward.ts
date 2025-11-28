@@ -1,6 +1,8 @@
 import axios from 'axios';
 import * as dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import fs from 'fs';
+import path from 'path';
 import { backgroundPrisma, backgroundPrismaManager } from './prisma-background';
 import { TickerProcessingManager } from './ticker-processing-manager';
 import { ConcurrencyManager, executeWithRetry, executeWithTimeout } from './concurrency-manager';
@@ -3671,35 +3673,109 @@ if (require.main === module) {
   main().catch(console.error);
 }
 
-// Função para descobrir e inicializar tickers da Ward API
-async function discoverAndInitializeTickers(tickerManager: TickerProcessingManager): Promise<void> {
-  console.log('🔍 Descobrindo tickers disponíveis na Ward API...');
-  
+// Função para ler tickers do CSV da B3
+function readTickersFromCSV(): string[] {
   try {
-    const wardTickers = await fetchWardTickers();
+    const csvPath = path.join(__dirname, 'acoes-listadas-b3.csv');
     
-    if (wardTickers.length === 0) {
-      console.log('⚠️  Nenhum ticker encontrado na Ward API');
-      return;
+    if (!fs.existsSync(csvPath)) {
+      console.log(`⚠️  Arquivo CSV não encontrado em: ${csvPath}`);
+      return [];
     }
     
-    console.log(`📋 Encontrados ${wardTickers.length} tickers na Ward API`);
+    const csvContent = fs.readFileSync(csvPath, 'utf-8');
+    const lines = csvContent.split('\n').filter(line => line.trim().length > 0);
     
-    // Extrair apenas os tickers únicos
-    const tickerList = wardTickers.map(item => item.ticker.toUpperCase());
-    const uniqueTickers = [...new Set(tickerList)];
+    if (lines.length < 2) {
+      console.log('⚠️  CSV vazio ou sem dados');
+      return [];
+    }
     
-    console.log(`📋 Inicializando ${uniqueTickers.length} tickers únicos...`);
+    // Pular o header (primeira linha)
+    const tickers: string[] = [];
     
-    // Inicializar todos os tickers com prioridade normal
-    await tickerManager.initializeTickers(uniqueTickers, 0);
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      // Parsear CSV com aspas: "Ticker","Nome",...
+      // Extrair o primeiro campo (Ticker) removendo aspas
+      // Regex mais robusta: captura o primeiro campo entre aspas
+      const match = line.match(/^"([^"]+)"/);
+      if (match && match[1]) {
+        const ticker = match[1].trim().toUpperCase();
+        // Validar formato básico de ticker (ex: ABC3, ABC4, ABC11)
+        if (ticker && ticker.length >= 3 && /^[A-Z0-9]+$/.test(ticker)) {
+          tickers.push(ticker);
+        }
+      }
+    }
     
-    console.log(`✅ ${uniqueTickers.length} tickers inicializados no sistema`);
+    const uniqueTickers = [...new Set(tickers)];
+    console.log(`📄 CSV lido: ${uniqueTickers.length} tickers únicos encontrados (de ${tickers.length} totais)`);
+    return uniqueTickers;
     
   } catch (error: any) {
-    console.error('❌ Erro ao descobrir tickers:', error.message);
-    throw error;
+    console.error(`❌ Erro ao ler CSV:`, error.message);
+    return [];
   }
+}
+
+// Função para descobrir e inicializar tickers da Ward API e CSV da B3
+async function discoverAndInitializeTickers(tickerManager: TickerProcessingManager): Promise<void> {
+  console.log('🔍 Descobrindo tickers disponíveis...');
+  
+  const allTickers = new Set<string>();
+  
+  // 1. Buscar tickers da Ward API
+  try {
+    console.log('📡 Buscando tickers da Ward API...');
+    const wardTickers = await fetchWardTickers();
+    
+    if (wardTickers.length > 0) {
+      wardTickers.forEach(item => {
+        allTickers.add(item.ticker.toUpperCase());
+      });
+      console.log(`✅ ${wardTickers.length} tickers encontrados na Ward API`);
+    } else {
+      console.log('⚠️  Nenhum ticker encontrado na Ward API');
+    }
+  } catch (error: any) {
+    console.error(`⚠️  Erro ao buscar tickers da Ward API:`, error.message);
+  }
+  
+  // 2. Ler tickers do CSV da B3
+  try {
+    console.log('📄 Lendo tickers do CSV da B3...');
+    const csvTickers = readTickersFromCSV();
+    
+    if (csvTickers.length > 0) {
+      csvTickers.forEach(ticker => {
+        allTickers.add(ticker.toUpperCase());
+      });
+      console.log(`✅ ${csvTickers.length} tickers adicionados do CSV`);
+    } else {
+      console.log('⚠️  Nenhum ticker encontrado no CSV');
+    }
+  } catch (error: any) {
+    console.error(`⚠️  Erro ao ler CSV:`, error.message);
+  }
+  
+  // 3. Combinar e inicializar todos os tickers únicos
+  const uniqueTickers = Array.from(allTickers);
+  
+  if (uniqueTickers.length === 0) {
+    console.log('❌ Nenhum ticker encontrado em nenhuma fonte');
+    return;
+  }
+  
+  console.log(`📋 Total de ${uniqueTickers.length} tickers únicos encontrados`);
+  console.log(`📋 Inicializando ${uniqueTickers.length} tickers no sistema...`);
+  
+  // Inicializar todos os tickers com prioridade normal
+  await tickerManager.initializeTickers(uniqueTickers, 0);
+  
+  console.log(`✅ ${uniqueTickers.length} tickers inicializados no sistema`);
 }
 
 // Função para processar tickers específicos (nova versão com paralelismo)

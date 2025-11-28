@@ -17,6 +17,7 @@ import {
   pricesToNumberMap,
 } from "./quote-service";
 import { DividendService } from "./dividend-service";
+import { getOrCalculateTechnicalAnalysis } from "./technical-analysis-service";
 // import { AssetRegistrationService } from './asset-registration-service'; // Not used currently
 
 // Types
@@ -48,6 +49,10 @@ export interface SuggestedTransaction {
   reason: string;
   cashBalanceBefore: number;
   cashBalanceAfter: number;
+  // Campos opcionais para análise técnica
+  fairPrice?: number; // Preço justo técnico (aiFairEntryPrice)
+  isAttractivePrice?: boolean; // Se preço está abaixo/igual ao justo
+  priceVsFairPrice?: number; // Percentual de diferença (negativo = abaixo, positivo = acima)
 }
 
 export interface CombinedRebalancingSuggestion {
@@ -629,19 +634,99 @@ export class PortfolioTransactionService {
     
     console.log(`📊 [GENERATE_BUY] Found ${assetsWithDeviation.length} underallocated assets`);
 
-    // Sort by deviation (furthest from target first)
-    assetsWithDeviation.sort((a, b) => b.deviation - a.deviation);
+    // Buscar análises técnicas em paralelo para todos os ativos subalocados
+    console.log(`🔍 [TECHNICAL_ANALYSIS] Fetching technical analysis for ${assetsWithDeviation.length} assets...`);
+    const technicalAnalysisMap = new Map<string, { fairPrice: number | null; isAttractive: boolean; priceVsFairPrice: number | null }>();
+    
+    const technicalAnalysisPromises = assetsWithDeviation.map(async (asset) => {
+      try {
+        const analysis = await getOrCalculateTechnicalAnalysis(asset.ticker, false, true);
+        if (analysis?.aiFairEntryPrice) {
+          const fairPrice = analysis.aiFairEntryPrice;
+          const isAttractive = asset.price <= fairPrice;
+          const priceVsFairPrice = ((asset.price - fairPrice) / fairPrice) * 100;
+          
+          technicalAnalysisMap.set(asset.ticker, {
+            fairPrice,
+            isAttractive,
+            priceVsFairPrice
+          });
+          
+          console.log(`  ✅ [TECHNICAL_ANALYSIS] ${asset.ticker}: price=R$ ${asset.price.toFixed(2)}, fairPrice=R$ ${fairPrice.toFixed(2)}, isAttractive=${isAttractive}, diff=${priceVsFairPrice.toFixed(1)}%`);
+        } else {
+          technicalAnalysisMap.set(asset.ticker, {
+            fairPrice: null,
+            isAttractive: false,
+            priceVsFairPrice: null
+          });
+          console.log(`  ⚠️ [TECHNICAL_ANALYSIS] ${asset.ticker}: No technical analysis available`);
+        }
+      } catch (error) {
+        console.error(`  ❌ [TECHNICAL_ANALYSIS] Error fetching analysis for ${asset.ticker}:`, error);
+        technicalAnalysisMap.set(asset.ticker, {
+          fairPrice: null,
+          isAttractive: false,
+          priceVsFairPrice: null
+        });
+      }
+    });
+    
+    await Promise.all(technicalAnalysisPromises);
+    console.log(`✅ [TECHNICAL_ANALYSIS] Completed fetching technical analysis for ${technicalAnalysisMap.size} assets`);
+
+    // Calcular score de oportunidade técnica e combinar com desvio de alocação
+    const assetsWithPriority: Array<{
+      ticker: string;
+      targetAlloc: number;
+      currentAlloc: number;
+      deviation: number;
+      price: number;
+      technicalOpportunityScore: number;
+      finalPriority: number;
+      fairPrice: number | null;
+      isAttractive: boolean;
+      priceVsFairPrice: number | null;
+    }> = [];
+
+    for (const asset of assetsWithDeviation) {
+      const techAnalysis = technicalAnalysisMap.get(asset.ticker);
+      
+      // Calcular score de oportunidade técnica
+      let technicalOpportunityScore = 1.0; // Neutro por padrão
+      if (techAnalysis?.fairPrice !== null) {
+        if (techAnalysis.isAttractive) {
+          technicalOpportunityScore = 1.5; // Preço abaixo/igual ao justo = alta prioridade
+        } else {
+          technicalOpportunityScore = 0.5; // Preço acima do justo = baixa prioridade
+        }
+      }
+      
+      // Prioridade final = desvio * score de oportunidade técnica
+      const finalPriority = asset.deviation * technicalOpportunityScore;
+      
+      assetsWithPriority.push({
+        ...asset,
+        technicalOpportunityScore,
+        finalPriority,
+        fairPrice: techAnalysis?.fairPrice ?? null,
+        isAttractive: techAnalysis?.isAttractive ?? false,
+        priceVsFairPrice: techAnalysis?.priceVsFairPrice ?? null,
+      });
+    }
+
+    // Ordenar por prioridade final (maior primeiro)
+    assetsWithPriority.sort((a, b) => b.finalPriority - a.finalPriority);
 
     console.log(
-      `📊 [BUY PRIORITY] Assets sorted by deviation from target:`,
-      assetsWithDeviation.map(
+      `📊 [BUY PRIORITY] Assets sorted by final priority (deviation × technical opportunity):`,
+      assetsWithPriority.map(
         (a) =>
-          `${a.ticker}: ${(a.currentAlloc * 100).toFixed(1)}% → ${(a.targetAlloc * 100).toFixed(1)}% (desvio: ${(a.deviation * 100).toFixed(1)}%)`
+          `${a.ticker}: ${(a.currentAlloc * 100).toFixed(1)}% → ${(a.targetAlloc * 100).toFixed(1)}% (deviation: ${(a.deviation * 100).toFixed(1)}%, techScore: ${a.technicalOpportunityScore.toFixed(2)}x, finalPriority: ${a.finalPriority.toFixed(4)})${a.isAttractive ? ' ⭐ ATTRACTIVE' : ''}`
       )
     );
 
     // Calculate total deviation once (outside loop for efficiency)
-    const totalDeviation = assetsWithDeviation.reduce(
+    const totalDeviation = assetsWithPriority.reduce(
       (sum, a) => sum + a.deviation,
       0
     );
@@ -656,13 +741,13 @@ export class PortfolioTransactionService {
     
     // First pass: Calculate proportional allocations for each asset
     const assetAllocations: Array<{
-      asset: typeof assetsWithDeviation[0];
+      asset: typeof assetsWithPriority[0];
       targetAmount: number;
       maxNeeded: number;
       priority: number;
     }> = [];
     
-    for (const asset of assetsWithDeviation) {
+    for (const asset of assetsWithPriority) {
       const allocationWeight = asset.deviation / totalDeviation;
       const targetAmount = availableCash * allocationWeight; // Use initial availableCash for proportional calculation
       
@@ -674,11 +759,11 @@ export class PortfolioTransactionService {
         asset,
         targetAmount,
         maxNeeded,
-        priority: asset.deviation, // Higher deviation = higher priority
+        priority: asset.finalPriority, // Use final priority (deviation × technical opportunity)
       });
     }
     
-    // Sort by priority (highest deviation first)
+    // Sort by priority (highest final priority first)
     assetAllocations.sort((a, b) => b.priority - a.priority);
     
     console.log(`📊 [GENERATE_BUY] Calculated allocations for ${assetAllocations.length} assets`);
@@ -762,6 +847,19 @@ export class PortfolioTransactionService {
             continue;
           }
 
+          // Construir reason com informações de análise técnica
+          let reason = `Compra de ${sharesToBuy} ações (alocação atual ${(asset.currentAlloc * 100).toFixed(1)}% → alvo ${(asset.targetAlloc * 100).toFixed(1)}%, prioridade por desvio`;
+          if (asset.fairPrice !== null) {
+            reason += ` e oportunidade técnica`;
+            if (asset.isAttractive) {
+              reason += ` - preço atrativo)`;
+            } else {
+              reason += `)`;
+            }
+          } else {
+            reason += `)`;
+          }
+
           suggestions.push({
             date: today,
             type: "BUY",
@@ -769,9 +867,12 @@ export class PortfolioTransactionService {
             amount: actualAmount,
             price: asset.price,
             quantity: sharesToBuy,
-            reason: `Compra de ${sharesToBuy} ações (alocação atual ${(asset.currentAlloc * 100).toFixed(1)}% → alvo ${(asset.targetAlloc * 100).toFixed(1)}%, prioridade por desvio)`,
+            reason,
             cashBalanceBefore: remainingCash,
             cashBalanceAfter: remainingCash - actualAmount,
+            fairPrice: asset.fairPrice ?? undefined,
+            isAttractivePrice: asset.isAttractive || undefined,
+            priceVsFairPrice: asset.priceVsFairPrice ?? undefined,
           });
 
           suggestedTickers.add(asset.ticker); // Mark this ticker as having a suggestion
@@ -854,6 +955,11 @@ export class PortfolioTransactionService {
             }
           } else {
             // Create new suggestion
+            let reason = `Compra de ${sharesToBuy} ações (saldo final restante)`;
+            if (asset.fairPrice !== null && asset.isAttractive) {
+              reason += ` - preço atrativo`;
+            }
+            
             suggestions.push({
               date: today,
               type: "BUY",
@@ -861,9 +967,12 @@ export class PortfolioTransactionService {
               amount: actualAmount,
               price: asset.price,
               quantity: sharesToBuy,
-              reason: `Compra de ${sharesToBuy} ações (saldo final restante)`,
+              reason,
               cashBalanceBefore: beforeRemaining,
               cashBalanceAfter: remainingCash,
+              fairPrice: asset.fairPrice ?? undefined,
+              isAttractivePrice: asset.isAttractive || undefined,
+              priceVsFairPrice: asset.priceVsFairPrice ?? undefined,
             });
             suggestedTickers.add(asset.ticker);
             totalSuggested += actualAmount;

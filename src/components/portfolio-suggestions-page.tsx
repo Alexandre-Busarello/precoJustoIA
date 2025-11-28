@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw, TrendingUp, DollarSign, Scale, Sparkles, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, DollarSign, Scale, Sparkles, ArrowDownCircle, ArrowUpCircle, Star } from 'lucide-react';
 import { PortfolioTransactionFormSuggested } from './portfolio-transaction-form-suggested';
 import { PortfolioRebalancingCombinedForm } from './portfolio-rebalancing-combined-form';
 import { useState, useEffect, useRef } from 'react';
@@ -33,6 +33,10 @@ interface Suggestion {
   reason: string;
   cashBalanceBefore: number;
   cashBalanceAfter: number;
+  // Campos opcionais para análise técnica
+  fairPrice?: number; // Preço justo técnico (aiFairEntryPrice)
+  isAttractivePrice?: boolean; // Se preço está abaixo/igual ao justo
+  priceVsFairPrice?: number; // Percentual de diferença (negativo = abaixo, positivo = acima)
   // For combined rebalancing
   sellTransaction?: Suggestion | null;
   sellTransactions?: Suggestion[]; // Support multiple sell transactions
@@ -216,22 +220,22 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-6">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push(`/carteira/${portfolioId}`)}
               className="flex-shrink-0"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar
+              <ArrowLeft className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Voltar</span>
             </Button>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold break-words">
                 Sugestões de Transações
               </h1>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-words truncate">
                 {portfolioData?.name || 'Carteira'}
               </p>
             </div>
@@ -241,9 +245,10 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
             size="sm"
             onClick={handleRefresh}
             disabled={isLoading}
+            className="flex-shrink-0 w-full sm:w-auto"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Atualizar
+            <RefreshCw className={`h-4 w-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="sm:inline">Atualizar</span>
           </Button>
         </div>
 
@@ -251,17 +256,17 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
         {cashBalance >= 100 && (
           <Card className="mb-6 border-blue-200 dark:border-blue-900 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950">
             <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                <div className="flex-1">
-                  <p className="font-semibold text-blue-900 dark:text-blue-100">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm sm:text-base">
                     Dinheiro Disponível para Investimento
                   </p>
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mt-1 break-words">
                     Você tem {formatCurrency(cashBalance)} em caixa. Confirme as sugestões abaixo para investir.
                   </p>
                 </div>
-                <Badge variant="outline" className="bg-white dark:bg-gray-900 border-blue-300 dark:border-blue-700">
+                <Badge variant="outline" className="bg-white dark:bg-gray-900 border-blue-300 dark:border-blue-700 flex-shrink-0 self-start sm:self-center">
                   {formatCurrency(cashBalance)}
                 </Badge>
               </div>
@@ -270,37 +275,37 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
         )}
 
         {/* Summary */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
           <Card>
-            <CardContent className="py-4">
+            <CardContent className="py-3 sm:py-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total de Sugestões</p>
-                  <p className="text-2xl font-bold">{totalSuggestions}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Total de Sugestões</p>
+                  <p className="text-xl sm:text-2xl font-bold">{totalSuggestions}</p>
                 </div>
-                <Sparkles className="h-8 w-8 text-primary opacity-50" />
+                <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-primary opacity-50 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="py-4">
+            <CardContent className="py-3 sm:py-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Aportes/Compras</p>
-                  <p className="text-2xl font-bold">{contributionSuggestions.length}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Aportes/Compras</p>
+                  <p className="text-xl sm:text-2xl font-bold">{contributionSuggestions.length}</p>
                 </div>
-                <TrendingUp className="h-8 w-8 text-green-600 opacity-50" />
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 opacity-50 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="py-4">
+            <CardContent className="py-3 sm:py-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Rebalanceamento</p>
-                  <p className="text-2xl font-bold">{rebalancingSuggestions.length}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Rebalanceamento</p>
+                  <p className="text-xl sm:text-2xl font-bold">{rebalancingSuggestions.length}</p>
                 </div>
-                <Scale className="h-8 w-8 text-orange-600 opacity-50" />
+                <Scale className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600 opacity-50 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
@@ -336,9 +341,9 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
         {!isLoading && contributionSuggestions.length > 0 && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                Aportes e Compras ({contributionSuggestions.length})
+              <CardTitle className="flex items-center gap-2 flex-wrap">
+                <TrendingUp className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <span className="break-words">Aportes e Compras ({contributionSuggestions.length})</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -346,28 +351,42 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
                 {contributionSuggestions.map((suggestion, index) => (
                   <div
                     key={`contribution-${index}`}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer overflow-hidden"
                     onClick={() => handleSuggestionClick(suggestion)}
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant={suggestion.type === 'MONTHLY_CONTRIBUTION' ? 'default' : 'secondary'}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-2 flex-wrap">
+                        <Badge variant={suggestion.type === 'MONTHLY_CONTRIBUTION' ? 'default' : 'secondary'} className="text-xs flex-shrink-0">
                           {suggestion.type === 'MONTHLY_CONTRIBUTION' ? 'Aporte Mensal' : 'Compra'}
                         </Badge>
                         {suggestion.ticker && (
-                          <Badge variant="outline">{suggestion.ticker}</Badge>
+                          <Badge variant="outline" className="text-xs flex-shrink-0">{suggestion.ticker}</Badge>
+                        )}
+                        {suggestion.isAttractivePrice && (
+                          <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 text-xs flex-shrink-0">
+                            <Star className="h-3 w-3 fill-current flex-shrink-0" />
+                            <span className="hidden sm:inline">Preço Atrativo (Análise Técnica)</span>
+                            <span className="sm:hidden">Preço Atrativo</span>
+                          </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
-                      {suggestion.quantity && suggestion.price && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {suggestion.quantity} ações × {formatCurrency(suggestion.price)}
-                        </p>
-                      )}
+                      <p className="text-sm text-muted-foreground break-words">{suggestion.reason}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-2">
+                        {suggestion.quantity && suggestion.price && (
+                          <p className="text-xs text-muted-foreground flex-shrink-0">
+                            {suggestion.quantity} ações × {formatCurrency(suggestion.price)}
+                          </p>
+                        )}
+                        {suggestion.fairPrice && (
+                          <p className="text-xs text-green-600 font-semibold flex-shrink-0">
+                            Preço Justo (Análise Técnica): {formatCurrency(suggestion.fairPrice)}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right ml-4">
-                      <p className="font-semibold">{formatCurrency(suggestion.amount)}</p>
-                      <p className="text-xs text-muted-foreground">
+                    <div className="text-left sm:text-right flex-shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 sm:ml-4">
+                      <p className="font-semibold text-base sm:text-lg">{formatCurrency(suggestion.amount)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
                       </p>
                     </div>
@@ -382,9 +401,9 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
         {!isLoading && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Scale className="h-5 w-5 text-orange-600" />
-                Rebalanceamento ({rebalancingSuggestions.length})
+              <CardTitle className="flex items-center gap-2 flex-wrap">
+                <Scale className="h-5 w-5 text-orange-600 flex-shrink-0" />
+                <span className="break-words">Rebalanceamento ({rebalancingSuggestions.length})</span>
               </CardTitle>
               {rebalancingData?.message && (
                 <div className="mt-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-3">
@@ -554,9 +573,9 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
         {!isLoading && dividendSuggestions.length > 0 && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-blue-600" />
-                Dividendos ({dividendSuggestions.length})
+              <CardTitle className="flex items-center gap-2 flex-wrap">
+                <DollarSign className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                <span className="break-words">Dividendos ({dividendSuggestions.length})</span>
               </CardTitle>
             </CardHeader>
             <CardContent>

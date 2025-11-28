@@ -35,9 +35,16 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     
     const filters: any = {};
     
+    // Processar filtro de status - sempre excluir PENDING e REJECTED
     if (searchParams.get('status')) {
       const statuses = searchParams.get('status')!.split(',');
-      filters.status = statuses.length > 1 ? statuses : statuses[0];
+      const validStatuses = statuses.filter((s: string) => s !== 'PENDING' && s !== 'REJECTED');
+      if (validStatuses.length > 0) {
+        filters.status = validStatuses.length > 1 ? validStatuses : validStatuses[0];
+      }
+    } else {
+      // Por padrão, mostrar apenas CONFIRMED e EXECUTED
+      filters.status = { in: ['CONFIRMED', 'EXECUTED'] };
     }
     
     if (searchParams.get('type')) {
@@ -69,9 +76,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       ? transactions.filter(tx => tx.type !== excludeType)
       : transactions;
 
+    // Filtrar PENDING e REJECTED como segurança extra
+    const finalTransactions = filteredTransactions.filter((tx: any) => 
+      tx.status !== 'PENDING' && tx.status !== 'REJECTED'
+    );
+
     return NextResponse.json({
-      transactions: filteredTransactions,
-      count: filteredTransactions.length
+      transactions: finalTransactions,
+      count: finalTransactions.length
     });
 
   } catch (error) {

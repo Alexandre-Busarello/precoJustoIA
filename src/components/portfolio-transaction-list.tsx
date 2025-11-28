@@ -25,9 +25,6 @@ import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portf
 import {
   ArrowDownCircle,
   ArrowUpCircle,
-  Check,
-  X,
-  RotateCcw,
   Trash2,
   DollarSign,
   Edit,
@@ -94,7 +91,6 @@ export function PortfolioTransactionList({
 }: PortfolioTransactionListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   
   // Edit modal state
@@ -155,7 +151,8 @@ export function PortfolioTransactionList({
   // Fetch transactions with React Query
   const fetchTransactions = async (): Promise<Transaction[]> => {
     const params = new URLSearchParams();
-    if (filterStatus !== 'all') params.append('status', filterStatus);
+    // Sempre buscar apenas CONFIRMED e EXECUTED
+    params.append('status', 'CONFIRMED,EXECUTED');
     if (filterType !== 'all') params.append('type', filterType);
     
     const response = await fetch(`/api/portfolio/${portfolioId}/transactions?${params}`);
@@ -165,7 +162,11 @@ export function PortfolioTransactionList({
     }
 
     const data = await response.json();
-    return data.transactions || [];
+    // Filtrar PENDING e REJECTED mesmo que venham da API (segurança extra)
+    const filtered = (data.transactions || []).filter((tx: Transaction) => 
+      tx.status !== 'PENDING' && tx.status !== 'REJECTED'
+    );
+    return filtered;
   };
 
   const {
@@ -173,7 +174,7 @@ export function PortfolioTransactionList({
     isLoading: loading,
     error: transactionsError
   } = useQuery({
-    queryKey: ['portfolio-transactions', portfolioId, filterStatus, filterType],
+    queryKey: ['portfolio-transactions', portfolioId, filterType],
     queryFn: fetchTransactions,
     // Configurações globais do query-provider.tsx já aplicam:
     // staleTime: 5 minutos, gcTime: 10 minutos, refetchOnMount: false, refetchOnWindowFocus: false
@@ -206,7 +207,7 @@ export function PortfolioTransactionList({
   };
 
   const editMutation = useMutation({
-    mutationFn: async ({ transactionId, transactionType, updates }: { transactionId: string; transactionType: string; updates: any }) => {
+    mutationFn: async ({ transactionId, updates }: { transactionId: string; updates: any }) => {
       const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}`,
         {
@@ -223,7 +224,7 @@ export function PortfolioTransactionList({
 
       return response.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       toast({
         title: 'Sucesso',
         description: 'Transação atualizada com sucesso'
@@ -235,13 +236,15 @@ export function PortfolioTransactionList({
       invalidateDashboardPortfoliosCache();
 
       // Dispatch event for cash flow change to trigger suggestion regeneration
-      window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
-        detail: {
-          transactionType: variables.transactionType,
-          portfolioId: portfolioId,
-          action: 'updated'
-        }
-      }));
+      if (editingTransaction) {
+        window.dispatchEvent(new CustomEvent('transaction-cash-flow-changed', {
+          detail: {
+            transactionType: editingTransaction.type,
+            portfolioId: portfolioId,
+            action: 'updated'
+          }
+        }));
+      }
 
       setShowEditModal(false);
       setEditingTransaction(null);
@@ -275,7 +278,6 @@ export function PortfolioTransactionList({
 
     editMutation.mutate({
       transactionId: editingTransaction.id,
-      transactionType: editingTransaction.type,
       updates
     });
   };
@@ -340,124 +342,9 @@ export function PortfolioTransactionList({
     deleteMutation.mutate(deletingTransaction.id);
   };
 
-  const confirmMutation = useMutation({
-    mutationFn: async (transactionId: string) => {
-      const response = await fetch(
-        `/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`,
-        { method: 'POST' }
-      );
+  // Removed handleConfirm and handleReject - PENDING and REJECTED transactions are no longer shown
 
-      if (!response.ok) {
-        throw new Error('Erro ao confirmar transação');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Sucesso',
-        description: 'Transação confirmada'
-      });
-
-      // Invalidar cache do dashboard
-      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
-      invalidateDashboardPortfoliosCache();
-      
-      if (onTransactionUpdate) onTransactionUpdate();
-    },
-    onError: () => {
-      toast({
-        title: 'Erro',
-        description: 'Erro ao confirmar transação',
-        variant: 'destructive'
-      });
-    }
-  });
-
-  const handleConfirm = async (transactionId: string) => {
-    confirmMutation.mutate(transactionId);
-  };
-
-  const rejectMutation = useMutation({
-    mutationFn: async (transactionId: string) => {
-      const response = await fetch(
-        `/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason: 'Rejeitado pelo usuário' })
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Erro ao rejeitar transação');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Sucesso',
-        description: 'Transação rejeitada'
-      });
-
-      // Invalidar cache do dashboard
-      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
-      invalidateDashboardPortfoliosCache();
-      
-      if (onTransactionUpdate) onTransactionUpdate();
-    },
-    onError: () => {
-      toast({
-        title: 'Erro',
-        description: 'Erro ao rejeitar transação',
-        variant: 'destructive'
-      });
-    }
-  });
-
-  const handleReject = async (transactionId: string) => {
-    rejectMutation.mutate(transactionId);
-  };
-
-  const revertMutation = useMutation({
-    mutationFn: async (transactionId: string) => {
-      const response = await fetch(
-        `/api/portfolio/${portfolioId}/transactions/${transactionId}/revert`,
-        { method: 'POST' }
-      );
-
-      if (!response.ok) {
-        throw new Error('Erro ao reverter transação');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Sucesso',
-        description: 'Transação revertida para pendente'
-      });
-
-      // Invalidar cache do dashboard
-      queryClient.invalidateQueries({ queryKey: ['portfolio-transactions', portfolioId] });
-      invalidateDashboardPortfoliosCache();
-      portfolioCache.invalidateAll(portfolioId);
-      
-      if (onTransactionUpdate) onTransactionUpdate();
-    },
-    onError: () => {
-      toast({
-        title: 'Erro',
-        description: 'Erro ao reverter transação',
-        variant: 'destructive'
-      });
-    }
-  });
-
-  const handleRevert = async (transactionId: string) => {
-    revertMutation.mutate(transactionId);
-  };
+  // Removed handleRevert and revertMutation - transactions are always executed, no need to revert
 
   const getTypeIcon = (type: string) => {
     if (type === 'CASH_CREDIT' || type === 'MONTHLY_CONTRIBUTION' || type === 'DIVIDEND') {
@@ -484,11 +371,10 @@ export function PortfolioTransactionList({
   };
 
   const getStatusBadge = (status: string) => {
+    // CONFIRMED e EXECUTED aparecem como "Executada" na interface
     const variants: Record<string, any> = {
-      'PENDING': { variant: 'outline', label: 'Pendente' },
-      'CONFIRMED': { variant: 'default', label: 'Confirmada' },
-      'EXECUTED': { variant: 'secondary', label: 'Executada' },
-      'REJECTED': { variant: 'destructive', label: 'Rejeitada' }
+      'CONFIRMED': { variant: 'secondary', label: 'Executada' },
+      'EXECUTED': { variant: 'secondary', label: 'Executada' }
     };
     const config = variants[status] || { variant: 'outline', label: status };
     return <Badge variant={config.variant}>{config.label}</Badge>;
@@ -506,20 +392,6 @@ export function PortfolioTransactionList({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-2">
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="PENDING">Pendentes</SelectItem>
-            <SelectItem value="CONFIRMED">Confirmadas</SelectItem>
-            <SelectItem value="EXECUTED">Executadas</SelectItem>
-            <SelectItem value="CONFIRMED,EXECUTED">Confirmadas e Executadas</SelectItem>
-            <SelectItem value="REJECTED">Rejeitadas</SelectItem>
-          </SelectContent>
-        </Select>
-
         <Select value={filterType} onValueChange={setFilterType}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Tipo" />
@@ -588,36 +460,6 @@ export function PortfolioTransactionList({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
-                      {tx.status === 'PENDING' && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleConfirm(tx.id)}
-                            title="Confirmar"
-                          >
-                            <Check className="h-4 w-4 text-green-600" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleReject(tx.id)}
-                            title="Rejeitar"
-                          >
-                            <X className="h-4 w-4 text-red-600" />
-                          </Button>
-                        </>
-                      )}
-                      {(tx.status === 'CONFIRMED' || tx.status === 'REJECTED') && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleRevert(tx.id)}
-                          title="Reverter"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </Button>
-                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button

@@ -540,7 +540,7 @@ export function generatePasswordResetEmailTemplate(resetUrl: string, userName?: 
               </p>
               <p class="footer-text">
                 Precisa de ajuda? Entre em contato conosco em 
-                <a href="mailto:busamar@gmail.com" class="footer-link">busamar@gmail.com</a>
+                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
               </p>
               
               <div class="footer-brand">
@@ -566,7 +566,7 @@ IMPORTANTE:
 - Se você não solicitou esta redefinição, ignore este email
 - Sua senha atual permanecerá inalterada até que você complete o processo
 
-Precisa de ajuda? Entre em contato conosco em busamar@gmail.com
+Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
 
 Preço Justo AI - Análise fundamentalista inteligente
 ${baseUrl}
@@ -962,7 +962,7 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
               </p>
               <p class="footer-text">
                 Entre em contato conosco em 
-                <a href="mailto:busamar@gmail.com" class="footer-link">busamar@gmail.com</a>
+                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
               </p>
               
               <div class="footer-brand">
@@ -993,7 +993,7 @@ Para tentar novamente, acesse: ${retryUrl}
 
 Não perca a oportunidade! Sua assinatura Premium te dará acesso a análises avançadas, estratégias exclusivas e ferramentas profissionais.
 
-Precisa de ajuda? Entre em contato conosco em busamar@gmail.com
+Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
 
 Preço Justo AI - Análise fundamentalista inteligente
 ${baseUrl}
@@ -1619,7 +1619,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
               </p>
               <p class="footer-text">
                 Entre em contato conosco em 
-                <a href="mailto:busamar@gmail.com" class="footer-link">busamar@gmail.com</a>
+                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
               </p>
               
               <div class="footer-brand">
@@ -1654,7 +1654,7 @@ ${userName ? `Olá, ${userName}!` : 'Olá!'} Parabéns! Sua assinatura ${planNam
 
 ${isEarlyAdopter ? '💬 Como Early Adopter, você receberá em breve o convite para o canal exclusivo WhatsApp com o CEO!' : ''}
 
-Precisa de ajuda? Entre em contato conosco em busamar@gmail.com
+Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
 
 Preço Justo AI - Análise fundamentalista inteligente
 ${baseUrl}
@@ -1673,9 +1673,54 @@ export async function sendWelcomeEmail(email: string, userName?: string, isEarly
   })
 }
 
+// ===== FUNÇÃO AUXILIAR PARA CONVERSÃO DE IMAGENS =====
+
+/**
+ * Converte uma URL de imagem SVG para base64 data URI para uso em emails
+ * Isso evita links externos suspeitos e permite usar imagens inline
+ * 
+ * @param url URL da imagem SVG
+ * @returns Promise com data URI base64 ou null se falhar
+ */
+async function convertSvgToBase64DataUri(url: string): Promise<string | null> {
+  try {
+    // Fazer fetch do SVG
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PrecoJustoAI/1.0)',
+      },
+      // Timeout de 5 segundos
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      console.warn(`[EMAIL] Falha ao buscar SVG: ${url} - Status: ${response.status}`);
+      return null;
+    }
+
+    const svgContent = await response.text();
+    
+    // Validar que é realmente SVG
+    if (!svgContent.trim().startsWith('<svg') && !svgContent.trim().startsWith('<?xml')) {
+      console.warn(`[EMAIL] Conteúdo não é SVG válido: ${url}`);
+      return null;
+    }
+
+    // Converter para base64
+    const base64 = Buffer.from(svgContent, 'utf-8').toString('base64');
+    
+    // Retornar como data URI SVG
+    // Muitos clientes de email modernos (Gmail, Outlook, Apple Mail) suportam SVG em data URIs
+    return `data:image/svg+xml;base64,${base64}`;
+  } catch (error) {
+    console.warn(`[EMAIL] Erro ao converter SVG para base64: ${url}`, error);
+    return null;
+  }
+}
+
 // ===== TEMPLATES PARA MONITORAMENTO DE ATIVOS =====
 
-export function generateAssetChangeEmailTemplate(params: {
+export async function generateAssetChangeEmailTemplate(params: {
   userName: string;
   ticker: string;
   companyName: string;
@@ -1710,16 +1755,15 @@ export function generateAssetChangeEmailTemplate(params: {
   const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
-  // Converter URLs SVG para formato compatível com email
-  // SVGs diretos não funcionam bem com o proxy do Gmail
-  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
+  // Converter URLs SVG para formato compatível com email usando base64 inline
+  // Isso evita links externos suspeitos e permite usar imagens no email
+  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
     if (!url) return null;
     
-    // Se for uma URL da brapi.dev (SVG), usar um serviço de conversão
+    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    // Isso evita proxies públicos suspeitos e permite usar a imagem inline
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      // Usar um serviço de proxy que converte SVG para PNG
-      // Alternativa 1: wsrv.nl (free image proxy)
-      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/667eea/ffffff?text=${ticker}`;
+      return await convertSvgToBase64DataUri(url);
     }
     
     // Se for URL relativa, adicionar base URL
@@ -1731,10 +1775,16 @@ export function generateAssetChangeEmailTemplate(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
+  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(companyLogoUrl);
 
+  // Suavizar assunto para evitar gatilhos de phishing (palavras como "piorou" geram medo/urgência)
+  // Assunto neutro ajuda a evitar marcação como spam enquanto o domínio ganha reputação
+  const subject = isPositive 
+    ? `Atualização de ${ticker}: Score melhorou para ${currentScore.toFixed(1)}`
+    : `Atualização de ${ticker}: Novos dados disponíveis`;
+  
   return {
-    subject: `${ticker}: Score Geral ${changeVerb} - ${previousScore.toFixed(1)} → ${currentScore.toFixed(1)}`,
+    subject,
     html: `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -1959,7 +2009,7 @@ export async function sendAssetChangeEmail(params: {
   reportSummary: string;
   reportUrl: string;
 }) {
-  const template = generateAssetChangeEmailTemplate(params);
+  const template = await generateAssetChangeEmailTemplate(params);
   
   return await sendEmail({
     to: params.email,
@@ -1971,7 +2021,7 @@ export async function sendAssetChangeEmail(params: {
 
 // ===== TEMPLATE PARA USUÁRIOS GRATUITOS (CONVERSÃO) =====
 
-export function generateFreeUserAssetChangeEmailTemplate(params: {
+export async function generateFreeUserAssetChangeEmailTemplate(params: {
   userName: string;
   ticker: string;
   companyName: string;
@@ -1990,12 +2040,13 @@ export function generateFreeUserAssetChangeEmailTemplate(params: {
   const upgradeUrl = `${baseUrl}/planos`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
-  // Converter URLs SVG para formato compatível com email
-  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
+  // Converter URLs SVG para formato compatível com email usando base64 inline
+  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
     if (!url) return null;
     
+    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/667eea/ffffff?text=${ticker}`;
+      return await convertSvgToBase64DataUri(url);
     }
     
     if (url.startsWith('/')) {
@@ -2005,7 +2056,7 @@ export function generateFreeUserAssetChangeEmailTemplate(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
+  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(companyLogoUrl);
 
   return {
     subject: `Mudança detectada em ${ticker} - Veja os detalhes completos`,
@@ -2265,7 +2316,7 @@ export async function sendFreeUserAssetChangeEmail(params: {
   companyName: string;
   companyLogoUrl?: string | null;
 }) {
-  const template = generateFreeUserAssetChangeEmailTemplate(params);
+  const template = await generateFreeUserAssetChangeEmailTemplate(params);
   
   return await sendEmail({
     to: params.email,
@@ -2277,7 +2328,7 @@ export async function sendFreeUserAssetChangeEmail(params: {
 
 // ===== TEMPLATE PARA RELATÓRIOS MENSAIS =====
 
-export function generateMonthlyReportEmailTemplate(params: {
+export async function generateMonthlyReportEmailTemplate(params: {
   userName: string;
   ticker: string;
   companyName: string;
@@ -2299,12 +2350,13 @@ export function generateMonthlyReportEmailTemplate(params: {
   const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
-  // Converter URLs SVG para formato compatível com email
-  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
+  // Converter URLs SVG para formato compatível com email usando base64 inline
+  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
     if (!url) return null;
     
+    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/8b5cf6/ffffff?text=${ticker}`;
+      return await convertSvgToBase64DataUri(url);
     }
     
     if (url.startsWith('/')) {
@@ -2314,7 +2366,7 @@ export function generateMonthlyReportEmailTemplate(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
+  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(companyLogoUrl);
 
   return {
     subject: `📊 Novo Relatório Mensal: ${ticker} - ${companyName}`,
@@ -2553,7 +2605,7 @@ export async function sendMonthlyReportEmail(params: {
   reportSummary: string;
   reportUrl: string;
 }) {
-  const template = generateMonthlyReportEmailTemplate(params);
+  const template = await generateMonthlyReportEmailTemplate(params);
   
   return await sendEmail({
     to: params.email,
@@ -2884,7 +2936,7 @@ export function generateEmailVerificationTemplate(verificationUrl: string, userN
               </p>
               <p class="footer-text">
                 Precisa de ajuda? Entre em contato conosco em 
-                <a href="mailto:busamar@gmail.com" class="footer-link">busamar@gmail.com</a>
+                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
               </p>
               
               <div class="footer-brand">
@@ -2914,7 +2966,7 @@ IMPORTANTE:
 - Este link expira em 24 horas
 - Se você não solicitou este cadastro, pode ignorar este email
 
-Precisa de ajuda? Entre em contato conosco em busamar@gmail.com
+Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
 
 Preço Justo AI - Análise fundamentalista inteligente
 ${baseUrl}

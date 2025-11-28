@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service';
 import { MonitoringReportService } from '@/lib/monitoring-report-service';
 import { EmailQueueService } from '@/lib/email-queue-service';
+import { NotificationService } from '@/lib/notification-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
 import { toNumber, StrategyAnalysis } from '@/lib/strategies';
@@ -320,17 +321,17 @@ export async function GET(request: NextRequest) {
                 console.log(`💾 ${company.ticker}: Relatório salvo (ID: ${reportId})`);
                 stats.reportGenerated = true;
 
-                // Buscar inscritos e enviar emails
+                // Buscar inscritos e criar notificações
                 const subscribers = await AssetMonitoringService.getSubscribersForCompany(
                   company.id
                 );
 
-                console.log(`📧 ${company.ticker}: Enviando emails para ${subscribers.length} inscritos`);
+                console.log(`🔔 ${company.ticker}: Criando notificações para ${subscribers.length} inscritos`);
 
                 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
-                const reportUrl = `${baseUrl}/acao/${company.ticker.toLowerCase()}/relatorios/${reportId}`;
+                const reportUrl = `/acao/${company.ticker.toLowerCase()}/relatorios/${reportId}`;
 
-                // Extrair resumo do relatório (primeiros 200 caracteres do conteúdo)
+                // Extrair resumo do relatório (primeiros 500 caracteres do conteúdo)
                 const reportSummary = reportContent
                   .replace(/[#*`]/g, '')
                   .substring(0, 500)
@@ -342,70 +343,55 @@ export async function GET(request: NextRequest) {
 
                 console.log(`👑 ${company.ticker}: ${premiumSubscribers.length} Premium/Trial, ${freeSubscribers.length} Gratuitos`);
 
-                // Adicionar emails à fila para Premium/Trial
-                const premiumEmailPromises = premiumSubscribers.map(async (subscriber) => {
+                // Criar notificações para Premium/Trial
+                const premiumNotificationPromises = premiumSubscribers.map(async (subscriber) => {
                   try {
-                    const result = await EmailQueueService.queueEmail({
-                      email: subscriber.email,
-                      emailType: 'ASSET_CHANGE',
-                      recipientName: subscriber.name || null,
-                      emailData: {
-                        ticker: company.ticker,
-                        companyName: company.name || company.ticker,
-                        companyLogoUrl: company.logoUrl,
-                        changeDirection: comparison.direction!, // Já verificado acima que não é null
-                        previousScore,
-                        currentScore,
-                        reportSummary,
-                        reportUrl,
-                      },
-                      priority: 0,
-                      metadata: {
-                        reportId,
-                        companyId: company.id,
-                        ticker: company.ticker,
-                      }
+                    await NotificationService.createNotificationFromAIReport({
+                      userId: subscriber.userId,
+                      ticker: company.ticker,
+                      companyName: company.name || company.ticker,
+                      reportId,
+                      reportType: 'ASSET_CHANGE',
+                      reportUrl,
+                      reportSummary,
+                      changeDirection: comparison.direction!,
+                      previousScore,
+                      currentScore
                     });
-                    return result.success;
-                  } catch (emailError) {
-                    console.error(`❌ Erro ao adicionar email Premium à fila para ${subscriber.email}:`, emailError);
+                    return true;
+                  } catch (notificationError) {
+                    console.error(`❌ Erro ao criar notificação Premium para ${subscriber.email}:`, notificationError);
                     return false;
                   }
                 });
 
-                // Adicionar emails de conversão para Gratuitos à fila
-                const freeEmailPromises = freeSubscribers.map(async (subscriber) => {
+                // Criar notificações de conversão para Gratuitos
+                const freeNotificationPromises = freeSubscribers.map(async (subscriber) => {
                   try {
-                    const result = await EmailQueueService.queueEmail({
-                      email: subscriber.email,
-                      emailType: 'FREE_USER_ASSET_CHANGE',
-                      recipientName: subscriber.name || null,
-                      emailData: {
-                        ticker: company.ticker,
-                        companyName: company.name || company.ticker,
-                        companyLogoUrl: company.logoUrl,
-                      },
-                      priority: 0,
-                      metadata: {
-                        companyId: company.id,
-                        ticker: company.ticker,
-                      }
+                    await NotificationService.createNotificationFromAIReport({
+                      userId: subscriber.userId,
+                      ticker: company.ticker,
+                      companyName: company.name || company.ticker,
+                      reportId,
+                      reportType: 'FREE_USER_ASSET_CHANGE',
+                      reportUrl,
+                      reportSummary
                     });
-                    return result.success;
-                  } catch (emailError) {
-                    console.error(`❌ Erro ao adicionar email Gratuito à fila para ${subscriber.email}:`, emailError);
+                    return true;
+                  } catch (notificationError) {
+                    console.error(`❌ Erro ao criar notificação Gratuita para ${subscriber.email}:`, notificationError);
                     return false;
                   }
                 });
 
-                const emailResults = await Promise.allSettled([
-                  ...premiumEmailPromises,
-                  ...freeEmailPromises,
+                const notificationResults = await Promise.allSettled([
+                  ...premiumNotificationPromises,
+                  ...freeNotificationPromises,
                 ]);
 
-                const successfulEmails = emailResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
-                stats.emailsSent = successfulEmails;
-                console.log(`✅ ${company.ticker}: ${successfulEmails} emails adicionados à fila`);
+                const successfulNotifications = notificationResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
+                stats.emailsSent = successfulNotifications; // Mantendo nome da variável para compatibilidade
+                console.log(`✅ ${company.ticker}: ${successfulNotifications} notificações criadas`);
               } catch (reportError) {
                 console.error(`❌ ${company.ticker}: Erro ao gerar/enviar relatório:`, reportError);
                 stats.error = `${company.ticker}: ${(reportError as Error).message}`;

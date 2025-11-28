@@ -23,6 +23,7 @@ import {
   Settings,
   ArrowRight,
   FileText,
+  Bell,
 } from 'lucide-react';
 
 interface AdminHubClientProps {
@@ -134,6 +135,14 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       icon: Database,
       href: '/admin/cache-monitor',
       color: 'bg-green-500',
+    },
+    {
+      id: 'notifications',
+      title: 'Campanhas de Notificações',
+      description: 'Crie e gerencie campanhas de notificações segmentadas para usuários',
+      icon: Bell,
+      href: '/admin/notifications',
+      color: 'bg-pink-500',
     },
   ];
 

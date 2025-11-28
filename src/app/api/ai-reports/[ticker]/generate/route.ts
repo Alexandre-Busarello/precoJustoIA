@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service'
 import { EmailQueueService } from '@/lib/email-queue-service'
+import { NotificationService } from '@/lib/notification-service'
 
 // Validar se a API key do Gemini está configurada
 function validateGeminiConfig() {
@@ -245,10 +246,10 @@ export async function POST(
         throw completeError
       }
 
-      // PASSO 5: Criar registros na fila de emails para envio assíncrono
+      // PASSO 5: Criar notificações para subscribers ao invés de emails diretos
       // Buscar empresa completa com logoUrl
-      const companyForEmail = await safeQueryWithParams(
-        'company-by-ticker-for-email',
+      const companyForNotification = await safeQueryWithParams(
+        'company-by-ticker-for-notification',
         () => prisma.company.findUnique({
           where: { ticker },
           select: {
@@ -259,95 +260,85 @@ export async function POST(
         { ticker }
       ) as { id: number; logoUrl: string | null } | null
 
-      // Buscar subscribers para criar registros na fila
-      let subscribers: Array<{ email: string; name: string | null }> = []
-      if (companyForEmail) {
+      // Buscar subscribers para criar notificações
+      let subscribers: Array<{ userId: string; email: string; name: string | null }> = []
+      if (companyForNotification) {
         try {
-          console.log(`📧 ${ticker}: Buscando subscribers para adicionar à fila de emails...`)
-          subscribers = await AssetMonitoringService.getSubscribersForCompany(companyForEmail.id)
-          console.log(`📧 ${ticker}: ${subscribers.length} subscribers encontrados`)
+          console.log(`🔔 ${ticker}: Buscando subscribers para criar notificações...`)
+          const subscriberData = await AssetMonitoringService.getSubscribersForCompany(companyForNotification.id)
+          
+          subscribers = subscriberData.map(sub => ({
+            userId: sub.userId,
+            email: sub.email,
+            name: sub.name
+          }))
+          
+          console.log(`🔔 ${ticker}: ${subscribers.length} subscribers encontrados`)
         } catch (subscriberError) {
           console.error(`❌ Erro ao buscar subscribers para ${ticker}:`, subscriberError)
           subscribers = []
         }
       }
 
-      // Criar registros na fila de emails para cada subscriber
-      if (companyForEmail && subscribers.length > 0) {
+      // Criar notificações para cada subscriber
+      if (companyForNotification && subscribers.length > 0) {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai'
-        const reportUrl = `${baseUrl}/acao/${ticker.toLowerCase()}/relatorios/${completedReport.id}`
+        const reportUrl = `/acao/${ticker.toLowerCase()}/relatorios/${completedReport.id}`
         const reportSummary = finalAnalysis
           .replace(/[#*`]/g, '')
           .substring(0, 500)
           .trim() + '...'
 
-        let emailsQueued = 0
+        let notificationsCreated = 0
 
         for (const subscriber of subscribers) {
           try {
-            let emailData: any
-            let emailType: 'ASSET_CHANGE' | 'MONTHLY_REPORT'
-
             if (type === 'FUNDAMENTAL_CHANGE') {
               const changeDirection = (completedReport as any).changeDirection
               const previousScore = (completedReport as any).previousScore ? Number((completedReport as any).previousScore) : undefined
               const currentScore = (completedReport as any).currentScore ? Number((completedReport as any).currentScore) : undefined
               
-              // Só criar registro se tiver todas as informações necessárias
+              // Só criar notificação se tiver todas as informações necessárias
               if (changeDirection && previousScore !== undefined && currentScore !== undefined) {
-                emailType = 'ASSET_CHANGE'
-                emailData = {
+                await NotificationService.createNotificationFromAIReport({
+                  userId: subscriber.userId,
                   ticker,
                   companyName: name,
-                  companyLogoUrl: companyForEmail.logoUrl || null,
+                  reportId: completedReport.id,
+                  reportType: 'ASSET_CHANGE',
+                  reportUrl,
+                  reportSummary,
                   changeDirection,
                   previousScore,
-                  currentScore,
-                  reportSummary,
-                  reportUrl,
-                }
+                  currentScore
+                })
+                notificationsCreated++
               } else {
                 console.log(`⏭️ Pulando subscriber ${subscriber.email}: informações de score incompletas`)
-                continue
               }
             } else if (type === 'MONTHLY_OVERVIEW') {
-              emailType = 'MONTHLY_REPORT'
-              emailData = {
+              await NotificationService.createNotificationFromAIReport({
+                userId: subscriber.userId,
                 ticker,
                 companyName: name,
-                companyLogoUrl: companyForEmail.logoUrl || null,
-                reportSummary,
+                reportId: completedReport.id,
+                reportType: 'MONTHLY_REPORT',
                 reportUrl,
-              }
+                reportSummary
+              })
+              notificationsCreated++
             } else {
               console.log(`⏭️ Pulando subscriber ${subscriber.email}: tipo de relatório desconhecido`)
-              continue
             }
-
-            // Adicionar email à fila (tenta enviar imediatamente)
-            await EmailQueueService.queueEmail({
-              email: subscriber.email,
-              emailType,
-              recipientName: subscriber.name || null,
-              emailData,
-              priority: 0, // Prioridade normal
-              metadata: {
-                reportId: completedReport.id,
-                companyId: companyForEmail.id,
-                ticker,
-              }
-            })
-
-            emailsQueued++
-          } catch (queueError) {
-            console.error(`❌ Erro ao adicionar email à fila para ${subscriber.email}:`, queueError)
-            // Continuar adicionando outros emails à fila
+          } catch (notificationError) {
+            console.error(`❌ Erro ao criar notificação para ${subscriber.email}:`, notificationError)
+            // Continuar criando outras notificações
           }
         }
 
-        console.log(`✅ ${ticker}: ${emailsQueued} emails adicionados à fila de envio`)
+        console.log(`✅ ${ticker}: ${notificationsCreated} notificações criadas`)
       } else {
-        console.log(`📧 ${ticker}: Nenhum subscriber encontrado, pulando criação de fila de emails`)
+        console.log(`🔔 ${ticker}: Nenhum subscriber encontrado, pulando criação de notificações`)
       }
 
       return NextResponse.json({

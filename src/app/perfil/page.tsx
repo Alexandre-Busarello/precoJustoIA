@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
 import {
   User,
@@ -27,6 +28,7 @@ import {
   Check,
   Loader2,
   CreditCard,
+  Bell,
 } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
@@ -68,6 +70,10 @@ export default function PerfilPage() {
   const [anonymizing, setAnonymizing] = useState(false)
   const [showAnonymizeDialog, setShowAnonymizeDialog] = useState(false)
   const [anonymizeConfirm, setAnonymizeConfirm] = useState(false)
+  
+  // Estados para preferências de notificações
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true)
+  const [updatingPreferences, setUpdatingPreferences] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -76,6 +82,7 @@ export default function PerfilPage() {
       return
     }
     fetchProfile()
+    fetchNotificationPreferences()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, status, router])
 
@@ -103,6 +110,49 @@ export default function PerfilPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchNotificationPreferences = async () => {
+    try {
+      const response = await fetch("/api/user/preferences/notifications")
+      if (response.ok) {
+        const data = await response.json()
+        setEmailNotificationsEnabled(data.emailNotificationsEnabled ?? true)
+      }
+    } catch (error) {
+      console.error("Erro ao buscar preferências de notificações:", error)
+    }
+  }
+
+  const handleUpdateNotificationPreferences = async () => {
+    try {
+      setUpdatingPreferences(true)
+      const response = await fetch("/api/user/preferences/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emailNotificationsEnabled,
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Sucesso",
+          description: "Preferências de notificações atualizadas",
+        })
+      } else {
+        throw new Error("Erro ao atualizar preferências")
+      }
+    } catch (error) {
+      console.error("Erro ao atualizar preferências:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar as preferências",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingPreferences(false)
     }
   }
 
@@ -491,6 +541,55 @@ export default function PerfilPage() {
               )}
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Preferências de Notificações */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="w-5 h-5" />
+            Preferências de Notificações
+          </CardTitle>
+          <CardDescription>
+            Configure como você deseja receber notificações
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Mail className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  Receber notificações por email
+                </label>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 ml-6">
+                Quando desabilitado, você ainda receberá notificações na plataforma, mas não por email
+              </p>
+            </div>
+            <Switch
+              checked={emailNotificationsEnabled}
+              onCheckedChange={setEmailNotificationsEnabled}
+            />
+          </div>
+          <Button
+            onClick={handleUpdateNotificationPreferences}
+            disabled={updatingPreferences}
+            className="w-full"
+          >
+            {updatingPreferences ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4 mr-2" />
+                Salvar Preferências
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 

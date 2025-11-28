@@ -2921,3 +2921,250 @@ ${baseUrl}
     `
   }
 }
+
+export function generateNotificationEmailTemplate(
+  title: string,
+  message: string,
+  link: string | null,
+  userName?: string
+) {
+  const baseUrl = getEmailBaseUrl()
+  const logoUrl = getEmailLogoUrl()
+  
+  return {
+    subject: title,
+    html: `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title} - Preço Justo AI</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+          }
+          
+          .email-wrapper {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          
+          .container {
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e2e8f0;
+          }
+          
+          .header {
+            background-color: #1e293b;
+            padding: 40px 30px;
+            text-align: center;
+          }
+          
+          .logo-container {
+            margin-bottom: 20px;
+            text-align: center;
+            background-color: #ffffff;
+            padding: 16px;
+            border-radius: 12px;
+            display: inline-block;
+          }
+          
+          .logo {
+            max-width: 180px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+          }
+          
+          .header-title {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 20px;
+          }
+          
+          .content {
+            padding: 40px 30px;
+          }
+          
+          .greeting {
+            font-size: 18px;
+            color: #475569;
+            margin-bottom: 20px;
+          }
+          
+          .notification-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 15px;
+          }
+          
+          .notification-message {
+            font-size: 16px;
+            color: #64748b;
+            line-height: 1.6;
+            margin-bottom: 30px;
+          }
+          
+          .button-container {
+            text-align: center;
+            margin: 30px 0;
+          }
+          
+          .button {
+            display: inline-block;
+            background-color: #3b82f6;
+            color: #ffffff;
+            padding: 14px 28px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          }
+          
+          .button:hover {
+            background-color: #2563eb;
+          }
+          
+          .footer {
+            background: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .footer-text {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 15px;
+          }
+          
+          .footer-link {
+            color: #3b82f6;
+            text-decoration: none;
+          }
+          
+          .footer-brand {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .footer-brand-link {
+            color: #3b82f6;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+          }
+          
+          .footer-tagline {
+            color: #94a3b8;
+            font-size: 13px;
+            margin-top: 5px;
+          }
+          
+          @media only screen and (max-width: 600px) {
+            .email-wrapper {
+              padding: 10px;
+            }
+            
+            .header {
+              padding: 30px 20px;
+            }
+            
+            .content {
+              padding: 30px 20px;
+            }
+            
+            .notification-title {
+              font-size: 18px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="container">
+            <div class="header">
+              <div class="logo-container">
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" />
+              </div>
+              <h1 class="header-title">Nova Notificação</h1>
+            </div>
+            
+            <div class="content">
+              <p class="greeting">
+                ${userName ? `Olá, <strong>${userName}</strong>!` : 'Olá!'} 👋
+              </p>
+              
+              <h2 class="notification-title">${title}</h2>
+              
+              <div class="notification-message">
+                ${message.replace(/\n/g, '<br>')}
+              </div>
+              
+              ${link ? `
+                <div class="button-container">
+                  <a href="${link}" class="button">Ver detalhes</a>
+                </div>
+              ` : ''}
+            </div>
+            
+            <div class="footer">
+              <p class="footer-text">
+                Esta é uma notificação automática do Preço Justo AI.
+              </p>
+              <p class="footer-text">
+                Você pode gerenciar suas preferências de notificações em 
+                <a href="${baseUrl}/perfil" class="footer-link">suas configurações</a>.
+              </p>
+              
+              <div class="footer-brand">
+                <a href="${baseUrl}" class="footer-brand-link">Preço Justo AI</a>
+                <p class="footer-tagline">Análise fundamentalista inteligente para seus investimentos</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+${title} - Preço Justo AI
+
+${userName ? `Olá, ${userName}!` : 'Olá!'}
+
+${title}
+
+${message}
+
+${link ? `\nAcesse: ${link}` : ''}
+
+---
+Esta é uma notificação automática do Preço Justo AI.
+Você pode gerenciar suas preferências em ${baseUrl}/perfil
+
+Preço Justo AI - Análise fundamentalista inteligente
+${baseUrl}
+    `
+  }
+}

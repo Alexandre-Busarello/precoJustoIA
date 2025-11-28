@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { CompanyLogo } from '@/components/company-logo';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Bell, BellOff, ExternalLink, Loader2 } from 'lucide-react';
+import { Bell, BellOff, ExternalLink, Loader2, Mail, AlertCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,13 +35,71 @@ interface Subscription {
 
 interface SubscriptionsListProps {
   subscriptions: Subscription[];
+  emailNotificationsEnabled: boolean;
 }
 
-export default function SubscriptionsList({ subscriptions: initialSubscriptions }: SubscriptionsListProps) {
+export default function SubscriptionsList({ 
+  subscriptions: initialSubscriptions,
+  emailNotificationsEnabled: initialEmailNotificationsEnabled 
+}: SubscriptionsListProps) {
   const [subscriptions, setSubscriptions] = useState(initialSubscriptions);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [subscriptionToDelete, setSubscriptionToDelete] = useState<Subscription | null>(null);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(initialEmailNotificationsEnabled);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Buscar preferências atualizadas
+  const { data: preferencesData } = useQuery({
+    queryKey: ['user', 'preferences', 'notifications'],
+    queryFn: async () => {
+      const res = await fetch('/api/user/preferences/notifications')
+      if (!res.ok) throw new Error('Erro ao buscar preferências')
+      return res.json()
+    },
+    initialData: { emailNotificationsEnabled: initialEmailNotificationsEnabled }
+  })
+
+  useEffect(() => {
+    if (preferencesData?.emailNotificationsEnabled !== undefined) {
+      setEmailNotificationsEnabled(preferencesData.emailNotificationsEnabled)
+    }
+  }, [preferencesData])
+
+  // Mutation para atualizar preferências
+  const updatePreferencesMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await fetch('/api/user/preferences/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailNotificationsEnabled: enabled })
+      })
+      if (!res.ok) throw new Error('Erro ao atualizar preferências')
+      return res.json()
+    },
+    onSuccess: (_, enabled) => {
+      setEmailNotificationsEnabled(enabled)
+      queryClient.invalidateQueries({ queryKey: ['user', 'preferences', 'notifications'] })
+      toast({
+        title: 'Preferências atualizadas',
+        description: enabled 
+          ? 'Notificações por email habilitadas. Você voltará a receber notificações sobre seus ativos.'
+          : 'Notificações por email desabilitadas',
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao atualizar preferências',
+        variant: 'destructive',
+      })
+    }
+  })
+
+  const handleToggleEmailNotifications = () => {
+    const newValue = !emailNotificationsEnabled
+    updatePreferencesMutation.mutate(newValue)
+  }
 
   const handleUnsubscribe = async (subscription: Subscription) => {
     setLoadingId(subscription.id);
@@ -84,6 +144,44 @@ export default function SubscriptionsList({ subscriptions: initialSubscriptions 
     }).format(d);
   };
 
+  // Se notificações por email estão desabilitadas, mostrar mensagem
+  if (!emailNotificationsEnabled && subscriptions.length > 0) {
+    return (
+      <Card className="border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20">
+        <CardContent className="py-12 text-center">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="p-4 bg-orange-100 dark:bg-orange-900/30 rounded-full">
+              <AlertCircle className="w-12 h-12 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold mb-2 text-orange-900 dark:text-orange-100">
+                Notificações por email desabilitadas
+              </h3>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                Você tem <strong>{subscriptions.length}</strong> ativo{subscriptions.length !== 1 ? 's' : ''} inscrito{subscriptions.length !== 1 ? 's' : ''}, 
+                mas não está recebendo notificações por email porque essa configuração está desligada.
+              </p>
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex items-center gap-3 p-4 bg-background rounded-lg border">
+                  <Mail className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-sm font-medium">Receber notificações por email</span>
+                  <Switch
+                    checked={emailNotificationsEnabled}
+                    onCheckedChange={handleToggleEmailNotifications}
+                    disabled={updatePreferencesMutation.isPending}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ao habilitar, você voltará a receber notificações sobre mudanças nos ativos que está monitorando.
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (subscriptions.length === 0) {
     return (
       <Card>
@@ -94,7 +192,7 @@ export default function SubscriptionsList({ subscriptions: initialSubscriptions 
               <h3 className="text-lg font-semibold mb-2">Nenhuma inscrição ativa</h3>
               <p className="text-muted-foreground mb-6 max-w-md mx-auto">
                 Você ainda não está monitorando nenhum ativo. Acesse a página de uma empresa e clique em
-                "Receber Atualizações" para começar.
+                &quot;Receber Atualizações&quot; para começar.
               </p>
               <Button asChild>
                 <Link href="/ranking">

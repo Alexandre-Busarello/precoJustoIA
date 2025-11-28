@@ -8,7 +8,8 @@ import {
   sendPaymentFailureEmail,
   sendFreeUserAssetChangeEmail,
   sendEmail,
-  generateEmailVerificationTemplate
+  generateEmailVerificationTemplate,
+  generateNotificationEmailTemplate
 } from '@/lib/email-service'
 
 // Configurar timeout para 60 segundos (máximo do plano hobby da Vercel)
@@ -151,6 +152,21 @@ export async function GET(request: NextRequest) {
               ticker: emailData.ticker,
               companyName: emailData.companyName,
               companyLogoUrl: emailData.companyLogoUrl || null,
+            })
+            break
+
+          case 'NOTIFICATION':
+            const notificationTemplate = generateNotificationEmailTemplate(
+              emailData.title,
+              emailData.message,
+              emailData.link || null,
+              emailQueue.recipientName || undefined
+            )
+            await sendEmail({
+              to: emailQueue.email,
+              subject: notificationTemplate.subject,
+              html: notificationTemplate.html,
+              text: notificationTemplate.text
             })
             break
 

@@ -95,6 +95,8 @@ model User {
   userSecurity      UserSecurity?
   featureUsage      FeatureUsage[]
   radarConfig       RadarConfig?
+  notifications     Notification[]
+  notificationPreferences UserNotificationPreferences?
 
   @@map("users")
 }
@@ -1325,6 +1327,7 @@ enum EmailType {
   PAYMENT_FAILURE        // Email de falha no pagamento
   EMAIL_VERIFICATION      // Email de verificação de email
   FREE_USER_ASSET_CHANGE // Email de mudança de ativo para usuários gratuitos (conversão)
+  NOTIFICATION           // Email de notificação da plataforma
 }
 
 enum EmailStatus {
@@ -1648,4 +1651,119 @@ model RadarConfig {
   
   @@index([userId])
   @@map("radar_configs")
+}
+
+// ===== SISTEMA DE NOTIFICAÇÕES =====
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String           @map("user_id")
+  campaignId  String?          @map("campaign_id")
+  
+  // Conteúdo
+  title       String
+  message     String           @db.Text
+  link        String?          // URL (pode ser interno ou externo)
+  linkType    NotificationLinkType @default(INTERNAL) @map("link_type")
+  
+  // Tipo e status
+  type        NotificationType
+  isRead      Boolean          @default(false) @map("is_read")
+  readAt      DateTime?        @map("read_at")
+  
+  // Metadata
+  metadata    Json?            // Dados adicionais (reportId, companyId, ticker, etc)
+  
+  // Timestamps
+  createdAt   DateTime         @default(now()) @map("created_at")
+  
+  // Relations
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign    NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+  @@index([campaignId])
+  @@index([type])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model NotificationCampaign {
+  id                String                  @id @default(cuid())
+  title             String
+  message           String                  @db.Text
+  link              String?
+  linkType          NotificationLinkType    @default(INTERNAL) @map("link_type")
+  ctaText           String?                 @map("cta_text") // Texto customizado do botão CTA
+  
+  // Segmentação
+  segmentType       NotificationSegmentType @map("segment_type")
+  segmentConfig     Json                    @map("segment_config") // Configurações específicas do segmento
+  
+  // Dashboard
+  showOnDashboard   Boolean                 @default(false) @map("show_on_dashboard")
+  dashboardExpiresAt DateTime?              @map("dashboard_expires_at")
+  
+  // Metadata
+  createdBy         String                  @map("created_by") // ID do admin que criou
+  stats             Json?                   // Estatísticas (totalSent, totalRead, totalClicked)
+  
+  // Timestamps
+  createdAt         DateTime                @default(now()) @map("created_at")
+  
+  // Relations
+  notifications     Notification[]
+  
+  @@index([createdAt])
+  @@index([showOnDashboard, dashboardExpiresAt])
+  @@map("notification_campaigns")
+}
+
+model UserNotificationPreferences {
+  id                      String   @id @default(cuid())
+  userId                  String   @unique @map("user_id")
+  emailNotificationsEnabled Boolean @default(true) @map("email_notifications_enabled")
+  
+  // Timestamps
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@map("user_notification_preferences")
+}
+
+enum NotificationType {
+  SYSTEM              // Notificações do sistema
+  CAMPAIGN            // Notificações de campanha
+  ASSET_CHANGE        // Mudança fundamental de ativo
+  MONTHLY_REPORT      // Relatório mensal
+  AI_REPORT           // Relatório de IA genérico
+}
+
+enum NotificationLinkType {
+  INTERNAL            // Link interno (/acao/PETR4)
+  EXTERNAL            // Link externo (https://...)
+}
+
+enum NotificationSegmentType {
+  ALL_USERS                    // Todos os usuários
+  ASSET_SUBSCRIBERS            // Usuários que seguem ativo X (UserAssetSubscription)
+  RECENT_RANKING_CREATORS      // Usuários que criaram ranking nos últimos X dias (RankingHistory)
+  RECENT_RADAR_USERS          // Usuários que adicionaram ativo X ao radar recentemente (RadarConfig)
+  RECENT_BACKTEST_USERS       // Usuários que fizeram backtest recentemente (BacktestConfig)
+  RECENT_PORTFOLIO_CREATORS   // Usuários que criaram carteira recentemente (Portfolio, PortfolioConfig)
+  ACTIVE_PORTFOLIO_USERS      // Usuários que estão usando carteira (adicionando transações recentes)
+  PREMIUM_USERS               // Usuários Premium (subscriptionTier = PREMIUM)
+  FREE_USERS                  // Usuários gratuitos (subscriptionTier = FREE)
+  EARLY_ADOPTERS              // Early Adopters (isEarlyAdopter = true)
+  TRIAL_USERS                 // Usuários em trial (trialStartedAt não null e trialEndsAt > now)
+  RECENT_LOGINS               // Usuários que fizeram login nos últimos X dias (lastLoginAt)
+  NEW_USERS                   // Usuários novos (criados nos últimos X dias, createdAt)
+  FEATURE_USERS               // Usuários que usaram feature X recentemente (FeatureUsage)
+  SUPPORT_TICKET_USERS        // Usuários que abriram ticket recentemente (SupportTicket)
+  EMAIL_LIST                  // Lista específica de emails (segmentConfig.emails: string[])
 }

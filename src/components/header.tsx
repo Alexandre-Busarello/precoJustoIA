@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
 import { ToolsDropdown } from "@/components/tools-dropdown"
 import { UserProfileDropdown } from "@/components/user-profile-dropdown"
+import { NotificationBell } from "@/components/notification-bell"
 import { LayoutDashboard, Headphones, BarChart3 } from "lucide-react"
 import { GlobalSearchBar } from "@/components/global-search-bar"
 
@@ -25,9 +26,9 @@ export default function Header() {
       <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50 will-change-transform">
         <div className="container mx-auto px-4 py-4 relative">
           {/* Mobile Layout */}
-          <div className="lg:hidden flex items-center">
-            {/* Mobile Menu Button - Absolute Left */}
-            <div className="absolute left-4 top-1/2 -translate-y-1/2">
+          <div className="lg:hidden flex items-center relative">
+            {/* Mobile Menu Button - Absolute Left (mais próximo da borda) */}
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10">
               <MobileMenuButton 
                 isOpen={mobileMenuOpen} 
                 setIsOpen={setMobileMenuOpen}
@@ -47,6 +48,13 @@ export default function Header() {
                 />
               </Link>
             </div>
+
+            {/* Notification Bell - Absolute Right (mais próximo da borda, apenas se logado) */}
+            {session && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
+                <NotificationBell />
+              </div>
+            )}
           </div>
 
           {/* Desktop Layout */}
@@ -122,15 +130,18 @@ export default function Header() {
                 </Button>
               </div>
 
-              {/* User Profile Dropdown */}
-              <UserProfileDropdown
+              {/* Notification Bell e User Profile - Agrupados */}
+              <div className="flex items-center space-x-2">
+                <NotificationBell />
+                <UserProfileDropdown
                 userName={session.user?.name}
                 userEmail={session.user?.email}
                 isPremium={isPremium || false}
                 isTrialActive={isTrialActive || false}
                 trialDaysRemaining={trialDaysRemaining || null}
                 subscriptionTier={(subscriptionTier as 'FREE' | 'PREMIUM' | 'VIP') || 'FREE'}
-              />
+                />
+              </div>
             </div>
           ) : (
             // Not logged in navigation

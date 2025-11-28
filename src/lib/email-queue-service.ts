@@ -7,7 +7,8 @@ import {
   sendAssetChangeEmail,
   sendMonthlyReportEmail,
   sendFreeUserAssetChangeEmail,
-  generateEmailVerificationTemplate
+  generateEmailVerificationTemplate,
+  generateNotificationEmailTemplate
 } from './email-service'
 
 export type EmailType = 
@@ -18,6 +19,7 @@ export type EmailType =
   | 'PAYMENT_FAILURE'
   | 'EMAIL_VERIFICATION'
   | 'FREE_USER_ASSET_CHANGE'
+  | 'NOTIFICATION'
 
 export interface QueueEmailParams {
   email: string
@@ -288,6 +290,21 @@ export class EmailQueueService {
           ticker: emailData.ticker,
           companyName: emailData.companyName,
           companyLogoUrl: emailData.companyLogoUrl || null,
+        })
+        break
+
+      case 'NOTIFICATION':
+        const notificationTemplate = generateNotificationEmailTemplate(
+          emailData.title,
+          emailData.message,
+          emailData.link || null,
+          recipientName || undefined
+        )
+        await sendEmail({
+          to: email,
+          subject: notificationTemplate.subject,
+          html: notificationTemplate.html,
+          text: notificationTemplate.text
         })
         break
 

@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import Link from 'next/link';
 import { Bell, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { NotificationService } from '@/lib/notification-service';
 
 export const metadata: Metadata = {
   title: 'Minhas Inscrições | Preço Justo AI',
@@ -53,6 +54,9 @@ export default async function SubscriptionsPage() {
     { userId: user.id }
   );
 
+  // Buscar preferências de notificações
+  const notificationPreferences = await NotificationService.getUserNotificationPreferences(user.id);
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
       {/* Header */}
@@ -88,7 +92,10 @@ export default async function SubscriptionsPage() {
       </Card>
 
       {/* Lista de inscrições */}
-      <SubscriptionsList subscriptions={subscriptions as any[]} />
+      <SubscriptionsList 
+        subscriptions={subscriptions as any[]} 
+        emailNotificationsEnabled={notificationPreferences.emailNotificationsEnabled}
+      />
 
       {/* Info Card */}
       <Card className="mt-8">

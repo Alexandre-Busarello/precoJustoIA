@@ -72,7 +72,6 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
       const { data, error } = await resend.emails.send({
         from,
         to: Array.isArray(to) ? to : [to],
-        bcc: process.env.NODE_ENV === 'production' ? 'busamar@gmail.com' : undefined, // Cópia oculta para monitoramento apenas em produção
         subject,
         html,
         text: textContent,
@@ -112,7 +111,6 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
       const mailOptions = {
         from: `"${fromName}" <${fromEmail.includes('<') ? fromEmail.match(/<(.+)>/)?.[1] || fromEmail : fromEmail}>`,
         to,
-        bcc: process.env.NODE_ENV === 'production' ? 'busamar@gmail.com' : undefined, // Cópia oculta para monitoramento apenas em produção
         subject,
         html,
         text: textContent,

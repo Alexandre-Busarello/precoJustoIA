@@ -99,6 +99,7 @@ export function AdminNotificationsPageClient() {
   const [emailList, setEmailList] = useState('')
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [deletingCampaign, setDeletingCampaign] = useState<Campaign | null>(null)
+  const [extendForNewUsers, setExtendForNewUsers] = useState(false)
 
   // Buscar campanhas
   const { data, isLoading } = useQuery({
@@ -176,6 +177,21 @@ export function AdminNotificationsPageClient() {
     }
   }, [countUsersQuery.data])
 
+  // Contar novos usuários quando estiver editando uma campanha
+  const { data: newUsersCountData, isLoading: isLoadingNewUsers } = useQuery({
+    queryKey: ['admin', 'new-users-count', editingCampaign?.id],
+    queryFn: async () => {
+      if (!editingCampaign) return null
+      const res = await fetch(`/api/admin/notifications/campaign/${editingCampaign.id}/new-users-count`)
+      if (!res.ok) throw new Error('Erro ao contar novos usuários')
+      return res.json()
+    },
+    enabled: !!editingCampaign,
+    staleTime: 30000, // Cache por 30 segundos
+  })
+
+  const newUsersCount = newUsersCountData?.count ?? 0
+
   // Mutation para criar campanha
   const createCampaignMutation = useMutation({
     mutationFn: async (campaignData: any) => {
@@ -209,6 +225,29 @@ export function AdminNotificationsPageClient() {
     },
   })
 
+  // Mutation para estender campanha para novos usuários
+  const extendCampaignMutation = useMutation({
+    mutationFn: async ({ campaignId, sendEmail }: { campaignId: string; sendEmail: boolean }) => {
+      const res = await fetch(`/api/admin/notifications/campaign/${campaignId}/extend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendEmail }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Erro ao estender campanha')
+      }
+      return res.json()
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
   // Mutation para atualizar campanha
   const updateCampaignMutation = useMutation({
     mutationFn: async ({ campaignId, campaignData }: { campaignId: string; campaignData: any }) => {
@@ -230,6 +269,7 @@ export function AdminNotificationsPageClient() {
       })
       queryClient.invalidateQueries({ queryKey: ['admin', 'campaigns'] })
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'new-users-count'] })
       setShowCreateDialog(false)
       setEditingCampaign(null)
       resetForm()
@@ -286,6 +326,7 @@ export function AdminNotificationsPageClient() {
     setSendEmail(false)
     setEditingCampaign(null)
     setEmailList('')
+    setExtendForNewUsers(false)
   }
 
   const handleCreateCampaign = () => {
@@ -601,6 +642,41 @@ export function AdminNotificationsPageClient() {
                 />
                 <Label htmlFor="sendEmail">Enviar também por email</Label>
               </div>
+
+              {/* Opção para recriar notificações para novos usuários (apenas ao editar) */}
+              {editingCampaign && (
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="extendForNewUsers"
+                      checked={extendForNewUsers}
+                      onCheckedChange={setExtendForNewUsers}
+                    />
+                    <Label htmlFor="extendForNewUsers" className="font-medium">
+                      Recriar notificações para novos usuários
+                    </Label>
+                  </div>
+                  {extendForNewUsers && (
+                    <div className="ml-8 text-sm text-muted-foreground">
+                      {isLoadingNewUsers ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Calculando novos usuários...</span>
+                        </div>
+                      ) : newUsersCount > 0 ? (
+                        <div className="flex items-center gap-2 text-primary">
+                          <Users className="w-4 h-4" />
+                          <span className="font-medium">
+                            {newUsersCount} novo{newUsersCount !== 1 ? 's' : ''} usuário{newUsersCount !== 1 ? 's' : ''} receberá{newUsersCount === 1 ? '' : 'ão'} notificação{newUsersCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      ) : (
+                        <span>Não há novos usuários no segmento desde a criação da campanha.</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => {
@@ -611,8 +687,27 @@ export function AdminNotificationsPageClient() {
                 Cancelar
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   if (editingCampaign) {
+                    // Se checkbox marcado, estender campanha primeiro
+                    if (extendForNewUsers) {
+                      try {
+                        const extendResult = await extendCampaignMutation.mutateAsync({
+                          campaignId: editingCampaign.id,
+                          sendEmail
+                        })
+                        
+                        toast({
+                          title: 'Sucesso',
+                          description: `${extendResult.newNotificationsCreated} nova${extendResult.newNotificationsCreated !== 1 ? 's' : ''} notificação${extendResult.newNotificationsCreated !== 1 ? 'ões' : ''} criada${extendResult.newNotificationsCreated !== 1 ? 's' : ''} para novos usuários.`,
+                        })
+                      } catch (error) {
+                        // Erro já foi tratado no onError da mutation
+                        return
+                      }
+                    }
+
+                    // Atualizar campanha
                     const campaignData: any = {
                       title,
                       message,
@@ -627,12 +722,16 @@ export function AdminNotificationsPageClient() {
                     handleCreateCampaign()
                   }
                 }}
-                disabled={createCampaignMutation.isPending || updateCampaignMutation.isPending}
+                disabled={createCampaignMutation.isPending || updateCampaignMutation.isPending || extendCampaignMutation.isPending}
               >
-                {(createCampaignMutation.isPending || updateCampaignMutation.isPending) ? (
+                {(createCampaignMutation.isPending || updateCampaignMutation.isPending || extendCampaignMutation.isPending) ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    {editingCampaign ? 'Atualizando...' : 'Criando...'}
+                    {extendCampaignMutation.isPending 
+                      ? 'Criando notificações para novos usuários...' 
+                      : editingCampaign 
+                        ? 'Atualizando...' 
+                        : 'Criando...'}
                   </>
                 ) : (
                   <>

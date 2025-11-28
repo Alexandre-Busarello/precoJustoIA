@@ -221,6 +221,148 @@ export class NotificationService {
   }
 
   /**
+   * Estende uma campanha existente criando notificações apenas para novos usuários
+   * que entraram no segmento desde a criação original da campanha
+   */
+  static async extendCampaignForNewUsers(
+    campaignId: string,
+    sendEmail: boolean = false
+  ): Promise<{ newNotificationsCreated: number; newUsersCount: number }> {
+    try {
+      // Buscar campanha existente
+      const campaign = await prisma.notificationCampaign.findUnique({
+        where: { id: campaignId }
+      })
+
+      if (!campaign) {
+        throw new Error('Campanha não encontrada')
+      }
+
+      // Obter usuários atuais do segmento
+      const currentUserIds = await this.getSegmentUserIds(
+        campaign.segmentType as NotificationSegmentType,
+        campaign.segmentConfig as Record<string, any>
+      )
+
+      // Buscar usuários que já receberam notificação desta campanha
+      const existingNotifications = await prisma.notification.findMany({
+        where: { campaignId },
+        select: { userId: true }
+      })
+
+      const existingUserIds = new Set(existingNotifications.map(n => n.userId))
+
+      // Calcular diferença (novos usuários)
+      const newUserIds = currentUserIds.filter(userId => !existingUserIds.has(userId))
+
+      if (newUserIds.length === 0) {
+        return {
+          newNotificationsCreated: 0,
+          newUsersCount: 0
+        }
+      }
+
+      console.log(`📢 [NOTIFICATION] Estendendo campanha ${campaignId}: ${newUserIds.length} novos usuários`)
+
+      // Criar notificações apenas para novos usuários
+      let notificationsCreated = 0
+      const batchSize = 100
+
+      for (let i = 0; i < newUserIds.length; i += batchSize) {
+        const batch = newUserIds.slice(i, i + batchSize)
+        
+        const notifications = await Promise.all(
+          batch.map(userId =>
+            prisma.notification.create({
+              data: {
+                userId,
+                campaignId: campaign.id,
+                title: campaign.title,
+                message: campaign.message,
+                link: campaign.link || null,
+                linkType: campaign.linkType as NotificationLinkType,
+                type: 'CAMPAIGN',
+                metadata: {
+                  campaignId: campaign.id,
+                  segmentType: campaign.segmentType,
+                  ...(campaign.segmentConfig as Record<string, any>)
+                }
+              }
+            })
+          )
+        )
+
+        notificationsCreated += notifications.length
+
+        // Enviar emails se necessário
+        if (sendEmail) {
+          await Promise.all(
+            notifications.map(notification =>
+              this.sendNotificationEmail(
+                notification.userId,
+                notification.id,
+                campaign.title,
+                campaign.message,
+                campaign.link,
+                campaign.linkType as NotificationLinkType
+              )
+            )
+          )
+        }
+      }
+
+      // Recalcular estatísticas da campanha
+      await this.recalculateCampaignStats(campaign.id)
+
+      return {
+        newNotificationsCreated: notificationsCreated,
+        newUsersCount: newUserIds.length
+      }
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao estender campanha:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Conta quantos novos usuários receberiam notificação se a campanha fosse estendida
+   */
+  static async countNewUsersForCampaign(campaignId: string): Promise<number> {
+    try {
+      // Buscar campanha existente
+      const campaign = await prisma.notificationCampaign.findUnique({
+        where: { id: campaignId }
+      })
+
+      if (!campaign) {
+        throw new Error('Campanha não encontrada')
+      }
+
+      // Obter usuários atuais do segmento
+      const currentUserIds = await this.getSegmentUserIds(
+        campaign.segmentType as NotificationSegmentType,
+        campaign.segmentConfig as Record<string, any>
+      )
+
+      // Buscar usuários que já receberam notificação desta campanha
+      const existingNotifications = await prisma.notification.findMany({
+        where: { campaignId },
+        select: { userId: true }
+      })
+
+      const existingUserIds = new Set(existingNotifications.map(n => n.userId))
+
+      // Calcular diferença (novos usuários)
+      const newUserIds = currentUserIds.filter(userId => !existingUserIds.has(userId))
+
+      return newUserIds.length
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao contar novos usuários:', error)
+      throw error
+    }
+  }
+
+  /**
    * Busca notificações do usuário (paginado)
    */
   static async getUserNotifications(

@@ -1679,7 +1679,7 @@ async function convertSvgToBase64DataUri(url: string): Promise<string | null> {
 
 // ===== TEMPLATES PARA MONITORAMENTO DE ATIVOS =====
 
-export async function generateAssetChangeEmailTemplate(params: {
+export function generateAssetChangeEmailTemplate(params: {
   userName: string;
   ticker: string;
   companyName: string;
@@ -1714,15 +1714,13 @@ export async function generateAssetChangeEmailTemplate(params: {
   const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
-  // Converter URLs SVG para formato compatível com email usando base64 inline
-  // Isso evita links externos suspeitos e permite usar imagens no email
-  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+  // Converter URLs SVG para formato compatível com email usando wsrv.nl
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
     
-    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
-    // Isso evita proxies públicos suspeitos e permite usar a imagem inline
+    // Se for uma URL da brapi.dev (SVG), usar wsrv.nl para converter para PNG
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return await convertSvgToBase64DataUri(url);
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/667eea/ffffff?text=${ticker}`;
     }
     
     // Se for URL relativa, adicionar base URL
@@ -1734,7 +1732,7 @@ export async function generateAssetChangeEmailTemplate(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(companyLogoUrl);
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
 
   // Suavizar assunto para evitar gatilhos de phishing (palavras como "piorou" geram medo/urgência)
   // Assunto neutro ajuda a evitar marcação como spam enquanto o domínio ganha reputação
@@ -1968,7 +1966,7 @@ export async function sendAssetChangeEmail(params: {
   reportSummary: string;
   reportUrl: string;
 }) {
-  const template = await generateAssetChangeEmailTemplate(params);
+  const template = generateAssetChangeEmailTemplate(params);
   
   return await sendEmail({
     to: params.email,
@@ -2287,7 +2285,7 @@ export async function sendFreeUserAssetChangeEmail(params: {
 
 // ===== TEMPLATE PARA RELATÓRIOS MENSAIS =====
 
-export async function generateMonthlyReportEmailTemplate(params: {
+export function generateMonthlyReportEmailTemplate(params: {
   userName: string;
   ticker: string;
   companyName: string;
@@ -2309,13 +2307,13 @@ export async function generateMonthlyReportEmailTemplate(params: {
   const assetUrl = `${baseUrl}/acao/${ticker.toLowerCase()}`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
-  // Converter URLs SVG para formato compatível com email usando base64 inline
-  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+  // Converter URLs SVG para formato compatível com email usando wsrv.nl
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
     
-    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    // Se for uma URL da brapi.dev (SVG), usar wsrv.nl para converter para PNG
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return await convertSvgToBase64DataUri(url);
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/8b5cf6/ffffff?text=${ticker}`;
     }
     
     if (url.startsWith('/')) {
@@ -2325,7 +2323,7 @@ export async function generateMonthlyReportEmailTemplate(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(companyLogoUrl);
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
 
   return {
     subject: `📊 Novo Relatório Mensal: ${ticker} - ${companyName}`,
@@ -2564,7 +2562,7 @@ export async function sendMonthlyReportEmail(params: {
   reportSummary: string;
   reportUrl: string;
 }) {
-  const template = await generateMonthlyReportEmailTemplate(params);
+  const template = generateMonthlyReportEmailTemplate(params);
   
   return await sendEmail({
     to: params.email,

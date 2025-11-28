@@ -3,7 +3,7 @@ import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
-import { sendPaymentFailureEmail, sendWelcomeEmail } from '@/lib/email-service'
+import { EmailQueueService } from '@/lib/email-queue-service'
 import { WebhookProcessor } from '@/lib/webhook-processor'
 import Stripe from 'stripe'
 
@@ -325,13 +325,25 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
     console.log(`✅ Subscription created and activated for user ${userId}`)
     console.log(`🎉 User ${userEmail} is now PREMIUM!`)
     
-    // Enviar email de boas-vindas
+    // Adicionar email de boas-vindas à fila
     if (userEmail) {
       try {
-        await sendWelcomeEmail(userEmail, undefined, false)
-        console.log(`📧 Welcome email sent to ${userEmail}`)
+        await EmailQueueService.queueEmail({
+          email: userEmail,
+          emailType: 'WELCOME',
+          emailData: {
+            userName: undefined,
+            isEarlyAdopter: false
+          },
+          priority: 0,
+          metadata: {
+            userId,
+            subscriptionId: subscription.id
+          }
+        })
+        console.log(`📧 Welcome email queued for ${userEmail}`)
       } catch (emailError) {
-        console.error('❌ Failed to send welcome email:', emailError)
+        console.error('❌ Failed to queue welcome email:', emailError)
         // Não falhar o webhook por causa do email
       }
     }
@@ -502,14 +514,27 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<b
 
     console.log(`✅ Payment succeeded for user ${user.id}`)
     
-    // Enviar email de boas-vindas apenas se for a primeira cobrança (não renovação)
+    // Adicionar email de boas-vindas à fila apenas se for a primeira cobrança (não renovação)
     // Verificamos se o usuário não tinha Premium antes
     if (!user.wasPremiumBefore && user.email) {
       try {
-        await sendWelcomeEmail(user.email, user.name || undefined, false)
-        console.log(`📧 Welcome email sent to ${user.email}`)
+        await EmailQueueService.queueEmail({
+          email: user.email,
+          emailType: 'WELCOME',
+          recipientName: user.name || null,
+          emailData: {
+            userName: user.name || undefined,
+            isEarlyAdopter: false
+          },
+          priority: 0,
+          metadata: {
+            userId: user.id,
+            subscriptionId: subscription.id
+          }
+        })
+        console.log(`📧 Welcome email queued for ${user.email}`)
       } catch (emailError) {
-        console.error('❌ Failed to send welcome email:', emailError)
+        console.error('❌ Failed to queue welcome email:', emailError)
         // Não falhar o webhook por causa do email
       }
     }
@@ -634,20 +659,30 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<bool
     console.log(`📧 Sending payment failure email to ${user.email}`)
     console.log(`🔍 Failure reason: ${translatedReason}`)
 
-    // Enviar email de notificação sobre falha no pagamento
+    // Adicionar email de notificação sobre falha no pagamento à fila
     const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
     const retryUrl = `${baseUrl}/checkout?retry_payment=true`
     
     try {
-      await sendPaymentFailureEmail(
-        user.email,
-        retryUrl,
-        user.name || undefined,
-        translatedReason
-      )
-      console.log(`✅ Payment failure email sent to ${user.email}`)
+      await EmailQueueService.queueEmail({
+        email: user.email,
+        emailType: 'PAYMENT_FAILURE',
+        recipientName: user.name || null,
+        emailData: {
+          retryUrl,
+          userName: user.name || undefined,
+          failureReason: translatedReason
+        },
+        priority: 1, // Prioridade alta para emails críticos
+        metadata: {
+          userId: user.id,
+          subscriptionId: subscription.id,
+          invoiceId: invoice.id
+        }
+      })
+      console.log(`✅ Payment failure email queued for ${user.email}`)
     } catch (emailError) {
-      console.error('❌ Failed to send payment failure email:', emailError)
+      console.error('❌ Failed to queue payment failure email:', emailError)
       // Não falhar o webhook por causa do email
     }
 
@@ -770,20 +805,29 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): P
     console.log(`📧 Sending payment failure email to ${user.email}`)
     console.log(`🔍 Failure reason: ${translatedReason}`)
 
-    // Enviar email de notificação sobre falha no pagamento
+    // Adicionar email de notificação sobre falha no pagamento à fila
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
     const retryUrl = `${baseUrl}/checkout?retry_payment=true`
     
     try {
-      await sendPaymentFailureEmail(
-        user.email,
-        retryUrl,
-        user.name || undefined,
-        translatedReason
-      )
-      console.log(`✅ Payment failure email sent to ${user.email}`)
+      await EmailQueueService.queueEmail({
+        email: user.email,
+        emailType: 'PAYMENT_FAILURE',
+        recipientName: user.name || null,
+        emailData: {
+          retryUrl,
+          userName: user.name || undefined,
+          failureReason: translatedReason
+        },
+        priority: 1, // Prioridade alta para emails críticos
+        metadata: {
+          userId: user.id,
+          paymentIntentId: paymentIntent.id
+        }
+      })
+      console.log(`✅ Payment failure email queued for ${user.email}`)
     } catch (emailError) {
-      console.error('❌ Failed to send payment failure email:', emailError)
+      console.error('❌ Failed to queue payment failure email:', emailError)
       // Não falhar o webhook por causa do email
     }
 

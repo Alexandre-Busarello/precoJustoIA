@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
-import { sendEmail } from './email-service'
-import { generateEmailVerificationTemplate } from './email-service'
+import { EmailQueueService } from './email-queue-service'
 import * as crypto from 'crypto'
 
 /**
@@ -58,13 +57,19 @@ export async function sendVerificationEmail(
     const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
     const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${token}`
 
-    const template = generateEmailVerificationTemplate(verificationUrl, userName)
-
-    const result = await sendEmail({
-      to: email,
-      subject: template.subject,
-      html: template.html,
-      text: template.text
+    const result = await EmailQueueService.queueEmail({
+      email,
+      emailType: 'EMAIL_VERIFICATION',
+      recipientName: userName || null,
+      emailData: {
+        verificationUrl,
+        userName
+      },
+      priority: 0,
+      metadata: {
+        userId,
+        token
+      }
     })
 
     if (!result.success) {
@@ -73,7 +78,7 @@ export async function sendVerificationEmail(
 
     return { success: true }
   } catch (error) {
-    console.error('Erro ao enviar email de verificação:', error)
+    console.error('Erro ao adicionar email de verificação à fila:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro desconhecido'

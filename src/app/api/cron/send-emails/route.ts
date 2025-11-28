@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { sendAssetChangeEmail, sendMonthlyReportEmail } from '@/lib/email-service'
+import { EmailQueueService } from '@/lib/email-queue-service'
+import { 
+  sendAssetChangeEmail, 
+  sendMonthlyReportEmail,
+  sendPasswordResetEmail,
+  sendWelcomeEmail,
+  sendPaymentFailureEmail,
+  sendFreeUserAssetChangeEmail,
+  sendEmail,
+  generateEmailVerificationTemplate
+} from '@/lib/email-service'
 
 // Configurar timeout para 60 segundos (máximo do plano hobby da Vercel)
 export const maxDuration = 60
@@ -35,19 +44,7 @@ export async function GET(request: NextRequest) {
     console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, PARALLEL_BATCH_SIZE=${PARALLEL_BATCH_SIZE}, MAX_ATTEMPTS=${MAX_ATTEMPTS}`)
 
     // 3. Buscar emails pendentes ordenados por prioridade e data de criação
-    const pendingEmails = await prisma.emailQueue.findMany({
-      where: {
-        status: 'PENDING',
-        attempts: {
-          lt: MAX_ATTEMPTS
-        }
-      },
-      orderBy: [
-        { priority: 'desc' }, // Prioridade alta primeiro
-        { createdAt: 'asc' }  // Mais antigos primeiro
-      ],
-      take: BATCH_SIZE
-    })
+    const pendingEmails = await EmailQueueService.getPendingEmails(BATCH_SIZE, MAX_ATTEMPTS)
 
     console.log(`📦 Encontrados ${pendingEmails.length} emails pendentes para processar em paralelo (${PARALLEL_BATCH_SIZE} por vez)`)
 
@@ -75,62 +72,94 @@ export async function GET(request: NextRequest) {
       };
 
       try {
-        // Atualizar tentativa
-        await prisma.emailQueue.update({
-          where: { id: emailQueue.id },
-          data: {
-            attempts: { increment: 1 },
-            lastAttemptAt: new Date()
-          }
-        })
+        // Incrementar tentativa
+        await EmailQueueService.incrementAttempt(emailQueue.id)
 
         const emailData = emailQueue.emailData as any
 
         // Enviar email baseado no tipo
-        if (emailQueue.emailType === 'ASSET_CHANGE') {
-          await sendAssetChangeEmail({
-            email: emailQueue.email,
-            userName: emailQueue.recipientName || 'Investidor',
-            ticker: emailData.ticker,
-            companyName: emailData.companyName,
-            companyLogoUrl: emailData.companyLogoUrl || null,
-            changeDirection: emailData.changeDirection,
-            previousScore: emailData.previousScore,
-            currentScore: emailData.currentScore,
-            reportSummary: emailData.reportSummary,
-            reportUrl: emailData.reportUrl,
-          })
-        } else if (emailQueue.emailType === 'MONTHLY_REPORT') {
-          await sendMonthlyReportEmail({
-            email: emailQueue.email,
-            userName: emailQueue.recipientName || 'Investidor',
-            ticker: emailData.ticker,
-            companyName: emailData.companyName,
-            companyLogoUrl: emailData.companyLogoUrl || null,
-            reportSummary: emailData.reportSummary,
-            reportUrl: emailData.reportUrl,
-          })
-        } else {
-          console.error(`❌ Tipo de email desconhecido: ${emailQueue.emailType}`)
-          await prisma.emailQueue.update({
-            where: { id: emailQueue.id },
-            data: {
-              status: 'FAILED',
-              errorMessage: `Tipo de email desconhecido: ${emailQueue.emailType}`
-            }
-          })
-          stats.failed = true
-          return stats
+        switch (emailQueue.emailType) {
+          case 'ASSET_CHANGE':
+            await sendAssetChangeEmail({
+              email: emailQueue.email,
+              userName: emailQueue.recipientName || 'Investidor',
+              ticker: emailData.ticker,
+              companyName: emailData.companyName,
+              companyLogoUrl: emailData.companyLogoUrl || null,
+              changeDirection: emailData.changeDirection,
+              previousScore: emailData.previousScore,
+              currentScore: emailData.currentScore,
+              reportSummary: emailData.reportSummary,
+              reportUrl: emailData.reportUrl,
+            })
+            break
+
+          case 'MONTHLY_REPORT':
+            await sendMonthlyReportEmail({
+              email: emailQueue.email,
+              userName: emailQueue.recipientName || 'Investidor',
+              ticker: emailData.ticker,
+              companyName: emailData.companyName,
+              companyLogoUrl: emailData.companyLogoUrl || null,
+              reportSummary: emailData.reportSummary,
+              reportUrl: emailData.reportUrl,
+            })
+            break
+
+          case 'PASSWORD_RESET':
+            await sendPasswordResetEmail(
+              emailQueue.email,
+              emailData.resetUrl,
+              emailData.userName
+            )
+            break
+
+          case 'WELCOME':
+            await sendWelcomeEmail(
+              emailQueue.email,
+              emailData.userName,
+              emailData.isEarlyAdopter || false
+            )
+            break
+
+          case 'PAYMENT_FAILURE':
+            await sendPaymentFailureEmail(
+              emailQueue.email,
+              emailData.retryUrl,
+              emailData.userName,
+              emailData.failureReason
+            )
+            break
+
+          case 'EMAIL_VERIFICATION':
+            const template = generateEmailVerificationTemplate(
+              emailData.verificationUrl,
+              emailData.userName
+            )
+            await sendEmail({
+              to: emailQueue.email,
+              subject: template.subject,
+              html: template.html,
+              text: template.text
+            })
+            break
+
+          case 'FREE_USER_ASSET_CHANGE':
+            await sendFreeUserAssetChangeEmail({
+              email: emailQueue.email,
+              userName: emailQueue.recipientName || 'Investidor',
+              ticker: emailData.ticker,
+              companyName: emailData.companyName,
+              companyLogoUrl: emailData.companyLogoUrl || null,
+            })
+            break
+
+          default:
+            throw new Error(`Tipo de email desconhecido: ${emailQueue.emailType}`)
         }
 
         // Marcar como enviado
-        await prisma.emailQueue.update({
-          where: { id: emailQueue.id },
-          data: {
-            status: 'SENT',
-            sentAt: new Date()
-          }
-        })
+        await EmailQueueService.markAsSent(emailQueue.id)
 
         stats.sent = true
         console.log(`✅ Email enviado: ${emailQueue.email} (${emailQueue.emailType})`)
@@ -144,22 +173,13 @@ export async function GET(request: NextRequest) {
 
         // Se excedeu o número máximo de tentativas, marcar como falha
         if (newAttempts >= MAX_ATTEMPTS) {
-          await prisma.emailQueue.update({
-            where: { id: emailQueue.id },
-            data: {
-              status: 'FAILED',
-              errorMessage: `Falhou após ${newAttempts} tentativas: ${errorMessage}`
-            }
-          })
+          await EmailQueueService.markAsFailed(
+            emailQueue.id,
+            `Falhou após ${newAttempts} tentativas: ${errorMessage}`
+          )
           stats.failed = true
         } else {
-          // Manter como PENDING para nova tentativa
-          await prisma.emailQueue.update({
-            where: { id: emailQueue.id },
-            data: {
-              errorMessage: errorMessage
-            }
-          })
+          // Manter como PENDING para nova tentativa (já atualizado pelo incrementAttempt)
           stats.skipped = true
         }
         stats.error = errorMessage

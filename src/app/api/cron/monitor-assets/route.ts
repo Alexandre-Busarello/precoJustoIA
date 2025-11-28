@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service';
 import { MonitoringReportService } from '@/lib/monitoring-report-service';
-import { sendAssetChangeEmail, sendFreeUserAssetChangeEmail } from '@/lib/email-service';
+import { EmailQueueService } from '@/lib/email-queue-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
 import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
 import { toNumber, StrategyAnalysis } from '@/lib/strategies';
@@ -342,41 +342,58 @@ export async function GET(request: NextRequest) {
 
                 console.log(`👑 ${company.ticker}: ${premiumSubscribers.length} Premium/Trial, ${freeSubscribers.length} Gratuitos`);
 
-                // Enviar emails completos para Premium/Trial em paralelo
+                // Adicionar emails à fila para Premium/Trial
                 const premiumEmailPromises = premiumSubscribers.map(async (subscriber) => {
                   try {
-                    await sendAssetChangeEmail({
+                    const result = await EmailQueueService.queueEmail({
                       email: subscriber.email,
-                      userName: subscriber.name || 'Investidor',
-                      ticker: company.ticker,
-                      companyName: company.name || company.ticker,
-                      companyLogoUrl: company.logoUrl,
-                      changeDirection: comparison.direction!, // Já verificado acima que não é null
-                      previousScore,
-                      currentScore,
-                      reportSummary,
-                      reportUrl,
+                      emailType: 'ASSET_CHANGE',
+                      recipientName: subscriber.name || null,
+                      emailData: {
+                        ticker: company.ticker,
+                        companyName: company.name || company.ticker,
+                        companyLogoUrl: company.logoUrl,
+                        changeDirection: comparison.direction!, // Já verificado acima que não é null
+                        previousScore,
+                        currentScore,
+                        reportSummary,
+                        reportUrl,
+                      },
+                      priority: 0,
+                      metadata: {
+                        reportId,
+                        companyId: company.id,
+                        ticker: company.ticker,
+                      }
                     });
-                    return true;
+                    return result.success;
                   } catch (emailError) {
-                    console.error(`❌ Erro ao enviar email Premium para ${subscriber.email}:`, emailError);
+                    console.error(`❌ Erro ao adicionar email Premium à fila para ${subscriber.email}:`, emailError);
                     return false;
                   }
                 });
 
-                // Enviar emails de conversão para Gratuitos em paralelo
+                // Adicionar emails de conversão para Gratuitos à fila
                 const freeEmailPromises = freeSubscribers.map(async (subscriber) => {
                   try {
-                    await sendFreeUserAssetChangeEmail({
+                    const result = await EmailQueueService.queueEmail({
                       email: subscriber.email,
-                      userName: subscriber.name || 'Investidor',
-                      ticker: company.ticker,
-                      companyName: company.name || company.ticker,
-                      companyLogoUrl: company.logoUrl,
+                      emailType: 'FREE_USER_ASSET_CHANGE',
+                      recipientName: subscriber.name || null,
+                      emailData: {
+                        ticker: company.ticker,
+                        companyName: company.name || company.ticker,
+                        companyLogoUrl: company.logoUrl,
+                      },
+                      priority: 0,
+                      metadata: {
+                        companyId: company.id,
+                        ticker: company.ticker,
+                      }
                     });
-                    return true;
+                    return result.success;
                   } catch (emailError) {
-                    console.error(`❌ Erro ao enviar email Gratuito para ${subscriber.email}:`, emailError);
+                    console.error(`❌ Erro ao adicionar email Gratuito à fila para ${subscriber.email}:`, emailError);
                     return false;
                   }
                 });
@@ -388,7 +405,7 @@ export async function GET(request: NextRequest) {
 
                 const successfulEmails = emailResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
                 stats.emailsSent = successfulEmails;
-                console.log(`✅ ${company.ticker}: ${successfulEmails} emails enviados`);
+                console.log(`✅ ${company.ticker}: ${successfulEmails} emails adicionados à fila`);
               } catch (reportError) {
                 console.error(`❌ ${company.ticker}: Erro ao gerar/enviar relatório:`, reportError);
                 stats.error = `${company.ticker}: ${(reportError as Error).message}`;

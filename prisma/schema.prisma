@@ -1320,6 +1320,11 @@ model EmailQueue {
 enum EmailType {
   ASSET_CHANGE          // Mudança fundamental de ativo
   MONTHLY_REPORT        // Relatório mensal
+  PASSWORD_RESET         // Email de redefinição de senha
+  WELCOME                // Email de boas-vindas
+  PAYMENT_FAILURE        // Email de falha no pagamento
+  EMAIL_VERIFICATION      // Email de verificação de email
+  FREE_USER_ASSET_CHANGE // Email de mudança de ativo para usuários gratuitos (conversão)
 }
 
 enum EmailStatus {

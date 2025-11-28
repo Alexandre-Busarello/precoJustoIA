@@ -7,7 +7,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { safeWrite } from '@/lib/prisma-wrapper'
-import { sendWelcomeEmail, sendPaymentFailureEmail } from '@/lib/email-service'
+import { EmailQueueService } from '@/lib/email-queue-service'
 import { stripe } from '@/lib/stripe'
 import { payment as mercadoPagoPayment } from '@/lib/mercadopago'
 
@@ -204,9 +204,21 @@ export class WebhookProcessor {
 
       if (userEmail) {
         try {
-          await sendWelcomeEmail(userEmail, undefined, false)
+          await EmailQueueService.queueEmail({
+            email: userEmail,
+            emailType: 'WELCOME',
+            emailData: {
+              userName: undefined,
+              isEarlyAdopter: false
+            },
+            priority: 0,
+            metadata: {
+              userId,
+              subscriptionId: subscription.id
+            }
+          })
         } catch (emailError) {
-          console.error('❌ Failed to send welcome email:', emailError)
+          console.error('❌ Failed to queue welcome email:', emailError)
         }
       }
 
@@ -319,9 +331,22 @@ export class WebhookProcessor {
 
       if (!user.wasPremiumBefore && user.email) {
         try {
-          await sendWelcomeEmail(user.email, user.name || undefined, false)
+          await EmailQueueService.queueEmail({
+            email: user.email,
+            emailType: 'WELCOME',
+            recipientName: user.name || null,
+            emailData: {
+              userName: user.name || undefined,
+              isEarlyAdopter: false
+            },
+            priority: 0,
+            metadata: {
+              userId: user.id,
+              subscriptionId: subscription.id
+            }
+          })
         } catch (emailError) {
-          console.error('❌ Failed to send welcome email:', emailError)
+          console.error('❌ Failed to queue welcome email:', emailError)
         }
       }
 
@@ -396,9 +421,24 @@ export class WebhookProcessor {
         try {
           const baseUrl = process.env.NEXTAUTH_URL || 'https://precojusto.ai'
           const retryUrl = `${baseUrl}/checkout?retry_payment=true`
-          await sendPaymentFailureEmail(user.email, retryUrl, user.name || undefined, translatedReason)
+          await EmailQueueService.queueEmail({
+            email: user.email,
+            emailType: 'PAYMENT_FAILURE',
+            recipientName: user.name || null,
+            emailData: {
+              retryUrl,
+              userName: user.name || undefined,
+              failureReason: translatedReason
+            },
+            priority: 1, // Prioridade alta para emails críticos
+            metadata: {
+              userId: user.id,
+              subscriptionId: subscription.id,
+              invoiceId: invoice.id
+            }
+          })
         } catch (emailError) {
-          console.error('❌ Failed to send payment failure email:', emailError)
+          console.error('❌ Failed to queue payment failure email:', emailError)
         }
       }
 
@@ -494,9 +534,23 @@ export class WebhookProcessor {
         try {
           const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
           const retryUrl = `${baseUrl}/checkout?retry_payment=true`
-          await sendPaymentFailureEmail(user.email, retryUrl, user.name || undefined, translatedReason)
+          await EmailQueueService.queueEmail({
+            email: user.email,
+            emailType: 'PAYMENT_FAILURE',
+            recipientName: user.name || null,
+            emailData: {
+              retryUrl,
+              userName: user.name || undefined,
+              failureReason: translatedReason
+            },
+            priority: 1, // Prioridade alta para emails críticos
+            metadata: {
+              userId: user.id,
+              paymentIntentId: paymentIntent.id
+            }
+          })
         } catch (emailError) {
-          console.error('❌ Failed to send payment failure email:', emailError)
+          console.error('❌ Failed to queue payment failure email:', emailError)
         }
       }
 
@@ -596,9 +650,22 @@ export class WebhookProcessor {
 
     if (currentUser.email) {
       try {
-        await sendWelcomeEmail(currentUser.email, currentUser.name || undefined, false)
+        await EmailQueueService.queueEmail({
+          email: currentUser.email,
+          emailType: 'WELCOME',
+          recipientName: currentUser.name || null,
+          emailData: {
+            userName: currentUser.name || undefined,
+            isEarlyAdopter: false
+          },
+          priority: 0,
+          metadata: {
+            userId,
+            paymentId: paymentData.id
+          }
+        })
       } catch (emailError) {
-        console.error('❌ Failed to send welcome email:', emailError)
+        console.error('❌ Failed to queue welcome email:', emailError)
       }
     }
 

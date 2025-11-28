@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { sendPasswordResetEmail } from '@/lib/email-service'
+import { EmailQueueService } from '@/lib/email-queue-service'
 import crypto from 'crypto'
 import { z } from 'zod'
 
@@ -60,17 +60,26 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
     const resetUrl = `${baseUrl}/redefinir-senha?token=${resetToken}`
 
-    // Enviar email
-    const emailResult = await sendPasswordResetEmail(
-      user.email,
-      resetUrl,
-      user.name || undefined
-    )
+    // Adicionar email à fila (tenta enviar imediatamente)
+    const emailResult = await EmailQueueService.queueEmail({
+      email: user.email,
+      emailType: 'PASSWORD_RESET',
+      recipientName: user.name || null,
+      emailData: {
+        resetUrl,
+        userName: user.name || undefined
+      },
+      priority: 1, // Prioridade alta para emails críticos
+      metadata: {
+        userId: user.id,
+        token: resetToken
+      }
+    })
 
     if (!emailResult.success) {
-      console.error('❌ Erro ao enviar email de reset:', emailResult.error)
+      console.error('❌ Erro ao adicionar email de reset à fila:', emailResult.error)
       
-      // Marcar token como usado se o email falhou
+      // Marcar token como usado se falhou ao adicionar à fila
       await prisma.passwordResetToken.updateMany({
         where: { token: resetToken },
         data: { used: true }
@@ -85,7 +94,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`✅ Email de reset enviado para: ${email}`)
+    console.log(`✅ Email de reset ${emailResult.sent ? 'enviado' : 'adicionado à fila'} para: ${email}`)
 
     return NextResponse.json({
       success: true,

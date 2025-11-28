@@ -8,6 +8,7 @@ import { reviewAnalysisInternal } from '@/app/api/review-analysis/route'
 import { prisma } from '@/lib/prisma'
 import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service'
+import { EmailQueueService } from '@/lib/email-queue-service'
 
 // Validar se a API key do Gemini está configurada
 function validateGeminiConfig() {
@@ -323,20 +324,17 @@ export async function POST(
               continue
             }
 
-            // Criar registro na fila de emails
-            await prisma.emailQueue.create({
-              data: {
-                email: subscriber.email,
-                emailType,
-                recipientName: subscriber.name || null,
-                emailData,
-                status: 'PENDING',
-                priority: 0, // Prioridade normal
-                metadata: {
-                  reportId: completedReport.id,
-                  companyId: companyForEmail.id,
-                  ticker,
-                }
+            // Adicionar email à fila (tenta enviar imediatamente)
+            await EmailQueueService.queueEmail({
+              email: subscriber.email,
+              emailType,
+              recipientName: subscriber.name || null,
+              emailData,
+              priority: 0, // Prioridade normal
+              metadata: {
+                reportId: completedReport.id,
+                companyId: companyForEmail.id,
+                ticker,
               }
             })
 

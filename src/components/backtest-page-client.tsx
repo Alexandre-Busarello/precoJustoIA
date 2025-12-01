@@ -158,11 +158,85 @@ export function BacktestPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
   
-  // Scroll para o topo quando o componente for montado
+  // Scroll para o topo quando o componente for montado (apenas se não for para configure)
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (urlView !== 'configure') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  
+
+  // Função compartilhada para scroll suave até a área de configuração
+  const scrollToConfigure = useCallback(() => {
+    // Tentar encontrar o elemento específico do formulário primeiro (mais preciso)
+    let targetElement = document.getElementById('backtest-config-form-start');
+    
+    // Se não encontrar, usar o TabsContent como fallback
+    if (!targetElement) {
+      targetElement = document.getElementById('backtest-configure');
+    }
+    
+    if (targetElement) {
+      // Calcular offset aumentado para ficar mais para cima (descontar header fixo + tabs + barra de busca)
+      // Mobile: header + tabs + barra de busca + padding
+      // Desktop: header + tabs + barra de busca + padding
+      const offset = window.innerWidth < 768 ? 140 : 120;
+      const elementPosition = targetElement.getBoundingClientRect().top;
+      const offsetPosition = Math.max(0, elementPosition + window.pageYOffset - offset);
+
+      // Usar requestAnimationFrame para garantir que o scroll seja suave mesmo quando já está na página
+      requestAnimationFrame(() => {
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth'
+        });
+      });
+    }
+  }, []);
+
+  // Scroll para área de configuração quando view=configure for detectado ou hash presente
+  useEffect(() => {
+    // Se tem hash #backtest-configure na URL, sempre fazer scroll
+    if (window.location.hash === '#backtest-configure') {
+      // Delay maior quando já está na página para garantir renderização completa
+      setTimeout(scrollToConfigure, 100);
+      // Remover hash após scroll para não interferir em navegação futura
+      setTimeout(() => {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }, 2000);
+    }
+    // Se está na aba configure, também fazer scroll
+    else if (activeTab === 'configure' && urlView === 'configure') {
+      setTimeout(scrollToConfigure, 300);
+    }
+  }, [activeTab, urlView, scrollToConfigure]);
+
+  // Escutar mudanças no hash da URL (para quando usuário já está na página e clica no link)
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === '#backtest-configure') {
+        // Pequeno delay para garantir que o DOM está pronto
+        setTimeout(scrollToConfigure, 100);
+        // Remover hash após scroll
+        setTimeout(() => {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }, 2000);
+      }
+    };
+
+    // Escutar eventos de hashchange
+    window.addEventListener('hashchange', handleHashChange);
+    
+    // Verificar hash inicial também (quando já está na página com hash)
+    if (window.location.hash === '#backtest-configure') {
+      handleHashChange();
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, [scrollToConfigure]);
+
   // Função auxiliar para atualizar URL
   const updateUrl = useCallback((view?: string, configId?: string) => {
     const params = new URLSearchParams();
@@ -908,7 +982,7 @@ export function BacktestPageClient() {
         </TabsContent>
 
         {/* Configuração */}
-        <TabsContent value="configure" className="space-y-6">
+        <TabsContent value="configure" id="backtest-configure" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Formulário de Configuração */}
             <div className="lg:col-span-2">

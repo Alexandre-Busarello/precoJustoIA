@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { BacktestPageClient } from '@/components/backtest-page-client'
+import { BacktestCTALink } from '@/components/backtest-cta-link'
 import { LandingHero } from '@/components/landing/landing-hero'
 import { CTASection } from '@/components/landing/cta-section'
 import { FAQSection } from '@/components/landing/faq-section'
@@ -63,26 +64,26 @@ export default async function BacktestPage() {
           ]} />
         </div>
 
-        {/* Hero Section Compacto */}
-        <LandingHero
-          headline={
-            <>
+        {/* Hero Section Compacto para usuários logados */}
+        <div className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-4 pb-8">
+          <div className="relative text-center max-w-4xl mx-auto px-4">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight mb-3 leading-tight">
               Backtest de{" "}
               <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 Carteira de Ações
               </span>
-            </>
-          }
-          subheadline={
-            <>
+            </h1>
+            <p className="text-sm sm:text-base text-muted-foreground mb-6 max-w-2xl mx-auto">
               Teste suas <strong>estratégias de investimento</strong> antes de aplicar com dados históricos reais da B3.
-            </>
-          }
-          showQuickAccess={false}
-        />
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <BacktestCTALink />
+            </div>
+          </div>
+        </div>
 
         {/* Ferramenta */}
-        <section className="py-8 bg-white dark:bg-background">
+        <section id="backtest-tool" className="py-8 bg-white dark:bg-background">
           <div className="container mx-auto max-w-7xl px-4">
             <BacktestPageClient />
           </div>

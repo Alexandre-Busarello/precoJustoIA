@@ -431,7 +431,7 @@ export function BacktestConfigForm({
         </div>
       )}
       
-    <div className="space-y-6">
+    <div className="space-y-6" id="backtest-config-form-start">
       {/* Informações Básicas */}
       <Card>
         <CardHeader>

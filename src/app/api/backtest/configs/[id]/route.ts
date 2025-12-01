@@ -250,6 +250,96 @@ export async function PUT(
   }
 }
 
+// DELETE /api/backtest/configs/[id] - Deletar configuração
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Não autorizado' },
+        { status: 401 }
+      );
+    }
+
+    // Usar o serviço centralizado para obter o usuário válido
+    const currentUser = await getCurrentUser();
+    
+    if (!currentUser?.id) {
+      return NextResponse.json(
+        { error: 'Usuário não encontrado' },
+        { status: 404 }
+      );
+    }
+
+    // Verificar se é usuário Premium
+    if (!currentUser.isPremium) {
+      return NextResponse.json({ 
+        error: 'Backtesting exclusivo para usuários Premium',
+        upgradeUrl: '/dashboard'
+      }, { status: 403 });
+    }
+
+    const { id: configId } = await params;
+
+    // Verificar se a configuração existe e pertence ao usuário
+    const config = await prisma.backtestConfig.findFirst({
+      where: {
+        id: configId,
+        userId: currentUser.id
+      }
+    });
+
+    if (!config) {
+      return NextResponse.json(
+        { error: 'Configuração não encontrada' },
+        { status: 404 }
+      );
+    }
+
+    // Deletar configuração e todos os dados relacionados dentro de uma transação
+    await safeTransaction('delete-backtest-config', async () => {
+      // Deletar transações relacionadas
+      await prisma.backtestTransaction.deleteMany({
+        where: { backtestId: configId }
+      });
+
+      // Deletar resultados relacionados
+      await prisma.backtestResult.deleteMany({
+        where: { backtestId: configId }
+      });
+
+      // Deletar ativos relacionados
+      await prisma.backtestAsset.deleteMany({
+        where: { backtestId: configId }
+      });
+
+      // Deletar a configuração
+      await prisma.backtestConfig.delete({
+        where: { id: configId }
+      });
+    }, {
+      affectedTables: ['backtest_configs', 'backtest_assets', 'backtest_results', 'backtest_transactions']
+    });
+
+    console.log(`✅ Configuração ${configId} deletada com sucesso`);
+
+    return NextResponse.json({ 
+      message: 'Configuração deletada com sucesso'
+    });
+
+  } catch (error) {
+    console.error('Erro ao deletar configuração:', error);
+    return NextResponse.json(
+      { error: 'Erro interno do servidor' },
+      { status: 500 }
+    );
+  }
+}
+
 // Função de validação
 function validateBacktestConfigData(data: any): string[] {
   const errors: string[] = [];

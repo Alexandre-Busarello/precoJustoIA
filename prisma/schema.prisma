@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
@@ -44,59 +44,60 @@ model User {
   subscriptionTier SubscriptionTier @default(FREE)
   premiumExpiresAt DateTime?
   isAdmin          Boolean          @default(false) @map("is_admin")
-  
+
   // Histórico Premium
-  wasPremiumBefore Boolean          @default(false) @map("was_premium_before")
-  firstPremiumAt   DateTime?        @map("first_premium_at")
-  lastPremiumAt    DateTime?        @map("last_premium_at")
-  premiumCount     Int              @default(0) @map("premium_count") // Quantas vezes foi Premium
-  
+  wasPremiumBefore Boolean   @default(false) @map("was_premium_before")
+  firstPremiumAt   DateTime? @map("first_premium_at")
+  lastPremiumAt    DateTime? @map("last_premium_at")
+  premiumCount     Int       @default(0) @map("premium_count") // Quantas vezes foi Premium
+
   // Stripe Integration
-  stripeCustomerId    String?   @unique @map("stripe_customer_id")
-  stripeSubscriptionId String?  @unique @map("stripe_subscription_id")
-  stripePriceId       String?   @map("stripe_price_id")
+  stripeCustomerId       String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId   String?   @unique @map("stripe_subscription_id")
+  stripePriceId          String?   @map("stripe_price_id")
   stripeCurrentPeriodEnd DateTime? @map("stripe_current_period_end")
-  
+
   // Fase Alfa - Early Adopters
-  isEarlyAdopter      Boolean   @default(false) @map("is_early_adopter")
-  earlyAdopterDate    DateTime? @map("early_adopter_date")
-  lastLoginAt         DateTime? @map("last_login_at")
-  isInactive          Boolean   @default(false) @map("is_inactive")
-  inactivatedAt       DateTime? @map("inactivated_at")
-  
+  isEarlyAdopter   Boolean   @default(false) @map("is_early_adopter")
+  earlyAdopterDate DateTime? @map("early_adopter_date")
+  lastLoginAt      DateTime? @map("last_login_at")
+  isInactive       Boolean   @default(false) @map("is_inactive")
+  inactivatedAt    DateTime? @map("inactivated_at")
+
   // Acquisition tracking
-  acquisition         String?   @map("acquisition") // Origem do cadastro (ex: "Calculadora de Dividend Yield")
-  
+  acquisition String? @map("acquisition") // Origem do cadastro (ex: "Calculadora de Dividend Yield")
+
   // Onboarding
-  lastOnboardingSeenAt DateTime? @map("last_onboarding_seen_at") // Última vez que viu o onboarding
-  onboardingAcquisitionSource String? @map("onboarding_acquisition_source") // Como chegou até aqui (Google, YouTube, etc)
-  onboardingExperienceLevel String? @map("onboarding_experience_level") // Nível de experiência (Iniciante, Intermediário, Avançado)
-  onboardingInvestmentFocus String? @map("onboarding_investment_focus") // Foco principal (Renda Passiva, Crescimento, Ambos, Explorar)
-  
+  lastOnboardingSeenAt        DateTime? @map("last_onboarding_seen_at") // Última vez que viu o onboarding
+  onboardingAcquisitionSource String?   @map("onboarding_acquisition_source") // Como chegou até aqui (Google, YouTube, etc)
+  onboardingExperienceLevel   String?   @map("onboarding_experience_level") // Nível de experiência (Iniciante, Intermediário, Avançado)
+  onboardingInvestmentFocus   String?   @map("onboarding_investment_focus") // Foco principal (Renda Passiva, Crescimento, Ambos, Explorar)
+
   // Trial Premium
-  trialStartedAt     DateTime? @map("trial_started_at") // Data de início do trial
-  trialEndsAt         DateTime? @map("trial_ends_at") // Data de término do trial
-  
+  trialStartedAt DateTime? @map("trial_started_at") // Data de início do trial
+  trialEndsAt    DateTime? @map("trial_ends_at") // Data de término do trial
+
   // Metadata
-  createdAt           DateTime  @default(now()) @map("created_at")
-  
-  accounts         Account[]
-  sessions         Session[]
-  portfolios       Portfolio[]
-  portfolioConfigs PortfolioConfig[] @relation("UserPortfolioConfigs")
-  rankingHistory   RankingHistory[]
-  supportTickets   SupportTicket[]
-  ticketMessages   TicketMessage[]
-  assignedTickets  SupportTicket[] @relation("AssignedTickets")
-  aiReportFeedbacks AIReportFeedback[]
-  backtestConfigs  BacktestConfig[]
-  assetSubscriptions UserAssetSubscription[]
-  userEvents        UserEvent[]
-  userSecurity      UserSecurity?
-  featureUsage      FeatureUsage[]
-  radarConfig       RadarConfig?
-  notifications     Notification[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  accounts                Account[]
+  sessions                Session[]
+  portfolios              Portfolio[]
+  portfolioConfigs        PortfolioConfig[]            @relation("UserPortfolioConfigs")
+  rankingHistory          RankingHistory[]
+  supportTickets          SupportTicket[]
+  ticketMessages          TicketMessage[]
+  assignedTickets         SupportTicket[]              @relation("AssignedTickets")
+  aiReportFeedbacks       AIReportFeedback[]
+  backtestConfigs         BacktestConfig[]
+  assetSubscriptions      UserAssetSubscription[]
+  userEvents              UserEvent[]
+  userSecurity            UserSecurity?
+  featureUsage            FeatureUsage[]
+  radarConfig             RadarConfig?
+  notifications           Notification[]
   notificationPreferences UserNotificationPreferences?
+  debts                   Debt[]
 
   @@map("users")
 }
@@ -110,27 +111,27 @@ model VerificationToken {
 }
 
 model UserSecurity {
-  id                    String   @id @default(cuid())
-  userId                String   @unique @map("user_id")
-  
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+
   // IP Tracking (LGPD Compliance: IPs são armazenados como SHA-256 hash, não IP direto)
-  registrationIp        String?  @map("registration_ip") // Hash SHA-256 do IP usado no registro
-  lastLoginIp           String?  @map("last_login_ip") // Hash SHA-256 do último IP usado no login
-  
+  registrationIp String? @map("registration_ip") // Hash SHA-256 do IP usado no registro
+  lastLoginIp    String? @map("last_login_ip") // Hash SHA-256 do último IP usado no login
+
   // Conta Suspeita
-  isSuspicious          Boolean  @default(false) @map("is_suspicious")
-  suspiciousReason      String?  @map("suspicious_reason") // Motivo da marcação
-  suspiciousFlaggedAt   DateTime? @map("suspicious_flagged_at")
-  suspiciousReviewedAt  DateTime? @map("suspicious_reviewed_at")
-  suspiciousReviewedBy  String?  @map("suspicious_reviewed_by") // ID do admin
-  
+  isSuspicious         Boolean   @default(false) @map("is_suspicious")
+  suspiciousReason     String?   @map("suspicious_reason") // Motivo da marcação
+  suspiciousFlaggedAt  DateTime? @map("suspicious_flagged_at")
+  suspiciousReviewedAt DateTime? @map("suspicious_reviewed_at")
+  suspiciousReviewedBy String?   @map("suspicious_reviewed_by") // ID do admin
+
   // Metadata
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Relations
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([registrationIp])
   @@index([isSuspicious])
   @@index([isSuspicious, suspiciousReviewedAt])
@@ -152,10 +153,10 @@ model PasswordResetToken {
 }
 
 model Company {
-  id                Int                      @id @default(autoincrement())
-  ticker            String                   @unique
+  id                Int       @id @default(autoincrement())
+  ticker            String    @unique
   name              String
-  assetType         AssetType                @default(STOCK) @map("asset_type")
+  assetType         AssetType @default(STOCK) @map("asset_type")
   sector            String?
   industry          String?
   cnpj              String?
@@ -167,7 +168,7 @@ model Company {
   country           String?
   fullTimeEmployees Int?
   logoUrl           String?
-  updatedAt         DateTime?                @updatedAt
+  updatedAt         DateTime? @updatedAt
   address2          String?
   address3          String?
   fax               String?
@@ -177,41 +178,41 @@ model Company {
   sectorDisp        String?
   sectorKey         String?
   zip               String?
-  
+
   // Dividend tracking (quick access)
   ultimoDividendo     Decimal?  @map("ultimo_dividendo") @db.Decimal(15, 6)
   dataUltimoDividendo DateTime? @map("data_ultimo_dividendo") @db.Date
-  
+
   // Dividend Radar (AI projections)
-  dividendRadarProjections     Json?     @map("dividend_radar_projections") // Projeções dos próximos 12 meses
-  dividendRadarLastProcessedAt DateTime? @map("dividend_radar_last_processed_at") // Última vez que radar foi processado
+  dividendRadarProjections      Json?     @map("dividend_radar_projections") // Projeções dos próximos 12 meses
+  dividendRadarLastProcessedAt  DateTime? @map("dividend_radar_last_processed_at") // Última vez que radar foi processado
   dividendRadarLastDividendDate DateTime? @map("dividend_radar_last_dividend_date") @db.Date // Data do último dividendo usado no cálculo
-  
+
   // BDR tracking (Yahoo Finance updates)
   yahooLastBdrUpdatedAt DateTime? @map("yahoo_last_bdr_updated_at")
-  
+
   // Relations
-  dailyQuotes       DailyQuote[]
-  historicalPrices  HistoricalPrice[]
-  financialData     FinancialData[]
-  balanceSheets     BalanceSheet[]
-  incomeStatements  IncomeStatement[]
-  cashflowStatements CashflowStatement[]
-  keyStatistics     KeyStatistics[]
+  dailyQuotes          DailyQuote[]
+  historicalPrices     HistoricalPrice[]
+  financialData        FinancialData[]
+  balanceSheets        BalanceSheet[]
+  incomeStatements     IncomeStatement[]
+  cashflowStatements   CashflowStatement[]
+  keyStatistics        KeyStatistics[]
   valueAddedStatements ValueAddedStatement[]
-  priceOscillations PriceOscillations[]
-  quarterlyFinancials QuarterlyFinancials[]
-  aiReports       AIReport[]
-  userSubscriptions UserAssetSubscription[]
-  snapshots       AssetSnapshot[]
-  youtubeAnalyses YouTubeAnalysis[]
-  etfData         EtfData?
-  fiiData         FiiData?
-  dividendHistory DividendHistory[]
-  lastCheckedAt   DateTime? @map("last_checked_at")
-  youtubeLastCheckedAt DateTime? @map("youtube_last_checked_at")
-  yahooLastUpdatedAt DateTime? @map("yahoo_last_updated_at")
-  technicalAnalyses AssetTechnicalAnalysis[]
+  priceOscillations    PriceOscillations[]
+  quarterlyFinancials  QuarterlyFinancials[]
+  aiReports            AIReport[]
+  userSubscriptions    UserAssetSubscription[]
+  snapshots            AssetSnapshot[]
+  youtubeAnalyses      YouTubeAnalysis[]
+  etfData              EtfData?
+  fiiData              FiiData?
+  dividendHistory      DividendHistory[]
+  lastCheckedAt        DateTime?                @map("last_checked_at")
+  youtubeLastCheckedAt DateTime?                @map("youtube_last_checked_at")
+  yahooLastUpdatedAt   DateTime?                @map("yahoo_last_updated_at")
+  technicalAnalyses    AssetTechnicalAnalysis[]
 
   @@index([sector])
   @@index([industry])
@@ -344,21 +345,21 @@ model HistoricalPrice {
 
 // Histórico completo de dividendos pagos
 model DividendHistory {
-  id              Int      @id @default(autoincrement())
-  companyId       Int      @map("company_id")
-  exDate          DateTime @map("ex_date") @db.Date // Data ex-dividendo
-  paymentDate     DateTime? @map("payment_date") @db.Date // Data de pagamento (Yahoo Finance não fornece - sempre null)
-  amount          Decimal  @db.Decimal(15, 6) // Valor por ação
-  type            String?  // dividend, JCP, etc (se disponível)
-  currency        String?  @default("BRL") // Moeda
-  
+  id          Int       @id @default(autoincrement())
+  companyId   Int       @map("company_id")
+  exDate      DateTime  @map("ex_date") @db.Date // Data ex-dividendo
+  paymentDate DateTime? @map("payment_date") @db.Date // Data de pagamento (Yahoo Finance não fornece - sempre null)
+  amount      Decimal   @db.Decimal(15, 6) // Valor por ação
+  type        String? // dividend, JCP, etc (se disponível)
+  currency    String?   @default("BRL") // Moeda
+
   // Metadata
-  source          String   @default("yahoo") // Fonte: yahoo, manual, etc
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
+  source    String   @default("yahoo") // Fonte: yahoo, manual, etc
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   @@unique([companyId, exDate, amount]) // Evitar duplicatas - permite JCP e dividendos na mesma data
   @@index([companyId, exDate])
   @@index([exDate])
@@ -391,116 +392,116 @@ model PortfolioAsset {
 // ===== PORTFOLIO (CARTEIRA) MODELS =====
 
 model PortfolioConfig {
-  id                  String   @id @default(cuid())
-  userId              String   @map("user_id")
-  name                String
-  description         String?
-  
+  id          String  @id @default(cuid())
+  userId      String  @map("user_id")
+  name        String
+  description String?
+
   // Configuration
   startDate           DateTime @map("start_date") @db.Date
   monthlyContribution Decimal  @map("monthly_contribution") @db.Decimal(12, 2)
   rebalanceFrequency  String   @default("monthly") // monthly, quarterly, yearly
-  
+
   // Status tracking
-  lastTransactionDate DateTime? @map("last_transaction_date") @db.Date
+  lastTransactionDate        DateTime? @map("last_transaction_date") @db.Date
   lastSuggestionsGeneratedAt DateTime? @map("last_suggestions_generated_at") // Last time suggestions were generated
-  isActive            Boolean  @default(true) @map("is_active")
-  trackingStarted     Boolean  @default(false) @map("tracking_started") // Start auto suggestions
-  
+  isActive                   Boolean   @default(true) @map("is_active")
+  trackingStarted            Boolean   @default(false) @map("tracking_started") // Start auto suggestions
+
   // Metadata
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Source tracking
-  sourceBacktestId    String?  @map("source_backtest_id") // If created from backtest
-  
+  sourceBacktestId String? @map("source_backtest_id") // If created from backtest
+
   // Relationships
-  user                User     @relation("UserPortfolioConfigs", fields: [userId], references: [id], onDelete: Cascade)
-  assets              PortfolioConfigAsset[]
-  transactions        PortfolioTransaction[]
-  metrics             PortfolioMetrics?
-  
+  user         User                   @relation("UserPortfolioConfigs", fields: [userId], references: [id], onDelete: Cascade)
+  assets       PortfolioConfigAsset[]
+  transactions PortfolioTransaction[]
+  metrics      PortfolioMetrics?
+
   @@index([userId, createdAt])
   @@index([userId, isActive])
   @@map("portfolio_configs")
 }
 
 model PortfolioConfigAsset {
-  id                String   @id @default(cuid())
-  portfolioId       String   @map("portfolio_id")
-  ticker            String
-  targetAllocation  Decimal  @map("target_allocation") @db.Decimal(5, 4) // Ex: 0.2500 = 25%
-  
+  id               String  @id @default(cuid())
+  portfolioId      String  @map("portfolio_id")
+  ticker           String
+  targetAllocation Decimal @map("target_allocation") @db.Decimal(5, 4) // Ex: 0.2500 = 25%
+
   // Tracking
-  addedAt           DateTime @default(now()) @map("added_at")
-  removedAt         DateTime? @map("removed_at") @db.Date // Soft delete for history
-  isActive          Boolean  @default(true) @map("is_active")
-  
-  portfolio         PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  
+  addedAt   DateTime  @default(now()) @map("added_at")
+  removedAt DateTime? @map("removed_at") @db.Date // Soft delete for history
+  isActive  Boolean   @default(true) @map("is_active")
+
+  portfolio PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
   @@index([portfolioId, isActive])
   @@index([portfolioId, ticker])
   @@map("portfolio_config_assets")
 }
 
 enum TransactionType {
-  CASH_CREDIT          // Manual contribution to cash
+  CASH_CREDIT // Manual contribution to cash
   MONTHLY_CONTRIBUTION // Monthly contribution suggested by system
-  CASH_DEBIT           // Manual cash withdrawal
-  BUY                  // Asset purchase (contribution)
-  SELL_REBALANCE       // Sale for rebalancing
-  BUY_REBALANCE        // Purchase from rebalance cash
-  SELL_WITHDRAWAL      // Sale without rebalancing (portfolio exit)
-  DIVIDEND             // Dividend received
+  CASH_DEBIT // Manual cash withdrawal
+  BUY // Asset purchase (contribution)
+  SELL_REBALANCE // Sale for rebalancing
+  BUY_REBALANCE // Purchase from rebalance cash
+  SELL_WITHDRAWAL // Sale without rebalancing (portfolio exit)
+  DIVIDEND // Dividend received
 }
 
 enum TransactionStatus {
-  PENDING              // @deprecated - No longer used. Suggestions are now dynamic and calculated on-demand.
-  CONFIRMED            // User confirmed
-  EXECUTED             // Manually entered as executed
-  REJECTED             // @deprecated - No longer used. Users no longer reject suggestions, they simply don't confirm them.
+  PENDING // @deprecated - No longer used. Suggestions are now dynamic and calculated on-demand.
+  CONFIRMED // User confirmed
+  EXECUTED // Manually entered as executed
+  REJECTED // @deprecated - No longer used. Users no longer reject suggestions, they simply don't confirm them.
 }
 
 model PortfolioTransaction {
-  id                  String   @id @default(cuid())
-  portfolioId         String   @map("portfolio_id")
-  
+  id          String @id @default(cuid())
+  portfolioId String @map("portfolio_id")
+
   // Transaction details
-  date                DateTime @db.Date
-  type                TransactionType
-  status              TransactionStatus @default(PENDING)
-  ticker              String?  // Null for CASH_CREDIT/CASH_DEBIT
-  
+  date   DateTime          @db.Date
+  type   TransactionType
+  status TransactionStatus @default(PENDING)
+  ticker String? // Null for CASH_CREDIT/CASH_DEBIT
+
   // Financial data
-  amount              Decimal  @db.Decimal(12, 2)  // Transaction amount (BRL)
-  price               Decimal? @db.Decimal(10, 4)  // Asset price at transaction
-  quantity            Decimal? @db.Decimal(15, 6)  // Shares quantity
-  
+  amount   Decimal  @db.Decimal(12, 2) // Transaction amount (BRL)
+  price    Decimal? @db.Decimal(10, 4) // Asset price at transaction
+  quantity Decimal? @db.Decimal(15, 6) // Shares quantity
+
   // Context
   cashBalanceBefore   Decimal  @map("cash_balance_before") @db.Decimal(12, 2)
   cashBalanceAfter    Decimal  @map("cash_balance_after") @db.Decimal(12, 2)
   portfolioValueAfter Decimal? @map("portfolio_value_after") @db.Decimal(15, 2)
-  
+
   // Notes & tracking
-  notes               String?
-  rejectionReason     String?  @map("rejection_reason") // Why user rejected
-  
+  notes           String?
+  rejectionReason String? @map("rejection_reason") // Why user rejected
+
   // Metadata
-  createdAt           DateTime @default(now()) @map("created_at")
-  confirmedAt         DateTime? @map("confirmed_at")
-  rejectedAt          DateTime? @map("rejected_at")
-  revertedAt          DateTime? @map("reverted_at")
-  
+  createdAt   DateTime  @default(now()) @map("created_at")
+  confirmedAt DateTime? @map("confirmed_at")
+  rejectedAt  DateTime? @map("rejected_at")
+  revertedAt  DateTime? @map("reverted_at")
+
   // Source tracking for auto-suggestions
-  isAutoSuggested     Boolean  @default(false) @map("is_auto_suggested")
-  
+  isAutoSuggested Boolean @default(false) @map("is_auto_suggested")
+
   // Future: Automatic dividend tracking
   dividendPaymentDate DateTime? @map("dividend_payment_date") @db.Date // For future auto-import
-  dividendSourceId    String?  @map("dividend_source_id") // External dividend ID for deduplication
-  
+  dividendSourceId    String?   @map("dividend_source_id") // External dividend ID for deduplication
+
   // Relationships
-  portfolio           PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  
+  portfolio PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
   @@index([portfolioId, date])
   @@index([portfolioId, status])
   @@index([portfolioId, type])
@@ -510,36 +511,36 @@ model PortfolioTransaction {
 }
 
 model PortfolioMetrics {
-  id                    String   @id @default(cuid())
-  portfolioId           String   @unique @map("portfolio_id")
-  
+  id          String @id @default(cuid())
+  portfolioId String @unique @map("portfolio_id")
+
   // Current values
-  currentValue          Decimal  @map("current_value") @db.Decimal(15, 2)
-  cashBalance           Decimal  @map("cash_balance") @db.Decimal(12, 2)
-  totalInvested         Decimal  @map("total_invested") @db.Decimal(15, 2)
-  totalWithdrawn        Decimal  @map("total_withdrawn") @db.Decimal(15, 2) @default(0)
-  totalDividends        Decimal  @map("total_dividends") @db.Decimal(12, 2) @default(0)
-  
+  currentValue   Decimal @map("current_value") @db.Decimal(15, 2)
+  cashBalance    Decimal @map("cash_balance") @db.Decimal(12, 2)
+  totalInvested  Decimal @map("total_invested") @db.Decimal(15, 2)
+  totalWithdrawn Decimal @default(0) @map("total_withdrawn") @db.Decimal(15, 2)
+  totalDividends Decimal @default(0) @map("total_dividends") @db.Decimal(12, 2)
+
   // Performance metrics
-  totalReturn           Decimal  @map("total_return") @db.Decimal(10, 4)
-  annualizedReturn      Decimal? @map("annualized_return") @db.Decimal(10, 4)
-  volatility            Decimal? @db.Decimal(10, 4)
-  sharpeRatio           Decimal? @map("sharpe_ratio") @db.Decimal(10, 4)
-  maxDrawdown           Decimal? @map("max_drawdown") @db.Decimal(10, 4)
-  
+  totalReturn      Decimal  @map("total_return") @db.Decimal(10, 4)
+  annualizedReturn Decimal? @map("annualized_return") @db.Decimal(10, 4)
+  volatility       Decimal? @db.Decimal(10, 4)
+  sharpeRatio      Decimal? @map("sharpe_ratio") @db.Decimal(10, 4)
+  maxDrawdown      Decimal? @map("max_drawdown") @db.Decimal(10, 4)
+
   // Detailed data (JSON)
-  assetHoldings         Json     @map("asset_holdings")      // Current holdings per asset
-  monthlyReturns        Json?    @map("monthly_returns")     // Historical monthly returns
-  evolutionData         Json?    @map("evolution_data")      // Portfolio value evolution
-  sectorAllocation      Json?    @map("sector_allocation")   // Allocation by sector
-  industryAllocation    Json?    @map("industry_allocation") // Allocation by industry
-  
+  assetHoldings      Json  @map("asset_holdings") // Current holdings per asset
+  monthlyReturns     Json? @map("monthly_returns") // Historical monthly returns
+  evolutionData      Json? @map("evolution_data") // Portfolio value evolution
+  sectorAllocation   Json? @map("sector_allocation") // Allocation by sector
+  industryAllocation Json? @map("industry_allocation") // Allocation by industry
+
   // Metadata
-  lastCalculatedAt      DateTime @default(now()) @map("last_calculated_at")
-  
+  lastCalculatedAt DateTime @default(now()) @map("last_calculated_at")
+
   // Relationships
-  portfolio             PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  
+  portfolio PortfolioConfig @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
   @@index([lastCalculatedAt])
   @@map("portfolio_metrics")
 }
@@ -576,32 +577,32 @@ enum ProcessingPhase {
 }
 
 enum TickerStatus {
-  PENDING         // Ainda não processado
-  PROCESSING      // Em processamento no momento
-  COMPLETED       // Processamento completo (todos os dados)
-  PARTIAL         // Processamento parcial (alguns dados faltando)
-  ERROR           // Erro no processamento
-  SKIPPED         // Pulado por algum motivo (ex: ticker inválido)
+  PENDING // Ainda não processado
+  PROCESSING // Em processamento no momento
+  COMPLETED // Processamento completo (todos os dados)
+  PARTIAL // Processamento parcial (alguns dados faltando)
+  ERROR // Erro no processamento
+  SKIPPED // Pulado por algum motivo (ex: ticker inválido)
 }
 
 // Status de processamento individual por ticker
 model TickerProcessingStatus {
-  id                    Int                    @id @default(autoincrement())
-  ticker                String                 @unique
-  processType           String                 @default("ward_data_fetch") @map("process_type")
-  status                TickerStatus @default(PENDING)
-  hasBasicData          Boolean                @default(false) @map("has_basic_data")
-  hasHistoricalData     Boolean                @default(false) @map("has_historical_data")
-  hasTTMData            Boolean                @default(false) @map("has_ttm_data")
-  hasBrapiProData       Boolean                @default(false) @map("has_brapi_pro_data")
-  lastProcessedAt       DateTime?              @map("last_processed_at")
-  lastSuccessAt         DateTime?              @map("last_success_at")
-  lastError             String?                @map("last_error")
-  errorCount            Int                    @default(0) @map("error_count")
-  priority              Int                    @default(0) // 0=normal, 1=high, 2=urgent
-  metadata              Json?
-  createdAt             DateTime               @default(now()) @map("created_at")
-  updatedAt             DateTime               @updatedAt @map("updated_at")
+  id                Int          @id @default(autoincrement())
+  ticker            String       @unique
+  processType       String       @default("ward_data_fetch") @map("process_type")
+  status            TickerStatus @default(PENDING)
+  hasBasicData      Boolean      @default(false) @map("has_basic_data")
+  hasHistoricalData Boolean      @default(false) @map("has_historical_data")
+  hasTTMData        Boolean      @default(false) @map("has_ttm_data")
+  hasBrapiProData   Boolean      @default(false) @map("has_brapi_pro_data")
+  lastProcessedAt   DateTime?    @map("last_processed_at")
+  lastSuccessAt     DateTime?    @map("last_success_at")
+  lastError         String?      @map("last_error")
+  errorCount        Int          @default(0) @map("error_count")
+  priority          Int          @default(0) // 0=normal, 1=high, 2=urgent
+  metadata          Json?
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
 
   @@index([processType, status])
   @@index([lastProcessedAt])
@@ -611,59 +612,59 @@ model TickerProcessingStatus {
 
 // Balanço Patrimonial
 model BalanceSheet {
-  id                                                    Int           @id @default(autoincrement())
-  companyId                                             Int           @map("company_id")
-  period                                                ReportPeriod  @default(YEARLY)
-  endDate                                               DateTime      @map("end_date") @db.Date
-  
+  id        Int          @id @default(autoincrement())
+  companyId Int          @map("company_id")
+  period    ReportPeriod @default(YEARLY)
+  endDate   DateTime     @map("end_date") @db.Date
+
   // Ativo Circulante
-  cash                                                  Decimal?      @db.Decimal(20, 2)
-  shortTermInvestments                                  Decimal?      @map("short_term_investments") @db.Decimal(20, 2)
-  totalCurrentAssets                                    Decimal?      @map("total_current_assets") @db.Decimal(20, 2)
-  
+  cash                 Decimal? @db.Decimal(20, 2)
+  shortTermInvestments Decimal? @map("short_term_investments") @db.Decimal(20, 2)
+  totalCurrentAssets   Decimal? @map("total_current_assets") @db.Decimal(20, 2)
+
   // Ativo Não Circulante
-  longTermInvestments                                   Decimal?      @map("long_term_investments") @db.Decimal(20, 2)
-  otherAssets                                           Decimal?      @map("other_assets") @db.Decimal(20, 2)
-  totalAssets                                           Decimal?      @map("total_assets") @db.Decimal(20, 2)
-  
+  longTermInvestments Decimal? @map("long_term_investments") @db.Decimal(20, 2)
+  otherAssets         Decimal? @map("other_assets") @db.Decimal(20, 2)
+  totalAssets         Decimal? @map("total_assets") @db.Decimal(20, 2)
+
   // Passivo Circulante
-  totalCurrentLiabilities                               Decimal?      @map("total_current_liabilities") @db.Decimal(20, 2)
-  
+  totalCurrentLiabilities Decimal? @map("total_current_liabilities") @db.Decimal(20, 2)
+
   // Passivo Total
-  totalLiab                                             Decimal?      @map("total_liab") @db.Decimal(20, 2)
-  
+  totalLiab Decimal? @map("total_liab") @db.Decimal(20, 2)
+
   // Patrimônio Líquido
-  commonStock                                           Decimal?      @map("common_stock") @db.Decimal(20, 2)
-  treasuryStock                                         Decimal?      @map("treasury_stock") @db.Decimal(20, 2)
-  totalStockholderEquity                                Decimal?      @map("total_stockholder_equity") @db.Decimal(20, 2)
-  netTangibleAssets                                     Decimal?      @map("net_tangible_assets") @db.Decimal(20, 2)
-  goodWill                                              Decimal?      @map("good_will") @db.Decimal(20, 2)
-  
+  commonStock            Decimal? @map("common_stock") @db.Decimal(20, 2)
+  treasuryStock          Decimal? @map("treasury_stock") @db.Decimal(20, 2)
+  totalStockholderEquity Decimal? @map("total_stockholder_equity") @db.Decimal(20, 2)
+  netTangibleAssets      Decimal? @map("net_tangible_assets") @db.Decimal(20, 2)
+  goodWill               Decimal? @map("good_will") @db.Decimal(20, 2)
+
   // Campos específicos para instituições financeiras
-  financialAssets                                       Decimal?      @map("financial_assets") @db.Decimal(20, 2)
-  centralBankCompulsoryDeposit                          Decimal?      @map("central_bank_compulsory_deposit") @db.Decimal(20, 2)
-  financialAssetsMeasuredAtFairValueThroughProfitOrLoss Decimal?      @map("financial_assets_measured_at_fair_value_through_profit_or_loss") @db.Decimal(20, 2)
-  longTermAssets                                        Decimal?      @map("long_term_assets") @db.Decimal(20, 2)
-  creditsFromOperations                                 Decimal?      @map("credits_from_operations") @db.Decimal(20, 2)
-  complementaryPension                                  Decimal?      @map("complementary_pension") @db.Decimal(20, 2)
-  deferredSellingExpenses                               Decimal?      @map("deferred_selling_expenses") @db.Decimal(20, 2)
-  nonCurrentAssets                                      Decimal?      @map("non_current_assets") @db.Decimal(20, 2)
-  deferredTaxes                                         Decimal?      @map("deferred_taxes") @db.Decimal(20, 2)
-  financialLiabilitiesMeasuredAtFairValueThroughIncome  Decimal?      @map("financial_liabilities_measured_at_fair_value_through_income") @db.Decimal(20, 2)
-  financialLiabilitiesAtAmortizedCost                   Decimal?      @map("financial_liabilities_at_amortized_cost") @db.Decimal(20, 2)
-  provisions                                            Decimal?      @db.Decimal(20, 2)
-  shareholdersEquity                                    Decimal?      @map("shareholders_equity") @db.Decimal(20, 2)
-  realizedShareCapital                                  Decimal?      @map("realized_share_capital") @db.Decimal(20, 2)
-  profitReserves                                        Decimal?      @map("profit_reserves") @db.Decimal(20, 2)
-  accumulatedProfitsOrLosses                            Decimal?      @map("accumulated_profits_or_losses") @db.Decimal(20, 2)
-  equityValuationAdjustments                            Decimal?      @map("equity_valuation_adjustments") @db.Decimal(20, 2)
-  currentLiabilities                                    Decimal?      @map("current_liabilities") @db.Decimal(20, 2)
-  nonCurrentLiabilities                                 Decimal?      @map("non_current_liabilities") @db.Decimal(20, 2)
-  thirdPartyDeposits                                    Decimal?      @map("third_party_deposits") @db.Decimal(20, 2)
-  otherDebits                                           Decimal?      @map("other_debits") @db.Decimal(20, 2)
-  
-  updatedAt                                             DateTime?     @updatedAt
-  company                                               Company       @relation(fields: [companyId], references: [id])
+  financialAssets                                       Decimal? @map("financial_assets") @db.Decimal(20, 2)
+  centralBankCompulsoryDeposit                          Decimal? @map("central_bank_compulsory_deposit") @db.Decimal(20, 2)
+  financialAssetsMeasuredAtFairValueThroughProfitOrLoss Decimal? @map("financial_assets_measured_at_fair_value_through_profit_or_loss") @db.Decimal(20, 2)
+  longTermAssets                                        Decimal? @map("long_term_assets") @db.Decimal(20, 2)
+  creditsFromOperations                                 Decimal? @map("credits_from_operations") @db.Decimal(20, 2)
+  complementaryPension                                  Decimal? @map("complementary_pension") @db.Decimal(20, 2)
+  deferredSellingExpenses                               Decimal? @map("deferred_selling_expenses") @db.Decimal(20, 2)
+  nonCurrentAssets                                      Decimal? @map("non_current_assets") @db.Decimal(20, 2)
+  deferredTaxes                                         Decimal? @map("deferred_taxes") @db.Decimal(20, 2)
+  financialLiabilitiesMeasuredAtFairValueThroughIncome  Decimal? @map("financial_liabilities_measured_at_fair_value_through_income") @db.Decimal(20, 2)
+  financialLiabilitiesAtAmortizedCost                   Decimal? @map("financial_liabilities_at_amortized_cost") @db.Decimal(20, 2)
+  provisions                                            Decimal? @db.Decimal(20, 2)
+  shareholdersEquity                                    Decimal? @map("shareholders_equity") @db.Decimal(20, 2)
+  realizedShareCapital                                  Decimal? @map("realized_share_capital") @db.Decimal(20, 2)
+  profitReserves                                        Decimal? @map("profit_reserves") @db.Decimal(20, 2)
+  accumulatedProfitsOrLosses                            Decimal? @map("accumulated_profits_or_losses") @db.Decimal(20, 2)
+  equityValuationAdjustments                            Decimal? @map("equity_valuation_adjustments") @db.Decimal(20, 2)
+  currentLiabilities                                    Decimal? @map("current_liabilities") @db.Decimal(20, 2)
+  nonCurrentLiabilities                                 Decimal? @map("non_current_liabilities") @db.Decimal(20, 2)
+  thirdPartyDeposits                                    Decimal? @map("third_party_deposits") @db.Decimal(20, 2)
+  otherDebits                                           Decimal? @map("other_debits") @db.Decimal(20, 2)
+
+  updatedAt DateTime? @updatedAt
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
   @@index([companyId, period, endDate])
@@ -673,76 +674,76 @@ model BalanceSheet {
 
 // Demonstração do Resultado do Exercício (DRE)
 model IncomeStatement {
-  id                                                    Int           @id @default(autoincrement())
-  companyId                                             Int           @map("company_id")
-  period                                                ReportPeriod  @default(YEARLY)
-  endDate                                               DateTime      @map("end_date") @db.Date
-  
+  id        Int          @id @default(autoincrement())
+  companyId Int          @map("company_id")
+  period    ReportPeriod @default(YEARLY)
+  endDate   DateTime     @map("end_date") @db.Date
+
   // Receitas e Custos
-  totalRevenue                                          Decimal?      @map("total_revenue") @db.Decimal(20, 2)
-  costOfRevenue                                         Decimal?      @map("cost_of_revenue") @db.Decimal(20, 2)
-  grossProfit                                           Decimal?      @map("gross_profit") @db.Decimal(20, 2)
-  
+  totalRevenue  Decimal? @map("total_revenue") @db.Decimal(20, 2)
+  costOfRevenue Decimal? @map("cost_of_revenue") @db.Decimal(20, 2)
+  grossProfit   Decimal? @map("gross_profit") @db.Decimal(20, 2)
+
   // Despesas Operacionais
-  researchDevelopment                                   Decimal?      @map("research_development") @db.Decimal(20, 2)
-  sellingGeneralAdministrative                          Decimal?      @map("selling_general_administrative") @db.Decimal(20, 2)
-  nonRecurring                                          Decimal?      @map("non_recurring") @db.Decimal(20, 2)
-  otherOperatingExpenses                                Decimal?      @map("other_operating_expenses") @db.Decimal(20, 2)
-  totalOperatingExpenses                                Decimal?      @map("total_operating_expenses") @db.Decimal(20, 2)
-  
+  researchDevelopment          Decimal? @map("research_development") @db.Decimal(20, 2)
+  sellingGeneralAdministrative Decimal? @map("selling_general_administrative") @db.Decimal(20, 2)
+  nonRecurring                 Decimal? @map("non_recurring") @db.Decimal(20, 2)
+  otherOperatingExpenses       Decimal? @map("other_operating_expenses") @db.Decimal(20, 2)
+  totalOperatingExpenses       Decimal? @map("total_operating_expenses") @db.Decimal(20, 2)
+
   // Resultado Operacional
-  operatingIncome                                       Decimal?      @map("operating_income") @db.Decimal(20, 2)
-  totalOtherIncomeExpenseNet                            Decimal?      @map("total_other_income_expense_net") @db.Decimal(20, 2)
-  ebit                                                  Decimal?      @db.Decimal(20, 2)
-  
+  operatingIncome            Decimal? @map("operating_income") @db.Decimal(20, 2)
+  totalOtherIncomeExpenseNet Decimal? @map("total_other_income_expense_net") @db.Decimal(20, 2)
+  ebit                       Decimal? @db.Decimal(20, 2)
+
   // Resultado Financeiro
-  interestExpense                                       Decimal?      @map("interest_expense") @db.Decimal(20, 2)
-  incomeBeforeTax                                       Decimal?      @map("income_before_tax") @db.Decimal(20, 2)
-  incomeTaxExpense                                      Decimal?      @map("income_tax_expense") @db.Decimal(20, 2)
-  
+  interestExpense  Decimal? @map("interest_expense") @db.Decimal(20, 2)
+  incomeBeforeTax  Decimal? @map("income_before_tax") @db.Decimal(20, 2)
+  incomeTaxExpense Decimal? @map("income_tax_expense") @db.Decimal(20, 2)
+
   // Resultado Líquido
-  minorityInterest                                      Decimal?      @map("minority_interest") @db.Decimal(20, 2)
-  netIncomeFromContinuingOps                            Decimal?      @map("net_income_from_continuing_ops") @db.Decimal(20, 2)
-  discontinuedOperations                                Decimal?      @map("discontinued_operations") @db.Decimal(20, 2)
-  extraordinaryItems                                    Decimal?      @map("extraordinary_items") @db.Decimal(20, 2)
-  effectOfAccountingCharges                             Decimal?      @map("effect_of_accounting_charges") @db.Decimal(20, 2)
-  otherItems                                            Decimal?      @map("other_items") @db.Decimal(20, 2)
-  netIncome                                             Decimal?      @map("net_income") @db.Decimal(20, 2)
-  netIncomeApplicableToCommonShares                     Decimal?      @map("net_income_applicable_to_common_shares") @db.Decimal(20, 2)
-  
+  minorityInterest                  Decimal? @map("minority_interest") @db.Decimal(20, 2)
+  netIncomeFromContinuingOps        Decimal? @map("net_income_from_continuing_ops") @db.Decimal(20, 2)
+  discontinuedOperations            Decimal? @map("discontinued_operations") @db.Decimal(20, 2)
+  extraordinaryItems                Decimal? @map("extraordinary_items") @db.Decimal(20, 2)
+  effectOfAccountingCharges         Decimal? @map("effect_of_accounting_charges") @db.Decimal(20, 2)
+  otherItems                        Decimal? @map("other_items") @db.Decimal(20, 2)
+  netIncome                         Decimal? @map("net_income") @db.Decimal(20, 2)
+  netIncomeApplicableToCommonShares Decimal? @map("net_income_applicable_to_common_shares") @db.Decimal(20, 2)
+
   // Campos específicos Brasil
-  salesExpenses                                         Decimal?      @map("sales_expenses") @db.Decimal(20, 2)
-  lossesDueToNonRecoverabilityOfAssets                  Decimal?      @map("losses_due_to_non_recoverability_of_assets") @db.Decimal(20, 2)
-  otherOperatingIncome                                  Decimal?      @map("other_operating_income") @db.Decimal(20, 2)
-  equityIncomeResult                                    Decimal?      @map("equity_income_result") @db.Decimal(20, 2)
-  financialResult                                       Decimal?      @map("financial_result") @db.Decimal(20, 2)
-  financialIncome                                       Decimal?      @map("financial_income") @db.Decimal(20, 2)
-  financialExpenses                                     Decimal?      @map("financial_expenses") @db.Decimal(20, 2)
-  currentTaxes                                          Decimal?      @map("current_taxes") @db.Decimal(20, 2)
-  deferredTaxes                                         Decimal?      @map("deferred_taxes") @db.Decimal(20, 2)
-  incomeBeforeStatutoryParticipationsAndContributions   Decimal?      @map("income_before_statutory_participations_and_contributions") @db.Decimal(20, 2)
-  
+  salesExpenses                                       Decimal? @map("sales_expenses") @db.Decimal(20, 2)
+  lossesDueToNonRecoverabilityOfAssets                Decimal? @map("losses_due_to_non_recoverability_of_assets") @db.Decimal(20, 2)
+  otherOperatingIncome                                Decimal? @map("other_operating_income") @db.Decimal(20, 2)
+  equityIncomeResult                                  Decimal? @map("equity_income_result") @db.Decimal(20, 2)
+  financialResult                                     Decimal? @map("financial_result") @db.Decimal(20, 2)
+  financialIncome                                     Decimal? @map("financial_income") @db.Decimal(20, 2)
+  financialExpenses                                   Decimal? @map("financial_expenses") @db.Decimal(20, 2)
+  currentTaxes                                        Decimal? @map("current_taxes") @db.Decimal(20, 2)
+  deferredTaxes                                       Decimal? @map("deferred_taxes") @db.Decimal(20, 2)
+  incomeBeforeStatutoryParticipationsAndContributions Decimal? @map("income_before_statutory_participations_and_contributions") @db.Decimal(20, 2)
+
   // Lucro por Ação
-  basicEarningsPerCommonShare                           Decimal?      @map("basic_earnings_per_common_share") @db.Decimal(15, 6)
-  dilutedEarningsPerCommonShare                         Decimal?      @map("diluted_earnings_per_common_share") @db.Decimal(15, 6)
-  basicEarningsPerPreferredShare                        Decimal?      @map("basic_earnings_per_preferred_share") @db.Decimal(15, 6)
-  dilutedEarningsPerPreferredShare                      Decimal?      @map("diluted_earnings_per_preferred_share") @db.Decimal(15, 6)
-  profitSharingAndStatutoryContributions                Decimal?      @map("profit_sharing_and_statutory_contributions") @db.Decimal(20, 2)
-  
+  basicEarningsPerCommonShare            Decimal? @map("basic_earnings_per_common_share") @db.Decimal(15, 6)
+  dilutedEarningsPerCommonShare          Decimal? @map("diluted_earnings_per_common_share") @db.Decimal(15, 6)
+  basicEarningsPerPreferredShare         Decimal? @map("basic_earnings_per_preferred_share") @db.Decimal(15, 6)
+  dilutedEarningsPerPreferredShare       Decimal? @map("diluted_earnings_per_preferred_share") @db.Decimal(15, 6)
+  profitSharingAndStatutoryContributions Decimal? @map("profit_sharing_and_statutory_contributions") @db.Decimal(20, 2)
+
   // Campos específicos para seguradoras/bancos
-  claimsAndOperationsCosts                              Decimal?      @map("claims_and_operations_costs") @db.Decimal(20, 2)
-  administrativeCosts                                   Decimal?      @map("administrative_costs") @db.Decimal(20, 2)
-  otherOperatingIncomeAndExpenses                       Decimal?      @map("other_operating_income_and_expenses") @db.Decimal(20, 2)
-  earningsPerShare                                      Decimal?      @map("earnings_per_share") @db.Decimal(15, 6)
-  basicEarningsPerShare                                 Decimal?      @map("basic_earnings_per_share") @db.Decimal(15, 6)
-  dilutedEarningsPerShare                               Decimal?      @map("diluted_earnings_per_share") @db.Decimal(15, 6)
-  insuranceOperations                                   Decimal?      @map("insurance_operations") @db.Decimal(20, 2)
-  reinsuranceOperations                                 Decimal?      @map("reinsurance_operations") @db.Decimal(20, 2)
-  complementaryPensionOperations                        Decimal?      @map("complementary_pension_operations") @db.Decimal(20, 2)
-  capitalizationOperations                              Decimal?      @map("capitalization_operations") @db.Decimal(20, 2)
-  
-  updatedAt                                             DateTime?     @updatedAt
-  company                                               Company       @relation(fields: [companyId], references: [id])
+  claimsAndOperationsCosts        Decimal? @map("claims_and_operations_costs") @db.Decimal(20, 2)
+  administrativeCosts             Decimal? @map("administrative_costs") @db.Decimal(20, 2)
+  otherOperatingIncomeAndExpenses Decimal? @map("other_operating_income_and_expenses") @db.Decimal(20, 2)
+  earningsPerShare                Decimal? @map("earnings_per_share") @db.Decimal(15, 6)
+  basicEarningsPerShare           Decimal? @map("basic_earnings_per_share") @db.Decimal(15, 6)
+  dilutedEarningsPerShare         Decimal? @map("diluted_earnings_per_share") @db.Decimal(15, 6)
+  insuranceOperations             Decimal? @map("insurance_operations") @db.Decimal(20, 2)
+  reinsuranceOperations           Decimal? @map("reinsurance_operations") @db.Decimal(20, 2)
+  complementaryPensionOperations  Decimal? @map("complementary_pension_operations") @db.Decimal(20, 2)
+  capitalizationOperations        Decimal? @map("capitalization_operations") @db.Decimal(20, 2)
+
+  updatedAt DateTime? @updatedAt
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
   @@index([companyId, period, endDate])
@@ -752,33 +753,33 @@ model IncomeStatement {
 
 // Demonstração do Fluxo de Caixa (DFC)
 model CashflowStatement {
-  id                          Int           @id @default(autoincrement())
-  companyId                   Int           @map("company_id")
-  period                      ReportPeriod  @default(YEARLY)
-  endDate                     DateTime      @map("end_date") @db.Date
-  
+  id        Int          @id @default(autoincrement())
+  companyId Int          @map("company_id")
+  period    ReportPeriod @default(YEARLY)
+  endDate   DateTime     @map("end_date") @db.Date
+
   // Fluxo de Caixa Operacional
-  operatingCashFlow           Decimal?      @map("operating_cash_flow") @db.Decimal(20, 2)
-  incomeFromOperations        Decimal?      @map("income_from_operations") @db.Decimal(20, 2)
-  netIncomeBeforeTaxes        Decimal?      @map("net_income_before_taxes") @db.Decimal(20, 2)
-  adjustmentsToProfitOrLoss   Decimal?      @map("adjustments_to_profit_or_loss") @db.Decimal(20, 2)
-  changesInAssetsAndLiabilities Decimal?    @map("changes_in_assets_and_liabilities") @db.Decimal(20, 2)
-  otherOperatingActivities    Decimal?      @map("other_operating_activities") @db.Decimal(20, 2)
-  
+  operatingCashFlow             Decimal? @map("operating_cash_flow") @db.Decimal(20, 2)
+  incomeFromOperations          Decimal? @map("income_from_operations") @db.Decimal(20, 2)
+  netIncomeBeforeTaxes          Decimal? @map("net_income_before_taxes") @db.Decimal(20, 2)
+  adjustmentsToProfitOrLoss     Decimal? @map("adjustments_to_profit_or_loss") @db.Decimal(20, 2)
+  changesInAssetsAndLiabilities Decimal? @map("changes_in_assets_and_liabilities") @db.Decimal(20, 2)
+  otherOperatingActivities      Decimal? @map("other_operating_activities") @db.Decimal(20, 2)
+
   // Fluxo de Caixa de Investimento
-  investmentCashFlow          Decimal?      @map("investment_cash_flow") @db.Decimal(20, 2)
-  
+  investmentCashFlow Decimal? @map("investment_cash_flow") @db.Decimal(20, 2)
+
   // Fluxo de Caixa de Financiamento
-  financingCashFlow           Decimal?      @map("financing_cash_flow") @db.Decimal(20, 2)
-  
+  financingCashFlow Decimal? @map("financing_cash_flow") @db.Decimal(20, 2)
+
   // Variação do Caixa
-  increaseOrDecreaseInCash    Decimal?      @map("increase_or_decrease_in_cash") @db.Decimal(20, 2)
-  initialCashBalance          Decimal?      @map("initial_cash_balance") @db.Decimal(20, 2)
-  finalCashBalance            Decimal?      @map("final_cash_balance") @db.Decimal(20, 2)
-  cashGeneratedInOperations   Decimal?      @map("cash_generated_in_operations") @db.Decimal(20, 2)
-  
-  updatedAt                   DateTime?     @updatedAt
-  company                     Company       @relation(fields: [companyId], references: [id])
+  increaseOrDecreaseInCash  Decimal? @map("increase_or_decrease_in_cash") @db.Decimal(20, 2)
+  initialCashBalance        Decimal? @map("initial_cash_balance") @db.Decimal(20, 2)
+  finalCashBalance          Decimal? @map("final_cash_balance") @db.Decimal(20, 2)
+  cashGeneratedInOperations Decimal? @map("cash_generated_in_operations") @db.Decimal(20, 2)
+
+  updatedAt DateTime? @updatedAt
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
   @@index([companyId, period, endDate])
@@ -788,43 +789,43 @@ model CashflowStatement {
 
 // Principais Estatísticas
 model KeyStatistics {
-  id                        Int           @id @default(autoincrement())
-  companyId                 Int           @map("company_id")
-  period                    ReportPeriod  @default(YEARLY)
-  endDate                   DateTime      @map("end_date") @db.Date
-  
+  id        Int          @id @default(autoincrement())
+  companyId Int          @map("company_id")
+  period    ReportPeriod @default(YEARLY)
+  endDate   DateTime     @map("end_date") @db.Date
+
   // Valuation
-  enterpriseValue           Decimal?      @map("enterprise_value") @db.Decimal(20, 2)
-  forwardPE                 Decimal?      @map("forward_pe") @db.Decimal(15, 6)
-  profitMargins             Decimal?      @map("profit_margins") @db.Decimal(15, 6)
-  sharesOutstanding         Decimal?      @map("shares_outstanding") @db.Decimal(20, 0)
-  bookValue                 Decimal?      @map("book_value") @db.Decimal(15, 6)
-  priceToBook               Decimal?      @map("price_to_book") @db.Decimal(15, 6)
-  
+  enterpriseValue   Decimal? @map("enterprise_value") @db.Decimal(20, 2)
+  forwardPE         Decimal? @map("forward_pe") @db.Decimal(15, 6)
+  profitMargins     Decimal? @map("profit_margins") @db.Decimal(15, 6)
+  sharesOutstanding Decimal? @map("shares_outstanding") @db.Decimal(20, 0)
+  bookValue         Decimal? @map("book_value") @db.Decimal(15, 6)
+  priceToBook       Decimal? @map("price_to_book") @db.Decimal(15, 6)
+
   // Crescimento
-  mostRecentQuarter         DateTime?     @map("most_recent_quarter") @db.Date
-  earningsQuarterlyGrowth   Decimal?      @map("earnings_quarterly_growth") @db.Decimal(15, 6)
-  earningsAnnualGrowth      Decimal?      @map("earnings_annual_growth") @db.Decimal(15, 6)
-  
+  mostRecentQuarter       DateTime? @map("most_recent_quarter") @db.Date
+  earningsQuarterlyGrowth Decimal?  @map("earnings_quarterly_growth") @db.Decimal(15, 6)
+  earningsAnnualGrowth    Decimal?  @map("earnings_annual_growth") @db.Decimal(15, 6)
+
   // Indicadores
-  trailingEps               Decimal?      @map("trailing_eps") @db.Decimal(15, 6)
-  enterpriseToRevenue       Decimal?      @map("enterprise_to_revenue") @db.Decimal(15, 6)
-  enterpriseToEbitda        Decimal?      @map("enterprise_to_ebitda") @db.Decimal(15, 6)
-  
+  trailingEps         Decimal? @map("trailing_eps") @db.Decimal(15, 6)
+  enterpriseToRevenue Decimal? @map("enterprise_to_revenue") @db.Decimal(15, 6)
+  enterpriseToEbitda  Decimal? @map("enterprise_to_ebitda") @db.Decimal(15, 6)
+
   // Performance
-  fiftyTwoWeekChange        Decimal?      @map("fifty_two_week_change") @db.Decimal(15, 6)
-  ytdReturn                 Decimal?      @map("ytd_return") @db.Decimal(15, 6)
-  
+  fiftyTwoWeekChange Decimal? @map("fifty_two_week_change") @db.Decimal(15, 6)
+  ytdReturn          Decimal? @map("ytd_return") @db.Decimal(15, 6)
+
   // Dividendos
-  lastDividendValue         Decimal?      @map("last_dividend_value") @db.Decimal(15, 6)
-  lastDividendDate          DateTime?     @map("last_dividend_date") @db.Date
-  dividendYield             Decimal?      @map("dividend_yield") @db.Decimal(15, 6)
-  
+  lastDividendValue Decimal?  @map("last_dividend_value") @db.Decimal(15, 6)
+  lastDividendDate  DateTime? @map("last_dividend_date") @db.Date
+  dividendYield     Decimal?  @map("dividend_yield") @db.Decimal(15, 6)
+
   // Outros
-  totalAssets               Decimal?      @map("total_assets") @db.Decimal(20, 2)
-  
-  updatedAt                 DateTime?     @updatedAt
-  company                   Company       @relation(fields: [companyId], references: [id])
+  totalAssets Decimal? @map("total_assets") @db.Decimal(20, 2)
+
+  updatedAt DateTime? @updatedAt
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
   @@map("key_statistics")
@@ -832,17 +833,17 @@ model KeyStatistics {
 
 // Demonstração do Valor Adicionado (DVA)
 model ValueAddedStatement {
-  id                                    Int           @id @default(autoincrement())
-  companyId                             Int           @map("company_id")
-  period                                ReportPeriod  @default(YEARLY)
-  endDate                               DateTime      @map("end_date") @db.Date
-  
+  id        Int          @id @default(autoincrement())
+  companyId Int          @map("company_id")
+  period    ReportPeriod @default(YEARLY)
+  endDate   DateTime     @map("end_date") @db.Date
+
   // Receitas
-  revenue                               Decimal?      @db.Decimal(20, 2)
-  financialIntermediationRevenue        Decimal?      @map("financial_intermediation_revenue") @db.Decimal(20, 2)
-  
-  updatedAt                             DateTime?     @updatedAt
-  company                               Company       @relation(fields: [companyId], references: [id])
+  revenue                        Decimal? @db.Decimal(20, 2)
+  financialIntermediationRevenue Decimal? @map("financial_intermediation_revenue") @db.Decimal(20, 2)
+
+  updatedAt DateTime? @updatedAt
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, endDate, period])
   @@map("value_added_statements")
@@ -850,21 +851,21 @@ model ValueAddedStatement {
 
 // Sistema de Tickets de Suporte
 model SupportTicket {
-  id          String        @id @default(cuid())
-  userId      String        @map("user_id")
+  id          String         @id @default(cuid())
+  userId      String         @map("user_id")
   title       String
   description String
-  status      TicketStatus  @default(OPEN)
+  status      TicketStatus   @default(OPEN)
   priority    TicketPriority @default(MEDIUM)
   category    TicketCategory @default(GENERAL)
-  assignedTo  String?       @map("assigned_to") // ID do admin responsável
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  closedAt    DateTime?     @map("closed_at")
-  
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignee    User?         @relation("AssignedTickets", fields: [assignedTo], references: [id])
-  messages    TicketMessage[]
+  assignedTo  String?        @map("assigned_to") // ID do admin responsável
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  closedAt    DateTime?      @map("closed_at")
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignee User?           @relation("AssignedTickets", fields: [assignedTo], references: [id])
+  messages TicketMessage[]
 
   @@index([userId])
   @@index([status])
@@ -874,15 +875,15 @@ model SupportTicket {
 }
 
 model TicketMessage {
-  id        String   @id @default(cuid())
-  ticketId  String   @map("ticket_id")
-  userId    String   @map("user_id")
-  message   String
-  isInternal Boolean @default(false) @map("is_internal") // Mensagens internas apenas para admins
-  createdAt DateTime @default(now()) @map("created_at")
-  
-  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  ticketId   String   @map("ticket_id")
+  userId     String   @map("user_id")
+  message    String
+  isInternal Boolean  @default(false) @map("is_internal") // Mensagens internas apenas para admins
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([ticketId])
   @@index([userId])
@@ -917,31 +918,31 @@ enum TicketCategory {
 
 // Oscilações de Preço (dados do Fundamentus)
 model PriceOscillations {
-  id                    Int       @id @default(autoincrement())
-  companyId             Int       @map("company_id")
-  extractionDate        DateTime  @map("extraction_date") @db.Date
-  
+  id             Int      @id @default(autoincrement())
+  companyId      Int      @map("company_id")
+  extractionDate DateTime @map("extraction_date") @db.Date
+
   // Variações de preço
-  variationDay          Decimal?  @map("variation_day") @db.Decimal(15, 6)
-  variationMonth        Decimal?  @map("variation_month") @db.Decimal(15, 6)
-  variation30Days       Decimal?  @map("variation_30_days") @db.Decimal(15, 6)
-  variation12Months     Decimal?  @map("variation_12_months") @db.Decimal(15, 6)
-  
+  variationDay      Decimal? @map("variation_day") @db.Decimal(15, 6)
+  variationMonth    Decimal? @map("variation_month") @db.Decimal(15, 6)
+  variation30Days   Decimal? @map("variation_30_days") @db.Decimal(15, 6)
+  variation12Months Decimal? @map("variation_12_months") @db.Decimal(15, 6)
+
   // Variações anuais (últimos 6 anos)
-  variation2025         Decimal?  @map("variation_2025") @db.Decimal(15, 6)
-  variation2024         Decimal?  @map("variation_2024") @db.Decimal(15, 6)
-  variation2023         Decimal?  @map("variation_2023") @db.Decimal(15, 6)
-  variation2022         Decimal?  @map("variation_2022") @db.Decimal(15, 6)
-  variation2021         Decimal?  @map("variation_2021") @db.Decimal(15, 6)
-  variation2020         Decimal?  @map("variation_2020") @db.Decimal(15, 6)
-  
+  variation2025 Decimal? @map("variation_2025") @db.Decimal(15, 6)
+  variation2024 Decimal? @map("variation_2024") @db.Decimal(15, 6)
+  variation2023 Decimal? @map("variation_2023") @db.Decimal(15, 6)
+  variation2022 Decimal? @map("variation_2022") @db.Decimal(15, 6)
+  variation2021 Decimal? @map("variation_2021") @db.Decimal(15, 6)
+  variation2020 Decimal? @map("variation_2020") @db.Decimal(15, 6)
+
   // Informações adicionais
-  min52Weeks            Decimal?  @map("min_52_weeks") @db.Decimal(10, 4)
-  max52Weeks            Decimal?  @map("max_52_weeks") @db.Decimal(10, 4)
-  tradedVolumePerDay    Decimal?  @map("traded_volume_per_day") @db.Decimal(20, 2)
-  
-  updatedAt             DateTime? @updatedAt
-  company               Company   @relation(fields: [companyId], references: [id])
+  min52Weeks         Decimal? @map("min_52_weeks") @db.Decimal(10, 4)
+  max52Weeks         Decimal? @map("max_52_weeks") @db.Decimal(10, 4)
+  tradedVolumePerDay Decimal? @map("traded_volume_per_day") @db.Decimal(20, 2)
+
+  updatedAt DateTime? @updatedAt
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, extractionDate])
   @@index([companyId, extractionDate])
@@ -950,22 +951,22 @@ model PriceOscillations {
 
 // Dados Trimestrais do Fundamentus
 model QuarterlyFinancials {
-  id                    Int       @id @default(autoincrement())
-  companyId             Int       @map("company_id")
-  extractionDate        DateTime  @map("extraction_date") @db.Date
-  
+  id             Int      @id @default(autoincrement())
+  companyId      Int      @map("company_id")
+  extractionDate DateTime @map("extraction_date") @db.Date
+
   // Dados dos últimos 3 meses
-  quarterlyRevenue      Decimal?  @map("quarterly_revenue") @db.Decimal(20, 2)
-  quarterlyEbit         Decimal?  @map("quarterly_ebit") @db.Decimal(20, 2)
-  quarterlyNetIncome    Decimal?  @map("quarterly_net_income") @db.Decimal(20, 2)
-  
+  quarterlyRevenue   Decimal? @map("quarterly_revenue") @db.Decimal(20, 2)
+  quarterlyEbit      Decimal? @map("quarterly_ebit") @db.Decimal(20, 2)
+  quarterlyNetIncome Decimal? @map("quarterly_net_income") @db.Decimal(20, 2)
+
   // Dados dos últimos 12 meses (para comparação)
-  twelveMonthsRevenue   Decimal?  @map("twelve_months_revenue") @db.Decimal(20, 2)
-  twelveMonthsEbit      Decimal?  @map("twelve_months_ebit") @db.Decimal(20, 2)
-  twelveMonthsNetIncome Decimal?  @map("twelve_months_net_income") @db.Decimal(20, 2)
-  
-  updatedAt             DateTime? @updatedAt
-  company               Company   @relation(fields: [companyId], references: [id])
+  twelveMonthsRevenue   Decimal? @map("twelve_months_revenue") @db.Decimal(20, 2)
+  twelveMonthsEbit      Decimal? @map("twelve_months_ebit") @db.Decimal(20, 2)
+  twelveMonthsNetIncome Decimal? @map("twelve_months_net_income") @db.Decimal(20, 2)
+
+  updatedAt DateTime? @updatedAt
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, extractionDate])
   @@index([companyId, extractionDate])
@@ -974,27 +975,27 @@ model QuarterlyFinancials {
 
 // Relatórios de IA por empresa
 model AIReport {
-  id                String             @id @default(cuid())
-  companyId         Int                @map("company_id")
-  snapshotId        String?            @map("snapshot_id") // FK para o snapshot associado
-  content           String             // Conteúdo markdown do relatório
-  strategicAnalyses Json?              // Análises estratégicas aplicadas
-  metadata          Json?              // Metadados adicionais (preço na época, etc)
-  version           Int                @default(1) // Versão do relatório
-  isActive          Boolean            @default(true) @map("is_active") // Se é o relatório ativo
-  status            ReportStatus       @default(COMPLETED) // Status do relatório
-  type              AIReportType       @default(MONTHLY_OVERVIEW)
-  changeDirection   String?            @map("change_direction") // 'positive', 'negative'
-  previousScore     Decimal?           @map("previous_score") @db.Decimal(5, 2)
-  currentScore      Decimal?           @map("current_score") @db.Decimal(5, 2)
-  likeCount         Int                @default(0) @map("like_count")
-  dislikeCount      Int                @default(0) @map("dislike_count")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-  
-  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  snapshot          AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id], onDelete: SetNull)
-  feedbacks         AIReportFeedback[]
+  id                String       @id @default(cuid())
+  companyId         Int          @map("company_id")
+  snapshotId        String?      @map("snapshot_id") // FK para o snapshot associado
+  content           String // Conteúdo markdown do relatório
+  strategicAnalyses Json? // Análises estratégicas aplicadas
+  metadata          Json? // Metadados adicionais (preço na época, etc)
+  version           Int          @default(1) // Versão do relatório
+  isActive          Boolean      @default(true) @map("is_active") // Se é o relatório ativo
+  status            ReportStatus @default(COMPLETED) // Status do relatório
+  type              AIReportType @default(MONTHLY_OVERVIEW)
+  changeDirection   String?      @map("change_direction") // 'positive', 'negative'
+  previousScore     Decimal?     @map("previous_score") @db.Decimal(5, 2)
+  currentScore      Decimal?     @map("current_score") @db.Decimal(5, 2)
+  likeCount         Int          @default(0) @map("like_count")
+  dislikeCount      Int          @default(0) @map("dislike_count")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  snapshot  AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id], onDelete: SetNull)
+  feedbacks AIReportFeedback[]
 
   @@index([companyId, isActive])
   @@index([companyId, createdAt])
@@ -1007,16 +1008,16 @@ model AIReport {
 
 // Feedback dos usuários sobre relatórios de IA
 model AIReportFeedback {
-  id        String     @id @default(cuid())
-  reportId  String     @map("report_id")
-  userId    String     @map("user_id")
+  id        String       @id @default(cuid())
+  reportId  String       @map("report_id")
+  userId    String       @map("user_id")
   type      FeedbackType // LIKE, DISLIKE
-  comment   String?    // Comentário opcional
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
-  
-  report    AIReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   String? // Comentário opcional
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  report AIReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([reportId, userId]) // Um usuário só pode dar um feedback por relatório
   @@index([reportId])
@@ -1030,9 +1031,9 @@ enum FeedbackType {
 }
 
 enum ReportStatus {
-  GENERATING  // Relatório sendo gerado
-  COMPLETED   // Relatório finalizado
-  FAILED      // Falha na geração
+  GENERATING // Relatório sendo gerado
+  COMPLETED // Relatório finalizado
+  FAILED // Falha na geração
 }
 
 enum AIReportType {
@@ -1044,28 +1045,28 @@ enum AIReportType {
 
 // Configurações de backtesting salvos pelo usuário
 model BacktestConfig {
-  id                String   @id @default(cuid())
-  userId            String   @map("user_id")
-  name              String   // Nome da simulação
-  description       String?  // Descrição opcional
-  
+  id          String  @id @default(cuid())
+  userId      String  @map("user_id")
+  name        String // Nome da simulação
+  description String? // Descrição opcional
+
   // Parâmetros da simulação
-  startDate         DateTime @map("start_date") @db.Date
-  endDate           DateTime @map("end_date") @db.Date
-  initialCapital    Decimal  @map("initial_capital") @db.Decimal(15, 2)     // Capital inicial
-  monthlyContribution Decimal @map("monthly_contribution") @db.Decimal(12, 2)
-  rebalanceFrequency String  @default("monthly") // monthly, quarterly, yearly
-  
+  startDate           DateTime @map("start_date") @db.Date
+  endDate             DateTime @map("end_date") @db.Date
+  initialCapital      Decimal  @map("initial_capital") @db.Decimal(15, 2) // Capital inicial
+  monthlyContribution Decimal  @map("monthly_contribution") @db.Decimal(12, 2)
+  rebalanceFrequency  String   @default("monthly") // monthly, quarterly, yearly
+
   // Metadados
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Relacionamentos
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assets            BacktestAsset[]
-  results           BacktestResult[]
-  transactions      BacktestTransaction[]
-  
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets       BacktestAsset[]
+  results      BacktestResult[]
+  transactions BacktestTransaction[]
+
   @@index([userId, createdAt]) // Otimização para listar configs do usuário ordenadas por data
   @@index([userId, updatedAt]) // Otimização para configs recentemente atualizadas
   @@map("backtest_configs")
@@ -1073,14 +1074,14 @@ model BacktestConfig {
 
 // Ativos da carteira com alocação percentual
 model BacktestAsset {
-  id              String   @id @default(cuid())
-  backtestId      String   @map("backtest_id")
-  ticker          String
-  targetAllocation Decimal @map("target_allocation") @db.Decimal(5, 4) // Ex: 0.2500 = 25%
+  id                   String   @id @default(cuid())
+  backtestId           String   @map("backtest_id")
+  ticker               String
+  targetAllocation     Decimal  @map("target_allocation") @db.Decimal(5, 4) // Ex: 0.2500 = 25%
   averageDividendYield Decimal? @map("average_dividend_yield") @db.Decimal(5, 4) // DY médio dos últimos 5 anos (ex: 0.0850 = 8.50%)
-  
-  backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
-  
+
+  backtest BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
+
   @@unique([backtestId, ticker])
   @@index([backtestId]) // Otimização para buscar ativos de um backtest específico
   @@index([ticker]) // Otimização para buscar backtests que usam um ticker específico
@@ -1089,37 +1090,37 @@ model BacktestAsset {
 
 // Resultados da simulação
 model BacktestResult {
-  id              String   @id @default(cuid())
-  backtestId      String   @map("backtest_id")
-  
+  id         String @id @default(cuid())
+  backtestId String @map("backtest_id")
+
   // Métricas gerais
-  totalReturn     Decimal  @map("total_return") @db.Decimal(10, 4)     // Retorno total %
-  annualizedReturn Decimal @map("annualized_return") @db.Decimal(10, 4) // Retorno anualizado %
-  volatility      Decimal  @db.Decimal(10, 4)                          // Volatilidade anualizada %
-  sharpeRatio     Decimal? @map("sharpe_ratio") @db.Decimal(10, 4)     // Sharpe Ratio
-  maxDrawdown     Decimal  @map("max_drawdown") @db.Decimal(10, 4)     // Drawdown máximo %
-  
+  totalReturn      Decimal  @map("total_return") @db.Decimal(10, 4) // Retorno total %
+  annualizedReturn Decimal  @map("annualized_return") @db.Decimal(10, 4) // Retorno anualizado %
+  volatility       Decimal  @db.Decimal(10, 4) // Volatilidade anualizada %
+  sharpeRatio      Decimal? @map("sharpe_ratio") @db.Decimal(10, 4) // Sharpe Ratio
+  maxDrawdown      Decimal  @map("max_drawdown") @db.Decimal(10, 4) // Drawdown máximo %
+
   // Estatísticas de consistência
-  positiveMonths  Int      @map("positive_months")
-  negativeMonths  Int      @map("negative_months")
-  totalMonths     Int      @map("total_months")
-  
+  positiveMonths Int @map("positive_months")
+  negativeMonths Int @map("negative_months")
+  totalMonths    Int @map("total_months")
+
   // Valores finais
-  totalInvested   Decimal  @map("total_invested") @db.Decimal(15, 2)   // Total aportado
-  finalValue      Decimal  @map("final_value") @db.Decimal(15, 2)      // Valor final da carteira
-  finalCashReserve Decimal? @map("final_cash_reserve") @db.Decimal(15, 2) // Saldo final em caixa
+  totalInvested          Decimal  @map("total_invested") @db.Decimal(15, 2) // Total aportado
+  finalValue             Decimal  @map("final_value") @db.Decimal(15, 2) // Valor final da carteira
+  finalCashReserve       Decimal? @map("final_cash_reserve") @db.Decimal(15, 2) // Saldo final em caixa
   totalDividendsReceived Decimal? @map("total_dividends_received") @db.Decimal(15, 2) // Total de dividendos recebidos
-  
+
   // Dados detalhados (JSON)
-  monthlyReturns  Json     @map("monthly_returns")    // Array de retornos mensais
-  assetPerformance Json    @map("asset_performance")  // Performance por ativo
-  portfolioEvolution Json  @map("portfolio_evolution") // Evolução mês a mês
-  
+  monthlyReturns     Json @map("monthly_returns") // Array de retornos mensais
+  assetPerformance   Json @map("asset_performance") // Performance por ativo
+  portfolioEvolution Json @map("portfolio_evolution") // Evolução mês a mês
+
   // Metadados
-  calculatedAt    DateTime @default(now()) @map("calculated_at")
-  
-  backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
-  
+  calculatedAt DateTime @default(now()) @map("calculated_at")
+
+  backtest BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
+
   // Removido @@unique([backtestId]) para permitir múltiplos resultados por configuração
   @@index([calculatedAt]) // Otimização para buscar resultados por data de cálculo
   @@index([totalReturn]) // Otimização para ordenar por performance
@@ -1129,29 +1130,29 @@ model BacktestResult {
 
 // Histórico detalhado de transações mensais
 model BacktestTransaction {
-  id              String   @id @default(cuid())
-  backtestId      String   @map("backtest_id")
-  
+  id         String @id @default(cuid())
+  backtestId String @map("backtest_id")
+
   // Dados da transação
-  month           Int                                    // Mês da simulação (0, 1, 2...)
-  date            DateTime @db.Date                      // Data da transação
-  ticker          String                                 // Ativo transacionado (ou 'CASH' para reserva)
-  transactionType String   @default("CONTRIBUTION")     // Tipo: CONTRIBUTION, REBALANCE_BUY, REBALANCE_SELL, CASH_RESERVE
-  contribution    Decimal  @db.Decimal(12, 2)          // Valor aportado (pode ser negativo em rebalanceamentos)
-  price           Decimal  @db.Decimal(10, 4)          // Preço de compra/venda
-  sharesAdded     Decimal  @db.Decimal(15, 6)          // Quantidade de ações adicionadas (pode ser negativo)
-  totalShares     Decimal  @db.Decimal(15, 6)          // Total de ações após a transação
-  totalInvested   Decimal  @db.Decimal(15, 2)          // Total investido no ativo até esta data
-  cashReserved    Decimal? @db.Decimal(12, 2)          // Valor em caixa por não conseguir comprar ação inteira
-  
+  month           Int // Mês da simulação (0, 1, 2...)
+  date            DateTime @db.Date // Data da transação
+  ticker          String // Ativo transacionado (ou 'CASH' para reserva)
+  transactionType String   @default("CONTRIBUTION") // Tipo: CONTRIBUTION, REBALANCE_BUY, REBALANCE_SELL, CASH_RESERVE
+  contribution    Decimal  @db.Decimal(12, 2) // Valor aportado (pode ser negativo em rebalanceamentos)
+  price           Decimal  @db.Decimal(10, 4) // Preço de compra/venda
+  sharesAdded     Decimal  @db.Decimal(15, 6) // Quantidade de ações adicionadas (pode ser negativo)
+  totalShares     Decimal  @db.Decimal(15, 6) // Total de ações após a transação
+  totalInvested   Decimal  @db.Decimal(15, 2) // Total investido no ativo até esta data
+  cashReserved    Decimal? @db.Decimal(12, 2) // Valor em caixa por não conseguir comprar ação inteira
+
   // Contexto do mês
   totalContribution Decimal @map("total_contribution") @db.Decimal(12, 2) // Aporte total do mês
-  portfolioValue    Decimal @map("portfolio_value") @db.Decimal(15, 2)    // Valor da carteira após rebalanceamento
-  cashBalance       Decimal @map("cash_balance") @db.Decimal(12, 2) @default(0) // Saldo em caixa no final do mês
-  
+  portfolioValue    Decimal @map("portfolio_value") @db.Decimal(15, 2) // Valor da carteira após rebalanceamento
+  cashBalance       Decimal @default(0) @map("cash_balance") @db.Decimal(12, 2) // Saldo em caixa no final do mês
+
   // Relacionamento
-  backtest        BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
-  
+  backtest BacktestConfig @relation(fields: [backtestId], references: [id], onDelete: Cascade)
+
   @@index([backtestId, month]) // Índice para consultas por backtest e mês (já existia)
   @@index([backtestId, ticker, month]) // Otimização para análise de ativo específico por mês
   @@index([backtestId, transactionType]) // Otimização para filtrar por tipo de transação
@@ -1164,13 +1165,13 @@ model BacktestTransaction {
 
 // Lista de interesse para fase Alfa
 model AlfaWaitlist {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  email     String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
+  email     String    @unique
+  createdAt DateTime  @default(now()) @map("created_at")
   invitedAt DateTime? @map("invited_at")
-  isInvited Boolean  @default(false) @map("is_invited")
-  
+  isInvited Boolean   @default(false) @map("is_invited")
+
   @@index([createdAt])
   @@index([isInvited])
   @@map("alfa_waitlist")
@@ -1184,10 +1185,10 @@ model UserAssetSubscription {
   userId    String   @map("user_id")
   companyId Int      @map("company_id")
   createdAt DateTime @default(now()) @map("created_at")
-  
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   @@unique([userId, companyId])
   @@index([userId])
   @@index([companyId])
@@ -1196,18 +1197,18 @@ model UserAssetSubscription {
 
 // Snapshots dos ativos (histórico completo)
 model AssetSnapshot {
-  id            String   @id @default(cuid())
-  companyId     Int      @map("company_id")
-  snapshotData  Json     @map("snapshot_data") // Dados completos do ativo
-  overallScore  Decimal  @map("overall_score") @db.Decimal(5, 2)
-  scoreComposition Json? @map("score_composition") // Composição detalhada da nota
-  isLatest      Boolean  @default(true) @map("is_latest") // Se é o snapshot mais recente
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
-  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  aiReports     AIReport[] @relation("SnapshotReports")
-  
+  id               String   @id @default(cuid())
+  companyId        Int      @map("company_id")
+  snapshotData     Json     @map("snapshot_data") // Dados completos do ativo
+  overallScore     Decimal  @map("overall_score") @db.Decimal(5, 2)
+  scoreComposition Json?    @map("score_composition") // Composição detalhada da nota
+  isLatest         Boolean  @default(true) @map("is_latest") // Se é o snapshot mais recente
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  aiReports AIReport[] @relation("SnapshotReports")
+
   @@index([companyId, isLatest])
   @@index([companyId, createdAt])
   @@index([updatedAt])
@@ -1218,19 +1219,19 @@ model AssetSnapshot {
 
 // Análises de vídeos do YouTube por empresa
 model YouTubeAnalysis {
-  id              String   @id @default(cuid())
-  companyId       Int      @map("company_id")
-  score           Decimal  @db.Decimal(5, 2)  // Nota de 0 a 100
-  summary         String   // Resumo dos pontos-chave analisados
-  positivePoints  Json?    @map("positive_points")  // Array de pontos positivos
-  negativePoints  Json?    @map("negative_points")  // Array de pontos negativos
-  videoIds        Json     @map("video_ids")  // Array dos IDs dos vídeos analisados
-  isActive        Boolean  @default(true) @map("is_active")  // Se é a análise ativa
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
+  id             String   @id @default(cuid())
+  companyId      Int      @map("company_id")
+  score          Decimal  @db.Decimal(5, 2) // Nota de 0 a 100
+  summary        String // Resumo dos pontos-chave analisados
+  positivePoints Json?    @map("positive_points") // Array de pontos positivos
+  negativePoints Json?    @map("negative_points") // Array de pontos negativos
+  videoIds       Json     @map("video_ids") // Array dos IDs dos vídeos analisados
+  isActive       Boolean  @default(true) @map("is_active") // Se é a análise ativa
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   @@index([companyId, isActive])
   @@index([companyId, createdAt])
   @@index([updatedAt])
@@ -1240,29 +1241,29 @@ model YouTubeAnalysis {
 // ===== TIPOS DE ATIVOS =====
 
 enum AssetType {
-  STOCK      // Ação
-  ETF        // Exchange Traded Fund
-  FII        // Fundo Imobiliário
-  BDR        // Brazilian Depositary Receipt
-  INDEX      // Índice
-  OTHER      // Outros
+  STOCK // Ação
+  ETF // Exchange Traded Fund
+  FII // Fundo Imobiliário
+  BDR // Brazilian Depositary Receipt
+  INDEX // Índice
+  OTHER // Outros
 }
 
 // ===== DADOS ESPECÍFICOS POR TIPO DE ATIVO =====
 
 // Dados específicos de ETFs
 model EtfData {
-  id                Int      @id @default(autoincrement())
-  companyId         Int      @unique @map("company_id")
-  netAssets         Decimal? @map("net_assets") @db.Decimal(20, 2)
-  netExpenseRatio   Decimal? @map("net_expense_ratio") @db.Decimal(5, 4)
-  dividendYield     Decimal? @map("dividend_yield") @db.Decimal(15, 6)
-  ytdReturn         Decimal? @map("ytd_return") @db.Decimal(15, 6)
-  category          String?
-  totalAssets       Decimal? @map("total_assets") @db.Decimal(20, 2)
-  updatedAt         DateTime? @updatedAt
-  
-  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id              Int       @id @default(autoincrement())
+  companyId       Int       @unique @map("company_id")
+  netAssets       Decimal?  @map("net_assets") @db.Decimal(20, 2)
+  netExpenseRatio Decimal?  @map("net_expense_ratio") @db.Decimal(5, 4)
+  dividendYield   Decimal?  @map("dividend_yield") @db.Decimal(15, 6)
+  ytdReturn       Decimal?  @map("ytd_return") @db.Decimal(15, 6)
+  category        String?
+  totalAssets     Decimal?  @map("total_assets") @db.Decimal(20, 2)
+  updatedAt       DateTime? @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@map("etf_data")
@@ -1270,17 +1271,17 @@ model EtfData {
 
 // Dados específicos de FIIs (Fundos Imobiliários)
 model FiiData {
-  id                    Int      @id @default(autoincrement())
-  companyId             Int      @unique @map("company_id")
-  netAssets             Decimal? @map("net_assets") @db.Decimal(20, 2)
-  dividendYield         Decimal? @map("dividend_yield") @db.Decimal(15, 6)
-  lastDividendValue     Decimal? @map("last_dividend_value") @db.Decimal(15, 6)
-  lastDividendDate      DateTime? @map("last_dividend_date") @db.Date
-  patrimonioLiquido     Decimal? @map("patrimonio_liquido") @db.Decimal(20, 2)
-  valorPatrimonial      Decimal? @map("valor_patrimonial") @db.Decimal(15, 6)
-  updatedAt             DateTime? @updatedAt
-  
-  company               Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                Int       @id @default(autoincrement())
+  companyId         Int       @unique @map("company_id")
+  netAssets         Decimal?  @map("net_assets") @db.Decimal(20, 2)
+  dividendYield     Decimal?  @map("dividend_yield") @db.Decimal(15, 6)
+  lastDividendValue Decimal?  @map("last_dividend_value") @db.Decimal(15, 6)
+  lastDividendDate  DateTime? @map("last_dividend_date") @db.Date
+  patrimonioLiquido Decimal?  @map("patrimonio_liquido") @db.Decimal(20, 2)
+  valorPatrimonial  Decimal?  @map("valor_patrimonial") @db.Decimal(15, 6)
+  updatedAt         DateTime? @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@map("fii_data")
@@ -1290,28 +1291,28 @@ model FiiData {
 
 // Fila de emails para envio assíncrono
 model EmailQueue {
-  id                String        @id @default(cuid())
-  email             String        // Email do destinatário
-  emailType         EmailType     @map("email_type") // Tipo de email
-  recipientName     String?       @map("recipient_name") // Nome do destinatário
-  
+  id            String    @id @default(cuid())
+  email         String // Email do destinatário
+  emailType     EmailType @map("email_type") // Tipo de email
+  recipientName String?   @map("recipient_name") // Nome do destinatário
+
   // Dados do email (JSON para flexibilidade)
-  emailData         Json          @map("email_data") // Dados específicos do tipo de email
-  
+  emailData Json @map("email_data") // Dados específicos do tipo de email
+
   // Status
-  status            EmailStatus   @default(PENDING) // PENDING, SENT, FAILED
-  attempts          Int           @default(0) // Número de tentativas de envio
-  lastAttemptAt     DateTime?     @map("last_attempt_at") // Última tentativa
-  errorMessage      String?       @map("error_message") // Mensagem de erro se falhou
-  
+  status        EmailStatus @default(PENDING) // PENDING, SENT, FAILED
+  attempts      Int         @default(0) // Número de tentativas de envio
+  lastAttemptAt DateTime?   @map("last_attempt_at") // Última tentativa
+  errorMessage  String?     @map("error_message") // Mensagem de erro se falhou
+
   // Datas
-  createdAt         DateTime      @default(now()) @map("created_at") // Data de criação da intenção
-  sentAt            DateTime?     @map("sent_at") // Data do envio do email (quando foi enviado)
-  
+  createdAt DateTime  @default(now()) @map("created_at") // Data de criação da intenção
+  sentAt    DateTime? @map("sent_at") // Data do envio do email (quando foi enviado)
+
   // Metadata
-  priority          Int           @default(0) // Prioridade (0=normal, 1=high, 2=urgent)
-  metadata          Json?         // Metadados adicionais
-  
+  priority Int   @default(0) // Prioridade (0=normal, 1=high, 2=urgent)
+  metadata Json? // Metadados adicionais
+
   @@index([status, createdAt]) // Para buscar emails pendentes ordenados por data
   @@index([emailType, status])
   @@index([createdAt])
@@ -1320,58 +1321,58 @@ model EmailQueue {
 }
 
 enum EmailType {
-  ASSET_CHANGE          // Mudança fundamental de ativo
-  MONTHLY_REPORT        // Relatório mensal
-  PASSWORD_RESET         // Email de redefinição de senha
-  WELCOME                // Email de boas-vindas
-  PAYMENT_FAILURE        // Email de falha no pagamento
-  EMAIL_VERIFICATION      // Email de verificação de email
+  ASSET_CHANGE // Mudança fundamental de ativo
+  MONTHLY_REPORT // Relatório mensal
+  PASSWORD_RESET // Email de redefinição de senha
+  WELCOME // Email de boas-vindas
+  PAYMENT_FAILURE // Email de falha no pagamento
+  EMAIL_VERIFICATION // Email de verificação de email
   FREE_USER_ASSET_CHANGE // Email de mudança de ativo para usuários gratuitos (conversão)
-  NOTIFICATION           // Email de notificação da plataforma
+  NOTIFICATION // Email de notificação da plataforma
 }
 
 enum EmailStatus {
-  PENDING               // Aguardando envio
-  SENT                  // Enviado com sucesso
-  FAILED                // Falhou após múltiplas tentativas
+  PENDING // Aguardando envio
+  SENT // Enviado com sucesso
+  FAILED // Falhou após múltiplas tentativas
 }
 
 // ===== SISTEMA DE TRACKING DE EVENTOS =====
 
 enum EventType {
-  PAGE_VIEW             // Visualização de página
-  CLICK                 // Clique em elemento
-  SCROLL                // Scroll na página
-  TIME_ON_PAGE          // Tempo gasto na página
-  NAVIGATION            // Navegação entre páginas
-  FORM_SUBMIT           // Submissão de formulário
-  FEATURE_USED          // Uso de feature específica
-  ASSET_VIEWED          // Visualização de ativo
-  RANKING_CREATED       // Criação de ranking
-  BACKTEST_RUN          // Execução de backtest
-  COMPARISON_STARTED    // Início de comparação
-  SEARCH                // Busca realizada
-  DOWNLOAD              // Download de arquivo
-  ERROR                 // Erro ocorrido
+  PAGE_VIEW // Visualização de página
+  CLICK // Clique em elemento
+  SCROLL // Scroll na página
+  TIME_ON_PAGE // Tempo gasto na página
+  NAVIGATION // Navegação entre páginas
+  FORM_SUBMIT // Submissão de formulário
+  FEATURE_USED // Uso de feature específica
+  ASSET_VIEWED // Visualização de ativo
+  RANKING_CREATED // Criação de ranking
+  BACKTEST_RUN // Execução de backtest
+  COMPARISON_STARTED // Início de comparação
+  SEARCH // Busca realizada
+  DOWNLOAD // Download de arquivo
+  ERROR // Erro ocorrido
 }
 
 // Eventos de tracking de usuários
 model UserEvent {
-  id          String    @id @default(cuid())
-  userId      String?   @map("user_id") // Nullable para visitantes
-  sessionId   String    @map("session_id") // Identificador de sessão
-  eventType   EventType @map("event_type")
-  page        String    // Rota da página (ex: /acao/PETR4)
-  element     String?   // Elemento clicado/interagido (ex: button#create-ranking)
-  metadata    Json?     // Dados adicionais: coordenadas, scroll depth, tempo, etc.
-  timestamp   DateTime  // Timestamp do evento (pode ser diferente de createdAt)
-  userAgent   String?   @map("user_agent")
-  ipHash      String?   @map("ip_hash") // Hash do IP para privacidade
-  referrer    String?   // Página de origem
-  createdAt   DateTime  @default(now()) @map("created_at")
-  
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+  id        String    @id @default(cuid())
+  userId    String?   @map("user_id") // Nullable para visitantes
+  sessionId String    @map("session_id") // Identificador de sessão
+  eventType EventType @map("event_type")
+  page      String // Rota da página (ex: /acao/PETR4)
+  element   String? // Elemento clicado/interagido (ex: button#create-ranking)
+  metadata  Json? // Dados adicionais: coordenadas, scroll depth, tempo, etc.
+  timestamp DateTime // Timestamp do evento (pode ser diferente de createdAt)
+  userAgent String?   @map("user_agent")
+  ipHash    String?   @map("ip_hash") // Hash do IP para privacidade
+  referrer  String? // Página de origem
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([userId, timestamp])
   @@index([sessionId, timestamp])
   @@index([eventType, timestamp])
@@ -1389,39 +1390,39 @@ enum WebhookProvider {
 }
 
 enum WebhookEventStatus {
-  PENDING   // Aguardando processamento
+  PENDING // Aguardando processamento
   PROCESSING // Em processamento
-  DONE      // Processado com sucesso
-  FAILED    // Falhou ao processar
+  DONE // Processado com sucesso
+  FAILED // Falhou ao processar
 }
 
 model WebhookEvent {
-  id                String            @id @default(cuid())
-  provider          WebhookProvider   // STRIPE ou MERCADOPAGO
-  eventId           String?           @map("event_id") // ID do evento no provider (ex: evt_xxx do Stripe)
-  eventType         String            @map("event_type") // Tipo do evento (ex: payment_intent.succeeded)
-  status            WebhookEventStatus @default(PENDING)
-  
+  id        String             @id @default(cuid())
+  provider  WebhookProvider // STRIPE ou MERCADOPAGO
+  eventId   String?            @map("event_id") // ID do evento no provider (ex: evt_xxx do Stripe)
+  eventType String             @map("event_type") // Tipo do evento (ex: payment_intent.succeeded)
+  status    WebhookEventStatus @default(PENDING)
+
   // Dados do evento
-  rawData           Json              @map("raw_data") // Dados completos do evento
-  processedData     Json?             @map("processed_data") // Dados processados/extrahidos
-  
+  rawData       Json  @map("raw_data") // Dados completos do evento
+  processedData Json? @map("processed_data") // Dados processados/extrahidos
+
   // Metadados
-  userId            String?           @map("user_id") // ID do usuário afetado (se identificável)
-  paymentId         String?           @map("payment_id") // ID do pagamento no provider
-  externalReference String?           @map("external_reference") // Referência externa (ex: external_reference do MercadoPago)
-  
+  userId            String? @map("user_id") // ID do usuário afetado (se identificável)
+  paymentId         String? @map("payment_id") // ID do pagamento no provider
+  externalReference String? @map("external_reference") // Referência externa (ex: external_reference do MercadoPago)
+
   // Processamento
-  errorMessage      String?           @map("error_message") // Mensagem de erro se falhou
-  retryCount        Int               @default(0) @map("retry_count") // Número de tentativas
-  lastProcessedAt   DateTime?         @map("last_processed_at") // Última tentativa de processamento
-  
+  errorMessage    String?   @map("error_message") // Mensagem de erro se falhou
+  retryCount      Int       @default(0) @map("retry_count") // Número de tentativas
+  lastProcessedAt DateTime? @map("last_processed_at") // Última tentativa de processamento
+
   // Timestamps
-  receivedAt        DateTime          @default(now()) @map("received_at") // Quando foi recebido
-  processedAt       DateTime?         @map("processed_at") // Quando foi processado com sucesso
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
-  
+  receivedAt  DateTime  @default(now()) @map("received_at") // Quando foi recebido
+  processedAt DateTime? @map("processed_at") // Quando foi processado com sucesso
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
   @@index([provider, status])
   @@index([status, createdAt])
   @@index([eventId, provider]) // Para evitar duplicatas
@@ -1436,20 +1437,20 @@ model WebhookEvent {
 
 // Cache de cálculos históricos do P/L agregado da bolsa
 model PlBolsaHistory {
-  id            String   @id @default(cuid())
-  date          DateTime @db.Date // Data do mês (primeiro dia do mês)
-  pl            Decimal  @db.Decimal(10, 4) // P/L agregado ponderado
-  averagePl     Decimal  @map("average_pl") @db.Decimal(10, 4) // Média histórica até esta data
+  id           String   @id @default(cuid())
+  date         DateTime @db.Date // Data do mês (primeiro dia do mês)
+  pl           Decimal  @db.Decimal(10, 4) // P/L agregado ponderado
+  averagePl    Decimal  @map("average_pl") @db.Decimal(10, 4) // Média histórica até esta data
   companyCount Int      @map("company_count") // Número de empresas incluídas
-  
+
   // Filtros aplicados (para cache por filtro)
-  sector        String?  // Setor filtrado (null = todos)
-  minScore      Int?     @map("min_score") // Score mínimo (null = sem filtro)
+  sector              String? // Setor filtrado (null = todos)
+  minScore            Int?    @map("min_score") // Score mínimo (null = sem filtro)
   excludeUnprofitable Boolean @default(false) @map("exclude_unprofitable") // Excluir não lucrativas
-  
+
   // Metadata
-  calculatedAt  DateTime @default(now()) @map("calculated_at")
-  
+  calculatedAt DateTime @default(now()) @map("calculated_at")
+
   @@unique([date, sector, minScore, excludeUnprofitable], name: "pl_bolsa_history_unique")
   @@index([date])
   @@index([calculatedAt])
@@ -1483,11 +1484,11 @@ model Offer {
 // ===== FEEDBACK DE EXIT INTENT =====
 
 model ExitIntentFeedback {
-  id                      String   @id @default(cuid())
-  reason                  String   // price_too_high, missing_features, just_browsing
-  suggested_price_in_cents Int?    @map("suggested_price_in_cents") // nullable, apenas se reason = price_too_high
-  page                    String   // Página onde ocorreu o exit intent
-  created_at              DateTime @default(now()) @map("created_at")
+  id                       String   @id @default(cuid())
+  reason                   String // price_too_high, missing_features, just_browsing
+  suggested_price_in_cents Int?     @map("suggested_price_in_cents") // nullable, apenas se reason = price_too_high
+  page                     String // Página onde ocorreu o exit intent
+  created_at               DateTime @default(now()) @map("created_at")
 
   @@index([reason])
   @@index([created_at])
@@ -1503,44 +1504,44 @@ enum BlogPostStatus {
 }
 
 model BlogPost {
-  id                String          @id @default(cuid())
-  slug              String          @unique
-  
+  id   String @id @default(cuid())
+  slug String @unique
+
   // Metadados básicos
-  title             String
-  excerpt           String          @db.Text
-  category          String
-  readTime          String          @map("read_time")
-  publishDate       DateTime?       @map("publish_date") @db.Date
-  author            String          @default("Equipe Preço Justo AI")
-  featured          Boolean         @default(false)
-  
+  title       String
+  excerpt     String    @db.Text
+  category    String
+  readTime    String    @map("read_time")
+  publishDate DateTime? @map("publish_date") @db.Date
+  author      String    @default("Equipe Preço Justo AI")
+  featured    Boolean   @default(false)
+
   // SEO
-  seoTitle          String?         @map("seo_title")
-  seoDescription    String?         @map("seo_description") @db.Text
-  image             String?
-  imageAlt          String?         @map("image_alt")
-  canonicalUrl      String?         @map("canonical_url")
-  
+  seoTitle       String? @map("seo_title")
+  seoDescription String? @map("seo_description") @db.Text
+  image          String?
+  imageAlt       String? @map("image_alt")
+  canonicalUrl   String? @map("canonical_url")
+
   // Conteúdo
-  content           String          @db.Text // Markdown completo
-  
+  content String @db.Text // Markdown completo
+
   // Status
-  status            BlogPostStatus  @default(DRAFT)
-  
+  status BlogPostStatus @default(DRAFT)
+
   // Tags (array JSON)
-  tags              Json            @default("[]")
-  
+  tags Json @default("[]")
+
   // Metadata
-  lastModified      DateTime?       @map("last_modified") @db.Date
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  
+  lastModified DateTime? @map("last_modified") @db.Date
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
   // Rastreamento de geração
-  generatedBy       String          @default("manual") @map("generated_by") // "AI" ou "manual"
-  generationPrompt  String?         @map("generation_prompt") @db.Text
-  sourceTopics      Json?           @map("source_topics") // Tópicos encontrados na web
-  
+  generatedBy      String  @default("manual") @map("generated_by") // "AI" ou "manual"
+  generationPrompt String? @map("generation_prompt") @db.Text
+  sourceTopics     Json?   @map("source_topics") // Tópicos encontrados na web
+
   @@index([status])
   @@index([status, publishDate])
   @@index([category])
@@ -1554,63 +1555,63 @@ model BlogPost {
 // ===== ANÁLISE TÉCNICA DE ATIVOS =====
 
 model AssetTechnicalAnalysis {
-  id                    String   @id @default(cuid())
-  companyId             Int      @map("company_id")
-  
+  id        String @id @default(cuid())
+  companyId Int    @map("company_id")
+
   // Indicadores Técnicos Calculados
-  rsi                   Decimal? @db.Decimal(5, 2)
-  stochasticK           Decimal? @map("stochastic_k") @db.Decimal(5, 2)
-  stochasticD           Decimal? @map("stochastic_d") @db.Decimal(5, 2)
-  macd                  Decimal? @db.Decimal(10, 4)
-  macdSignal            Decimal? @map("macd_signal") @db.Decimal(10, 4)
-  macdHistogram         Decimal? @map("macd_histogram") @db.Decimal(10, 4)
-  
+  rsi           Decimal? @db.Decimal(5, 2)
+  stochasticK   Decimal? @map("stochastic_k") @db.Decimal(5, 2)
+  stochasticD   Decimal? @map("stochastic_d") @db.Decimal(5, 2)
+  macd          Decimal? @db.Decimal(10, 4)
+  macdSignal    Decimal? @map("macd_signal") @db.Decimal(10, 4)
+  macdHistogram Decimal? @map("macd_histogram") @db.Decimal(10, 4)
+
   // Médias Móveis
-  sma20                 Decimal? @map("sma_20") @db.Decimal(10, 4)
-  sma50                 Decimal? @map("sma_50") @db.Decimal(10, 4)
-  sma200                Decimal? @map("sma_200") @db.Decimal(10, 4)
-  ema12                 Decimal? @map("ema_12") @db.Decimal(10, 4)
-  ema26                 Decimal? @map("ema_26") @db.Decimal(10, 4)
-  
+  sma20  Decimal? @map("sma_20") @db.Decimal(10, 4)
+  sma50  Decimal? @map("sma_50") @db.Decimal(10, 4)
+  sma200 Decimal? @map("sma_200") @db.Decimal(10, 4)
+  ema12  Decimal? @map("ema_12") @db.Decimal(10, 4)
+  ema26  Decimal? @map("ema_26") @db.Decimal(10, 4)
+
   // Bollinger Bands
-  bbUpper               Decimal? @map("bb_upper") @db.Decimal(10, 4)
-  bbMiddle              Decimal? @map("bb_middle") @db.Decimal(10, 4)
-  bbLower               Decimal? @map("bb_lower") @db.Decimal(10, 4)
-  bbWidth               Decimal? @map("bb_width") @db.Decimal(10, 4)
-  
+  bbUpper  Decimal? @map("bb_upper") @db.Decimal(10, 4)
+  bbMiddle Decimal? @map("bb_middle") @db.Decimal(10, 4)
+  bbLower  Decimal? @map("bb_lower") @db.Decimal(10, 4)
+  bbWidth  Decimal? @map("bb_width") @db.Decimal(10, 4)
+
   // Fibonacci Retracement (níveis principais)
-  fib236                Decimal? @map("fib_236") @db.Decimal(10, 4)
-  fib382                Decimal? @map("fib_382") @db.Decimal(10, 4)
-  fib500                Decimal? @map("fib_500") @db.Decimal(10, 4)
-  fib618                Decimal? @map("fib_618") @db.Decimal(10, 4)
-  fib786                Decimal? @map("fib_786") @db.Decimal(10, 4)
-  
+  fib236 Decimal? @map("fib_236") @db.Decimal(10, 4)
+  fib382 Decimal? @map("fib_382") @db.Decimal(10, 4)
+  fib500 Decimal? @map("fib_500") @db.Decimal(10, 4)
+  fib618 Decimal? @map("fib_618") @db.Decimal(10, 4)
+  fib786 Decimal? @map("fib_786") @db.Decimal(10, 4)
+
   // Ichimoku Cloud
-  tenkanSen             Decimal? @map("tenkan_sen") @db.Decimal(10, 4)
-  kijunSen              Decimal? @map("kijun_sen") @db.Decimal(10, 4)
-  senkouSpanA           Decimal? @map("senkou_span_a") @db.Decimal(10, 4)
-  senkouSpanB           Decimal? @map("senkou_span_b") @db.Decimal(10, 4)
-  chikouSpan            Decimal? @map("chikou_span") @db.Decimal(10, 4)
-  
+  tenkanSen   Decimal? @map("tenkan_sen") @db.Decimal(10, 4)
+  kijunSen    Decimal? @map("kijun_sen") @db.Decimal(10, 4)
+  senkouSpanA Decimal? @map("senkou_span_a") @db.Decimal(10, 4)
+  senkouSpanB Decimal? @map("senkou_span_b") @db.Decimal(10, 4)
+  chikouSpan  Decimal? @map("chikou_span") @db.Decimal(10, 4)
+
   // Suporte e Resistência
-  supportLevels         Json?    @map("support_levels") // Array de níveis de suporte
-  resistanceLevels      Json?    @map("resistance_levels") // Array de níveis de resistência
-  psychologicalLevels   Json?    @map("psychological_levels") // Níveis psicológicos (preços redondos)
-  
+  supportLevels       Json? @map("support_levels") // Array de níveis de suporte
+  resistanceLevels    Json? @map("resistance_levels") // Array de níveis de resistência
+  psychologicalLevels Json? @map("psychological_levels") // Níveis psicológicos (preços redondos)
+
   // Análise de IA (Previsão 30 dias)
-  aiMinPrice            Decimal? @map("ai_min_price") @db.Decimal(10, 4) // Preço mínimo previsto
-  aiMaxPrice            Decimal? @map("ai_max_price") @db.Decimal(10, 4) // Preço máximo previsto
-  aiFairEntryPrice      Decimal? @map("ai_fair_entry_price") @db.Decimal(10, 4) // Preço justo de entrada ideal
-  aiAnalysis            String?  @map("ai_analysis") @db.Text // Explicação da IA
-  aiConfidence          Decimal? @map("ai_confidence") @db.Decimal(5, 2) // Confiança da análise (0-100)
-  
+  aiMinPrice       Decimal? @map("ai_min_price") @db.Decimal(10, 4) // Preço mínimo previsto
+  aiMaxPrice       Decimal? @map("ai_max_price") @db.Decimal(10, 4) // Preço máximo previsto
+  aiFairEntryPrice Decimal? @map("ai_fair_entry_price") @db.Decimal(10, 4) // Preço justo de entrada ideal
+  aiAnalysis       String?  @map("ai_analysis") @db.Text // Explicação da IA
+  aiConfidence     Decimal? @map("ai_confidence") @db.Decimal(5, 2) // Confiança da análise (0-100)
+
   // Metadata
-  calculatedAt          DateTime @default(now()) @map("calculated_at")
-  expiresAt             DateTime @map("expires_at") // 30 dias após calculatedAt
-  isActive              Boolean  @default(true) @map("is_active")
-  
-  company               Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
+  calculatedAt DateTime @default(now()) @map("calculated_at")
+  expiresAt    DateTime @map("expires_at") // 30 dias após calculatedAt
+  isActive     Boolean  @default(true) @map("is_active")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   @@unique([companyId, calculatedAt])
   @@index([companyId, isActive])
   @@index([companyId, expiresAt])
@@ -1621,17 +1622,17 @@ model AssetTechnicalAnalysis {
 // ===== USO DE FEATURES (GENÉRICO) =====
 
 model FeatureUsage {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  feature     String   // Ex: "technical_analysis", "ai_report", "backtest", etc.
-  resourceId  String?  @map("resource_id") // Opcional: ticker, reportId, etc.
-  usedAt      DateTime @default(now()) @map("used_at")
-  month       Int      // 1-12
-  year        Int      // YYYY
-  metadata    Json?    // Dados adicionais flexíveis (ex: { ticker: "PETR4" })
-  
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  feature    String // Ex: "technical_analysis", "ai_report", "backtest", etc.
+  resourceId String?  @map("resource_id") // Opcional: ticker, reportId, etc.
+  usedAt     DateTime @default(now()) @map("used_at")
+  month      Int // 1-12
+  year       Int // YYYY
+  metadata   Json? // Dados adicionais flexíveis (ex: { ticker: "PETR4" })
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, feature, resourceId, month, year], name: "feature_usage_unique")
   @@index([userId, feature, year, month])
   @@index([feature, year, month])
@@ -1643,12 +1644,12 @@ model FeatureUsage {
 model RadarConfig {
   id        String   @id @default(cuid())
   userId    String   @unique @map("user_id")
-  tickers   Json     // Array de strings (tickers)
+  tickers   Json // Array de strings (tickers)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@map("radar_configs")
 }
@@ -1656,31 +1657,31 @@ model RadarConfig {
 // ===== SISTEMA DE NOTIFICAÇÕES =====
 
 model Notification {
-  id          String           @id @default(cuid())
-  userId      String           @map("user_id")
-  campaignId  String?          @map("campaign_id")
-  
+  id         String  @id @default(cuid())
+  userId     String  @map("user_id")
+  campaignId String? @map("campaign_id")
+
   // Conteúdo
-  title       String
-  message     String           @db.Text
-  link        String?          // URL (pode ser interno ou externo)
-  linkType    NotificationLinkType @default(INTERNAL) @map("link_type")
-  
+  title    String
+  message  String               @db.Text
+  link     String? // URL (pode ser interno ou externo)
+  linkType NotificationLinkType @default(INTERNAL) @map("link_type")
+
   // Tipo e status
-  type        NotificationType
-  isRead      Boolean          @default(false) @map("is_read")
-  readAt      DateTime?        @map("read_at")
-  
+  type   NotificationType
+  isRead Boolean          @default(false) @map("is_read")
+  readAt DateTime?        @map("read_at")
+
   // Metadata
-  metadata    Json?            // Dados adicionais (reportId, companyId, ticker, etc)
-  
+  metadata Json? // Dados adicionais (reportId, companyId, ticker, etc)
+
   // Timestamps
-  createdAt   DateTime         @default(now()) @map("created_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+
   // Relations
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campaign    NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
   @@index([userId, isRead, createdAt])
   @@index([userId, createdAt])
   @@index([campaignId])
@@ -1690,80 +1691,145 @@ model Notification {
 }
 
 model NotificationCampaign {
-  id                String                  @id @default(cuid())
-  title             String
-  message           String                  @db.Text
-  link              String?
-  linkType          NotificationLinkType    @default(INTERNAL) @map("link_type")
-  ctaText           String?                 @map("cta_text") // Texto customizado do botão CTA
-  
+  id       String               @id @default(cuid())
+  title    String
+  message  String               @db.Text
+  link     String?
+  linkType NotificationLinkType @default(INTERNAL) @map("link_type")
+  ctaText  String?              @map("cta_text") // Texto customizado do botão CTA
+
   // Segmentação
-  segmentType       NotificationSegmentType @map("segment_type")
-  segmentConfig     Json                    @map("segment_config") // Configurações específicas do segmento
-  
+  segmentType   NotificationSegmentType @map("segment_type")
+  segmentConfig Json                    @map("segment_config") // Configurações específicas do segmento
+
   // Dashboard
-  showOnDashboard   Boolean                 @default(false) @map("show_on_dashboard")
-  dashboardExpiresAt DateTime?              @map("dashboard_expires_at")
-  
+  showOnDashboard    Boolean   @default(false) @map("show_on_dashboard")
+  dashboardExpiresAt DateTime? @map("dashboard_expires_at")
+
   // Metadata
-  createdBy         String                  @map("created_by") // ID do admin que criou
-  stats             Json?                   // Estatísticas (totalSent, totalRead, totalClicked)
-  
+  createdBy String @map("created_by") // ID do admin que criou
+  stats     Json? // Estatísticas (totalSent, totalRead, totalClicked)
+
   // Timestamps
-  createdAt         DateTime                @default(now()) @map("created_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+
   // Relations
-  notifications     Notification[]
-  
+  notifications Notification[]
+
   @@index([createdAt])
   @@index([showOnDashboard, dashboardExpiresAt])
   @@map("notification_campaigns")
 }
 
 model UserNotificationPreferences {
-  id                      String   @id @default(cuid())
-  userId                  String   @unique @map("user_id")
+  id                        String  @id @default(cuid())
+  userId                    String  @unique @map("user_id")
   emailNotificationsEnabled Boolean @default(true) @map("email_notifications_enabled")
-  
+
   // Timestamps
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Relations
-  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@map("user_notification_preferences")
 }
 
+// ===== ARBITRAGEM INTELIGENTE DE DÍVIDA =====
+
+enum AmortizationSystem {
+  SAC // Sistema de Amortização Constante
+  PRICE // Sistema de Amortização Francês (Tabela Price)
+}
+
+enum StrategySource {
+  FIXED_RATE // Taxa manual (Free)
+  PORTFOLIO // Média ponderada da carteira (PRO)
+  RANKING // Estratégia de ranking (PRO)
+  MANUAL_TICKERS // Tickers manuais (PRO)
+}
+
+model Debt {
+  id                 String             @id @default(cuid())
+  userId             String             @map("user_id")
+  name               String // Ex: "Minha Casa", "Loteamento"
+  balance            Decimal            @db.Decimal(15, 2) // Saldo devedor atual
+  interestRateAnnual Decimal            @map("interest_rate_annual") @db.Decimal(5, 4) // Taxa CET anual (ex: 0.1050 = 10.50%)
+  termMonths         Int                @map("term_months") // Prazo total em meses
+  monthlyPayment     Decimal            @map("monthly_payment") @db.Decimal(12, 2) // Prestação obrigatória mensal
+  amortizationSystem AmortizationSystem @default(SAC) @map("amortization_system")
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  simulationConfig UserSimulationConfig?
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@map("debts")
+}
+
+model UserSimulationConfig {
+  id     String @id @default(cuid())
+  debtId String @unique @map("debt_id")
+  debt   Debt   @relation(fields: [debtId], references: [id], onDelete: Cascade)
+
+  // Configuração de Orçamento
+  monthlyBudget   Decimal @map("monthly_budget") @db.Decimal(12, 2) // Orçamento mensal total
+  investmentSplit Decimal @map("investment_split") @db.Decimal(12, 2) // Valor fixo do Split (Estratégia Híbrida)
+
+  // Configuração da Fonte de Rentabilidade
+  strategyType StrategySource @default(FIXED_RATE) @map("strategy_type")
+
+  // Campo exclusivo do Free (ou Pro que quer digitar manual)
+  manualRateFixed Decimal? @map("manual_rate_fixed") @db.Decimal(5, 4) // Taxa manual anual (ex: 0.10 = 10%)
+
+  // Taxa Referencial (TR) mensal
+  monthlyTR Decimal @default(0.001) @map("monthly_tr") @db.Decimal(5, 4) // TR mensal padrão 0,1% (ex: 0.001 = 0.1%)
+
+  // Campos exclusivos do PRO
+  rankingId     String?  @map("ranking_id") // ID do ranking selecionado
+  manualTickers String[] @default([]) @map("manual_tickers") // Array de tickers para cálculo manual
+
+  // Metadata
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_simulation_configs")
+}
+
 enum NotificationType {
-  SYSTEM              // Notificações do sistema
-  CAMPAIGN            // Notificações de campanha
-  ASSET_CHANGE        // Mudança fundamental de ativo
-  MONTHLY_REPORT      // Relatório mensal
-  AI_REPORT           // Relatório de IA genérico
+  SYSTEM // Notificações do sistema
+  CAMPAIGN // Notificações de campanha
+  ASSET_CHANGE // Mudança fundamental de ativo
+  MONTHLY_REPORT // Relatório mensal
+  AI_REPORT // Relatório de IA genérico
 }
 
 enum NotificationLinkType {
-  INTERNAL            // Link interno (/acao/PETR4)
-  EXTERNAL            // Link externo (https://...)
+  INTERNAL // Link interno (/acao/PETR4)
+  EXTERNAL // Link externo (https://...)
 }
 
 enum NotificationSegmentType {
-  ALL_USERS                    // Todos os usuários
-  ASSET_SUBSCRIBERS            // Usuários que seguem ativo X (UserAssetSubscription)
-  RECENT_RANKING_CREATORS      // Usuários que criaram ranking nos últimos X dias (RankingHistory)
-  RECENT_RADAR_USERS          // Usuários que adicionaram ativo X ao radar recentemente (RadarConfig)
-  RECENT_BACKTEST_USERS       // Usuários que fizeram backtest recentemente (BacktestConfig)
-  RECENT_PORTFOLIO_CREATORS   // Usuários que criaram carteira recentemente (Portfolio, PortfolioConfig)
-  ACTIVE_PORTFOLIO_USERS      // Usuários que estão usando carteira (adicionando transações recentes)
-  PREMIUM_USERS               // Usuários Premium (subscriptionTier = PREMIUM)
-  FREE_USERS                  // Usuários gratuitos (subscriptionTier = FREE)
-  EARLY_ADOPTERS              // Early Adopters (isEarlyAdopter = true)
-  TRIAL_USERS                 // Usuários em trial (trialStartedAt não null e trialEndsAt > now)
-  RECENT_LOGINS               // Usuários que fizeram login nos últimos X dias (lastLoginAt)
-  NEW_USERS                   // Usuários novos (criados nos últimos X dias, createdAt)
-  FEATURE_USERS               // Usuários que usaram feature X recentemente (FeatureUsage)
-  SUPPORT_TICKET_USERS        // Usuários que abriram ticket recentemente (SupportTicket)
-  EMAIL_LIST                  // Lista específica de emails (segmentConfig.emails: string[])
+  ALL_USERS // Todos os usuários
+  ASSET_SUBSCRIBERS // Usuários que seguem ativo X (UserAssetSubscription)
+  RECENT_RANKING_CREATORS // Usuários que criaram ranking nos últimos X dias (RankingHistory)
+  RECENT_RADAR_USERS // Usuários que adicionaram ativo X ao radar recentemente (RadarConfig)
+  RECENT_BACKTEST_USERS // Usuários que fizeram backtest recentemente (BacktestConfig)
+  RECENT_PORTFOLIO_CREATORS // Usuários que criaram carteira recentemente (Portfolio, PortfolioConfig)
+  ACTIVE_PORTFOLIO_USERS // Usuários que estão usando carteira (adicionando transações recentes)
+  PREMIUM_USERS // Usuários Premium (subscriptionTier = PREMIUM)
+  FREE_USERS // Usuários gratuitos (subscriptionTier = FREE)
+  EARLY_ADOPTERS // Early Adopters (isEarlyAdopter = true)
+  TRIAL_USERS // Usuários em trial (trialStartedAt não null e trialEndsAt > now)
+  RECENT_LOGINS // Usuários que fizeram login nos últimos X dias (lastLoginAt)
+  NEW_USERS // Usuários novos (criados nos últimos X dias, createdAt)
+  FEATURE_USERS // Usuários que usaram feature X recentemente (FeatureUsage)
+  SUPPORT_TICKET_USERS // Usuários que abriram ticket recentemente (SupportTicket)
+  EMAIL_LIST // Lista específica de emails (segmentConfig.emails: string[])
 }

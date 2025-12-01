@@ -96,7 +96,11 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   'userEvent': 'user_events',
   
   // Webhooks
-  'webhookEvent': 'webhook_events'
+  'webhookEvent': 'webhook_events',
+  
+  // Arbitragem Inteligente de Dívida
+  'debt': 'debts',
+  'userSimulationConfig': 'user_simulation_configs'
 }
 
 // Mapeamento de dependências entre tabelas
@@ -117,9 +121,13 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'value_added_statements': ['companies', 'value_added_statements'],
   
   // Usuários e dados pessoais
-  'users': ['users', 'portfolios', 'portfolio_assets', 'portfolio_configs', 'ranking_history', 'backtest_configs', 'user_asset_subscriptions'],
+  'users': ['users', 'portfolios', 'portfolio_assets', 'portfolio_configs', 'ranking_history', 'backtest_configs', 'user_asset_subscriptions', 'debts', 'user_simulation_configs'],
   'portfolios': ['users', 'portfolios', 'portfolio_assets'],
   'portfolio_assets': ['portfolios', 'portfolio_assets'],
+  
+  // Arbitragem Inteligente de Dívida
+  'debts': ['users', 'debts', 'user_simulation_configs'],
+  'user_simulation_configs': ['debts', 'user_simulation_configs'],
   
   // Portfolio Carteira (new)
   'portfolio_configs': ['portfolio_configs', 'portfolio_config_assets', 'portfolio_transactions', 'portfolio_metrics'],

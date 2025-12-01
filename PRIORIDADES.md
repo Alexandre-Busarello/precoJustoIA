@@ -1,4 +1,4 @@
-Todos os emails gerados pela plataforma devem ir para "email_queue" e serem processado em background
+Empresas sem liquidez como SOND3 devem ser marcadas e excluidas de rankins e etc
 
 cron para atualizar o utltimo dividendo das empresas, fiis, etfs e bdrs
 

@@ -35,7 +35,7 @@ export const SCREENING_PRESETS: Record<ScreeningPresetSlug, ScreeningPreset> = {
   'top-vacas-leiteiras-dividendos': {
     slug: 'top-vacas-leiteiras-dividendos',
     title: '🐮 Top "Vacas Leiteiras": Dividendos Acima da Selic',
-    hook: 'Esqueça a poupança. Estas 3 empresas são as verdadeiras "Vacas Leiteiras" da bolsa agora, pagando dividendos gordos e isentos de imposto. Veja o Yield da primeira da lista...',
+    hook: 'Esqueça a poupança. Estas 3 empresas são as verdadeiras "Vacas Leiteiras" da bolsa agora, pagando dividendos gordos. Veja o Yield da primeira da lista...',
     description: 'Descubra as ações que pagam os maiores dividendos da B3. Filtros: Dividend Yield ≥ 8%, Payout entre 25% e 90%, Liquidez Diária > R$ 500k.',
     keywords: ['dividendos', 'dividend yield', 'renda passiva', 'vacas leiteiras', 'barsi', 'dividendos altos'],
     params: {

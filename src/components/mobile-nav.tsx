@@ -21,7 +21,6 @@ import {
   GitCompare,
   Headphones,
   TrendingUp,
-  Wrench,
   Building2,
   Filter,
   Sparkles,
@@ -29,8 +28,18 @@ import {
   Calculator,
   Clock,
   DollarSign,
-  Radar
+  Radar,
+  ChevronRight,
+  Settings,
+  Rocket,
+  History
 } from "lucide-react"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { useAdminCheck } from "@/hooks/use-user-data"
 
 interface MobileNavProps {
   isOpen: boolean
@@ -41,6 +50,8 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const { isPremium, isTrialActive, trialDaysRemaining, subscriptionTier } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
+  const { data: adminData } = useAdminCheck()
+  const isAdmin = adminData?.isAdmin || false
 
   // Extrair iniciais do nome ou email
   const getInitials = () => {
@@ -76,6 +87,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
     }
   }, [isOpen])
 
+  // Menu Principal - Links Diretos
   const menuItems = [
     {
       title: "Dashboard",
@@ -89,96 +101,126 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       icon: <BarChart3 className="w-5 h-5" />,
       show: !!session && isPremium,
       isPremiumFeature: !isPremium
-    },
-    {
-      title: "Perfil",
-      href: "/perfil",
-      icon: <User className="w-5 h-5" />,
-      show: !!session
     }
   ]
 
-  const analysisItems = [
+  // Oportunidades - Seção Expansível com Subcategorias
+  const oportunidadesSections: Array<{
+    label: string
+    items: Array<{
+      title: string
+      href: string
+      icon: React.ReactElement
+      show: boolean
+      description: string
+      isNew?: boolean
+      badge?: string
+    }>
+  }> = [
     {
-      title: "Radar de Oportunidades",
-      href: "/radar", 
-      icon: <Radar className="w-5 h-5" />,
-      show: true,
-      description: "Visão consolidada e visual",
-      isNew: true
+      label: "Descoberta",
+      items: [
+        {
+          title: "Radar de Oportunidades",
+          href: "/radar", 
+          icon: <Radar className="w-5 h-5" />,
+          show: true,
+          description: "Visão consolidada e visual de ativos descontados",
+          isNew: true
+        },
+        {
+          title: "Screening de Ações",
+          href: "/screening-acoes", 
+          icon: <Filter className="w-5 h-5" />,
+          show: true,
+          description: "Filtros customizáveis para encontrar a ação perfeita"
+        },
+      ],
     },
     {
-      title: "Radar de Dividendos",
-      href: "/radar-dividendos", 
-      icon: <DollarSign className="w-5 h-5" />,
-      show: true,
-      description: "Projeções de dividendos com IA",
-      isNew: true
+      label: "Análise Rápida",
+      items: [
+        {
+          title: "Radar de Dividendos",
+          href: "/radar-dividendos", 
+          icon: <DollarSign className="w-5 h-5" />,
+          show: true,
+          description: "Projeções de dividendos com IA"
+        },
+        {
+          title: "Rankings",
+          href: "/ranking", 
+          icon: <BarChart3 className="w-5 h-5" />,
+          show: true,
+          description: "As melhores ações segundo Graham, Bazin e outros"
+        },
+      ],
+    },
+  ]
+
+  // Análise & Estratégia - Seção Expansível com Subcategorias
+  const analiseEstrategiaSections: Array<{
+    label: string
+    items: Array<{
+      title: string
+      href: string
+      icon: React.ReactElement
+      show: boolean
+      description: string
+      badge?: string
+    }>
+  }> = [
+    {
+      label: "Comparação",
+      items: [
+        {
+          title: "Comparador",
+          href: "/comparador", 
+          icon: <GitCompare className="w-5 h-5" />,
+          show: true,
+          description: "Compare indicadores de ações lado a lado"
+        },
+        {
+          title: "Análise Setorial",
+          href: "/analise-setorial", 
+          icon: <Building2 className="w-5 h-5" />,
+          show: true,
+          description: "Compare múltiplos e métricas entre setores"
+        },
+      ],
     },
     {
-      title: "Rankings",
-      href: "/ranking", 
-      icon: <BarChart3 className="w-5 h-5" />,
-      show: true,
-      description: "Análise fundamentalista"
+      label: "Histórico",
+      items: [
+        {
+          title: "P/L Histórico",
+          href: "/pl-bolsa",
+          icon: <TrendingUp className="w-5 h-5" />,
+          show: true,
+          description: "Análise histórica do P/L da Bovespa"
+        },
+        {
+          title: "Backtesting",
+          href: "/backtest", 
+          icon: <History className="w-5 h-5" />,
+          show: true,
+          description: "Simule estratégias de investimento no passado"
+        },
+      ],
     },
     {
-      title: "Análise Setorial",
-      href: "/analise-setorial", 
-      icon: <Building2 className="w-5 h-5" />,
-      show: true,
-      description: "Compare setores da B3",
-      isNew: true
+      label: "Ferramentas",
+      items: [
+        {
+          title: "Calculadoras",
+          href: "/calculadoras/dividend-yield",
+          icon: <Calculator className="w-5 h-5" />,
+          show: true,
+          description: "Calcule preço teto e rendimento de dividendos",
+          badge: "Grátis"
+        },
+      ],
     },
-    {
-      title: "Screening de Ações",
-      href: "/screening-acoes", 
-      icon: <Filter className="w-5 h-5" />,
-      show: true,
-      description: "Filtros customizáveis",
-      isNew: true
-    }
-  ]
-
-  const marketItems = [
-    {
-      title: "P/L Histórico",
-      href: "/pl-bolsa",
-      icon: <TrendingUp className="w-5 h-5" />,
-      show: true,
-      description: "P/L histórico da Bovespa"
-    }
-  ]
-
-  const comparisonItems = [
-    {
-      title: "Comparador",
-      href: "/comparador", 
-      icon: <GitCompare className="w-5 h-5" />,
-      show: true,
-      description: "Compare ações"
-    }
-  ]
-
-  const simulationItems = [
-    {
-      title: "Backtesting",
-      href: "/backtest", 
-      icon: <TrendingUp className="w-5 h-5" />,
-      show: true,
-      description: "Simule carteiras",
-      isPremiumFeature: !isPremium
-    }
-  ]
-
-  const supportItems = [
-    {
-      title: "Suporte",
-      href: "/suporte", 
-      icon: <Headphones className="w-5 h-5" />,
-      show: !!session,
-      isPremiumFeature: !isPremium
-    }
   ]
 
   // Handler para fechar o menu - garante compatibilidade com touch events
@@ -309,26 +351,11 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                 </div>
               </div>
               
-              {/* Quick Actions */}
-              <div className="flex gap-2">
-                <Link 
-                  href="/dashboard/subscriptions" 
-                  className="flex-1"
-                  onClick={() => setIsOpen(false)}
-                >
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full text-xs"
-                  >
-                    <Bell className="w-3 h-3 mr-1" />
-                    Inscrições
-                  </Button>
-                </Link>
-                {!isPremium && (
+              {/* Upgrade CTA - Apenas para usuários não Premium */}
+              {!isPremium && (
+                <div className="mt-2">
                   <Link 
                     href="/checkout" 
-                    className="flex-1"
                     onClick={() => setIsOpen(false)}
                   >
                     <Button 
@@ -336,11 +363,11 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                       className="w-full text-xs bg-gradient-to-r from-violet-600 to-purple-600"
                     >
                       <CreditCard className="w-3 h-3 mr-1" />
-                      Upgrade
+                      Upgrade Premium
                     </Button>
                   </Link>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -348,224 +375,10 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
           <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
             <div className="p-4 pb-20">
               <nav className="space-y-4">
-              {/* Menu Principal */}
-              {session && menuItems.filter(item => item.show).length > 0 && (
-                <div className="space-y-2">
-                  {menuItems
-                    .filter(item => item.show)
-                    .map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setIsOpen(false)}
-                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                          pathname === item.href
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        {item.icon}
-                        <span className="font-medium flex-1">{item.title}</span>
-                      </Link>
-                    ))}
-                </div>
-              )}
-
-              {/* Seção Ferramentas */}
-              <div>
-                <div className="flex items-center gap-2 px-3 py-2 mb-2">
-                  <Wrench className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                    Ferramentas
-                  </h3>
-                </div>
-                
-                {/* Análise */}
-                <div className="px-3 py-1 mb-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase">Análise</p>
-                </div>
-                <div className="space-y-1 mb-3">
-                  {analysisItems
-                    .filter(item => item.show)
-                    .map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setIsOpen(false)}
-                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                          pathname === item.href
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className={`p-1.5 rounded-md ${
-                          item.href === '/analise-setorial'
-                            ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
-                            : item.href === '/screening-acoes'
-                            ? 'bg-gradient-to-br from-amber-500 to-yellow-500'
-                            : 'bg-gradient-to-br from-blue-500 to-purple-500'
-                        }`}>
-                          <div className="text-white text-sm">
-                            {item.icon}
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{item.title}</span>
-                            {item.isNew && (
-                              <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
-                                🚀 Novo
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">{item.description}</p>
-                        </div>
-                      </Link>
-                    ))}
-                </div>
-
-                {/* Mercado */}
-                <div className="px-3 py-1 mb-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase">Mercado</p>
-                </div>
-                <div className="space-y-1 mb-3">
-                  {marketItems
-                    .filter(item => item.show)
-                    .map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setIsOpen(false)}
-                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                          pathname === item.href
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className="p-1.5 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500">
-                          <div className="text-white text-sm">
-                            {item.icon}
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <span className="font-medium text-sm">{item.title}</span>
-                          <p className="text-xs text-muted-foreground">{item.description}</p>
-                        </div>
-                      </Link>
-                    ))}
-                </div>
-
-                {/* Comparação */}
-                <div className="px-3 py-1 mb-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase">Comparação</p>
-                </div>
-                <div className="space-y-1 mb-3">
-                  {comparisonItems
-                    .filter(item => item.show)
-                    .map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setIsOpen(false)}
-                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                          pathname === item.href
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className="p-1.5 rounded-md bg-gradient-to-br from-blue-500 to-purple-500">
-                          <div className="text-white text-sm">
-                            {item.icon}
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <span className="font-medium text-sm">{item.title}</span>
-                          <p className="text-xs text-muted-foreground">{item.description}</p>
-                        </div>
-                      </Link>
-                    ))}
-                </div>
-
-                {/* Simulação */}
-                <div className="px-3 py-1 mb-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase">Simulação</p>
-                </div>
-                <div className="space-y-1">
-                  {simulationItems
-                    .filter(item => item.show)
-                    .map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setIsOpen(false)}
-                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                          pathname === item.href
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className="p-1.5 rounded-md bg-gradient-to-br from-emerald-500 to-teal-500">
-                          <div className="text-white text-sm">
-                            {item.icon}
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{item.title}</span>
-                            {item.isPremiumFeature && (
-                              <Badge variant="default" className="text-xs bg-gradient-to-r from-emerald-500 to-teal-500">
-                                Premium
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">{item.description}</p>
-                        </div>
-                      </Link>
-                    ))}
-                </div>
-              </div>
-
-              {/* Seção Calculadoras */}
-              <div>
-                <div className="flex items-center gap-2 px-3 py-2 mb-2">
-                  <Calculator className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                    Calculadoras
-                  </h3>
-                </div>
-                <div className="space-y-1">
-                  <Link
-                    href="/calculadoras/dividend-yield"
-                    onClick={() => setIsOpen(false)}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                      pathname?.startsWith('/calculadoras/dividend-yield')
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    <div className="p-1.5 rounded-md bg-gradient-to-br from-green-500 to-emerald-500">
-                      <div className="text-white text-sm">
-                        <Calculator className="w-5 h-5" />
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">Dividend Yield</span>
-                        <Badge variant="secondary" className="text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white">
-                          Grátis
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Calcule renda passiva com dividendos</p>
-                    </div>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Seção Suporte */}
-              {session && (
-                <div>
-                  <div className="space-y-1">
-                    {supportItems
+                {/* Menu Principal - Links Diretos */}
+                {session && menuItems.filter(item => item.show).length > 0 && (
+                  <div className="space-y-2">
+                    {menuItems
                       .filter(item => item.show)
                       .map((item) => (
                         <Link
@@ -581,39 +394,135 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                           {item.icon}
                           <span className="font-medium flex-1">{item.title}</span>
                           {item.isPremiumFeature && (
-                            <Badge variant="default" className="text-xs bg-gradient-to-r from-blue-500 to-purple-600">
+                            <Badge variant="default" className="text-xs bg-gradient-to-r from-violet-600 to-purple-600">
                               Premium
                             </Badge>
                           )}
                         </Link>
                       ))}
                   </div>
-                </div>
-              )}
-            </nav>
+                )}
 
-            {/* Upgrade CTA for Free Users */}
-            {session && !isPremium && (
-              <div className="mt-6 p-4 bg-gradient-to-r from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20 rounded-lg border border-violet-200 dark:border-violet-800">
-                <div className="flex items-center gap-3 mb-3">
-                  <Shield className="w-5 h-5 text-violet-600" />
-                  <h3 className="font-semibold text-sm">Upgrade Premium</h3>
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Desbloqueie todos os modelos de valuation, análises com IA e Central de Suporte Premium
-                </p>
-                <Button asChild size="sm" className="w-full bg-gradient-to-r from-violet-600 to-pink-600">
-                  <Link 
-                    href="/checkout" 
-                    className="flex items-center justify-center gap-2"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    Fazer Upgrade
-                  </Link>
-                </Button>
-              </div>
-            )}
+                {/* Seção Oportunidades - Accordion */}
+                <Collapsible>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg px-4 py-3 font-medium hover:bg-accent hover:text-accent-foreground data-[state=open]:text-primary group">
+                    <span className="flex items-center gap-2">
+                      <Rocket className="h-4 w-4" /> Oportunidades
+                    </span>
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="px-4 py-2 space-y-3">
+                    {oportunidadesSections.map((section, sectionIndex) => (
+                      <div key={sectionIndex}>
+                        {section.label && (
+                          <div className="px-2 py-1 mb-1">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">{section.label}</p>
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          {section.items
+                            .filter(item => item.show)
+                            .map((item) => (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={() => setIsOpen(false)}
+                                className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                                  pathname === item.href || pathname?.startsWith(item.href)
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                                }`}
+                              >
+                                <div className={`p-1.5 rounded-md ${
+                                  item.href === '/screening-acoes'
+                                    ? 'bg-gradient-to-br from-amber-500 to-yellow-500'
+                                    : 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                }`}>
+                                  <div className="text-white text-sm">
+                                    {item.icon}
+                                  </div>
+                                </div>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm">{item.title}</span>
+                                    {item.isNew && (
+                                      <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                                        🚀 Novo
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                                </div>
+                              </Link>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* Seção Análise & Estratégia - Accordion */}
+                <Collapsible>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg px-4 py-3 font-medium hover:bg-accent hover:text-accent-foreground data-[state=open]:text-primary group">
+                    <span className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" /> Análise & Estratégia
+                    </span>
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="px-4 py-2 space-y-3">
+                    {analiseEstrategiaSections.map((section, sectionIndex) => (
+                      <div key={sectionIndex}>
+                        {section.label && (
+                          <div className="px-2 py-1 mb-1">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">{section.label}</p>
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          {section.items
+                            .filter(item => item.show)
+                            .map((item) => (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={() => setIsOpen(false)}
+                                className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                                  pathname === item.href || pathname?.startsWith(item.href)
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                                }`}
+                              >
+                                <div className={`p-1.5 rounded-md ${
+                                  item.href === '/analise-setorial'
+                                    ? 'bg-gradient-to-br from-indigo-500 to-blue-500'
+                                    : item.href === '/backtest'
+                                    ? 'bg-gradient-to-br from-emerald-500 to-teal-500'
+                                    : item.href === '/calculadoras/dividend-yield'
+                                    ? 'bg-gradient-to-br from-green-500 to-emerald-500'
+                                    : 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                }`}>
+                                  <div className="text-white text-sm">
+                                    {item.icon}
+                                  </div>
+                                </div>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm">{item.title}</span>
+                                    {item.badge && (
+                                      <Badge variant="secondary" className="text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                                        {item.badge}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                                </div>
+                              </Link>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+            </nav>
 
             {/* Link Preços para usuários não logados */}
             {!session && (
@@ -673,51 +582,86 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
 
           {/* Footer Actions */}
           {session && (
-            <div className="border-t border-border p-4">
-              <div className="space-y-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start"
-                  asChild
+            <div className="border-t border-border p-4 space-y-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                asChild
+              >
+                <Link 
+                  href="/dashboard/subscriptions" 
+                  className="flex items-center gap-3"
+                  onClick={() => setIsOpen(false)}
                 >
-                  <Link 
-                    href="/perfil" 
-                    className="flex items-center gap-3"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <User className="w-4 h-4" />
-                    Perfil
-                  </Link>
-                </Button>
-                {/* <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start"
-                  asChild
+                  <Bell className="w-4 h-4" />
+                  Inscrições
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                asChild
+              >
+                <Link 
+                  href="/perfil" 
+                  className="flex items-center gap-3"
+                  onClick={() => setIsOpen(false)}
                 >
-                  <Link 
-                    href="/settings" 
-                    className="flex items-center gap-3"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <Settings className="w-4 h-4" />
-                    Configurações
-                  </Link>
-                </Button> */}
+                  <Settings className="w-4 h-4" />
+                  Configurações
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                asChild
+              >
+                <Link 
+                  href="/suporte" 
+                  className="flex items-center gap-3"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Headphones className="w-4 h-4" />
+                  Suporte
+                  {!isPremium && (
+                    <Badge variant="default" className="ml-auto text-xs bg-gradient-to-r from-blue-500 to-purple-600">
+                      Premium
+                    </Badge>
+                  )}
+                </Link>
+              </Button>
+              {isAdmin && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
-                  onClick={() => {
-                    setIsOpen(false)
-                    signOut()
-                  }}
+                  asChild
                 >
-                  <LogOut className="w-4 h-4 mr-3" />
-                  Sair
+                  <Link 
+                    href="/admin" 
+                    className="flex items-center gap-3"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Shield className="w-4 h-4" />
+                    Painel Admin
+                  </Link>
                 </Button>
-              </div>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+                onClick={() => {
+                  setIsOpen(false)
+                  signOut()
+                }}
+              >
+                <LogOut className="w-4 h-4 mr-3" />
+                Sair
+              </Button>
             </div>
           )}
         </div>

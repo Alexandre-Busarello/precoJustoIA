@@ -16,6 +16,7 @@ import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
 import { FeatureCard } from "@/components/landing/feature-card"
 import { Breadcrumbs } from "@/components/landing/breadcrumbs"
+import { SCREENING_PRESETS, getAllPresetSlugs } from "@/lib/screening-presets"
 import { 
   Search, 
   Loader2, 
@@ -31,7 +32,8 @@ import {
   Shield,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  ArrowRight
 } from "lucide-react"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -408,22 +410,66 @@ function ScreeningAcoesContent() {
           </div>
           
         {/* Hero Section Compacto para usuários logados */}
-        <LandingHero
-          headline={
-            <>
-            Screening de{" "}
+        <div className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-6 pb-8">
+          {/* Background Pattern */}
+          <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))]"></div>
+          
+          <div className="relative text-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Headline */}
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 leading-tight">
+              Screening de{" "}
               <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
                 Ações B3
-            </span>
-            </>
-          }
-          subheadline={
-            <>
+              </span>
+            </h1>
+            
+            {/* Subheadline */}
+            <div className="text-base sm:text-lg md:text-xl text-muted-foreground mb-6 max-w-3xl mx-auto leading-relaxed">
               Use <strong>filtros customizáveis</strong> para encontrar ações que atendem seus critérios exatos.
-            </>
-          }
-          showQuickAccess={false}
-        />
+            </div>
+
+            {/* CTA Button - Scroll to Configurator */}
+            <div className="flex justify-center">
+              <Button 
+                size="lg" 
+                onClick={() => {
+                  const configurator = document.getElementById('screening-configurator')
+                  if (configurator) {
+                    configurator.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }
+                }}
+                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-base px-6 py-3 shadow-xl hover:shadow-2xl transition-all"
+              >
+                <Search className="w-5 h-5 mr-2" />
+                Configurar Filtros
+                <ArrowDown className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Atalhos Rápidos para Presets - Versão Discreta para Logados */}
+        <section className="py-6 bg-white dark:bg-background border-b">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-muted-foreground">Estratégias Rápidas:</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {getAllPresetSlugs().map((slug) => {
+                const preset = SCREENING_PRESETS[slug]
+                return (
+                  <Link
+                    key={slug}
+                    href={`/screening-acoes/${slug}`}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    {preset.title.replace(/^[^\s]+\s/, '')} {/* Remove emoji */}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </section>
 
         {/* Screening Tool */}
         <section className="py-8 bg-white dark:bg-background">
@@ -841,6 +887,50 @@ function ScreeningAcoesContent() {
                                 </p>
                               </div>
                         </div>
+        </div>
+      </section>
+
+      {/* Estratégias Pré-Configuradas - Versão Prominente para Deslogados */}
+      <section className="py-16 sm:py-20 bg-gradient-to-b from-blue-50/50 to-white dark:from-blue-950/10 dark:to-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              Estratégias{" "}
+              <span className="text-blue-600">Pré-Configuradas</span>
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+              Comece rapidamente com estratégias testadas e comprovadas. Clique em qualquer estratégia para ver os resultados instantaneamente.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+            {getAllPresetSlugs().map((slug) => {
+              const preset = SCREENING_PRESETS[slug]
+              return (
+                <Link
+                  key={slug}
+                  href={`/screening-acoes/${slug}`}
+                  className="group"
+                >
+                  <Card className="border-0 shadow-lg hover:shadow-xl transition-all h-full hover:scale-105">
+                    <CardContent className="p-6">
+                      <div className="text-3xl mb-3">{preset.title.split(' ')[0]}</div>
+                      <h3 className="text-xl font-bold mb-2 group-hover:text-blue-600 transition-colors">
+                        {preset.title.replace(/^[^\s]+\s/, '')}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                        {preset.description}
+                      </p>
+                      <div className="flex items-center text-blue-600 font-semibold text-sm group-hover:underline">
+                        Ver resultados
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </section>
 

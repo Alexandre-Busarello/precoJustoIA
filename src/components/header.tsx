@@ -9,7 +9,8 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
-import { ToolsDropdown } from "@/components/tools-dropdown"
+import { OportunidadesDropdown } from "@/components/oportunidades-dropdown"
+import { AnaliseEstrategiaDropdown } from "@/components/analise-estrategia-dropdown"
 import { UserProfileDropdown } from "@/components/user-profile-dropdown"
 import { NotificationBell } from "@/components/notification-bell"
 import { LayoutDashboard, Headphones, BarChart3 } from "lucide-react"
@@ -58,8 +59,8 @@ export default function Header() {
           </div>
 
           {/* Desktop Layout */}
-          <div className="hidden lg:flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center justify-between gap-4 xl:gap-8">
+            <div className="flex items-center flex-shrink-0">
               <Link href="/" className="hover:opacity-80 transition-opacity">
                 <Image 
                   src="/logo-preco-justo.png" 
@@ -67,13 +68,13 @@ export default function Header() {
                   width={553}
                   height={135}
                   style={{ width: 'auto' }}
-                  className="h-[70px] w-auto"
+                  className="h-[60px] xl:h-[70px] w-auto"
                 />
               </Link>
             </div>
 
           {/* Desktop Navigation */}
-          <nav className="flex items-center space-x-6">
+          <nav className="flex items-center space-x-6 flex-1 justify-end min-w-0">
           {status === "loading" ? (
             <div className="animate-pulse flex items-center space-x-2">
               <div className="w-4 h-4 bg-gray-300 rounded-full"></div>
@@ -95,7 +96,13 @@ export default function Header() {
                   </Link>
                 </Button>
 
-                {/* Carteiras - Nova seção separada */}
+                {/* Oportunidades Dropdown */}
+                <OportunidadesDropdown />
+
+                {/* Análise & Estratégia Dropdown */}
+                <AnaliseEstrategiaDropdown />
+
+                {/* Carteiras */}
                 {isPremium && (
                   <Button 
                     variant={pathname === "/carteira" ? "default" : "ghost"} 
@@ -108,30 +115,25 @@ export default function Header() {
                     </Link>
                   </Button>
                 )}
-                
-                {/* Dropdown de Ferramentas */}
-                <ToolsDropdown isPremium={isPremium || false} />
+              </div>
 
-                {/* Suporte - Conversão para Premium */}
+              {/* Notification Bell, Suporte e User Profile - Agrupados */}
+              <div className="flex items-center space-x-2">
+                {/* Suporte como ícone */}
                 <Button 
                   variant={pathname === "/suporte" ? "default" : "ghost"} 
                   size="sm" 
                   asChild
+                  className="h-9 w-9 p-0 relative"
+                  title="Suporte"
                 >
-                  <Link href="/suporte" className="flex items-center gap-2">
+                  <Link href="/suporte" className="flex items-center justify-center relative">
                     <Headphones className="w-4 h-4" />
-                    Suporte
                     {!isPremium && (
-                      <Badge variant="default" className="ml-1 text-xs bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
-                        Premium
-                      </Badge>
+                      <Badge variant="default" className="absolute -top-1 -right-1 h-2.5 w-2.5 p-0 bg-gradient-to-r from-blue-500 to-purple-600 border-0 rounded-full" />
                     )}
                   </Link>
                 </Button>
-              </div>
-
-              {/* Notification Bell e User Profile - Agrupados */}
-              <div className="flex items-center space-x-2">
                 <NotificationBell />
                 <UserProfileDropdown
                 userName={session.user?.name}
@@ -148,8 +150,11 @@ export default function Header() {
             <div className="flex items-center space-x-4">
               {/* Public Links */}
               <div className="flex items-center space-x-1">
-                {/* Dropdown de Ferramentas para usuários não logados */}
-                <ToolsDropdown isPremium={false} />
+                {/* Oportunidades Dropdown para usuários não logados */}
+                <OportunidadesDropdown />
+                
+                {/* Análise & Estratégia Dropdown para usuários não logados */}
+                <AnaliseEstrategiaDropdown />
                 
                 {/* Link para Preços - Scroll na LP, link direto em outras páginas */}
                 {pathname === '/' ? (

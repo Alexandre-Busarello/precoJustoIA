@@ -150,8 +150,9 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
     const uniqueResults = this.removeDuplicateCompanies(sortedResults);
     
-    // Aplicar limite
-    const limitedResults = uniqueResults.slice(0, 50);
+    // Aplicar limite (usar params.limit se fornecido, senão usar 50 como padrão)
+    const limit = params.limit ?? 50;
+    const limitedResults = uniqueResults.slice(0, limit);
 
     // Aplicar priorização técnica se habilitada
     return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);

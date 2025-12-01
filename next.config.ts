@@ -28,6 +28,11 @@ const nextConfig: NextConfig = {
         hostname: '**.wikimedia.org',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'encrypted-tbn0.gstatic.com',
+        pathname: '/**',
+      },
     ],
   },
   async redirects() {

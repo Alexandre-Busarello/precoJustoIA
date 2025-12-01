@@ -98,6 +98,9 @@ export interface ScreeningParams extends StrategyParams {
   // Seleção de Setores e Indústrias
   selectedSectors?: string[]; // Array de setores selecionados
   selectedIndustries?: string[]; // Array de indústrias selecionadas (filtradas pelo setor)
+  
+  // Ordenação customizada para rotas de marketing
+  sortBy?: string; // Ex: 'pl_asc', 'dy_desc', 'cagr_desc', 'upside_desc', 'magic_score_desc'
 }
 
 export interface BarsiParams extends StrategyParams {

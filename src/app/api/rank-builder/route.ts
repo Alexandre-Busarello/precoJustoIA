@@ -412,49 +412,63 @@ export async function POST(request: NextRequest) {
       const user = session?.user?.id ? await getCurrentUser() : null;
       const isPremium = user?.isPremium || false;
 
-      // Se não for Premium (incluindo deslogados), limitar apenas aos parâmetros de Valuation
+      // Se não for Premium (incluindo deslogados), limitar filtros
       if (!isPremium) {
         const screeningParams = params as ScreeningParams;
 
-        // Limpar todos os filtros exceto Valuation e Graham Upside (Graham é gratuito)
-        const restrictedParams: ScreeningParams = {
-          // Permitir apenas filtros de Valuation
-          plFilter: screeningParams.plFilter,
-          pvpFilter: screeningParams.pvpFilter,
-          evEbitdaFilter: screeningParams.evEbitdaFilter,
-          psrFilter: screeningParams.psrFilter,
+        // Verificar se é uma rota de marketing (preset) - identificada pela presença de sortBy
+        // Rotas de marketing têm sortBy definido e devem permitir todos os filtros necessários
+        const isMarketingRoute = !!screeningParams.sortBy;
 
-          // Permitir Graham Upside (estratégia Graham é gratuita)
-          grahamUpsideFilter: screeningParams.grahamUpsideFilter,
-
-          // Manter parâmetros básicos
+        if (isMarketingRoute) {
+          // Rotas de marketing: permitir todos os filtros necessários para funcionar corretamente
           // Backend sempre aplica limite de 3 para não-Premium (não confiar no frontend)
-          limit: 3,
-          companySize: screeningParams.companySize || "all",
-          useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
-          assetTypeFilter: screeningParams.assetTypeFilter,
+          body.params = {
+            ...screeningParams,
+            limit: 3,
+            useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
+          };
+        } else {
+          // Modo ferramenta normal: limitar apenas aos parâmetros de Valuation
+          const restrictedParams: ScreeningParams = {
+            // Permitir apenas filtros de Valuation
+            plFilter: screeningParams.plFilter,
+            pvpFilter: screeningParams.pvpFilter,
+            evEbitdaFilter: screeningParams.evEbitdaFilter,
+            psrFilter: screeningParams.psrFilter,
 
-          // Remover todos os outros filtros (ficam undefined)
-          roeFilter: undefined,
-          roicFilter: undefined,
-          roaFilter: undefined,
-          margemLiquidaFilter: undefined,
-          margemEbitdaFilter: undefined,
-          cagrLucros5aFilter: undefined,
-          cagrReceitas5aFilter: undefined,
-          dyFilter: undefined,
-          payoutFilter: undefined,
-          dividaLiquidaPlFilter: undefined,
-          liquidezCorrenteFilter: undefined,
-          dividaLiquidaEbitdaFilter: undefined,
-          marketCapFilter: undefined,
-          overallScoreFilter: undefined,
-          selectedSectors: undefined,
-          selectedIndustries: undefined,
-        };
+            // Permitir Graham Upside (estratégia Graham é gratuita)
+            grahamUpsideFilter: screeningParams.grahamUpsideFilter,
 
-        // Substituir params com os parâmetros restritos
-        body.params = restrictedParams;
+            // Manter parâmetros básicos
+            // Backend sempre aplica limite de 3 para não-Premium (não confiar no frontend)
+            limit: 3,
+            companySize: screeningParams.companySize || "all",
+            useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
+            assetTypeFilter: screeningParams.assetTypeFilter,
+
+            // Remover todos os outros filtros (ficam undefined)
+            roeFilter: undefined,
+            roicFilter: undefined,
+            roaFilter: undefined,
+            margemLiquidaFilter: undefined,
+            margemEbitdaFilter: undefined,
+            cagrLucros5aFilter: undefined,
+            cagrReceitas5aFilter: undefined,
+            dyFilter: undefined,
+            payoutFilter: undefined,
+            dividaLiquidaPlFilter: undefined,
+            liquidezCorrenteFilter: undefined,
+            dividaLiquidaEbitdaFilter: undefined,
+            marketCapFilter: undefined,
+            overallScoreFilter: undefined,
+            selectedSectors: undefined,
+            selectedIndustries: undefined,
+          };
+
+          // Substituir params com os parâmetros restritos
+          body.params = restrictedParams;
+        }
       } else {
         // Para Premium, garantir que não há limite (remover se vier do frontend)
         const screeningParams = params as ScreeningParams;
@@ -548,10 +562,38 @@ export async function POST(request: NextRequest) {
         );
         break;
       case "magicFormula":
+        // Verificar status Premium do usuário (pode ser null se deslogado)
+        const magicFormulaUser = session?.user?.id ? await getCurrentUser() : null;
+        const magicFormulaIsPremium = magicFormulaUser?.isPremium || false;
+        
+        // Calcular total ANTES de aplicar limite (para mostrar blur nas rotas de marketing)
+        const magicFormulaParamsWithoutLimit: MagicFormulaParams = {
+          ...(executionParams as MagicFormulaParams),
+          limit: undefined // Sem limite para contar total
+        };
+        const allMagicFormulaResults = StrategyFactory.runMagicFormulaRanking(
+          companies,
+          magicFormulaParamsWithoutLimit
+        );
+        const magicFormulaTotalCount = allMagicFormulaResults.length;
+        
+        // Backend SEMPRE aplica o limite correto baseado no status Premium
+        // Não confiar no limite enviado pelo frontend
+        const finalMagicFormulaParams: MagicFormulaParams = {
+          ...(executionParams as MagicFormulaParams),
+          // Premium: sem limite (undefined). Não-Premium (incluindo deslogados): sempre 3
+          limit: magicFormulaIsPremium ? undefined : 3
+        };
+        
+        console.log(`[MAGIC_FORMULA] Premium: ${magicFormulaIsPremium}, Limit aplicado: ${finalMagicFormulaParams.limit}, Total encontrado: ${magicFormulaTotalCount}, User: ${magicFormulaUser?.email || 'deslogado'}`);
+        
         results = StrategyFactory.runMagicFormulaRanking(
           companies,
-          executionParams as MagicFormulaParams
+          finalMagicFormulaParams
         );
+        
+        // Armazenar totalCount em variável separada para retornar na resposta
+        (results as any).__magicFormulaTotalCount = magicFormulaTotalCount;
         break;
       case "fcd":
         results = StrategyFactory.runFCDRanking(companies, executionParams as FCDParams);
@@ -581,6 +623,17 @@ export async function POST(request: NextRequest) {
         const screeningUser = session?.user?.id ? await getCurrentUser() : null;
         const screeningIsPremium = screeningUser?.isPremium || false;
         
+        // Calcular total ANTES de aplicar limite (para mostrar blur nas rotas de marketing)
+        const paramsWithoutLimit: ScreeningParams = {
+          ...screeningParams,
+          limit: undefined // Sem limite para contar total
+        };
+        const allResults = StrategyFactory.runScreeningRanking(
+          companies,
+          paramsWithoutLimit
+        );
+        const totalCount = allResults.length;
+        
         // Backend SEMPRE aplica o limite correto baseado no status Premium
         // Não confiar no limite enviado pelo frontend
         const finalScreeningParams: ScreeningParams = {
@@ -589,12 +642,15 @@ export async function POST(request: NextRequest) {
           limit: screeningIsPremium ? undefined : 3
         };
         
-        console.log(`[SCREENING] Premium: ${screeningIsPremium}, Limit aplicado: ${finalScreeningParams.limit}, User: ${screeningUser?.email || 'deslogado'}`);
+        console.log(`[SCREENING] Premium: ${screeningIsPremium}, Limit aplicado: ${finalScreeningParams.limit}, Total encontrado: ${totalCount}, User: ${screeningUser?.email || 'deslogado'}`);
         
         results = StrategyFactory.runScreeningRanking(
           companies,
           finalScreeningParams
         );
+        
+        // Armazenar totalCount em variável separada para retornar na resposta
+        (results as any).__screeningTotalCount = totalCount;
         break;
       case "barsi":
         results = await StrategyFactory.runBarsiRanking(
@@ -721,7 +777,96 @@ export async function POST(request: NextRequest) {
               fairValueModel = bestValuation.model;
             }
           } else {
-            // Para estratégias com preço justo, apenas enriquecer os upsides adicionais
+            // Para estratégias com preço justo OU screening que já calculou upside, enriquecer os upsides adicionais
+            // Mas para screening, ainda precisamos garantir que fairValue e upside estão atualizados
+
+            // Para screening, sempre calcular fairValue mesmo se já tiver upside
+            if (model === "screening" && (mainFairValue === null || mainFairValue === undefined)) {
+              const valuations: Array<{ upside: number; fairValue: number; model: string }> = [];
+
+              // Graham (sempre disponível)
+              try {
+                const grahamAnalysis = StrategyFactory.runGrahamAnalysis(
+                  company,
+                  STRATEGY_CONFIG.graham
+                );
+                if (
+                  grahamAnalysis.upside !== null &&
+                  grahamAnalysis.upside !== undefined &&
+                  grahamAnalysis.fairValue !== null &&
+                  grahamAnalysis.fairValue !== undefined
+                ) {
+                  valuations.push({
+                    upside: grahamAnalysis.upside,
+                    fairValue: grahamAnalysis.fairValue,
+                    model: "Graham"
+                  });
+                  enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
+                }
+              } catch (_) {
+                // Ignorar erro
+              }
+
+              // FCD (se Premium)
+              if (userIsPremium) {
+                try {
+                  const fcdAnalysis = StrategyFactory.runFCDAnalysis(
+                    company,
+                    STRATEGY_CONFIG.fcd
+                  );
+                  if (
+                    fcdAnalysis.upside !== null &&
+                    fcdAnalysis.upside !== undefined &&
+                    fcdAnalysis.fairValue !== null &&
+                    fcdAnalysis.fairValue !== undefined
+                  ) {
+                    valuations.push({
+                      upside: fcdAnalysis.upside,
+                      fairValue: fcdAnalysis.fairValue,
+                      model: "FCD"
+                    });
+                    enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
+                  }
+                } catch (_) {
+                  // Ignorar erro
+                }
+              }
+
+              // Gordon (se Premium)
+              if (userIsPremium) {
+                try {
+                  const gordonAnalysis = StrategyFactory.runGordonAnalysis(
+                    company,
+                    STRATEGY_CONFIG.gordon
+                  );
+                  if (
+                    gordonAnalysis.upside !== null &&
+                    gordonAnalysis.upside !== undefined &&
+                    gordonAnalysis.fairValue !== null &&
+                    gordonAnalysis.fairValue !== undefined
+                  ) {
+                    valuations.push({
+                      upside: gordonAnalysis.upside,
+                      fairValue: gordonAnalysis.fairValue,
+                      model: "Gordon"
+                    });
+                    enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
+                  }
+                } catch (_) {
+                  // Ignorar erro
+                }
+              }
+
+              // Usar o maior upside encontrado (maior margem de segurança)
+              if (valuations.length > 0) {
+                const bestValuation = valuations.reduce((best, current) => 
+                  current.upside > best.upside ? current : best
+                );
+                mainUpside = bestValuation.upside;
+                mainFairValue = bestValuation.fairValue;
+                fairValueModel = bestValuation.model;
+              }
+            }
 
             // Calcular upside de Graham se ainda não tiver (disponível para todos)
             if (
@@ -842,12 +987,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Extrair totalCount se foi armazenado (para screening ou magicFormula)
+    let totalCount = results.length;
+    if ((results as any).__screeningTotalCount !== undefined) {
+      totalCount = (results as any).__screeningTotalCount;
+      // Remover propriedade temporária
+      delete (results as any).__screeningTotalCount;
+    } else if ((results as any).__magicFormulaTotalCount !== undefined) {
+      totalCount = (results as any).__magicFormulaTotalCount;
+      // Remover propriedade temporária
+      delete (results as any).__magicFormulaTotalCount;
+    }
+
     return NextResponse.json({
       model,
       params: executionParams, // Retornar os params usados (pode ter sido modificado para não-Premium)
       rational,
       results,
-      count: results.length,
+      count: totalCount, // Total real de empresas encontradas (antes do limite)
     });
   } catch (error) {
     console.error("Erro na API rank-builder:", error);

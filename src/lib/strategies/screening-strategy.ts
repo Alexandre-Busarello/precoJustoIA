@@ -13,9 +13,13 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
   /**
    * Valida se um valor está dentro do range especificado no filtro
    */
-  private isValueInRange(value: number | null, filter: ScreeningFilter | undefined): boolean {
+  private isValueInRange(value: number | null, filter: ScreeningFilter | undefined, strictNullCheck: boolean = false): boolean {
     if (!filter || !filter.enabled) return true; // Filtro desativado, aceita qualquer valor
-    if (value === null) return true; // Sem dados, IGNORA o filtro (não reprova)
+    
+    // Para Market Cap e outros filtros críticos, null deve reprovar
+    if (value === null) {
+      return strictNullCheck ? false : true; // Sem dados, IGNORA o filtro (não reprova) exceto se strictNullCheck=true
+    }
     
     // Verifica min
     if (filter.min !== undefined && value < filter.min) return false;
@@ -188,7 +192,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     }
 
     if (params.cagrReceitas5aFilter?.enabled) {
-      const cagrReceitas = toNumber(financials.crescimentoReceitas);
+      const cagrReceitas = toNumber(financials.cagrReceitas5a);
       const inRange = this.isValueInRange(cagrReceitas, params.cagrReceitas5aFilter);
       criteria.push({
         label: 'CAGR Receitas 5a',
@@ -249,15 +253,15 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       });
     }
 
-    // Market Cap
+    // Market Cap (strictNullCheck=true: empresas sem Market Cap são reprovadas)
     if (params.marketCapFilter?.enabled) {
       const marketCap = toNumber(financials.marketCap);
       const marketCapBi = marketCap ? marketCap / 1_000_000_000 : null;
-      const inRange = this.isValueInRange(marketCap, params.marketCapFilter);
+      const inRange = this.isValueInRange(marketCap, params.marketCapFilter, true); // strictNullCheck=true
       criteria.push({
         label: 'Market Cap',
         value: inRange,
-        description: `${params.marketCapFilter.min !== undefined ? `≥ R$ ${(params.marketCapFilter.min / 1_000_000_000).toFixed(2)}bi` : ''}${params.marketCapFilter.min !== undefined && params.marketCapFilter.max !== undefined ? ' e ' : ''}${params.marketCapFilter.max !== undefined ? `≤ R$ ${(params.marketCapFilter.max / 1_000_000_000).toFixed(2)}bi` : ''} (atual: ${marketCapBi ? `R$ ${marketCapBi.toFixed(2)}bi` : 'N/A'})`
+        description: `${params.marketCapFilter.min !== undefined ? `≥ R$ ${(params.marketCapFilter.min / 1_000_000_000).toFixed(2)}bi` : ''}${params.marketCapFilter.min !== undefined && params.marketCapFilter.max !== undefined ? ' e ' : ''}${params.marketCapFilter.max !== undefined ? `≤ R$ ${(params.marketCapFilter.max / 1_000_000_000).toFixed(2)}bi` : ''} (atual: ${marketCapBi ? `R$ ${marketCapBi.toFixed(2)}bi` : 'N/A - reprovado'})`
       });
     }
     
@@ -378,7 +382,9 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       dy: toNumber(financials.dy),
       margemLiquida: toNumber(financials.margemLiquida),
       liquidezCorrente: toNumber(financials.liquidezCorrente),
-      dividaLiquidaPl: toNumber(financials.dividaLiquidaPl)
+      dividaLiquidaPl: toNumber(financials.dividaLiquidaPl),
+      cagrReceitas: toNumber(financials.cagrReceitas5a),
+      marketCap: toNumber(financials.marketCap)
     };
 
     return {
@@ -441,6 +447,13 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       const analysis = this.runAnalysis(company, params);
       
       if (analysis.isEligible) {
+        // Calcular upside se necessário para ordenação (grahamUpsideFilter ativo OU ordenação por upside)
+        let upside: number | null = null;
+        const needsUpside = params.grahamUpsideFilter?.enabled || params.sortBy === 'upside_desc' || params.sortBy === 'upside_asc';
+        if (needsUpside) {
+          upside = this.calculateGrahamUpside(company);
+        }
+        
         results.push({
           ticker: company.ticker,
           name: company.name,
@@ -448,7 +461,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
           currentPrice: company.currentPrice,
           logoUrl: company.logoUrl,
           fairValue: null,
-          upside: null,
+          upside: upside,
           marginOfSafety: null,
           rational: this.generateIndividualRational(company, params, analysis),
           key_metrics: analysis.key_metrics
@@ -456,15 +469,21 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       }
     }
 
-    // Ordenar por score (mais alto primeiro)
+    // Ordenar por score (mais alto primeiro) ou ordenação customizada
     results.sort((a, b) => {
+      // Ordenação customizada para rotas de marketing
+      if (params.sortBy) {
+        const sortResult = this.customSort(a, b, params.sortBy);
+        if (sortResult !== 0) return sortResult;
+      }
+      
       // Priorizar por análise técnica se ativada
       if (params.useTechnicalAnalysis && a.key_metrics?.technicalScore && b.key_metrics?.technicalScore) {
         const techDiff = (b.key_metrics.technicalScore as number) - (a.key_metrics.technicalScore as number);
         if (Math.abs(techDiff) > 5) return techDiff;
       }
       
-      // Ordenar por market cap (maiores primeiro)
+      // Ordenar por market cap (maiores primeiro) como fallback
       return ((b.key_metrics?.marketCap as number) || 0) - ((a.key_metrics?.marketCap as number) || 0);
     });
 
@@ -635,6 +654,59 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
 **Objetivo**: Encontrar empresas que atendem seus critérios específicos de investimento${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
 
     return rational;
+  }
+
+  /**
+   * Ordenação customizada para rotas de marketing
+   * Garante que os melhores resultados apareçam primeiro
+   */
+  private customSort(a: RankBuilderResult, b: RankBuilderResult, sortBy: string): number {
+    const [field, direction] = sortBy.split('_');
+    const isAsc = direction === 'asc';
+    
+    let aValue: number | null = null;
+    let bValue: number | null = null;
+    
+    switch (field) {
+      case 'pl':
+        // Menor P/L primeiro (mais barato)
+        aValue = a.key_metrics?.pl as number ?? null;
+        bValue = b.key_metrics?.pl as number ?? null;
+        break;
+      case 'dy':
+        // Maior DY primeiro (maior yield)
+        aValue = a.key_metrics?.dy as number ?? null;
+        bValue = b.key_metrics?.dy as number ?? null;
+        break;
+      case 'cagr':
+        // Maior CAGR primeiro (maior crescimento)
+        aValue = a.key_metrics?.cagrReceitas as number ?? null;
+        bValue = b.key_metrics?.cagrReceitas as number ?? null;
+        break;
+      case 'upside':
+        // Maior Upside primeiro (maior potencial)
+        aValue = a.upside ?? null;
+        bValue = b.upside ?? null;
+        break;
+      case 'magic':
+        // Maior score da fórmula mágica primeiro
+        // Nota: Esta ordenação será aplicada quando usar modelo magicFormula
+        return 0; // Fallback para ordenação padrão
+      default:
+        return 0; // Sem ordenação customizada, usar padrão
+    }
+    
+    // Tratar valores nulos (colocar no final)
+    if (aValue === null && bValue === null) return 0;
+    if (aValue === null) return 1; // a vai para o final
+    if (bValue === null) return -1; // b vai para o final
+    
+    // Aplicar ordenação
+    if (isAsc) {
+      return aValue - bValue; // Crescente
+    } else {
+      return bValue - aValue; // Decrescente
+    }
   }
 
   validateCompanyData(companyData: CompanyData, params: ScreeningParams): boolean {

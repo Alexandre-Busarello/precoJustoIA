@@ -208,6 +208,16 @@ export async function GET(request: NextRequest) {
     for (const company of paginatedCompanies) {
       let projections: DividendProjection[] = [];
 
+      // Verificar se precisa reprocessar projeções (novos dividendos ou projeções antigas)
+      const needsReprocessing = await DividendRadarService.shouldReprocessProjections(company.ticker);
+      
+      if (needsReprocessing) {
+        // Reprocessar projeções em background (não bloqueia resposta)
+        DividendRadarService.getOrGenerateProjections(company.ticker).catch((error) => {
+          console.error(`[GRID] Erro ao reprocessar projeções para ${company.ticker}:`, error);
+        });
+      }
+
       // Usar projeções que já existem no banco
       if ((company as any).dividendRadarProjections) {
         projections = (company as any).dividendRadarProjections as DividendProjection[];
@@ -217,9 +227,24 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      // Filtrar projeções futuras (apenas meses futuros) E confiança >= 60%
+      // Filtrar projeções antigas (meses passados) e futuras (apenas meses futuros) E confiança >= 60%
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      
       const futureProjections = projections.filter((p) => {
         const projDate = new Date(p.projectedExDate);
+        const projMonth = projDate.getMonth() + 1;
+        const projYear = projDate.getFullYear();
+        
+        // Remover projeções de meses passados
+        if (projYear < currentYear) {
+          return false;
+        }
+        if (projYear === currentYear && projMonth < currentMonth) {
+          return false;
+        }
+        
+        // Manter apenas projeções futuras dentro do período E confiança >= 60%
         return projDate > now && projDate <= cutoffDate && p.confidence >= 60;
       });
 

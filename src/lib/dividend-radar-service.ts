@@ -73,10 +73,38 @@ export class DividendRadarService {
       historicalData
     );
 
-    // Salvar projeções no banco
-    await this.saveProjections(ticker, projections);
+    // Filtrar projeções antigas (meses passados) antes de salvar
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    
+    const filteredProjections = projections.filter((p) => {
+      const projDate = new Date(p.projectedExDate);
+      const projMonth = projDate.getMonth() + 1;
+      const projYear = projDate.getFullYear();
 
-    return projections;
+      // Manter apenas projeções futuras ou do mês atual
+      if (projYear > currentYear) {
+        return true;
+      }
+      if (projYear === currentYear && projMonth >= currentMonth) {
+        return true;
+      }
+
+      // Remover projeções de meses passados
+      return false;
+    });
+
+    if (filteredProjections.length < projections.length) {
+      console.log(
+        `🧹 [DIVIDEND RADAR] ${ticker}: Removidas ${projections.length - filteredProjections.length} projeções antigas`
+      );
+    }
+
+    // Salvar projeções filtradas no banco
+    await this.saveProjections(ticker, filteredProjections);
+
+    return filteredProjections;
   }
 
   /**
@@ -102,7 +130,7 @@ export class DividendRadarService {
     const needsReprocessing = await this.shouldReprocessProjections(ticker);
     
     if (needsReprocessing) {
-      console.log(`🔄 [DIVIDEND RADAR] ${ticker}: Novo dividendo detectado, reprocessando projeções...`);
+      console.log(`🔄 [DIVIDEND RADAR] ${ticker}: Reprocessando projeções (novos dividendos ou projeções antigas detectadas)...`);
       return await this.generateProjections(ticker);
     }
 
@@ -128,8 +156,59 @@ export class DividendRadarService {
   }
 
   /**
+   * Verifica se há projeções em meses passados que precisam ser removidas/reprocessadas
+   */
+  static async hasStaleProjections(ticker: string): Promise<boolean> {
+    const company = await prisma.company.findUnique({
+      where: { ticker },
+      select: {
+        dividendRadarProjections: true,
+      },
+    });
+
+    if (!company || !company.dividendRadarProjections) {
+      return false;
+    }
+
+    const projections = company.dividendRadarProjections as unknown as DividendProjection[];
+    if (!Array.isArray(projections) || projections.length === 0) {
+      return false;
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    // Verificar se há projeções com datas passadas (meses anteriores ao mês atual)
+    const hasStale = projections.some((p) => {
+      const projDate = new Date(p.projectedExDate);
+      const projMonth = projDate.getMonth() + 1;
+      const projYear = projDate.getFullYear();
+
+      // Considerar "stale" se a projeção está em um mês passado
+      // Comparar ano e mês para detectar projeções antigas
+      if (projYear < currentYear) {
+        return true;
+      }
+      if (projYear === currentYear && projMonth < currentMonth) {
+        return true;
+      }
+
+      return false;
+    });
+
+    if (hasStale) {
+      console.log(
+        `🔄 [DIVIDEND RADAR] ${ticker}: Projeções antigas detectadas (meses passados), precisa reprocessar`
+      );
+    }
+
+    return hasStale;
+  }
+
+  /**
    * Verifica se precisa reprocessar projeções
-   * (quando novo dividendo confirmado não estava nas projeções)
+   * (quando novo dividendo confirmado não estava nas projeções OU quando há projeções em meses passados)
    */
   static async shouldReprocessProjections(ticker: string): Promise<boolean> {
     const company = await prisma.company.findUnique({
@@ -144,7 +223,8 @@ export class DividendRadarService {
     });
 
     if (!company || company.dividendHistory.length === 0) {
-      return false;
+      // Mesmo sem histórico, verificar se há projeções antigas
+      return await this.hasStaleProjections(ticker);
     }
 
     const latestDividend = company.dividendHistory[0];
@@ -163,7 +243,8 @@ export class DividendRadarService {
       return true;
     }
 
-    return false;
+    // Verificar se há projeções antigas (meses passados)
+    return await this.hasStaleProjections(ticker);
   }
 
   /**

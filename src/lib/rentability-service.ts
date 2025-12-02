@@ -49,7 +49,8 @@ export async function getPortfolioAverageReturn(
         include: {
           assets: {
             where: { isActive: true }
-          }
+          },
+          metrics: true
         }
       })
     } else {

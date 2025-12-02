@@ -152,9 +152,35 @@ async function saveToCache(
 }
 
 /**
+ * Verifica se um mês está completo (não é futuro e tem dados suficientes)
+ */
+function isMonthComplete(month: Date): boolean {
+  const now = new Date()
+  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1)
+  const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0)
+  
+  // Se o mês ainda não terminou, não está completo
+  if (monthEnd > now) {
+    return false
+  }
+  
+  // Se estamos no mês atual, verificar se já passou pelo menos 3 dias do mês seguinte
+  // (para garantir que temos dados do último dia útil do mês anterior)
+  const nextMonthStart = new Date(month.getFullYear(), month.getMonth() + 1, 1)
+  const daysSinceNextMonth = Math.floor((now.getTime() - nextMonthStart.getTime()) / (1000 * 60 * 60 * 24))
+  
+  if (daysSinceNextMonth < 3) {
+    return false
+  }
+  
+  return true
+}
+
+/**
  * Calcula o P/L agregado para meses específicos (sem cache)
  * @param initialCumulativeSum - Soma acumulada dos P/Ls anteriores (para calcular média histórica correta)
  * @param initialCount - Contador de meses anteriores (para calcular média histórica correta)
+ * @param minCompaniesRequired - Número mínimo de empresas necessárias para calcular (padrão: 200)
  */
 async function calculateMonthsPL(
   months: Date[],
@@ -162,7 +188,8 @@ async function calculateMonthsPL(
   companiesWithScore: Set<number> | null,
   excludeUnprofitable: boolean,
   initialCumulativeSum: number = 0,
-  initialCount: number = 0
+  initialCount: number = 0,
+  minCompaniesRequired: number = 200
 ): Promise<PLBolsaDataPoint[]> {
   const results: PLBolsaDataPoint[] = []
   let cumulativePLSum = initialCumulativeSum
@@ -170,6 +197,12 @@ async function calculateMonthsPL(
 
   // Para cada mês, calcular P/L agregado
   for (const month of months) {
+    // Verificar se o mês está completo antes de calcular
+    if (!isMonthComplete(month)) {
+      console.log(`[PL Bolsa] Pulando mês ${month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} - mês ainda não está completo`)
+      continue
+    }
+
     const monthStart = new Date(month.getFullYear(), month.getMonth(), 1)
     const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0)
 
@@ -296,7 +329,14 @@ async function calculateMonthsPL(
       validCompanies++
     }
 
+    // Validar número mínimo de empresas antes de incluir no resultado
     if (totalMarketCap > 0 && validCompanies > 0) {
+      // Se não temos empresas suficientes, não incluir este mês
+      if (validCompanies < minCompaniesRequired) {
+        console.log(`[PL Bolsa] Pulando mês ${month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} - apenas ${validCompanies} empresas válidas (mínimo: ${minCompaniesRequired})`)
+        continue
+      }
+
       const aggregatedPL = totalWeightedPL / totalMarketCap
 
       // Calcular média histórica até este ponto
@@ -334,7 +374,11 @@ export async function calculateAggregatedPL(
   // Normalizar datas para primeiro dia do mês
   const start = new Date(startDate)
   start.setDate(1)
-  const end = new Date(endDate)
+  
+  // Limitar endDate ao último mês completo disponível
+  const now = new Date()
+  const lastCompleteMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const end = new Date(Math.min(endDate.getTime(), lastCompleteMonth.getTime()))
   end.setDate(1)
 
   // 1. Tentar buscar do cache primeiro
@@ -424,13 +468,22 @@ export async function calculateAggregatedPL(
     initialCount = previousCached.length
   }
   
+  // Filtrar apenas meses completos antes de calcular
+  const completeMissingMonths = missingMonths.filter(month => isMonthComplete(month))
+  
+  // Se não há meses completos faltantes, retornar apenas cache
+  if (completeMissingMonths.length === 0) {
+    return cachedData
+  }
+
   const calculatedData = await calculateMonthsPL(
-    missingMonths,
+    completeMissingMonths,
     companyIds,
     companiesWithScore,
     excludeUnprofitable,
     initialCumulativeSum,
-    initialCount
+    initialCount,
+    200 // Número mínimo de empresas: 200
   )
 
   // 4. Combinar cache + novos dados calculados

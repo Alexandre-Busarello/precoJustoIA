@@ -47,6 +47,12 @@ export async function POST(request: NextRequest) {
     let debt
     if (debtIds && Array.isArray(debtIds) && debtIds.length > 0) {
       // Múltiplas dívidas: buscar todas e agregar
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Usuário não autenticado. Múltiplas dívidas requerem autenticação.' },
+          { status: 401 }
+        )
+      }
       const debts = await Promise.all(
         debtIds.map((id: string) => getDebtById(id, user.id))
       )
@@ -76,6 +82,12 @@ export async function POST(request: NextRequest) {
         interestRateAnnual: weightedRate
       }
     } else if (debtId && debtId !== 'temp') {
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Usuário não autenticado. Dívida específica requer autenticação.' },
+          { status: 401 }
+        )
+      }
       const debtRecord = await getDebtById(debtId, user.id)
       if (!debtRecord) {
         return NextResponse.json(

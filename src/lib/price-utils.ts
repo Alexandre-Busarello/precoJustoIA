@@ -4,8 +4,8 @@
 
 /**
  * Formata um preço em centavos para o formato brasileiro "R$ X,XX"
- * @param priceInCents Preço em centavos (ex: 1990 = R$ 19,90)
- * @returns String formatada (ex: "R$ 19,90")
+ * @param priceInCents Preço em centavos (ex: 1990 = R$ 21,90)
+ * @returns String formatada (ex: "R$ 21,90")
  */
 export function formatPrice(priceInCents: number): string {
   const priceInReais = priceInCents / 100

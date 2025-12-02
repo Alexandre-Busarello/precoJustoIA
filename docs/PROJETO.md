@@ -247,7 +247,7 @@
 ## 6. Fluxo de Pagamento (PIX)
 
 1.  O usuário clica no botão "Desbloquear Premium".
-2.  Um modal aparece explicando os benefícios e o preço (ex: "R$ 19,90 por 1 mês de acesso total").
+2.  Um modal aparece explicando os benefícios e o preço (ex: "R$ 21,90 por 1 mês de acesso total").
 3.  Ao clicar em "Pagar com Pix", o frontend faz uma chamada para o backend.
 4.  O backend gera uma cobrança Pix via API do gateway de pagamento (ex: Mercado Pago).
 5.  A API de pagamento retorna um QR Code (imagem) e um "Copia e Cola".

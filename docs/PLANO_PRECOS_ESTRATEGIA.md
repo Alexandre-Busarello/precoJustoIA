@@ -16,7 +16,7 @@
   - ✅ Histórico de rankings salvos
 
 ### **⭐ Plano Premium**
-- **Preço**: **R$ 19,90/mês**
+- **Preço**: **R$ 21,90/mês**
 - **Preço Anual**: **R$ 189,90/ano** (2 meses grátis - 15% desconto)
 - **Objetivo**: Monetização principal e retenção
 - **Funcionalidades**:

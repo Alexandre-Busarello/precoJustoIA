@@ -312,7 +312,7 @@ Preço Justo AI é uma plataforma SaaS completa de análise fundamentalista de a
   - Histórico de rankings salvos
 
 ### Plano Premium Mensal
-- **Preço**: R$ 19,90/mês
+- **Preço**: R$ 21,90/mês
 - **Features**:
   - Tudo do plano gratuito
   - 8 modelos de valuation completos

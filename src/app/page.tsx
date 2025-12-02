@@ -924,7 +924,7 @@ export default async function Home() {
             },
             {
               question: "Preciso pagar para usar?",
-              answer: "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 19,90/mês, sem fidelidade.",
+              answer: "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 21,90/mês, sem fidelidade.",
               iconName: "DollarSign"
             },
             {
@@ -1364,7 +1364,7 @@ export default async function Home() {
                   "name": "Preciso pagar para usar?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 19,90/mês, sem fidelidade."
+                    "text": "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 21,90/mês, sem fidelidade."
                   }
                 }
               ]

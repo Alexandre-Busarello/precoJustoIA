@@ -249,7 +249,7 @@ export function LandingPricingSection() {
                   ) : (
                     <>
                       <div className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent mb-2">
-                        {monthly?.price_formatted || 'R$ 19,90'}
+                        {monthly?.price_formatted || 'R$ 21,90'}
                       </div>
                       <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
                       <div className="mt-2 inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">

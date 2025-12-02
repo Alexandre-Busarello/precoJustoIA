@@ -68,7 +68,7 @@ ON CONFLICT (id) DO NOTHING;
 COMMENT ON TABLE offers IS 'Tabela centralizada de ofertas/preços da plataforma';
 COMMENT ON COLUMN offers.id IS 'Identificador único da oferta (ex: prod_premium_monthly)';
 COMMENT ON COLUMN offers.type IS 'Tipo da oferta: MONTHLY ou ANNUAL';
-COMMENT ON COLUMN offers.price_in_cents IS 'Preço em centavos (ex: 1990 = R$ 19,90)';
+COMMENT ON COLUMN offers.price_in_cents IS 'Preço em centavos (ex: 1990 = R$ 21,90)';
 COMMENT ON COLUMN offers.stripe_price_id IS 'ID do preço no Stripe (deve ser preenchido manualmente após criação no Stripe)';
 COMMENT ON COLUMN offers.is_active IS 'Se a oferta está ativa e disponível para venda';
 

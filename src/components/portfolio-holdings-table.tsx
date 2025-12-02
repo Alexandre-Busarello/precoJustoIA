@@ -72,29 +72,33 @@ export function PortfolioHoldingsTable({
   const holdings = holdingsData?.holdings || [];
 
   // Query for checking pending contributions
+  // Count dynamic suggestions (not just PENDING transactions in DB)
+  // This includes both PENDING transactions and dynamic suggestions
   const fetchPendingContributions = async () => {
-    const response = await fetch(
-      `/api/portfolio/${portfolioId}/transactions?status=PENDING`
+    // Get dynamic contribution suggestions (includes MONTHLY_CONTRIBUTION and BUY suggestions)
+    const suggestionsResponse = await fetch(
+      `/api/portfolio/${portfolioId}/suggestions?type=contribution`
     );
     
-    if (!response.ok) {
-      throw new Error('Erro ao verificar transações pendentes');
+    if (!suggestionsResponse.ok) {
+      throw new Error('Erro ao verificar sugestões de aportes');
     }
 
-    const data = await response.json();
-    const contributionTx = (data.transactions || []).filter(
-      (tx: any) => 
-        tx.type !== 'SELL_REBALANCE' && 
-        tx.type !== 'BUY_REBALANCE' &&
-        (tx.type === 'MONTHLY_CONTRIBUTION' || 
-         tx.type === 'CASH_CREDIT' || 
-         tx.type === 'BUY' || 
-         tx.type === 'DIVIDEND')
+    const suggestionsData = await suggestionsResponse.json();
+    // Count all contribution suggestions (MONTHLY_CONTRIBUTION, BUY, etc.)
+    // These are the transactions that need to be completed before rebalancing
+    const contributionSuggestions = (suggestionsData.suggestions || []).filter(
+      (suggestion: any) => {
+        // Include only contribution and buy suggestions (not dividends or rebalancing)
+        return suggestion.type === 'MONTHLY_CONTRIBUTION' || 
+               suggestion.type === 'CASH_CREDIT' || 
+               suggestion.type === 'BUY';
+      }
     );
     
     return {
-      hasPending: contributionTx.length > 0,
-      count: contributionTx.length
+      hasPending: contributionSuggestions.length > 0,
+      count: contributionSuggestions.length
     };
   };
 

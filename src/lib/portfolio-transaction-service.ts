@@ -53,6 +53,8 @@ export interface SuggestedTransaction {
   fairPrice?: number; // Preço justo técnico (aiFairEntryPrice)
   isAttractivePrice?: boolean; // Se preço está abaixo/igual ao justo
   priceVsFairPrice?: number; // Percentual de diferença (negativo = abaixo, positivo = acima)
+  // ID da transação se for uma transação PENDING existente (para permitir rejeição)
+  transactionId?: string;
 }
 
 export interface CombinedRebalancingSuggestion {
@@ -201,7 +203,16 @@ export class PortfolioTransactionService {
     }
 
     // Get data in parallel
-    const [holdings, prices, nextDates, existingTransactions, cashBalance] =
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfCurrentMonth = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1
+    );
+    startOfCurrentMonth.setHours(0, 0, 0, 0);
+
+    const [holdings, prices, nextDates, existingTransactions, rejectedTransactions, pendingMonthlyContributions, cashBalance] =
       await Promise.all([
         this.getCurrentHoldings(portfolioId),
         this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
@@ -220,48 +231,109 @@ export class PortfolioTransactionService {
             quantity: true,
           },
         }),
+        // Also fetch REJECTED transactions to check if monthly contribution was rejected this month
+        prisma.portfolioTransaction.findMany({
+          where: {
+            portfolioId,
+            status: "REJECTED",
+            type: "MONTHLY_CONTRIBUTION",
+            date: {
+              gte: startOfCurrentMonth,
+            },
+          },
+          select: {
+            date: true,
+            type: true,
+            status: true,
+          },
+        }),
+        // Fetch PENDING MONTHLY_CONTRIBUTION transactions to include in suggestions
+        prisma.portfolioTransaction.findMany({
+          where: {
+            portfolioId,
+            status: "PENDING",
+            type: "MONTHLY_CONTRIBUTION",
+            date: {
+              gte: startOfCurrentMonth,
+            },
+          },
+          select: {
+            id: true,
+            date: true,
+            type: true,
+            amount: true,
+            cashBalanceBefore: true,
+            cashBalanceAfter: true,
+            notes: true,
+          },
+        }),
         this.getCurrentCashBalance(portfolioId),
       ]);
 
     const suggestions: SuggestedTransaction[] = [];
 
-    // Check if there's a monthly contribution for current month (CONFIRMED or EXECUTED only)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startOfCurrentMonth = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      1
-    );
-    startOfCurrentMonth.setHours(0, 0, 0, 0);
+    // First, add existing PENDING MONTHLY_CONTRIBUTION transactions to suggestions
+    // These need to be shown so user can confirm or reject them
+    if (pendingMonthlyContributions.length > 0) {
+      console.log(`📋 [PENDING_EXISTING] Found ${pendingMonthlyContributions.length} PENDING MONTHLY_CONTRIBUTION transaction(s), including in suggestions`);
+      for (const pendingTx of pendingMonthlyContributions) {
+        suggestions.push({
+          date: pendingTx.date,
+          type: "MONTHLY_CONTRIBUTION" as TransactionType,
+          amount: Number(pendingTx.amount),
+          reason: pendingTx.notes || `Aporte mensal de R$ ${Number(pendingTx.amount).toFixed(2)}`,
+          cashBalanceBefore: Number(pendingTx.cashBalanceBefore),
+          cashBalanceAfter: Number(pendingTx.cashBalanceAfter),
+          // Include transaction ID so we can reject/confirm it
+          transactionId: pendingTx.id,
+        } as SuggestedTransaction & { transactionId?: string });
+      }
+    }
 
     // Check if there's a monthly contribution already executed/confirmed in current month
+    // Only MONTHLY_CONTRIBUTION is considered as monthly contribution (not CASH_CREDIT)
     const currentMonthContribution = existingTransactions.find(
       (tx) =>
-        ((tx.type as string) === "MONTHLY_CONTRIBUTION" || tx.type === "CASH_CREDIT") &&
+        (tx.type as string) === "MONTHLY_CONTRIBUTION" &&
         new Date(tx.date).getTime() >= startOfCurrentMonth.getTime() &&
         (tx.status === "CONFIRMED" || tx.status === "EXECUTED")
     );
+
+    // Check if there's a REJECTED monthly contribution in current month
+    // If rejected, don't suggest again for the same month (only when month changes)
+    // Only MONTHLY_CONTRIBUTION is considered as monthly contribution (not CASH_CREDIT)
+    const currentMonthRejectedContribution = rejectedTransactions.length > 0 
+      ? rejectedTransactions[0] 
+      : null;
 
     console.log(
       `📅 [CHECK_CONTRIBUTION] Current month contribution check:`,
       currentMonthContribution
         ? `Found ${currentMonthContribution.type} with status ${currentMonthContribution.status}`
+        : currentMonthRejectedContribution
+        ? `Found REJECTED ${currentMonthRejectedContribution.type} - will not suggest again this month`
         : 'No contribution found in current month'
     );
 
-    // Monthly contribution is "decided" if it's CONFIRMED or EXECUTED
-    const monthlyContributionDecided = !!currentMonthContribution;
-
-    console.log(
-      `📅 [SUGGESTION_LOGIC] nextDates.length=${nextDates.length}, monthlyContributionDecided=${monthlyContributionDecided}, cashBalance=${cashBalance.toFixed(2)}, portfolioAssets=${portfolio.assets?.length || 0}, holdings=${holdings.size}, prices=${prices.size}`
-    );
+    // Monthly contribution is "decided" if it's CONFIRMED, EXECUTED, or REJECTED
+    // REJECTED means user explicitly rejected it, so don't suggest again this month
+    const monthlyContributionDecided = !!currentMonthContribution || !!currentMonthRejectedContribution;
 
     // Always generate buy suggestions when there's cash available (from sales or contributions)
     // This ensures that any cash in the account gets investment suggestions
 
-    // 1. Generate monthly contribution suggestions FIRST (if not already decided)
-    if (nextDates.length > 0 && !monthlyContributionDecided) {
+    // 1. Generate monthly contribution suggestions FIRST (if not already decided and monthlyContribution > 0)
+    // Only suggest if monthlyContribution is configured and greater than 0
+    const monthlyContributionAmount = Number(portfolio.monthlyContribution);
+    
+    console.log(
+      `📅 [SUGGESTION_LOGIC] nextDates.length=${nextDates.length}, monthlyContributionDecided=${monthlyContributionDecided}, monthlyContributionAmount=${monthlyContributionAmount}, cashBalance=${cashBalance.toFixed(2)}, portfolioAssets=${portfolio.assets?.length || 0}, holdings=${holdings.size}, prices=${prices.size}`
+    );
+    console.log(
+      `📅 [SUGGESTION_LOGIC] Conditions check: nextDates.length > 0 = ${nextDates.length > 0}, !monthlyContributionDecided = ${!monthlyContributionDecided}, monthlyContributionAmount > 0 = ${monthlyContributionAmount > 0}`
+    );
+    
+    if (nextDates.length > 0 && !monthlyContributionDecided && monthlyContributionAmount > 0) {
       console.log(
         `📅 [CONTRIBUTIONS] ${nextDates.length} pending monthly contributions - suggesting FIRST`
       );
@@ -276,12 +348,10 @@ export class PortfolioTransactionService {
         const suggestion = {
           date,
           type: "MONTHLY_CONTRIBUTION" as TransactionType,
-          amount: Number(portfolio.monthlyContribution),
-          reason: `Aporte mensal de R$ ${Number(
-            portfolio.monthlyContribution
-          ).toFixed(2)}`,
+          amount: monthlyContributionAmount,
+          reason: `Aporte mensal de R$ ${monthlyContributionAmount.toFixed(2)}`,
           cashBalanceBefore: runningCashBalance,
-          cashBalanceAfter: runningCashBalance + Number(portfolio.monthlyContribution),
+          cashBalanceAfter: runningCashBalance + monthlyContributionAmount,
         };
         
         console.log(`📝 [SUGGESTION] Creating MONTHLY_CONTRIBUTION suggestion:`, {
@@ -294,10 +364,18 @@ export class PortfolioTransactionService {
         suggestions.push(suggestion);
         
         // Update running balance for next iteration
-        runningCashBalance += Number(portfolio.monthlyContribution);
+        runningCashBalance += monthlyContributionAmount;
       }
       
       console.log(`📊 [BEFORE_FILTER] Created ${suggestions.length} monthly contribution suggestions before deduplication`);
+      console.log(`📊 [BEFORE_FILTER] Suggestions details:`, suggestions.map(s => ({
+        date: s.date.toISOString().split("T")[0],
+        type: s.type,
+        amount: s.amount,
+        ticker: s.ticker || 'null'
+      })));
+      console.log(`📊 [BEFORE_FILTER] Existing transactions count: ${existingTransactions.length}`);
+      console.log(`📊 [BEFORE_FILTER] Existing transactions types:`, [...new Set(existingTransactions.map(tx => tx.type))]);
       
       // Filter monthly contribution suggestions (but don't return yet - we'll generate buys too)
       const monthlyContribSuggestions = suggestions.slice(); // Copy array
@@ -307,7 +385,7 @@ export class PortfolioTransactionService {
       );
       
       console.log(
-        `✅ [MONTHLY_CONTRIBUTIONS] ${filteredMonthlyContributions.length} monthly contribution suggestions after deduplication`
+        `✅ [MONTHLY_CONTRIBUTIONS] ${filteredMonthlyContributions.length} monthly contribution suggestions after deduplication (filtered out ${monthlyContribSuggestions.length - filteredMonthlyContributions.length})`
       );
       console.log(`📊 [FILTERED] Filtered suggestions:`, filteredMonthlyContributions.map(s => ({
         date: s.date.toISOString().split("T")[0],
@@ -325,8 +403,11 @@ export class PortfolioTransactionService {
         {
           nextDatesLength: nextDates.length,
           monthlyContributionDecided,
+          monthlyContributionAmount,
           reason: nextDates.length === 0 
             ? 'No dates returned from calculateNextTransactionDates' 
+            : monthlyContributionAmount === 0
+            ? 'Monthly contribution is 0 (not configured)'
             : 'Monthly contribution already decided'
         }
       );
@@ -381,13 +462,19 @@ export class PortfolioTransactionService {
       }
     }
 
-    // Filter duplicates
-    console.log(`🔍 [BEFORE_FILTER] ${suggestions.length} suggestions before deduplication`);
+    // Filter duplicates (only filters against CONFIRMED/EXECUTED, not PENDING)
+    console.log(`🔍 [BEFORE_FILTER] ${suggestions.length} suggestions before deduplication (including ${pendingMonthlyContributions.length} PENDING transactions)`);
     const filteredSuggestions = this.filterDuplicateSuggestions(
       suggestions,
       existingTransactions
     );
     console.log(`🔍 [AFTER_FILTER] ${filteredSuggestions.length} suggestions after deduplication`);
+    
+    // Log if PENDING transactions were filtered out (they shouldn't be)
+    const pendingCountAfterFilter = filteredSuggestions.filter(s => s.type === "MONTHLY_CONTRIBUTION").length;
+    if (pendingMonthlyContributions.length > 0 && pendingCountAfterFilter === 0) {
+      console.warn(`⚠️ [FILTER_WARNING] All PENDING MONTHLY_CONTRIBUTION transactions were filtered out! This shouldn't happen.`);
+    }
     
     if (suggestions.length > 0 && filteredSuggestions.length === 0) {
       console.log(`⚠️ [FILTER_REMOVED_ALL] All suggestions were filtered out as duplicates!`);
@@ -1115,15 +1202,16 @@ export class PortfolioTransactionService {
     startOfCurrentMonth.setHours(0, 0, 0, 0);
     
     console.log(`📅 [CALC_DATES] Today: ${today.toISOString().split("T")[0]}, Start of month: ${startOfCurrentMonth.toISOString().split("T")[0]}`);
+    console.log(`📅 [CALC_DATES] Searching for MONTHLY_CONTRIBUTION transactions from ${startOfCurrentMonth.toISOString().split("T")[0]} onwards`);
 
-    // Check if there's already a PENDING MONTHLY_CONTRIBUTION or CASH_CREDIT transaction in the current month
-    // Only PENDING transactions prevent suggesting (user hasn't decided yet)
-    // CONFIRMED/REJECTED/EXECUTED don't prevent - we can suggest again if needed
+    // Check if there's already a PENDING MONTHLY_CONTRIBUTION transaction in the current month
+    // PENDING transactions prevent suggesting (user hasn't decided yet)
+    // Only MONTHLY_CONTRIBUTION is considered as monthly contribution (not CASH_CREDIT)
     const currentMonthPendingTransaction = await prisma.portfolioTransaction.findFirst({
       where: {
         portfolioId,
         status: "PENDING",
-        type: { in: ["MONTHLY_CONTRIBUTION", "CASH_CREDIT"] as any },
+        type: "MONTHLY_CONTRIBUTION",
         date: {
           gte: startOfCurrentMonth, // Within current month
         },
@@ -1135,11 +1223,52 @@ export class PortfolioTransactionService {
       },
     });
 
+    // Check if there's a REJECTED MONTHLY_CONTRIBUTION transaction in the current month
+    // REJECTED transactions prevent suggesting again in the same month (only when month changes)
+    // Only MONTHLY_CONTRIBUTION is considered as monthly contribution (not CASH_CREDIT)
+    const currentMonthRejectedTransaction = await prisma.portfolioTransaction.findFirst({
+      where: {
+        portfolioId,
+        status: "REJECTED",
+        type: "MONTHLY_CONTRIBUTION",
+        date: {
+          gte: startOfCurrentMonth, // Within current month
+        },
+      },
+      select: {
+        date: true,
+        status: true,
+        type: true,
+      },
+    });
+
+    // Check if there's a CONFIRMED or EXECUTED MONTHLY_CONTRIBUTION transaction in the current month
+    // If already confirmed/executed, don't suggest again
+    const currentMonthConfirmedTransaction = await prisma.portfolioTransaction.findFirst({
+      where: {
+        portfolioId,
+        status: { in: ["CONFIRMED", "EXECUTED"] },
+        type: "MONTHLY_CONTRIBUTION",
+        date: {
+          gte: startOfCurrentMonth,
+        },
+      },
+      select: {
+        date: true,
+        status: true,
+        type: true,
+      },
+    });
+
     console.log(
-      `📅 [CHECK_MONTH] Current month PENDING transaction check:`,
+      `📅 [CHECK_MONTH] Current month transaction check:`,
       currentMonthPendingTransaction 
-        ? `Found ${currentMonthPendingTransaction.type} with status ${currentMonthPendingTransaction.status} on ${currentMonthPendingTransaction.date.toISOString().split("T")[0]}`
-        : 'No PENDING transaction found in current month'
+        ? `Found PENDING ${currentMonthPendingTransaction.type} on ${currentMonthPendingTransaction.date.toISOString().split("T")[0]}`
+        : currentMonthRejectedTransaction
+        ? `Found REJECTED ${currentMonthRejectedTransaction.type} on ${currentMonthRejectedTransaction.date.toISOString().split("T")[0]} - will not suggest again this month`
+        : currentMonthConfirmedTransaction
+        ? `Found ${currentMonthConfirmedTransaction.status} ${currentMonthConfirmedTransaction.type} on ${currentMonthConfirmedTransaction.date.toISOString().split("T")[0]} - already executed`
+        : 'No MONTHLY_CONTRIBUTION transaction found in current month - will suggest'
     );
 
     // If there's a PENDING transaction, don't suggest again (user hasn't decided yet)
@@ -1150,11 +1279,29 @@ export class PortfolioTransactionService {
       return dates; // Return empty array - don't suggest
     }
 
-    // If no PENDING transaction exists in current month, suggest for first day of current month
+    // If there's a REJECTED transaction, don't suggest again in the same month
+    // APORTE MENSAL is the only suggestion that can be rejected, and if rejected, 
+    // it should not be suggested again until the month changes
+    if (currentMonthRejectedTransaction) {
+      console.log(
+        `⏸️ [REJECTED_EXISTS] REJECTED contribution already exists for current month, not suggesting again (will suggest again next month)`
+      );
+      return dates; // Return empty array - don't suggest
+    }
+
+    // If there's a CONFIRMED or EXECUTED transaction, don't suggest again (already done)
+    if (currentMonthConfirmedTransaction) {
+      console.log(
+        `⏸️ [CONFIRMED_EXISTS] ${currentMonthConfirmedTransaction.status} contribution already exists for current month, not suggesting again`
+      );
+      return dates; // Return empty array - don't suggest
+    }
+
+    // If no PENDING or REJECTED transaction exists in current month, suggest for first day of current month
     // This ensures we always suggest the monthly contribution for the current month
     dates.push(new Date(startOfCurrentMonth));
     console.log(
-      `📅 [SUGGEST] No PENDING contribution in current month (${startOfCurrentMonth.toISOString().split("T")[0]}), suggesting for first day of month`
+      `📅 [SUGGEST] No PENDING or REJECTED contribution in current month (${startOfCurrentMonth.toISOString().split("T")[0]}), suggesting for first day of month. Returning ${dates.length} date(s)`
     );
     return dates;
   }
@@ -1676,9 +1823,10 @@ export class PortfolioTransactionService {
     const startTime = Date.now();
 
     // Get data in parallel
-    // Note: We no longer check for PENDING transactions since suggestions are dynamic
-    // Only check CONFIRMED/EXECUTED to avoid suggesting dividends already registered
-    const [holdings, prices, existingTransactions] = await Promise.all([
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const [holdings, prices, existingTransactions, pendingDividendTransactions] = await Promise.all([
       this.getCurrentHoldings(portfolioId),
       this.getLatestPrices(portfolio.assets.map((a) => a.ticker)),
       prisma.portfolioTransaction.findMany({
@@ -1697,26 +1845,138 @@ export class PortfolioTransactionService {
           price: true,
         },
       }),
+      // Fetch PENDING DIVIDEND transactions to include in suggestions
+      // Include ALL PENDING dividends regardless of date (user needs to confirm/reject them)
+      prisma.portfolioTransaction.findMany({
+        where: {
+          portfolioId,
+          status: "PENDING",
+          type: "DIVIDEND",
+        },
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          ticker: true,
+          amount: true,
+          quantity: true,
+          price: true,
+          cashBalanceBefore: true,
+          cashBalanceAfter: true,
+          notes: true,
+        },
+        orderBy: {
+          date: 'desc', // Most recent first
+        },
+      }),
     ]);
 
-    const suggestions = await this.generateDividendSuggestions(
+    const suggestions: SuggestedTransaction[] = [];
+
+    // First, add existing PENDING DIVIDEND transactions to suggestions
+    // These need to be shown so user can confirm or reject them
+    if (pendingDividendTransactions.length > 0) {
+      console.log(`📋 [PENDING_EXISTING] Found ${pendingDividendTransactions.length} PENDING DIVIDEND transaction(s), including in suggestions`);
+      for (const pendingTx of pendingDividendTransactions) {
+        suggestions.push({
+          date: pendingTx.date,
+          type: "DIVIDEND" as TransactionType,
+          ticker: pendingTx.ticker || undefined,
+          amount: Number(pendingTx.amount),
+          price: pendingTx.price ? Number(pendingTx.price) : undefined,
+          quantity: pendingTx.quantity ? Number(pendingTx.quantity) : undefined,
+          reason: pendingTx.notes || `Dividendo de ${pendingTx.ticker || 'ativo'}`,
+          cashBalanceBefore: Number(pendingTx.cashBalanceBefore),
+          cashBalanceAfter: Number(pendingTx.cashBalanceAfter),
+          // Include transaction ID so we can reject/confirm it
+          transactionId: pendingTx.id,
+        } as SuggestedTransaction & { transactionId?: string });
+      }
+    }
+
+    // Generate new dividend suggestions
+    const generatedSuggestions = await this.generateDividendSuggestions(
       portfolioId,
       holdings,
       prices
     );
 
-    // Filter duplicates
-    const filteredSuggestions = this.filterDuplicateSuggestions(
-      suggestions,
+    // Filter duplicates against CONFIRMED/EXECUTED transactions
+    const filteredAgainstConfirmed = this.filterDuplicateSuggestions(
+      generatedSuggestions,
       existingTransactions
     );
 
-    const totalTime = Date.now() - startTime;
-    console.log(
-      `✅ [DIVIDEND SUGGESTIONS] ${filteredSuggestions.length} suggestions generated (${totalTime}ms)`
+    // Also filter against PENDING transactions to avoid creating duplicates
+    // Convert PENDING transactions to the same format for filtering (matching existingTransactions format)
+    const pendingTransactionsForFilter = pendingDividendTransactions.map(tx => ({
+      date: tx.date instanceof Date ? tx.date : new Date(tx.date),
+      type: tx.type,
+      ticker: tx.ticker,
+      status: 'PENDING' as const,
+      amount: Number(tx.amount),
+      quantity: tx.quantity ? Number(tx.quantity) : null,
+    }));
+
+    const filteredGeneratedSuggestions = this.filterDuplicateSuggestions(
+      filteredAgainstConfirmed,
+      pendingTransactionsForFilter
     );
 
-    return filteredSuggestions;
+    // Create PENDING transactions for new dividend suggestions (so they can be confirmed/rejected)
+    // createPendingTransactions will check for duplicates again, so it's safe
+    if (filteredGeneratedSuggestions.length > 0) {
+      console.log(`📝 [DIVIDEND_PENDING] Creating ${filteredGeneratedSuggestions.length} PENDING transactions for new dividend suggestions`);
+      const createdTransactionIds = await this.createPendingTransactions(
+        portfolioId,
+        userId,
+        filteredGeneratedSuggestions
+      );
+      
+      // Fetch the created PENDING transactions to include transactionId in suggestions
+      if (createdTransactionIds.length > 0) {
+        const createdPendingTransactions = await prisma.portfolioTransaction.findMany({
+          where: {
+            id: { in: createdTransactionIds },
+          },
+          select: {
+            id: true,
+            date: true,
+            type: true,
+            ticker: true,
+            amount: true,
+            quantity: true,
+            price: true,
+            cashBalanceBefore: true,
+            cashBalanceAfter: true,
+            notes: true,
+          },
+        });
+
+        // Add created PENDING transactions to suggestions with transactionId
+        for (const pendingTx of createdPendingTransactions) {
+          suggestions.push({
+            date: pendingTx.date,
+            type: "DIVIDEND" as TransactionType,
+            ticker: pendingTx.ticker || undefined,
+            amount: Number(pendingTx.amount),
+            price: pendingTx.price ? Number(pendingTx.price) : undefined,
+            quantity: pendingTx.quantity ? Number(pendingTx.quantity) : undefined,
+            reason: pendingTx.notes || `Dividendo de ${pendingTx.ticker || 'ativo'}`,
+            cashBalanceBefore: Number(pendingTx.cashBalanceBefore),
+            cashBalanceAfter: Number(pendingTx.cashBalanceAfter),
+            transactionId: pendingTx.id,
+          } as SuggestedTransaction & { transactionId?: string });
+        }
+      }
+    }
+
+    const totalTime = Date.now() - startTime;
+    console.log(
+      `✅ [DIVIDEND SUGGESTIONS] ${suggestions.length} suggestions total (${pendingDividendTransactions.length} existing PENDING + ${filteredGeneratedSuggestions.length} new created as PENDING, ${totalTime}ms)`
+    );
+
+    return suggestions;
   }
 
   /**
@@ -1929,8 +2189,8 @@ export class PortfolioTransactionService {
           if (isMatch) {
             matchedTransaction = existing;
             
-            // Only skip if transaction is CONFIRMED or EXECUTED (same asset, same month, same value)
-            // REJECTED transactions can be suggested again (user might want to reconsider)
+            // Skip if transaction is CONFIRMED, EXECUTED, or REJECTED (same asset, same month, same value)
+            // REJECTED transactions should not be suggested again (user explicitly rejected)
             // PENDING transactions are already shown, so we skip to avoid duplicates
             if (existing.status === 'CONFIRMED' || existing.status === 'EXECUTED') {
               shouldSkip = true;
@@ -1939,8 +2199,10 @@ export class PortfolioTransactionService {
               shouldSkip = true;
               skipReason = `Already pending`;
             } else if (existing.status === 'REJECTED') {
-              // Don't skip rejected transactions - allow user to reconsider
-              console.log(`🔄 [DIVIDEND REJECTED] ${ticker}: Previously rejected, but allowing re-suggestion`);
+              // Skip rejected transactions - user explicitly rejected, don't suggest again
+              shouldSkip = true;
+              skipReason = `Previously rejected - same asset, same month, same value`;
+              console.log(`⏩ [DIVIDEND REJECTED] ${ticker}: Previously rejected with same value, skipping re-suggestion`);
             }
             break;
           }
@@ -2751,6 +3013,8 @@ export class PortfolioTransactionService {
 
   /**
    * Reject a transaction
+   * IMPORTANT: Only MONTHLY_CONTRIBUTION (APORTE MENSAL) and DIVIDEND transactions can be rejected.
+   * Other transaction types should be confirmed or deleted, not rejected.
    */
   static async rejectTransaction(
     transactionId: string,
@@ -2770,6 +3034,13 @@ export class PortfolioTransactionService {
 
     if (transaction.status !== "PENDING") {
       throw new Error("Only pending transactions can be rejected");
+    }
+
+    // Only MONTHLY_CONTRIBUTION (APORTE MENSAL) and DIVIDEND transactions can be rejected
+    // CASH_CREDIT is a different type (manual contribution) and cannot be rejected
+    // Other transaction types (BUY, SELL, etc.) should be confirmed or deleted
+    if (transaction.type !== "MONTHLY_CONTRIBUTION" && transaction.type !== "DIVIDEND") {
+      throw new Error("Apenas transações de APORTE MENSAL (MONTHLY_CONTRIBUTION) e DIVIDENDOS (DIVIDEND) podem ser rejeitadas. Outras transações devem ser confirmadas ou excluídas.");
     }
 
     await safeWrite(
@@ -3111,12 +3382,7 @@ export class PortfolioTransactionService {
       throw new Error("Transaction not found");
     }
 
-    // Only allow deleting PENDING or manually created EXECUTED transactions
-    if (transaction.status === "CONFIRMED" && transaction.isAutoSuggested) {
-      throw new Error(
-        "Cannot delete confirmed auto-suggested transactions. Revert to pending first."
-      );
-    }
+    // Allow deleting any transaction (removed restriction on confirmed auto-suggested transactions)
 
     const portfolioId = transaction.portfolioId;
 

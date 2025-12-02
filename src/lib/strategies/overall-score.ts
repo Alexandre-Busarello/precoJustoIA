@@ -446,16 +446,40 @@ export function analyzeFinancialStatements(
     company?.industry || null
   );
 
+  // === DETECTAR SE É HOLDING ===
+  const isHolding = detectHoldingCompany(
+    company?.sector || null,
+    company?.industry || null,
+    company?.ticker || undefined,
+    completedYearsData.income
+  );
+
   // === ANÁLISE BASEADA EM MÉDIAS E BENCHMARKS ===
   const averageMetrics = calculateAverageMetrics(
     completedYearsData,
     data.financialDataFallback,
     company?.ticker || undefined,
-    dataValidation
+    dataValidation,
+    isHolding
   );
   // Detectar se é BDR para ajustar benchmarks
   const isBDR = isBDRTicker(company?.ticker);
   const benchmarks = getSectorBenchmarks(sectorContext, sizeContext, isBDR);
+
+  // Obter ROE do fallback para uso nas análises
+  let fallbackROE: number | undefined = undefined;
+  if (data.financialDataFallback?.roe) {
+    const roeArray = Array.isArray(data.financialDataFallback.roe)
+      ? data.financialDataFallback.roe
+      : [data.financialDataFallback.roe];
+    const validROE = roeArray.filter(
+      (v) => v !== null && v !== undefined && !isNaN(v as number)
+    ) as number[];
+    if (validROE.length > 0) {
+      fallbackROE =
+        validROE.reduce((sum, val) => sum + val, 0) / validROE.length;
+    }
+  }
 
   // === SISTEMA DE PONTUAÇÃO NORMALIZADO ===
   // Definir pesos normalizados (soma = 1.0)
@@ -475,7 +499,9 @@ export function analyzeFinancialStatements(
       averageMetrics,
       benchmarks,
       sectorContext,
-      completedYearsData
+      completedYearsData,
+      isHolding,
+      fallbackROE
     ),
     liquidity: analyzeLiquidityMetrics(
       averageMetrics,
@@ -502,7 +528,8 @@ export function analyzeFinancialStatements(
     ),
     incomeComposition: analyzeIncomeComposition(
       completedYearsData,
-      sectorContext
+      sectorContext,
+      isHolding
     ),
   };
 
@@ -751,6 +778,97 @@ interface SectorBenchmarks {
   goodRevenueGrowth: number;
 }
 
+// === FUNÇÃO PARA DETECTAR HOLDINGS ===
+function detectHoldingCompany(
+  sector: string | null,
+  industry: string | null,
+  ticker: string | undefined,
+  incomeStatements: Record<string, unknown>[]
+): boolean {
+  // Tickers conhecidos de holdings
+  const knownHoldingTickers = ["BRBI11"];
+  if (ticker && knownHoldingTickers.includes(ticker.toUpperCase())) {
+    return true;
+  }
+
+  // Verificar setor/indústria
+  const sectorLower = sector?.toLowerCase() || "";
+  const industryLower = industry?.toLowerCase() || "";
+
+  const hasHoldingKeywords =
+    sectorLower.includes("participações") ||
+    sectorLower.includes("holdings") ||
+    industryLower.includes("participações") ||
+    industryLower.includes("holdings");
+
+  if (!hasHoldingKeywords) {
+    return false;
+  }
+
+  // Verificar padrão financeiro característico de holdings
+  // Holdings têm receita operacional muito baixa/negativa mas lucro líquido positivo
+  if (incomeStatements.length < 2) {
+    return hasHoldingKeywords; // Se tem keywords mas poucos dados, assumir holding
+  }
+
+  const yearsToAnalyze = Math.min(3, incomeStatements.length);
+  let totalRevenue = 0;
+  let totalNetIncome = 0;
+  let totalNonOperationalResult = 0;
+  let positiveNetIncomeYears = 0;
+
+  for (let i = 0; i < yearsToAnalyze; i++) {
+    const incomeStmt = incomeStatements[i];
+    const revenue =
+      toNumber(incomeStmt.totalRevenue) ||
+      toNumber(incomeStmt.operatingIncome) ||
+      0;
+    const netIncome = toNumber(incomeStmt.netIncome) || 0;
+    const ebit = toNumber(incomeStmt.ebit) || 0;
+    const operatingIncome = toNumber(incomeStmt.operatingIncome) || 0;
+    const financialResult = toNumber(incomeStmt.financialResult) || 0;
+    const totalOtherIncomeExpenseNet =
+      toNumber(incomeStmt.totalOtherIncomeExpenseNet) || 0;
+
+    // Calcular resultado operacional
+    let operatingResult = ebit;
+    if (!operatingResult && operatingIncome) {
+      operatingResult = operatingIncome;
+    }
+
+    // Calcular resultado não operacional
+    const nonOperationalResult = financialResult + totalOtherIncomeExpenseNet;
+
+    totalRevenue += Math.abs(revenue);
+    totalNetIncome += netIncome;
+    totalNonOperationalResult += Math.abs(nonOperationalResult);
+
+    if (netIncome > 0) {
+      positiveNetIncomeYears++;
+    }
+  }
+
+  const avgRevenue = totalRevenue / yearsToAnalyze;
+  const avgNetIncome = totalNetIncome / yearsToAnalyze;
+  const avgNonOperationalResult = totalNonOperationalResult / yearsToAnalyze;
+
+  // Padrão de holding:
+  // 1. Receita operacional muito baixa comparada ao lucro líquido (< 5%) OU negativa
+  // 2. Lucro líquido positivo na maioria dos anos
+  // 3. Resultado não operacional significativo (> 50% do lucro líquido)
+  const revenueToNetIncomeRatio =
+    avgNetIncome > 0 ? avgRevenue / avgNetIncome : 0;
+  const nonOpToNetIncomeRatio =
+    avgNetIncome > 0 ? avgNonOperationalResult / avgNetIncome : 0;
+
+  const isHoldingPattern =
+    (revenueToNetIncomeRatio < 0.05 || avgRevenue <= 0) &&
+    positiveNetIncomeYears >= Math.ceil(yearsToAnalyze * 0.5) &&
+    nonOpToNetIncomeRatio > 0.5;
+
+  return hasHoldingKeywords && isHoldingPattern;
+}
+
 // === FUNÇÃO PARA CALCULAR MÉDIAS DOS INDICADORES ===
 function calculateAverageMetrics(
   data: {
@@ -760,7 +878,8 @@ function calculateAverageMetrics(
   },
   fallbackData?: FinancialStatementsData["financialDataFallback"],
   ticker?: string,
-  dataValidation?: DataValidation
+  dataValidation?: DataValidation,
+  isHolding?: boolean
 ): AverageMetrics {
   const { income, balance, cashflow } = data;
   const periods = Math.min(income.length, balance.length, cashflow.length);
@@ -1264,10 +1383,25 @@ function calculateAverageMetrics(
     const fallbackMetrics = calculateFallbackMetrics(fallbackData);
     let fallbacksApplied = 0;
 
+    // Para holdings: priorizar ROE do fallback se ROE calculado for muito baixo (< 1%)
+    // Holdings têm estrutura diferente e o cálculo direto pode falhar
+    if (isHolding) {
+      if (
+        fallbackMetrics.roe !== undefined &&
+        (metrics.roe === 0 ||
+          isNaN(metrics.roe) ||
+          metrics.roe < 0.01) // ROE muito baixo (< 1%)
+      ) {
+        metrics.roe = fallbackMetrics.roe;
+        fallbacksApplied++;
+      }
+    }
+
     // Aplicar fallback para indicadores críticos que ficaram zerados ou inválidos
     if (
       (metrics.roe === 0 || isNaN(metrics.roe)) &&
-      fallbackMetrics.roe !== undefined
+      fallbackMetrics.roe !== undefined &&
+      !isHolding // Para holdings já tratamos acima
     ) {
       metrics.roe = fallbackMetrics.roe;
       fallbacksApplied++;
@@ -1586,7 +1720,7 @@ function calculateFallbackMetrics(
     // Calcular médias dos arrays de dados históricos
     if (fallbackData.roe && Array.isArray(fallbackData.roe)) {
       const avgRoe = calculateAverage(fallbackData.roe);
-      // ROE será aplicado apenas se necessário no fallback específico, não aqui
+      if (avgRoe !== undefined) metrics.roe = avgRoe;
     }
 
     if (fallbackData.roa && Array.isArray(fallbackData.roa)) {
@@ -1935,7 +2069,9 @@ function analyzeProfitabilityMetrics(
     income: Record<string, unknown>[];
     balance: Record<string, unknown>[];
     cashflow: Record<string, unknown>[];
-  }
+  },
+  isHolding?: boolean,
+  fallbackROE?: number
 ): AnalysisResult {
   const result: AnalysisResult = {
     scoreAdjustment: 0,
@@ -1946,8 +2082,13 @@ function analyzeProfitabilityMetrics(
   // Para seguradoras e empresas financeiras, usar análise adaptada
   const isFinancialSector = sectorContext.type === "FINANCIAL";
 
+  // Para holdings: usar ROE do fallback se disponível e válido
+  const effectiveROE = isHolding && fallbackROE !== undefined && fallbackROE > 0
+    ? fallbackROE
+    : metrics.roe;
+
   // ROE Analysis
-  if (metrics.roe >= benchmarks.excellentROE) {
+  if (effectiveROE >= benchmarks.excellentROE) {
     result.scoreAdjustment += 15;
     if (isFinancialSector) {
       result.positiveSignals.push(
@@ -1955,7 +2096,7 @@ function analyzeProfitabilityMetrics(
           sectorContext.type === "FINANCIAL"
             ? "instituição financeira"
             : "empresa"
-        } gera ${(metrics.roe * 100).toFixed(
+        } gera ${(effectiveROE * 100).toFixed(
           1
         )}% de retorno sobre o patrimônio líquido (acima de ${(
           benchmarks.goodROE * 100
@@ -1964,7 +2105,7 @@ function analyzeProfitabilityMetrics(
     } else {
       result.positiveSignals.push(
         `Rentabilidade excepcional: A empresa gera ${(
-          metrics.roe * 100
+          effectiveROE * 100
         ).toFixed(
           1
         )}% de lucro para cada R$ 100 investidos pelos acionistas (acima de ${(
@@ -1974,47 +2115,56 @@ function analyzeProfitabilityMetrics(
         )}% esperado). Isso significa que seu dinheiro está rendendo muito bem nesta empresa.`
       );
     }
-  } else if (metrics.roe >= benchmarks.goodROE) {
+  } else if (effectiveROE >= benchmarks.goodROE) {
     result.scoreAdjustment += 8;
     if (isFinancialSector) {
       result.positiveSignals.push(
-        `Boa rentabilidade: A instituição gera ${(metrics.roe * 100).toFixed(
+        `Boa rentabilidade: A instituição gera ${(effectiveROE * 100).toFixed(
           1
         )}% de retorno sobre o patrimônio líquido. Gestão eficiente do capital dos acionistas.`
       );
     } else {
       result.positiveSignals.push(
-        `Boa rentabilidade: A empresa gera ${(metrics.roe * 100).toFixed(
+        `Boa rentabilidade: A empresa gera ${(effectiveROE * 100).toFixed(
           1
         )}% de lucro para cada R$ 100 dos acionistas. É um retorno sólido para seu investimento.`
       );
     }
-  } else if (metrics.roe < benchmarks.minROE) {
-    result.scoreAdjustment -= 20;
-    if (isFinancialSector) {
-      result.redFlags.push(
-        `Rentabilidade baixa: A instituição gera apenas ${(
-          metrics.roe * 100
-        ).toFixed(
-          1
-        )}% de retorno sobre o patrimônio líquido (mínimo esperado: ${(
-          benchmarks.minROE * 100
-        ).toFixed(
-          1
-        )}%). Pode indicar ineficiência na gestão do capital ou ambiente desafiador.`
+  } else if (effectiveROE < benchmarks.minROE) {
+    // Para holdings: não emitir alerta se ROE do fallback for válido (> 8%)
+    // Holdings têm estrutura diferente e o cálculo direto pode falhar
+    if (isHolding && fallbackROE !== undefined && fallbackROE >= benchmarks.minROE) {
+      // Não emitir alerta - o ROE real está no fallback e é válido
+      result.positiveSignals.push(
+        `Estrutura de holding: A empresa é uma holding e seu lucro vem principalmente de participações em subsidiárias (equivalência patrimonial). ROE real: ${(fallbackROE * 100).toFixed(1)}%.`
       );
     } else {
-      result.redFlags.push(
-        `Rentabilidade baixa: A empresa gera apenas ${(
-          metrics.roe * 100
-        ).toFixed(
-          1
-        )}% de lucro para cada R$ 100 investidos (mínimo esperado: ${(
-          benchmarks.minROE * 100
-        ).toFixed(
-          1
-        )}%). Seu dinheiro pode render mais em outras opções de investimento.`
-      );
+      result.scoreAdjustment -= 20;
+      if (isFinancialSector) {
+        result.redFlags.push(
+          `Rentabilidade baixa: A instituição gera apenas ${(
+            effectiveROE * 100
+          ).toFixed(
+            1
+          )}% de retorno sobre o patrimônio líquido (mínimo esperado: ${(
+            benchmarks.minROE * 100
+          ).toFixed(
+            1
+          )}%). Pode indicar ineficiência na gestão do capital ou ambiente desafiador.`
+        );
+      } else {
+        result.redFlags.push(
+          `Rentabilidade baixa: A empresa gera apenas ${(
+            effectiveROE * 100
+          ).toFixed(
+            1
+          )}% de lucro para cada R$ 100 investidos (mínimo esperado: ${(
+            benchmarks.minROE * 100
+          ).toFixed(
+            1
+          )}%). Seu dinheiro pode render mais em outras opções de investimento.`
+        );
+      }
     }
   }
 
@@ -3140,7 +3290,8 @@ function analyzeIncomeComposition(
     balance: Record<string, unknown>[];
     cashflow: Record<string, unknown>[];
   },
-  sectorContext: SectorContext
+  sectorContext: SectorContext,
+  isHolding?: boolean
 ): AnalysisResult {
   const result: AnalysisResult = {
     scoreAdjustment: 0,
@@ -3150,6 +3301,14 @@ function analyzeIncomeComposition(
 
   // Não aplicar para empresas financeiras
   if (sectorContext.type === "FINANCIAL") {
+    return result;
+  }
+
+  // Não aplicar para holdings - equivalência patrimonial é operação normal
+  if (isHolding) {
+    result.positiveSignals.push(
+      "Estrutura de holding: O lucro vem principalmente de participações em subsidiárias através de equivalência patrimonial, o que é esperado para este tipo de empresa."
+    );
     return result;
   }
 

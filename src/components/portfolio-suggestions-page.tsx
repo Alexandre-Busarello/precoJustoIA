@@ -4,7 +4,9 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw, TrendingUp, DollarSign, Scale, Sparkles, ArrowDownCircle, ArrowUpCircle, Star } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, DollarSign, Scale, Sparkles, ArrowDownCircle, ArrowUpCircle, Star, Check, X } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useMutation } from '@tanstack/react-query';
 import { PortfolioTransactionFormSuggested } from './portfolio-transaction-form-suggested';
 import { PortfolioRebalancingCombinedForm } from './portfolio-rebalancing-combined-form';
 import { useState, useEffect, useRef } from 'react';
@@ -44,6 +46,8 @@ interface Suggestion {
   totalSold?: number;
   totalBought?: number;
   netCashChange?: number;
+  // ID da transação se for uma transação PENDING existente (para permitir rejeição)
+  transactionId?: string;
 }
 
 interface SuggestionsResponse {
@@ -55,6 +59,7 @@ interface SuggestionsResponse {
 export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPageProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const previousCashBalanceRef = useRef<number | undefined>(undefined);
 
@@ -129,6 +134,11 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
   };
 
   const handleSuggestionClick = (suggestion: Suggestion) => {
+    // For MONTHLY_CONTRIBUTION and DIVIDEND with transactionId, don't open modal - use inline buttons instead
+    if ((suggestion.type === 'MONTHLY_CONTRIBUTION' || suggestion.type === 'DIVIDEND') && suggestion.transactionId) {
+      return; // Don't open modal, use inline buttons
+    }
+    
     // Check if this is a combined rebalancing suggestion
     const isCombined = suggestion.type === 'REBALANCING_COMBINED' || 
                        (suggestion.sellTransaction !== undefined && suggestion.buyTransactions !== undefined);
@@ -138,6 +148,86 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
       setSelectedSuggestion(suggestion);
     } else {
       // Use regular form for other suggestions
+      setSelectedSuggestion(suggestion);
+    }
+  };
+
+  // Mutation to reject a transaction
+  const rejectMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Rejeitado pelo usuário' }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao rejeitar transação');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Transação rejeitada',
+        description: 'Aporte mensal rejeitado com sucesso. Não será sugerido novamente neste mês.',
+      });
+      handleRefresh();
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-metrics', portfolioId] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao rejeitar transação',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Mutation to confirm a transaction
+  const confirmMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao confirmar transação');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Transação confirmada',
+        description: 'Aporte mensal confirmado com sucesso.',
+      });
+      handleRefresh();
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-metrics', portfolioId] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao confirmar transação',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleReject = (e: React.MouseEvent, suggestion: Suggestion) => {
+    e.stopPropagation();
+    if (suggestion.transactionId) {
+      rejectMutation.mutate(suggestion.transactionId);
+    }
+  };
+
+  const handleConfirm = (e: React.MouseEvent, suggestion: Suggestion) => {
+    e.stopPropagation();
+    if (suggestion.transactionId) {
+      confirmMutation.mutate(suggestion.transactionId);
+    } else {
+      // If no transactionId, open modal to create new transaction
       setSelectedSuggestion(suggestion);
     }
   };
@@ -348,50 +438,83 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {contributionSuggestions.map((suggestion, index) => (
-                  <div
-                    key={`contribution-${index}`}
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer overflow-hidden"
-                    onClick={() => handleSuggestionClick(suggestion)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 sm:gap-2 mb-2 flex-wrap">
-                        <Badge variant={suggestion.type === 'MONTHLY_CONTRIBUTION' ? 'default' : 'secondary'} className="text-xs flex-shrink-0">
-                          {suggestion.type === 'MONTHLY_CONTRIBUTION' ? 'Aporte Mensal' : 'Compra'}
-                        </Badge>
-                        {suggestion.ticker && (
-                          <Badge variant="outline" className="text-xs flex-shrink-0">{suggestion.ticker}</Badge>
-                        )}
-                        {suggestion.isAttractivePrice && (
-                          <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 text-xs flex-shrink-0">
-                            <Star className="h-3 w-3 fill-current flex-shrink-0" />
-                            <span className="hidden sm:inline">Preço Atrativo (Análise Técnica)</span>
-                            <span className="sm:hidden">Preço Atrativo</span>
+                {contributionSuggestions.map((suggestion, index) => {
+                  const isMonthlyContribution = suggestion.type === 'MONTHLY_CONTRIBUTION';
+                  const hasTransactionId = !!suggestion.transactionId;
+                  const showActionButtons = isMonthlyContribution && hasTransactionId;
+                  
+                  return (
+                    <div
+                      key={`contribution-${index}`}
+                      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg transition-colors overflow-hidden ${
+                        showActionButtons ? '' : 'hover:bg-muted/50 cursor-pointer'
+                      }`}
+                      onClick={() => !showActionButtons && handleSuggestionClick(suggestion)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 flex-wrap">
+                          <Badge variant={isMonthlyContribution ? 'default' : 'secondary'} className="text-xs flex-shrink-0">
+                            {isMonthlyContribution ? 'Aporte Mensal' : 'Compra'}
                           </Badge>
-                        )}
+                          {suggestion.ticker && (
+                            <Badge variant="outline" className="text-xs flex-shrink-0">{suggestion.ticker}</Badge>
+                          )}
+                          {suggestion.isAttractivePrice && (
+                            <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 text-xs flex-shrink-0">
+                              <Star className="h-3 w-3 fill-current flex-shrink-0" />
+                              <span className="hidden sm:inline">Preço Atrativo (Análise Técnica)</span>
+                              <span className="sm:hidden">Preço Atrativo</span>
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground break-words">{suggestion.reason}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-2">
+                          {suggestion.quantity && suggestion.price && (
+                            <p className="text-xs text-muted-foreground flex-shrink-0">
+                              {suggestion.quantity} ações × {formatCurrency(suggestion.price)}
+                            </p>
+                          )}
+                          {suggestion.fairPrice && (
+                            <p className="text-xs text-green-600 font-semibold flex-shrink-0">
+                              Preço Justo (Análise Técnica): {formatCurrency(suggestion.fairPrice)}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground break-words">{suggestion.reason}</p>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-2">
-                        {suggestion.quantity && suggestion.price && (
-                          <p className="text-xs text-muted-foreground flex-shrink-0">
-                            {suggestion.quantity} ações × {formatCurrency(suggestion.price)}
+                      <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3 flex-shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 sm:ml-4">
+                        <div className="text-left sm:text-right">
+                          <p className="font-semibold text-base sm:text-lg">{formatCurrency(suggestion.amount)}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
                           </p>
-                        )}
-                        {suggestion.fairPrice && (
-                          <p className="text-xs text-green-600 font-semibold flex-shrink-0">
-                            Preço Justo (Análise Técnica): {formatCurrency(suggestion.fairPrice)}
-                          </p>
+                        </div>
+                        {showActionButtons && (
+                          <div className="flex gap-2 mt-2 sm:mt-0">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={(e) => handleConfirm(e, suggestion)}
+                              disabled={confirmMutation.isPending}
+                            >
+                              <Check className="h-4 w-4 mr-1" />
+                              Confirmar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={(e) => handleReject(e, suggestion)}
+                              disabled={rejectMutation.isPending}
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Rejeitar
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
-                    <div className="text-left sm:text-right flex-shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 sm:ml-4">
-                      <p className="font-semibold text-base sm:text-lg">{formatCurrency(suggestion.amount)}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -580,29 +703,62 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {dividendSuggestions.map((suggestion, index) => (
-                  <div
-                    key={`dividend-${index}`}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => handleSuggestionClick(suggestion)}
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="default">Dividendo</Badge>
-                        {suggestion.ticker && (
-                          <Badge variant="outline">{suggestion.ticker}</Badge>
+                {dividendSuggestions.map((suggestion, index) => {
+                  const isDividend = suggestion.type === 'DIVIDEND';
+                  const hasTransactionId = !!suggestion.transactionId;
+                  const showActionButtons = isDividend && hasTransactionId;
+                  
+                  return (
+                    <div
+                      key={`dividend-${index}`}
+                      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg transition-colors overflow-hidden ${
+                        showActionButtons ? '' : 'hover:bg-muted/50 cursor-pointer'
+                      }`}
+                      onClick={() => !showActionButtons && handleSuggestionClick(suggestion)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 flex-wrap">
+                          <Badge variant="default">Dividendo</Badge>
+                          {suggestion.ticker && (
+                            <Badge variant="outline" className="text-xs flex-shrink-0">{suggestion.ticker}</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground break-words">{suggestion.reason}</p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3 flex-shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 sm:ml-4">
+                        <div className="text-left sm:text-right">
+                          <p className="font-semibold text-base sm:text-lg">{formatCurrency(suggestion.amount)}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
+                          </p>
+                        </div>
+                        {showActionButtons && (
+                          <div className="flex gap-2 mt-2 sm:mt-0">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={(e) => handleConfirm(e, suggestion)}
+                              disabled={confirmMutation.isPending}
+                            >
+                              <Check className="h-4 w-4 mr-1" />
+                              Confirmar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={(e) => handleReject(e, suggestion)}
+                              disabled={rejectMutation.isPending}
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Rejeitar
+                            </Button>
+                          </div>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
                     </div>
-                    <div className="text-right ml-4">
-                      <p className="font-semibold">{formatCurrency(suggestion.amount)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

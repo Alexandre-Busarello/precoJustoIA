@@ -35,12 +35,19 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     
     const filters: any = {};
     
-    // Processar filtro de status - sempre excluir PENDING e REJECTED
+    // Processar filtro de status
+    // Se status=PENDING for explicitamente solicitado, permitir (para contagem de pendentes)
     if (searchParams.get('status')) {
       const statuses = searchParams.get('status')!.split(',');
-      const validStatuses = statuses.filter((s: string) => s !== 'PENDING' && s !== 'REJECTED');
-      if (validStatuses.length > 0) {
-        filters.status = validStatuses.length > 1 ? validStatuses : validStatuses[0];
+      // Se PENDING foi explicitamente solicitado, permitir
+      if (statuses.includes('PENDING')) {
+        filters.status = statuses.length > 1 ? { in: statuses } : 'PENDING';
+      } else {
+        // Caso contrário, excluir PENDING e REJECTED como antes
+        const validStatuses = statuses.filter((s: string) => s !== 'PENDING' && s !== 'REJECTED');
+        if (validStatuses.length > 0) {
+          filters.status = validStatuses.length > 1 ? { in: validStatuses } : validStatuses[0];
+        }
       }
     } else {
       // Por padrão, mostrar apenas CONFIRMED e EXECUTED
@@ -76,10 +83,13 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       ? transactions.filter(tx => tx.type !== excludeType)
       : transactions;
 
-    // Filtrar PENDING e REJECTED como segurança extra
-    const finalTransactions = filteredTransactions.filter((tx: any) => 
-      tx.status !== 'PENDING' && tx.status !== 'REJECTED'
-    );
+    // Filtrar PENDING e REJECTED como segurança extra apenas se não foram explicitamente solicitados
+    const requestedStatus = searchParams.get('status');
+    const finalTransactions = requestedStatus && requestedStatus.includes('PENDING')
+      ? filteredTransactions // Se PENDING foi solicitado, não filtrar
+      : filteredTransactions.filter((tx: any) => 
+          tx.status !== 'PENDING' && tx.status !== 'REJECTED'
+        );
 
     return NextResponse.json({
       transactions: finalTransactions,

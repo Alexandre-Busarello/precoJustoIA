@@ -124,7 +124,12 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
           <CardTitle>Histórico P/L Bovespa</CardTitle>
           {statistics && (
             <div className="text-right text-sm text-muted-foreground">
-              <div>Última atualização: {format(new Date(statistics.lastUpdate), 'dd/MM/yyyy', { locale: ptBR })}</div>
+              <div>Última atualização: {(() => {
+                // Parse a data como YYYY-MM-DD e criar Date object local (sem conversão UTC)
+                const [year, month] = statistics.lastUpdate.split('-').map(Number)
+                const dateObj = new Date(year, month - 1, 1)
+                return format(dateObj, 'MM/yyyy', { locale: ptBR })
+              })()}</div>
               <div className="font-semibold text-foreground">
                 P/L atual: {formatPL(statistics.currentPL)}
               </div>

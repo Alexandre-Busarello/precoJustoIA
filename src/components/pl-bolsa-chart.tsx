@@ -38,10 +38,15 @@ interface PLBolsaChartProps {
 export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
   // Formatar dados para o gráfico
   const chartData = useMemo(() => {
-    return data.map((item) => ({
-      ...item,
-      dateFormatted: format(new Date(item.date), 'MM/yyyy', { locale: ptBR }),
-    }))
+    return data.map((item) => {
+      // Parse a data como YYYY-MM-DD e criar Date object local (sem conversão UTC)
+      const [year, month] = item.date.split('-').map(Number)
+      const dateObj = new Date(year, month - 1, 1)
+      return {
+        ...item,
+        dateFormatted: format(dateObj, 'MM/yyyy', { locale: ptBR }),
+      }
+    })
   }, [data])
 
   // Calcular domínio do eixo Y dinamicamente
@@ -73,8 +78,12 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
   }
 
   // Formatar data no tooltip
+  // Usar parseISO para evitar problemas de timezone
   const formatTooltipDate = (date: string) => {
-    return format(new Date(date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+    // Parse a data como YYYY-MM-DD e criar Date object local (sem conversão UTC)
+    const [year, month, day] = date.split('-').map(Number)
+    const dateObj = new Date(year, month - 1, day)
+    return format(dateObj, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
   }
 
   if (loading) {

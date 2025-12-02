@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Filter, X } from 'lucide-react'
 
@@ -21,7 +20,6 @@ export interface PLBolsaFiltersState {
   endDate: string
   sector: string | undefined
   minScore: number | undefined
-  excludeUnprofitable: boolean
 }
 
 interface PLBolsaFiltersProps {
@@ -60,9 +58,6 @@ export function PLBolsaFilters({
   const [minScoreInput, setMinScoreInput] = useState<string>(
     initialFilters?.minScore?.toString() || ''
   )
-  const [excludeUnprofitable, setExcludeUnprofitable] = useState(
-    initialFilters?.excludeUnprofitable || false
-  )
 
   // Atualizar endDate quando status de login mudar
   useEffect(() => {
@@ -94,14 +89,12 @@ export function PLBolsaFilters({
       endDate: finalEndDate,
       sector,
       minScore,
-      excludeUnprofitable,
     })
-  }, [startDate, endDate, sector, minScore, excludeUnprofitable, isLoggedIn, maxEndDate, onFiltersChange])
+  }, [startDate, endDate, sector, minScore, isLoggedIn, maxEndDate, onFiltersChange])
 
   const hasActiveFilters =
     sector !== undefined ||
     minScore !== undefined ||
-    excludeUnprofitable ||
     startDate !== '2010-01-01' ||
     endDate !== maxEndDate
 
@@ -110,7 +103,6 @@ export function PLBolsaFilters({
     setEndDate(maxEndDate)
     setSector(undefined)
     setMinScore(undefined)
-    setExcludeUnprofitable(false)
   }
 
   return (
@@ -242,22 +234,6 @@ export function PLBolsaFilters({
             </p>
           </div>
 
-          {/* Excluir Não Lucrativas */}
-          <div className="flex items-center space-x-2 pt-8">
-            <Checkbox
-              id="excludeUnprofitable"
-              checked={excludeUnprofitable}
-              onCheckedChange={(checked) =>
-                setExcludeUnprofitable(checked === true)
-              }
-            />
-            <Label
-              htmlFor="excludeUnprofitable"
-              className="text-sm font-normal cursor-pointer"
-            >
-              Excluir empresas não lucrativas
-            </Label>
-          </div>
         </div>
       </CardContent>
     </Card>

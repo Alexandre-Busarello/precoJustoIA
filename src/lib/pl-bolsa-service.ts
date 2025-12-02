@@ -28,7 +28,6 @@ export interface PLBolsaFilters {
   endDate?: Date
   sector?: string
   minScore?: number // 0-100
-  excludeUnprofitable?: boolean
 }
 
 /**
@@ -38,8 +37,7 @@ async function getCachedData(
   startDate: Date,
   endDate: Date,
   sector: string | undefined,
-  minScore: number | undefined,
-  excludeUnprofitable: boolean
+  minScore: number | undefined
 ): Promise<PLBolsaDataPoint[]> {
   const start = new Date(startDate)
   start.setDate(1)
@@ -52,7 +50,7 @@ async function getCachedData(
       gte: start,
       lte: end,
     },
-    excludeUnprofitable,
+    excludeUnprofitable: false, // Sempre false agora (mantido para compatibilidade com banco)
   }
 
   // Tratar campos nullable corretamente
@@ -115,8 +113,7 @@ async function getCachedData(
 async function saveToCache(
   data: PLBolsaDataPoint[],
   sector: string | undefined,
-  minScore: number | undefined,
-  excludeUnprofitable: boolean
+  minScore: number | undefined
 ): Promise<void> {
   // Salvar em lote para melhor performance
   const promises = data.map(async (item) => {
@@ -126,7 +123,7 @@ async function saveToCache(
     // Construir filtros para busca
     const whereClause: any = {
       date: monthStart,
-      excludeUnprofitable,
+      excludeUnprofitable: false, // Sempre false agora (mantido para compatibilidade com banco)
     }
 
     // Adicionar filtros opcionais (null para "todos")
@@ -168,7 +165,7 @@ async function saveToCache(
           companyCount: item.companyCount,
           sector: sector || null,
           minScore: minScore ?? null,
-          excludeUnprofitable,
+          excludeUnprofitable: false, // Sempre false agora (mantido para compatibilidade com banco)
         },
       })
     }
@@ -212,7 +209,6 @@ async function calculateMonthsPL(
   months: Date[],
   companyIds: number[],
   companiesWithScore: Set<number> | null,
-  excludeUnprofitable: boolean,
   initialCumulativeSum: number = 0,
   initialCount: number = 0,
   sector?: string | undefined
@@ -289,22 +285,11 @@ async function calculateMonthsPL(
 
     // Agrupar por companyId e pegar o mais recente
     // IMPORTANTE: Sempre usar o registro mais recente disponível
-    // Se excludeUnprofitable = true, verificar se o registro mais recente tem lucro positivo
     const latestFinancialByCompany = new Map<number, typeof financialData[0]>()
     for (const financial of financialData) {
       if (!latestFinancialByCompany.has(financial.companyId)) {
         // Sempre pegar o registro mais recente primeiro
         latestFinancialByCompany.set(financial.companyId, financial)
-      }
-    }
-
-    // Se excludeUnprofitable = true, remover empresas cujo registro mais recente não tem lucro positivo
-    if (excludeUnprofitable) {
-      for (const [companyId, financial] of latestFinancialByCompany.entries()) {
-        const lucroLiquido = financial.lucroLiquido ? toNumber(financial.lucroLiquido) : null
-        if (lucroLiquido === null || lucroLiquido <= 0) {
-          latestFinancialByCompany.delete(companyId)
-        }
       }
     }
 
@@ -402,7 +387,6 @@ export async function calculateAggregatedPL(
     endDate = new Date(),
     sector,
     minScore,
-    excludeUnprofitable = false
   } = filters
 
   // Normalizar datas para primeiro dia do mês
@@ -420,8 +404,7 @@ export async function calculateAggregatedPL(
     start,
     end,
     sector,
-    minScore,
-    excludeUnprofitable
+    minScore
   )
 
   // Se temos todos os dados em cache, retornar
@@ -524,7 +507,6 @@ export async function calculateAggregatedPL(
     completeMissingMonths,
     companyIds,
     companiesWithScore,
-    excludeUnprofitable,
     initialCumulativeSum,
     initialCount,
     sector
@@ -556,11 +538,11 @@ export async function calculateAggregatedPL(
 
   // 5. Salvar novos dados calculados no cache
   if (calculatedData.length > 0) {
-    await saveToCache(calculatedData, sector, minScore, excludeUnprofitable)
+    await saveToCache(calculatedData, sector, minScore)
     
     // Se recalculamos a média histórica, atualizar todos os registros afetados
     if (validCachedData.length > 0) {
-      await saveToCache(allData, sector, minScore, excludeUnprofitable)
+      await saveToCache(allData, sector, minScore)
     }
   }
 

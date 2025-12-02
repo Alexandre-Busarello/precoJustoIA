@@ -27,7 +27,6 @@ export async function GET(request: NextRequest) {
     const endDateStr = searchParams.get('endDate')
     const sector = searchParams.get('sector') || undefined
     const minScoreStr = searchParams.get('minScore')
-    const excludeUnprofitableStr = searchParams.get('excludeUnprofitable')
 
     // Validar e parsear datas
     let startDate: Date | undefined
@@ -77,10 +76,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Validar excludeUnprofitable
-    const excludeUnprofitable =
-      excludeUnprofitableStr === 'true' || excludeUnprofitableStr === '1'
-
     // Criar chave de cache considerando todos os parâmetros
     const cacheKeyParts = [
       'pl-bolsa',
@@ -88,7 +83,6 @@ export async function GET(request: NextRequest) {
       endDateStr || 'no-end',
       sector || 'all-sectors',
       minScoreStr || 'no-min-score',
-      excludeUnprofitable ? 'exclude-unprofitable' : 'include-all',
       isLoggedIn ? 'logged' : 'anon',
     ]
     const cacheKey = cacheKeyParts.join(':')
@@ -105,7 +99,6 @@ export async function GET(request: NextRequest) {
       endDate,
       sector,
       minScore,
-      excludeUnprofitable,
     }
 
     // Buscar dados
@@ -124,7 +117,6 @@ export async function GET(request: NextRequest) {
         endDate: endDate?.toISOString(),
         sector,
         minScore,
-        excludeUnprofitable,
       },
       requiresLogin: !isLoggedIn && (!endDateStr || new Date(endDateStr) > lastYearEnd),
     }

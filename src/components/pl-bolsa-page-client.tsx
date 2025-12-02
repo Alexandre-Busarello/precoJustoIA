@@ -60,9 +60,6 @@ async function fetchPLBolsaData(
   if (filters.minScore !== undefined) {
     params.append('minScore', filters.minScore.toString())
   }
-  if (filters.excludeUnprofitable) {
-    params.append('excludeUnprofitable', 'true')
-  }
 
   const response = await fetch(`/api/pl-bolsa?${params.toString()}`)
 
@@ -84,7 +81,6 @@ export function PLBolsaPageClient({
     endDate: new Date().toISOString().split('T')[0],
     sector: undefined,
     minScore: undefined,
-    excludeUnprofitable: false,
   })
 
   // Atualizar endDate quando usuário fizer login

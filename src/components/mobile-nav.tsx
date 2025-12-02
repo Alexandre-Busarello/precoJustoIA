@@ -32,7 +32,8 @@ import {
   ChevronRight,
   Settings,
   Rocket,
-  History
+  History,
+  ArrowLeftRight
 } from "lucide-react"
 import {
   Collapsible,
@@ -168,6 +169,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       show: boolean
       description: string
       badge?: string
+      isNew?: boolean
     }>
   }> = [
     {
@@ -211,6 +213,14 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
     {
       label: "Ferramentas",
       items: [
+        {
+          title: "Arbitragem de Dívida",
+          href: "/arbitragem-divida",
+          icon: <ArrowLeftRight className="w-5 h-5" />,
+          show: true,
+          description: "Simule amortizar dívida vs investir em ativos",
+          isNew: true
+        },
         {
           title: "Calculadoras",
           href: "/calculadoras/dividend-yield",
@@ -498,6 +508,8 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                                     ? 'bg-gradient-to-br from-emerald-500 to-teal-500'
                                     : item.href === '/calculadoras/dividend-yield'
                                     ? 'bg-gradient-to-br from-green-500 to-emerald-500'
+                                    : item.href === '/arbitragem-divida'
+                                    ? 'bg-gradient-to-br from-purple-500 to-pink-500'
                                     : 'bg-gradient-to-br from-blue-500 to-purple-500'
                                 }`}>
                                   <div className="text-white text-sm">
@@ -507,6 +519,11 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
                                     <span className="font-medium text-sm">{item.title}</span>
+                                    {item.isNew && (
+                                      <Badge variant="secondary" className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                                        🚀 Novo
+                                      </Badge>
+                                    )}
                                     {item.badge && (
                                       <Badge variant="secondary" className="text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white">
                                         {item.badge}

@@ -1,7 +1,7 @@
 "use client"
 
 import { NavDropdown, NavSection } from "./nav-dropdown"
-import { GitCompare, Building2, TrendingUp, History, Calculator } from "lucide-react"
+import { GitCompare, Building2, TrendingUp, History, Calculator, ArrowLeftRight } from "lucide-react"
 
 const sections: NavSection[] = [
   {
@@ -45,6 +45,14 @@ const sections: NavSection[] = [
   {
     label: "Ferramentas",
     items: [
+      {
+        title: "Arbitragem de Dívida",
+        href: "/arbitragem-divida",
+        icon: ArrowLeftRight,
+        description: "Simule amortizar dívida vs investir em ativos.",
+        isNew: true,
+        iconGradient: "bg-gradient-to-br from-purple-500 to-pink-500",
+      },
       {
         title: "Calculadoras",
         href: "/calculadoras/dividend-yield",

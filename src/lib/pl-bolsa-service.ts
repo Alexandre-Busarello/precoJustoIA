@@ -267,13 +267,12 @@ async function calculateMonthsPL(
     }
 
     // Buscar dados financeiros mais recentes até o mês atual
+    // IMPORTANTE: Buscar TODOS os registros primeiro, ordenar por ano, e DEPOIS aplicar filtro de lucro
+    // Isso garante que pegamos o registro mais recente que atende ao critério
     const financialData = await prisma.financialData.findMany({
       where: {
         companyId: { in: Array.from(pricesByCompany.keys()) },
         year: { lte: month.getFullYear() },
-        ...(excludeUnprofitable && {
-          lucroLiquido: { gt: 0 },
-        }),
       },
       select: {
         companyId: true,
@@ -288,10 +287,18 @@ async function calculateMonthsPL(
       },
     })
 
-    // Agrupar por companyId e pegar o mais recente
+    // Agrupar por companyId e pegar o mais recente que atende ao critério
     const latestFinancialByCompany = new Map<number, typeof financialData[0]>()
     for (const financial of financialData) {
-      if (!latestFinancialByCompany.has(financial.companyId) && financial) {
+      if (!latestFinancialByCompany.has(financial.companyId)) {
+        // Se excludeUnprofitable = true, só aceitar se lucroLiquido > 0
+        if (excludeUnprofitable) {
+          const lucroLiquido = financial.lucroLiquido ? toNumber(financial.lucroLiquido) : null
+          if (lucroLiquido === null || lucroLiquido <= 0) {
+            continue // Pular este registro e procurar um mais antigo com lucro positivo
+          }
+        }
+        // Se chegou aqui, é o registro mais recente que atende ao critério
         latestFinancialByCompany.set(financial.companyId, financial)
       }
     }

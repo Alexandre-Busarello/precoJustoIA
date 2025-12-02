@@ -287,19 +287,24 @@ async function calculateMonthsPL(
       },
     })
 
-    // Agrupar por companyId e pegar o mais recente que atende ao critério
+    // Agrupar por companyId e pegar o mais recente
+    // IMPORTANTE: Sempre usar o registro mais recente disponível
+    // Se excludeUnprofitable = true, verificar se o registro mais recente tem lucro positivo
     const latestFinancialByCompany = new Map<number, typeof financialData[0]>()
     for (const financial of financialData) {
       if (!latestFinancialByCompany.has(financial.companyId)) {
-        // Se excludeUnprofitable = true, só aceitar se lucroLiquido > 0
-        if (excludeUnprofitable) {
-          const lucroLiquido = financial.lucroLiquido ? toNumber(financial.lucroLiquido) : null
-          if (lucroLiquido === null || lucroLiquido <= 0) {
-            continue // Pular este registro e procurar um mais antigo com lucro positivo
-          }
-        }
-        // Se chegou aqui, é o registro mais recente que atende ao critério
+        // Sempre pegar o registro mais recente primeiro
         latestFinancialByCompany.set(financial.companyId, financial)
+      }
+    }
+
+    // Se excludeUnprofitable = true, remover empresas cujo registro mais recente não tem lucro positivo
+    if (excludeUnprofitable) {
+      for (const [companyId, financial] of latestFinancialByCompany.entries()) {
+        const lucroLiquido = financial.lucroLiquido ? toNumber(financial.lucroLiquido) : null
+        if (lucroLiquido === null || lucroLiquido <= 0) {
+          latestFinancialByCompany.delete(companyId)
+        }
       }
     }
 

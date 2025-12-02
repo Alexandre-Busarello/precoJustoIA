@@ -162,6 +162,9 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
                   if (name === 'averagePl') {
                     return [formatPL(value), 'Média']
                   }
+                  if (name === 'companyCount') {
+                    return [`${value} empresas`, 'Empresas']
+                  }
                   return [value, name]
                 }}
                 labelFormatter={(label: string) => {
@@ -170,6 +173,44 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
                     return formatTooltipDate(item.date)
                   }
                   return label
+                }}
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length > 0) {
+                    const item = chartData.find((d) => d.dateFormatted === label)
+                    return (
+                      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-3">
+                        <p className="font-semibold mb-2">
+                          {item ? formatTooltipDate(item.date) : label}
+                        </p>
+                        {payload.map((entry: any, index: number) => {
+                          if (entry.dataKey === 'pl') {
+                            return (
+                              <p key={index} className="text-sm">
+                                <span className="text-slate-600 dark:text-slate-400">P/L: </span>
+                                <span className="font-semibold">{formatPL(entry.value)}</span>
+                              </p>
+                            )
+                          }
+                          if (entry.dataKey === 'averagePl') {
+                            return (
+                              <p key={index} className="text-sm">
+                                <span className="text-slate-600 dark:text-slate-400">Média: </span>
+                                <span className="font-semibold">{formatPL(entry.value)}</span>
+                              </p>
+                            )
+                          }
+                          return null
+                        })}
+                        {item && (
+                          <p className="text-sm mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                            <span className="text-slate-600 dark:text-slate-400">Empresas consideradas: </span>
+                            <span className="font-semibold">{item.companyCount}</span>
+                          </p>
+                        )}
+                      </div>
+                    )
+                  }
+                  return null
                 }}
                 contentStyle={{
                   backgroundColor: 'rgba(255, 255, 255, 0.95)',

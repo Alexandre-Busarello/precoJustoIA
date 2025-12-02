@@ -94,25 +94,14 @@ async function getCachedData(
     minScore: item.minScore,
   }))
 
-  // Filtrar registros inválidos:
-  // 1. Meses incompletos (futuros)
-  // 2. Registros sem filtros com menos de 200 empresas
+  // Filtrar apenas meses incompletos (futuros)
+  // Não há mais limitação de número mínimo de empresas
   return mapped.filter((item: { date: string; pl: number; averagePl: number; companyCount: number; sector: string | null; minScore: number | null }) => {
     const itemDate = new Date(item.date)
     itemDate.setDate(1)
     
     // Verificar se o mês está completo
-    if (!isMonthComplete(itemDate)) {
-      return false
-    }
-    
-    // Apenas para registros SEM filtros (sem setor e sem minScore), exigir mínimo de 200 empresas
-    // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
-    if (!item.sector && item.minScore === null && item.companyCount < 200) {
-      return false
-    }
-    
-    return true
+    return isMonthComplete(itemDate)
   }).map((item: { date: string; pl: number; averagePl: number; companyCount: number; sector: string | null; minScore: number | null }) => {
     // Remover campos auxiliares antes de retornar
     const { sector: _sector, minScore: _minScore, ...rest } = item
@@ -226,7 +215,6 @@ async function calculateMonthsPL(
   excludeUnprofitable: boolean,
   initialCumulativeSum: number = 0,
   initialCount: number = 0,
-  minCompaniesRequired: number = 200,
   sector?: string | undefined
 ): Promise<PLBolsaDataPoint[]> {
   const results: PLBolsaDataPoint[] = []
@@ -367,19 +355,9 @@ async function calculateMonthsPL(
       validCompanies++
     }
 
-    // Validar número mínimo de empresas antes de incluir no resultado
-    // Apenas para registros SEM filtros (sem setor e sem minScore), exigir mínimo de 200 empresas
-    // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
+    // Não há mais limitação de número mínimo de empresas
+    // Apenas garantir que temos dados válidos
     if (totalMarketCap > 0 && validCompanies > 0) {
-      // Verificar se é um registro sem filtros (sem setor e sem minScore)
-      const isUnfiltered = !companiesWithScore && !sector
-      
-      // Se não temos empresas suficientes E é um registro sem filtros, não incluir este mês
-      // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
-      if (isUnfiltered && validCompanies < minCompaniesRequired) {
-        console.log(`[PL Bolsa] Pulando mês ${month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} - apenas ${validCompanies} empresas válidas (mínimo: ${minCompaniesRequired} para registros sem filtros)`)
-        continue
-      }
 
       const aggregatedPL = totalWeightedPL / totalMarketCap
 
@@ -454,23 +432,14 @@ export async function calculateAggregatedPL(
     (m) => !cachedMonths.has(m.getTime())
   )
 
-  // Filtrar dados do cache para remover registros inválidos
+  // Filtrar apenas meses incompletos (futuros)
+  // Não há mais limitação de número mínimo de empresas
   const validCachedData = cachedData.filter((item) => {
     const itemDate = new Date(item.date)
     itemDate.setDate(1)
     
     // Verificar se o mês está completo
-    if (!isMonthComplete(itemDate)) {
-      return false
-    }
-    
-    // Apenas para registros SEM filtros (sem setor e sem minScore), exigir mínimo de 200 empresas
-    // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
-    if (!sector && (minScore === undefined || minScore === null) && item.companyCount < 200) {
-      return false
-    }
-    
-    return true
+    return isMonthComplete(itemDate)
   })
 
   // Se não há meses faltantes, retornar cache filtrado
@@ -546,7 +515,6 @@ export async function calculateAggregatedPL(
     excludeUnprofitable,
     initialCumulativeSum,
     initialCount,
-    200, // Número mínimo de empresas: 200 (apenas para registros sem filtros)
     sector
   )
 

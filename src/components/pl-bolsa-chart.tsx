@@ -77,13 +77,12 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
     return `${value.toFixed(2)}x`
   }
 
-  // Formatar data no tooltip
-  // Usar parseISO para evitar problemas de timezone
+  // Formatar data no tooltip (apenas mês e ano)
   const formatTooltipDate = (date: string) => {
     // Parse a data como YYYY-MM-DD e criar Date object local (sem conversão UTC)
-    const [year, month, day] = date.split('-').map(Number)
-    const dateObj = new Date(year, month - 1, day)
-    return format(dateObj, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+    const [year, month] = date.split('-').map(Number)
+    const dateObj = new Date(year, month - 1, 1)
+    return format(dateObj, "MMMM 'de' yyyy", { locale: ptBR })
   }
 
   if (loading) {

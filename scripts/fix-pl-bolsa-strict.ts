@@ -1,7 +1,7 @@
 /**
- * Script para corrigir o banco de dados do P/L histórico da BOLSA
+ * Script para corrigir o banco de dados do P/L histórico da BOLSA com critérios mais rigorosos
  * 
- * Remove registros de meses incompletos (futuros) e recalcula novembro se necessário
+ * Remove registros com muito poucas empresas mesmo em setores específicos
  */
 
 import * as dotenv from 'dotenv';
@@ -25,7 +25,6 @@ function isMonthComplete(month: Date): boolean {
   }
   
   // Se estamos no mês atual, verificar se já passou pelo menos 3 dias do mês seguinte
-  // (para garantir que temos dados do último dia útil do mês anterior)
   const nextMonthStart = new Date(month.getFullYear(), month.getMonth() + 1, 1)
   const daysSinceNextMonth = Math.floor((now.getTime() - nextMonthStart.getTime()) / (1000 * 60 * 60 * 24))
   
@@ -36,9 +35,31 @@ function isMonthComplete(month: Date): boolean {
   return true
 }
 
-async function fixDatabase() {
+/**
+ * Determina o número mínimo de empresas necessário baseado nos filtros
+ */
+function getMinCompaniesRequired(record: any): number {
+  // Sem filtros: mínimo 200 empresas
+  if (!record.sector && record.minScore === null) {
+    return 200
+  }
+  
+  // Com filtro de setor: mínimo 10 empresas (setores podem ser pequenos)
+  if (record.sector) {
+    return 10
+  }
+  
+  // Com filtro de score: mínimo 20 empresas
+  if (record.minScore !== null) {
+    return 20
+  }
+  
+  return 200 // Padrão
+}
+
+async function fixDatabaseStrict() {
   try {
-    console.log('🔧 Corrigindo banco de dados do P/L histórico da BOLSA');
+    console.log('🔧 Corrigindo banco de dados do P/L histórico da BOLSA (critérios rigorosos)');
     console.log('='.repeat(80));
 
     // Buscar todos os registros
@@ -50,56 +71,56 @@ async function fixDatabase() {
 
     console.log(`\n📊 Total de registros no banco: ${allRecords.length}`);
 
-    // Identificar registros de meses incompletos
-    const incompleteRecords: any[] = [];
-    const completeRecords: any[] = [];
+    // Identificar registros problemáticos
+    const problematicRecords: any[] = [];
+    const validRecords: any[] = [];
 
     for (const record of allRecords) {
       const recordDate = new Date(record.date);
       recordDate.setDate(1); // Normalizar para primeiro dia do mês
       
-      if (!isMonthComplete(recordDate)) {
-        incompleteRecords.push(record);
+      const minRequired = getMinCompaniesRequired(record);
+      const isComplete = isMonthComplete(recordDate);
+      
+      // Verificar se o registro é problemático
+      if (!isComplete) {
+        problematicRecords.push(record);
+        console.log(`   ⚠️  Mês incompleto: ${recordDate.toISOString().split('T')[0]} | Empresas: ${record.companyCount}`);
+      } else if (record.companyCount < minRequired) {
+        problematicRecords.push(record);
+        console.log(`   ⚠️  Poucas empresas: ${recordDate.toISOString().split('T')[0]} | Empresas: ${record.companyCount} (mínimo: ${minRequired}) | Setor: ${record.sector || 'todos'} | MinScore: ${record.minScore ?? 'nenhum'}`);
       } else {
-        // Verificar número mínimo de empresas baseado nos filtros
-        let minCompaniesRequired = 200; // Padrão para registros sem filtros
-        
-        if (record.sector) {
-          // Para setores específicos, exigir pelo menos 10 empresas
-          minCompaniesRequired = 10;
-        } else if (record.minScore !== null) {
-          // Para filtros de score, exigir pelo menos 20 empresas
-          minCompaniesRequired = 20;
-        }
-        
-        if (record.companyCount < minCompaniesRequired) {
-          incompleteRecords.push(record);
-          console.log(`   ⚠️  Registro com poucas empresas: ${recordDate.toISOString().split('T')[0]} - ${record.companyCount} empresas (mínimo: ${minCompaniesRequired}) | Setor: ${record.sector || 'todos'} | MinScore: ${record.minScore ?? 'nenhum'}`);
-        } else {
-          completeRecords.push(record);
-        }
+        validRecords.push(record);
       }
     }
 
-    console.log(`\n📊 Registros completos: ${completeRecords.length}`);
-    console.log(`📊 Registros incompletos a remover: ${incompleteRecords.length}`);
+    console.log(`\n📊 Registros válidos: ${validRecords.length}`);
+    console.log(`📊 Registros problemáticos a remover: ${problematicRecords.length}`);
 
-    if (incompleteRecords.length > 0) {
-      console.log(`\n🗑️  Removendo registros incompletos...`);
+    if (problematicRecords.length > 0) {
+      console.log(`\n🗑️  Removendo registros problemáticos...`);
       
-      for (const record of incompleteRecords) {
+      let removedCount = 0;
+      for (const record of problematicRecords) {
         const recordDate = new Date(record.date);
         const pl = toNumber(record.pl);
-        console.log(`   Removendo: ${recordDate.toISOString().split('T')[0]} | P/L: ${pl?.toFixed(2)}x | Empresas: ${record.companyCount} | Setor: ${record.sector || 'todos'} | MinScore: ${record.minScore ?? 'nenhum'}`);
+        const minRequired = getMinCompaniesRequired(record);
         
-        await (backgroundPrisma as any).plBolsaHistory.delete({
-          where: { id: record.id },
-        });
+        console.log(`   Removendo: ${recordDate.toISOString().split('T')[0]} | P/L: ${pl?.toFixed(2)}x | Empresas: ${record.companyCount} (mín: ${minRequired}) | Setor: ${record.sector || 'todos'} | MinScore: ${record.minScore ?? 'nenhum'}`);
+        
+        try {
+          await (backgroundPrisma as any).plBolsaHistory.delete({
+            where: { id: record.id },
+          });
+          removedCount++;
+        } catch (error: any) {
+          console.log(`   ⚠️  Erro ao remover registro ${record.id}: ${error.message}`);
+        }
       }
       
-      console.log(`\n✅ ${incompleteRecords.length} registro(s) removido(s) com sucesso!`);
+      console.log(`\n✅ ${removedCount} registro(s) removido(s) com sucesso!`);
     } else {
-      console.log(`\n✅ Nenhum registro incompleto encontrado!`);
+      console.log(`\n✅ Nenhum registro problemático encontrado!`);
     }
 
     // Verificar novembro/2025 especificamente
@@ -116,7 +137,7 @@ async function fixDatabase() {
       },
     });
 
-    console.log(`\n📅 Verificando registros de novembro/2025:`);
+    console.log(`\n📅 Verificando registros de novembro/2025 (sem filtros):`);
     console.log(`   Total encontrado: ${novemberRecords.length}`);
 
     if (novemberRecords.length > 0) {
@@ -125,34 +146,6 @@ async function fixDatabase() {
         const avgPl = toNumber(record.averagePl);
         console.log(`   ${record.date.toISOString().split('T')[0]} | P/L: ${pl?.toFixed(2)}x | Média: ${avgPl?.toFixed(2)}x | Empresas: ${record.companyCount}`);
       });
-
-      // Verificar se há registros com poucas empresas
-      // Para registros sem filtros, exigir 200+ empresas
-      // Para setores específicos, exigir 10+ empresas
-      // Para filtros de score, exigir 20+ empresas
-      const problematicRecords = novemberRecords.filter((r: any) => {
-        let minRequired = 200;
-        if (r.sector) minRequired = 10;
-        else if (r.minScore !== null) minRequired = 20;
-        return r.companyCount < minRequired;
-      });
-
-      if (problematicRecords.length > 0) {
-        console.log(`\n⚠️  Encontrados ${problematicRecords.length} registro(s) problemático(s) em novembro:`);
-        problematicRecords.forEach((record: any) => {
-          const pl = toNumber(record.pl);
-          console.log(`   ${record.date.toISOString().split('T')[0]} | P/L: ${pl?.toFixed(2)}x | Empresas: ${record.companyCount}`);
-        });
-        console.log(`\n   Esses registros serão removidos e recalculados...`);
-        
-        for (const record of problematicRecords) {
-          await (backgroundPrisma as any).plBolsaHistory.delete({
-            where: { id: record.id },
-          });
-        }
-        
-        console.log(`\n✅ Registros problemáticos removidos. Eles serão recalculados automaticamente na próxima requisição.`);
-      }
     }
 
     // Verificar o último mês completo disponível
@@ -196,7 +189,7 @@ async function fixDatabase() {
   }
 }
 
-fixDatabase()
+fixDatabaseStrict()
   .then(() => {
     console.log('\n✅ Script finalizado com sucesso');
     process.exit(0);

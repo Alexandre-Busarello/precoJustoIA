@@ -75,12 +75,49 @@ async function getCachedData(
     },
   })
 
-  return cached.map((item: { date: Date; pl: Decimal; averagePl: Decimal; companyCount: number }) => ({
+  // Converter e filtrar dados inválidos
+  interface CachedItem {
+    date: Date
+    pl: Decimal
+    averagePl: Decimal
+    companyCount: number
+    sector: string | null
+    minScore: number | null
+  }
+
+  const mapped = cached.map((item: CachedItem) => ({
     date: item.date.toISOString().split('T')[0],
     pl: toNumber(item.pl) || 0,
     averagePl: toNumber(item.averagePl) || 0,
     companyCount: item.companyCount,
+    sector: item.sector,
+    minScore: item.minScore,
   }))
+
+  // Filtrar registros inválidos:
+  // 1. Meses incompletos (futuros)
+  // 2. Registros sem filtros com menos de 200 empresas
+  return mapped.filter((item: { date: string; pl: number; averagePl: number; companyCount: number; sector: string | null; minScore: number | null }) => {
+    const itemDate = new Date(item.date)
+    itemDate.setDate(1)
+    
+    // Verificar se o mês está completo
+    if (!isMonthComplete(itemDate)) {
+      return false
+    }
+    
+    // Apenas para registros SEM filtros (sem setor e sem minScore), exigir mínimo de 200 empresas
+    // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
+    if (!item.sector && item.minScore === null && item.companyCount < 200) {
+      return false
+    }
+    
+    return true
+  }).map((item: { date: string; pl: number; averagePl: number; companyCount: number; sector: string | null; minScore: number | null }) => {
+    // Remover campos auxiliares antes de retornar
+    const { sector: _sector, minScore: _minScore, ...rest } = item
+    return rest as PLBolsaDataPoint
+  })
 }
 
 /**
@@ -189,7 +226,8 @@ async function calculateMonthsPL(
   excludeUnprofitable: boolean,
   initialCumulativeSum: number = 0,
   initialCount: number = 0,
-  minCompaniesRequired: number = 200
+  minCompaniesRequired: number = 200,
+  sector?: string | undefined
 ): Promise<PLBolsaDataPoint[]> {
   const results: PLBolsaDataPoint[] = []
   let cumulativePLSum = initialCumulativeSum
@@ -330,10 +368,16 @@ async function calculateMonthsPL(
     }
 
     // Validar número mínimo de empresas antes de incluir no resultado
+    // Apenas para registros SEM filtros (sem setor e sem minScore), exigir mínimo de 200 empresas
+    // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
     if (totalMarketCap > 0 && validCompanies > 0) {
-      // Se não temos empresas suficientes, não incluir este mês
-      if (validCompanies < minCompaniesRequired) {
-        console.log(`[PL Bolsa] Pulando mês ${month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} - apenas ${validCompanies} empresas válidas (mínimo: ${minCompaniesRequired})`)
+      // Verificar se é um registro sem filtros (sem setor e sem minScore)
+      const isUnfiltered = !companiesWithScore && !sector
+      
+      // Se não temos empresas suficientes E é um registro sem filtros, não incluir este mês
+      // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
+      if (isUnfiltered && validCompanies < minCompaniesRequired) {
+        console.log(`[PL Bolsa] Pulando mês ${month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} - apenas ${validCompanies} empresas válidas (mínimo: ${minCompaniesRequired} para registros sem filtros)`)
         continue
       }
 
@@ -410,9 +454,28 @@ export async function calculateAggregatedPL(
     (m) => !cachedMonths.has(m.getTime())
   )
 
-  // Se não há meses faltantes, retornar cache
+  // Filtrar dados do cache para remover registros inválidos
+  const validCachedData = cachedData.filter((item) => {
+    const itemDate = new Date(item.date)
+    itemDate.setDate(1)
+    
+    // Verificar se o mês está completo
+    if (!isMonthComplete(itemDate)) {
+      return false
+    }
+    
+    // Apenas para registros SEM filtros (sem setor e sem minScore), exigir mínimo de 200 empresas
+    // Setores específicos e filtros de score podem ter poucas empresas e isso é normal
+    if (!sector && (minScore === undefined || minScore === null) && item.companyCount < 200) {
+      return false
+    }
+    
+    return true
+  })
+
+  // Se não há meses faltantes, retornar cache filtrado
   if (missingMonths.length === 0) {
-    return cachedData
+    return validCachedData
   }
 
   // 2. Buscar empresas STOCK (necessário para calcular meses faltantes)
@@ -455,10 +518,10 @@ export async function calculateAggregatedPL(
   let initialCumulativeSum = 0
   let initialCount = 0
   
-  if (cachedData.length > 0) {
+  if (validCachedData.length > 0) {
     // Calcular soma acumulada e contador dos meses em cache anteriores aos faltantes
     const firstMissingMonth = missingMonths[0]?.getTime()
-    const previousCached = cachedData.filter((d) => {
+    const previousCached = validCachedData.filter((d) => {
       const date = new Date(d.date)
       date.setDate(1)
       return date.getTime() < (firstMissingMonth || Infinity)
@@ -483,15 +546,16 @@ export async function calculateAggregatedPL(
     excludeUnprofitable,
     initialCumulativeSum,
     initialCount,
-    200 // Número mínimo de empresas: 200
+    200, // Número mínimo de empresas: 200 (apenas para registros sem filtros)
+    sector
   )
 
-  // 4. Combinar cache + novos dados calculados
+  // 4. Combinar cache filtrado + novos dados calculados
   let allData: PLBolsaDataPoint[] = []
   
-  if (cachedData.length > 0) {
+  if (validCachedData.length > 0) {
     // Combinar e ordenar por data
-    allData = [...cachedData, ...calculatedData].sort((a, b) => 
+    allData = [...validCachedData, ...calculatedData].sort((a, b) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     )
     
@@ -515,7 +579,7 @@ export async function calculateAggregatedPL(
     await saveToCache(calculatedData, sector, minScore, excludeUnprofitable)
     
     // Se recalculamos a média histórica, atualizar todos os registros afetados
-    if (cachedData.length > 0) {
+    if (validCachedData.length > 0) {
       await saveToCache(allData, sector, minScore, excludeUnprofitable)
     }
   }

@@ -187,16 +187,20 @@ function isMonthComplete(month: Date): boolean {
     return false
   }
   
-  // Se estamos no mês atual, verificar se já passou pelo menos 3 dias do mês seguinte
-  // (para garantir que temos dados do último dia útil do mês anterior)
-  const nextMonthStart = new Date(month.getFullYear(), month.getMonth() + 1, 1)
-  const daysSinceNextMonth = Math.floor((now.getTime() - nextMonthStart.getTime()) / (1000 * 60 * 60 * 24))
+  // Se já estamos no mês seguinte, considerar o mês como completo
+  // (mesmo que ainda estejamos no início do mês seguinte)
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+  const monthToCheck = month.getMonth()
+  const yearToCheck = month.getFullYear()
   
-  if (daysSinceNextMonth < 3) {
-    return false
+  // Se o mês a verificar é anterior ao mês atual, está completo
+  if (yearToCheck < currentYear || (yearToCheck === currentYear && monthToCheck < currentMonth)) {
+    return true
   }
   
-  return true
+  // Se estamos no mesmo mês, não está completo ainda
+  return false
 }
 
 /**

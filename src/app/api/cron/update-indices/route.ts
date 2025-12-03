@@ -474,7 +474,8 @@ async function runScreeningJob(): Promise<{
 
       // 4. Verificar se deve rebalancear
       const threshold = config.rebalance?.threshold || 0.05;
-      const shouldRebalanceIndex = shouldRebalance(currentComposition, validatedComposition, threshold);
+      const upsideType = config.rebalance?.upsideType || 'best';
+      const shouldRebalanceIndex = shouldRebalance(currentComposition, validatedComposition, threshold, upsideType);
 
       if (shouldRebalanceIndex && changes.length > 0) {
         // Gerar motivo detalhado do rebalanceamento antes de atualizar
@@ -483,7 +484,8 @@ async function runScreeningJob(): Promise<{
           currentComposition,
           validatedComposition,
           threshold,
-          config.rebalance?.checkQuality || false
+          config.rebalance?.checkQuality || false,
+          upsideType
         );
         
         console.log(`    📋 ${index.ticker}: Motivo do rebalanceamento: ${rebalanceReason}`);

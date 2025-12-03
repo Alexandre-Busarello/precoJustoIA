@@ -14,9 +14,25 @@ export interface CompanyUpsideData {
   ticker: string;
   currentPrice: number;
   fairValue: number | null;
-  upside: number | null; // (fairValue - currentPrice) / currentPrice
+  upside: number | null; // Melhor upside disponível (compatibilidade)
   overallScore: number | null;
   dividendYield: number | null;
+  // Upsides por tipo de estratégia
+  upsides: {
+    graham: number | null;
+    fcd: number | null;
+    gordon: number | null;
+    barsi: number | null;
+    technical: number | null; // Preço Justo da Análise Técnica
+  };
+  // Fair values por tipo de estratégia
+  fairValues: {
+    graham: number | null;
+    fcd: number | null;
+    gordon: number | null;
+    barsi: number | null;
+    technical: number | null;
+  };
 }
 
 export interface AverageVolumeData {
@@ -94,41 +110,94 @@ export async function calculateUpside(ticker: string): Promise<CompanyUpsideData
       includeBreakdown: false
     });
 
-    // 4. Tentar calcular fairValue usando múltiplas estratégias
+    // 4. Calcular fairValue e upside para cada estratégia disponível
+    const upsides: {
+      graham: number | null;
+      fcd: number | null;
+      gordon: number | null;
+      barsi: number | null;
+      technical: number | null;
+    } = {
+      graham: null,
+      fcd: null,
+      gordon: null,
+      barsi: null,
+      technical: null
+    };
+
+    const fairValues: {
+      graham: number | null;
+      fcd: number | null;
+      gordon: number | null;
+      barsi: number | null;
+      technical: number | null;
+    } = {
+      graham: null,
+      fcd: null,
+      gordon: null,
+      barsi: null,
+      technical: null
+    };
+
+    // Graham (sempre disponível)
+    if (analysisResult.strategies.graham?.fairValue) {
+      const grahamFairValue = analysisResult.strategies.graham.fairValue;
+      fairValues.graham = grahamFairValue;
+      upsides.graham = grahamFairValue ? ((grahamFairValue - currentPrice) / currentPrice) * 100 : null;
+    }
+
+    // FCD (se disponível)
+    if (analysisResult.strategies.fcd?.fairValue) {
+      const fcdFairValue = analysisResult.strategies.fcd.fairValue;
+      fairValues.fcd = fcdFairValue;
+      upsides.fcd = fcdFairValue ? ((fcdFairValue - currentPrice) / currentPrice) * 100 : null;
+    }
+
+    // Gordon (se disponível)
+    if (analysisResult.strategies.gordon?.fairValue) {
+      const gordonFairValue = analysisResult.strategies.gordon.fairValue;
+      fairValues.gordon = gordonFairValue;
+      upsides.gordon = gordonFairValue ? ((gordonFairValue - currentPrice) / currentPrice) * 100 : null;
+    }
+
+    // Barsi (se disponível)
+    if (analysisResult.strategies.barsi?.fairValue) {
+      const barsiFairValue = analysisResult.strategies.barsi.fairValue;
+      fairValues.barsi = barsiFairValue;
+      upsides.barsi = barsiFairValue ? ((barsiFairValue - currentPrice) / currentPrice) * 100 : null;
+    }
+
+    // Análise Técnica (Preço Justo da Análise Técnica)
+    try {
+      const { getOrCalculateTechnicalAnalysis } = await import('./technical-analysis-service');
+      const technicalAnalysis = await getOrCalculateTechnicalAnalysis(ticker, false, true);
+      if (technicalAnalysis?.aiFairEntryPrice) {
+        const technicalFairValue = technicalAnalysis.aiFairEntryPrice;
+        fairValues.technical = technicalFairValue;
+        upsides.technical = technicalFairValue ? ((technicalFairValue - currentPrice) / currentPrice) * 100 : null;
+      }
+    } catch (error) {
+      // Ignorar erro ao buscar análise técnica
+    }
+
+    // Calcular melhor upside disponível (para compatibilidade)
     let bestFairValue: number | null = null;
     let bestUpside: number | null = null;
 
-    // Tentar Graham primeiro (sempre disponível)
-    if (analysisResult.strategies.graham?.fairValue) {
-      const grahamFairValue = analysisResult.strategies.graham.fairValue;
-      const grahamUpside = grahamFairValue ? ((grahamFairValue - currentPrice) / currentPrice) * 100 : null;
-      
-      if (grahamFairValue && grahamUpside !== null) {
-        bestFairValue = grahamFairValue;
-        bestUpside = grahamUpside;
-      }
-    }
+    const allUpsides = [
+      { type: 'graham', value: upsides.graham, fairValue: fairValues.graham },
+      { type: 'fcd', value: upsides.fcd, fairValue: fairValues.fcd },
+      { type: 'gordon', value: upsides.gordon, fairValue: fairValues.gordon },
+      { type: 'barsi', value: upsides.barsi, fairValue: fairValues.barsi },
+      { type: 'technical', value: upsides.technical, fairValue: fairValues.technical }
+    ].filter(u => u.value !== null && u.value !== undefined);
 
-    // Tentar FCD (se disponível)
-    if (analysisResult.strategies.fcd?.fairValue) {
-      const fcdFairValue = analysisResult.strategies.fcd.fairValue;
-      const fcdUpside = fcdFairValue ? ((fcdFairValue - currentPrice) / currentPrice) * 100 : null;
-      
-      if (fcdFairValue && fcdUpside !== null && (bestUpside === null || fcdUpside > bestUpside)) {
-        bestFairValue = fcdFairValue;
-        bestUpside = fcdUpside;
-      }
-    }
-
-    // Tentar Gordon (se disponível)
-    if (analysisResult.strategies.gordon?.fairValue) {
-      const gordonFairValue = analysisResult.strategies.gordon.fairValue;
-      const gordonUpside = gordonFairValue ? ((gordonFairValue - currentPrice) / currentPrice) * 100 : null;
-      
-      if (gordonFairValue && gordonUpside !== null && (bestUpside === null || gordonUpside > bestUpside)) {
-        bestFairValue = gordonFairValue;
-        bestUpside = gordonUpside;
-      }
+    if (allUpsides.length > 0) {
+      const best = allUpsides.reduce((best, current) => 
+        (current.value || 0) > (best.value || 0) ? current : best
+      );
+      bestUpside = best.value;
+      bestFairValue = best.fairValue;
     }
 
     // 5. Extrair dividend yield
@@ -143,7 +212,9 @@ export async function calculateUpside(ticker: string): Promise<CompanyUpsideData
       fairValue: bestFairValue,
       upside: bestUpside,
       overallScore,
-      dividendYield: dividendYield ? dividendYield * 100 : null // Converter para porcentagem
+      dividendYield: dividendYield ? dividendYield * 100 : null, // Converter para porcentagem
+      upsides,
+      fairValues
     };
   } catch (error) {
     console.error(`❌ [INDEX INTEGRATION] Error calculating upside for ${ticker}:`, error);

@@ -52,6 +52,7 @@ export interface IndexConfig {
   rebalance?: {
     threshold?: number; // Threshold de upside para troca (ex: 0.05 = 5%)
     checkQuality?: boolean; // Verificar qualidade antes de trocar
+    upsideType?: 'graham' | 'fcd' | 'gordon' | 'barsi' | 'technical' | 'best'; // Tipo de upside a usar no threshold (padrão: 'best' = melhor disponível)
   };
   diversification?: {
     type?: 'allocation' | 'maxCount'; // Tipo de diversificação
@@ -74,12 +75,20 @@ export interface ScreeningCandidate {
   name: string;
   sector: string | null; // Setor da empresa
   currentPrice: number;
-  upside: number | null;
+  upside: number | null; // Melhor upside disponível (compatibilidade)
   overallScore: number | null;
   dividendYield: number | null;
   marketCap: number | null;
   averageDailyVolume: number | null;
   technicalMargin: number | null; // Margem técnica: diferença percentual entre preço atual e preço justo técnico ((currentPrice - aiFairEntryPrice) / aiFairEntryPrice * 100)
+  // Upsides por tipo de estratégia
+  upsides?: {
+    graham: number | null;
+    fcd: number | null;
+    gordon: number | null;
+    barsi: number | null;
+    technical: number | null;
+  };
   debug?: {
     scoreCalculationFailed: boolean;
     error?: string;
@@ -274,6 +283,13 @@ export async function runScreening(
         marketCap: toNumber(financials.marketCap),
         averageDailyVolume: null,
         technicalMargin: null,
+        upsides: {
+          graham: null,
+          fcd: null,
+          gordon: null,
+          barsi: null,
+          technical: null
+        },
         debug: undefined // Será preenchido durante cálculo do score
       });
     }
@@ -350,6 +366,14 @@ export async function runScreening(
       if (upside) {
         candidate.upside = upside.upside;
         candidate.dividendYield = upside.dividendYield;
+        // Preencher upsides por tipo
+        candidate.upsides = upside.upsides || {
+          graham: null,
+          fcd: null,
+          gordon: null,
+          barsi: null,
+          technical: null
+        };
       }
 
       // Aplicar filtro de upside positivo se configurado
@@ -808,7 +832,15 @@ export async function runScreening(
           strategyCandidatesMap.set(result.ticker, {
             ...originalCandidate,
             upside: result.upside,
-            overallScore: result.key_metrics?.overallScore || originalCandidate.overallScore
+            overallScore: result.key_metrics?.overallScore || originalCandidate.overallScore,
+            // Preservar upsides do candidato original
+            upsides: originalCandidate.upsides || {
+              graham: null,
+              fcd: null,
+              gordon: null,
+              barsi: null,
+              technical: null
+            }
           });
         }
 
@@ -1253,6 +1285,53 @@ function applyDiversification(
 }
 
 /**
+ * Obtém o upside correto baseado no tipo especificado no config
+ * Se não especificado ou 'best', retorna o melhor disponível
+ */
+function getUpsideForRebalance(
+  candidate: ScreeningCandidate,
+  upsideType?: 'graham' | 'fcd' | 'gordon' | 'barsi' | 'technical' | 'best'
+): number | null {
+  // Se não há upsides por tipo, usar o upside padrão (compatibilidade)
+  if (!candidate.upsides) {
+    return candidate.upside;
+  }
+
+  // Se não especificado ou 'best', retornar o melhor disponível
+  if (!upsideType || upsideType === 'best') {
+    const allUpsides = [
+      candidate.upsides.graham,
+      candidate.upsides.fcd,
+      candidate.upsides.gordon,
+      candidate.upsides.barsi,
+      candidate.upsides.technical
+    ].filter(u => u !== null && u !== undefined) as number[];
+
+    if (allUpsides.length === 0) {
+      return candidate.upside; // Fallback para upside padrão
+    }
+
+    return Math.max(...allUpsides);
+  }
+
+  // Retornar o upside do tipo especificado
+  switch (upsideType) {
+    case 'graham':
+      return candidate.upsides.graham ?? candidate.upside;
+    case 'fcd':
+      return candidate.upsides.fcd ?? candidate.upside;
+    case 'gordon':
+      return candidate.upsides.gordon ?? candidate.upside;
+    case 'barsi':
+      return candidate.upsides.barsi ?? candidate.upside;
+    case 'technical':
+      return candidate.upsides.technical ?? candidate.upside;
+    default:
+      return candidate.upside;
+  }
+}
+
+/**
  * Compara composição atual com resultado ideal do screening
  */
 export function compareComposition(
@@ -1306,7 +1385,8 @@ export function generateRebalanceReason(
   current: Array<{ assetTicker: string }>,
   ideal: ScreeningCandidate[],
   threshold: number,
-  hasQualityFilter: boolean
+  hasQualityFilter: boolean,
+  upsideType?: 'graham' | 'fcd' | 'gordon' | 'barsi' | 'technical' | 'best'
 ): string {
   const currentTickers = new Set(current.map(c => c.assetTicker));
   const idealTickers = new Set(ideal.map(c => c.ticker));
@@ -1331,13 +1411,16 @@ export function generateRebalanceReason(
   if (entries.length > 0 && current.length > 0) {
     const currentInIdeal = ideal.filter(c => currentTickers.has(c.ticker));
     if (currentInIdeal.length > 0) {
-      const lastCurrentUpside = currentInIdeal[currentInIdeal.length - 1]?.upside;
-      const firstNewUpside = entries[0]?.upside;
+      const lastCurrentUpside = getUpsideForRebalance(currentInIdeal[currentInIdeal.length - 1], upsideType);
+      const firstNewUpside = getUpsideForRebalance(entries[0], upsideType);
       
       if (firstNewUpside !== null && firstNewUpside !== undefined && lastCurrentUpside !== null) {
         const upsideDiff = firstNewUpside - lastCurrentUpside;
         if (upsideDiff > threshold * 100) {
-          reasons.push(`novo ativo com upside ${upsideDiff.toFixed(1)}% superior ao último da lista atual (threshold: ${(threshold * 100).toFixed(0)}%)`);
+          const upsideTypeLabel = upsideType && upsideType !== 'best' 
+            ? ` (${upsideType === 'fcd' ? 'FCD' : upsideType === 'technical' ? 'Análise Técnica' : upsideType.charAt(0).toUpperCase() + upsideType.slice(1)})`
+            : '';
+          reasons.push(`novo ativo com upside${upsideTypeLabel} ${upsideDiff.toFixed(1)}% superior ao último da lista atual (threshold: ${(threshold * 100).toFixed(0)}%)`);
         }
       }
     }
@@ -1508,7 +1591,8 @@ export async function filterByQuality(
 export function shouldRebalance(
   current: Array<{ assetTicker: string; entryPrice: number }>,
   ideal: ScreeningCandidate[],
-  threshold: number = 0.05
+  threshold: number = 0.05,
+  upsideType?: 'graham' | 'fcd' | 'gordon' | 'barsi' | 'technical' | 'best'
 ): boolean {
   // Se há mudanças na composição, sempre rebalancear
   const currentTickers = new Set(current.map(c => c.assetTicker));
@@ -1532,8 +1616,9 @@ export function shouldRebalance(
       return true;
     }
 
-    const lastCurrentUpside = currentInIdeal[currentInIdeal.length - 1]?.upside;
-    const firstNewUpside = ideal.find(c => !currentTickers.has(c.ticker))?.upside;
+    const lastCurrentUpside = getUpsideForRebalance(currentInIdeal[currentInIdeal.length - 1], upsideType);
+    const firstNewCandidate = ideal.find(c => !currentTickers.has(c.ticker));
+    const firstNewUpside = firstNewCandidate ? getUpsideForRebalance(firstNewCandidate, upsideType) : null;
 
     if (firstNewUpside !== null && firstNewUpside !== undefined && lastCurrentUpside !== null) {
       const upsideDiff = firstNewUpside - lastCurrentUpside;

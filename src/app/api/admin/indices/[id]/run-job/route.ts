@@ -99,7 +99,8 @@ export async function POST(
           // Verificar se deve rebalancear
           const config = index.config as any;
           const threshold = config.rebalance?.threshold || 0.05;
-          const shouldRebalanceResult = shouldRebalance(currentComposition, idealComposition, threshold);
+          const upsideType = config.rebalance?.upsideType || 'best';
+          const shouldRebalanceResult = shouldRebalance(currentComposition, idealComposition, threshold, upsideType);
 
           if (shouldRebalanceResult && changes.length > 0) {
             // Gerar motivo detalhado do rebalanceamento
@@ -107,7 +108,8 @@ export async function POST(
               currentComposition,
               idealComposition,
               threshold,
-              config.rebalance?.checkQuality || false
+              config.rebalance?.checkQuality || false,
+              upsideType
             );
             
             // Atualizar composição com motivo

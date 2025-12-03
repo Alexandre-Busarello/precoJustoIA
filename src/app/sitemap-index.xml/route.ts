@@ -27,6 +27,10 @@ export async function GET() {
     <loc>${baseUrl}/sitemap-technical-analysis.xml</loc>
     <lastmod>${currentDate}</lastmod>
   </sitemap>
+  <sitemap>
+    <loc>${baseUrl}/sitemap-indices.xml</loc>
+    <lastmod>${currentDate}</lastmod>
+  </sitemap>
 </sitemapindex>`
 
   return new NextResponse(sitemapIndex, {

@@ -1,67 +1,50 @@
 /**
  * Dashboard de Índices IPJ
  * Lista todos os índices disponíveis
+ * Otimizado para SEO com palavras-chave: carteira teórica fundamentalista, índice teórico da bolsa
  */
 
-'use client';
+import { Metadata } from 'next'
+import { Card, CardContent } from '@/components/ui/card'
+import { IndexCard } from '@/components/indices/index-card'
+import { IndexDisclaimer } from '@/components/indices/index-disclaimer'
+import { TrendingUp } from 'lucide-react'
+import { getIndicesList } from '@/lib/index-data'
+import { IndicesClient } from '@/components/indices/indices-client'
 
-import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { IndexCard } from '@/components/indices/index-card';
-import { IndexDisclaimer } from '@/components/indices/index-disclaimer';
-import { TrendingUp, Loader2 } from 'lucide-react';
-
-interface IndexData {
-  id: string;
-  ticker: string;
-  name: string;
-  description: string;
-  color: string;
-  currentPoints: number;
-  accumulatedReturn: number;
-  currentYield: number | null;
-  assetCount: number;
-  lastUpdate: string | null;
+export const metadata: Metadata = {
+  title: 'Índices Teóricos da Bolsa | Carteiras Teóricas Fundamentalistas | Preço Justo',
+  description: 'Acompanhe carteiras teóricas automatizadas baseadas em análise fundamentalista quantitativa. Índices teóricos da bolsa brasileira com rebalanceamento automático e performance histórica. Compare com IBOV e CDI.',
+  keywords: [
+    'índice teórico da bolsa',
+    'carteira teórica fundamentalista',
+    'carteiras automatizadas',
+    'análise fundamentalista quantitativa',
+    'rebalanceamento automático',
+    'índices B3',
+    'carteira de ações',
+    'investimento quantitativo',
+    'screening fundamentalista',
+    'portfólio teórico'
+  ],
+  openGraph: {
+    title: 'Índices Teóricos da Bolsa | Carteiras Teóricas Fundamentalistas',
+    description: 'Acompanhe carteiras teóricas automatizadas baseadas em análise fundamentalista quantitativa. Índices teóricos da bolsa brasileira com rebalanceamento automático.',
+    type: 'website',
+    url: 'https://precojusto.ai/indices',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Índices Teóricos da Bolsa | Carteiras Teóricas Fundamentalistas',
+    description: 'Acompanhe carteiras teóricas automatizadas baseadas em análise fundamentalista quantitativa.',
+  },
+  alternates: {
+    canonical: 'https://precojusto.ai/indices',
+  },
 }
 
-async function fetchIndices(): Promise<IndexData[]> {
-  const response = await fetch('/api/indices');
-  if (!response.ok) {
-    throw new Error('Erro ao buscar índices');
-  }
-  const data = await response.json();
-  return data.indices || [];
-}
-
-export default function IndicesPage() {
-  const { data: indices, isLoading, error } = useQuery<IndexData[]>({
-    queryKey: ['indices'],
-    queryFn: fetchIndices,
-    refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000 // 5 minutos
-  });
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardContent className="pt-6">
-            <p className="text-red-600 dark:text-red-400">
-              Erro ao carregar índices. Tente novamente mais tarde.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+export default async function IndicesPage() {
+  const indices = await getIndicesList()
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
@@ -72,8 +55,11 @@ export default function IndicesPage() {
             <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             <h1 className="text-3xl font-bold">Índices Preço Justo</h1>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
-            Carteiras teóricas automatizadas baseadas em algoritmos quantitativos
+          <p className="text-gray-600 dark:text-gray-400 text-lg">
+            Carteiras teóricas automatizadas baseadas em algoritmos quantitativos de análise fundamentalista
+          </p>
+          <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
+            Acompanhe índices teóricos da bolsa brasileira com rebalanceamento automático e compare a performance com IBOV e CDI
           </p>
         </div>
 
@@ -84,21 +70,40 @@ export default function IndicesPage() {
 
         {/* Lista de Índices */}
         {indices && indices.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {indices.map((index) => (
-              <IndexCard
-                key={index.id}
-                ticker={index.ticker}
-                name={index.name}
-                color={index.color}
-                currentPoints={index.currentPoints}
-                accumulatedReturn={index.accumulatedReturn}
-                currentYield={index.currentYield}
-                assetCount={index.assetCount}
-                sparklineData={[]} // Será preenchido quando tivermos histórico
-              />
-            ))}
-          </div>
+          <>
+            <IndicesClient initialIndices={indices.map(idx => ({
+              ...idx,
+              lastUpdate: idx.lastUpdate ? idx.lastUpdate.toISOString() : null,
+            }))} />
+            {/* Structured Data para SEO */}
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: JSON.stringify({
+                  '@context': 'https://schema.org',
+                  '@type': 'CollectionPage',
+                  name: 'Índices Teóricos da Bolsa',
+                  description: 'Carteiras teóricas automatizadas baseadas em análise fundamentalista quantitativa',
+                  url: 'https://precojusto.ai/indices',
+                  mainEntity: {
+                    '@type': 'ItemList',
+                    numberOfItems: indices.length,
+                    itemListElement: indices.map((index, indexNum) => ({
+                      '@type': 'ListItem',
+                      position: indexNum + 1,
+                      item: {
+                        '@type': 'FinancialProduct',
+                        name: index.name,
+                        tickerSymbol: index.ticker,
+                        description: index.description,
+                        url: `https://precojusto.ai/indices/${index.ticker.toLowerCase()}`,
+                      },
+                    })),
+                  },
+                }),
+              }}
+            />
+          </>
         ) : (
           <Card>
             <CardContent className="pt-6">
@@ -110,6 +115,5 @@ export default function IndicesPage() {
         )}
       </div>
     </div>
-  );
+  )
 }
-

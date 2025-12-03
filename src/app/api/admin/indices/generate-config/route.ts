@@ -108,7 +108,8 @@ Você deve retornar APENAS um objeto JSON válido (sem markdown, sem explicaçõ
   },
   "rebalance": {
     "threshold": 0.05,
-    "checkQuality": true
+    "checkQuality": true,
+    "upsideType": "best"
   },
   "diversification": {
     "type": "allocation|maxCount",
@@ -210,7 +211,24 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
 **REBALANCEAMENTO**:
 
 - threshold: Diferença mínima de upside para trocar ativo (decimal, ex: 0.05 = 5%)
+  - Aplicado apenas quando não há entrada/saída de ativos na composição
+  - Quando há entrada/saída de ativos, o rebalanceamento sempre ocorre (threshold não aplicado)
+  - Quando não há mudanças na composição, compara a diferença entre o upside do primeiro ativo novo e o último ativo atual
 - checkQuality: Se deve verificar qualidade antes de trocar (boolean)
+- upsideType: Tipo de upside a usar no threshold (opcional, padrão: "best")
+  - "best": Usa o melhor upside disponível entre todos os tipos (padrão recomendado)
+  - "graham": Usa apenas o upside calculado pela estratégia Graham (value investing)
+  - "fcd": Usa apenas o upside calculado pelo Fluxo de Caixa Descontado (DCF)
+  - "gordon": Usa apenas o upside calculado pelo modelo de crescimento de dividendos de Gordon
+  - "barsi": Usa apenas o upside calculado pelo Método Barsi (preço teto baseado em dividendos)
+  - "technical": Usa apenas o upside baseado no Preço Justo da Análise Técnica (aiFairEntryPrice)
+  - Quando usar tipos específicos:
+    - Use "graham" para índices focados em value investing
+    - Use "fcd" para índices focados em análise de fluxo de caixa
+    - Use "gordon" para índices focados em dividendos crescentes
+    - Use "barsi" para índices focados em dividendos com preço teto
+    - Use "technical" para índices focados em análise técnica/timing de entrada
+    - Use "best" (ou omita) para índices gerais que querem aproveitar o melhor upside disponível
 
 **DIVERSIFICAÇÃO POR SETOR**:
 
@@ -236,7 +254,7 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
   - Filtros adicionais (upside positivo, análise técnica, etc.)
   - Processo de seleção e ordenação
   - Sistema de pesos
-  - Regras de rebalanceamento
+  - Regras de rebalanceamento (inclua o tipo de upside usado se diferente de "best")
   - Modelo de cálculo (Total Return com reinvestimento automático de dividendos)
   - OBRIGATÓRIO: Sempre gere uma metodologia completa e detalhada
 
@@ -260,7 +278,7 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
   },
   "selection": { "topN": 15, "orderBy": "upside", "orderDirection": "desc" },
   "weights": { "type": "equal", "value": 0.0667 },
-  "rebalance": { "threshold": 0.05, "checkQuality": true },
+  "rebalance": { "threshold": 0.05, "checkQuality": true, "upsideType": "best" },
   "filters": { "requirePositiveUpside": true }
 }
 
@@ -282,7 +300,7 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
   },
   "selection": { "topN": 20, "orderBy": "dy", "orderDirection": "desc" },
   "weights": { "type": "equal", "value": 0.05 },
-  "rebalance": { "threshold": 0.05, "checkQuality": true }
+  "rebalance": { "threshold": 0.05, "checkQuality": true, "upsideType": "best" }
 }
 
 "Índice de BOAS SMALL CAPS com potencial de crescimento. Market CAP maior que 500 milhões e menor que 5 Bilhões"
@@ -305,7 +323,7 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
   },
   "selection": { "topN": 15, "orderBy": "overallScore", "orderDirection": "desc" },
   "weights": { "type": "overallScore", "minWeight": 0.03, "maxWeight": 0.12 },
-  "rebalance": { "threshold": 0.05, "checkQuality": true }
+  "rebalance": { "threshold": 0.05, "checkQuality": true, "upsideType": "best" }
 }
 
 "Índice baseado em análise técnica, empresas com score > 50 que estão abaixo do preço justo técnico"
@@ -331,7 +349,7 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
   },
   "selection": { "topN": 15, "orderBy": "technicalMargin", "orderDirection": "asc" },
   "weights": { "type": "equal", "value": 0.0667 },
-  "rebalance": { "threshold": 0.05, "checkQuality": true }
+  "rebalance": { "threshold": 0.05, "checkQuality": true, "upsideType": "technical" }
 }
 
 Analise a instrução e retorne APENAS o JSON válido:`;

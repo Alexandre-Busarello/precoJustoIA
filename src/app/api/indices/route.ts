@@ -8,6 +8,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Revalidar a API a cada 60 segundos (1 minuto)
+// Isso permite cache para performance, mas garante que novos índices apareçam em até 1 minuto
+export const revalidate = 60;
+
 export async function GET(request: NextRequest) {
   try {
     const indices = await prisma.indexDefinition.findMany({

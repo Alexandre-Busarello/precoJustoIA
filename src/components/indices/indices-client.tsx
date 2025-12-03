@@ -33,8 +33,9 @@ export function IndicesClient({ initialIndices }: IndicesClientProps) {
   const { data: indices = initialIndices } = useQuery<IndexData[]>({
     queryKey: ['indices'],
     queryFn: fetchIndices,
-    refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    refetchOnWindowFocus: true, // Refetch quando a janela recebe foco
+    refetchOnMount: true, // Refetch quando o componente monta
+    staleTime: 30 * 1000, // 30 segundos (reduzido para atualizar mais rápido)
     initialData: initialIndices,
   })
 

@@ -5,6 +5,10 @@
  */
 
 import { Metadata } from 'next'
+
+// Revalidar a página a cada 60 segundos (1 minuto)
+// Isso permite cache para performance, mas garante que novos índices apareçam em até 1 minuto
+export const revalidate = 60
 import { notFound } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

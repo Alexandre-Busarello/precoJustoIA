@@ -79,6 +79,8 @@ Você deve retornar APENAS um objeto JSON válido (sem markdown, sem explicaçõ
     "payout": { "lte": 0.30 },
     "marketCap": { "gte": 1000000000 },
     "overallScore": { "gte": 60 },
+    "pl": { "lte": 15 },
+    "pvp": { "lte": 2.0 },
     "strategy": {
       "type": "graham|fcd|dividendYield|lowPE|magicFormula|gordon|fundamentalist|barsi|ai|screening",
       "params": {}
@@ -148,6 +150,8 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
 - overallScore: Score Geral mínimo/máximo (0-100) - Use para garantir qualidade mínima (ex: gte: 50)
 - payout: Payout mínimo/máximo (decimal, ex: 0.30 = 30%) - Use para empresas de crescimento (payout baixo) ou dividendos (payout alto)
 - marketCap: Market Cap mínimo/máximo em R$ (ex: 500000000 = R$ 500 milhões, 5000000000 = R$ 5 bilhões)
+- pl: P/L (Price to Earnings) mínimo/máximo (decimal, ex: { "lte": 15 } = P/L <= 15) - Use para empresas baratas em relação ao lucro
+- pvp: P/VP (Price to Book Value) mínimo/máximo (decimal, ex: { "lte": 2.0 } = P/VP <= 2.0) - Use para empresas baratas em relação ao patrimônio
 
 **Estratégias (Use APENAS quando o usuário solicitar explicitamente)**:
 - strategy: Seleção por estratégia específica (OPCIONAL)
@@ -160,12 +164,14 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
 1. Se o usuário não mencionar uma estratégia específica, NÃO inclua o campo "strategy"
 2. Sempre inclua filtros básicos de qualidade (roe, margemLiquida, dividaLiquidaEbitda, overallScore) quando apropriado para o tipo de índice
 3. Para índices de crescimento: use payout baixo (lte: 0.30), roe alto (gte: 0.15), overallScore alto (gte: 70)
-4. Para índices de valor: use roe moderado (gte: 0.10), dividaLiquidaEbitda baixo (lte: 3.0), overallScore moderado (gte: 50), requirePositiveUpside: true
+4. Para índices de valor: use roe moderado (gte: 0.10), dividaLiquidaEbitda baixo (lte: 3.0), overallScore moderado (gte: 50), pl baixo (lte: 15), pvp baixo (lte: 2.0), requirePositiveUpside: true
 5. Para índices de dividendos: use payout alto, dy alto, overallScore moderado
 6. Para índices técnicos: use technicalFairValue.enabled: true, requireBelowFairPrice: true, requireAboveMinPrice: true, orderBy: "technicalMargin", orderDirection: "asc"
 7. MarketCap deve sempre ser incluído quando mencionado pelo usuário
 8. Se o usuário mencionar "upside positivo", "empresas descontadas" ou similar, inclua requirePositiveUpside: true
 9. Se o usuário mencionar "análise técnica", "preço justo técnico", "timing" ou "oportunidades técnicas", inclua filtros técnicos apropriados
+10. Se o usuário mencionar "P/L baixo", "empresas baratas", "valor justo" ou similar, inclua pl com limite máximo (ex: { "lte": 15 })
+11. Se o usuário mencionar "P/VP baixo", "preço abaixo do patrimônio", "valor contábil" ou similar, inclua pvp com limite máximo (ex: { "lte": 2.0 })
 
 **CRITÉRIOS DE SELEÇÃO**:
 

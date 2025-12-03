@@ -26,6 +26,8 @@ export interface IndexConfig {
     overallScore?: { gte?: number; lte?: number };
     payout?: { gte?: number; lte?: number };
     marketCap?: { gte?: number; lte?: number }; // Market Cap em R$ (ex: 1000000000 = R$ 1 bilhão)
+    pl?: { gte?: number; lte?: number }; // P/L (Price to Earnings) - ex: { "lte": 15 } = P/L <= 15
+    pvp?: { gte?: number; lte?: number }; // P/VP (Price to Book Value) - ex: { "lte": 2.0 } = P/VP <= 2.0
     strategy?: {
       type: 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'fundamentalist' | 'barsi' | 'ai' | 'screening';
       params?: any; // Parâmetros específicos da estratégia
@@ -262,6 +264,36 @@ export async function runScreening(
               passesQuality = false;
             }
             if (config.quality.marketCap.lte !== undefined && marketCap > config.quality.marketCap.lte) {
+              passesQuality = false;
+            }
+          }
+        }
+
+        // P/L (Price to Earnings)
+        if (config.quality.pl) {
+          const pl = toNumber(financials.pl);
+          if (pl === null) {
+            passesQuality = false;
+          } else {
+            if (config.quality.pl.gte !== undefined && pl < config.quality.pl.gte) {
+              passesQuality = false;
+            }
+            if (config.quality.pl.lte !== undefined && pl > config.quality.pl.lte) {
+              passesQuality = false;
+            }
+          }
+        }
+
+        // P/VP (Price to Book Value)
+        if (config.quality.pvp) {
+          const pvp = toNumber(financials.pvp);
+          if (pvp === null) {
+            passesQuality = false;
+          } else {
+            if (config.quality.pvp.gte !== undefined && pvp < config.quality.pvp.gte) {
+              passesQuality = false;
+            }
+            if (config.quality.pvp.lte !== undefined && pvp > config.quality.pvp.lte) {
               passesQuality = false;
             }
           }
@@ -1533,6 +1565,34 @@ export async function validateCandidateQuality(
         return false;
       }
       if (config.quality.marketCap.lte !== undefined && marketCap > config.quality.marketCap.lte) {
+        return false;
+      }
+    }
+
+    // Validar P/L (Price to Earnings)
+    if (config.quality.pl) {
+      const pl = toNumber(financials.pl);
+      if (pl === null) {
+        return false;
+      }
+      if (config.quality.pl.gte !== undefined && pl < config.quality.pl.gte) {
+        return false;
+      }
+      if (config.quality.pl.lte !== undefined && pl > config.quality.pl.lte) {
+        return false;
+      }
+    }
+
+    // Validar P/VP (Price to Book Value)
+    if (config.quality.pvp) {
+      const pvp = toNumber(financials.pvp);
+      if (pvp === null) {
+        return false;
+      }
+      if (config.quality.pvp.gte !== undefined && pvp < config.quality.pvp.gte) {
+        return false;
+      }
+      if (config.quality.pvp.lte !== undefined && pvp > config.quality.pvp.lte) {
         return false;
       }
     }

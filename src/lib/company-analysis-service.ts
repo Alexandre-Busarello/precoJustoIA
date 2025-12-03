@@ -337,7 +337,17 @@ export async function executeCompanyAnalysis(
 
   // Calcular score geral (com breakdown se solicitado)
   const includeBreakdown = options.includeBreakdown || false;
-  const overallScore = isPremium ? calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData, includeBreakdown) : null;
+  let overallScore: OverallScore | null = null;
+  
+  if (isPremium) {
+    try {
+      overallScore = calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData, includeBreakdown);
+    } catch (error) {
+      console.error(`❌ [COMPANY ANALYSIS] Erro ao calcular overallScore para ${companyData.ticker}:`, error);
+      // Retornar null em caso de erro, mas não propagar exceção
+      overallScore = null;
+    }
+  }
 
   // Ajustar scores das estratégias baseado no breakdown se disponível
   // Isso garante que os scores exibidos na interface sejam os mesmos usados no cálculo final

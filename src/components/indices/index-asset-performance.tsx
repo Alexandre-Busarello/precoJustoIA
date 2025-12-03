@@ -1,0 +1,289 @@
+/**
+ * Componente: Performance Individual de Ativos do Índice
+ * Mostra tabela com todos os ativos que passaram pelo índice e suas performances
+ */
+
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+
+interface AssetPerformance {
+  ticker: string;
+  entryDate: string;
+  exitDate: string | null;
+  entryPrice: number;
+  exitPrice: number | null;
+  daysInIndex: number;
+  totalReturn: number | null;
+  contributionToIndex: number;
+  averageWeight: number;
+  status: 'ACTIVE' | 'EXITED';
+  firstSnapshotDate: string;
+  lastSnapshotDate: string;
+}
+
+interface IndexAssetPerformanceProps {
+  ticker: string;
+}
+
+async function fetchAssetPerformance(ticker: string): Promise<AssetPerformance[]> {
+  const response = await fetch(`/api/indices/${ticker}/asset-performance`);
+  if (!response.ok) {
+    throw new Error('Erro ao buscar performance de ativos');
+  }
+  const data = await response.json();
+  return data.performances || [];
+}
+
+export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
+  const [filter, setFilter] = useState<'ALL' | 'ACTIVE' | 'EXITED'>('ALL');
+  const [sortBy, setSortBy] = useState<'entryDate' | 'totalReturn' | 'contribution' | 'days'>('entryDate');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  const { data: performances, isLoading, error } = useQuery({
+    queryKey: ['index-asset-performance', ticker],
+    queryFn: () => fetchAssetPerformance(ticker),
+    refetchOnWindowFocus: false
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Performance Individual dos Ativos</CardTitle>
+          <CardDescription>Rastreamento de rentabilidade de cada ativo que passou pelo índice</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Performance Individual dos Ativos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-destructive">Erro ao carregar performance dos ativos</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!performances || performances.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Performance Individual dos Ativos</CardTitle>
+          <CardDescription>Rastreamento de rentabilidade de cada ativo que passou pelo índice</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Nenhum dado de performance disponível ainda.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Filtrar performances
+  const filteredPerformances = performances.filter(perf => {
+    if (filter === 'ACTIVE') return perf.status === 'ACTIVE';
+    if (filter === 'EXITED') return perf.status === 'EXITED';
+    return true;
+  });
+
+  // Ordenar performances
+  const sortedPerformances = [...filteredPerformances].sort((a, b) => {
+    let aValue: number | string | null = null;
+    let bValue: number | string | null = null;
+
+    switch (sortBy) {
+      case 'entryDate':
+        aValue = a.entryDate;
+        bValue = b.entryDate;
+        break;
+      case 'totalReturn':
+        aValue = a.totalReturn ?? -Infinity;
+        bValue = b.totalReturn ?? -Infinity;
+        break;
+      case 'contribution':
+        aValue = a.contributionToIndex;
+        bValue = b.contributionToIndex;
+        break;
+      case 'days':
+        aValue = a.daysInIndex;
+        bValue = b.daysInIndex;
+        break;
+    }
+
+    if (aValue === null && bValue === null) return 0;
+    if (aValue === null) return 1;
+    if (bValue === null) return -1;
+
+    const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  };
+
+  const formatPercent = (value: number | null) => {
+    if (value === null) return 'N/A';
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${value.toFixed(2)}%`;
+  };
+
+  const getReturnColor = (value: number | null) => {
+    if (value === null) return 'text-muted-foreground';
+    if (value > 0) return 'text-green-600 dark:text-green-400';
+    if (value < 0) return 'text-red-600 dark:text-red-400';
+    return 'text-muted-foreground';
+  };
+
+  const getReturnIcon = (value: number | null) => {
+    if (value === null) return <Minus className="h-4 w-4" />;
+    if (value > 0) return <TrendingUp className="h-4 w-4" />;
+    if (value < 0) return <TrendingDown className="h-4 w-4" />;
+    return <Minus className="h-4 w-4" />;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Performance Individual dos Ativos</CardTitle>
+        <CardDescription>
+          Rastreamento completo de rentabilidade de cada ativo que passou pelo índice
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {/* Filtros */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground">Filtrar:</span>
+            <Button
+              variant={filter === 'ALL' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter('ALL')}
+            >
+              Todos ({performances.length})
+            </Button>
+            <Button
+              variant={filter === 'ACTIVE' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter('ACTIVE')}
+            >
+              Ativos ({performances.filter(p => p.status === 'ACTIVE').length})
+            </Button>
+            <Button
+              variant={filter === 'EXITED' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter('EXITED')}
+            >
+              Removidos ({performances.filter(p => p.status === 'EXITED').length})
+            </Button>
+          </div>
+
+          {/* Controles de ordenação */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground">Ordenar por:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="text-sm border rounded px-2 py-1"
+            >
+              <option value="entryDate">Data de Entrada</option>
+              <option value="totalReturn">Rentabilidade</option>
+              <option value="contribution">Contribuição</option>
+              <option value="days">Dias no Índice</option>
+            </select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+            >
+              {sortDirection === 'asc' ? '↑ Crescente' : '↓ Decrescente'}
+            </Button>
+          </div>
+
+          {/* Tabela */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ticker</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Entrada</TableHead>
+                  <TableHead>Saída</TableHead>
+                  <TableHead>Dias</TableHead>
+                  <TableHead>Preço Entrada</TableHead>
+                  <TableHead>Preço Saída</TableHead>
+                  <TableHead className="text-right">Rentabilidade</TableHead>
+                  <TableHead className="text-right">Contribuição</TableHead>
+                  <TableHead className="text-right">Peso Médio</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedPerformances.map((perf) => (
+                  <TableRow key={perf.ticker}>
+                    <TableCell className="font-medium">{perf.ticker}</TableCell>
+                    <TableCell>
+                      <Badge variant={perf.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                        {perf.status === 'ACTIVE' ? 'Ativo' : 'Removido'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {new Date(perf.entryDate).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {perf.exitDate ? new Date(perf.exitDate).toLocaleDateString('pt-BR') : '-'}
+                    </TableCell>
+                    <TableCell>{perf.daysInIndex}</TableCell>
+                    <TableCell>{formatCurrency(perf.entryPrice)}</TableCell>
+                    <TableCell>
+                      {perf.exitPrice ? formatCurrency(perf.exitPrice) : '-'}
+                    </TableCell>
+                    <TableCell className={`text-right font-medium ${getReturnColor(perf.totalReturn)}`}>
+                      <div className="flex items-center justify-end gap-1">
+                        {getReturnIcon(perf.totalReturn)}
+                        {formatPercent(perf.totalReturn)}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatPercent(perf.contributionToIndex)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(perf.averageWeight * 100).toFixed(2)}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {sortedPerformances.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Nenhum ativo encontrado com o filtro selecionado.
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+

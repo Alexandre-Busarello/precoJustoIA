@@ -100,7 +100,14 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   
   // Arbitragem Inteligente de Dívida
   'debt': 'debts',
-  'userSimulationConfig': 'user_simulation_configs'
+  'userSimulationConfig': 'user_simulation_configs',
+  
+  // Índices Preço Justo (IPJ)
+  'indexDefinition': 'index_definitions',
+  'indexComposition': 'index_compositions',
+  'indexHistoryPoints': 'index_history_points',
+  'indexRebalanceLog': 'index_rebalance_logs',
+  'indexCronCheckpoint': 'index_cron_checkpoints'
 }
 
 // Mapeamento de dependências entre tabelas
@@ -170,7 +177,14 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   'asset_technical_analysis': ['companies', 'asset_technical_analysis'],
   
   // Sistema de processamento
-  'ticker_processing_status': ['companies', 'ticker_processing_status']
+  'ticker_processing_status': ['companies', 'ticker_processing_status'],
+  
+  // Índices Preço Justo (IPJ)
+  'index_definitions': ['index_definitions', 'index_compositions', 'index_history_points', 'index_rebalance_logs'],
+  'index_compositions': ['index_definitions', 'index_compositions', 'companies', 'daily_quotes'],
+  'index_history_points': ['index_definitions', 'index_history_points', 'daily_quotes'],
+  'index_rebalance_logs': ['index_definitions', 'index_rebalance_logs'],
+  'index_cron_checkpoints': ['index_cron_checkpoints']
 }
 
 // Padrões de queries que devem ser cacheadas

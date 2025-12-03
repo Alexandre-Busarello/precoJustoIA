@@ -270,11 +270,8 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     // Portanto, NÃO devemos subtrair a dívida líquida novamente (seria dupla contagem)
     const enterpriseValue = presentValueCashflows + presentValueTerminal;
     
-    console.log(`[FCD DEBUG calculateFCDFairValue] Enterprise Value:`, enterpriseValue);
-    
     // 6. Preço Justo por Ação = Enterprise Value / Número de Ações
     const pricePerShare = enterpriseValue / sharesOutstanding;
-    console.log(`[FCD DEBUG calculateFCDFairValue] Preço por ação:`, pricePerShare, '(EV:', enterpriseValue, '/ Shares:', sharesOutstanding, ')');
     return pricePerShare;
   }
   

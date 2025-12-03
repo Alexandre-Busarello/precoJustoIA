@@ -32,9 +32,10 @@ import {
 export async function generateMetadata({
   params,
 }: {
-  params: { ticker: string };
+  params: Promise<{ ticker: string }>;
 }): Promise<Metadata> {
-  const ticker = params.ticker.toUpperCase();
+  const { ticker: tickerParam } = await params;
+  const ticker = tickerParam.toUpperCase();
 
   const company = await prisma.company.findUnique({
     where: { ticker },
@@ -60,9 +61,10 @@ export async function generateMetadata({
 export default async function EntendendoScorePage({
   params,
 }: {
-  params: { ticker: string };
+  params: Promise<{ ticker: string }>;
 }) {
-  const ticker = params.ticker.toUpperCase();
+  const { ticker: tickerParam } = await params;
+  const ticker = tickerParam.toUpperCase();
 
   // Verificar sessão e status Premium
   const session = await getServerSession(authOptions);

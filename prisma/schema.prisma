@@ -1833,3 +1833,124 @@ enum NotificationSegmentType {
   SUPPORT_TICKET_USERS // Usuários que abriram ticket recentemente (SupportTicket)
   EMAIL_LIST // Lista específica de emails (segmentConfig.emails: string[])
 }
+
+// ===== ÍNDICES PREÇO JUSTO (IPJ) =====
+
+// Checkpoint para rastrear progresso dos cron jobs
+model IndexCronCheckpoint {
+  id                   String   @id @default(uuid())
+  jobType              String // 'mark-to-market' ou 'screening'
+  indexId              String?  @map("index_id") // null = checkpoint global
+  lastProcessedIndexId String?  @map("last_processed_index_id")
+  processedCount       Int      @default(0) @map("processed_count")
+  totalCount           Int      @default(0) @map("total_count")
+  errors               Json     @default("[]") // Array de strings
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@unique([jobType, indexId])
+  @@index([jobType])
+  @@map("index_cron_checkpoints")
+}
+
+// Definição da Regra do Índice (A "Fórmula")
+// Essa formula deve levar em conta todos os dados da tabela companies e suas associações (relações)
+model IndexDefinition {
+  id          String @id @default(uuid())
+  ticker      String @unique // Ex: "IPJ-VALUE"
+  name        String // Ex: "Índice Preço Justo Value"
+  description String
+  color       String // Hex code para gráficos
+  methodology String @db.Text // Texto explicando a regra (Compliance)
+
+  // Configuração JSON para a Engine criar novos índices facilmente
+  // Ex: { "type": "VALUE", "min_liquidity": 2000000, "top_n": 10 }
+  config Json
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  history       IndexHistoryPoints[]
+  composition   IndexComposition[]
+  rebalanceLogs IndexRebalanceLog[]
+
+  @@index([ticker])
+  @@index([createdAt])
+  @@map("index_definitions")
+}
+
+// A Carteira Atual (Snapshot do que compõe o índice HOJE)
+model IndexComposition {
+  id          String @id @default(uuid())
+  indexId     String @map("index_id")
+  assetTicker String @map("asset_ticker") // Ex: "BBAS3"
+
+  // Peso Alvo (ex: 0.10). Usado para rebalanceamento.
+  targetWeight Float @map("target_weight")
+
+  // Dados estáticos de entrada para fins de histórico/comparação
+  entryPrice Float    @map("entry_price")
+  entryDate  DateTime @default(now()) @map("entry_date")
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  definition IndexDefinition @relation(fields: [indexId], references: [id], onDelete: Cascade)
+
+  @@unique([indexId, assetTicker])
+  @@index([indexId])
+  @@index([assetTicker])
+  @@map("index_compositions")
+}
+
+// Série Temporal (Para plotar o gráfico de performance)
+model IndexHistoryPoints {
+  id          String   @id @default(uuid())
+  indexId     String   @map("index_id")
+  date        DateTime @db.Date // Data do pregão
+  points      Float // Valor do índice (ex: 102.54)
+  dailyChange Float    @map("daily_change") // Variação % do dia (ex: 1.2%)
+
+  // Cache do Yield para exibir na UI sem recálculo
+  currentYield Float? @map("current_yield") // Média ponderada do DY da carteira neste dia
+
+  // Dividendos recebidos no dia
+  dividendsReceived Decimal? @map("dividends_received") @db.Decimal(15, 6) // Total de dividendos recebidos no dia (em pontos do índice)
+  dividendsByTicker Json?    @map("dividends_by_ticker") // Detalhamento de dividendos por ticker: { "PETR4": 0.15, "VALE3": 0.08 }
+
+  // Snapshot da composição neste dia (para rastrear performance individual)
+  compositionSnapshot Json? @map("composition_snapshot") // { "PETR4": { weight: 0.10, price: 25.50, entryPrice: 24.00, entryDate: "2024-01-01" }, ... }
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+
+  definition IndexDefinition @relation(fields: [indexId], references: [id], onDelete: Cascade)
+
+  @@unique([indexId, date])
+  @@index([indexId, date])
+  @@index([date])
+  @@map("index_history_points")
+}
+
+// Log de Auditoria e UX (Timeline de Mudanças)
+model IndexRebalanceLog {
+  id      String   @id @default(uuid())
+  indexId String   @map("index_id")
+  date    DateTime @default(now()) @db.Date
+  action  String // "ENTRY", "EXIT", "REBALANCE"
+  ticker  String
+  reason  String   @db.Text // Texto gerado pela IA: "Saiu pois ROE caiu para 8%"
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+
+  definition IndexDefinition @relation(fields: [indexId], references: [id], onDelete: Cascade)
+
+  @@index([indexId, date])
+  @@index([indexId, action])
+  @@index([date])
+  @@map("index_rebalance_logs")
+}

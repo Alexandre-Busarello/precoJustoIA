@@ -144,6 +144,14 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       href: '/admin/notifications',
       color: 'bg-pink-500',
     },
+    {
+      id: 'indices',
+      title: 'Gerenciar Índices IPJ',
+      description: 'Crie e gerencie índices automatizados usando IA',
+      icon: TrendingUp,
+      href: '/admin/indices',
+      color: 'bg-emerald-500',
+    },
   ];
 
   const analyticsFeatures = [

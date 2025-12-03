@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/fetch-ward",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/update-indices?job=mark-to-market",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/update-indices?job=screening",
+      "schedule": "30 19 * * *"
     }
   ],
   "functions": {
@@ -17,6 +25,9 @@
       "maxDuration": 60
     },
     "src/app/api/cron/monitor-assets/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/update-indices/route.ts": {
       "maxDuration": 60
     }
   },

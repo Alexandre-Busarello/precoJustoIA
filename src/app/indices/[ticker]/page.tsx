@@ -19,6 +19,7 @@ import { IndexComparisonChart } from '@/components/indices/index-comparison-char
 import { IndexCompositionTable } from '@/components/indices/index-composition-table'
 import { IndexRebalanceTimeline } from '@/components/indices/index-rebalance-timeline'
 import { IndexDisclaimer } from '@/components/indices/index-disclaimer'
+import { IndexRealTimeReturn } from '@/components/indices/index-realtime-return'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
@@ -255,6 +256,11 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
               totalDividendsReceived={index.totalDividendsReceived}
               color={index.color}
             />
+          </div>
+
+          {/* Rentabilidade em Tempo Real */}
+          <div className="mb-6">
+            <IndexRealTimeReturn ticker={index.ticker} color={index.color} />
           </div>
 
           {/* Tabs */}

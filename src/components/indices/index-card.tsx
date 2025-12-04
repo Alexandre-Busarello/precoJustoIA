@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
 import { IndexSparkline } from './index-sparkline';
+import { IndexRealTimeBadge } from './index-realtime-badge';
 
 interface IndexCardProps {
   ticker: string;
@@ -72,11 +73,14 @@ export function IndexCard({
             
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">Retorno</span>
-              <div className={`flex items-center gap-1 ${returnColor}`}>
-                <ReturnIcon className="h-4 w-4" />
-                <span className="font-semibold">
-                  {isPositive ? '+' : ''}{accumulatedReturn.toFixed(2)}%
-                </span>
+              <div className="flex flex-col items-end gap-1">
+                <div className={`flex items-center gap-1 ${returnColor}`}>
+                  <ReturnIcon className="h-4 w-4" />
+                  <span className="font-semibold">
+                    {isPositive ? '+' : ''}{accumulatedReturn.toFixed(2)}%
+                  </span>
+                </div>
+                <IndexRealTimeBadge ticker={ticker} />
               </div>
             </div>
 

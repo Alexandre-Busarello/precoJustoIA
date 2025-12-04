@@ -149,6 +149,210 @@ async function getLastPublishedCategory(): Promise<string | null> {
 }
 
 /**
+ * Busca posts recentes para evitar repetição de temas
+ */
+async function getRecentPosts(limit: number = 10): Promise<Array<{ title: string; sourceTopics: any }>> {
+  try {
+    const posts = await (prisma as any).blogPost.findMany({
+      where: { 
+        status: { in: ['PUBLISHED', 'DRAFT'] }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { 
+        title: true,
+        sourceTopics: true,
+      },
+    });
+    return posts;
+  } catch (error) {
+    console.warn('Erro ao buscar posts recentes:', error);
+    return [];
+  }
+}
+
+/**
+ * Verifica se um tópico é recente (últimos 7-15 dias)
+ * Procura por datas antigas no título ou resumo
+ */
+function isTopicRecent(topic: TrendingTopic): boolean {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+  
+  // Padrões de datas antigas para detectar
+  const oldPatterns = [
+    // Trimestres antigos (ex: 3T24 quando estamos em 2025)
+    /\b([1-4])T(\d{2})\b/gi,
+    // Anos antigos explícitos (ex: 2023, 2024 quando estamos em 2025)
+    /\b(20[0-2]\d)\b/g,
+    // Meses/anos específicos antigos
+    /\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+(20[0-2]\d)\b/gi,
+  ];
+  
+  const text = `${topic.title} ${topic.summary}`.toLowerCase();
+  
+  // Verificar padrões de trimestres (ex: 3T24, 1T25)
+  const quarterMatches = text.match(/\b([1-4])t(\d{2})\b/gi);
+  if (quarterMatches) {
+    for (const match of quarterMatches) {
+      const parts = match.match(/(\d)t(\d{2})/i);
+      if (parts) {
+        const quarter = parseInt(parts[1]);
+        const yearShort = parseInt(parts[2]);
+        const year = 2000 + yearShort; // 24 -> 2024, 25 -> 2025
+        
+        // Se o ano for menor que o atual, é definitivamente antigo
+        if (year < currentYear) {
+          console.log(`⚠️ Tópico contém trimestre antigo: ${match} (ano ${year} < ${currentYear})`);
+          return false;
+        }
+        
+        // Se for do ano atual, verificar se o trimestre já passou há muito tempo
+        if (year === currentYear) {
+          const currentQuarter = Math.ceil(currentMonth / 3);
+          // Se o trimestre mencionado é anterior ao atual (mais de 1 trimestre de diferença)
+          // Exemplo: estamos no 4T25 e menciona 2T25 -> OK (pode ser análise recente)
+          // Mas se menciona 1T25 quando estamos no 4T25 -> muito antigo
+          if (quarter < currentQuarter - 1) {
+            console.log(`⚠️ Tópico contém trimestre muito antigo: ${match} (trimestre ${quarter} < ${currentQuarter - 1} no ano ${currentYear})`);
+            return false;
+          }
+        }
+      }
+    }
+  }
+  
+  // Verificar anos explícitos
+  const yearMatches = text.match(/\b(20[0-2]\d)\b/g);
+  if (yearMatches) {
+    for (const match of yearMatches) {
+      const year = parseInt(match);
+      // Se mencionar um ano anterior ao atual, é antigo
+      if (year < currentYear) {
+        console.log(`⚠️ Tópico contém ano antigo: ${year} < ${currentYear}`);
+        return false;
+      }
+    }
+  }
+  
+  // Verificar datas específicas de meses/anos (ex: "janeiro de 2024", "novembro 2025")
+  const monthYearMatches = text.match(/\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+(?:de\s+)?(20[0-2]\d)\b/gi);
+  if (monthYearMatches) {
+    const monthNames: { [key: string]: number } = {
+      janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
+      julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12
+    };
+    
+    for (const match of monthYearMatches) {
+      const parts = match.match(/(\w+)\s+(?:de\s+)?(20\d{2})/i);
+      if (parts) {
+        const monthName = parts[1].toLowerCase();
+        const year = parseInt(parts[2]);
+        const month = monthNames[monthName];
+        
+        if (!month) continue; // Mês não reconhecido
+        
+        // Se o ano for anterior ao atual, é antigo
+        if (year < currentYear) {
+          console.log(`⚠️ Tópico contém data antiga: ${match} (ano ${year} < ${currentYear})`);
+          return false;
+        }
+        
+        // Se for do ano atual, verificar se o mês já passou há muito tempo
+        // Permitir mês atual e mês anterior (análises podem ter delay)
+        if (year === currentYear && month < currentMonth - 1) {
+          console.log(`⚠️ Tópico contém data muito antiga: ${match} (mês ${month} < ${currentMonth - 1} no ano ${currentYear})`);
+          return false;
+        }
+      }
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * Verifica se um tópico é similar a posts recentes
+ */
+function isTopicSimilarToRecentPosts(topic: TrendingTopic, recentPosts: Array<{ title: string; sourceTopics: any }>): boolean {
+  const topicText = `${topic.title} ${topic.summary}`.toLowerCase();
+  
+  for (const post of recentPosts) {
+    const postTitle = post.title.toLowerCase();
+    
+    // Verificar similaridade simples por palavras-chave
+    const topicWords = topicText.split(/\s+/).filter(w => w.length > 3);
+    const postWords = postTitle.split(/\s+/).filter(w => w.length > 3);
+    
+    // Se mais de 30% das palavras do tópico estão no título do post, é similar
+    const commonWords = topicWords.filter(w => postWords.includes(w));
+    const similarity = commonWords.length / Math.max(topicWords.length, 1);
+    
+    if (similarity > 0.3) {
+      console.log(`⚠️ Tópico similar a post recente: "${topic.title}" vs "${post.title}" (similaridade: ${(similarity * 100).toFixed(0)}%)`);
+      return true;
+    }
+    
+    // Verificar também nos sourceTopics do post
+    if (post.sourceTopics && typeof post.sourceTopics === 'object') {
+      const sourceTopics = post.sourceTopics as any;
+      if (sourceTopics.trending_topics && Array.isArray(sourceTopics.trending_topics)) {
+        for (const oldTopic of sourceTopics.trending_topics) {
+          if (oldTopic.title && topic.title.toLowerCase().includes(oldTopic.title.toLowerCase())) {
+            console.log(`⚠️ Tópico já usado em post recente: "${topic.title}"`);
+            return true;
+          }
+        }
+      }
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Filtra e reordena tópicos para garantir que sejam recentes e diferentes dos posts anteriores
+ */
+function filterAndReorderTopics(
+  topics: TrendingTopic[],
+  recentPosts: Array<{ title: string; sourceTopics: any }>
+): TrendingTopic[] {
+  const validTopics: TrendingTopic[] = [];
+  const invalidTopics: TrendingTopic[] = [];
+  
+  for (const topic of topics) {
+    // Verificar se é recente
+    if (!isTopicRecent(topic)) {
+      console.log(`❌ Tópico rejeitado por não ser recente: "${topic.title}"`);
+      invalidTopics.push(topic);
+      continue;
+    }
+    
+    // Verificar se é similar a posts recentes
+    if (isTopicSimilarToRecentPosts(topic, recentPosts)) {
+      console.log(`❌ Tópico rejeitado por ser similar a posts recentes: "${topic.title}"`);
+      invalidTopics.push(topic);
+      continue;
+    }
+    
+    validTopics.push(topic);
+  }
+  
+  if (validTopics.length === 0) {
+    console.warn('⚠️ Nenhum tópico válido encontrado após filtragem. Usando todos os tópicos originais.');
+    return topics;
+  }
+  
+  console.log(`✅ ${validTopics.length} tópicos válidos de ${topics.length} encontrados`);
+  if (invalidTopics.length > 0) {
+    console.log(`   Tópicos rejeitados: ${invalidTopics.map(t => `"${t.title}"`).join(', ')}`);
+  }
+  
+  return validTopics;
+}
+
+/**
  * Busca tópicos recentes e quentes sobre investimentos/B3 usando Gemini
  */
 export async function searchHotTopics(): Promise<TopicSearchResult> {
@@ -160,26 +364,67 @@ export async function searchHotTopics(): Promise<TopicSearchResult> {
     apiKey: process.env.GEMINI_API_KEY,
   });
 
-  // Buscar última categoria publicada
+  // Buscar última categoria publicada e posts recentes
   const lastCategory = await getLastPublishedCategory();
+  const recentPosts = await getRecentPosts(10);
+  
   const categoryHint = lastCategory 
     ? `\n\nIMPORTANTE - SELEÇÃO DE CATEGORIA:\nA última categoria publicada foi "${lastCategory}". PREFIRA escolher uma categoria DIFERENTE para diversificar o conteúdo. Se não houver alternativa adequada, pode usar a mesma, mas priorize diversidade.`
     : '\n\nIMPORTANTE - SELEÇÃO DE CATEGORIA:\nNão há posts publicados recentemente. Escolha a categoria mais adequada aos tópicos encontrados.';
+
+  // Preparar lista de títulos recentes para evitar repetição
+  const recentTitles = recentPosts.map(p => p.title).slice(0, 5);
+  const recentTitlesHint = recentTitles.length > 0
+    ? `\n\n🚨 CRÍTICO - EVITAR REPETIÇÃO:\nOs seguintes temas já foram abordados recentemente. NÃO selecione tópicos similares:\n${recentTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nIMPORTANTE: Seus tópicos devem ser COMPLETAMENTE DIFERENTES destes temas.`
+    : '';
+
+  // Obter data atual para referência
+  const now = new Date();
+  const currentDateStr = now.toLocaleDateString('pt-BR', { 
+    day: '2-digit', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+  const currentYear = now.getFullYear();
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3);
 
   const prompt = `ATUE COMO: Sênior Market Analyst e Estrategista de SEO focado no mercado financeiro brasileiro (B3).
 
 TAREFA:
 Realize uma varredura profunda na internet (web browsing) para identificar as oportunidades de conteúdo mais quentes do momento. Seu objetivo é alimentar um blog de investimentos focado em Value Investing e Dividendos.
 
+📅 DATA ATUAL: ${currentDateStr} (${currentYear}, ${currentQuarter}º trimestre)
+
+🚨🚨🚨 REGRAS CRÍTICAS DE TEMPORALIDADE 🚨🚨🚨
+
+1. TÓPICOS DEVEM SER ULTRA-RECENTES (Últimos 7-15 dias):
+   - Apenas notícias que estão acontecendo AGORA ou nas últimas semanas
+   - NÃO selecione tópicos sobre trimestres passados (ex: "3T24" quando estamos em ${currentYear})
+   - NÃO selecione tópicos sobre anos anteriores (ex: eventos de 2023 ou 2024 quando estamos em ${currentYear})
+   - Foque em eventos que aconteceram nas últimas 2 semanas no máximo
+
+2. EXEMPLOS DE TÓPICOS VÁLIDOS (recentes):
+   ✅ "Balanços do ${currentQuarter}º trimestre de ${currentYear}: Oportunidades em..."
+   ✅ "Decisão do COPOM de ${currentDateStr.split(' ')[1]}: Impacto em..."
+   ✅ "Anúncios de dividendos desta semana: Empresas que..."
+   ✅ "Fusões e aquisições anunciadas em ${currentDateStr.split(' ')[1]}:"
+
+3. EXEMPLOS DE TÓPICOS INVÁLIDOS (antigos):
+   ❌ "Balanços do 3T24" (trimestre antigo)
+   ❌ "Oportunidades em 2024" (ano anterior)
+   ❌ "Análise dos resultados de janeiro de 2024" (data antiga)
+   ❌ Qualquer evento que não seja das últimas 2 semanas
+
 CRITÉRIOS DE BUSCA:
 
 1. TÓPICOS QUENTES (Últimos 7-15 dias): Notícias que estão movendo o Ibovespa agora (ex: fusões, balanços trimestrais surpreendentes, mudanças regulatórias, decisões do COPOM/FED).
 
-2. TENDÊNCIAS 2025: Relatórios recentes de grandes casas (BTG, XP, Itaú) sobre projeções setoriais e macroeconômicas.
+2. TENDÊNCIAS ${currentYear}: Relatórios recentes de grandes casas (BTG, XP, Itaú) sobre projeções setoriais e macroeconômicas.
 
 3. DIVIDENDOS: Anúncios recentes de proventos (Data Com) ou empresas que se tornaram descontadas (valuation atrativo).
 
 4. SETORES ESPECÍFICOS: Energia, Saneamento, Bancos, Frigoríficos e Commodities.
+${recentTitlesHint}
 
 RESTRIÇÕES DE QUALIDADE:
 - Ignore "day trade" ou criptomoedas. Foco total em Análise Fundamentalista e Buy & Hold.
@@ -299,6 +544,22 @@ INÍCIO DA RESPOSTA (comece aqui):`;
       
       console.log(`✅ JSON extraído com sucesso: ${result.trending_topics.length} tópicos encontrados`);
       console.log(`📂 Categoria selecionada: ${result.category}`);
+      
+      // Filtrar tópicos para garantir que sejam recentes e diferentes dos posts anteriores
+      console.log('🔍 Filtrando tópicos para garantir recência e evitar repetição...');
+      const filteredTopics = filterAndReorderTopics(result.trending_topics, recentPosts);
+      
+      if (filteredTopics.length === 0) {
+        console.warn('⚠️ Todos os tópicos foram filtrados. Tentando novamente com critérios mais flexíveis...');
+        // Se todos foram filtrados, usar os originais mas avisar
+        console.warn('⚠️ Usando tópicos originais sem filtragem rigorosa');
+        return result;
+      }
+      
+      // Atualizar resultado com tópicos filtrados
+      result.trending_topics = filteredTopics;
+      console.log(`✅ ${filteredTopics.length} tópicos válidos após filtragem`);
+      
       return result;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -985,8 +1246,27 @@ export async function generateDailyPost(): Promise<{
   console.log(`✅ Encontrados ${topics.trending_topics.length} tópicos quentes`);
   console.log(`📊 Contexto de mercado: ${topics.market_context}`);
 
-  // Selecionar o tópico principal
-  const mainTopic = topics.trending_topics[0];
+  // Buscar posts recentes para validação final
+  const recentPosts = await getRecentPosts(10);
+  
+  // Selecionar o tópico principal (garantir que seja válido)
+  let mainTopic: TrendingTopic | null = null;
+  for (const topic of topics.trending_topics) {
+    // Validar se é recente e não similar a posts anteriores
+    if (isTopicRecent(topic) && !isTopicSimilarToRecentPosts(topic, recentPosts)) {
+      mainTopic = topic;
+      break;
+    } else {
+      console.log(`⚠️ Tópico "${topic.title}" rejeitado na validação final`);
+    }
+  }
+  
+  if (!mainTopic) {
+    // Se nenhum tópico passou na validação, usar o primeiro mas avisar
+    console.warn('⚠️ Nenhum tópico passou na validação final. Usando o primeiro tópico disponível.');
+    mainTopic = topics.trending_topics[0];
+  }
+  
   console.log(`📌 Tópico principal selecionado: "${mainTopic.title}"`);
 
   // ETAPA 1: Pesquisar e coletar fontes

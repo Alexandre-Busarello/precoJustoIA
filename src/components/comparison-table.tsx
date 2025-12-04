@@ -236,7 +236,7 @@ const indicators = [
     key: 'overallScore',
     label: 'Score Geral',
     description: 'Pontuação Geral da Empresa',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -247,7 +247,7 @@ const indicators = [
     key: 'graham',
     label: 'Graham',
     description: 'Análise Benjamin Graham',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -256,7 +256,7 @@ const indicators = [
     key: 'dividendYieldStrategy',
     label: 'Dividend Yield',
     description: 'Estratégia de Dividendos',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -265,7 +265,7 @@ const indicators = [
     key: 'lowPE',
     label: 'Low P/E',
     description: 'Estratégia P/L Baixo',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -274,7 +274,7 @@ const indicators = [
     key: 'magicFormula',
     label: 'Magic Formula',
     description: 'Fórmula Mágica de Greenblatt',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -283,7 +283,7 @@ const indicators = [
     key: 'fcd',
     label: 'FCD',
     description: 'Fluxo de Caixa Descontado',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -292,7 +292,7 @@ const indicators = [
     key: 'gordon',
     label: 'Gordon',
     description: 'Modelo de Gordon',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -301,7 +301,7 @@ const indicators = [
     key: 'fundamentalist',
     label: 'Fundamentalista 3+1',
     description: 'Análise Fundamentalista Simplificada',
-    format: (value: number | null) => value ? `${value.toFixed(1)}/100` : 'N/A',
+    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
@@ -401,7 +401,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                 const values = companies.map(c => {
                   // Score Geral
                   if (indicator.key === 'overallScore') {
-                    return c.overallScore?.score || null
+                    return c.overallScore?.score !== null && c.overallScore?.score !== undefined ? c.overallScore.score : null
                   }
                   
                   // Estratégias de Investimento
@@ -413,7 +413,7 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                     }
                     
                     const strategy = (c.strategies as Record<string, { score: number; isEligible: boolean }>)[strategyKey]
-                    return strategy?.score || null
+                    return strategy?.score !== null && strategy?.score !== undefined ? strategy.score : null
                   }
                   
                   // Indicadores Financeiros com fallbacks

@@ -36,7 +36,7 @@ export async function getIndicesList(): Promise<IndexListItem[]> {
     }
   })
 
-  return indices.map(index => {
+  const mappedIndices = indices.map(index => {
     const latestPoint = index.history[0]
     const initialPoints = 100.0
     const currentPoints = latestPoint?.points || initialPoints
@@ -55,6 +55,9 @@ export async function getIndicesList(): Promise<IndexListItem[]> {
       lastUpdate: latestPoint?.date || null
     }
   })
+
+  // Ordenar por retorno acumulado (maior primeiro)
+  return mappedIndices.sort((a, b) => b.accumulatedReturn - a.accumulatedReturn)
 }
 
 export async function getIndexByTicker(ticker: string) {

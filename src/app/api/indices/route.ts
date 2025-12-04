@@ -52,9 +52,14 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Ordenar por retorno acumulado (maior primeiro)
+    const sortedIndices = indicesWithPerformance.sort(
+      (a, b) => b.accumulatedReturn - a.accumulatedReturn
+    );
+
     return NextResponse.json({
       success: true,
-      indices: indicesWithPerformance
+      indices: sortedIndices
     });
   } catch (error) {
     console.error('❌ [API INDICES] Error listing indices:', error);

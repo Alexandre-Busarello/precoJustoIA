@@ -245,20 +245,36 @@ export async function GET(request: NextRequest) {
           company.id
         );
 
+        // Flag para indicar se devemos usar apenas análise web (sem vídeos)
+        let useWebOnly = false;
+        
         if (existingAnalysis && existingAnalysis.videoIds && existingAnalysis.videoIds.length > 0) {
           // Verificar se há vídeos novos (que não estavam na análise anterior)
           const existingVideoIds = existingAnalysis.videoIds;
           const newVideoIds = videoIds.filter(id => !existingVideoIds.includes(id));
           
-          if (newVideoIds.length === 0) {
-            // Todos os vídeos encontrados já estavam na análise anterior
+          // Verificar se a análise tem mais de 30 dias (forçar atualização periódica)
+          const analysisDate = new Date(existingAnalysis.createdAt);
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const isAnalysisOld = analysisDate < thirtyDaysAgo;
+          
+          if (newVideoIds.length === 0 && !isAnalysisOld) {
+            // Todos os vídeos encontrados já estavam na análise anterior E análise ainda está recente (< 30 dias)
             console.log(
-              `✅ ${company.ticker}: Nenhum vídeo novo encontrado, mantendo análise anterior`
+              `✅ ${company.ticker}: Nenhum vídeo novo encontrado, mantendo análise anterior (criada há ${Math.floor((Date.now() - analysisDate.getTime()) / (1000 * 60 * 60 * 24))} dias)`
             );
             await YouTubeAnalysisService.updateLastChecked(company.id);
             stats.processed = true;
             stats.skipped = true;
             return stats;
+          } else if (newVideoIds.length === 0 && isAnalysisOld) {
+            // Não há vídeos novos, mas análise tem mais de 30 dias - usar análise web ao invés de reprocessar vídeos antigos
+            console.log(
+              `🔄 ${company.ticker}: Análise tem mais de 30 dias (${Math.floor((Date.now() - analysisDate.getTime()) / (1000 * 60 * 60 * 24))} dias), atualizando via análise web (sem vídeos novos)...`
+            );
+            useWebOnly = true;
+            // Pular análise de vídeos e ir direto para análise web
           } else {
             // Há vídeos novos! Refazer análise
             console.log(
@@ -267,60 +283,94 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // 8. Analisar vídeos
-        console.log(`🎬 ${company.ticker}: Analisando ${videoIds.length} vídeo(s)...`);
+        let finalAnalysisResult;
+        
+        if (useWebOnly) {
+          // 8a. Caso especial: análise antiga sem vídeos novos - usar apenas análise web
+          console.log(`🌐 ${company.ticker}: Buscando análise web atualizada (sem reprocessar vídeos antigos)...`);
+          
+          try {
+            const webAnalysis = await YouTubeAnalysisService.analyzeWebContent(
+              company.ticker,
+              company.name,
+              company.sector || undefined,
+              company.industry || undefined
+            );
 
-        let analysisResult;
-        try {
-          analysisResult = await YouTubeAnalysisService.analyzeVideos(
-            videoIds,
-            company.ticker,
-            company.name
-          );
-        } catch (analysisError: any) {
-          // Tratar erro específico de vídeo muito longo
-          if (analysisError?.message?.includes('Vídeo muito longo')) {
-            console.error(`🎥 ${company.ticker}: Vídeo muito longo - pulando esta empresa`);
-            stats.error = `${company.ticker}: Vídeo excede limite de processamento (muito longo)`;
-            // NÃO atualizar lastCheckedAt - não salvamos análise válida, deve ser reprocessada
+            // Usar análise web como resultado final (100% web quando não há vídeos novos)
+            finalAnalysisResult = {
+              score: webAnalysis.score,
+              summary: webAnalysis.summary,
+              positivePoints: webAnalysis.positivePoints,
+              negativePoints: webAnalysis.negativePoints,
+            };
+
+            console.log(
+              `🌐 ${company.ticker}: Análise web atualizada - Score ${finalAnalysisResult.score}/100`
+            );
+          } catch (webError) {
+            console.error(`❌ ${company.ticker}: Erro na análise web`, webError);
+            // Se falhar análise web, manter análise anterior e não atualizar lastCheckedAt
             stats.processed = true;
             stats.skipped = true;
             return stats;
           }
-          // Outros erros de análise
-          throw analysisError;
-        }
+        } else {
+          // 8b. Fluxo normal: analisar vídeos e combinar com web
+          console.log(`🎬 ${company.ticker}: Analisando ${videoIds.length} vídeo(s)...`);
 
-        console.log(
-          `📊 ${company.ticker}: Análise YouTube - Score ${analysisResult.score}/100`
-        );
-
-        // 9. Buscar análise web complementar
-        console.log(`🌐 ${company.ticker}: Buscando análise web complementar...`);
-        
-        let finalAnalysisResult = analysisResult;
-        try {
-          const webAnalysis = await YouTubeAnalysisService.analyzeWebContent(
-            company.ticker,
-            company.name,
-            company.sector || undefined,
-            company.industry || undefined
-          );
-
-          // Combinar análises (70% YouTube + 30% Web)
-          finalAnalysisResult = YouTubeAnalysisService.combineAnalyses(
-            analysisResult,
-            webAnalysis,
-            company.ticker
-          );
+          let analysisResult;
+          try {
+            analysisResult = await YouTubeAnalysisService.analyzeVideos(
+              videoIds,
+              company.ticker,
+              company.name
+            );
+          } catch (analysisError: any) {
+            // Tratar erro específico de vídeo muito longo
+            if (analysisError?.message?.includes('Vídeo muito longo')) {
+              console.error(`🎥 ${company.ticker}: Vídeo muito longo - pulando esta empresa`);
+              stats.error = `${company.ticker}: Vídeo excede limite de processamento (muito longo)`;
+              // NÃO atualizar lastCheckedAt - não salvamos análise válida, deve ser reprocessada
+              stats.processed = true;
+              stats.skipped = true;
+              return stats;
+            }
+            // Outros erros de análise
+            throw analysisError;
+          }
 
           console.log(
-            `🔗 ${company.ticker}: Análise combinada - Score final ${finalAnalysisResult.score}/100`
+            `📊 ${company.ticker}: Análise YouTube - Score ${analysisResult.score}/100`
           );
-        } catch (webError) {
-          console.warn(`⚠️ ${company.ticker}: Análise web falhou, usando apenas YouTube`, webError);
-          // Se falhar a análise web, continua com apenas YouTube
+
+          // 9. Buscar análise web complementar
+          console.log(`🌐 ${company.ticker}: Buscando análise web complementar...`);
+          
           finalAnalysisResult = analysisResult;
+          try {
+            const webAnalysis = await YouTubeAnalysisService.analyzeWebContent(
+              company.ticker,
+              company.name,
+              company.sector || undefined,
+              company.industry || undefined
+            );
+
+            // Combinar análises (70% YouTube + 30% Web)
+            finalAnalysisResult = YouTubeAnalysisService.combineAnalyses(
+              analysisResult,
+              webAnalysis,
+              company.ticker
+            );
+
+            console.log(
+              `🔗 ${company.ticker}: Análise combinada - Score final ${finalAnalysisResult.score}/100`
+            );
+          } catch (webError) {
+            console.warn(`⚠️ ${company.ticker}: Análise web falhou, usando apenas YouTube`, webError);
+            // Se falhar a análise web, continua com apenas YouTube
+            finalAnalysisResult = analysisResult;
+          }
         }
 
         // 10. Validar análise antes de salvar
@@ -338,9 +388,11 @@ export async function GET(request: NextRequest) {
         }
 
         // 11. Salvar análise final
+        // Se usar apenas análise web (sem vídeos novos), salvar com array vazio de vídeos
+        const videoIdsToSave = useWebOnly ? [] : videoIds;
         const analysisId = await YouTubeAnalysisService.saveAnalysis(
           company.id,
-          videoIds,
+          videoIdsToSave,
           finalAnalysisResult
         );
 

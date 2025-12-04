@@ -39,9 +39,14 @@ export function IndicesClient({ initialIndices }: IndicesClientProps) {
     initialData: initialIndices,
   })
 
+  // Ordenar por retorno acumulado (maior primeiro) - garantir ordenação mesmo se vier da API
+  const sortedIndices = [...(indices || [])].sort(
+    (a, b) => b.accumulatedReturn - a.accumulatedReturn
+  )
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {indices.map((index) => (
+      {sortedIndices.map((index) => (
         <IndexCard
           key={index.id}
           ticker={index.ticker}

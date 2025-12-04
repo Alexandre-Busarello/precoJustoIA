@@ -413,8 +413,8 @@ async function calculateWeightedScore(companies: Record<string, unknown>[]): Pro
     }
     
     // Score geral (usando dados já carregados)
-    if (overallScore?.score) {
-      const allOverallScores = companiesWithStrategies.map(c => c.strategies.overallScore?.score || null)
+    if (overallScore?.score !== null && overallScore?.score !== undefined) {
+      const allOverallScores = companiesWithStrategies.map(c => c.strategies.overallScore?.score !== null && c.strategies.overallScore?.score !== undefined ? c.strategies.overallScore.score : null)
       totalScore += scoreIndicator(allOverallScores, overallScore.score, weights.overallScore, true, 'overallScore')
       totalWeight += weights.overallScore
     }

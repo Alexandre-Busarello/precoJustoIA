@@ -22,6 +22,7 @@ interface Notification {
   isRead: boolean
   readAt: Date | null
   createdAt: Date
+  campaignId?: string | null
 }
 
 export function NotificationsPageClient() {
@@ -87,6 +88,12 @@ export function NotificationsPageClient() {
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.isRead) {
       markAsReadMutation.mutate(notification.id)
+    }
+
+    // Se for quiz, redirecionar para página do quiz
+    if (notification.type === 'QUIZ' && notification.campaignId) {
+      window.location.href = `/quiz/${notification.campaignId}`
+      return
     }
 
     if (notification.link) {

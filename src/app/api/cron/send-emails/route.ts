@@ -160,7 +160,8 @@ export async function GET(request: NextRequest) {
               emailData.title,
               emailData.message,
               emailData.link || null,
-              emailQueue.recipientName || undefined
+              emailQueue.recipientName || undefined,
+              emailData.ctaText || null
             )
             await sendEmail({
               to: emailQueue.email,

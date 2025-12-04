@@ -7,6 +7,11 @@ export type NotificationType =
   | 'ASSET_CHANGE'
   | 'MONTHLY_REPORT'
   | 'AI_REPORT'
+  | 'QUIZ'
+
+export type NotificationDisplayType = 'BANNER' | 'MODAL' | 'QUIZ'
+
+export type NotificationTemplate = 'GRADIENT' | 'SOLID' | 'MINIMAL' | 'ILLUSTRATED'
 
 export type NotificationLinkType = 'INTERNAL' | 'EXTERNAL'
 
@@ -52,6 +57,19 @@ export interface CreateCampaignParams {
   dashboardExpiresAt?: Date
   createdBy: string
   sendEmail?: boolean
+  displayType?: NotificationDisplayType
+  bannerTemplate?: NotificationTemplate
+  modalTemplate?: NotificationTemplate
+  quizConfig?: Record<string, any>
+  illustrationUrl?: string
+  bannerColors?: {
+    primaryColor?: string
+    secondaryColor?: string
+    backgroundColor?: string
+    textColor?: string
+    buttonColor?: string
+    buttonTextColor?: string
+  }
 }
 
 export interface Notification {
@@ -137,7 +155,13 @@ export class NotificationService {
       showOnDashboard = false,
       dashboardExpiresAt,
       createdBy,
-      sendEmail = false
+      sendEmail = false,
+      displayType = 'BANNER',
+      bannerTemplate,
+      modalTemplate,
+      quizConfig,
+      illustrationUrl,
+      bannerColors
     } = params
 
     try {
@@ -154,6 +178,12 @@ export class NotificationService {
           showOnDashboard,
           dashboardExpiresAt: dashboardExpiresAt || null,
           createdBy,
+          displayType: displayType as any,
+          bannerTemplate: bannerTemplate as any || null,
+          modalTemplate: modalTemplate as any || null,
+          quizConfig: quizConfig || null,
+          illustrationUrl: illustrationUrl || null,
+          bannerColors: bannerColors || null,
           stats: {
             totalSent: 0,
             totalRead: 0,
@@ -184,7 +214,7 @@ export class NotificationService {
                 message,
                 link: link || null,
                 linkType,
-                type: 'CAMPAIGN',
+                type: (displayType === 'QUIZ' ? 'QUIZ' : 'CAMPAIGN') as any,
                 metadata: {
                   campaignId: campaign.id,
                   segmentType,
@@ -201,7 +231,7 @@ export class NotificationService {
         if (sendEmail) {
           await Promise.all(
             notifications.map(notification =>
-              this.sendNotificationEmail(notification.userId, notification.id, title, message, link, linkType)
+              this.sendNotificationEmail(notification.userId, notification.id, title, message, link, linkType, ctaText)
             )
           )
         }
@@ -281,7 +311,7 @@ export class NotificationService {
                 message: campaign.message,
                 link: campaign.link || null,
                 linkType: campaign.linkType as NotificationLinkType,
-                type: 'CAMPAIGN',
+                type: ((campaign as any).displayType === 'QUIZ' ? 'QUIZ' : 'CAMPAIGN') as any,
                 metadata: {
                   campaignId: campaign.id,
                   segmentType: campaign.segmentType,
@@ -304,7 +334,8 @@ export class NotificationService {
                 campaign.title,
                 campaign.message,
                 campaign.link,
-                campaign.linkType as NotificationLinkType
+                campaign.linkType as NotificationLinkType,
+                (campaign as any).ctaText
               )
             )
           )
@@ -404,7 +435,7 @@ export class NotificationService {
           message: n.message,
           link: n.link,
           linkType: n.linkType as NotificationLinkType,
-          type: n.type as NotificationType,
+          type: n.type as any as NotificationType, // Cast temporário até Prisma ser regenerado
           isRead: n.isRead,
           readAt: n.readAt,
           metadata: n.metadata as Record<string, any> | null,
@@ -565,20 +596,23 @@ export class NotificationService {
 
   /**
    * Busca notificação destacada para dashboard
+   * Retorna sempre a campanha mais recente quando há múltiplas ativas
    */
-  static async getDashboardNotification(userId: string): Promise<(Notification & { ctaText?: string | null }) | null> {
+  static async getDashboardNotification(userId: string): Promise<(Notification & { ctaText?: string | null; bannerTemplate?: NotificationTemplate | null; illustrationUrl?: string | null; bannerColors?: { primaryColor?: string; secondaryColor?: string; backgroundColor?: string; textColor?: string; buttonColor?: string; buttonTextColor?: string } | null }) | null> {
     try {
       const now = new Date()
       
-      const campaign = await prisma.notificationCampaign.findFirst({
+      // Buscar todas as campanhas ativas ordenadas pela mais recente
+      const campaigns = await prisma.notificationCampaign.findMany({
         where: {
           showOnDashboard: true,
+          displayType: 'BANNER' as any, // Apenas banners na dashboard
           OR: [
             { dashboardExpiresAt: null },
             { dashboardExpiresAt: { gt: now } }
           ]
-        },
-        orderBy: { createdAt: 'desc' },
+        } as any,
+        orderBy: { createdAt: 'desc' }, // Mais recente primeiro
         include: {
           notifications: {
             where: {
@@ -590,7 +624,11 @@ export class NotificationService {
         }
       })
 
-      if (!campaign || campaign.notifications.length === 0) {
+      // Encontrar a primeira campanha que tenha notificação para este usuário
+      // Como já está ordenado por createdAt desc, a primeira com notificação é a mais recente
+      const campaign = campaigns.find(c => c.notifications.length > 0)
+
+      if (!campaign || !campaign.notifications[0]) {
         return null
       }
 
@@ -603,12 +641,15 @@ export class NotificationService {
         message: notification.message,
         link: notification.link,
         linkType: notification.linkType as NotificationLinkType,
-        type: notification.type as NotificationType,
+        type: notification.type as any as NotificationType,
         isRead: notification.isRead,
         readAt: notification.readAt,
         metadata: notification.metadata as Record<string, any> | null,
         createdAt: notification.createdAt,
-        ctaText: (campaign as any).ctaText // Cast temporário até migration ser aplicada
+        ctaText: (campaign as any).ctaText,
+        bannerTemplate: (campaign as any).bannerTemplate as NotificationTemplate | null,
+        illustrationUrl: (campaign as any).illustrationUrl,
+        bannerColors: (campaign as any).bannerColors as { primaryColor?: string; secondaryColor?: string; backgroundColor?: string; textColor?: string; buttonColor?: string; buttonTextColor?: string } | null
       }
     } catch (error) {
       console.error('❌ [NOTIFICATION] Erro ao buscar notificação do dashboard:', error)
@@ -949,7 +990,8 @@ export class NotificationService {
     title: string,
     message: string,
     link: string | null | undefined,
-    linkType: NotificationLinkType
+    linkType: NotificationLinkType,
+    ctaText?: string | null
   ): Promise<void> {
     try {
       // Buscar dados do usuário
@@ -1006,7 +1048,8 @@ export class NotificationService {
           title,
           message,
           link: emailLink,
-          notificationId
+          notificationId,
+          ctaText: ctaText || null
         },
         priority: 0,
         metadata: {
@@ -1017,6 +1060,406 @@ export class NotificationService {
     } catch (error) {
       console.error(`❌ [NOTIFICATION] Erro ao enviar email de notificação para ${userId}:`, error)
       // Não falhar a criação da notificação por causa do email
+    }
+  }
+
+  /**
+   * Busca modal ou quiz pendente para usuário
+   * Prioriza quizzes sobre modais
+   */
+  static async getModalNotification(userId: string): Promise<{
+    id: string
+    campaignId: string
+    title: string
+    message: string
+    link: string | null
+    linkType: NotificationLinkType
+    ctaText: string | null
+    modalTemplate: NotificationTemplate | null
+    illustrationUrl: string | null
+    displayType: NotificationDisplayType
+  } | null> {
+    try {
+      const now = new Date()
+      
+      // Primeiro, verificar se há quiz pendente (prioridade)
+      // Quiz só aparece automaticamente se não foi respondido E não foi visto ainda
+      const quizCampaign = await prisma.notificationCampaign.findFirst({
+        where: {
+          displayType: 'QUIZ' as any,
+          OR: [
+            { dashboardExpiresAt: null },
+            { dashboardExpiresAt: { gt: now } }
+          ],
+          notifications: {
+            some: {
+              userId
+            }
+          },
+          NOT: {
+            OR: [
+              {
+                quizResponses: {
+                  some: {
+                    userId
+                  }
+                }
+              },
+              {
+                modalViews: {
+                  some: {
+                    userId
+                  }
+                }
+              }
+            ]
+          } as any
+        } as any,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          notifications: {
+            where: {
+              userId
+            },
+            take: 1
+          }
+        }
+      } as any)
+
+      if (quizCampaign && (quizCampaign as any).notifications.length > 0) {
+        return {
+          id: (quizCampaign as any).notifications[0].id,
+          campaignId: quizCampaign.id,
+          title: quizCampaign.title,
+          message: quizCampaign.message,
+          link: quizCampaign.link,
+          linkType: quizCampaign.linkType as NotificationLinkType,
+          ctaText: quizCampaign.ctaText,
+          modalTemplate: (quizCampaign as any).modalTemplate as NotificationTemplate | null,
+          illustrationUrl: (quizCampaign as any).illustrationUrl,
+          displayType: 'QUIZ' as NotificationDisplayType
+        }
+      }
+
+      // Se não há quiz, buscar modal pendente
+      const modalCampaign = await prisma.notificationCampaign.findFirst({
+        where: {
+          displayType: 'MODAL' as any,
+          OR: [
+            { dashboardExpiresAt: null },
+            { dashboardExpiresAt: { gt: now } }
+          ],
+          notifications: {
+            some: {
+              userId
+            }
+          },
+          NOT: {
+            modalViews: {
+              some: {
+                userId
+              }
+            }
+          } as any
+        } as any,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          message: true,
+          link: true,
+          linkType: true,
+          ctaText: true,
+          modalTemplate: true,
+          illustrationUrl: true,
+          notifications: {
+            where: {
+              userId
+            },
+            take: 1,
+            select: {
+              id: true
+            }
+          }
+        }
+      } as any)
+
+      if (!modalCampaign || (modalCampaign as any).notifications.length === 0) {
+        return null
+      }
+
+      return {
+        id: (modalCampaign as any).notifications[0].id,
+        campaignId: modalCampaign.id,
+        title: modalCampaign.title,
+        message: modalCampaign.message,
+        link: modalCampaign.link,
+        linkType: modalCampaign.linkType as NotificationLinkType,
+        ctaText: modalCampaign.ctaText,
+        modalTemplate: (modalCampaign as any).modalTemplate as NotificationTemplate | null,
+        illustrationUrl: (modalCampaign as any).illustrationUrl,
+        displayType: 'MODAL' as NotificationDisplayType
+      }
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao buscar modal:', error)
+      return null
+    }
+  }
+
+  /**
+   * Marca modal como vista
+   */
+  static async markModalAsViewed(
+    userId: string,
+    campaignId: string,
+    dismissed: boolean = false
+  ): Promise<void> {
+    try {
+      await (prisma as any).notificationModalView.upsert({
+        where: {
+          userId_campaignId: {
+            userId,
+            campaignId
+          }
+        },
+        create: {
+          userId,
+          campaignId,
+          dismissedAt: dismissed ? new Date() : null
+        },
+        update: {
+          dismissedAt: dismissed ? new Date() : undefined
+        }
+      })
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao marcar modal como vista:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Verifica se usuário já viu modal
+   */
+  static async hasUserViewedModal(userId: string, campaignId: string): Promise<boolean> {
+    try {
+      const view = await (prisma as any).notificationModalView.findUnique({
+        where: {
+          userId_campaignId: {
+            userId,
+            campaignId
+          }
+        }
+      })
+      return !!view
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao verificar visualização de modal:', error)
+      return false
+    }
+  }
+
+  /**
+   * Busca quiz pendente ou específico
+   */
+  static async getQuizNotification(
+    userId: string,
+    campaignId?: string
+  ): Promise<{
+    id: string
+    campaignId: string
+    title: string
+    message: string
+    quizConfig: Record<string, any>
+    modalTemplate: NotificationTemplate | null
+    illustrationUrl: string | null
+  } | null> {
+    try {
+      const now = new Date()
+      
+      const where: any = {
+        displayType: 'QUIZ' as any,
+        OR: [
+          { dashboardExpiresAt: null },
+          { dashboardExpiresAt: { gt: now } }
+        ],
+        notifications: {
+          some: {
+            userId
+          }
+        },
+        NOT: {
+          quizResponses: {
+            some: {
+              userId
+            }
+          } as any
+        } as any
+      }
+
+      if (campaignId) {
+        where.id = campaignId
+      }
+
+      const campaign = await prisma.notificationCampaign.findFirst({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          notifications: {
+            where: {
+              userId
+            },
+            take: 1
+          }
+        }
+      })
+
+      if (!campaign || (campaign as any).notifications.length === 0 || !(campaign as any).quizConfig) {
+        return null
+      }
+
+      return {
+        id: (campaign as any).notifications[0].id,
+        campaignId: campaign.id,
+        title: campaign.title,
+        message: campaign.message,
+        quizConfig: (campaign as any).quizConfig as Record<string, any>,
+        modalTemplate: (campaign as any).modalTemplate as NotificationTemplate | null,
+        illustrationUrl: (campaign as any).illustrationUrl
+      }
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao buscar quiz:', error)
+      return null
+    }
+  }
+
+  /**
+   * Submete respostas do quiz
+   */
+  static async submitQuizResponse(
+    userId: string,
+    campaignId: string,
+    responses: Record<string, any>
+  ): Promise<void> {
+    try {
+      // Verificar se já respondeu
+      const existing = await (prisma as any).quizResponse.findUnique({
+        where: {
+          userId_campaignId: {
+            userId,
+            campaignId
+          }
+        }
+      })
+
+      if (existing) {
+        throw new Error('Quiz já foi respondido por este usuário')
+      }
+
+      await (prisma as any).quizResponse.create({
+        data: {
+          userId,
+          campaignId,
+          responses
+        }
+      })
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao submeter quiz:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Verifica se usuário já respondeu quiz
+   */
+  static async hasUserCompletedQuiz(userId: string, campaignId: string): Promise<boolean> {
+    try {
+      const response = await (prisma as any).quizResponse.findUnique({
+        where: {
+          userId_campaignId: {
+            userId,
+            campaignId
+          }
+        }
+      })
+      return !!response
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao verificar resposta de quiz:', error)
+      return false
+    }
+  }
+
+  /**
+   * Busca informações do quiz (mesmo se já foi respondido)
+   * Retorna informações básicas e indica se já foi respondido
+   */
+  static async getQuizInfo(
+    userId: string,
+    campaignId: string
+  ): Promise<{
+    id: string
+    campaignId: string
+    title: string
+    message: string
+    quizConfig: Record<string, any>
+    modalTemplate: NotificationTemplate | null
+    illustrationUrl: string | null
+    isCompleted: boolean
+    completedAt?: Date
+  } | null> {
+    try {
+      const now = new Date()
+      
+      const campaign = await prisma.notificationCampaign.findFirst({
+        where: {
+          id: campaignId,
+          displayType: 'QUIZ' as any,
+          OR: [
+            { dashboardExpiresAt: null },
+            { dashboardExpiresAt: { gt: now } }
+          ],
+          notifications: {
+            some: {
+              userId
+            }
+          }
+        } as any,
+        include: {
+          notifications: {
+            where: {
+              userId
+            },
+            take: 1
+          }
+        }
+      })
+
+      if (!campaign || (campaign as any).notifications.length === 0 || !(campaign as any).quizConfig) {
+        return null
+      }
+
+      // Verificar se já foi respondido
+      const response = await (prisma as any).quizResponse.findUnique({
+        where: {
+          userId_campaignId: {
+            userId,
+            campaignId
+          }
+        }
+      })
+
+      return {
+        id: (campaign as any).notifications[0].id,
+        campaignId: campaign.id,
+        title: campaign.title,
+        message: campaign.message,
+        quizConfig: (campaign as any).quizConfig as Record<string, any>,
+        modalTemplate: (campaign as any).modalTemplate as NotificationTemplate | null,
+        illustrationUrl: (campaign as any).illustrationUrl,
+        isCompleted: !!response,
+        completedAt: response?.completedAt ? new Date(response.completedAt) : undefined
+      }
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao buscar informações do quiz:', error)
+      return null
     }
   }
 }
@@ -1032,4 +1475,10 @@ export const getDashboardNotification = NotificationService.getDashboardNotifica
 export const createNotificationFromAIReport = NotificationService.createNotificationFromAIReport.bind(NotificationService)
 export const getUserNotificationPreferences = NotificationService.getUserNotificationPreferences.bind(NotificationService)
 export const updateUserNotificationPreferences = NotificationService.updateUserNotificationPreferences.bind(NotificationService)
+export const getModalNotification = NotificationService.getModalNotification.bind(NotificationService)
+export const markModalAsViewed = NotificationService.markModalAsViewed.bind(NotificationService)
+export const hasUserViewedModal = NotificationService.hasUserViewedModal.bind(NotificationService)
+export const getQuizNotification = NotificationService.getQuizNotification.bind(NotificationService)
+export const submitQuizResponse = NotificationService.submitQuizResponse.bind(NotificationService)
+export const hasUserCompletedQuiz = NotificationService.hasUserCompletedQuiz.bind(NotificationService)
 

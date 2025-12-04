@@ -5,6 +5,16 @@ import { requireAdminUser } from '@/lib/user-service'
 import { NotificationService } from '@/lib/notification-service'
 import { z } from 'zod'
 
+const quizQuestionSchema = z.object({
+  id: z.string(),
+  type: z.enum(['MULTIPLE_CHOICE', 'TEXT', 'SCALE']),
+  question: z.string().min(1),
+  options: z.array(z.string()).optional(), // Para MULTIPLE_CHOICE
+  required: z.boolean(),
+  min: z.number().optional(), // Para SCALE
+  max: z.number().optional() // Para SCALE
+})
+
 const createCampaignSchema = z.object({
   title: z.string().min(1).max(200),
   message: z.string().min(1).max(2000),
@@ -32,7 +42,49 @@ const createCampaignSchema = z.object({
   segmentConfig: z.any().optional(),
   showOnDashboard: z.boolean().optional(),
   dashboardExpiresAt: z.string().optional().nullable(),
-  sendEmail: z.boolean().optional()
+  sendEmail: z.boolean().optional(),
+  displayType: z.enum(['BANNER', 'MODAL', 'QUIZ']).optional(),
+  bannerTemplate: z.enum(['GRADIENT', 'SOLID', 'MINIMAL', 'ILLUSTRATED']).optional(),
+  modalTemplate: z.enum(['GRADIENT', 'SOLID', 'MINIMAL', 'ILLUSTRATED']).optional(),
+  quizConfig: z.object({
+    questions: z.array(quizQuestionSchema).max(5).min(1)
+  }).optional(),
+  illustrationUrl: z.string().url().optional().nullable(),
+  bannerColors: z.object({
+    primaryColor: z.string().optional(),
+    secondaryColor: z.string().optional(),
+    backgroundColor: z.string().optional(),
+    textColor: z.string().optional(),
+    buttonColor: z.string().optional(),
+    buttonTextColor: z.string().optional()
+  }).optional()
+}).refine((data) => {
+  // Se displayType é QUIZ, quizConfig é obrigatório
+  if (data.displayType === 'QUIZ' && !data.quizConfig) {
+    return false
+  }
+  // Se quizConfig existe, deve ter pelo menos 1 pergunta e no máximo 5
+  if (data.quizConfig) {
+    if (!data.quizConfig.questions || data.quizConfig.questions.length === 0 || data.quizConfig.questions.length > 5) {
+      return false
+    }
+    // Validar que MULTIPLE_CHOICE tem options
+    for (const question of data.quizConfig.questions) {
+      if (question.type === 'MULTIPLE_CHOICE' && (!question.options || question.options.length === 0)) {
+        return false
+      }
+      if (question.type === 'SCALE' && (question.min === undefined || question.max === undefined)) {
+        return false
+      }
+    }
+  }
+  // Se template é ILLUSTRATED, illustrationUrl é obrigatório
+  if ((data.bannerTemplate === 'ILLUSTRATED' || data.modalTemplate === 'ILLUSTRATED') && !data.illustrationUrl) {
+    return false
+  }
+  return true
+}, {
+  message: 'Configuração inválida: QUIZ requer quizConfig, MULTIPLE_CHOICE requer options, SCALE requer min/max, ILLUSTRATED requer illustrationUrl'
 })
 
 /**
@@ -108,7 +160,13 @@ export async function POST(request: NextRequest) {
       showOnDashboard,
       dashboardExpiresAt,
       createdBy: session.user.id,
-      sendEmail
+      sendEmail,
+      displayType: validatedData.displayType || 'BANNER',
+      bannerTemplate: validatedData.bannerTemplate,
+      modalTemplate: validatedData.modalTemplate,
+      quizConfig: validatedData.quizConfig,
+      illustrationUrl: validatedData.illustrationUrl || undefined,
+      bannerColors: validatedData.bannerColors
     })
 
     return NextResponse.json({

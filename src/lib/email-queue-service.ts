@@ -298,7 +298,8 @@ export class EmailQueueService {
           emailData.title,
           emailData.message,
           emailData.link || null,
-          recipientName || undefined
+          recipientName || undefined,
+          emailData.ctaText || null
         )
         await sendEmail({
           to: email,

@@ -27,6 +27,7 @@ import { CompanyLogo } from "@/components/company-logo";
 import { DashboardPortfolios } from "@/components/dashboard-portfolios";
 import { DashboardRadarSection } from "@/components/dashboard-radar-section";
 import { DashboardNotificationBanner } from "@/components/dashboard-notification-banner";
+import { NotificationModalsWrapper } from "@/components/notification-modals-wrapper";
 import {
   BarChart3,
   TrendingUp,
@@ -93,6 +94,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
+      <NotificationModalsWrapper />
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         {/* Header Simplificado */}
         <div className="mb-6">

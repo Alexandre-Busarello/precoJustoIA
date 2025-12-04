@@ -27,6 +27,7 @@ interface Notification {
   type: string
   isRead: boolean
   createdAt: Date
+  campaignId?: string | null
 }
 
 interface NotificationBellProps {
@@ -84,6 +85,12 @@ export function NotificationBell({ className }: NotificationBellProps) {
 
     // Fechar dropdown
     setIsOpen(false)
+
+    // Se for quiz, redirecionar para página do quiz
+    if (notification.type === 'QUIZ' && notification.campaignId) {
+      window.location.href = `/quiz/${notification.campaignId}`
+      return
+    }
 
     // Navegar para o link se houver
     if (notification.link) {
@@ -166,6 +173,11 @@ export function NotificationBell({ className }: NotificationBellProps) {
                   <div className="flex items-start justify-between w-full mb-1">
                     <h4 className="font-semibold text-sm flex-1">
                       {notification.title}
+                      {notification.type === 'QUIZ' && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          Quiz
+                        </Badge>
+                      )}
                     </h4>
                     {!notification.isRead && (
                       <div className="h-2 w-2 bg-blue-600 rounded-full ml-2 flex-shrink-0 mt-1" />

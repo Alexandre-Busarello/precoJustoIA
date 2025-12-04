@@ -2922,7 +2922,8 @@ export function generateNotificationEmailTemplate(
   title: string,
   message: string,
   link: string | null,
-  userName?: string
+  userName?: string,
+  ctaText?: string | null
 ) {
   const baseUrl = getEmailBaseUrl()
   const logoUrl = getEmailLogoUrl()
@@ -3028,17 +3029,34 @@ export function generateNotificationEmailTemplate(
           .button {
             display: inline-block;
             background-color: #3b82f6;
-            color: #ffffff;
-            padding: 14px 28px;
+            color: #ffffff !important;
+            padding: 16px 32px;
             text-decoration: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-weight: 600;
             font-size: 16px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            line-height: 1.5;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transition: all 0.2s ease;
+            border: none;
+            text-align: center;
+            min-width: 200px;
           }
           
           .button:hover {
             background-color: #2563eb;
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+            transform: translateY(-1px);
+          }
+          
+          .button:active {
+            transform: translateY(0);
+          }
+          
+          /* Garantir que o texto seja sempre branco */
+          .button,
+          .button * {
+            color: #ffffff !important;
           }
           
           .footer {
@@ -3120,7 +3138,9 @@ export function generateNotificationEmailTemplate(
               
               ${link ? `
                 <div class="button-container">
-                  <a href="${link}" class="button">Ver detalhes</a>
+                  <a href="${link}" class="button" style="color: #ffffff !important; text-decoration: none;">
+                    ${ctaText || 'Ver detalhes'}
+                  </a>
                 </div>
               ` : ''}
             </div>

@@ -97,6 +97,8 @@ model User {
   radarConfig             RadarConfig?
   notifications           Notification[]
   notificationPreferences UserNotificationPreferences?
+  notificationModalViews  NotificationModalView[]
+  quizResponses          QuizResponse[]
   debts                   Debt[]
 
   @@map("users")
@@ -1706,6 +1708,14 @@ model NotificationCampaign {
   showOnDashboard    Boolean   @default(false) @map("show_on_dashboard")
   dashboardExpiresAt DateTime? @map("dashboard_expires_at")
 
+  // Display Type e Templates
+  displayType     NotificationDisplayType @default(BANNER) @map("display_type")
+  bannerTemplate  NotificationTemplate?   @map("banner_template")
+  modalTemplate   NotificationTemplate?   @map("modal_template")
+  quizConfig      Json?                   @map("quiz_config") // Configuração do quiz (perguntas, tipos, etc)
+  illustrationUrl String?                 @map("illustration_url") // URL da imagem para template ILLUSTRATED
+  bannerColors    Json?                   @map("banner_colors") // Cores customizadas do banner { primaryColor, secondaryColor, backgroundColor, textColor, buttonColor, buttonTextColor }
+
   // Metadata
   createdBy String @map("created_by") // ID do admin que criou
   stats     Json? // Estatísticas (totalSent, totalRead, totalClicked)
@@ -1714,10 +1724,13 @@ model NotificationCampaign {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  notifications Notification[]
+  notifications      Notification[]
+  modalViews         NotificationModalView[]
+  quizResponses      QuizResponse[]
 
   @@index([createdAt])
   @@index([showOnDashboard, dashboardExpiresAt])
+  @@index([displayType])
   @@map("notification_campaigns")
 }
 
@@ -1735,6 +1748,40 @@ model UserNotificationPreferences {
 
   @@index([userId])
   @@map("user_notification_preferences")
+}
+
+model NotificationModalView {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  campaignId String   @map("campaign_id")
+  viewedAt   DateTime @default(now()) @map("viewed_at")
+  dismissedAt DateTime? @map("dismissed_at") // Quando fechou sem interagir
+
+  // Relations
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign NotificationCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campaignId])
+  @@index([userId])
+  @@index([campaignId])
+  @@map("notification_modal_views")
+}
+
+model QuizResponse {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  campaignId String   @map("campaign_id")
+  responses  Json // Respostas do usuário { questionId: resposta }
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  // Relations
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign NotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campaignId])
+  @@index([userId])
+  @@index([campaignId])
+  @@map("quiz_responses")
 }
 
 // ===== ARBITRAGEM INTELIGENTE DE DÍVIDA =====
@@ -1808,6 +1855,20 @@ enum NotificationType {
   ASSET_CHANGE // Mudança fundamental de ativo
   MONTHLY_REPORT // Relatório mensal
   AI_REPORT // Relatório de IA genérico
+  QUIZ // Notificações de quiz
+}
+
+enum NotificationDisplayType {
+  BANNER // Exibido como banner na dashboard
+  MODAL // Exibido como modal (uma vez por usuário)
+  QUIZ // Exibido como modal de quiz
+}
+
+enum NotificationTemplate {
+  GRADIENT // Template com gradiente
+  SOLID // Template sólido
+  MINIMAL // Template minimalista
+  ILLUSTRATED // Template com ilustração/imagem
 }
 
 enum NotificationLinkType {

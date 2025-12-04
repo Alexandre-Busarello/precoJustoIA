@@ -100,6 +100,27 @@ export function AdminNotificationsPageClient() {
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [deletingCampaign, setDeletingCampaign] = useState<Campaign | null>(null)
   const [extendForNewUsers, setExtendForNewUsers] = useState(false)
+  const [displayType, setDisplayType] = useState<'BANNER' | 'MODAL' | 'QUIZ'>('BANNER')
+  const [bannerTemplate, setBannerTemplate] = useState<'GRADIENT' | 'SOLID' | 'MINIMAL' | 'ILLUSTRATED'>('GRADIENT')
+  const [modalTemplate, setModalTemplate] = useState<'GRADIENT' | 'SOLID' | 'MINIMAL' | 'ILLUSTRATED'>('GRADIENT')
+  const [illustrationUrl, setIllustrationUrl] = useState('')
+  const [bannerColors, setBannerColors] = useState<{
+    primaryColor?: string
+    secondaryColor?: string
+    backgroundColor?: string
+    textColor?: string
+    buttonColor?: string
+    buttonTextColor?: string
+  }>({})
+  const [quizQuestions, setQuizQuestions] = useState<Array<{
+    id: string
+    type: 'MULTIPLE_CHOICE' | 'TEXT' | 'SCALE'
+    question: string
+    options?: string[]
+    required: boolean
+    min?: number
+    max?: number
+  }>>([])
 
   // Buscar campanhas
   const { data, isLoading } = useQuery({
@@ -327,6 +348,12 @@ export function AdminNotificationsPageClient() {
     setEditingCampaign(null)
     setEmailList('')
     setExtendForNewUsers(false)
+    setDisplayType('MODAL') // Padrão quando não está destacando na dashboard
+    setBannerTemplate('GRADIENT')
+    setModalTemplate('GRADIENT')
+    setIllustrationUrl('')
+    setBannerColors({})
+    setQuizQuestions([])
   }
 
   const handleCreateCampaign = () => {
@@ -383,6 +410,58 @@ export function AdminNotificationsPageClient() {
       config.emails = emails
     }
 
+    // Se showOnDashboard estiver marcado, displayType é sempre BANNER
+    const finalDisplayType = showOnDashboard ? 'BANNER' : displayType
+    
+    // Validar quizConfig se displayType é QUIZ (e não está destacando na dashboard)
+    if (finalDisplayType === 'QUIZ') {
+      if (quizQuestions.length === 0 || quizQuestions.length > 5) {
+        toast({
+          title: 'Erro',
+          description: 'Quiz deve ter entre 1 e 5 perguntas',
+          variant: 'destructive',
+        })
+        return
+      }
+      // Validar cada pergunta
+      for (const q of quizQuestions) {
+        if (!q.question.trim()) {
+          toast({
+            title: 'Erro',
+            description: 'Todas as perguntas devem ter texto',
+            variant: 'destructive',
+          })
+          return
+        }
+        if (q.type === 'MULTIPLE_CHOICE' && (!q.options || q.options.length === 0)) {
+          toast({
+            title: 'Erro',
+            description: 'Perguntas de múltipla escolha devem ter opções',
+            variant: 'destructive',
+          })
+          return
+        }
+        if (q.type === 'SCALE' && (q.min === undefined || q.max === undefined)) {
+          toast({
+            title: 'Erro',
+            description: 'Perguntas de escala devem ter min e max definidos',
+            variant: 'destructive',
+          })
+          return
+        }
+      }
+    }
+
+    // Validar illustrationUrl se template é ILLUSTRATED
+    if ((bannerTemplate === 'ILLUSTRATED' || modalTemplate === 'ILLUSTRATED') && !illustrationUrl.trim()) {
+      toast({
+        title: 'Erro',
+        description: 'Template ILLUSTRATED requer URL da imagem',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const campaignData: any = {
       title,
       message,
@@ -394,6 +473,50 @@ export function AdminNotificationsPageClient() {
       showOnDashboard,
       dashboardExpiresAt: dashboardExpiresAt ? new Date(dashboardExpiresAt).toISOString() : undefined,
       sendEmail,
+      displayType: finalDisplayType,
+      bannerTemplate: showOnDashboard ? bannerTemplate : undefined,
+      modalTemplate: !showOnDashboard ? modalTemplate : undefined,
+      quizConfig: finalDisplayType === 'QUIZ' ? { questions: quizQuestions } : undefined,
+      illustrationUrl: illustrationUrl.trim() || undefined,
+      bannerColors: (() => {
+        if (!showOnDashboard) return undefined
+        
+        // Valores padrão por template
+        const defaultColors: Record<string, string> = {}
+        
+        // Definir valores padrão baseado no template
+        if (bannerTemplate === 'GRADIENT' || bannerTemplate === 'MINIMAL' || bannerTemplate === 'ILLUSTRATED') {
+          defaultColors.primaryColor = '#6366f1'
+        }
+        if (bannerTemplate === 'GRADIENT' || bannerTemplate === 'ILLUSTRATED') {
+          defaultColors.secondaryColor = '#9333ea'
+        }
+        if (bannerTemplate === 'SOLID') {
+          defaultColors.backgroundColor = '#1e293b'
+        }
+        // Cor do texto e botão são sempre visíveis
+        defaultColors.textColor = '#1e293b'
+        defaultColors.buttonColor = '#4f46e5'
+        defaultColors.buttonTextColor = '#ffffff'
+        
+        // Construir objeto final mesclando valores padrão com valores customizados
+        const finalColors: typeof bannerColors = {}
+        
+        // Para cada cor relevante do template, usar valor customizado ou padrão
+        Object.entries(defaultColors).forEach(([key, defaultValue]) => {
+          const customValue = bannerColors[key as keyof typeof bannerColors]
+          // Se há valor customizado e não está vazio, usar ele
+          if (customValue && typeof customValue === 'string' && customValue.trim() !== '') {
+            finalColors[key as keyof typeof bannerColors] = customValue.trim()
+          } else {
+            // Caso contrário, usar valor padrão
+            finalColors[key as keyof typeof bannerColors] = defaultValue
+          }
+        })
+        
+        // Retornar objeto com cores (sempre terá valores devido aos padrões)
+        return finalColors
+      })(),
     }
 
     createCampaignMutation.mutate(campaignData)
@@ -558,6 +681,447 @@ export function AdminNotificationsPageClient() {
                 )}
               </div>
 
+              {/* Destacar na Dashboard */}
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="showOnDashboard"
+                  checked={showOnDashboard}
+                  onCheckedChange={(checked) => {
+                    setShowOnDashboard(checked)
+                    // Se marcar, automaticamente define como BANNER
+                    if (checked) {
+                      setDisplayType('BANNER')
+                    } else {
+                      // Se desmarcar, volta para MODAL como padrão
+                      setDisplayType('MODAL')
+                    }
+                  }}
+                />
+                <Label htmlFor="showOnDashboard">Destacar na Dashboard</Label>
+              </div>
+              <p className="text-xs text-muted-foreground -mt-2">
+                {showOnDashboard 
+                  ? 'A notificação será exibida como banner na dashboard dos usuários'
+                  : 'A notificação será exibida como modal ou quiz (uma vez por usuário)'
+                }
+              </p>
+
+              {/* Tipo de Exibição (apenas se não estiver destacando na dashboard) */}
+              {!showOnDashboard && (
+                <div>
+                  <Label htmlFor="displayType">Tipo de Exibição *</Label>
+                  <Select value={displayType} onValueChange={(v: any) => setDisplayType(v)}>
+                    <SelectTrigger id="displayType">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MODAL">Modal (uma vez por usuário)</SelectItem>
+                      <SelectItem value="QUIZ">Quiz Interativo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Template de Banner (apenas se destacar na dashboard) */}
+              {showOnDashboard && (
+                <>
+                  <div>
+                    <Label htmlFor="bannerTemplate">Template do Banner</Label>
+                    <Select value={bannerTemplate} onValueChange={(v: any) => setBannerTemplate(v)}>
+                      <SelectTrigger id="bannerTemplate">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GRADIENT">Gradiente</SelectItem>
+                        <SelectItem value="SOLID">Sólido</SelectItem>
+                        <SelectItem value="MINIMAL">Minimalista</SelectItem>
+                        <SelectItem value="ILLUSTRATED">Com Ilustração</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Cores Customizadas do Banner - Mostrar apenas cores relevantes para cada template */}
+                  <div className="space-y-3 border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
+                    <Label className="text-sm font-semibold">Cores Customizadas (opcional)</Label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {bannerTemplate === 'GRADIENT' && 'Para Gradiente: use Cor Primária e Secundária para criar o gradiente. Cor do Texto e Cor do Botão para personalização.'}
+                      {bannerTemplate === 'SOLID' && 'Para Sólido: use Cor de Fundo para o background, Cor do Texto para textos e Cor do Botão para o botão CTA.'}
+                      {bannerTemplate === 'MINIMAL' && 'Para Minimalista: Cor Primária para bordas e elementos de destaque. Cor do Texto para textos. Cor do Botão para o botão CTA.'}
+                      {bannerTemplate === 'ILLUSTRATED' && 'Para Ilustrado: use Cor Primária e Secundária para gradientes. Cor do Texto para textos. Cor do Botão para o botão CTA.'}
+                      {!bannerTemplate && 'Personalize as cores do banner. Deixe em branco para usar as cores padrão do template.'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Cor Primária - Mostrar para GRADIENT, MINIMAL, ILLUSTRATED */}
+                      {(bannerTemplate === 'GRADIENT' || bannerTemplate === 'MINIMAL' || bannerTemplate === 'ILLUSTRATED') && (
+                        <div>
+                          <Label htmlFor="primaryColor" className="text-xs">Cor Primária</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="primaryColor"
+                              type="color"
+                              value={bannerColors.primaryColor || '#6366f1'}
+                              onChange={(e) => setBannerColors({ ...bannerColors, primaryColor: e.target.value })}
+                              className="h-9 w-16 p-1 cursor-pointer"
+                            />
+                            <Input
+                              type="text"
+                              value={bannerColors.primaryColor || ''}
+                              onChange={(e) => setBannerColors({ ...bannerColors, primaryColor: e.target.value })}
+                              placeholder="#6366f1"
+                              className="flex-1 text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Cor Secundária - Mostrar para GRADIENT e ILLUSTRATED */}
+                      {(bannerTemplate === 'GRADIENT' || bannerTemplate === 'ILLUSTRATED') && (
+                        <div>
+                          <Label htmlFor="secondaryColor" className="text-xs">Cor Secundária</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="secondaryColor"
+                              type="color"
+                              value={bannerColors.secondaryColor || '#9333ea'}
+                              onChange={(e) => setBannerColors({ ...bannerColors, secondaryColor: e.target.value })}
+                              className="h-9 w-16 p-1 cursor-pointer"
+                            />
+                            <Input
+                              type="text"
+                              value={bannerColors.secondaryColor || ''}
+                              onChange={(e) => setBannerColors({ ...bannerColors, secondaryColor: e.target.value })}
+                              placeholder="#9333ea"
+                              className="flex-1 text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Cor de Fundo - Mostrar apenas para SOLID */}
+                      {bannerTemplate === 'SOLID' && (
+                        <div>
+                          <Label htmlFor="backgroundColor" className="text-xs">Cor de Fundo</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="backgroundColor"
+                              type="color"
+                              value={bannerColors.backgroundColor || ''}
+                              onChange={(e) => setBannerColors({ ...bannerColors, backgroundColor: e.target.value })}
+                              className="h-9 w-16 p-1 cursor-pointer"
+                            />
+                            <Input
+                              type="text"
+                              value={bannerColors.backgroundColor || ''}
+                              onChange={(e) => setBannerColors({ ...bannerColors, backgroundColor: e.target.value })}
+                              placeholder="Ex: #1e293b"
+                              className="flex-1 text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Cor do Texto - Mostrar para todos os templates */}
+                      <div>
+                        <Label htmlFor="textColor" className="text-xs">Cor do Texto</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="textColor"
+                            type="color"
+                            value={bannerColors.textColor || ''}
+                            onChange={(e) => setBannerColors({ ...bannerColors, textColor: e.target.value })}
+                            className="h-9 w-16 p-1 cursor-pointer"
+                          />
+                          <Input
+                            type="text"
+                            value={bannerColors.textColor || ''}
+                            onChange={(e) => setBannerColors({ ...bannerColors, textColor: e.target.value })}
+                            placeholder="#1e293b"
+                            className="flex-1 text-xs"
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Cor do Botão - Mostrar para todos os templates */}
+                      <div>
+                        <Label htmlFor="buttonColor" className="text-xs">Cor do Botão</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="buttonColor"
+                            type="color"
+                            value={bannerColors.buttonColor || '#4f46e5'}
+                            onChange={(e) => setBannerColors({ ...bannerColors, buttonColor: e.target.value })}
+                            className="h-9 w-16 p-1 cursor-pointer"
+                          />
+                          <Input
+                            type="text"
+                            value={bannerColors.buttonColor || ''}
+                            onChange={(e) => setBannerColors({ ...bannerColors, buttonColor: e.target.value })}
+                            placeholder="#4f46e5"
+                            className="flex-1 text-xs"
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Cor do Texto do Botão - Mostrar para todos os templates */}
+                      <div>
+                        <Label htmlFor="buttonTextColor" className="text-xs">Cor do Texto do Botão</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="buttonTextColor"
+                            type="color"
+                            value={bannerColors.buttonTextColor || '#ffffff'}
+                            onChange={(e) => setBannerColors({ ...bannerColors, buttonTextColor: e.target.value })}
+                            className="h-9 w-16 p-1 cursor-pointer"
+                          />
+                          <Input
+                            type="text"
+                            value={bannerColors.buttonTextColor || ''}
+                            onChange={(e) => setBannerColors({ ...bannerColors, buttonTextColor: e.target.value })}
+                            placeholder="#ffffff"
+                            className="flex-1 text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Template de Modal (apenas se não estiver destacando na dashboard) */}
+              {!showOnDashboard && (
+                <div>
+                  <Label htmlFor="modalTemplate">Template do Modal</Label>
+                  <Select value={modalTemplate} onValueChange={(v: any) => setModalTemplate(v)}>
+                    <SelectTrigger id="modalTemplate">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GRADIENT">Gradiente</SelectItem>
+                      <SelectItem value="SOLID">Sólido</SelectItem>
+                      <SelectItem value="MINIMAL">Minimalista</SelectItem>
+                      <SelectItem value="ILLUSTRATED">Com Ilustração</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* URL da Ilustração */}
+              {(bannerTemplate === 'ILLUSTRATED' || modalTemplate === 'ILLUSTRATED') && (
+                <div>
+                  <Label htmlFor="illustrationUrl">URL da Imagem *</Label>
+                  <Input
+                    id="illustrationUrl"
+                    value={illustrationUrl}
+                    onChange={(e) => setIllustrationUrl(e.target.value)}
+                    placeholder="https://exemplo.com/imagem.png"
+                    type="url"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    URL completa da imagem para o template ilustrado
+                  </p>
+                </div>
+              )}
+
+              {/* Configuração do Quiz */}
+              {!showOnDashboard && displayType === 'QUIZ' && (
+                <div className="space-y-4 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <Label>Perguntas do Quiz (máximo 5)</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (quizQuestions.length < 5) {
+                          setQuizQuestions([
+                            ...quizQuestions,
+                            {
+                              id: Date.now().toString(),
+                              type: 'MULTIPLE_CHOICE',
+                              question: '',
+                              options: [''],
+                              required: true
+                            }
+                          ])
+                        }
+                      }}
+                      disabled={quizQuestions.length >= 5}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Adicionar Pergunta
+                    </Button>
+                  </div>
+                  {quizQuestions.map((q, idx) => (
+                    <div key={q.id} className="border rounded p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Pergunta {idx + 1}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setQuizQuestions(quizQuestions.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div>
+                        <Label>Texto da Pergunta *</Label>
+                        <Input
+                          value={q.question}
+                          onChange={(e) => {
+                            const updated = [...quizQuestions]
+                            updated[idx].question = e.target.value
+                            setQuizQuestions(updated)
+                          }}
+                          placeholder="Digite a pergunta..."
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label>Tipo</Label>
+                          <Select
+                            value={q.type}
+                            onValueChange={(v: any) => {
+                              const updated = [...quizQuestions]
+                              updated[idx].type = v
+                              if (v === 'MULTIPLE_CHOICE') {
+                                updated[idx].options = ['']
+                              } else {
+                                delete updated[idx].options
+                              }
+                              if (v === 'SCALE') {
+                                updated[idx].min = 0
+                                updated[idx].max = 10
+                              } else {
+                                delete updated[idx].min
+                                delete updated[idx].max
+                              }
+                              setQuizQuestions(updated)
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="MULTIPLE_CHOICE">Múltipla Escolha</SelectItem>
+                              <SelectItem value="TEXT">Texto Livre</SelectItem>
+                              <SelectItem value="SCALE">Escala</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={q.required}
+                            onCheckedChange={(checked) => {
+                              const updated = [...quizQuestions]
+                              updated[idx].required = checked
+                              setQuizQuestions(updated)
+                            }}
+                          />
+                          <Label>Obrigatória</Label>
+                        </div>
+                      </div>
+                      {q.type === 'MULTIPLE_CHOICE' && (
+                        <div className="space-y-2">
+                          <Label>Opções *</Label>
+                          {(q.options || []).map((opt, optIdx) => (
+                            <div key={optIdx} className="flex gap-2">
+                              <Input
+                                value={opt}
+                                onChange={(e) => {
+                                  const updated = [...quizQuestions]
+                                  if (!updated[idx].options) updated[idx].options = ['']
+                                  updated[idx].options![optIdx] = e.target.value
+                                  setQuizQuestions(updated)
+                                }}
+                                placeholder={`Opção ${optIdx + 1}`}
+                              />
+                              {(q.options || []).length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const updated = [...quizQuestions]
+                                    updated[idx].options = (updated[idx].options || []).filter((_, i) => i !== optIdx)
+                                    setQuizQuestions(updated)
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const updated = [...quizQuestions]
+                              if (!updated[idx].options) updated[idx].options = ['']
+                              updated[idx].options!.push('')
+                              setQuizQuestions(updated)
+                            }}
+                          >
+                            <Plus className="w-4 h-4 mr-1 h-4" />
+                            Adicionar Opção
+                          </Button>
+                        </div>
+                      )}
+                      {q.type === 'SCALE' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label>Mínimo</Label>
+                            <Input
+                              type="number"
+                              value={q.min || 0}
+                              onChange={(e) => {
+                                const updated = [...quizQuestions]
+                                updated[idx].min = parseInt(e.target.value) || 0
+                                setQuizQuestions(updated)
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label>Máximo</Label>
+                            <Input
+                              type="number"
+                              value={q.max || 10}
+                              onChange={(e) => {
+                                const updated = [...quizQuestions]
+                                updated[idx].max = parseInt(e.target.value) || 10
+                                setQuizQuestions(updated)
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {quizQuestions.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Adicione pelo menos uma pergunta ao quiz
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Data de expiração (apenas se destacar na dashboard) */}
+              {showOnDashboard && (
+                <div>
+                  <Label htmlFor="dashboardExpiresAt">Expira em (opcional)</Label>
+                  <Input
+                    id="dashboardExpiresAt"
+                    type="datetime-local"
+                    value={dashboardExpiresAt}
+                    onChange={(e) => setDashboardExpiresAt(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Data e hora em que o banner será removido automaticamente da dashboard
+                  </p>
+                </div>
+              )}
+
               {/* Configurações específicas do segmento */}
               {(segmentType === 'ASSET_SUBSCRIBERS' || segmentType === 'RECENT_RADAR_USERS') && (
                 <div>
@@ -610,27 +1174,6 @@ export function AdminNotificationsPageClient() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Insira um email por linha. Apenas usuários cadastrados com esses emails receberão a notificação.
                   </p>
-                </div>
-              )}
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="showOnDashboard"
-                  checked={showOnDashboard}
-                  onCheckedChange={setShowOnDashboard}
-                />
-                <Label htmlFor="showOnDashboard">Destacar na Dashboard</Label>
-              </div>
-
-              {showOnDashboard && (
-                <div>
-                  <Label htmlFor="dashboardExpiresAt">Expira em (opcional)</Label>
-                  <Input
-                    id="dashboardExpiresAt"
-                    type="datetime-local"
-                    value={dashboardExpiresAt}
-                    onChange={(e) => setDashboardExpiresAt(e.target.value)}
-                  />
                 </div>
               )}
 

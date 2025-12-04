@@ -24,6 +24,7 @@ import {
   ArrowRight,
   FileText,
   Bell,
+  FileQuestion,
 } from 'lucide-react';
 
 interface AdminHubClientProps {
@@ -143,6 +144,14 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       icon: Bell,
       href: '/admin/notifications',
       color: 'bg-pink-500',
+    },
+    {
+      id: 'quizzes',
+      title: 'Quizzes e Respostas',
+      description: 'Visualize e acompanhe respostas dos quizzes criados',
+      icon: FileQuestion,
+      href: '/admin/quizzes',
+      color: 'bg-indigo-500',
     },
     {
       id: 'indices',

@@ -185,11 +185,15 @@ async function fetchCustomIndices(): Promise<MarketIndex[]> {
             });
             
             if (todayPoint) {
-              // Usar preço de fechamento do dia atual
+              // Mercado fechado e preço de fechamento disponível
+              // IMPORTANTE: Usar sempre o dailyChange do histórico, não calcular baseado nos pontos totais
               currentValue = todayPoint.points;
-              changePercent = todayPoint.dailyChange;
               
-              // Buscar pontos do dia anterior para calcular change corretamente
+              // Usar o dailyChange do histórico (variação do dia)
+              // Este valor já está calculado corretamente no banco como variação desde o dia anterior
+              changePercent = todayPoint.dailyChange ?? 0;
+              
+              // Buscar pontos do dia anterior para calcular change absoluto corretamente
               const yesterday = new Date(todayDate);
               yesterday.setDate(yesterday.getDate() - 1);
               
@@ -206,9 +210,14 @@ async function fetchCustomIndices(): Promise<MarketIndex[]> {
                 },
               });
               
-              // Calcular change baseado no dia anterior
+              // Calcular change absoluto baseado no dia anterior
               const previousPoints = yesterdayPoint?.points || 100.0;
               change = currentValue - previousPoints;
+              
+              // Se dailyChange não está disponível no histórico, calcular manualmente
+              if (changePercent === 0 && previousPoints !== 0) {
+                changePercent = ((currentValue - previousPoints) / previousPoints) * 100;
+              }
             } else {
               // Fallback: usar último fechamento oficial
               currentValue = realTimeData.lastOfficialPoints;
@@ -216,13 +225,50 @@ async function fetchCustomIndices(): Promise<MarketIndex[]> {
               change = 0;
             }
           } else {
-            // Mercado aberto ou fechado sem preço de fechamento - usar lógica padrão
-            currentValue = realTimeData.isMarketOpen 
-              ? realTimeData.realTimePoints 
-              : realTimeData.lastOfficialPoints;
+            // Mercado aberto ou fechado sem preço de fechamento - usar preços em tempo real
+            // IMPORTANTE: Mesmo quando mercado fechado, se não tem preço de fechamento ainda,
+            // devemos mostrar os preços em aberto do dia (como durante o pregão)
+            currentValue = realTimeData.realTimePoints;
             
-            changePercent = realTimeData.dailyChange;
-            change = currentValue - realTimeData.lastOfficialPoints;
+            // Buscar último ponto do dia anterior para calcular variação correta
+            // Isso garante que a variação seja calculada desde o fechamento do dia anterior,
+            // não desde um ponto mais antigo que pode estar desatualizado
+            const today = new Date();
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: 'America/Sao_Paulo',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            });
+            
+            const parts = formatter.formatToParts(today);
+            const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+            const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+            const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+            const todayDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            
+            // Buscar último ponto antes de hoje (dia anterior)
+            const yesterdayPoint = await prisma.indexHistoryPoints.findFirst({
+              where: {
+                indexId: index.id,
+                date: {
+                  lt: todayDate,
+                },
+              },
+              orderBy: { date: 'desc' },
+              select: {
+                points: true,
+              },
+            });
+            
+            // Usar o último ponto do dia anterior como referência
+            const referencePoints = yesterdayPoint?.points || realTimeData.lastOfficialPoints;
+            
+            // Calcular variação desde o último fechamento do dia anterior
+            change = currentValue - referencePoints;
+            changePercent = referencePoints !== 0 
+              ? (change / referencePoints) * 100 
+              : realTimeData.dailyChange; // Fallback para dailyChange se não conseguir calcular
           }
           
           // URL interna para índices próprios

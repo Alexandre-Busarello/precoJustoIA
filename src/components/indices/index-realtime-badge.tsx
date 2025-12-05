@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Clock, TrendingUp, TrendingDown, Radio } from 'lucide-react';
+import { fetchRealTimeReturnWithCache, getCachedRealTimeReturn } from '@/lib/index-realtime-cache';
 
 interface RealTimeReturnData {
   dailyChange: number;
@@ -31,22 +32,40 @@ export function IndexRealTimeBadge({
   const [realTimeData, setRealTimeData] = useState<RealTimeReturnData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
+  const hasFetchedRef = useRef(false); // Evitar múltiplos fetches
 
   useEffect(() => {
+    // Se já fez fetch, não fazer novamente
+    if (hasFetchedRef.current) {
+      return;
+    }
+
     let mounted = true;
 
     async function fetchRealTimeReturn() {
       try {
+        // Verificar cache primeiro (síncrono) antes de mostrar loading
+        const cached = getCachedRealTimeReturn(ticker);
+        if (cached) {
+          hasFetchedRef.current = true; // Marcar como já processado
+          if (mounted) {
+            setRealTimeData({
+              dailyChange: cached.dailyChange,
+              realTimeReturn: cached.realTimeReturn,
+              isMarketOpen: cached.isMarketOpen,
+            });
+            setIsLoading(false);
+          }
+          return;
+        }
+        
+        // Se não há cache, marcar como processado e fazer request
+        hasFetchedRef.current = true;
         setIsLoading(true);
         setError(false);
         
-        const response = await fetch(`/api/indices/${ticker}/realtime-return`);
-        
-        if (!response.ok) {
-          throw new Error('Erro ao buscar rentabilidade em tempo real');
-        }
-
-        const data = await response.json();
+        // Usar função com cache automático
+        const data = await fetchRealTimeReturnWithCache(ticker);
         
         if (mounted) {
           setRealTimeData({
@@ -65,24 +84,13 @@ export function IndexRealTimeBadge({
       }
     }
 
-    // Buscar em background após um pequeno delay para não bloquear renderização inicial
-    const timeoutId = setTimeout(() => {
-      fetchRealTimeReturn();
-    }, 100);
-
-    // Atualizar a cada 30 segundos se mercado estiver aberto
-    const intervalId = setInterval(() => {
-      if (realTimeData?.isMarketOpen) {
-        fetchRealTimeReturn();
-      }
-    }, 30000);
+    // Buscar apenas uma vez quando o componente montar
+    fetchRealTimeReturn();
 
     return () => {
       mounted = false;
-      clearTimeout(timeoutId);
-      clearInterval(intervalId);
     };
-  }, [ticker, realTimeData?.isMarketOpen]);
+  }, [ticker]);
 
   // Se ainda está carregando, mostrar badge de "Calculando"
   if (isLoading) {

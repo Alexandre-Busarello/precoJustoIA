@@ -8,7 +8,8 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { fetchRealTimeReturnWithCache, getCachedRealTimeReturn } from '@/lib/index-realtime-cache';
 
 interface RealTimeReturnData {
   realTimePoints: number;
@@ -31,18 +32,33 @@ export function IndexRealTimeReturn({
   const [data, setData] = useState<RealTimeReturnData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasFetchedRef = useRef(false); // Evitar múltiplos fetches
 
   useEffect(() => {
+    // Se já fez fetch, não fazer novamente
+    if (hasFetchedRef.current) {
+      return;
+    }
+
     async function fetchRealTimeReturn() {
       try {
-        setLoading(true);
-        const response = await fetch(`/api/indices/${ticker}/realtime-return`);
-        
-        if (!response.ok) {
-          throw new Error('Erro ao buscar rentabilidade em tempo real');
+        // Verificar cache primeiro (síncrono) antes de mostrar loading
+        const cached = getCachedRealTimeReturn(ticker);
+        if (cached) {
+          hasFetchedRef.current = true; // Marcar como já processado
+          setData(cached);
+          setError(null);
+          setLoading(false);
+          return;
         }
-
-        const result = await response.json();
+        
+        // Se não há cache, marcar como processado e fazer request
+        hasFetchedRef.current = true;
+        setLoading(true);
+        
+        // Usar função com cache automático
+        const result = await fetchRealTimeReturnWithCache(ticker);
+        
         setData(result);
         setError(null);
       } catch (err) {
@@ -53,11 +69,8 @@ export function IndexRealTimeReturn({
       }
     }
 
+    // Buscar apenas uma vez quando o componente montar
     fetchRealTimeReturn();
-
-    // Atualizar a cada 30 segundos durante o pregão
-    const interval = setInterval(fetchRealTimeReturn, 30000);
-    return () => clearInterval(interval);
   }, [ticker]);
 
   if (loading) {
@@ -84,11 +97,28 @@ export function IndexRealTimeReturn({
     : 'text-red-600 dark:text-red-400';
 
   const lastUpdateDate = new Date(data.lastOfficialDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const lastUpdateDateOnly = new Date(lastUpdateDate);
-  lastUpdateDateOnly.setHours(0, 0, 0, 0);
-  const isToday = lastUpdateDateOnly.getTime() === today.getTime();
+  
+  // Verificar se o último fechamento é de hoje (horário de Brasília)
+  // IMPORTANTE: Se não for de hoje, significa que estamos usando dados do dia anterior
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  
+  const todayParts = formatter.formatToParts(now);
+  const todayYear = parseInt(todayParts.find(p => p.type === 'year')?.value || '0', 10);
+  const todayMonth = parseInt(todayParts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+  const todayDay = parseInt(todayParts.find(p => p.type === 'day')?.value || '0', 10);
+  
+  const lastParts = formatter.formatToParts(lastUpdateDate);
+  const lastYear = parseInt(lastParts.find(p => p.type === 'year')?.value || '0', 10);
+  const lastMonth = parseInt(lastParts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+  const lastDay = parseInt(lastParts.find(p => p.type === 'day')?.value || '0', 10);
+  
+  const isToday = todayYear === lastYear && todayMonth === lastMonth && todayDay === lastDay;
 
   return (
     <Card className="border-2 border-dashed" style={{ borderColor: color }}>

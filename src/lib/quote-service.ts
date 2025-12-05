@@ -79,8 +79,7 @@ export async function getTickerPrice(ticker: string): Promise<StockPrice | null>
 
     if (quote?.regularMarketPrice) {
       const price = Number(quote.regularMarketPrice);
-      console.log(`  ✅ ${ticker}: R$ ${price.toFixed(2)} (Yahoo Finance)`);
-      
+
       // Auto-update database with latest price (fire and forget)
       updateDatabasePrice(ticker, price).catch(err => {
         console.error(`  ⚠️ ${ticker}: Failed to update database:`, err.message);
@@ -301,6 +300,84 @@ export async function ensureTodayPriceBackground(ticker: string): Promise<void> 
 }
 
 /**
+ * Busca preço histórico do Yahoo Finance para uma data específica
+ * Prioriza Yahoo Finance, usa banco apenas como fallback
+ */
+export async function getYahooHistoricalPrice(
+  ticker: string,
+  targetDate: Date
+): Promise<number | null> {
+  try {
+    const yahooFinance = await getYahooFinance();
+    const yahooSymbol = `${ticker}.SA`;
+    
+    // Buscar dados do dia específico (usar intervalo diário para precisão)
+    const startDate = new Date(targetDate);
+    startDate.setDate(startDate.getDate() - 5); // Buscar alguns dias antes para garantir que encontre
+    const endDate = new Date(targetDate);
+    endDate.setDate(endDate.getDate() + 1); // Até o dia seguinte
+
+    const result = await yahooFinance.chart(yahooSymbol, {
+      period1: startDate,
+      period2: endDate,
+      interval: '1d', // Dados diários para precisão
+      return: 'array'
+    });
+
+    // O resultado pode vir como array direto ou como objeto com quotes
+    const quotes = Array.isArray(result) ? result : (result?.quotes || []);
+    
+    if (!quotes || quotes.length === 0) {
+      return null;
+    }
+
+    // Encontrar o preço mais próximo da data alvo (último disponível antes ou na data)
+    const targetTime = targetDate.getTime();
+    let closestQuote: any = null;
+    let closestDiff = Infinity;
+
+    for (const quote of quotes) {
+      const quoteDate = new Date(quote.date);
+      const diff = Math.abs(quoteDate.getTime() - targetTime);
+      
+      // Preferir datas <= targetDate
+      if (quoteDate <= targetDate && diff < closestDiff) {
+        closestQuote = quote;
+        closestDiff = diff;
+      }
+    }
+
+    // Se não encontrou antes da data, usar o último disponível antes da data
+    if (!closestQuote && quotes.length > 0) {
+      // Tentar encontrar o último antes da data (iterar reverso)
+      const reversedQuotes = [...quotes].reverse();
+      for (const quote of reversedQuotes) {
+        const quoteDate = new Date(quote.date);
+        if (quoteDate <= targetDate) {
+          closestQuote = quote;
+          break;
+        }
+      }
+      // Se ainda não encontrou, usar o último disponível
+      if (!closestQuote) {
+        closestQuote = quotes[quotes.length - 1];
+      }
+    }
+
+    if (closestQuote && closestQuote.close && closestQuote.close > 0) {
+      const price = Number(closestQuote.close);
+      console.log(`📊 [YAHOO] Found historical price for ${ticker} on ${targetDate.toISOString().split('T')[0]}: ${price.toFixed(2)}`);
+      return price;
+    }
+
+    return null;
+  } catch (error) {
+    console.warn(`⚠️ [QUOTE SERVICE] Error fetching Yahoo historical price for ${ticker}:`, error);
+    return null;
+  }
+}
+
+/**
  * Update database with latest price from Yahoo Finance
  * Creates or updates the daily_quote for today
  */
@@ -339,7 +416,6 @@ async function updateDatabasePrice(ticker: string, price: number): Promise<void>
       }
     });
 
-    console.log(`  💾 ${ticker}: Database updated with R$ ${price.toFixed(2)}`);
   } catch (error) {
     // Log but don't throw - database update is best-effort
     console.error(`  ❌ ${ticker}: Database update failed:`, error instanceof Error ? error.message : error);

@@ -84,26 +84,127 @@ async function fetchIbovData(startDate: Date, endDate: Date): Promise<BenchmarkD
         
         const startTime = startDate.getTime();
         const endTime = endDate.getTime();
+        const periodDiff = endTime - startTime;
         
-        const transformedData: BenchmarkDataPoint[] = historicalData
+        // Se o período for muito curto (menos de 7 dias), expandir para incluir dados próximos
+        const expandedStartTime = periodDiff < 7 * 24 * 60 * 60 * 1000 
+          ? startTime - (30 * 24 * 60 * 60 * 1000)
+          : startTime;
+        const expandedEndTime = periodDiff < 7 * 24 * 60 * 60 * 1000
+          ? endTime + (30 * 24 * 60 * 60 * 1000)
+          : endTime;
+        
+        let transformedData: BenchmarkDataPoint[] = historicalData
           .filter((item: any) => {
             const itemTime = item.date * 1000;
-            return itemTime >= startTime && itemTime <= endTime;
+            return itemTime >= expandedStartTime && itemTime <= expandedEndTime;
           })
           .map((item: any) => {
+            // Converter timestamp Unix para Date local
             const date = new Date(item.date * 1000);
-            const isoDate = date.toISOString().split('T')[0];
+            // Formatar data em timezone local (YYYY-MM-DD) para evitar problemas de timezone
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const localDate = `${year}-${month}-${day}`;
             
             return {
-              date: isoDate,
+              date: localDate,
               value: item.close
             };
           })
           .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+        // Se ainda não temos dados após expandir, usar todos os dados disponíveis
+        if (transformedData.length === 0 && historicalData.length > 0) {
+          console.log('⚠️ Nenhum dado no período expandido, usando todos os dados disponíveis');
+          transformedData = historicalData
+            .map((item: any) => {
+              const date = new Date(item.date * 1000);
+              const isoDate = date.toISOString().split('T')[0];
+              
+              return {
+                date: isoDate,
+                value: item.close
+              };
+            })
+            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        }
+
+        // Filtrar para manter apenas dados dentro do período original (se possível)
         if (transformedData.length > 0) {
-          console.log(`✅ IBOV: ${transformedData.length} pontos de dados carregados via BRAPI`);
-          return transformedData;
+          const filteredByOriginalPeriod = transformedData.filter(item => {
+            const itemTime = new Date(item.date).getTime();
+            return itemTime >= startTime && itemTime <= endTime;
+          });
+          
+          let finalData = filteredByOriginalPeriod.length > 0 
+            ? filteredByOriginalPeriod 
+            : transformedData;
+          
+          // Verificar se temos dados do dia atual (endDate) - usar formato local
+          const endYear = endDate.getFullYear();
+          const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
+          const endDay = String(endDate.getDate()).padStart(2, '0');
+          const endDateStr = `${endYear}-${endMonth}-${endDay}`;
+          const hasTodayData = finalData.some(item => item.date === endDateStr);
+          
+          // Se não temos dados do dia atual, buscar do Yahoo Finance
+          if (!hasTodayData) {
+            console.log('📊 BRAPI não tem dados do dia atual, buscando do Yahoo Finance...');
+            try {
+              const todayPeriod1 = Math.floor((endDate.getTime() - 7 * 24 * 60 * 60 * 1000) / 1000); // 7 dias atrás
+              const todayPeriod2 = Math.floor(endDate.getTime() / 1000);
+              const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${todayPeriod1}&period2=${todayPeriod2}&interval=1d`;
+              
+              const yahooResponse = await fetch(yahooUrl, {
+                next: { revalidate: 300 } // Cache de 5 minutos para dados do dia atual
+              });
+              
+              if (yahooResponse.ok) {
+                const yahooData = await yahooResponse.json();
+                const timestamps = yahooData.chart?.result?.[0]?.timestamp || [];
+                const closes = yahooData.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+                
+                // Buscar apenas dados do dia atual ou mais recente
+                const todayData: BenchmarkDataPoint[] = [];
+                for (let i = timestamps.length - 1; i >= 0; i--) {
+                  const date = new Date(timestamps[i] * 1000);
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const localDate = `${year}-${month}-${day}`;
+                  
+                  if (closes[i] && closes[i] > 0) {
+                    todayData.push({
+                      date: localDate,
+                      value: closes[i]
+                    });
+                    
+                    // Se encontramos o dia atual, parar
+                    if (localDate === endDateStr) {
+                      break;
+                    }
+                  }
+                }
+                
+                if (todayData.length > 0) {
+                  // Combinar dados do BRAPI com Yahoo Finance, removendo duplicatas
+                  const existingDates = new Set(finalData.map(d => d.date));
+                  const newData = todayData.filter(d => !existingDates.has(d.date));
+                  finalData = [...finalData, ...newData].sort((a, b) => 
+                    new Date(a.date).getTime() - new Date(b.date).getTime()
+                  );
+                  console.log(`✅ Adicionados ${newData.length} pontos do Yahoo Finance (dia atual)`);
+                }
+              }
+            } catch (yahooError) {
+              console.warn('⚠️ Erro ao buscar dados do dia atual do Yahoo Finance:', yahooError);
+            }
+          }
+          
+          console.log(`✅ IBOV: ${finalData.length} pontos de dados carregados via BRAPI${hasTodayData ? '' : ' + Yahoo Finance'}`);
+          return finalData;
         } else {
           console.warn('⚠️ Nenhum dado IBOV após filtragem');
         }

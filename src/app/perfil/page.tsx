@@ -29,6 +29,7 @@ import {
   Loader2,
   CreditCard,
   Bell,
+  BarChart3,
 } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
@@ -74,6 +75,9 @@ export default function PerfilPage() {
   // Estados para preferências de notificações
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true)
   const [updatingPreferences, setUpdatingPreferences] = useState(false)
+  
+  // Estado para banner de índices
+  const [marketTickerHidden, setMarketTickerHidden] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -83,6 +87,7 @@ export default function PerfilPage() {
     }
     fetchProfile()
     fetchNotificationPreferences()
+    checkMarketTickerStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, status, router])
 
@@ -122,6 +127,26 @@ export default function PerfilPage() {
       }
     } catch (error) {
       console.error("Erro ao buscar preferências de notificações:", error)
+    }
+  }
+
+  const checkMarketTickerStatus = () => {
+    if (typeof window !== 'undefined') {
+      const hidden = localStorage.getItem('market-ticker-banner-hidden') === 'true'
+      setMarketTickerHidden(hidden)
+    }
+  }
+
+  const handleReenableMarketTicker = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('market-ticker-banner-hidden')
+      setMarketTickerHidden(false)
+      // Disparar evento customizado para notificar outros componentes
+      window.dispatchEvent(new Event('marketTickerVisibilityChange'))
+      toast({
+        title: "Sucesso",
+        description: "Banner de índices reativado.",
+      })
     }
   }
 
@@ -590,6 +615,46 @@ export default function PerfilPage() {
               </>
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Preferências de Interface */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Preferências de Interface
+          </CardTitle>
+          <CardDescription>
+            Configure como você deseja visualizar elementos da interface
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <BarChart3 className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  Banner de Índices do Mercado
+                </label>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 ml-6">
+                {marketTickerHidden 
+                  ? "O banner está oculto. Você pode reativá-lo clicando no botão abaixo."
+                  : "Exibe índices internacionais e próprios no topo da página"}
+              </p>
+            </div>
+            {marketTickerHidden && (
+              <Button
+                onClick={handleReenableMarketTicker}
+                variant="outline"
+                size="sm"
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Reativar Banner
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

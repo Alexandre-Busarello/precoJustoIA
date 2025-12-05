@@ -9,9 +9,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, Minus, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
+import Link from 'next/link';
 
 interface AssetPerformance {
   ticker: string;
@@ -42,6 +44,7 @@ async function fetchAssetPerformance(ticker: string): Promise<AssetPerformance[]
 }
 
 export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
+  const { isPremium } = usePremiumStatus();
   const [filter, setFilter] = useState<'ALL' | 'ACTIVE' | 'EXITED'>('ALL');
   const [sortBy, setSortBy] = useState<'entryDate' | 'totalReturn' | 'contribution' | 'days'>('entryDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -134,6 +137,10 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
+  // Mostrar apenas 3 ativos para usuários Free, resto com blur
+  const visiblePerformances = isPremium ? sortedPerformances : sortedPerformances.slice(0, 3);
+  const blurredPerformances = isPremium ? [] : sortedPerformances.slice(3);
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -166,7 +173,15 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Performance Individual dos Ativos</CardTitle>
+        <CardTitle className="flex items-center justify-between">
+          <span>Performance Individual dos Ativos</span>
+          {!isPremium && (
+            <Badge variant="outline" className="text-xs">
+              <Lock className="h-3 w-3 mr-1" />
+              Premium
+            </Badge>
+          )}
+        </CardTitle>
         <CardDescription>
           Rastreamento completo de rentabilidade de cada ativo que passou pelo índice
         </CardDescription>
@@ -239,7 +254,7 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedPerformances.map((perf) => (
+                {visiblePerformances.map((perf) => (
                   <TableRow key={perf.ticker}>
                     <TableCell className="font-medium">{perf.ticker}</TableCell>
                     <TableCell>
@@ -272,6 +287,44 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
                     </TableCell>
                   </TableRow>
                 ))}
+                {blurredPerformances.map((perf, index) => (
+                  <TableRow 
+                    key={`blurred-${perf.ticker}-${index}`} 
+                    className="relative overflow-hidden"
+                    style={{ filter: 'blur(4px)', pointerEvents: 'none' }}
+                  >
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-16 rounded" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-5 w-16 rounded" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-20 rounded" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-20 rounded" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-12 rounded" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-16 rounded" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-16 rounded" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-16 rounded ml-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-16 rounded ml-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="bg-gray-300 h-4 w-12 rounded ml-auto" />
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
@@ -280,6 +333,25 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
             <p className="text-sm text-muted-foreground text-center py-4">
               Nenhum ativo encontrado com o filtro selecionado.
             </p>
+          )}
+
+          {!isPremium && blurredPerformances.length > 0 && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm mb-1">Desbloqueie a Performance Completa</h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Veja todos os {sortedPerformances.length} ativos que passaram pelo índice e suas performances detalhadas.
+                  </p>
+                  <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
+                    <Link href="/checkout">
+                      Fazer Upgrade para Premium
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </CardContent>

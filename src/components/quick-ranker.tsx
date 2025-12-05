@@ -706,23 +706,33 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
   const formatMetricValue = (key: string, value: number | null) => {
     if (value === null || value === undefined) return 'N/A';
     
+    // Métricas que já vêm em percentual (não em decimal)
+    const percentualAlready = ['discountFromCeiling'];
+    
     // Identificar métricas que são percentuais (geralmente em decimal)
     const percentualMetrics = [
       'roe', 'roa', 'roic', 'margemLiquida', 'margemEbitda', 
-      'crescimentoReceitas', 'crescimentoLucros', 'dy', 'impliedWACC', 
+      'crescimentoReceitas', 'crescimentoLucros', 'dy', 'dividendYield', 'impliedWACC', 
       'impliedGrowth', 'sustainabilityScore', 'qualityScore', 'valueScore',
-      'fcdQualityScore', 'terminalValueContribution'
+      'fcdQualityScore', 'terminalValueContribution', 'discountFromCeiling'
     ];
     
     // Identificar métricas monetárias
     const monetaryMetrics = [
       'lpa', 'vpa', 'fairValue', 'currentPrice', 'precoJusto',
       'fcffBase', 'enterpriseValue', 'presentValueCashflows', 
-      'presentValueTerminal', 'marketCapBi'
+      'presentValueTerminal', 'marketCapBi', 'ceilingPrice', 'averageDividend'
     ];
+    
+    // Métricas que são números simples (não percentuais, não monetárias)
+    const simpleNumericMetrics = ['barsiScore'];
     
     // Formatação específica baseada no tipo de métrica
     if (percentualMetrics.includes(key)) {
+      // Se já vem em percentual, apenas formatar
+      if (percentualAlready.includes(key)) {
+        return `${value.toFixed(1)}%`;
+      }
       // Se o valor está entre 0 e 1, assumir que é decimal e converter para %
       if (value >= 0 && value <= 1) {
         return `${(value * 100).toFixed(1)}%`;
@@ -733,6 +743,14 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     
     if (monetaryMetrics.includes(key)) {
       return formatCurrency(value);
+    }
+    
+    // Métricas numéricas simples (como scores)
+    if (simpleNumericMetrics.includes(key)) {
+      return value.toLocaleString('pt-BR', {
+        minimumFractionDigits: value % 1 === 0 ? 0 : 1,
+        maximumFractionDigits: 1
+      });
     }
     
     // Para outros valores, formatar como número
@@ -752,6 +770,7 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       'pl': 'P/L',
       'pvp': 'P/VP',
       'dy': 'Dividend Yield',
+      'dividendYield': 'Dividend Yield (média 5-6 anos)',
       'lpa': 'LPA',
       'vpa': 'VPA',
       'margemLiquida': 'Margem Líquida',
@@ -764,6 +783,7 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       'sustainabilityScore': 'Score Sustentabilidade',
       'valueScore': 'Score Value',
       'fcdQualityScore': 'Score FCD',
+      'barsiScore': 'Score Barsi',
       'fcffBase': 'FCFF Base (R$ Mi)',
       'enterpriseValue': 'Enterprise Value (R$ Bi)',
       'presentValueCashflows': 'VP Fluxos (R$ Bi)',
@@ -776,7 +796,10 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       'combinedRank': 'Ranking Combinado',
       'roicRank': 'Ranking ROIC',
       'eyRank': 'Ranking Earnings Yield',
-      'earningsYield': 'Earnings Yield'
+      'earningsYield': 'Earnings Yield',
+      'ceilingPrice': 'Preço Teto',
+      'discountFromCeiling': 'Desconto do Teto',
+      'averageDividend': 'Média Dividendos (5-6 anos)'
     };
     
     return translations[key] || key.replace(/([A-Z])/g, ' $1').trim();
@@ -830,9 +853,14 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
           case "upside":
             // Upside já vem em % (ex: 25.5 = 25.5%)
             // Calculado como: ((fairValue - currentPrice) / currentPrice) * 100
-            // Funciona para todas as estratégias (Graham, FCD, Gordon, etc)
-            aVal = a.upside;
-            bVal = b.upside;
+            // Para método Barsi, usar discountFromCeiling como upside principal
+            if (results?.model === 'barsi') {
+              aVal = a.key_metrics?.discountFromCeiling ?? a.upside;
+              bVal = b.key_metrics?.discountFromCeiling ?? b.upside;
+            } else {
+              aVal = a.upside;
+              bVal = b.upside;
+            }
             break;
           case "upside_graham":
             // Ordenar especificamente por upside de Graham
@@ -1818,20 +1846,28 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           </div>
                           
                           {/* Upside da estratégia principal */}
-                          {typeof result.upside === 'number' ? (
-                            <div className="flex items-center justify-end gap-1 mb-2">
-                              <TrendingUp className={`w-3 h-3 sm:w-4 sm:h-4 ${result.upside >= 0 ? 'text-green-600' : 'text-red-600'}`} />
-                              <span className={`text-xs sm:text-sm font-semibold ${result.upside >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {result.upside >= 0 ? '+' : ''}{formatPercentage(result.upside)} upside
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-end gap-1 mb-2">
-                              <span className="text-xs text-muted-foreground">
-                                Upside não calculado
-                              </span>
-                            </div>
-                          )}
+                          {(() => {
+                            // Para método Barsi, sempre usar discountFromCeiling como upside principal
+                            let mainUpside = result.upside;
+                            if (results?.model === 'barsi' && result.key_metrics?.discountFromCeiling !== null && result.key_metrics?.discountFromCeiling !== undefined) {
+                              mainUpside = result.key_metrics.discountFromCeiling;
+                            }
+                            
+                            return typeof mainUpside === 'number' ? (
+                              <div className="flex items-center justify-end gap-1 mb-2">
+                                <TrendingUp className={`w-3 h-3 sm:w-4 sm:h-4 ${mainUpside >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                                <span className={`text-xs sm:text-sm font-semibold ${mainUpside >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {mainUpside >= 0 ? '+' : ''}{formatPercentage(mainUpside)} upside
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1 mb-2">
+                                <span className="text-xs text-muted-foreground">
+                                  Upside não calculado
+                                </span>
+                              </div>
+                            );
+                          })()}
                           
                           {/* Upsides adicionais (outras estratégias) */}
                           {(() => {

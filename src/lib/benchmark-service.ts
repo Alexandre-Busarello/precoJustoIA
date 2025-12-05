@@ -81,9 +81,6 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
     // Tentar BRAPI primeiro - Token deve ir no query string
     const brapiUrl = `https://brapi.dev/api/quote/%5EBVSP?range=${range}&interval=1mo${brapiToken ? `&token=${brapiToken}` : ''}`;
     
-    console.log('📊 Buscando IBOV via BRAPI:', brapiToken ? 'PRO' : 'FREE');
-    console.log('🔗 URL BRAPI:', brapiUrl.replace(brapiToken || '', 'TOKEN_HIDDEN'));
-    
     try {
       const response = await fetch(brapiUrl, {
         // BRAPI não precisa de Authorization header, apenas token no query string
@@ -92,9 +89,6 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
 
       if (response.ok) {
         const data = await response.json();
-        
-        console.log('✅ BRAPI Response Status:', response.status);
-        console.log('📦 BRAPI Data:', JSON.stringify(data, null, 2));
         
         // BRAPI retorna: { results: [{ historicalDataPrice: [...] }] }
         const historicalData = data.results?.[0]?.historicalDataPrice || [];
@@ -106,26 +100,132 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
         // Filtrar dados pelo período desejado
         const startTime = startDate.getTime();
         const endTime = endDate.getTime();
+        const periodDiff = endTime - startTime;
         
-        const transformedData: BenchmarkDataPoint[] = historicalData
+        // Se o período for muito curto (menos de 7 dias), expandir para incluir dados próximos
+        // Isso resolve o problema quando startDate e endDate são iguais ou muito próximos
+        const expandedStartTime = periodDiff < 7 * 24 * 60 * 60 * 1000 
+          ? startTime - (30 * 24 * 60 * 60 * 1000) // Expandir 30 dias antes
+          : startTime;
+        const expandedEndTime = periodDiff < 7 * 24 * 60 * 60 * 1000
+          ? endTime + (30 * 24 * 60 * 60 * 1000) // Expandir 30 dias depois
+          : endTime;
+        
+        let transformedData: BenchmarkDataPoint[] = historicalData
           .filter((item: any) => {
             const itemTime = item.date * 1000; // Converter de segundos para milissegundos
-            return itemTime >= startTime && itemTime <= endTime;
+            return itemTime >= expandedStartTime && itemTime <= expandedEndTime;
           })
           .map((item: any) => {
+            // Converter timestamp Unix para Date local
             const date = new Date(item.date * 1000);
-            const isoDate = date.toISOString().split('T')[0];
+            // Formatar data em timezone local (YYYY-MM-DD) para evitar problemas de timezone
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const localDate = `${year}-${month}-${day}`;
             
             return {
-              date: isoDate,
+              date: localDate,
               value: item.close
             };
           })
           .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+        // Se ainda não temos dados após expandir, usar todos os dados disponíveis
+        if (transformedData.length === 0 && historicalData.length > 0) {
+          console.log('⚠️ Nenhum dado no período expandido, usando todos os dados disponíveis');
+          transformedData = historicalData
+            .map((item: any) => {
+              // Converter timestamp Unix para Date local
+              const date = new Date(item.date * 1000);
+              // Formatar data em timezone local (YYYY-MM-DD) para evitar problemas de timezone
+              const year = date.getFullYear();
+              const month = String(date.getMonth() + 1).padStart(2, '0');
+              const day = String(date.getDate()).padStart(2, '0');
+              const localDate = `${year}-${month}-${day}`;
+              
+              return {
+                date: localDate,
+                value: item.close
+              };
+            })
+            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        }
+
+        // Filtrar para manter apenas dados dentro do período original (se possível)
+        // Mas manter pelo menos alguns dados se o período original não tiver correspondência
         if (transformedData.length > 0) {
-          console.log(`✅ IBOV: ${transformedData.length} pontos de dados carregados via BRAPI`);
-          return transformedData;
+          const filteredByOriginalPeriod = transformedData.filter(item => {
+            const itemTime = new Date(item.date).getTime();
+            return itemTime >= startTime && itemTime <= endTime;
+          });
+          
+          // Se temos dados no período original, usar eles. Caso contrário, usar os expandidos
+          let finalData = filteredByOriginalPeriod.length > 0 
+            ? filteredByOriginalPeriod 
+            : transformedData;
+          
+          // Buscar dados diários do Yahoo Finance para preencher todos os dias úteis
+          try {
+            // Buscar dados diários do período completo
+            const yahooPeriod1 = Math.floor(startDate.getTime() / 1000);
+            const yahooPeriod2 = Math.floor(endDate.getTime() / 1000);
+            const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${yahooPeriod1}&period2=${yahooPeriod2}&interval=1d`;
+            
+            const yahooResponse = await fetch(yahooUrl, {
+              next: { revalidate: 300 } // Cache de 5 minutos
+            });
+            
+            if (yahooResponse.ok) {
+              const yahooData = await yahooResponse.json();
+              const timestamps = yahooData.chart?.result?.[0]?.timestamp || [];
+              const closes = yahooData.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+              
+              // Converter todos os dados do Yahoo Finance para o formato padronizado
+              const yahooDataPoints: BenchmarkDataPoint[] = [];
+              for (let i = 0; i < timestamps.length; i++) {
+                const date = new Date(timestamps[i] * 1000);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const localDate = `${year}-${month}-${day}`;
+                
+                if (closes[i] && closes[i] > 0) {
+                  yahooDataPoints.push({
+                    date: localDate,
+                    value: closes[i]
+                  });
+                }
+              }
+              
+              if (yahooDataPoints.length > 0) {
+                // Combinar dados do BRAPI com Yahoo Finance
+                // Yahoo Finance tem prioridade para datas que existem em ambos (dados mais recentes)
+                const existingDates = new Set(finalData.map(d => d.date));
+                const newData = yahooDataPoints.filter(d => !existingDates.has(d.date));
+                
+                // Para datas que existem em ambos, usar Yahoo Finance (mais atualizado)
+                const yahooDates = new Set(yahooDataPoints.map(d => d.date));
+                const updatedData = finalData.map(d => {
+                  if (yahooDates.has(d.date)) {
+                    const yahooPoint = yahooDataPoints.find(y => y.date === d.date);
+                    return yahooPoint || d;
+                  }
+                  return d;
+                });
+                
+                finalData = [...updatedData, ...newData].sort((a, b) => 
+                  new Date(a.date).getTime() - new Date(b.date).getTime()
+                );
+                
+              }
+            }
+          } catch (yahooError) {
+            console.warn('⚠️ Erro ao buscar dados diários do Yahoo Finance:', yahooError);
+          }
+          
+          return finalData;
         } else {
           console.warn('⚠️ Nenhum dado IBOV após filtragem/transformação');
         }
@@ -159,11 +259,16 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
     const closes = data.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
     
     const transformedData: BenchmarkDataPoint[] = timestamps.map((timestamp: number, index: number) => {
+      // Converter timestamp Unix para Date local
       const date = new Date(timestamp * 1000);
-      const isoDate = date.toISOString().split('T')[0];
+      // Formatar data em timezone local (YYYY-MM-DD) para evitar problemas de timezone
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const localDate = `${year}-${month}-${day}`;
       
       return {
-        date: isoDate,
+        date: localDate,
         value: closes[index] || 0
       };
     }).filter((item: BenchmarkDataPoint) => item.value > 0);
@@ -214,13 +319,6 @@ function alignBenchmarkDates(
   backtestDates: string[]
 ): BenchmarkDataPoint[] {
   if (benchmarkData.length === 0 || backtestDates.length === 0) return [];
-
-  console.log('🔍 ===== ALIGN BENCHMARK DATES =====');
-  console.log('🔍 Total backtest dates:', backtestDates.length);
-  console.log('🔍 Total benchmark data points:', benchmarkData.length);
-  console.log('🔍 Últimas 3 datas do backtest:', backtestDates.slice(-3));
-  console.log('🔍 Últimos 3 dados do benchmark:', benchmarkData.slice(-3));
-
   // Criar mapa de datas de benchmark para busca rápida
   const benchmarkMap = new Map(
     benchmarkData.map(item => [item.date, item.value])
@@ -230,9 +328,6 @@ function alignBenchmarkDates(
   const alignedData: BenchmarkDataPoint[] = backtestDates.map((date, index) => {
     // Se temos o valor exato, usar ele
     if (benchmarkMap.has(date)) {
-      if (index >= backtestDates.length - 3) {
-        console.log(`🔍 Mês ${index}: Data ${date} - Match exato! Valor: ${benchmarkMap.get(date)}`);
-      }
       return {
         date,
         value: benchmarkMap.get(date)!
@@ -268,39 +363,23 @@ function alignBenchmarkDates(
     if (prevValue !== null && nextValue !== null && prevTime !== nextTime) {
       const ratio = (dateTime - prevTime) / (nextTime - prevTime);
       const interpolatedValue = prevValue + (nextValue - prevValue) * ratio;
-      if (index >= backtestDates.length - 3) {
-        console.log(`🔍 Mês ${index}: Data ${date} - INTERPOLADO! Prev: ${prevValue}, Next: ${nextValue}, Resultado: ${interpolatedValue}`);
-      }
       return { date, value: interpolatedValue };
     }
 
     // Se só temos um lado, usar ele
     if (prevValue !== null) {
-      if (index >= backtestDates.length - 3) {
-        console.log(`🔍 Mês ${index}: Data ${date} - Usando valor ANTERIOR: ${prevValue}`);
-      }
       return { date, value: prevValue };
     }
     if (nextValue !== null) {
-      if (index >= backtestDates.length - 3) {
-        console.log(`🔍 Mês ${index}: Data ${date} - Usando valor POSTERIOR: ${nextValue}`);
-      }
       return { date, value: nextValue };
     }
 
     // Último caso: usar o primeiro valor disponível
-    if (index >= backtestDates.length - 3) {
-      console.log(`🔍 Mês ${index}: Data ${date} - FALLBACK para primeiro valor: ${benchmarkData[0]?.value || 0}`);
-    }
     return {
       date,
       value: benchmarkData[0]?.value || 0
     };
   });
-
-  console.log('🔍 Total de dados alinhados:', alignedData.length);
-  console.log('🔍 Últimos 3 dados alinhados:', alignedData.slice(-3));
-  console.log('🔍 ===========================');
 
   return alignedData;
 }
@@ -313,16 +392,10 @@ export async function fetchBenchmarkData(
   endDate: Date
 ): Promise<BenchmarkData> {
   try {
-    console.log('📊 Buscando dados de benchmarks...');
-    console.log('📅 Período:', startDate, 'até', endDate);
-
     const [cdiData, ibovData] = await Promise.all([
       fetchCDIData(startDate, endDate),
       fetchIBOVData(startDate, endDate)
     ]);
-
-    console.log('✅ CDI:', cdiData.length, 'pontos de dados');
-    console.log('✅ IBOV:', ibovData.length, 'pontos de dados');
 
     return {
       cdi: cdiData,

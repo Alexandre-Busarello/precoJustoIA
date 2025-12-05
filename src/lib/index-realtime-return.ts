@@ -43,8 +43,8 @@ function isBrazilMarketOpen(): boolean {
   
   const dayOfWeek = dayMap[weekday] ?? 0;
   
-  // Mercado B3: Segunda a Sexta, 10h às 17h (horário de Brasília)
-  return dayOfWeek >= 1 && dayOfWeek <= 5 && hour >= 10 && hour < 17;
+  // Mercado B3: Segunda a Sexta, 10h às 18h (horário de Brasília)
+  return dayOfWeek >= 1 && dayOfWeek <= 5 && hour >= 10 && hour < 18;
 }
 
 export interface RealTimeReturn {
@@ -64,16 +64,65 @@ export async function calculateRealTimeReturn(
   indexId: string
 ): Promise<RealTimeReturn | null> {
   try {
-    // 1. Buscar último ponto histórico oficial (último fechamento)
-    const lastHistoryPoint = await prisma.indexHistoryPoints.findFirst({
-      where: { indexId },
-      orderBy: { date: 'desc' },
-      select: {
-        date: true,
-        points: true,
-        compositionSnapshot: true,
-      },
+    // 1. Buscar último ponto histórico oficial disponível
+    // IMPORTANTE: Quando mercado fechado e preço de fechamento disponível, usar o ponto de hoje
+    // Quando mercado aberto ou fechado sem preço, usar último ponto disponível para calcular variação
+    // Usar horário de Brasília para garantir comparação correta
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
     });
+    
+    const parts = formatter.formatToParts(now);
+    const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+    const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1; // month é 0-indexed
+    const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+    
+    // Criar data de hoje em Brasília (início do dia)
+    const today = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    
+    // Verificar se mercado está fechado
+    const marketClosed = !isBrazilMarketOpen();
+    
+    // Se mercado fechado, primeiro verificar se existe ponto de fechamento do dia atual
+    let lastHistoryPoint = null;
+    if (marketClosed) {
+      const todayPoint = await prisma.indexHistoryPoints.findFirst({
+        where: { 
+          indexId,
+          date: today,
+        },
+        orderBy: { date: 'desc' },
+        select: {
+          date: true,
+          points: true,
+          compositionSnapshot: true,
+        },
+      });
+      
+      if (todayPoint) {
+        // Preço de fechamento do dia já disponível - usar ele
+        lastHistoryPoint = todayPoint;
+      }
+    }
+    
+    // Se não encontrou ponto de hoje (ou mercado aberto), buscar último ponto disponível
+    if (!lastHistoryPoint) {
+      lastHistoryPoint = await prisma.indexHistoryPoints.findFirst({
+        where: { 
+          indexId,
+        },
+        orderBy: { date: 'desc' },
+        select: {
+          date: true,
+          points: true,
+          compositionSnapshot: true,
+        },
+      });
+    }
 
     if (!lastHistoryPoint) {
       return null; // Sem histórico, não pode calcular
@@ -81,8 +130,37 @@ export async function calculateRealTimeReturn(
 
     const lastOfficialPoints = lastHistoryPoint.points;
     const lastOfficialDate = lastHistoryPoint.date;
+    
+    // Se mercado fechado e já temos preço de fechamento do dia atual, retornar diretamente
+    // sem calcular variação em tempo real (economiza processamento)
+    if (marketClosed && lastHistoryPoint.date.getTime() === today.getTime()) {
+      // Buscar variação diária do banco
+      const todayPointWithChange = await prisma.indexHistoryPoints.findFirst({
+        where: { 
+          indexId,
+          date: today,
+        },
+        select: {
+          dailyChange: true,
+        },
+      });
+      
+      const realTimePoints = lastOfficialPoints;
+      const dailyChange = todayPointWithChange?.dailyChange ?? 0;
+      const initialPoints = 100.0;
+      const realTimeReturn = ((realTimePoints - initialPoints) / initialPoints) * 100;
+      
+      return {
+        realTimePoints,
+        realTimeReturn,
+        dailyChange,
+        lastOfficialPoints,
+        lastOfficialDate,
+        isMarketOpen: false,
+      };
+    }
 
-    // 2. Buscar composição atual do índice
+    // 2. Buscar composição atual do índice (apenas se não temos preço de fechamento do dia)
     const composition = await prisma.indexComposition.findMany({
       where: { indexId },
       select: {
@@ -194,17 +272,16 @@ export async function calculateRealTimeReturn(
       return null;
     }
 
-    // 8. Calcular pontos em tempo real: pontos_realtime = pontos_último_fechamento × (1 + R_t)
+    // 8. Calcular pontos em tempo real
+    // Mercado aberto ou fechado sem preço de fechamento - calcular variação em tempo real
     const realTimePoints = lastOfficialPoints * (1 + totalReturn);
-
-    // 9. Calcular retorno acumulado em tempo real desde o último fechamento
     const dailyChange = totalReturn * 100; // Converter para porcentagem
 
-    // 10. Calcular retorno total desde o início (base 100)
+    // 9. Calcular retorno total desde o início (base 100)
     const initialPoints = 100.0;
     const realTimeReturn = ((realTimePoints - initialPoints) / initialPoints) * 100;
 
-    // 11. Verificar se mercado está aberto (horário de Brasília)
+    // 10. Verificar se mercado está aberto (horário de Brasília)
     const isMarketOpen = isBrazilMarketOpen();
 
     return {

@@ -13,9 +13,11 @@ export interface IndexListItem {
   color: string
   currentPoints: number
   accumulatedReturn: number
+  dailyChange: number | null
   currentYield: number | null
   assetCount: number
   lastUpdate: Date | null
+  sparklineData?: Array<{ date: string; points: number }> | null
 }
 
 export async function getIndicesList(): Promise<IndexListItem[]> {
@@ -36,28 +38,55 @@ export async function getIndicesList(): Promise<IndexListItem[]> {
     }
   })
 
-  const mappedIndices = indices.map(index => {
-    const latestPoint = index.history[0]
-    const initialPoints = 100.0
-    const currentPoints = latestPoint?.points || initialPoints
-    const accumulatedReturn = ((currentPoints - initialPoints) / initialPoints) * 100
+  // Buscar histórico para sparkline de cada índice em paralelo
+  const mappedIndices = await Promise.all(
+    indices.map(async (index) => {
+      // Buscar últimos 30 pontos históricos para o sparkline
+      const sparklineHistory = await prisma.indexHistoryPoints.findMany({
+        where: { indexId: index.id },
+        orderBy: { date: 'desc' }, // Mais recentes primeiro
+        take: 30, // Últimos 30 dias
+        select: {
+          date: true,
+          points: true,
+        },
+      })
 
-    return {
-      id: index.id,
-      ticker: index.ticker,
-      name: index.name,
-      description: index.description,
-      color: index.color,
-      currentPoints,
-      accumulatedReturn,
-      currentYield: latestPoint?.currentYield || null,
-      assetCount: index.composition.length,
-      lastUpdate: latestPoint?.date || null
-    }
-  })
+      const latestPoint = index.history[0]
+      const initialPoints = 100.0
+      const currentPoints = latestPoint?.points || initialPoints
+      const accumulatedReturn = ((currentPoints - initialPoints) / initialPoints) * 100
+      const dailyChange = latestPoint?.dailyChange ?? null
+
+      // Formatar dados do sparkline (inverter ordem para cronológica: mais antigo -> mais recente)
+      const sparklineData = sparklineHistory
+        .reverse() // Inverter para ordem cronológica
+        .map(point => ({
+          date: point.date.toISOString().split('T')[0], // Formato YYYY-MM-DD
+          points: point.points,
+        }))
+
+      return {
+        id: index.id,
+        ticker: index.ticker,
+        name: index.name,
+        description: index.description,
+        color: index.color,
+        currentPoints,
+        accumulatedReturn,
+        dailyChange,
+        currentYield: latestPoint?.currentYield || null,
+        assetCount: index.composition.length,
+        lastUpdate: latestPoint?.date || null,
+        sparklineData: sparklineData.length > 0 ? sparklineData : null,
+      }
+    }),
+  )
 
   // Ordenar por retorno acumulado (maior primeiro)
-  return mappedIndices.sort((a, b) => b.accumulatedReturn - a.accumulatedReturn)
+  return mappedIndices.sort(
+    (a, b) => b.accumulatedReturn - a.accumulatedReturn
+  )
 }
 
 export async function getIndexByTicker(ticker: string) {

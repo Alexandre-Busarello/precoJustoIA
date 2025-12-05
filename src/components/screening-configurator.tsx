@@ -30,6 +30,7 @@ interface ScreeningParams {
   limit?: number;
   companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
   useTechnicalAnalysis?: boolean;
+  assetTypeFilter?: 'b3' | 'bdr' | 'both';
   plFilter?: ScreeningFilter;
   pvpFilter?: ScreeningFilter;
   evEbitdaFilter?: ScreeningFilter;
@@ -220,6 +221,27 @@ export function ScreeningConfigurator({
         </Select>
         <p className="text-xs text-muted-foreground">
           Filtre empresas por valor de mercado para focar em segmentos específicos
+        </p>
+      </div>
+
+      {/* Filtro de Tipo de Ativo */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Filtro por Tipo de Ativo</Label>
+        <Select 
+          value={params.assetTypeFilter || 'both'} 
+          onValueChange={(value) => setParams({ ...params, assetTypeFilter: value as 'b3' | 'bdr' | 'both' })}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecione o tipo de ativo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="both">🌎 Todos (B3 + BDRs)</SelectItem>
+            <SelectItem value="b3">🇧🇷 Apenas B3</SelectItem>
+            <SelectItem value="bdr">🌐 Apenas BDRs</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Escolha se deseja incluir apenas ações da B3, apenas BDRs ou ambos
         </p>
       </div>
 

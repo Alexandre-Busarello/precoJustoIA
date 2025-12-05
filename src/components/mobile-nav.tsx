@@ -33,7 +33,8 @@ import {
   Settings,
   Rocket,
   History,
-  ArrowLeftRight
+  ArrowLeftRight,
+  LineChart
 } from "lucide-react"
 import {
   Collapsible,
@@ -194,6 +195,13 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
     {
       label: "Histórico",
       items: [
+        {
+          title: "Carteiras Teóricas",
+          href: "/indices",
+          icon: <LineChart className="w-5 h-5" />,
+          show: true,
+          description: "Índices teóricos com performance histórica e rebalanceamento automático"
+        },
         {
           title: "P/L Histórico",
           href: "/pl-bolsa",

@@ -213,6 +213,12 @@ export async function getOrCalculateTechnicalAnalysis(
   // Converter para formato PriceData
   // IMPORTANTE: Muitos registros mensais têm open/high/low = 0, mas close está preenchido
   // Nesses casos, usar close para todos os campos
+  // 
+  // SOBRE DATAS MENSais:
+  // - Registros com data no dia 1 (ex: 2025-12-01) representam o FECHAMENTO do mês anterior (Novembro)
+  // - A ordenação por data crescente garante sequência temporal correta para cálculos
+  // - Exemplo: 2025-11-01 (Outubro) < 2025-12-01 (Novembro) < 2025-12-05 (Dezembro diário)
+  // - Os cálculos técnicos (RSI, MACD, etc.) não dependem das datas em si, apenas da sequência ordenada
   const priceData: PriceData[] = historicalPrices
     .map(hp => {
       const close = Number(hp.close);
@@ -221,7 +227,7 @@ export async function getOrCalculateTechnicalAnalysis(
       const low = Number(hp.low) || close;   // Se low = 0, usar close
       
       return {
-        date: hp.date,
+        date: hp.date, // Manter data original - ordenação garante sequência correta
         open: open,
         high: Math.max(high, close), // Garantir que high >= close
         low: Math.min(low, close),   // Garantir que low <= close
@@ -236,7 +242,14 @@ export async function getOrCalculateTechnicalAnalysis(
       !isNaN(p.low) && 
       !isNaN(p.open)
     )
-    .sort((a, b) => a.date.getTime() - b.date.getTime()); // Garantir ordenação por data (mais antigo primeiro)
+    .sort((a, b) => a.date.getTime() - b.date.getTime()); // CRÍTICO: Ordenar por data crescente para garantir sequência temporal correta
+  
+  // Log para debug: verificar sequência de datas
+  if (priceData.length > 0) {
+    const firstDate = priceData[0].date.toISOString().split('T')[0];
+    const lastDate = priceData[priceData.length - 1].date.toISOString().split('T')[0];
+    console.log(`[TECHNICAL ANALYSIS] ${tickerUpper}: ${priceData.length} pontos ordenados de ${firstDate} até ${lastDate}`);
+  }
   
   if (priceData.length < 50) {
     // Dados válidos insuficientes após filtro
@@ -244,10 +257,16 @@ export async function getOrCalculateTechnicalAnalysis(
   }
   
   // Calcular todos os indicadores usando período recente para Fibonacci (12 meses)
+  // IMPORTANTE: Os cálculos técnicos usam apenas a sequência ordenada dos preços
+  // As datas são usadas apenas para ordenação - os indicadores não dependem das datas em si
+  // Exemplo: mesmo que 2025-12-01 represente Novembro, a sequência ordenada garante cálculos corretos
   const technicalResult = TechnicalIndicators.calculateTechnicalAnalysis(priceData, 12);
   
   // Detectar suporte e resistência usando preço atual correto
+  // combineLevels usa os últimos 24 meses do array ordenado (não depende das datas em si)
   const supportResistance = combineLevels(priceData, 20, currentPrice);
+  
+  console.log(`[TECHNICAL ANALYSIS] ${tickerUpper}: Indicadores calculados - RSI: ${technicalResult.currentRSI?.rsi.toFixed(2) || 'N/A'}, Suportes: ${supportResistance.supportLevels.length}, Resistências: ${supportResistance.resistanceLevels.length}`);
   
   // Importar e calcular preços da IA dinamicamente
   const { calculateAIPriceTargets } = await import('./technical-ai-service')

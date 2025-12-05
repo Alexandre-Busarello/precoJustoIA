@@ -151,4 +151,6 @@
     max-width: 100vw;
     overflow-x: hidden;
   }
+
+  /* Tarja de índices agora está entre header e search bar, não precisa mais de espaçamento condicional */
 }

@@ -6,7 +6,8 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { getLatestPrices } from '@/lib/quote-service';
+import { getLatestPrices, StockPrice, getYahooHistoricalPrice } from '@/lib/quote-service';
+import { getHistoricalPricesForDate } from './index-rebalance-date';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export interface CompositionSnapshot {
@@ -28,6 +29,10 @@ export interface IndexDailyReturn {
 
 /**
  * Busca dividendos com ex-date igual à data especificada para todos os ativos da composição
+ * 
+ * IMPORTANTE: No mercado brasileiro, o ex-date é o próprio dia em que o preço já está ajustado
+ * (já foi descontado no pregão). Portanto, ao calcular pontos para 01/12, buscamos dividendos
+ * com exDate = 01/12, pois é neste dia que o preço já caiu pelo valor do dividendo.
  */
 async function getDividendsForDate(
   indexId: string,
@@ -139,7 +144,31 @@ export async function calculateDailyReturn(
 
     // 3. Buscar preços de fechamento do dia atual (necessário para snapshot e cálculo)
     const tickers = composition.map(c => c.assetTicker);
-    const pricesToday = await getLatestPrices(tickers);
+    
+    // Se a data não for hoje, buscar preços históricos para aquela data específica
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    let pricesToday: Map<string, StockPrice>;
+    if (targetDate.getTime() < today.getTime()) {
+      // Data no passado: buscar preços históricos
+      console.log(`📊 [INDEX ENGINE] Fetching historical prices for ${targetDate.toISOString().split('T')[0]}`);
+      const historicalPrices = await getHistoricalPricesForDate(tickers, targetDate);
+      pricesToday = new Map();
+      for (const [ticker, price] of historicalPrices.entries()) {
+        pricesToday.set(ticker, {
+          ticker,
+          price,
+          source: 'database',
+          timestamp: targetDate
+        });
+      }
+    } else {
+      // Data atual ou futura: usar preços mais recentes
+      pricesToday = await getLatestPrices(tickers);
+    }
 
     // Se é o primeiro dia, retornar pontos = 100 sem calcular variação
     if (isFirstDay) {
@@ -205,7 +234,18 @@ export async function calculateDailyReturn(
 
       if (!company) continue;
 
-      // Tentar buscar preço do dia anterior
+      // SEMPRE tentar Yahoo Finance primeiro para todos os ativos
+      console.log(`📊 [INDEX ENGINE] Fetching from Yahoo Finance first for ${comp.assetTicker}...`);
+      const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday);
+      if (yahooPrice && yahooPrice > 0) {
+        pricesYesterday.set(comp.assetTicker, yahooPrice);
+        console.log(`✅ [INDEX ENGINE] Using Yahoo Finance price for ${comp.assetTicker}: ${yahooPrice.toFixed(2)}`);
+        continue; // Próximo ativo
+      } else {
+        console.warn(`⚠️ [INDEX ENGINE] Yahoo Finance failed for ${comp.assetTicker}, falling back to database...`);
+      }
+
+      // Fallback: buscar do banco de dados (dailyQuote ou historicalPrice)
       const yesterdayQuote = await prisma.dailyQuote.findFirst({
         where: {
           companyId: company.id,
@@ -220,25 +260,74 @@ export async function calculateDailyReturn(
       if (yesterdayQuote) {
         pricesYesterday.set(comp.assetTicker, Number(yesterdayQuote.price));
       } else {
-        // Se não encontrou quote do dia anterior, verificar se o ativo entrou hoje
-        const entryDate = new Date(comp.entryDate);
-        entryDate.setHours(0, 0, 0, 0);
-        const todayDate = new Date(date);
-        todayDate.setHours(0, 0, 0, 0);
-        
-        // Se o ativo entrou hoje (rebalanceamento), usar preço atual como base (sem variação no primeiro dia)
-        // Isso preserva a rentabilidade do índice ao não criar variação artificial
-        if (entryDate.getTime() === todayDate.getTime()) {
-          // Ativo novo: usar preço atual como base (retorno zero no primeiro dia)
-          const priceToday = pricesToday.get(comp.assetTicker)?.price;
-          if (priceToday) {
-            pricesYesterday.set(comp.assetTicker, priceToday);
-          } else {
+        // Se não encontrou quote do dia anterior, tentar buscar último preço histórico disponível
+        // CRÍTICO: Validar se o preço histórico está correto comparando com entryPrice
+        const historicalPrice = await prisma.historicalPrice.findFirst({
+          where: {
+            companyId: company.id,
+            date: {
+              lte: yesterday
+            }
+          },
+          orderBy: { date: 'desc' },
+          take: 1
+        });
+
+        if (historicalPrice) {
+          const historicalPriceValue = Number(historicalPrice.close);
+          const entryDate = new Date(comp.entryDate);
+          entryDate.setHours(0, 0, 0, 0);
+          const daysSinceEntry = Math.floor((date.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          // Validar se o preço histórico está razoável comparado ao entryPrice
+          const priceDiff = Math.abs(historicalPriceValue - comp.entryPrice) / comp.entryPrice;
+          const isPriceSuspicious = priceDiff > 0.5; // Diferença maior que 50%
+          
+          // Se preço histórico está suspeito e ativo entrou recentemente, usar entryPrice
+          if (daysSinceEntry <= 7 && isPriceSuspicious) {
+            console.warn(`⚠️ [INDEX ENGINE] Historical price for ${comp.assetTicker} seems incorrect (${historicalPriceValue.toFixed(2)} vs entryPrice ${comp.entryPrice.toFixed(2)}). Using entryPrice as asset entered ${daysSinceEntry} days ago.`);
             pricesYesterday.set(comp.assetTicker, comp.entryPrice);
+          } else if (isPriceSuspicious) {
+            // Preço histórico suspeito mas ativo não é novo: usar entryPrice como fallback seguro
+            console.warn(`⚠️ [INDEX ENGINE] Historical price for ${comp.assetTicker} seems incorrect (${historicalPriceValue.toFixed(2)} vs entryPrice ${comp.entryPrice.toFixed(2)}). Using entryPrice as safer fallback.`);
+            pricesYesterday.set(comp.assetTicker, comp.entryPrice);
+          } else {
+            // Preço histórico parece válido
+            pricesYesterday.set(comp.assetTicker, historicalPriceValue);
+            console.log(`📊 [INDEX ENGINE] Using historical price for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}: ${historicalPriceValue.toFixed(2)}`);
           }
         } else {
-          // Ativo antigo sem quote: usar preço de entrada como fallback
-          pricesYesterday.set(comp.assetTicker, comp.entryPrice);
+          // Se não encontrou histórico, verificar se o ativo entrou hoje
+          const entryDate = new Date(comp.entryDate);
+          entryDate.setHours(0, 0, 0, 0);
+          const todayDate = new Date(date);
+          todayDate.setHours(0, 0, 0, 0);
+          
+          // Se o ativo entrou hoje (rebalanceamento), usar preço atual como base (sem variação no primeiro dia)
+          // Isso preserva a rentabilidade do índice ao não criar variação artificial
+          if (entryDate.getTime() === todayDate.getTime()) {
+            // Ativo novo: usar preço atual como base (retorno zero no primeiro dia)
+            const priceToday = pricesToday.get(comp.assetTicker)?.price;
+            if (priceToday) {
+              pricesYesterday.set(comp.assetTicker, priceToday);
+              console.log(`📊 [INDEX ENGINE] New asset ${comp.assetTicker} entered today, using today's price as yesterday: ${priceToday.toFixed(2)}`);
+            } else {
+              // Último recurso: usar entryPrice apenas se for ativo novo e não tiver preço atual
+              pricesYesterday.set(comp.assetTicker, comp.entryPrice);
+              console.warn(`⚠️ [INDEX ENGINE] New asset ${comp.assetTicker} has no current price, using entryPrice: ${comp.entryPrice.toFixed(2)}`);
+            }
+          } else {
+            // Ativo antigo sem quote e sem histórico: usar preço atual como último recurso
+            // Isso evita retornos absurdos causados por entryPrice desatualizado
+            const priceToday = pricesToday.get(comp.assetTicker)?.price;
+            if (priceToday) {
+              pricesYesterday.set(comp.assetTicker, priceToday);
+              console.warn(`⚠️ [INDEX ENGINE] No historical price found for ${comp.assetTicker}, using today's price as yesterday (retorno zero): ${priceToday.toFixed(2)}`);
+            } else {
+              // Se nem preço atual existe, pular este ativo (será tratado no skip abaixo)
+              console.error(`❌ [INDEX ENGINE] No price data available for ${comp.assetTicker} (entryDate: ${entryDate.toISOString().split('T')[0]}, today: ${todayDate.toISOString().split('T')[0]})`);
+            }
+          }
         }
       }
     }
@@ -257,12 +346,36 @@ export async function calculateDailyReturn(
     const dividendsByTicker = new Map<string, number>();
 
     for (const comp of composition) {
-      const priceToday = pricesToday.get(comp.assetTicker)?.price;
-      const priceYesterday = pricesYesterday.get(comp.assetTicker);
+      let priceToday = pricesToday.get(comp.assetTicker)?.price;
+      let priceYesterday = pricesYesterday.get(comp.assetTicker);
 
       if (!priceToday || !priceYesterday || priceYesterday === 0) {
         console.warn(`⚠️ [INDEX ENGINE] Missing price data for ${comp.assetTicker}, skipping`);
         continue;
+      }
+
+      // Validação crítica: detectar retornos absurdos que indicam problema de dados
+      const rawReturn = (priceToday / priceYesterday) - 1;
+      if (Math.abs(rawReturn) > 0.5) { // Retorno maior que 50% em um dia
+        const entryDate = new Date(comp.entryDate);
+        entryDate.setHours(0, 0, 0, 0);
+        const daysSinceEntry = Math.floor((date.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        console.error(`🚨 [INDEX ENGINE] SUSPICIOUS RETURN DETECTED for ${comp.assetTicker} on ${date.toISOString().split('T')[0]}:`);
+        console.error(`   Price Today: ${priceToday.toFixed(2)}, Price Yesterday: ${priceYesterday.toFixed(2)}`);
+        console.error(`   Raw Return: ${(rawReturn * 100).toFixed(2)}%`);
+        console.error(`   Entry Price: ${comp.entryPrice.toFixed(2)}, Entry Date: ${comp.entryDate.toISOString().split('T')[0]} (${daysSinceEntry} days ago)`);
+        
+        // Se o ativo entrou recentemente (menos de 7 dias) e o preço de ontem está muito diferente do entryPrice,
+        // corrigir usando entryPrice como priceYesterday
+        const priceYesterdayDiff = Math.abs(priceYesterday - comp.entryPrice) / comp.entryPrice;
+        if (daysSinceEntry <= 7 && priceYesterdayDiff > 0.3) {
+          console.warn(`🔧 [INDEX ENGINE] CORRECTING: Using entryPrice (${comp.entryPrice.toFixed(2)}) instead of suspicious priceYesterday (${priceYesterday.toFixed(2)})`);
+          priceYesterday = comp.entryPrice; // Usar variável local corrigida
+          pricesYesterday.set(comp.assetTicker, comp.entryPrice); // Atualizar Map também
+          const correctedReturn = (priceToday / comp.entryPrice) - 1;
+          console.log(`   Corrected Return: ${(correctedReturn * 100).toFixed(2)}%`);
+        }
       }
 
       // Verificar se há dividendo no ex-date
@@ -347,7 +460,8 @@ export async function calculateDailyReturn(
  */
 export async function updateIndexPoints(
   indexId: string,
-  date: Date
+  date: Date,
+  forceUpdate: boolean = false
 ): Promise<boolean> {
   try {
     const dailyReturn = await calculateDailyReturn(indexId, date);
@@ -365,6 +479,25 @@ export async function updateIndexPoints(
         }
       }
     });
+    
+    // Se o ponto já existe e não estamos forçando atualização, verificar se precisa atualizar
+    // (por exemplo, se o dailyChange não bate com os pontos)
+    if (existing && !forceUpdate) {
+      // Verificar se há inconsistência entre pontos e dailyChange
+      const expectedPoints = existing.points * (1 + (existing.dailyChange / 100));
+      const calculatedPoints = dailyReturn.points;
+      const pointsDiff = Math.abs(expectedPoints - calculatedPoints);
+      
+      // Se a diferença for muito pequena (< 0.01 pontos), assumir que está correto e não atualizar
+      // Isso evita recalcular pontos que já foram calculados corretamente
+      if (pointsDiff < 0.01) {
+        console.log(`ℹ️ [INDEX ENGINE] Point for ${date.toISOString().split('T')[0]} already exists and is consistent, skipping update`);
+        return true;
+      }
+      
+      // Se há inconsistência significativa, atualizar
+      console.log(`⚠️ [INDEX ENGINE] Point for ${date.toISOString().split('T')[0]} exists but has inconsistency (diff: ${pointsDiff.toFixed(4)}), updating`);
+    }
 
     // Converter Map para objeto JSON
     const dividendsByTickerJson = dailyReturn.dividendsByTicker.size > 0
@@ -386,11 +519,46 @@ export async function updateIndexPoints(
         )
       : undefined;
 
+    // Validar consistência: points deve ser igual a previousPoints * (1 + dailyReturn)
+    // Se não bater, recalcular points usando previousPoints
+    let finalPoints = dailyReturn.points;
+    
+    // Buscar ponto anterior para validar consistência
+    const previousPoint = await prisma.indexHistoryPoints.findFirst({
+      where: {
+        indexId,
+        date: {
+          lt: date
+        }
+      },
+      orderBy: { date: 'desc' }
+    });
+    
+    if (previousPoint) {
+      const expectedPoints = previousPoint.points * (1 + dailyReturn.dailyReturn);
+      const pointsDiff = Math.abs(finalPoints - expectedPoints);
+      
+      // Se a diferença for significativa (> 0.01), usar o valor esperado baseado no dailyReturn
+      if (pointsDiff > 0.01) {
+        console.warn(`⚠️ [INDEX ENGINE] Points inconsistency detected for ${date.toISOString().split('T')[0]}: calculated=${finalPoints.toFixed(4)}, expected=${expectedPoints.toFixed(4)} (from ${previousPoint.points.toFixed(4)} * (1 + ${(dailyReturn.dailyReturn * 100).toFixed(4)}%)), diff=${pointsDiff.toFixed(4)}. Using expected value.`);
+        finalPoints = expectedPoints;
+      }
+    }
+
     const updateData: any = {
-      points: dailyReturn.points,
+      points: finalPoints,
       dailyChange: dailyReturn.dailyReturn * 100, // Converter para porcentagem
       currentYield: dailyReturn.currentYield
     };
+
+    // Incluir dividendos recebidos (Total Return com reinvestimento automático)
+    if (dailyReturn.dividendsReceived > 0) {
+      updateData.dividendsReceived = dailyReturn.dividendsReceived;
+    }
+
+    if (dividendsByTickerJson) {
+      updateData.dividendsByTicker = dividendsByTickerJson;
+    }
 
     if (compositionSnapshotJson) {
       updateData.compositionSnapshot = compositionSnapshotJson;
@@ -411,11 +579,115 @@ export async function updateIndexPoints(
           ...updateData
         }
       });
+
+      // Verificar se este é o primeiro ponto histórico e se não começa em 100
+      // Se não começar em 100, criar um ponto virtual no dia anterior com 100 pontos
+      const allPoints = await prisma.indexHistoryPoints.findMany({
+        where: { indexId },
+        orderBy: { date: 'asc' }
+      });
+
+      // Se há apenas um ponto (o que acabamos de criar) e não é 100, criar ponto virtual
+      if (allPoints.length === 1 && Math.abs(dailyReturn.points - 100.0) > 0.01) {
+        const previousDate = new Date(date);
+        previousDate.setDate(previousDate.getDate() - 1);
+        previousDate.setHours(0, 0, 0, 0);
+
+        // Verificar se já existe ponto no dia anterior (não deveria, mas verificar por segurança)
+        const previousPointExists = await prisma.indexHistoryPoints.findUnique({
+          where: {
+            indexId_date: {
+              indexId,
+              date: previousDate
+            }
+          }
+        });
+
+        if (!previousPointExists) {
+          // Criar ponto virtual no dia anterior com 100 pontos
+          await prisma.indexHistoryPoints.create({
+            data: {
+              indexId,
+              date: previousDate,
+              points: 100.0,
+              dailyChange: 0.0,
+              currentYield: dailyReturn.currentYield // Usar o mesmo yield do primeiro dia real
+            }
+          });
+
+          console.log(`📊 [INDEX ENGINE] Created virtual starting point at ${previousDate.toISOString().split('T')[0]} with 100 points for index ${indexId}`);
+        }
+      }
     }
 
     return true;
   } catch (error) {
     console.error(`❌ [INDEX ENGINE] Error updating index points for ${indexId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Corrige índices que começaram com valor diferente de 100
+ * Cria um ponto virtual no dia anterior ao primeiro ponto com 100 pontos
+ */
+export async function fixIndexStartingPoint(indexId: string): Promise<boolean> {
+  try {
+    // Buscar todos os pontos históricos ordenados por data
+    const allPoints = await prisma.indexHistoryPoints.findMany({
+      where: { indexId },
+      orderBy: { date: 'asc' }
+    });
+
+    if (allPoints.length === 0) {
+      console.log(`⚠️ [INDEX ENGINE] No points found for index ${indexId}`);
+      return false; // Sem pontos históricos
+    }
+
+    const firstPoint = allPoints[0];
+    console.log(`🔍 [INDEX ENGINE] Checking starting point for index ${indexId}: First point is ${firstPoint.points} on ${firstPoint.date.toISOString().split('T')[0]}`);
+
+    // Se o primeiro ponto já é 100 (com margem de erro), não precisa corrigir
+    if (Math.abs(firstPoint.points - 100.0) <= 0.01) {
+      console.log(`✅ [INDEX ENGINE] Starting point already correct (${firstPoint.points})`);
+      return false; // Já está correto
+    }
+
+    // Verificar se já existe ponto no dia anterior
+    const previousDate = new Date(firstPoint.date);
+    previousDate.setDate(previousDate.getDate() - 1);
+    previousDate.setHours(0, 0, 0, 0);
+
+    const previousPointExists = await prisma.indexHistoryPoints.findUnique({
+      where: {
+        indexId_date: {
+          indexId,
+          date: previousDate
+        }
+      }
+    });
+
+    if (previousPointExists) {
+      console.log(`⚠️ [INDEX ENGINE] Point already exists for previous date ${previousDate.toISOString().split('T')[0]}`);
+      return false; // Já existe ponto anterior
+    }
+
+    // Criar ponto virtual no dia anterior com 100 pontos
+    await prisma.indexHistoryPoints.create({
+      data: {
+        indexId,
+        date: previousDate,
+        points: 100.0,
+        dailyChange: 0.0,
+        currentYield: firstPoint.currentYield // Usar o mesmo yield do primeiro dia real
+      }
+    });
+
+    console.log(`✅ [INDEX ENGINE] Fixed starting point for index ${indexId}: Created virtual point at ${previousDate.toISOString().split('T')[0]} with 100 points`);
+
+    return true;
+  } catch (error) {
+    console.error(`❌ [INDEX ENGINE] Error fixing starting point for index ${indexId}:`, error);
     return false;
   }
 }

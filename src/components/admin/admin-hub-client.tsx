@@ -25,6 +25,7 @@ import {
   FileText,
   Bell,
   FileQuestion,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AdminHubClientProps {
@@ -160,6 +161,14 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       icon: TrendingUp,
       href: '/admin/indices',
       color: 'bg-emerald-500',
+    },
+    {
+      id: 'historical-prices',
+      title: 'Recriar Preços Históricos',
+      description: 'Recria preços históricos desde 2010 usando Yahoo Finance',
+      icon: RefreshCw,
+      href: '/admin/historical-prices',
+      color: 'bg-cyan-500',
     },
   ];
 

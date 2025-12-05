@@ -3400,7 +3400,8 @@ export class BDRDataService {
   }
 
   /**
-   * Processa dados históricos de preços (se disponível)
+   * Processa dados históricos de preços usando Yahoo Finance como fonte primária
+   * Usa função centralizada que faz deduplicação por mês automaticamente
    */
   static async processHistoricalPrices(
     companyId: number,
@@ -3409,88 +3410,21 @@ export class BDRDataService {
     try {
       console.log(`📊 [BDR] Buscando preços históricos para ${ticker}...`);
 
-      // Importar yahoo-finance2 dinamicamente
-      const yahooModule = await import("yahoo-finance2");
-      const YahooFinance = yahooModule.default;
-      const yahooFinance = new YahooFinance({
-        suppressNotices: ["yahooSurvey"],
-      });
+      // Usar função centralizada do HistoricalDataService
+      const { HistoricalDataService } = await import('./historical-data-service');
+      
+      // Buscar dados desde 2000 até hoje (padrão da função centralizada)
+      const result = await HistoricalDataService.fetchAndSaveHistoricalPricesFromYahoo(
+        companyId,
+        ticker,
+        undefined, // startDate - usa padrão 2000-01-01
+        undefined, // endDate - usa hoje
+        '1mo' // intervalo mensal
+      );
 
-      // Buscar dados dos últimos 10 anos (máximo possível para análises históricas)
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setFullYear(startDate.getFullYear() - 10);
-
-      const historicalData = await (yahooFinance as any).historical(ticker, {
-        period1: startDate,
-        period2: endDate,
-        interval: "1mo", // Dados mensais
-        events: "history",
-      });
-
-      if (historicalData && historicalData.length > 0) {
-        console.log(
-          `  📈 Processando ${historicalData.length} registros de preços históricos...`
-        );
-
-        for (const record of historicalData) {
-          try {
-            const date = new Date(record.date);
-
-            const openPrice = this.convertValue(record.open);
-            const highPrice = this.convertValue(record.high);
-            const lowPrice = this.convertValue(record.low);
-            const closePrice = this.convertValue(record.close);
-            const adjustedClosePrice = this.convertValue(record.adjClose);
-            const volumeValue = record.volume ? BigInt(record.volume) : null;
-
-            if (
-              openPrice !== null &&
-              highPrice !== null &&
-              lowPrice !== null &&
-              closePrice !== null
-            ) {
-              const createData: any = {
-                companyId,
-                date,
-                interval: "1mo",
-                open: openPrice,
-                high: highPrice,
-                low: lowPrice,
-                close: closePrice,
-              };
-
-              if (volumeValue !== null) {
-                createData.volume = volumeValue;
-              }
-              if (adjustedClosePrice !== null) {
-                createData.adjustedClose = adjustedClosePrice;
-              }
-
-              await prisma.historicalPrice.upsert({
-                where: {
-                  companyId_date_interval: {
-                    companyId,
-                    date,
-                    interval: "1mo",
-                  },
-                },
-                update: createData,
-                create: createData,
-              });
-            }
-          } catch (error: any) {
-            console.warn(
-              `  ⚠️ Erro ao salvar preço de ${record.date}:`,
-              error.message
-            );
-          }
-        }
-
-        console.log(
-          `  ✅ ${historicalData.length} preços históricos processados`
-        );
-      }
+      console.log(
+        `  ✅ Preços históricos processados: ${result.recordsSaved} registros salvos (${result.recordsProcessed} recebidos, ${result.recordsDeduplicated} após deduplicação)`
+      );
     } catch (error: any) {
       console.warn(
         `  ⚠️ Erro ao buscar preços históricos para ${ticker}:`,

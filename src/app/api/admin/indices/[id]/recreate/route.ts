@@ -11,6 +11,7 @@ import { requireAdminUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { runScreening, updateComposition } from '@/lib/index-screening-engine';
 import { updateIndexPoints } from '@/lib/index-engine';
+import { cache } from '@/lib/cache-service';
 
 export async function POST(
   request: NextRequest,
@@ -123,6 +124,15 @@ export async function POST(
         },
         { status: 500 }
       );
+    }
+
+    // Invalidar cache de market-indices após recriar índice
+    try {
+      await cache.delete('market-indices');
+      console.log('🔄 [ADMIN INDICES] Cache "market-indices" invalidado após recriação');
+    } catch (error) {
+      console.error('⚠️ [ADMIN INDICES] Erro ao invalidar cache:', error);
+      // Não falhar a operação por causa de erro no cache
     }
 
     return NextResponse.json({

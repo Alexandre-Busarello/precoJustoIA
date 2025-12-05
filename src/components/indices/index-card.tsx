@@ -18,6 +18,7 @@ interface IndexCardProps {
   color: string;
   currentPoints: number;
   accumulatedReturn: number;
+  dailyChange: number | null; // Variação do dia (quando disponível)
   currentYield: number | null;
   assetCount: number;
   sparklineData?: Array<{ date: string; points: number }>;
@@ -29,13 +30,19 @@ export function IndexCard({
   color,
   currentPoints,
   accumulatedReturn,
+  dailyChange,
   currentYield,
   assetCount,
   sparklineData = []
 }: IndexCardProps) {
+  // Sempre mostrar retorno acumulado (total desde o início)
   const isPositive = accumulatedReturn >= 0;
   const returnColor = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
   const ReturnIcon = isPositive ? TrendingUp : TrendingDown;
+  
+  // Para variação do dia, se disponível
+  const hasDailyChange = dailyChange !== null;
+  const isDailyPositive = hasDailyChange ? dailyChange >= 0 : null;
 
   return (
     <Link href={`/indices/${ticker}`}>
@@ -72,7 +79,7 @@ export function IndexCard({
             </div>
             
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Retorno</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Retorno Total</span>
               <div className="flex flex-col items-end gap-1">
                 <div className={`flex items-center gap-1 ${returnColor}`}>
                   <ReturnIcon className="h-4 w-4" />
@@ -80,6 +87,11 @@ export function IndexCard({
                     {isPositive ? '+' : ''}{accumulatedReturn.toFixed(2)}%
                   </span>
                 </div>
+                {hasDailyChange && (
+                  <span className={`text-xs ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {isDailyPositive ? '+' : ''}{dailyChange!.toFixed(2)}% hoje
+                  </span>
+                )}
                 <IndexRealTimeBadge ticker={ticker} />
               </div>
             </div>

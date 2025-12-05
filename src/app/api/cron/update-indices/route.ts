@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { updateIndexPoints, fillMissingHistory } from '@/lib/index-engine';
 import { runScreening, compareComposition, shouldRebalance, updateComposition } from '@/lib/index-screening-engine';
+import { cache } from '@/lib/cache-service';
 
 export const maxDuration = 60; // Limite da Vercel
 
@@ -28,6 +29,32 @@ interface Checkpoint {
 }
 
 const GLOBAL_CHECKPOINT_ID = '__GLOBAL__'; // ID especial para checkpoint global
+
+/**
+ * Invalida cache de market-indices após processamento
+ * Isso garante que dados atualizados sejam refletidos imediatamente
+ */
+async function invalidateMarketIndicesCache(): Promise<void> {
+  try {
+    const CACHE_KEY = 'market-indices';
+    await cache.delete(CACHE_KEY);
+    console.log('🔄 [CRON INDICES] Cache "market-indices" invalidado após processamento');
+  } catch (error) {
+    console.error('⚠️ [CRON INDICES] Erro ao invalidar cache:', error);
+    // Não falhar o job por causa de erro no cache
+  }
+}
+
+/**
+ * Verifica se é dia útil (segunda a sexta)
+ * Retorna true se for dia útil, false se for sábado ou domingo
+ */
+function isTradingDay(date: Date = new Date()): boolean {
+  const dayOfWeek = date.getDay();
+  // 0 = Domingo, 6 = Sábado
+  // 1-5 = Segunda a Sexta
+  return dayOfWeek >= 1 && dayOfWeek <= 5;
+}
 
 /**
  * Salva checkpoint no banco
@@ -302,6 +329,11 @@ async function runMarkToMarketJob(): Promise<{
 
     console.log(`✅ [CRON INDICES] Mark-to-Market completed: ${successCount} success, ${failedCount} failed, ${processed} processed, ${remaining} remaining (${duration}ms)`);
 
+    // Invalidar cache quando todos os índices foram processados
+    if (remaining === 0 && successCount > 0) {
+      await invalidateMarketIndicesCache();
+    }
+
     return {
       success: successCount,
       failed: failedCount,
@@ -327,6 +359,14 @@ async function runScreeningJob(): Promise<{
   const startTime = Date.now();
   const MAX_EXECUTION_TIME = 50 * 1000; // 50 segundos
   
+  // Verificar se é dia útil (segunda a sexta)
+  const today = new Date();
+  if (!isTradingDay(today)) {
+    const dayName = today.toLocaleDateString('pt-BR', { weekday: 'long' });
+    console.log(`⏸️ [CRON INDICES] Screening job skipped: não é dia útil (${dayName})`);
+    return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
+  }
+  
   console.log('🔍 [CRON INDICES] Starting Screening job (incremental)...');
 
   const allIndices = await prisma.indexDefinition.findMany({
@@ -349,8 +389,8 @@ async function runScreeningJob(): Promise<{
   }
   
   // Verificar se já foi executado hoje (verificando último log de rebalanceamento)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayCheck = new Date();
+  todayCheck.setHours(0, 0, 0, 0);
   
   let allScreenedToday = true;
   for (const index of allIndices) {
@@ -359,32 +399,32 @@ async function runScreeningJob(): Promise<{
       orderBy: { date: 'desc' }
     });
     
-    if (lastLog) {
-      const lastLogDate = new Date(lastLog.date);
-      lastLogDate.setHours(0, 0, 0, 0);
-      
-      if (lastLogDate < today) {
+      if (lastLog) {
+        const lastLogDate = new Date(lastLog.date);
+        lastLogDate.setHours(0, 0, 0, 0);
+        
+        if (lastLogDate < todayCheck) {
+          allScreenedToday = false;
+          break;
+        }
+      } else {
+        // Se nunca teve log, precisa executar pelo menos uma vez
         allScreenedToday = false;
         break;
       }
-    } else {
-      // Se nunca teve log, precisa executar pelo menos uma vez
-      allScreenedToday = false;
-      break;
     }
-  }
-  
-  if (allScreenedToday) {
-    console.log('✅ [CRON INDICES] All indices were screened today. Nothing to process.');
-    // Limpar checkpoint e encerrar
-    await prisma.indexCronCheckpoint.deleteMany({
-      where: {
-        jobType: 'screening',
-        indexId: GLOBAL_CHECKPOINT_ID
-      }
-    }).catch(() => {});
-    return { success: 0, failed: 0, rebalanced: 0, processed: allIndices.length, remaining: 0, errors: [] };
-  }
+    
+    if (allScreenedToday) {
+      console.log('✅ [CRON INDICES] All indices were screened today. Nothing to process.');
+      // Limpar checkpoint e encerrar
+      await prisma.indexCronCheckpoint.deleteMany({
+        where: {
+          jobType: 'screening',
+          indexId: GLOBAL_CHECKPOINT_ID
+        }
+      }).catch(() => {});
+      return { success: 0, failed: 0, rebalanced: 0, processed: allIndices.length, remaining: 0, errors: [] };
+    }
 
   // Carregar checkpoint
   const checkpoint = await loadCheckpoint('screening');
@@ -420,8 +460,8 @@ async function runScreeningJob(): Promise<{
       console.log(`  🔍 Processing ${index.ticker} (${i + 1}/${allIndices.length})...`);
 
       // Verificar se já foi processado hoje (verificando último log)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayIndex = new Date();
+      todayIndex.setHours(0, 0, 0, 0);
       
       const lastLog = await prisma.indexRebalanceLog.findFirst({
         where: { indexId: index.id },
@@ -432,7 +472,7 @@ async function runScreeningJob(): Promise<{
         const lastLogDate = new Date(lastLog.date);
         lastLogDate.setHours(0, 0, 0, 0);
         
-        if (lastLogDate >= today) {
+        if (lastLogDate >= todayIndex) {
           console.log(`    ⏭️ ${index.ticker}: Already screened today, skipping`);
           successCount++;
           continue;
@@ -448,14 +488,20 @@ async function runScreeningJob(): Promise<{
         continue;
       }
 
+      // Obter informações detalhadas do screening (armazenadas em lastScreeningDetails)
+      const { getLastScreeningDetails } = await import('@/lib/index-screening-engine');
+      const screeningDetails = getLastScreeningDetails();
+
       // 2. Aplicar validação de qualidade se checkQuality estiver ativado
       const config = index.config as any;
       let validatedComposition = idealComposition;
+      let qualityRejected: Array<{ candidate: any; reason: string }> = [];
       
       if (config.rebalance?.checkQuality) {
         const { filterByQuality } = await import('@/lib/index-screening-engine');
         const qualityResult = await filterByQuality(idealComposition, config);
         validatedComposition = qualityResult.valid;
+        qualityRejected = qualityResult.rejected;
         
         if (validatedComposition.length === 0) {
           console.warn(`    ⚠️ ${index.ticker}: No companies passed quality check for rebalancing (${qualityResult.rejected.length} rejected)`);
@@ -468,9 +514,17 @@ async function runScreeningJob(): Promise<{
         }
       }
 
-      // 3. Comparar com composição atual
+      // 3. Comparar com composição atual (passar informações detalhadas do screening)
       const currentComposition = index.composition;
-      const changes = compareComposition(currentComposition, validatedComposition);
+      const changes = compareComposition(
+        currentComposition, 
+        validatedComposition,
+        config,
+        qualityRejected,
+        undefined, // screeningRejected - pode ser adicionado no futuro se necessário
+        screeningDetails?.candidatesBeforeSelection,
+        screeningDetails?.removedByDiversification
+      );
 
       // 4. Verificar se deve rebalancear
       const threshold = config.rebalance?.threshold || 0.05;
@@ -485,7 +539,9 @@ async function runScreeningJob(): Promise<{
           validatedComposition,
           threshold,
           config.rebalance?.checkQuality || false,
-          upsideType
+          upsideType,
+          config,
+          qualityRejected
         );
         
         console.log(`    📋 ${index.ticker}: Motivo do rebalanceamento: ${rebalanceReason}`);
@@ -552,6 +608,11 @@ async function runScreeningJob(): Promise<{
 
   console.log(`✅ [CRON INDICES] Screening completed: ${successCount} success, ${failedCount} failed, ${rebalancedCount} rebalanced, ${processed} processed, ${remaining} remaining (${duration}ms)`);
 
+  // Invalidar cache quando todos os índices foram processados ou quando há rebalanceamento
+  if ((remaining === 0 && successCount > 0) || rebalancedCount > 0) {
+    await invalidateMarketIndicesCache();
+  }
+
   return {
     success: successCount,
     failed: failedCount,
@@ -610,7 +671,7 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime;
     const hasMore = 'remaining' in result && result.remaining > 0;
 
-    // Se não há mais nada para processar, limpar checkpoint
+    // Se não há mais nada para processar, limpar checkpoint e invalidar cache
     if (!hasMore && result.processed === result.totalCount) {
       console.log('✅ [CRON INDICES] All indices processed. Clearing checkpoint.');
       try {
@@ -620,6 +681,10 @@ export async function GET(request: NextRequest) {
             indexId: GLOBAL_CHECKPOINT_ID
           }
         });
+        
+        // Invalidar cache quando todos os índices foram processados completamente
+        // Isso garante que dados atualizados sejam refletidos imediatamente
+        await invalidateMarketIndicesCache();
       } catch (error) {
         console.error('⚠️ [CRON INDICES] Error clearing checkpoint:', error);
       }

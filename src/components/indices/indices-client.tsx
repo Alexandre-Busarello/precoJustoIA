@@ -11,9 +11,11 @@ interface IndexData {
   color: string
   currentPoints: number
   accumulatedReturn: number
+  dailyChange: number | null
   currentYield: number | null
   assetCount: number
   lastUpdate: string | null
+  sparklineData?: Array<{ date: string; points: number }>
 }
 
 async function fetchIndices(): Promise<IndexData[]> {
@@ -33,9 +35,9 @@ export function IndicesClient({ initialIndices }: IndicesClientProps) {
   const { data: indices = initialIndices } = useQuery<IndexData[]>({
     queryKey: ['indices'],
     queryFn: fetchIndices,
-    refetchOnWindowFocus: true, // Refetch quando a janela recebe foco
-    refetchOnMount: true, // Refetch quando o componente monta
-    staleTime: 30 * 1000, // 30 segundos (reduzido para atualizar mais rápido)
+    refetchOnWindowFocus: false, // Não refetch quando a janela recebe foco
+    refetchOnMount: false, // Não refetch quando o componente monta - usar dados iniciais
+    staleTime: Infinity, // Dados nunca ficam stale - requer reload da página para atualizar
     initialData: initialIndices,
   })
 
@@ -54,9 +56,10 @@ export function IndicesClient({ initialIndices }: IndicesClientProps) {
           color={index.color}
           currentPoints={index.currentPoints}
           accumulatedReturn={index.accumulatedReturn}
+          dailyChange={index.dailyChange}
           currentYield={index.currentYield}
           assetCount={index.assetCount}
-          sparklineData={[]} // Será preenchido quando tivermos histórico
+          sparklineData={index.sparklineData || []}
         />
       ))}
     </div>

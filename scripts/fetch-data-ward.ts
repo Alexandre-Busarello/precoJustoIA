@@ -2137,140 +2137,33 @@ async function processValueAddedStatements(
   }
 }
 
-// Função para atualizar dados históricos de preço recentes (últimos 2 meses)
+// Função para atualizar dados históricos de preço recentes usando Yahoo Finance
 async function updateRecentHistoricalPrices(companyId: number, ticker: string): Promise<void> {
   try {
-    console.log(`  📈 Atualizando dados históricos recentes para ${ticker}...`);
+    console.log(`  📈 Atualizando dados históricos recentes para ${ticker} usando Yahoo Finance...`);
+
+    // Usar função centralizada do HistoricalDataService que usa Yahoo Finance como fonte primária
+    // Buscar apenas os últimos 3 meses para atualização incremental
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 3);
+    startDate.setDate(1); // Primeiro dia do mês
+
+    // Importar HistoricalDataService dinamicamente
+    const { HistoricalDataService } = await import('../src/lib/historical-data-service');
     
-    if (!BRAPI_TOKEN) {
-      console.log(`  ⚠️  BRAPI_TOKEN não configurado, pulando dados históricos`);
-      return;
-    }
-
-    // Buscar dados históricos dos últimos 3 meses (para garantir que temos pelo menos 2 meses completos)
-    const headers = {
-      'Authorization': `Bearer ${BRAPI_TOKEN}`,
-      'User-Agent': 'analisador-acoes/1.0.0'
-    };
-
-    const response = await axios.get(
-      `https://brapi.dev/api/quote/${ticker}`,
-      {
-        headers,
-        params: {
-          range: '3mo', // 3 meses
-          interval: '1mo' // Dados mensais
-        },
-        timeout: 15000
-      }
+    const result = await HistoricalDataService.fetchAndSaveHistoricalPricesFromYahoo(
+      companyId,
+      ticker,
+      startDate,
+      endDate,
+      '1mo'
     );
 
-    if (response.status === 200 && response.data.results && response.data.results.length > 0) {
-      const data = response.data.results[0];
-      
-      if (!data.historicalDataPrice || data.historicalDataPrice.length === 0) {
-        console.log(`  ⚠️  Nenhum dado histórico encontrado para ${ticker}`);
-        return;
-      }
-
-      console.log(`  📊 Processando ${data.historicalDataPrice.length} registros históricos recentes...`);
-
-      // Verificar dados existentes para evitar duplicatas
-      const twoMonthsAgo = new Date();
-      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-      twoMonthsAgo.setDate(1); // Primeiro dia do mês
-
-      const existingDates = await prisma.historicalPrice.findMany({
-        where: {
-          companyId,
-          interval: '1mo',
-          date: { gte: twoMonthsAgo }
-        },
-        select: { date: true }
-      });
-
-      const existingDateSet = new Set(
-        existingDates.map(d => d.date.toISOString().split('T')[0])
-      );
-
-      // Preparar dados para inserção/atualização
-      const historicalRecords = data.historicalDataPrice
-        .map((record: any) => {
-          const date = new Date(record.date * 1000); // Converter timestamp Unix para Date
-          const dateStr = date.toISOString().split('T')[0];
-
-          return {
-            companyId,
-            date,
-            dateStr,
-            open: record.open,
-            high: record.high,
-            low: record.low,
-            close: record.close,
-            volume: BigInt(record.volume),
-            adjustedClose: record.adjustedClose,
-            interval: '1mo'
-          };
-        })
-        .filter((record: any) => {
-          // Filtrar apenas os últimos 2 meses
-          return record.date >= twoMonthsAgo;
-        });
-
-      if (historicalRecords.length === 0) {
-        console.log(`  ⏭️  Nenhum dado histórico recente para processar`);
-        return;
-      }
-
-      // Usar upsert para cada registro (atualizar se existe, criar se não existe)
-      let updatedCount = 0;
-      let createdCount = 0;
-
-      for (const record of historicalRecords) {
-        try {
-          const result = await prisma.historicalPrice.upsert({
-            where: {
-              companyId_date_interval: {
-                companyId: record.companyId,
-                date: record.date,
-                interval: record.interval
-              }
-            },
-            update: {
-              open: record.open,
-              high: record.high,
-              low: record.low,
-              close: record.close,
-              volume: record.volume,
-              adjustedClose: record.adjustedClose
-            },
-            create: {
-              companyId: record.companyId,
-              date: record.date,
-              open: record.open,
-              high: record.high,
-              low: record.low,
-              close: record.close,
-              volume: record.volume,
-              adjustedClose: record.adjustedClose,
-              interval: record.interval
-            }
-          });
-
-          if (existingDateSet.has(record.dateStr)) {
-            updatedCount++;
-          } else {
-            createdCount++;
-          }
-        } catch (error: any) {
-          console.error(`  ❌ Erro ao processar registro histórico de ${record.dateStr}:`, error.message);
-        }
-      }
-
-      console.log(`  ✅ Dados históricos atualizados: ${createdCount} novos, ${updatedCount} atualizados`);
-
+    if (result.recordsSaved > 0) {
+      console.log(`  ✅ Dados históricos atualizados: ${result.recordsSaved} registros salvos (${result.recordsProcessed} recebidos, ${result.recordsDeduplicated} após deduplicação)`);
     } else {
-      console.log(`  ⚠️  Nenhum dado histórico encontrado na BRAPI para ${ticker}`);
+      console.log(`  ℹ️  Nenhum dado novo para atualizar`);
     }
 
   } catch (error: any) {

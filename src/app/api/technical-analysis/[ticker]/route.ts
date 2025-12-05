@@ -160,14 +160,29 @@ export async function GET(
       select: { price: true, date: true }
     })
     
-    // Preparar dados do gráfico - usar diretamente os dados mensais já agrupados
-    // Não precisamos agrupar novamente, já fizemos isso acima
-    const historicalData = monthlyPrices.map((hp: typeof monthlyPrices[0]) => ({
-      date: hp.date.toISOString(),
-      close: Number(hp.close),
-      high: Number(hp.high),
-      low: Number(hp.low)
-    }))
+    // Função para ajustar data mensal: se a data é dia 1 do mês, representa o fechamento do mês anterior
+    // Exemplo: 2025-12-01 representa fechamento de Novembro → ajustar para 2025-11-30
+    const adjustMonthlyDate = (date: Date): Date => {
+      const adjustedDate = new Date(date)
+      // Se é dia 1 do mês (dados mensais), ajustar para o último dia do mês anterior
+      // Isso garante que o gráfico exiba corretamente: 2025-12-01 aparece como Nov/2025
+      if (adjustedDate.getDate() === 1) {
+        adjustedDate.setMonth(adjustedDate.getMonth() - 1)
+        adjustedDate.setDate(0) // Último dia do mês anterior (ex: 30/11 para Novembro)
+      }
+      return adjustedDate
+    }
+    
+    // Preparar dados do gráfico - ajustar datas mensais para representar corretamente o mês de fechamento
+    const historicalData = monthlyPrices.map((hp: typeof monthlyPrices[0]) => {
+      const adjustedDate = adjustMonthlyDate(new Date(hp.date))
+      return {
+        date: adjustedDate.toISOString(),
+        close: Number(hp.close),
+        high: Number(hp.high),
+        low: Number(hp.low)
+      }
+    })
     
     console.log(`[DEBUG] Dados históricos preparados: ${historicalData.length} pontos`)
     
@@ -186,8 +201,9 @@ export async function GET(
       
       if (currentMonthIndex >= 0) {
         // Substituir o ponto do mês atual pelo preço atual
+        // Não ajustar data do preço atual (é um dado diário, não mensal)
         historicalData[currentMonthIndex] = {
-          date: currentDate.toISOString(),
+          date: currentDate.toISOString(), // Manter data original (dados diários não são ajustados)
           close: currentPrice,
           high: currentPrice,
           low: currentPrice
@@ -195,8 +211,9 @@ export async function GET(
         console.log(`[DEBUG] Substituído ponto do mês atual (índice ${currentMonthIndex}) pelo preço atual`)
       } else {
         // Adicionar como novo ponto se não existir
+        // Não ajustar data do preço atual (é um dado diário, não mensal)
         historicalData.push({
-          date: currentDate.toISOString(),
+          date: currentDate.toISOString(), // Manter data original (dados diários não são ajustados)
           close: currentPrice,
           high: currentPrice,
           low: currentPrice

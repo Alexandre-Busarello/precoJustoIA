@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
           sector: c.sector,
           currentPrice: c.currentPrice,
           upside: c.upside,
+          fairValueModel: c.fairValueModel,
           overallScore: c.overallScore,
           dividendYield: c.dividendYield,
           marketCap: c.marketCap

@@ -118,11 +118,12 @@ class HistoricalPriceFetcher {
   }
 
   /**
-   * Processa e salva dados históricos no banco
+   * Processa e salva dados históricos no banco usando Yahoo Finance como fonte primária
+   * ATUALIZADO: Agora usa Yahoo Finance através da função centralizada que faz deduplicação por mês
    */
   async processHistoricalData(
     ticker: string,
-    data: BrapiHistoricalResponse['results'][0],
+    data: BrapiHistoricalResponse['results'][0] | null,
     interval: string = '1mo'
   ): Promise<void> {
     try {
@@ -137,144 +138,44 @@ class HistoricalPriceFetcher {
       });
 
       if (!company) {
+        // Se não temos dados da BRAPI, buscar nome do Yahoo Finance
+        let companyName = ticker;
+        try {
+          const { HistoricalDataService } = await import('../src/lib/historical-data-service.js');
+          const assetInfo = await HistoricalDataService.fetchAssetInfo(ticker);
+          if (assetInfo) {
+            companyName = assetInfo.name;
+          }
+        } catch (error) {
+          console.warn(`⚠️  Não foi possível buscar nome da empresa para ${ticker}, usando ticker como nome`);
+        }
+
         // Criar empresa básica se não existir
         company = await backgroundPrisma.company.create({
           data: {
             ticker,
-            name: data.longName || data.shortName || ticker
+            name: data?.longName || data?.shortName || companyName
           }
         });
         console.log(`✅ Empresa criada: ${ticker} - ${company.name}`);
       }
 
-      if (!data.historicalDataPrice || data.historicalDataPrice.length === 0) {
-        console.log(`⚠️  Nenhum dado histórico para processar: ${ticker}`);
-        return;
-      }
+      console.log(`🔄 Processando preços históricos para ${ticker} usando Yahoo Finance...`);
 
-      console.log(`🔄 Processando ${data.historicalDataPrice.length} registros históricos para ${ticker}...`);
-
-      // Verificar dados existentes para evitar duplicatas
-      const existingDates = await backgroundPrisma.historicalPrice.findMany({
-        where: {
-          companyId: company.id,
-          interval
-        },
-        select: {
-          date: true
-        }
-      }).catch(error => {
-        console.error(`❌ Erro ao buscar dados existentes para ${ticker}:`, error.message);
-        return [];
-      });
-
-      const existingDateSet = new Set(
-        existingDates.map(d => d.date.toISOString().split('T')[0])
+      // Usar função centralizada do HistoricalDataService que usa Yahoo Finance como fonte primária
+      // Importar dinamicamente para evitar problemas de módulo em scripts
+      const { HistoricalDataService } = await import('../src/lib/historical-data-service.js');
+      
+      // Buscar dados desde 2000 até hoje (padrão da função centralizada)
+      const result = await HistoricalDataService.fetchAndSaveHistoricalPricesFromYahoo(
+        company.id,
+        ticker,
+        undefined, // startDate - usa padrão 2000-01-01
+        undefined, // endDate - usa hoje
+        interval as '1mo' | '1wk' | '1d'
       );
 
-      // Preparar dados para inserção
-      const historicalRecords = data.historicalDataPrice
-        .map(record => {
-          const date = new Date(record.date * 1000); // Converter timestamp Unix para Date
-          const dateStr = date.toISOString().split('T')[0];
-
-          // Pular se já existe
-          if (existingDateSet.has(dateStr)) {
-            return null;
-          }
-
-          // Validar se todos os campos obrigatórios estão presentes
-          if (!record.open || !record.high || !record.low || !record.close) {
-            console.log(`⚠️  Dados incompletos para ${ticker} em ${dateStr}, pulando...`);
-            return null;
-          }
-
-          // Função para validar e ajustar precisão decimal (máximo 6 dígitos antes da vírgula, 4 após)
-          const validateDecimal = (value: number, fieldName: string): number => {
-            if (!value || isNaN(value) || !isFinite(value)) {
-              console.log(`⚠️  Valor inválido para ${fieldName} em ${ticker} (${dateStr}): ${value}`);
-              return 0;
-            }
-            
-            // Verificar se excede a precisão Decimal(10,4) - máximo 999999.9999
-            if (Math.abs(value) >= 1000000) {
-              console.log(`⚠️  Valor muito grande para ${fieldName} em ${ticker} (${dateStr}): ${value}, limitando...`);
-              return Math.sign(value) * 999999.9999;
-            }
-            
-            // Arredondar para 4 casas decimais
-            return Math.round(value * 10000) / 10000;
-          };
-
-          const adjustedClose = record.adjustedClose || record.close;
-
-          return {
-            companyId: company.id,
-            date,
-            open: validateDecimal(record.open, 'open'),
-            high: validateDecimal(record.high, 'high'),
-            low: validateDecimal(record.low, 'low'),
-            close: validateDecimal(record.close, 'close'),
-            volume: record.volume ? BigInt(record.volume) : BigInt(0),
-            adjustedClose: validateDecimal(adjustedClose, 'adjustedClose'),
-            interval
-          };
-        })
-        .filter(record => record !== null);
-
-      if (historicalRecords.length === 0) {
-        console.log(`⏭️  Todos os dados históricos já existem para ${ticker}`);
-        return;
-      }
-
-      // Inserir em lotes para melhor performance
-      const batchSize = 100;
-      let insertedCount = 0;
-
-      for (let i = 0; i < historicalRecords.length; i += batchSize) {
-        const batch = historicalRecords.slice(i, i + batchSize);
-        
-        try {
-          await backgroundPrisma.historicalPrice.createMany({
-            data: batch,
-            skipDuplicates: true
-          });
-
-          insertedCount += batch.length;
-          console.log(`  📊 Inseridos ${insertedCount}/${historicalRecords.length} registros`);
-        } catch (batchError: any) {
-          console.error(`❌ Erro ao inserir lote para ${ticker}:`, batchError.message);
-          
-          // Tentar inserir um por vez para identificar o registro problemático
-          for (const record of batch) {
-            try {
-              await backgroundPrisma.historicalPrice.create({
-                data: record
-              });
-              insertedCount++;
-            } catch (recordError: any) {
-              console.error(`❌ Erro no registro ${record.date.toISOString().split('T')[0]} para ${ticker}:`, recordError.message);
-              
-              // Verificar se é erro de overflow numérico
-              if (recordError.message.includes('numeric field overflow')) {
-                console.error(`   🔢 OVERFLOW DETECTADO - Valores que excedem Decimal(10,4):`);
-                console.error(`      Open: ${record.open} (máx: 999999.9999)`);
-                console.error(`      High: ${record.high} (máx: 999999.9999)`);
-                console.error(`      Low: ${record.low} (máx: 999999.9999)`);
-                console.error(`      Close: ${record.close} (máx: 999999.9999)`);
-                console.error(`      AdjustedClose: ${record.adjustedClose} (máx: 999999.9999)`);
-                console.error(`      Volume: ${record.volume}`);
-              }
-              
-              console.error(`   Dados completos:`, JSON.stringify(record, (key, value) =>
-                typeof value === 'bigint' ? value.toString() : value
-              ));
-            }
-          }
-        }
-      }
-
-      console.log(`✅ ${insertedCount} novos registros históricos salvos para ${ticker}`);
+      console.log(`✅ ${ticker}: ${result.recordsSaved} registros salvos (${result.recordsProcessed} recebidos, ${result.recordsDeduplicated} após deduplicação)`);
 
     } catch (error: any) {
       console.error(`❌ Erro ao processar dados históricos para ${ticker}:`, error.message);
@@ -312,26 +213,17 @@ class HistoricalPriceFetcher {
 
       await this.tickerManager.markProcessing(ticker);
 
-      // Buscar dados históricos
-      const historicalData = await this.fetchHistoricalData(ticker, range, interval);
+      // Processar e salvar no banco usando Yahoo Finance diretamente
+      // Não precisa mais buscar da BRAPI primeiro
+      await this.processHistoricalData(ticker, null, interval);
 
-      if (historicalData) {
-        // Processar e salvar no banco
-        await this.processHistoricalData(ticker, historicalData, interval);
+      // Marcar como completo
+      await this.tickerManager.updateProgress(ticker, {
+        hasHistoricalData: true,
+        status: 'COMPLETED'
+      });
 
-        // Marcar como completo
-        await this.tickerManager.updateProgress(ticker, {
-          hasHistoricalData: true,
-          status: 'COMPLETED'
-        });
-
-        console.log(`✅ ${ticker} processado com sucesso`);
-      } else {
-        await this.tickerManager.updateProgress(ticker, {
-          status: 'ERROR',
-          error: 'Dados históricos não encontrados'
-        });
-      }
+      console.log(`✅ ${ticker} processado com sucesso`);
 
     } catch (error: any) {
       console.error(`❌ Erro ao processar ${ticker}:`, error.message);
@@ -350,8 +242,8 @@ class HistoricalPriceFetcher {
       forceUpdate = false
     } = options;
 
-    console.log('🚀 Iniciando busca de dados históricos da BRAPI...');
-    console.log(`📊 Configurações: range=${range}, interval=${interval}`);
+    console.log('🚀 Iniciando busca de dados históricos do Yahoo Finance...');
+    console.log(`📊 Configurações: interval=${interval} (Yahoo Finance busca desde 2000 automaticamente)`);
 
     try {
       // Obter lista de tickers

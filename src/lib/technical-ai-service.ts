@@ -328,9 +328,12 @@ FORMATO DA ANÁLISE:
 - Mencione suporte e resistência de forma clara
 - Termine com uma recomendação prática
 
-IMPORTANTE:
+IMPORTANTE SOBRE OS DADOS:
 - Preço Atual: R$ ${currentPrice.toFixed(2)}
-- Os dados são MENSais (não diários)
+- Os dados são MENSais (não diários) - cada ponto representa o fechamento de um mês
+- IMPORTANTE: As datas nos dados históricos podem aparecer como dia 1 do mês seguinte (ex: 2025-12-01 representa fechamento de Novembro/2025)
+- Isso é NORMAL e CORRETO - os cálculos técnicos foram feitos usando a sequência temporal correta dos preços
+- Os indicadores (RSI, MACD, suporte/resistência) foram calculados corretamente usando a ordem cronológica dos preços
 - Foco em INVESTIMENTO DE LONGO PRAZO (não day trade)
 - Seja conservador e prático
 

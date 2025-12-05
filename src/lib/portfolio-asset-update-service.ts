@@ -322,14 +322,22 @@ export class PortfolioAssetUpdateService {
         return 0;
       }
 
+      // Processar dados: manter último registro de cada mês fechado e todos do mês atual
+      const processedData = HistoricalDataService.processMonthlyData(historicalData);
+      
+      if (processedData.length < historicalData.length) {
+        console.log(`📊 [${ticker}] ${historicalData.length} registros recebidos, ${processedData.length} após processamento (mantém fechamento de meses fechados e todos do mês atual)`);
+      }
+
       // Salvar no banco
       await HistoricalDataService.saveHistoricalData(
         companyId,
-        historicalData,
-        "1mo"
+        processedData,
+        "1mo",
+        ticker
       );
 
-      return historicalData.length;
+      return processedData.length;
     } catch (error) {
       console.error(
         `❌ [${ticker}] Erro ao atualizar preços históricos:`,

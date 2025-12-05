@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowLeft, Save, Sparkles, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, Save, Sparkles, RefreshCw, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { JsonEditor } from '@/components/admin/json-editor';
 import { Badge } from '@/components/ui/badge';
@@ -82,12 +82,15 @@ export default function EditIndexPage() {
       sector: string | null;
       currentPrice: number;
       upside: number | null;
+      fairValueModel: string | null;
       overallScore: number | null;
       dividendYield: number | null;
     marketCap: number | null;
     }>;
   } | null>(null);
   const [isTestingScreening, setIsTestingScreening] = useState(false);
+  const [rebalanceDate, setRebalanceDate] = useState('');
+  const [isRegeneratingRebalance, setIsRegeneratingRebalance] = useState(false);
   const [formData, setFormData] = useState({
     ticker: '',
     name: '',
@@ -466,6 +469,7 @@ export default function EditIndexPage() {
                             <th className="text-left p-2">Setor</th>
                             <th className="text-right p-2">Preço</th>
                             <th className="text-right p-2">Upside</th>
+                            <th className="text-left p-2">Modelo</th>
                             <th className="text-right p-2">Score</th>
                           </tr>
                         </thead>
@@ -488,6 +492,13 @@ export default function EditIndexPage() {
                                   : ''
                               }`}>
                                 {company.upside !== null ? `${company.upside.toFixed(1)}%` : '-'}
+                              </td>
+                              <td className="p-2">
+                                {company.fairValueModel ? (
+                                  <Badge variant="outline" className="text-xs">
+                                    {company.fairValueModel}
+                                  </Badge>
+                                ) : '-'}
                               </td>
                               <td className="p-2 text-right">
                                 {company.overallScore !== null ? company.overallScore.toFixed(1) : '-'}
@@ -517,6 +528,89 @@ export default function EditIndexPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Re-gerar Rebalanceamento de Data Específica */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Re-gerar Rebalanceamento de Data Específica
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Esta funcionalidade permite re-gerar o rebalanceamento de um dia específico e recalcular
+                  todos os pontos históricos do índice a partir dessa data até hoje. Os preços de entrada
+                  serão atualizados para os preços históricos daquela data.
+                </AlertDescription>
+              </Alert>
+              
+              <div className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <Label htmlFor="rebalance-date">Data do Rebalanceamento</Label>
+                  <Input
+                    id="rebalance-date"
+                    type="date"
+                    value={rebalanceDate}
+                    onChange={(e) => setRebalanceDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    disabled={isRegeneratingRebalance}
+                  />
+                </div>
+                <Button
+                  onClick={async () => {
+                    if (!rebalanceDate) {
+                      toast.error('Por favor, selecione uma data');
+                      return;
+                    }
+
+                    setIsRegeneratingRebalance(true);
+                    try {
+                      const response = await fetch(`/api/admin/indices/${indexId}/rebalance-date`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date: rebalanceDate })
+                      });
+
+                      const data = await response.json();
+
+                      if (data.success) {
+                        toast.success(data.message || 'Rebalanceamento re-gerado com sucesso');
+                        if (data.errors && data.errors.length > 0) {
+                          console.warn('Erros durante recálculo:', data.errors);
+                        }
+                        // Recarregar dados do índice
+                        queryClient.invalidateQueries({ queryKey: ['admin-index', indexId] });
+                      } else {
+                        toast.error(data.error || 'Erro ao re-gerar rebalanceamento');
+                      }
+                    } catch (error) {
+                      console.error('Erro ao re-gerar rebalanceamento:', error);
+                      toast.error('Erro ao re-gerar rebalanceamento');
+                    } finally {
+                      setIsRegeneratingRebalance(false);
+                    }
+                  }}
+                  disabled={isRegeneratingRebalance || !rebalanceDate}
+                  variant="outline"
+                >
+                  {isRegeneratingRebalance ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Re-gerando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Re-gerar Rebalanceamento
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Botões de Ação */}
           <div className="flex justify-end gap-4 pb-8">

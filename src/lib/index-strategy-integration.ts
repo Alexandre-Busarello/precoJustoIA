@@ -15,6 +15,7 @@ export interface CompanyUpsideData {
   currentPrice: number;
   fairValue: number | null;
   upside: number | null; // Melhor upside disponível (compatibilidade)
+  fairValueModel: string | null; // Modelo usado para calcular o melhor upside (graham, fcd, gordon, barsi, technical)
   overallScore: number | null;
   dividendYield: number | null;
   // Upsides por tipo de estratégia
@@ -161,10 +162,18 @@ export async function calculateUpside(ticker: string): Promise<CompanyUpsideData
     }
 
     // Barsi (se disponível)
-    if (analysisResult.strategies.barsi?.fairValue) {
-      const barsiFairValue = analysisResult.strategies.barsi.fairValue;
-      fairValues.barsi = barsiFairValue;
-      upsides.barsi = barsiFairValue ? ((barsiFairValue - currentPrice) / currentPrice) * 100 : null;
+    // IMPORTANTE: Para BARSI, o upside já vem calculado como discountFromCeiling
+    // que é diferente da fórmula tradicional: ((ceilingPrice - currentPrice) / ceilingPrice) * 100
+    // Não recalcular usando a fórmula tradicional!
+    if (analysisResult.strategies.barsi) {
+      const barsiAnalysis = analysisResult.strategies.barsi;
+      if (barsiAnalysis.fairValue) {
+        fairValues.barsi = barsiAnalysis.fairValue;
+      }
+      // Usar o upside diretamente do StrategyAnalysis (já é discountFromCeiling)
+      upsides.barsi = barsiAnalysis.upside !== null && barsiAnalysis.upside !== undefined 
+        ? barsiAnalysis.upside 
+        : null;
     }
 
     // Análise Técnica (Preço Justo da Análise Técnica)
@@ -183,6 +192,7 @@ export async function calculateUpside(ticker: string): Promise<CompanyUpsideData
     // Calcular melhor upside disponível (para compatibilidade)
     let bestFairValue: number | null = null;
     let bestUpside: number | null = null;
+    let bestModel: string | null = null;
 
     const allUpsides = [
       { type: 'graham', value: upsides.graham, fairValue: fairValues.graham },
@@ -198,6 +208,7 @@ export async function calculateUpside(ticker: string): Promise<CompanyUpsideData
       );
       bestUpside = best.value;
       bestFairValue = best.fairValue;
+      bestModel = best.type.toUpperCase(); // GRAHAM, FCD, GORDON, BARSI, TECHNICAL
     }
 
     // 5. Extrair dividend yield
@@ -211,6 +222,7 @@ export async function calculateUpside(ticker: string): Promise<CompanyUpsideData
       currentPrice,
       fairValue: bestFairValue,
       upside: bestUpside,
+      fairValueModel: bestModel,
       overallScore,
       dividendYield: dividendYield ? dividendYield * 100 : null, // Converter para porcentagem
       upsides,
@@ -263,7 +275,6 @@ export async function getAverageDailyVolume(
     if (historicalPrices.length === 0) {
       // Fallback: tentar buscar de daily_quotes (mas não temos volume lá)
       // Por enquanto, retornar null e deixar o screening decidir
-      console.log(`    ⚠️ ${ticker}: No historical prices found for volume calculation`);
       return null;
     }
 
@@ -338,41 +349,48 @@ export async function getCompanyFinancials(ticker: string): Promise<any | null> 
 }
 
 /**
- * Calcula upside para múltiplos tickers em paralelo
+ * Processa array em batches para evitar sobrecarga do banco
  */
-export async function calculateUpsideBatch(tickers: string[]): Promise<Map<string, CompanyUpsideData>> {
-  const results = new Map<string, CompanyUpsideData>();
+async function processBatch<T, R>(
+  items: T[],
+  batchSize: number,
+  processor: (item: T) => Promise<R | null>
+): Promise<Map<T, R>> {
+  const results = new Map<T, R>();
   
-  const promises = tickers.map(async (ticker) => {
-    const data = await calculateUpside(ticker);
-    if (data) {
-      results.set(ticker, data);
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const promises = batch.map(async (item) => {
+      const data = await processor(item);
+      return { item, data };
+    });
+    
+    const batchResults = await Promise.all(promises);
+    
+    for (const { item, data } of batchResults) {
+      if (data !== null) {
+        results.set(item, data);
+      }
     }
-  });
-
-  await Promise.all(promises);
+  }
   
   return results;
 }
 
 /**
- * Calcula volume médio para múltiplos tickers em paralelo
+ * Calcula upside para múltiplos tickers em batches de 10
+ */
+export async function calculateUpsideBatch(tickers: string[]): Promise<Map<string, CompanyUpsideData>> {
+  return processBatch(tickers, 10, calculateUpside);
+}
+
+/**
+ * Calcula volume médio para múltiplos tickers em batches de 10
  */
 export async function getAverageDailyVolumeBatch(
   tickers: string[],
   days: number = 30
 ): Promise<Map<string, AverageVolumeData>> {
-  const results = new Map<string, AverageVolumeData>();
-  
-  const promises = tickers.map(async (ticker) => {
-    const data = await getAverageDailyVolume(ticker, days);
-    if (data) {
-      results.set(ticker, data);
-    }
-  });
-
-  await Promise.all(promises);
-  
-  return results;
+  return processBatch(tickers, 10, (ticker) => getAverageDailyVolume(ticker, days));
 }
 

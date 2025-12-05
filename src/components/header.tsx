@@ -11,10 +11,12 @@ import { Badge } from "@/components/ui/badge"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
 import { OportunidadesDropdown } from "@/components/oportunidades-dropdown"
 import { AnaliseEstrategiaDropdown } from "@/components/analise-estrategia-dropdown"
+import { CarteirasDropdown } from "@/components/carteiras-dropdown"
 import { UserProfileDropdown } from "@/components/user-profile-dropdown"
 import { NotificationBell } from "@/components/notification-bell"
-import { LayoutDashboard, Headphones, BarChart3 } from "lucide-react"
+import { LayoutDashboard, Headphones } from "lucide-react"
 import { GlobalSearchBar } from "@/components/global-search-bar"
+import { MarketTickerBar } from "@/components/indices/market-ticker-bar"
 
 export default function Header() {
   const { data: session, status } = useSession()
@@ -24,7 +26,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50 will-change-transform">
+      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 relative">
           {/* Mobile Layout */}
           <div className="lg:hidden flex items-center relative">
@@ -102,19 +104,8 @@ export default function Header() {
                 {/* Análise & Estratégia Dropdown */}
                 <AnaliseEstrategiaDropdown />
 
-                {/* Carteiras */}
-                {isPremium && (
-                  <Button 
-                    variant={pathname === "/carteira" ? "default" : "ghost"} 
-                    size="sm" 
-                    asChild
-                  >
-                    <Link href="/carteira" className="flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4" />
-                      Carteiras
-                    </Link>
-                  </Button>
-                )}
+                {/* Carteiras Dropdown */}
+                <CarteirasDropdown />
               </div>
 
               {/* Notification Bell, Suporte e User Profile - Agrupados */}
@@ -194,7 +185,10 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Global Search Bar - Below Header */}
+      {/* Tarja de Índices do Mercado - Entre Header e Search Bar */}
+      <MarketTickerBar position="top" />
+
+      {/* Global Search Bar - Below Market Ticker */}
       <GlobalSearchBar />
 
       {/* Mobile Navigation Drawer */}

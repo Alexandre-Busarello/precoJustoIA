@@ -78,6 +78,7 @@ export interface ScreeningCandidate {
   sector: string | null; // Setor da empresa
   currentPrice: number;
   upside: number | null; // Melhor upside disponível (compatibilidade)
+  fairValueModel: string | null; // Modelo usado para calcular o melhor upside (GRAHAM, FCD, GORDON, BARSI, TECHNICAL)
   overallScore: number | null;
   dividendYield: number | null;
   marketCap: number | null;
@@ -106,6 +107,22 @@ export interface CompositionChange {
   action: 'ENTRY' | 'EXIT';
   ticker: string;
   reason: string;
+}
+
+// Variável global temporária para armazenar informações detalhadas do último screening
+let lastScreeningDetails: {
+  candidatesBeforeSelection?: ScreeningCandidate[];
+  removedByDiversification?: string[];
+} = {};
+
+/**
+ * Retorna as informações detalhadas do último screening executado
+ */
+export function getLastScreeningDetails(): {
+  candidatesBeforeSelection?: ScreeningCandidate[];
+  removedByDiversification?: string[];
+} {
+  return { ...lastScreeningDetails };
 }
 
 /**
@@ -310,6 +327,7 @@ export async function runScreening(
         sector: company.sector,
         currentPrice: 0, // Será preenchido depois
         upside: null,
+        fairValueModel: null,
         overallScore: null,
         dividendYield: toNumber(financials.dy) ? toNumber(financials.dy)! * 100 : null,
         marketCap: toNumber(financials.marketCap),
@@ -397,6 +415,7 @@ export async function runScreening(
       const upside = upsideData.get(candidate.ticker);
       if (upside) {
         candidate.upside = upside.upside;
+        candidate.fairValueModel = upside.fairValueModel;
         candidate.dividendYield = upside.dividendYield;
         // Preencher upsides por tipo
         candidate.upsides = upside.upsides || {
@@ -696,6 +715,17 @@ export async function runScreening(
     }
 
     console.log(`✅ [SCREENING ENGINE] ${finalCandidates.length} companies passed all filters`);
+    
+    // Log detalhado dos candidatos que passaram nos filtros (antes do ranking)
+    if (finalCandidates.length > 0) {
+      console.log(`📊 [SCREENING ENGINE] Top ${Math.min(15, finalCandidates.length)} candidatos após filtros (antes do ranking):`);
+      finalCandidates.slice(0, 15).forEach((c, idx) => {
+        const upside = c.upside !== null && c.upside !== undefined ? `${c.upside.toFixed(1)}%` : 'N/A';
+        const score = c.overallScore !== null && c.overallScore !== undefined ? c.overallScore.toFixed(0) : 'N/A';
+        const price = c.currentPrice ? `R$ ${c.currentPrice.toFixed(2)}` : 'N/A';
+        console.log(`   ${idx + 1}. ${c.ticker} - Preço: ${price}, Upside: ${upside}, Score: ${score}, Setor: ${c.sector || 'N/A'}`);
+      });
+    }
 
     // 5.5. Buscar análises técnicas em batch se necessário
     let technicalAnalyses: Map<string, any> = new Map();
@@ -861,9 +891,22 @@ export async function runScreening(
           const originalCandidate = finalCandidates.find(c => c.ticker === result.ticker);
           if (!originalCandidate) continue;
 
+          // Determinar o modelo baseado no tipo da estratégia
+          let fairValueModel: string | null = originalCandidate.fairValueModel;
+          if (result.fairValueModel) {
+            fairValueModel = result.fairValueModel;
+          } else if (config.quality?.strategy?.type) {
+            // Se não há fairValueModel no resultado, usar o tipo da estratégia
+            const strategyType = config.quality.strategy.type.toUpperCase();
+            fairValueModel = strategyType === 'GRAHAM' || strategyType === 'FCD' || strategyType === 'GORDON' || strategyType === 'BARSI' 
+              ? strategyType 
+              : null;
+          }
+          
           strategyCandidatesMap.set(result.ticker, {
             ...originalCandidate,
             upside: result.upside,
+            fairValueModel: fairValueModel,
             overallScore: result.key_metrics?.overallScore || originalCandidate.overallScore,
             // Preservar upsides do candidato original
             upsides: originalCandidate.upsides || {
@@ -880,6 +923,17 @@ export async function runScreening(
         strategyRankedCandidates = Array.from(strategyCandidatesMap.values());
         
         console.log(`✅ [SCREENING ENGINE] Strategy ${config.quality.strategy.type} returned ${strategyRankedCandidates.length} ranked companies`);
+        
+        // Log detalhado do ranking da estratégia
+        if (strategyRankedCandidates.length > 0) {
+          console.log(`📊 [SCREENING ENGINE] Top ${Math.min(15, strategyRankedCandidates.length)} candidatos após ranking da estratégia:`);
+          strategyRankedCandidates.slice(0, 15).forEach((c, idx) => {
+            const upside = c.upside !== null && c.upside !== undefined ? `${c.upside.toFixed(1)}%` : 'N/A';
+            const score = c.overallScore !== null && c.overallScore !== undefined ? c.overallScore.toFixed(0) : 'N/A';
+            const price = c.currentPrice ? `R$ ${c.currentPrice.toFixed(2)}` : 'N/A';
+            console.log(`   ${idx + 1}. ${c.ticker} - Preço: ${price}, Upside: ${upside}, Score: ${score}, Modelo: ${c.fairValueModel || 'N/A'}`);
+          });
+        }
       } catch (error) {
         console.error(`❌ [SCREENING ENGINE] Error executing strategy ranking:`, error);
         // Em caso de erro, continuar com ordenação padrão
@@ -942,6 +996,9 @@ export async function runScreening(
 
     // Agrupar por empresa e manter apenas o melhor ticker de cada empresa
     const companyMap = new Map<string, ScreeningCandidate>();
+    // Se há estratégia configurada, manter ordem original do ranking (primeiro que aparece)
+    const hasStrategy = !!config.quality?.strategy?.type;
+    
     for (const candidate of strategyRankedCandidates) {
       const companyBase = getCompanyBase(candidate.ticker);
       const existing = companyMap.get(companyBase);
@@ -949,49 +1006,118 @@ export async function runScreening(
       if (!existing) {
         companyMap.set(companyBase, candidate);
       } else {
-        // Manter o que tem melhor valor no critério de ordenação
-        const orderBy = config.selection?.orderBy || 'upside';
-        let existingValue: number | null = null;
-        let candidateValue: number | null = null;
+        if (hasStrategy) {
+          // Quando há estratégia, manter o primeiro que aparece (já está na ordem correta do ranking)
+          // Não substituir, manter o que já está no mapa
+        } else {
+          // Quando não há estratégia, usar critério de ordenação configurado
+          const orderBy = config.selection?.orderBy || 'upside';
+          let existingValue: number | null = null;
+          let candidateValue: number | null = null;
 
-        switch (orderBy) {
-          case 'upside':
-            existingValue = existing.upside;
-            candidateValue = candidate.upside;
-            break;
-          case 'dy':
-            existingValue = existing.dividendYield;
-            candidateValue = candidate.dividendYield;
-            break;
-          case 'overallScore':
-            existingValue = existing.overallScore;
-            candidateValue = candidate.overallScore;
-            break;
-          case 'marketCap':
-            existingValue = existing.marketCap;
-            candidateValue = candidate.marketCap;
-            break;
-          case 'technicalMargin':
-            existingValue = existing.technicalMargin;
-            candidateValue = candidate.technicalMargin;
-            break;
-        }
+          switch (orderBy) {
+            case 'upside':
+              existingValue = existing.upside;
+              candidateValue = candidate.upside;
+              break;
+            case 'dy':
+              existingValue = existing.dividendYield;
+              candidateValue = candidate.dividendYield;
+              break;
+            case 'overallScore':
+              existingValue = existing.overallScore;
+              candidateValue = candidate.overallScore;
+              break;
+            case 'marketCap':
+              existingValue = existing.marketCap;
+              candidateValue = candidate.marketCap;
+              break;
+            case 'technicalMargin':
+              existingValue = existing.technicalMargin;
+              candidateValue = candidate.technicalMargin;
+              break;
+          }
 
-        const orderDirection = config.selection?.orderDirection || 'desc';
-        const shouldReplace = 
-          candidateValue !== null && 
-          (existingValue === null || 
-           (orderDirection === 'desc' && candidateValue > existingValue) ||
-           (orderDirection === 'asc' && candidateValue < existingValue));
+          const orderDirection = config.selection?.orderDirection || 'desc';
+          const shouldReplace = 
+            candidateValue !== null && 
+            (existingValue === null || 
+             (orderDirection === 'desc' && candidateValue > existingValue) ||
+             (orderDirection === 'asc' && candidateValue < existingValue));
 
-        if (shouldReplace) {
-          companyMap.set(companyBase, candidate);
+          if (shouldReplace) {
+            companyMap.set(companyBase, candidate);
+          }
         }
       }
     }
 
-    const uniqueCandidates = Array.from(companyMap.values());
+    // Preservar ordem original quando há estratégia configurada
+    let uniqueCandidates: ScreeningCandidate[];
+    if (hasStrategy) {
+      // Manter ordem original do ranking da estratégia
+      const seenCompanies = new Set<string>();
+      uniqueCandidates = [];
+      for (const candidate of strategyRankedCandidates) {
+        const companyBase = getCompanyBase(candidate.ticker);
+        if (!seenCompanies.has(companyBase)) {
+          seenCompanies.add(companyBase);
+          uniqueCandidates.push(candidate);
+        }
+      }
+    } else {
+      uniqueCandidates = Array.from(companyMap.values());
+    }
+    
     console.log(`🔄 [SCREENING ENGINE] Removed ${strategyRankedCandidates.length - uniqueCandidates.length} duplicate company tickers`);
+
+    // Ordenar uniqueCandidates ANTES da seleção para garantir ordem consistente
+    // MAS: quando há estratégia configurada, não reordenar (manter ordem original do ranking)
+    if (!hasStrategy) {
+      const orderBy = config.selection?.orderBy || 'upside';
+      const orderDirection = config.selection?.orderDirection || 'desc';
+      
+      uniqueCandidates.sort((a, b) => {
+        let aValue: number | null = null;
+        let bValue: number | null = null;
+
+        switch (orderBy) {
+          case 'upside':
+            aValue = a.upside;
+            bValue = b.upside;
+            break;
+          case 'dy':
+            aValue = a.dividendYield;
+            bValue = b.dividendYield;
+            break;
+          case 'overallScore':
+            aValue = a.overallScore;
+            bValue = b.overallScore;
+            break;
+          case 'marketCap':
+            aValue = a.marketCap;
+            bValue = b.marketCap;
+            break;
+          case 'technicalMargin':
+            aValue = a.technicalMargin;
+            bValue = b.technicalMargin;
+            break;
+          default:
+            aValue = a.upside;
+            bValue = b.upside;
+        }
+
+        if (aValue === null && bValue === null) return 0;
+        if (aValue === null) return 1;
+        if (bValue === null) return -1;
+
+        const diff = aValue - bValue;
+        return orderDirection === 'desc' ? -diff : diff;
+      });
+    } else {
+      const strategyType = config.quality?.strategy?.type || 'unknown';
+      console.log(`📊 [SCREENING ENGINE] Preserving original strategy ranking order (${strategyType})`);
+    }
 
     // 9. Aplicar limites por faixa de score (se especificado)
     let selected: ScreeningCandidate[] = [];
@@ -1011,68 +1137,12 @@ export async function runScreening(
         });
         
         // Ordenar por critério de ordenação dentro da banda
-        const orderBy = config.selection?.orderBy || 'upside';
-        const orderDirection = config.selection?.orderDirection || 'desc';
-        
-        candidatesInBand.sort((a, b) => {
-          let aValue: number | null = null;
-          let bValue: number | null = null;
-
-          switch (orderBy) {
-            case 'upside':
-              aValue = a.upside;
-              bValue = b.upside;
-              break;
-            case 'dy':
-              aValue = a.dividendYield;
-              bValue = b.dividendYield;
-              break;
-            case 'overallScore':
-              aValue = a.overallScore;
-              bValue = b.overallScore;
-              break;
-            case 'marketCap':
-              aValue = a.marketCap;
-              bValue = b.marketCap;
-              break;
-            case 'technicalMargin':
-              aValue = a.technicalMargin;
-              bValue = b.technicalMargin;
-              break;
-            default:
-              aValue = a.upside;
-              bValue = b.upside;
-          }
-
-          if (aValue === null && bValue === null) return 0;
-          if (aValue === null) return 1;
-          if (bValue === null) return -1;
-
-          const diff = aValue - bValue;
-          return orderDirection === 'desc' ? -diff : diff;
-        });
-        
-        // Selecionar até o máximo permitido para esta banda
-        const selectedFromBand = candidatesInBand.slice(0, band.maxCount);
-        selectedFromBand.forEach(c => {
-          selectedByBand.push(c);
-          usedTickers.add(c.ticker);
-        });
-        
-        console.log(`📊 [SCREENING ENGINE] Score band [${band.min}-${band.max}]: Selected ${selectedFromBand.length}/${band.maxCount} max`);
-      }
-      
-      selected = selectedByBand;
-      
-      // Se ainda há espaço e há um topN definido, preencher com os melhores restantes
-      const topN = config.selection?.topN;
-      if (topN && selected.length < topN) {
-        const remaining = uniqueCandidates
-          .filter(c => !usedTickers.has(c.ticker))
-          .sort((a, b) => {
-            const orderBy = config.selection?.orderBy || 'upside';
-            const orderDirection = config.selection?.orderDirection || 'desc';
-            
+        // MAS: quando há estratégia configurada, manter ordem original do ranking
+        if (!hasStrategy) {
+          const orderBy = config.selection?.orderBy || 'upside';
+          const orderDirection = config.selection?.orderDirection || 'desc';
+          
+          candidatesInBand.sort((a, b) => {
             let aValue: number | null = null;
             let bValue: number | null = null;
 
@@ -1097,6 +1167,9 @@ export async function runScreening(
                 aValue = a.technicalMargin;
                 bValue = b.technicalMargin;
                 break;
+              default:
+                aValue = a.upside;
+                bValue = b.upside;
             }
 
             if (aValue === null && bValue === null) return 0;
@@ -1105,8 +1178,68 @@ export async function runScreening(
 
             const diff = aValue - bValue;
             return orderDirection === 'desc' ? -diff : diff;
-          })
-          .slice(0, topN - selected.length);
+          });
+        }
+        
+        // Selecionar até o máximo permitido para esta banda
+        const selectedFromBand = candidatesInBand.slice(0, band.maxCount);
+        selectedFromBand.forEach(c => {
+          selectedByBand.push(c);
+          usedTickers.add(c.ticker);
+        });
+        
+        console.log(`📊 [SCREENING ENGINE] Score band [${band.min}-${band.max}]: Selected ${selectedFromBand.length}/${band.maxCount} max`);
+      }
+      
+      selected = selectedByBand;
+      
+      // Se ainda há espaço e há um topN definido, preencher com os melhores restantes
+      const topN = config.selection?.topN;
+      if (topN && selected.length < topN) {
+        const remaining = uniqueCandidates.filter(c => !usedTickers.has(c.ticker));
+        
+        // Ordenar apenas se não há estratégia configurada (manter ordem original quando há estratégia)
+        const sortedRemaining = hasStrategy 
+          ? remaining // Manter ordem original quando há estratégia
+          : remaining.sort((a, b) => {
+              const orderBy = config.selection?.orderBy || 'upside';
+              const orderDirection = config.selection?.orderDirection || 'desc';
+              
+              let aValue: number | null = null;
+              let bValue: number | null = null;
+
+              switch (orderBy) {
+                case 'upside':
+                  aValue = a.upside;
+                  bValue = b.upside;
+                  break;
+                case 'dy':
+                  aValue = a.dividendYield;
+                  bValue = b.dividendYield;
+                  break;
+                case 'overallScore':
+                  aValue = a.overallScore;
+                  bValue = b.overallScore;
+                  break;
+                case 'marketCap':
+                  aValue = a.marketCap;
+                  bValue = b.marketCap;
+                  break;
+                case 'technicalMargin':
+                  aValue = a.technicalMargin;
+                  bValue = b.technicalMargin;
+                  break;
+              }
+
+              if (aValue === null && bValue === null) return 0;
+              if (aValue === null) return 1;
+              if (bValue === null) return -1;
+
+              const diff = aValue - bValue;
+              return orderDirection === 'desc' ? -diff : diff;
+            });
+        
+        selected.push(...sortedRemaining.slice(0, topN - selected.length));
         
         selected.push(...remaining);
       }
@@ -1117,11 +1250,37 @@ export async function runScreening(
     }
 
     console.log(`🎯 [SCREENING ENGINE] Selected ${selected.length} companies${config.selection?.scoreBands ? ' using score bands' : ''}`);
+    
+    // Guardar candidatos ANTES da seleção (topN/scoreBands) para logs detalhados
+    // Isso inclui todos os candidatos que passaram nos filtros mas podem não ter sido selecionados
+    const candidatesBeforeSelection = [...uniqueCandidates];
+    
+    // Log detalhado dos candidatos selecionados antes da diversificação
+    if (selected.length > 0) {
+      console.log(`📊 [SCREENING ENGINE] Top ${Math.min(10, selected.length)} candidatos antes da diversificação:`);
+      selected.slice(0, 10).forEach((c, idx) => {
+        const upside = c.upside !== null && c.upside !== undefined ? `${c.upside.toFixed(1)}%` : 'N/A';
+        const score = c.overallScore !== null && c.overallScore !== undefined ? c.overallScore.toFixed(0) : 'N/A';
+        console.log(`   ${idx + 1}. ${c.ticker} - Upside: ${upside}, Score: ${score}, Setor: ${c.sector || 'N/A'}, Modelo: ${c.fairValueModel || 'N/A'}`);
+      });
+    }
 
+    // Guardar candidatos antes da diversificação para identificar removidos por diversificação
+    const candidatesBeforeDiversification = [...selected];
+    
     // 10. Aplicar diversificação por setor (se especificado)
+    let removedByDiversification: string[] = [];
     if (config.diversification) {
+      const beforeDiversification = selected.length;
+      const beforeTickers = new Set(selected.map(c => c.ticker));
       selected = applyDiversification(selected, config);
-      console.log(`📊 [SCREENING ENGINE] After diversification: ${selected.length} companies`);
+      const afterTickers = new Set(selected.map(c => c.ticker));
+      removedByDiversification = Array.from(beforeTickers).filter(t => !afterTickers.has(t));
+      
+      console.log(`📊 [SCREENING ENGINE] After diversification: ${selected.length} companies (removed ${beforeDiversification - selected.length})`);
+      if (removedByDiversification.length > 0) {
+        console.log(`   Removidos por diversificação: ${removedByDiversification.join(', ')}`);
+      }
     }
 
     // Garantir que candidatos com overallScore null tenham debug antes de retornar
@@ -1136,6 +1295,13 @@ export async function runScreening(
       }
     }
 
+    // Armazenar informações detalhadas para uso em compareComposition
+    lastScreeningDetails = {
+      candidatesBeforeSelection, // Candidatos que passaram nos filtros mas podem não ter sido selecionados
+      removedByDiversification
+    };
+    
+    // Retornar array diretamente para compatibilidade retroativa
     return selected;
   } catch (error) {
     console.error(`❌ [SCREENING ENGINE] Error running screening:`, error);
@@ -1368,35 +1534,250 @@ function getUpsideForRebalance(
  */
 export function compareComposition(
   current: Array<{ assetTicker: string }>,
-  ideal: ScreeningCandidate[]
+  ideal: ScreeningCandidate[],
+  config?: IndexConfig,
+  qualityRejected?: Array<{ candidate: ScreeningCandidate; reason: string }>,
+  screeningRejected?: Array<{ ticker: string; reason: string }>,
+  candidatesBeforeSelection?: ScreeningCandidate[], // Candidatos que passaram nos filtros mas não foram selecionados
+  removedByDiversification?: string[] // Tickers removidos por diversificação
 ): CompositionChange[] {
+  // Se não foram fornecidos, tentar usar informações do último screening
+  if (!candidatesBeforeSelection && lastScreeningDetails.candidatesBeforeSelection) {
+    candidatesBeforeSelection = lastScreeningDetails.candidatesBeforeSelection;
+  }
+  if (!removedByDiversification && lastScreeningDetails.removedByDiversification) {
+    removedByDiversification = lastScreeningDetails.removedByDiversification;
+  }
   const changes: CompositionChange[] = [];
   const currentTickers = new Set(current.map(c => c.assetTicker));
   const idealTickers = new Set(ideal.map(c => c.ticker));
+  
+  // Criar mapas para busca rápida de motivos
+  const qualityRejectedMap = new Map<string, string>();
+  if (qualityRejected) {
+    qualityRejected.forEach(r => qualityRejectedMap.set(r.candidate.ticker, r.reason));
+  }
+  
+  const screeningRejectedMap = new Map<string, string>();
+  if (screeningRejected) {
+    screeningRejected.forEach(r => screeningRejectedMap.set(r.ticker, r.reason));
+  }
+
+  // Criar mapa de posições no ranking ideal (para logs mais detalhados)
+  const idealRankingMap = new Map<string, number>();
+  ideal.forEach((candidate, index) => {
+    idealRankingMap.set(candidate.ticker, index + 1);
+  });
+
+  // Criar mapa de setores para análise de diversificação
+  const sectorMap = new Map<string, string>();
+  ideal.forEach(candidate => {
+    sectorMap.set(candidate.ticker, candidate.sector || 'Outros');
+  });
+
+  // Criar mapa de candidatos que passaram nos filtros mas não foram selecionados
+  const candidatesBeforeSelectionMap = new Map<string, ScreeningCandidate>();
+  if (candidatesBeforeSelection) {
+    candidatesBeforeSelection.forEach(c => {
+      candidatesBeforeSelectionMap.set(c.ticker, c);
+    });
+  }
+
+  // Criar set de tickers removidos por diversificação
+  const removedByDiversificationSet = new Set<string>();
+  if (removedByDiversification) {
+    removedByDiversification.forEach(ticker => removedByDiversificationSet.add(ticker));
+  }
+
+  // Analisar diversificação para identificar setores acima do limite
+  const sectorCounts = new Map<string, number>();
+  ideal.forEach(candidate => {
+    const sector = candidate.sector || 'Outros';
+    sectorCounts.set(sector, (sectorCounts.get(sector) || 0) + 1);
+  });
 
   // Identificar saídas (ativos que estão na composição atual mas não no ideal)
   for (const comp of current) {
     if (!idealTickers.has(comp.assetTicker)) {
+      let reason = 'Ativo removido: ';
+      
+      // Verificar se foi rejeitado por qualidade
+      if (qualityRejectedMap.has(comp.assetTicker)) {
+        reason += `não passou na validação de qualidade (${qualityRejectedMap.get(comp.assetTicker)})`;
+      }
+      // Verificar se foi rejeitado no screening (não passou nos filtros)
+      else if (screeningRejectedMap.has(comp.assetTicker)) {
+        reason += screeningRejectedMap.get(comp.assetTicker) || 'não passou nos filtros do screening';
+      }
+      // Verificar se foi removido por diversificação
+      else if (removedByDiversificationSet.has(comp.assetTicker)) {
+        const tickerSector = sectorMap.get(comp.assetTicker) || candidatesBeforeSelectionMap.get(comp.assetTicker)?.sector || 'Outros';
+        const sectorCount = sectorCounts.get(tickerSector) || 0;
+        const maxCountPerSector = config?.diversification?.maxCountPerSector || {};
+        const maxCount = maxCountPerSector[tickerSector] || (Object.keys(maxCountPerSector).length === 0 ? 4 : undefined);
+        
+        if (maxCount !== undefined) {
+          reason += `removido por diversificação (setor "${tickerSector}" com ${sectorCount} ativos selecionados, limite: ${maxCount} por setor)`;
+        } else {
+          reason += `removido por regras de diversificação (setor "${tickerSector}")`;
+        }
+      }
+      // Verificar se passou nos filtros mas não foi selecionado (selection ou scoreBands)
+      else if (candidatesBeforeSelectionMap.has(comp.assetTicker)) {
+        const candidate = candidatesBeforeSelectionMap.get(comp.assetTicker)!;
+        const topN = config?.selection?.topN;
+        const scoreBands = config?.selection?.scoreBands;
+        const candidateScore = candidate.overallScore;
+        
+        if (scoreBands && scoreBands.length > 0) {
+          // Verificar em qual banda o ativo deveria estar
+          const matchingBand = scoreBands.find(band => 
+            candidateScore !== null && candidateScore !== undefined &&
+            candidateScore >= band.min && candidateScore <= band.max
+          );
+          
+          if (matchingBand) {
+            // Contar quantos ativos já estão nesta banda no ideal
+            const countInBand = ideal.filter(c => {
+              const score = c.overallScore;
+              return score !== null && score !== undefined && 
+                     score >= matchingBand.min && score <= matchingBand.max;
+            }).length;
+            
+            reason += `não está dentro da faixa de score [${matchingBand.min}-${matchingBand.max}] (Score: ${candidateScore?.toFixed(0) || 'N/A'}, ${countInBand}/${matchingBand.maxCount} ativos já selecionados nesta faixa)`;
+          } else {
+            reason += `não está dentro das faixas de score configuradas (Score: ${candidateScore?.toFixed(0) || 'N/A'})`;
+          }
+        } else if (topN) {
+          // Encontrar posição do candidato no ranking antes da seleção
+          const allCandidatesBeforeSelection = Array.from(candidatesBeforeSelectionMap.values());
+          const orderBy = config?.selection?.orderBy || 'upside';
+          const orderDirection = config?.selection?.orderDirection || 'desc';
+          
+          // Ordenar como foi ordenado antes da seleção
+          allCandidatesBeforeSelection.sort((a, b) => {
+            let aValue: number | null = null;
+            let bValue: number | null = null;
+
+            switch (orderBy) {
+              case 'upside':
+                aValue = a.upside;
+                bValue = b.upside;
+                break;
+              case 'dy':
+                aValue = a.dividendYield;
+                bValue = b.dividendYield;
+                break;
+              case 'overallScore':
+                aValue = a.overallScore;
+                bValue = b.overallScore;
+                break;
+              case 'marketCap':
+                aValue = a.marketCap;
+                bValue = b.marketCap;
+                break;
+              case 'technicalMargin':
+                aValue = a.technicalMargin;
+                bValue = b.technicalMargin;
+                break;
+            }
+
+            if (aValue === null && bValue === null) return 0;
+            if (aValue === null) return 1;
+            if (bValue === null) return -1;
+
+            const diff = aValue - bValue;
+            return orderDirection === 'desc' ? -diff : diff;
+          });
+          
+          const position = allCandidatesBeforeSelection.findIndex(c => c.ticker === comp.assetTicker) + 1;
+          
+          if (position > topN) {
+            reason += `não está entre os top ${topN} selecionados (posição ${position} no ranking por ${orderBy})`;
+          } else {
+            reason += `não está entre os top ${topN} selecionados (posição ${position}/${topN})`;
+          }
+        } else {
+          reason += 'passou nos filtros mas não foi selecionado pelo critério de seleção configurado';
+        }
+      }
+      // Se não está em nenhum dos mapas acima, tentar inferir o motivo
+      else {
+        // Tentar inferir motivo comparando com os ativos selecionados
+        const topN = config?.selection?.topN;
+        const scoreBands = config?.selection?.scoreBands;
+        
+        if (scoreBands && scoreBands.length > 0) {
+          // Se usa scoreBands, provavelmente não está dentro das faixas
+          reason += 'não está dentro das faixas de score configuradas (não passou nos filtros ou não está nas faixas permitidas)';
+        } else if (topN) {
+          // Se usa topN, provavelmente não está entre os top N
+          reason += `não está entre os top ${topN} selecionados (não passou nos filtros ou ranking insuficiente)`;
+        } else if (config?.diversification) {
+          // Se tem diversificação, pode ter sido removido por diversificação
+          reason += 'não passou nos filtros do screening ou foi removido por diversificação';
+        } else {
+          reason += 'não passou nos filtros do screening (não atende aos critérios configurados)';
+        }
+      }
+      
       changes.push({
         action: 'EXIT',
         ticker: comp.assetTicker,
-        reason: `Ativo removido: não atende mais aos critérios de seleção do índice após novo screening`
+        reason
       });
     }
   }
 
   // Identificar entradas (ativos que estão no ideal mas não na composição atual)
-  for (const candidate of ideal) {
+  ideal.forEach((candidate, index) => {
     if (!currentTickers.has(candidate.ticker)) {
+      const position = index + 1;
       let reason = `Ativo adicionado: selecionado pelo screening`;
+      
+      // Adicionar posição no ranking
+      reason += ` (posição ${position}/${ideal.length}`;
+      
+      // Adicionar informações sobre o modelo usado
+      if (candidate.fairValueModel) {
+        reason += `, Modelo: ${candidate.fairValueModel}`;
+      }
+      
       if (candidate.upside !== null && candidate.upside !== undefined) {
-        reason += ` com ${candidate.upside.toFixed(1)}% de upside`;
+        reason += `, Upside: ${candidate.upside.toFixed(1)}%`;
       }
       if (candidate.overallScore !== null && candidate.overallScore !== undefined) {
-        reason += ` (Score: ${candidate.overallScore.toFixed(0)})`;
+        reason += `, Score: ${candidate.overallScore.toFixed(0)}`;
       }
       if (candidate.technicalMargin !== null && candidate.technicalMargin !== undefined) {
-        reason += ` (Margem técnica: ${candidate.technicalMargin.toFixed(1)}%)`;
+        reason += `, Margem técnica: ${candidate.technicalMargin.toFixed(1)}%`;
+      }
+      
+      reason += ')';
+      
+      // Verificar se foi adicionado por threshold
+      if (config?.rebalance?.threshold && current.length > 0) {
+        const currentInIdeal = ideal.filter(c => currentTickers.has(c.ticker));
+        if (currentInIdeal.length > 0) {
+          const lastCurrentUpside = getUpsideForRebalance(currentInIdeal[currentInIdeal.length - 1], config.rebalance?.upsideType);
+          const newUpside = getUpsideForRebalance(candidate, config.rebalance?.upsideType);
+          if (newUpside !== null && lastCurrentUpside !== null) {
+            const upsideDiff = newUpside - lastCurrentUpside;
+            if (upsideDiff > (config.rebalance.threshold * 100)) {
+              reason += ` - adicionado por threshold (${upsideDiff.toFixed(1)}% superior ao último da lista)`;
+            }
+          }
+        }
+      }
+      
+      // Verificar se foi adicionado por scoreBands
+      if (config?.selection?.scoreBands && candidate.overallScore !== null && candidate.overallScore !== undefined) {
+        const matchingBand = config.selection.scoreBands.find(band => 
+          candidate.overallScore! >= band.min && candidate.overallScore! <= band.max
+        );
+        if (matchingBand) {
+          reason += ` - dentro da faixa de score [${matchingBand.min}-${matchingBand.max}]`;
+        }
       }
       
       changes.push({
@@ -1405,7 +1786,7 @@ export function compareComposition(
         reason
       });
     }
-  }
+  });
 
   return changes;
 }
@@ -1418,7 +1799,9 @@ export function generateRebalanceReason(
   ideal: ScreeningCandidate[],
   threshold: number,
   hasQualityFilter: boolean,
-  upsideType?: 'graham' | 'fcd' | 'gordon' | 'barsi' | 'technical' | 'best'
+  upsideType?: 'graham' | 'fcd' | 'gordon' | 'barsi' | 'technical' | 'best',
+  config?: IndexConfig,
+  qualityRejected?: Array<{ candidate: ScreeningCandidate; reason: string }>
 ): string {
   const currentTickers = new Set(current.map(c => c.assetTicker));
   const idealTickers = new Set(ideal.map(c => c.ticker));
@@ -1458,9 +1841,28 @@ export function generateRebalanceReason(
     }
   }
   
-  // Motivo 3: Filtro de qualidade
-  if (hasQualityFilter && exits.length > 0) {
-    reasons.push(`alguns ativos não passaram na validação de qualidade`);
+  // Motivo 3: Filtro de qualidade (mais específico)
+  if (hasQualityFilter && exits.length > 0 && qualityRejected && qualityRejected.length > 0) {
+    const rejectedFromCurrent = qualityRejected.filter(r => currentTickers.has(r.candidate.ticker));
+    if (rejectedFromCurrent.length > 0) {
+      reasons.push(`${rejectedFromCurrent.length} ativo(s) removido(s) por não passar na validação de qualidade`);
+    }
+  }
+  
+  // Motivo 4: Selection (topN ou scoreBands)
+  if (config?.selection && exits.length > 0) {
+    const topN = config.selection.topN;
+    const scoreBands = config.selection.scoreBands;
+    if (scoreBands && scoreBands.length > 0) {
+      reasons.push(`alguns ativos removidos por não estarem nas faixas de score configuradas`);
+    } else if (topN) {
+      reasons.push(`alguns ativos removidos por não estarem entre os top ${topN} selecionados`);
+    }
+  }
+  
+  // Motivo 5: Diversificação
+  if (config?.diversification && exits.length > 0) {
+    reasons.push(`alguns ativos removidos por regras de diversificação`);
   }
   
   if (reasons.length === 0) {
@@ -1472,13 +1874,14 @@ export function generateRebalanceReason(
 
 /**
  * Valida se um candidato atende aos critérios de qualidade do config
+ * Retorna objeto com resultado e motivo da rejeição (se aplicável)
  */
 export async function validateCandidateQuality(
   candidate: ScreeningCandidate,
   config: IndexConfig
-): Promise<boolean> {
+): Promise<{ passes: boolean; rejectionReason?: string }> {
   if (!config.quality) {
-    return true; // Sem filtros de qualidade, aceita qualquer candidato
+    return { passes: true }; // Sem filtros de qualidade, aceita qualquer candidato
   }
 
   try {
@@ -1494,7 +1897,7 @@ export async function validateCandidateQuality(
     });
 
     if (!company || !company.financialData || company.financialData.length === 0) {
-      return false; // Sem dados financeiros, não passa
+      return { passes: false, rejectionReason: 'sem dados financeiros disponíveis' };
     }
 
     const financials = company.financialData[0];
@@ -1503,13 +1906,13 @@ export async function validateCandidateQuality(
     if (config.quality.roe) {
       const roe = toNumber(financials.roe);
       if (roe === null) {
-        return false;
+        return { passes: false, rejectionReason: 'ROE não disponível' };
       }
       if (config.quality.roe.gte !== undefined && roe < config.quality.roe.gte) {
-        return false;
+        return { passes: false, rejectionReason: `ROE ${(roe * 100).toFixed(1)}% abaixo do mínimo ${(config.quality.roe.gte * 100).toFixed(1)}%` };
       }
       if (config.quality.roe.lte !== undefined && roe > config.quality.roe.lte) {
-        return false;
+        return { passes: false, rejectionReason: `ROE ${(roe * 100).toFixed(1)}% acima do máximo ${(config.quality.roe.lte * 100).toFixed(1)}%` };
       }
     }
 
@@ -1517,13 +1920,13 @@ export async function validateCandidateQuality(
     if (config.quality.margemLiquida) {
       const margemLiquida = toNumber(financials.margemLiquida);
       if (margemLiquida === null) {
-        return false;
+        return { passes: false, rejectionReason: 'Margem Líquida não disponível' };
       }
       if (config.quality.margemLiquida.gte !== undefined && margemLiquida < config.quality.margemLiquida.gte) {
-        return false;
+        return { passes: false, rejectionReason: `Margem Líquida ${(margemLiquida * 100).toFixed(1)}% abaixo do mínimo ${(config.quality.margemLiquida.gte * 100).toFixed(1)}%` };
       }
       if (config.quality.margemLiquida.lte !== undefined && margemLiquida > config.quality.margemLiquida.lte) {
-        return false;
+        return { passes: false, rejectionReason: `Margem Líquida ${(margemLiquida * 100).toFixed(1)}% acima do máximo ${(config.quality.margemLiquida.lte * 100).toFixed(1)}%` };
       }
     }
 
@@ -1531,13 +1934,13 @@ export async function validateCandidateQuality(
     if (config.quality.dividaLiquidaEbitda) {
       const dividaLiquidaEbitda = toNumber(financials.dividaLiquidaEbitda);
       if (dividaLiquidaEbitda === null) {
-        return false;
+        return { passes: false, rejectionReason: 'Dívida Líq./EBITDA não disponível' };
       }
       if (config.quality.dividaLiquidaEbitda.gte !== undefined && dividaLiquidaEbitda < config.quality.dividaLiquidaEbitda.gte) {
-        return false;
+        return { passes: false, rejectionReason: `Dívida Líq./EBITDA ${dividaLiquidaEbitda.toFixed(2)}x abaixo do mínimo ${config.quality.dividaLiquidaEbitda.gte.toFixed(2)}x` };
       }
       if (config.quality.dividaLiquidaEbitda.lte !== undefined && dividaLiquidaEbitda > config.quality.dividaLiquidaEbitda.lte) {
-        return false;
+        return { passes: false, rejectionReason: `Dívida Líq./EBITDA ${dividaLiquidaEbitda.toFixed(2)}x acima do máximo ${config.quality.dividaLiquidaEbitda.lte.toFixed(2)}x` };
       }
     }
 
@@ -1545,13 +1948,13 @@ export async function validateCandidateQuality(
     if (config.quality.payout) {
       const payout = toNumber(financials.payout);
       if (payout === null) {
-        return false;
+        return { passes: false, rejectionReason: 'Payout não disponível' };
       }
       if (config.quality.payout.gte !== undefined && payout < config.quality.payout.gte) {
-        return false;
+        return { passes: false, rejectionReason: `Payout ${(payout * 100).toFixed(1)}% abaixo do mínimo ${(config.quality.payout.gte * 100).toFixed(1)}%` };
       }
       if (config.quality.payout.lte !== undefined && payout > config.quality.payout.lte) {
-        return false;
+        return { passes: false, rejectionReason: `Payout ${(payout * 100).toFixed(1)}% acima do máximo ${(config.quality.payout.lte * 100).toFixed(1)}%` };
       }
     }
 
@@ -1559,13 +1962,13 @@ export async function validateCandidateQuality(
     if (config.quality.marketCap) {
       const marketCap = toNumber(financials.marketCap);
       if (marketCap === null) {
-        return false;
+        return { passes: false, rejectionReason: 'Market Cap não disponível' };
       }
       if (config.quality.marketCap.gte !== undefined && marketCap < config.quality.marketCap.gte) {
-        return false;
+        return { passes: false, rejectionReason: `Market Cap R$ ${(marketCap / 1_000_000_000).toFixed(2)}bi abaixo do mínimo R$ ${(config.quality.marketCap.gte / 1_000_000_000).toFixed(2)}bi` };
       }
       if (config.quality.marketCap.lte !== undefined && marketCap > config.quality.marketCap.lte) {
-        return false;
+        return { passes: false, rejectionReason: `Market Cap R$ ${(marketCap / 1_000_000_000).toFixed(2)}bi acima do máximo R$ ${(config.quality.marketCap.lte / 1_000_000_000).toFixed(2)}bi` };
       }
     }
 
@@ -1573,13 +1976,13 @@ export async function validateCandidateQuality(
     if (config.quality.pl) {
       const pl = toNumber(financials.pl);
       if (pl === null) {
-        return false;
+        return { passes: false, rejectionReason: 'P/L não disponível' };
       }
       if (config.quality.pl.gte !== undefined && pl < config.quality.pl.gte) {
-        return false;
+        return { passes: false, rejectionReason: `P/L ${pl.toFixed(2)} abaixo do mínimo ${config.quality.pl.gte.toFixed(2)}` };
       }
       if (config.quality.pl.lte !== undefined && pl > config.quality.pl.lte) {
-        return false;
+        return { passes: false, rejectionReason: `P/L ${pl.toFixed(2)} acima do máximo ${config.quality.pl.lte.toFixed(2)}` };
       }
     }
 
@@ -1587,33 +1990,33 @@ export async function validateCandidateQuality(
     if (config.quality.pvp) {
       const pvp = toNumber(financials.pvp);
       if (pvp === null) {
-        return false;
+        return { passes: false, rejectionReason: 'P/VP não disponível' };
       }
       if (config.quality.pvp.gte !== undefined && pvp < config.quality.pvp.gte) {
-        return false;
+        return { passes: false, rejectionReason: `P/VP ${pvp.toFixed(2)} abaixo do mínimo ${config.quality.pvp.gte.toFixed(2)}` };
       }
       if (config.quality.pvp.lte !== undefined && pvp > config.quality.pvp.lte) {
-        return false;
+        return { passes: false, rejectionReason: `P/VP ${pvp.toFixed(2)} acima do máximo ${config.quality.pvp.lte.toFixed(2)}` };
       }
     }
 
     // Validar Overall Score (se disponível no candidato)
     if (config.quality.overallScore) {
       if (candidate.overallScore === null) {
-        return false;
+        return { passes: false, rejectionReason: 'Overall Score não disponível' };
       }
       if (config.quality.overallScore.gte !== undefined && candidate.overallScore < config.quality.overallScore.gte) {
-        return false;
+        return { passes: false, rejectionReason: `Overall Score ${candidate.overallScore.toFixed(0)} abaixo do mínimo ${config.quality.overallScore.gte.toFixed(0)}` };
       }
       if (config.quality.overallScore.lte !== undefined && candidate.overallScore > config.quality.overallScore.lte) {
-        return false;
+        return { passes: false, rejectionReason: `Overall Score ${candidate.overallScore.toFixed(0)} acima do máximo ${config.quality.overallScore.lte.toFixed(0)}` };
       }
     }
 
-    return true; // Passou em todos os critérios
+    return { passes: true }; // Passou em todos os critérios
   } catch (error) {
     console.error(`⚠️ [SCREENING ENGINE] Error validating quality for ${candidate.ticker}:`, error);
-    return false; // Em caso de erro, não passa
+    return { passes: false, rejectionReason: 'erro ao validar critérios de qualidade' };
   }
 }
 
@@ -1624,21 +2027,24 @@ export async function validateCandidateQuality(
 export async function filterByQuality(
   candidates: ScreeningCandidate[],
   config: IndexConfig
-): Promise<{ valid: ScreeningCandidate[]; rejected: ScreeningCandidate[] }> {
+): Promise<{ valid: ScreeningCandidate[]; rejected: Array<{ candidate: ScreeningCandidate; reason: string }> }> {
   if (!config.rebalance?.checkQuality) {
     return { valid: candidates, rejected: [] }; // Se checkQuality não está ativado, retorna todos
   }
 
   const valid: ScreeningCandidate[] = [];
-  const rejected: ScreeningCandidate[] = [];
+  const rejected: Array<{ candidate: ScreeningCandidate; reason: string }> = [];
 
   for (const candidate of candidates) {
-    const passesQuality = await validateCandidateQuality(candidate, config);
-    if (passesQuality) {
+    const qualityResult = await validateCandidateQuality(candidate, config);
+    if (qualityResult.passes) {
       valid.push(candidate);
     } else {
-      rejected.push(candidate);
-      console.log(`    ⚠️ [REBALANCE] ${candidate.ticker}: Não atende critérios de qualidade, removido do rebalanceamento`);
+      rejected.push({
+        candidate,
+        reason: qualityResult.rejectionReason || 'não atende critérios de qualidade'
+      });
+      console.log(`    ⚠️ [REBALANCE] ${candidate.ticker}: Não atende critérios de qualidade - ${qualityResult.rejectionReason || 'motivo desconhecido'}`);
     }
   }
 

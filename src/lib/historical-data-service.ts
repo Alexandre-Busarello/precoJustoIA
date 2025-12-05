@@ -242,10 +242,17 @@ export class HistoricalDataService {
       return;
     }
 
-    // Save to database
-    await this.saveHistoricalData(company.id, historicalData, interval);
+    // Processar dados: manter último registro de cada mês fechado e todos do mês atual
+    const processedData = this.processMonthlyData(historicalData);
     
-    console.log(`✅ [HISTORICAL] ${ticker}: ${historicalData.length} pontos salvos no banco`);
+    if (processedData.length < historicalData.length) {
+      console.log(`📊 [HISTORICAL] ${ticker}: ${historicalData.length} registros recebidos, ${processedData.length} após processamento (mantém fechamento de meses fechados e todos do mês atual)`);
+    }
+
+    // Save to database
+    await this.saveHistoricalData(company.id, processedData, interval, ticker);
+    
+    console.log(`✅ [HISTORICAL] ${ticker}: ${processedData.length} pontos salvos no banco`);
   }
 
   /**
@@ -294,13 +301,199 @@ export class HistoricalDataService {
   }
 
   /**
+   * Processa dados históricos mantendo apenas o último registro de cada mês fechado
+   * e todos os registros do mês atual (em aberto)
+   * 
+   * REGRA:
+   * - Meses fechados: mantém apenas o último registro do mês (representa o fechamento mensal)
+   * - Mês atual: mantém TODOS os registros diários (01/12, 02/12, 03/12, etc.)
+   * 
+   * IMPORTANTE: Se houver dados mensais e diários no mesmo mês atual, mantém apenas os diários
+   * (são mais recentes e detalhados)
+   */
+  static processMonthlyData(data: HistoricalPriceData[]): HistoricalPriceData[] {
+    if (data.length === 0) return [];
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    // Separar dados por tipo: mensais (1 registro por mês) vs diários (múltiplos por mês)
+    // Identificamos diários quando há múltiplos registros no mesmo mês
+    const monthlyDataMap = new Map<string, HistoricalPriceData[]>();
+    
+    // Agrupar por mês/ano
+    for (const record of data) {
+      const recordDate = new Date(record.date);
+      recordDate.setHours(0, 0, 0, 0);
+      const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyDataMap.has(monthKey)) {
+        monthlyDataMap.set(monthKey, []);
+      }
+      monthlyDataMap.get(monthKey)!.push(record);
+    }
+
+    const processedData: HistoricalPriceData[] = [];
+
+    // Processar cada mês
+    for (const [monthKey, records] of monthlyDataMap.entries()) {
+      const [year, month] = monthKey.split('-').map(Number);
+      const isCurrentMonth = year === currentYear && month - 1 === currentMonth;
+
+      // Ordenar registros por data
+      const sortedRecords = records.sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      if (isCurrentMonth) {
+        // Mês atual: manter TODOS os registros (dados diários)
+        // Se houver apenas 1 registro, pode ser mensal ou diário - mantém mesmo assim
+        processedData.push(...sortedRecords);
+      } else {
+        // Mês fechado: manter apenas o último registro (fechamento do mês)
+        // Se houver múltiplos registros no mesmo mês fechado, manter apenas o último
+        processedData.push(sortedRecords[sortedRecords.length - 1]);
+      }
+    }
+
+    return processedData.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+  }
+
+  /**
+   * Busca e salva preços históricos do Yahoo Finance para uma empresa
+   * Função centralizada que usa Yahoo Finance como fonte primária
+   * 
+   * ESTRATÉGIA:
+   * - Busca dados mensais desde 2000 até hoje
+   * - Busca também dados diários do mês atual
+   * - Mantém último registro de cada mês fechado
+   * - Mantém TODOS os registros do mês atual (dados diários)
+   */
+  static async fetchAndSaveHistoricalPricesFromYahoo(
+    companyId: number,
+    ticker: string,
+    startDate?: Date,
+    endDate?: Date,
+    interval: '1mo' | '1wk' | '1d' = '1mo'
+  ): Promise<{ recordsProcessed: number; recordsDeduplicated: number; recordsSaved: number }> {
+    try {
+      // Definir período padrão: desde 2000 até hoje
+      const periodStart = startDate || new Date('2000-01-01');
+      const periodEnd = endDate || new Date();
+      periodEnd.setHours(23, 59, 59, 999);
+
+      console.log(`📊 [HISTORICAL DATA] Buscando preços históricos do Yahoo Finance para ${ticker}...`);
+
+      // 1. Buscar dados mensais históricos
+      const monthlyData = await this.fetchHistoricalFromYahoo(
+        ticker,
+        periodStart,
+        periodEnd,
+        '1mo'
+      );
+
+      // 2. Buscar também dados diários do mês atual para atualizações frequentes
+      const today = new Date();
+      const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const dailyDataCurrentMonth = await this.fetchHistoricalFromYahoo(
+        ticker,
+        currentMonthStart,
+        periodEnd,
+        '1d' // Dados diários para o mês atual
+      );
+
+      // Combinar dados mensais (históricos) com dados diários (mês atual)
+      const allData = [...monthlyData, ...dailyDataCurrentMonth];
+
+      if (allData.length === 0) {
+        console.log(`⚠️ [HISTORICAL DATA] Nenhum dado encontrado para ${ticker}`);
+        return { recordsProcessed: 0, recordsDeduplicated: 0, recordsSaved: 0 };
+      }
+
+      console.log(`  → ${allData.length} registros encontrados (${monthlyData.length} mensais + ${dailyDataCurrentMonth.length} diários do mês atual)`);
+
+      // 3. Processar dados: manter último registro de cada mês fechado e todos do mês atual
+      const processedData = this.processMonthlyData(allData);
+      
+      if (processedData.length < allData.length) {
+        console.log(`  → ${processedData.length} registros após processamento (${allData.length - processedData.length} removidos - mantém fechamento de meses fechados e todos do mês atual)`);
+      }
+
+      // 4. Salvar dados processados
+      await this.saveHistoricalData(companyId, processedData, interval, ticker);
+
+      return {
+        recordsProcessed: allData.length,
+        recordsDeduplicated: processedData.length,
+        recordsSaved: processedData.length
+      };
+    } catch (error) {
+      console.error(`❌ [HISTORICAL DATA] Erro ao buscar e salvar preços históricos para ${ticker}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Valida se um registro de preço histórico tem valores anômalos
+   * Retorna true se o registro deve ser ignorado (valores anômalos)
+   * 
+   * REGRA: Preços acima de 100.000 são considerados anomalias e devem ser ignorados
+   */
+  static hasAnomalousPrices(point: HistoricalPriceData, ticker?: string): boolean {
+    const MAX_REALISTIC_PRICE = 100000; // Preços acima disso são anomalias
+
+    const fields = [
+      { name: 'open', value: point.open },
+      { name: 'high', value: point.high },
+      { name: 'low', value: point.low },
+      { name: 'close', value: point.close },
+      { name: 'adjustedClose', value: point.adjustedClose }
+    ];
+
+    for (const field of fields) {
+      if (field.value === null || field.value === undefined || isNaN(field.value) || !isFinite(field.value)) {
+        continue; // Valores inválidos serão tratados separadamente
+      }
+
+      // Verificar se excede o limite realista
+      if (Math.abs(field.value) > MAX_REALISTIC_PRICE) {
+        console.warn(`⚠️ [ANOMALY] ${ticker || 'Unknown'} - ${field.name} anômalo em ${point.date.toISOString().split('T')[0]}: ${field.value.toFixed(4)} (ignorando registro)`);
+        return true; // Registro tem anomalia
+      }
+    }
+
+    return false; // Registro está OK
+  }
+
+  /**
+   * Valida e normaliza valores decimais para o formato Decimal(10,4)
+   * Decimal(10,4) permite valores até 999.999,9999 (999999.9999)
+   * Valores inválidos são convertidos para 0
+   */
+  static normalizeDecimalValue(value: number | null | undefined): number {
+    if (value === null || value === undefined || isNaN(value) || !isFinite(value)) {
+      return 0;
+    }
+
+    // Arredondar para 4 casas decimais
+    return Number(value.toFixed(4));
+  }
+
+  /**
    * Salva dados históricos no banco em lotes para evitar esgotar o pool de conexões
    * Otimizado: verifica quais datas já existem antes de fazer upserts
+   * IMPORTANTE: Esta função assume que os dados já foram deduplicados por mês
+   * Valida e limita valores decimais para evitar overflow
    */
   static async saveHistoricalData(
     companyId: number,
     data: HistoricalPriceData[],
-    interval: string = '1mo'
+    interval: string = '1mo',
+    ticker?: string
   ): Promise<void> {
     if (data.length === 0) return;
 
@@ -329,38 +522,54 @@ export class HistoricalDataService {
         return;
       }
 
-      console.log(`💾 [DB] Salvando ${newData.length} novos pontos (${data.length - newData.length} já existiam)`);
+      // Filtrar registros com preços anômalos (acima de 999.999,99)
+      const validData = newData.filter(point => !this.hasAnomalousPrices(point, ticker));
+      const anomaliesCount = newData.length - validData.length;
+
+      if (anomaliesCount > 0) {
+        console.warn(`⚠️ [DB] ${anomaliesCount} registros ignorados devido a preços anômalos (acima de 100.000)`);
+      }
+
+      if (validData.length === 0) {
+        console.log(`ℹ️ [DB] Nenhum registro válido para salvar após filtrar anomalias`);
+        return;
+      }
+
+      console.log(`💾 [DB] Salvando ${validData.length} novos pontos válidos (${data.length - newData.length} já existiam, ${anomaliesCount} anomalias ignoradas)`);
 
       // Processar em lotes de 50 para não esgotar o pool de conexões
       const BATCH_SIZE = 50;
       let processedCount = 0;
 
-      for (let i = 0; i < newData.length; i += BATCH_SIZE) {
-        const batch = newData.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < validData.length; i += BATCH_SIZE) {
+        const batch = validData.slice(i, i + BATCH_SIZE);
+        
+        // Normalizar valores antes de salvar (arredondar para 4 casas decimais)
+        const normalizedBatch = batch.map(point => ({
+          companyId: companyId,
+          date: point.date,
+          interval: interval,
+          open: this.normalizeDecimalValue(point.open),
+          high: this.normalizeDecimalValue(point.high),
+          low: this.normalizeDecimalValue(point.low),
+          close: this.normalizeDecimalValue(point.close),
+          volume: BigInt(point.volume || 0),
+          adjustedClose: this.normalizeDecimalValue(point.adjustedClose)
+        }));
         
         // Processar batch em paralelo (createMany é mais eficiente que múltiplos upserts)
         await prisma.historicalPrice.createMany({
-          data: batch.map(point => ({
-            companyId: companyId,
-            date: point.date,
-            interval: interval,
-            open: point.open,
-            high: point.high,
-            low: point.low,
-            close: point.close,
-            volume: BigInt(point.volume),
-            adjustedClose: point.adjustedClose
-          })),
+          data: normalizedBatch,
           skipDuplicates: true
         });
         
         processedCount += batch.length;
-        if (newData.length > BATCH_SIZE) {
-          console.log(`📊 [DB] Processados ${processedCount}/${newData.length} pontos históricos`);
+        if (validData.length > BATCH_SIZE) {
+          console.log(`📊 [DB] Processados ${processedCount}/${validData.length} pontos históricos`);
         }
       }
 
-      console.log(`✅ [DB] Salvos ${newData.length} pontos históricos no banco`);
+      console.log(`✅ [DB] Salvos ${validData.length} pontos históricos no banco${anomaliesCount > 0 ? ` (${anomaliesCount} anomalias ignoradas)` : ''}`);
     } catch (error) {
       console.error(`❌ [SAVE] Erro ao salvar dados históricos:`, error);
       throw error;

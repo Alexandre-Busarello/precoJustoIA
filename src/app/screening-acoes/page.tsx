@@ -180,6 +180,9 @@ function ScreeningAcoesContent() {
       // Remover limit do params - backend sempre controla o limite baseado no status Premium
       const { limit, ...paramsWithoutLimit } = params;
       
+      // Usar assetTypeFilter do params (atualizado pela interface) ou fallback para searchParams
+      const finalAssetTypeFilter = params.assetTypeFilter || assetType || 'both';
+      
       const response = await fetch("/api/rank-builder", {
         method: "POST",
         headers: {
@@ -189,8 +192,8 @@ function ScreeningAcoesContent() {
           model: 'screening',
           params: {
             ...paramsWithoutLimit,
-            includeBDRs: assetType === 'both' || assetType === 'bdr',
-            assetTypeFilter: assetType
+            includeBDRs: finalAssetTypeFilter === 'both' || finalAssetTypeFilter === 'bdr',
+            assetTypeFilter: finalAssetTypeFilter
             // limit não é enviado - backend sempre aplica o limite correto
           },
         }),

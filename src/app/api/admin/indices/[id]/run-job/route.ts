@@ -11,6 +11,17 @@ import { requireAdminUser } from '@/lib/user-service';
 import { updateIndexPoints, fillMissingHistory } from '@/lib/index-engine';
 import { runScreening, compareComposition, shouldRebalance, updateComposition, generateRebalanceReason } from '@/lib/index-screening-engine';
 
+/**
+ * Verifica se é dia útil (segunda a sexta)
+ * Retorna true se for dia útil, false se for sábado ou domingo
+ */
+function isTradingDay(date: Date = new Date()): boolean {
+  const dayOfWeek = date.getDay();
+  // 0 = Domingo, 6 = Sábado
+  // 1-5 = Segunda a Sexta
+  return dayOfWeek >= 1 && dayOfWeek <= 5;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -81,6 +92,19 @@ export async function POST(
 
       } else if (jobType === 'screening') {
         // Job de Screening
+        // Verificar se é dia útil (segunda a sexta)
+        const today = new Date();
+        if (!isTradingDay(today)) {
+          const dayName = today.toLocaleDateString('pt-BR', { weekday: 'long' });
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Rebalanceamento não executado: não é dia útil (${dayName}). Rebalanceamentos só são executados em dias úteis (segunda a sexta).`
+            },
+            { status: 400 }
+          );
+        }
+        
         console.log(`🔧 [MANUAL JOB] Running screening for ${index.ticker}...`);
 
         // Executar screening
@@ -94,23 +118,46 @@ export async function POST(
         } else {
           // Comparar com composição atual
           const currentComposition = index.composition || [];
-          const changes = compareComposition(currentComposition, idealComposition);
+          const config = index.config as any;
+          
+          // Aplicar validação de qualidade se checkQuality estiver ativado
+          let validatedComposition = idealComposition;
+          let qualityRejected: Array<{ candidate: any; reason: string }> = [];
+          
+          if (config.rebalance?.checkQuality) {
+            const { filterByQuality } = await import('@/lib/index-screening-engine');
+            const qualityResult = await filterByQuality(idealComposition, config);
+            validatedComposition = qualityResult.valid;
+            qualityRejected = qualityResult.rejected;
+          }
+          
+          const changes = compareComposition(
+            currentComposition, 
+            validatedComposition,
+            config,
+            qualityRejected,
+            undefined
+          );
 
           // Verificar se deve rebalancear
-          const config = index.config as any;
           const threshold = config.rebalance?.threshold || 0.05;
           const upsideType = config.rebalance?.upsideType || 'best';
-          const shouldRebalanceResult = shouldRebalance(currentComposition, idealComposition, threshold, upsideType);
+          const shouldRebalanceResult = shouldRebalance(currentComposition, validatedComposition, threshold, upsideType);
 
           if (shouldRebalanceResult && changes.length > 0) {
             // Gerar motivo detalhado do rebalanceamento
             const rebalanceReason = generateRebalanceReason(
               currentComposition,
-              idealComposition,
+              validatedComposition,
               threshold,
               config.rebalance?.checkQuality || false,
-              upsideType
+              upsideType,
+              config,
+              qualityRejected
             );
+            
+            // Atualizar composição com motivo
+            await updateComposition(index.id, validatedComposition, changes, rebalanceReason);
             
             // Atualizar composição com motivo
             await updateComposition(index.id, idealComposition, changes, rebalanceReason);

@@ -105,17 +105,35 @@ export async function GET(
     const oneYearAgo = new Date()
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
     
+    // Função para ajustar data mensal: se a data é dia 1 do mês, representa o fechamento do mês anterior
+    // Exemplo: 2025-12-01 representa fechamento de Novembro → ajustar para 2025-11-30
+    const adjustMonthlyDate = (date: Date): Date => {
+      const adjustedDate = new Date(date)
+      // Se é dia 1 do mês (dados mensais), ajustar para o último dia do mês anterior
+      // Isso garante que o gráfico exiba corretamente: 2025-12-01 aparece como Nov/2025
+      if (adjustedDate.getDate() === 1) {
+        adjustedDate.setMonth(adjustedDate.getMonth() - 1)
+        adjustedDate.setDate(0) // Último dia do mês anterior (ex: 30/11 para Novembro)
+      }
+      return adjustedDate
+    }
+    
     const chartData = validHistoricalData
       .filter((data: any) => data.date >= oneYearAgo)
-      .map((data: any) => ({
-        date: data.date.toISOString(),
-        open: Number(data.open),
-        high: Number(data.high),
-        low: Number(data.low),
-        close: Number(data.close),
-        adjustedClose: Number(data.adjustedClose),
-        volume: Number(data.volume)
-      }))
+      .map((data: any) => {
+        // Ajustar data para representar corretamente o mês de fechamento
+        const adjustedDate = adjustMonthlyDate(new Date(data.date))
+        
+        return {
+          date: adjustedDate.toISOString(),
+          open: Number(data.open),
+          high: Number(data.high),
+          low: Number(data.low),
+          close: Number(data.close),
+          adjustedClose: Number(data.adjustedClose),
+          volume: Number(data.volume)
+        }
+      })
 
     return NextResponse.json({
       ticker,

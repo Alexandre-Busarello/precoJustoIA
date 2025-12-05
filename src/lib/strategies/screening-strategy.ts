@@ -426,10 +426,15 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
         })
         .sort((a, b) => ((b.key_metrics?.marketCap as number) || 0) - ((a.key_metrics?.marketCap as number) || 0));
       
-      // Remover empresas duplicadas (ex: SAPR3, SAPR4, SAPR11 - mantém apenas a primeira)
-      const uniqueResults = this.removeDuplicateCompanies(allResults);
+      // Screening NÃO remove tickers duplicados da mesma empresa (ex: BEES3, BEES4)
+      // Permite que múltiplos tickers da mesma empresa apareçam nos resultados
       
-      return uniqueResults.slice(0, params.limit || 100);
+      // Se limit for undefined, retornar todos os resultados (sem limite)
+      if (params.limit === undefined || params.limit === null) {
+        return allResults;
+      }
+      
+      return allResults.slice(0, params.limit);
     }
 
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
@@ -487,10 +492,21 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       return ((b.key_metrics?.marketCap as number) || 0) - ((a.key_metrics?.marketCap as number) || 0);
     });
 
-    // Remover empresas duplicadas (ex: SAPR3, SAPR4, SAPR11 - mantém apenas a primeira)
-    const uniqueResults = this.removeDuplicateCompanies(results);
-
-    return uniqueResults.slice(0, params.limit || 100);
+    // Screening NÃO remove tickers duplicados da mesma empresa (ex: BEES3, BEES4)
+    // Permite que múltiplos tickers da mesma empresa apareçam nos resultados
+    
+    // Se limit for undefined, retornar todos os resultados (sem limite)
+    // Se limit for definido, aplicar o limite
+    console.log(`[SCREENING-STRATEGY] Limit recebido: ${params.limit}, Tipo: ${typeof params.limit}, Total resultados: ${results.length}`);
+    
+    if (params.limit === undefined || params.limit === null) {
+      console.log(`[SCREENING-STRATEGY] Retornando todos os ${results.length} resultados (sem limite)`);
+      return results;
+    }
+    
+    const limitedResults = results.slice(0, params.limit);
+    console.log(`[SCREENING-STRATEGY] Aplicando limite de ${params.limit}, retornando ${limitedResults.length} resultados`);
+    return limitedResults;
   }
 
   private generateIndividualRational(

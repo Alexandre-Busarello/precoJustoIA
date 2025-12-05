@@ -638,16 +638,19 @@ export async function POST(request: NextRequest) {
         // Não confiar no limite enviado pelo frontend
         const finalScreeningParams: ScreeningParams = {
           ...screeningParams,
-          // Premium: sem limite (undefined). Não-Premium (incluindo deslogados): sempre 3
+          // Premium: sem limite (undefined = usa default de 1000). Não-Premium (incluindo deslogados): sempre 3
           limit: screeningIsPremium ? undefined : 3
         };
         
         console.log(`[SCREENING] Premium: ${screeningIsPremium}, Limit aplicado: ${finalScreeningParams.limit}, Total encontrado: ${totalCount}, User: ${screeningUser?.email || 'deslogado'}`);
+        console.log(`[SCREENING] Params recebidos:`, JSON.stringify(finalScreeningParams, null, 2));
         
         results = StrategyFactory.runScreeningRanking(
           companies,
           finalScreeningParams
         );
+        
+        console.log(`[SCREENING] Resultados retornados: ${results.length}`);
         
         // Armazenar totalCount em variável separada para retornar na resposta
         (results as any).__screeningTotalCount = totalCount;

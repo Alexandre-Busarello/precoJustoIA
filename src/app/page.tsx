@@ -104,6 +104,7 @@ export default async function Home() {
 
   return (
     <div>
+
       {/* Floating CTA - Aparece após scroll */}
       {!session && (
         <FloatingCTA 
@@ -274,12 +275,12 @@ export default async function Home() {
 
           {/* CTA Contextual */}
           {!session && (
-            <div className="text-center">
-              <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-lg px-8 py-4 shadow-xl" asChild>
-                <Link href="/register" className="flex items-center justify-center gap-2">
-                  <Rocket className="w-5 h-5" />
-                  Começar a economizar tempo e dinheiro
-                  <ArrowRight className="w-5 h-5" />
+            <div className="text-center px-4">
+              <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-sm sm:text-lg px-4 sm:px-8 py-3 sm:py-4 shadow-xl w-full sm:w-auto max-w-full" asChild>
+                <Link href="/register" className="flex items-center justify-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                  <Rocket className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                  <span className="truncate">Começar a economizar tempo e dinheiro</span>
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                 </Link>
               </Button>
                   </div>

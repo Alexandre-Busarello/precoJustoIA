@@ -72,10 +72,21 @@ async function getDividendsForDate(
       return new Map();
     }
 
-    const dateStart = new Date(date);
-    dateStart.setHours(0, 0, 0, 0);
-    const dateEnd = new Date(date);
-    dateEnd.setHours(23, 59, 59, 999);
+    // Normalizar data para evitar problemas de timezone
+    // Como exDate é @db.Date (sem hora), precisamos garantir que estamos comparando apenas a parte da data
+    // CRÍTICO: Usar apenas a parte da data, sem considerar hora/timezone
+    // Extrair componentes da data de entrada (usar métodos locais para preservar a data correta)
+    const inputYear = date.getFullYear();
+    const inputMonth = date.getMonth();
+    const inputDay = date.getDate();
+    
+    // Criar datas usando UTC para garantir que não haja problemas de timezone
+    // O campo exDate no banco é DATE (sem hora), então precisamos comparar apenas a parte da data
+    // Usar Date.UTC para criar datas que representam exatamente um dia completo
+    const dateStart = new Date(Date.UTC(inputYear, inputMonth, inputDay, 0, 0, 0, 0));
+    // Para dateEnd, usar o início do dia seguinte e subtrair 1ms para garantir que pegamos todo o dia
+    const dateEnd = new Date(Date.UTC(inputYear, inputMonth, inputDay + 1, 0, 0, 0, 0));
+    dateEnd.setUTCMilliseconds(dateEnd.getUTCMilliseconds() - 1);
 
     const dividendRecords = await prisma.dividendHistory.findMany({
       where: {
@@ -87,7 +98,8 @@ async function getDividendsForDate(
       },
       select: {
         companyId: true,
-        amount: true
+        amount: true,
+        exDate: true // Incluir exDate para debug se necessário
       }
     });
 
@@ -98,6 +110,12 @@ async function getDividendsForDate(
         const currentAmount = dividends.get(ticker) || 0;
         dividends.set(ticker, currentAmount + Number(div.amount));
       }
+    }
+
+    // Log para debug: mostrar dividendos encontrados para esta data
+    if (dividends.size > 0) {
+      console.log(`💰 [INDEX ENGINE] Dividends found for ${date.toISOString().split('T')[0]}:`, 
+        Object.fromEntries(dividends));
     }
 
     return dividends;
@@ -856,16 +874,13 @@ export async function recalculateIndexWithDividends(
         const updateData: any = {
           points: newPointsValue,
           dailyChange: dailyReturn.dailyReturn * 100,
-          currentYield: dailyReturn.currentYield
+          currentYield: dailyReturn.currentYield,
+          // Sempre atualizar campos de dividendos (mesmo que sejam null/vazios)
+          dividendsReceived: dailyReturn.dividendsReceived > 0 ? dailyReturn.dividendsReceived : null,
+          dividendsByTicker: dailyReturn.dividendsByTicker.size > 0 
+            ? Object.fromEntries(dailyReturn.dividendsByTicker) 
+            : null
         };
-
-        if (dailyReturn.dividendsReceived > 0) {
-          updateData.dividendsReceived = dailyReturn.dividendsReceived;
-        }
-
-        if (dailyReturn.dividendsByTicker.size > 0) {
-          updateData.dividendsByTicker = Object.fromEntries(dailyReturn.dividendsByTicker);
-        }
 
         // Atualizar registro no banco
         await prisma.indexHistoryPoints.update({

@@ -119,6 +119,15 @@ export function IndexRealTimeReturn({
   const lastDay = parseInt(lastParts.find(p => p.type === 'day')?.value || '0', 10);
   
   const isToday = todayYear === lastYear && todayMonth === lastMonth && todayDay === lastDay;
+  
+  // Formatar data usando timezone de Brasília para evitar problemas de conversão
+  const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const formattedDate = dateFormatter.format(lastUpdateDate);
 
   return (
     <Card className="border-2 border-dashed" style={{ borderColor: color }}>
@@ -180,7 +189,7 @@ export function IndexRealTimeReturn({
                   atuais dos ativos e{' '}
                   {isToday
                     ? 'será atualizada oficialmente após o fechamento do mercado'
-                    : `último fechamento oficial de ${lastUpdateDate.toLocaleDateString('pt-BR')}`}
+                    : `último fechamento oficial de ${formattedDate}`}
                   . A pontuação oficial do índice é atualizada diariamente às
                   19h via processo automatizado.
                 </p>

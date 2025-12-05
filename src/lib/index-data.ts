@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { calculateRealTimeReturn } from '@/lib/index-realtime-return'
 
 export interface IndexListItem {
   id: string
@@ -54,9 +55,59 @@ export async function getIndicesList(): Promise<IndexListItem[]> {
 
       const latestPoint = index.history[0]
       const initialPoints = 100.0
-      const currentPoints = latestPoint?.points || initialPoints
+      
+      // Verificar se há preço de fechamento do dia atual
+      const today = new Date()
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+      
+      const parts = formatter.formatToParts(today)
+      const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10)
+      const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1
+      const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10)
+      const todayDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0))
+      
+      // Comparar datas corretamente (ignorar horas)
+      const latestPointDate = latestPoint ? new Date(latestPoint.date) : null
+      const latestPointDateOnly = latestPointDate 
+        ? new Date(Date.UTC(
+            latestPointDate.getUTCFullYear(),
+            latestPointDate.getUTCMonth(),
+            latestPointDate.getUTCDate(),
+            0, 0, 0, 0
+          ))
+        : null
+      
+      const hasTodayClosingPrice = latestPointDateOnly && 
+        latestPointDateOnly.getTime() === todayDate.getTime()
+      
+      let currentPoints: number
+      let dailyChange: number | null
+      
+      if (hasTodayClosingPrice) {
+        // Tem preço de fechamento do dia atual - usar do histórico
+        currentPoints = latestPoint.points
+        dailyChange = latestPoint.dailyChange ?? null
+      } else {
+        // Não tem preço de fechamento - calcular em tempo real
+        // IMPORTANTE: Mesmo quando mercado fechado, se não tem preço de fechamento ainda,
+        // devemos calcular em tempo real usando os últimos preços disponíveis
+        const realTimeData = await calculateRealTimeReturn(index.id)
+        if (realTimeData) {
+          currentPoints = realTimeData.realTimePoints
+          dailyChange = realTimeData.dailyChange
+        } else {
+          // Fallback: usar último ponto disponível
+          currentPoints = latestPoint?.points || initialPoints
+          dailyChange = latestPoint?.dailyChange ?? null
+        }
+      }
+      
       const accumulatedReturn = ((currentPoints - initialPoints) / initialPoints) * 100
-      const dailyChange = latestPoint?.dailyChange ?? null
 
       // Formatar dados do sparkline (inverter ordem para cronológica: mais antigo -> mais recente)
       const sparklineData = sparklineHistory

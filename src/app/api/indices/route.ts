@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { calculateRealTimeReturn } from '@/lib/index-realtime-return';
 
 // Revalidar a API a cada 60 segundos (1 minuto)
 // Isso permite cache para performance, mas garante que novos índices apareçam em até 1 minuto
@@ -47,10 +48,46 @@ export async function GET(request: NextRequest) {
 
         const latestPoint = index.history[0];
         const initialPoints = 100.0; // Base 100
-        const currentPoints = latestPoint?.points || initialPoints;
+        
+        // Verificar se há preço de fechamento do dia atual
+        const today = new Date();
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        });
+        
+        const parts = formatter.formatToParts(today);
+        const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+        const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+        const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+        const todayDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+        
+        const hasTodayClosingPrice = latestPoint && 
+          new Date(latestPoint.date).getTime() === todayDate.getTime();
+        
+        let currentPoints: number;
+        let dailyChange: number | null;
+        
+        if (hasTodayClosingPrice) {
+          // Tem preço de fechamento do dia atual - usar do histórico
+          currentPoints = latestPoint.points;
+          dailyChange = latestPoint.dailyChange ?? null;
+        } else {
+          // Não tem preço de fechamento - calcular em tempo real
+          const realTimeData = await calculateRealTimeReturn(index.id);
+          if (realTimeData) {
+            currentPoints = realTimeData.realTimePoints;
+            dailyChange = realTimeData.dailyChange;
+          } else {
+            // Fallback: usar último ponto disponível
+            currentPoints = latestPoint?.points || initialPoints;
+            dailyChange = latestPoint?.dailyChange ?? null;
+          }
+        }
+        
         const accumulatedReturn = ((currentPoints - initialPoints) / initialPoints) * 100;
-        // Usar dailyChange quando disponível (variação do dia), senão usar accumulatedReturn como fallback
-        const dailyChange = latestPoint?.dailyChange ?? null;
 
         // Formatar dados do sparkline (inverter ordem para cronológica: mais antigo -> mais recente)
         const sparklineData = sparklineHistory

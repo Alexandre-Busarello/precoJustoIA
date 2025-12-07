@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { getLatestPrices } from '@/lib/quote-service';
+import { checkMarketWasOpen } from './index-engine';
 
 /**
  * Verifica se o mercado B3 está aberto no momento atual (horário de Brasília)
@@ -50,10 +51,11 @@ function isBrazilMarketOpen(): boolean {
 export interface RealTimeReturn {
   realTimePoints: number;
   realTimeReturn: number; // Retorno em tempo real desde o último fechamento
-  dailyChange: number; // Variação percentual do dia
+  dailyChange: number; // Variação percentual do dia (0% se não houve pregão hoje)
   lastOfficialPoints: number;
   lastOfficialDate: Date;
   isMarketOpen: boolean;
+  lastAvailableDailyChange?: number; // Última variação disponível (do último pregão) - para uso no banner
 }
 
 /**
@@ -84,7 +86,46 @@ export async function calculateRealTimeReturn(
     // Criar data de hoje em Brasília (início do dia)
     const today = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
     
-    // Verificar se mercado está fechado
+    // Verificar se houve pregão hoje (sábado, domingo ou feriado não têm pregão)
+    const marketWasOpenToday = await checkMarketWasOpen(today);
+    if (!marketWasOpenToday) {
+      // Não houve pregão hoje - retornar dados do último fechamento oficial sem calcular variação em tempo real
+      const lastHistoryPoint = await prisma.indexHistoryPoints.findFirst({
+        where: { 
+          indexId,
+        },
+        orderBy: { date: 'desc' },
+        select: {
+          date: true,
+          points: true,
+          dailyChange: true,
+        },
+      });
+      
+      if (!lastHistoryPoint) {
+        return null; // Sem histórico, não pode calcular
+      }
+      
+      const realTimePoints = lastHistoryPoint.points;
+      // Se não houve pregão hoje, a variação do dia é 0% (não usar variação do último pregão)
+      const dailyChange = 0;
+      // Mas guardar a última variação disponível para uso no banner
+      const lastAvailableDailyChange = lastHistoryPoint.dailyChange ?? 0;
+      const initialPoints = 100.0;
+      const realTimeReturn = ((realTimePoints - initialPoints) / initialPoints) * 100;
+      
+      return {
+        realTimePoints,
+        realTimeReturn,
+        dailyChange,
+        lastOfficialPoints: realTimePoints,
+        lastOfficialDate: lastHistoryPoint.date,
+        isMarketOpen: false,
+        lastAvailableDailyChange,
+      };
+    }
+    
+    // Verificar se mercado está fechado (horário atual)
     const marketClosed = !isBrazilMarketOpen();
     
     // Se mercado fechado, primeiro verificar se existe ponto de fechamento do dia atual

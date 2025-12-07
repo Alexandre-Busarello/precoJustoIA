@@ -20,6 +20,7 @@ interface RealTimeReturnData {
   dailyChange: number;
   realTimeReturn: number;
   isMarketOpen: boolean;
+  lastAvailableDailyChange?: number; // Última variação disponível (para banner quando mercado fechado)
 }
 
 interface IndexRealTimeBadgeProps {
@@ -53,6 +54,7 @@ export function IndexRealTimeBadge({
               dailyChange: cached.dailyChange,
               realTimeReturn: cached.realTimeReturn,
               isMarketOpen: cached.isMarketOpen,
+              lastAvailableDailyChange: cached.lastAvailableDailyChange,
             });
             setIsLoading(false);
           }
@@ -72,6 +74,7 @@ export function IndexRealTimeBadge({
             dailyChange: data.dailyChange,
             realTimeReturn: data.realTimeReturn,
             isMarketOpen: data.isMarketOpen,
+            lastAvailableDailyChange: data.lastAvailableDailyChange,
           });
           setIsLoading(false);
         }
@@ -117,12 +120,53 @@ export function IndexRealTimeBadge({
     return null;
   }
 
-  // Se mercado está fechado, não mostrar badge de tempo real
+  // Se mercado está fechado, mostrar última variação disponível se existir
   if (!realTimeData.isMarketOpen) {
-    return null;
+    // Se não há última variação disponível, não mostrar badge
+    if (realTimeData.lastAvailableDailyChange === undefined || realTimeData.lastAvailableDailyChange === null) {
+      return null;
+    }
+    
+    // Mostrar última variação disponível (do último pregão)
+    const isPositive = realTimeData.lastAvailableDailyChange >= 0;
+    const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
+    const changeColor = isPositive
+      ? 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
+      : 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20';
+
+    const tooltipText = `Última variação disponível: ${isPositive ? '+' : ''}${realTimeData.lastAvailableDailyChange.toFixed(2)}% do último pregão.`;
+
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className={`text-xs ${changeColor} relative group flex items-center gap-1`}
+            >
+              <ChangeIcon className="h-3 w-3 flex-shrink-0" />
+              <span className="hidden md:inline whitespace-nowrap">
+                {isPositive ? '+' : ''}
+                {realTimeData.lastAvailableDailyChange.toFixed(2)}%
+              </span>
+              <span className="md:hidden whitespace-nowrap">
+                {isPositive ? '+' : ''}
+                {realTimeData.lastAvailableDailyChange.toFixed(2)}%
+              </span>
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs p-2">
+            <p className="font-semibold mb-1.5">Última Variação Disponível</p>
+            <p className="text-muted-foreground leading-relaxed">
+              {tooltipText}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   }
 
-  // Mostrar variação do dia em tempo real
+  // Mostrar variação do dia em tempo real (mercado aberto)
   const isPositive = realTimeData.dailyChange >= 0;
   const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
   const changeColor = isPositive

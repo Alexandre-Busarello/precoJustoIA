@@ -10,6 +10,18 @@ import { getLatestPrices, StockPrice, getYahooHistoricalPrice } from '@/lib/quot
 import { getHistoricalPricesForDate } from './index-rebalance-date';
 import { Decimal } from '@prisma/client/runtime/library';
 
+// Yahoo Finance instance (lazy-loaded)
+let yahooFinanceInstance: any = null;
+
+async function getYahooFinance() {
+  if (!yahooFinanceInstance) {
+    const module = await import('yahoo-finance2');
+    const YahooFinance = module.default;
+    yahooFinanceInstance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+  }
+  return yahooFinanceInstance;
+}
+
 export interface CompositionSnapshot {
   weight: number; // Peso no índice neste dia
   price: number; // Preço atual do ativo
@@ -25,6 +37,82 @@ export interface IndexDailyReturn {
   dividendsReceived: number; // Total de dividendos recebidos (em pontos)
   dividendsByTicker: Map<string, number>; // Detalhamento por ticker
   compositionSnapshot?: Record<string, CompositionSnapshot>; // Snapshot da composição neste dia
+}
+
+/**
+ * Verifica se houve pregão na B3 para uma data específica
+ * Usa IBOVESPA (^BVSP) como referência para determinar se houve pregão
+ * 
+ * @param date Data a verificar
+ * @returns true se houve pregão, false caso contrário (sábado, domingo ou feriado)
+ */
+export async function checkMarketWasOpen(date: Date): Promise<boolean> {
+  try {
+    // Normalizar data (sem hora)
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    // Verificar se é sábado (6) ou domingo (0) - ignorar imediatamente
+    const dayOfWeek = targetDate.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      console.log(`⏸️ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]} é ${dayOfWeek === 0 ? 'domingo' : 'sábado'}, mercado fechado`);
+      return false;
+    }
+    
+    // Se for dia útil (segunda a sexta), verificar se houve pregão consultando IBOVESPA
+    const yahooFinance = await getYahooFinance();
+    const ibovSymbol = '^BVSP'; // IBOVESPA no Yahoo Finance (sem .SA)
+    
+    // Buscar dados do dia específico (usar intervalo diário para precisão)
+    const startDate = new Date(targetDate);
+    startDate.setDate(startDate.getDate() - 2); // Buscar alguns dias antes
+    const endDate = new Date(targetDate);
+    endDate.setDate(endDate.getDate() + 1); // Até o dia seguinte
+    
+    const result = await yahooFinance.chart(ibovSymbol, {
+      period1: startDate,
+      period2: endDate,
+      interval: '1d', // Dados diários para precisão
+      return: 'array'
+    });
+    
+    // O resultado pode vir como array direto ou como objeto com quotes
+    const quotes = Array.isArray(result) ? result : (result?.quotes || []);
+    
+    if (!quotes || quotes.length === 0) {
+      console.log(`⚠️ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]}: Nenhum dado do IBOVESPA encontrado, assumindo que não houve pregão`);
+      return false;
+    }
+    
+    // Verificar se há uma cotação exata para a data alvo
+    const targetTime = targetDate.getTime();
+    let foundExactDate = false;
+    
+    for (const quote of quotes) {
+      const quoteDate = new Date(quote.date);
+      quoteDate.setHours(0, 0, 0, 0);
+      
+      // Verificar se a data da cotação corresponde exatamente à data alvo
+      if (quoteDate.getTime() === targetTime) {
+        if (quote.close && quote.close > 0) {
+          foundExactDate = true;
+          console.log(`✅ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]}: Pregão confirmado (IBOVESPA: ${Number(quote.close).toFixed(2)})`);
+          break;
+        }
+      }
+    }
+    
+    if (!foundExactDate) {
+      console.log(`⏸️ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]}: Nenhuma cotação do IBOVESPA encontrada para esta data exata, assumindo que não houve pregão`);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`❌ [MARKET CHECK] Erro ao verificar pregão para ${date.toISOString().split('T')[0]}:`, error);
+    // Em caso de erro, assumir que não houve pregão para evitar cálculos incorretos
+    return false;
+  }
 }
 
 /**
@@ -482,6 +570,16 @@ export async function updateIndexPoints(
   forceUpdate: boolean = false
 ): Promise<boolean> {
   try {
+    // Verificar se houve pregão antes de calcular pontos
+    const marketWasOpen = await checkMarketWasOpen(date);
+    if (!marketWasOpen) {
+      const dateStr = date.toISOString().split('T')[0];
+      const dayOfWeek = date.getDay();
+      const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'dia útil sem pregão';
+      console.log(`⏸️ [INDEX ENGINE] Pulando cálculo de pontos para ${dateStr} (${dayName}) - mercado não funcionou neste dia`);
+      return false;
+    }
+    
     const dailyReturn = await calculateDailyReturn(indexId, date);
     
     if (!dailyReturn) {

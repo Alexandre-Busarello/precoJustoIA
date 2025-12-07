@@ -157,7 +157,34 @@ async function fetchCustomIndices(): Promise<MarketIndex[]> {
           let changePercent: number;
           let change: number;
           
-          if (!realTimeData.isMarketOpen && hasClosingPrice) {
+          // Se não há pregão hoje (dailyChange = 0 e lastAvailableDailyChange existe), usar última variação disponível
+          // Verificar se não há preço de fechamento hoje E se há última variação disponível
+          if (!hasClosingPrice && realTimeData.dailyChange === 0 && realTimeData.lastAvailableDailyChange !== undefined && realTimeData.lastAvailableDailyChange !== null) {
+            // Não houve pregão hoje - usar última variação disponível do último pregão
+            currentValue = realTimeData.lastOfficialPoints;
+            changePercent = realTimeData.lastAvailableDailyChange;
+            
+            // Buscar pontos do dia anterior ao último pregão para calcular change absoluto
+            const lastOfficialDate = new Date(realTimeData.lastOfficialDate);
+            const dayBefore = new Date(lastOfficialDate);
+            dayBefore.setDate(dayBefore.getDate() - 1);
+            
+            const dayBeforePoint = await prisma.indexHistoryPoints.findFirst({
+              where: {
+                indexId: index.id,
+                date: {
+                  lte: dayBefore,
+                },
+              },
+              orderBy: { date: 'desc' },
+              select: {
+                points: true,
+              },
+            });
+            
+            const previousPoints = dayBeforePoint?.points || 100.0;
+            change = currentValue - previousPoints;
+          } else if (!realTimeData.isMarketOpen && hasClosingPrice) {
             // Mercado fechado e preço de fechamento disponível - buscar pontos de fechamento do dia
             const today = new Date();
             const formatter = new Intl.DateTimeFormat('en-US', {

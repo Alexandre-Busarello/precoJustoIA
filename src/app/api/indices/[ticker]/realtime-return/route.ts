@@ -114,6 +114,7 @@ export async function GET(
         lastOfficialPoints: number;
         lastOfficialDate: string;
         isMarketOpen: boolean;
+        lastAvailableDailyChange?: number;
       }>(cacheKey);
       
       if (cachedData) {
@@ -153,6 +154,7 @@ export async function GET(
       lastOfficialPoints: realTimeData.lastOfficialPoints,
       lastOfficialDate: realTimeData.lastOfficialDate.toISOString(),
       isMarketOpen: realTimeData.isMarketOpen,
+      lastAvailableDailyChange: realTimeData.lastAvailableDailyChange,
     };
 
     // Salvar no cache apenas se não estamos ignorando cache

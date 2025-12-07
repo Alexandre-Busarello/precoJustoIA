@@ -7,7 +7,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { runScreening, compareComposition, generateRebalanceReason, filterByQuality, getLastScreeningDetails } from './index-screening-engine';
-import { updateIndexPoints, fixIndexStartingPoint } from './index-engine';
+import { updateIndexPoints, fixIndexStartingPoint, checkMarketWasOpen } from './index-engine';
 import { toNumber } from './strategies/base-strategy';
 import { getYahooHistoricalPrice } from './quote-service';
 
@@ -635,6 +635,17 @@ export async function regenerateRebalanceForDate(
 
           const currentDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
           
+          // Verificar se houve pregão antes de processar
+          const marketWasOpen = await checkMarketWasOpen(currentDate);
+          if (!marketWasOpen) {
+            const dayOfWeek = currentDate.getDay();
+            const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'feriado';
+            console.log(`  ⏸️ [REBALANCE DATE] Pulando ${currentDateStr} (${dayName} - mercado não funcionou)`);
+            currentDate.setDate(currentDate.getDate() + 1);
+            currentDate.setHours(0, 0, 0, 0);
+            continue;
+          }
+          
           console.log(`\n📅 [REBALANCE DATE] Processando ${currentDateStr}`);
 
           // ========== PASSO 1: AFTER MARKET ==========
@@ -876,6 +887,17 @@ export async function regenerateRebalanceForDate(
           }
 
           const currentDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+          
+          // Verificar se houve pregão antes de processar
+          const marketWasOpen = await checkMarketWasOpen(currentDate);
+          if (!marketWasOpen) {
+            const dayOfWeek = currentDate.getDay();
+            const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'feriado';
+            console.log(`  ⏸️ [REBALANCE DATE] Pulando ${currentDateStr} (${dayName} - mercado não funcionou)`);
+            currentDate.setDate(currentDate.getDate() + 1);
+            currentDate.setHours(0, 0, 0, 0);
+            continue;
+          }
           
           console.log(`\n📅 [REBALANCE DATE] Processando ${currentDateStr}`);
 

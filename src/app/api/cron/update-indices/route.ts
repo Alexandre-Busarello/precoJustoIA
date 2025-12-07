@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { updateIndexPoints, fillMissingHistory } from '@/lib/index-engine';
+import { updateIndexPoints, fillMissingHistory, checkMarketWasOpen } from '@/lib/index-engine';
 import { runScreening, compareComposition, shouldRebalance, updateComposition } from '@/lib/index-screening-engine';
 import { cache } from '@/lib/cache-service';
 
@@ -186,6 +186,15 @@ async function runMarkToMarketJob(): Promise<{
   // Verificar se todos os índices já estão atualizados para hoje ANTES de processar
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  
+  // Verificar se houve pregão hoje (sábado, domingo ou feriado)
+  const marketWasOpen = await checkMarketWasOpen(today);
+  if (!marketWasOpen) {
+    const dayOfWeek = today.getDay();
+    const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'feriado';
+    console.log(`⏸️ [CRON INDICES] Mark-to-Market job skipped: hoje é ${dayName}, mercado não funcionou`);
+    return { success: 0, failed: 0, processed: 0, remaining: 0, errors: [] };
+  }
   
   let allUpToDate = true;
   for (const index of allIndices) {
@@ -361,9 +370,18 @@ async function runScreeningJob(): Promise<{
   
   // Verificar se é dia útil (segunda a sexta)
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
   if (!isTradingDay(today)) {
     const dayName = today.toLocaleDateString('pt-BR', { weekday: 'long' });
     console.log(`⏸️ [CRON INDICES] Screening job skipped: não é dia útil (${dayName})`);
+    return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
+  }
+  
+  // Verificar se houve pregão hoje (pode ser feriado mesmo sendo dia útil)
+  const marketWasOpen = await checkMarketWasOpen(today);
+  if (!marketWasOpen) {
+    console.log(`⏸️ [CRON INDICES] Screening job skipped: mercado não funcionou hoje (feriado ou sem pregão)`);
     return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
   }
   

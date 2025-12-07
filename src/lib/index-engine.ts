@@ -257,19 +257,42 @@ export async function calculateDailyReturn(
     const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
     
+    const isRetroactiveProcessing = targetDate.getTime() < today.getTime();
+    
     let pricesToday: Map<string, StockPrice>;
-    if (targetDate.getTime() < today.getTime()) {
-      // Data no passado: buscar preços históricos
-      console.log(`📊 [INDEX ENGINE] Fetching historical prices for ${targetDate.toISOString().split('T')[0]}`);
-      const historicalPrices = await getHistoricalPricesForDate(tickers, targetDate);
+    if (isRetroactiveProcessing) {
+      // Data no passado: SEMPRE buscar do Yahoo Finance para a data exata
+      console.log(`📊 [INDEX ENGINE] Retroactive processing: Fetching prices from Yahoo Finance for ${targetDate.toISOString().split('T')[0]}`);
       pricesToday = new Map();
-      for (const [ticker, price] of historicalPrices.entries()) {
-        pricesToday.set(ticker, {
-          ticker,
-          price,
-          source: 'database',
-          timestamp: targetDate
-        });
+      
+      // Buscar preços do Yahoo Finance para cada ticker na data exata
+      for (const ticker of tickers) {
+        const yahooPrice = await getYahooHistoricalPrice(ticker, targetDate);
+        if (yahooPrice && yahooPrice > 0) {
+          pricesToday.set(ticker, {
+            ticker,
+            price: yahooPrice,
+            source: 'yahoo',
+            timestamp: targetDate
+          });
+          console.log(`✅ [INDEX ENGINE] Yahoo Finance price for ${ticker} on ${targetDate.toISOString().split('T')[0]}: ${yahooPrice.toFixed(2)}`);
+        } else {
+          // Fallback: usar getHistoricalPricesForDate que também tenta Yahoo Finance
+          console.warn(`⚠️ [INDEX ENGINE] Yahoo Finance failed for ${ticker}, trying fallback...`);
+          const historicalPrices = await getHistoricalPricesForDate([ticker], targetDate);
+          const fallbackPrice = historicalPrices.get(ticker);
+          if (fallbackPrice && fallbackPrice > 0) {
+            pricesToday.set(ticker, {
+              ticker,
+              price: fallbackPrice,
+              source: 'database',
+              timestamp: targetDate
+            });
+            console.log(`📊 [INDEX ENGINE] Using fallback price for ${ticker}: ${fallbackPrice.toFixed(2)}`);
+          } else {
+            console.error(`❌ [INDEX ENGINE] No price found for ${ticker} on ${targetDate.toISOString().split('T')[0]}`);
+          }
+        }
       }
     } else {
       // Data atual ou futura: usar preços mais recentes
@@ -326,13 +349,56 @@ export async function calculateDailyReturn(
       };
     }
 
-    // 3.5. Buscar preços do dia anterior do banco
+    // 3.5. Buscar preços do dia anterior
     const pricesYesterday = new Map<string, number>();
     
     const yesterday = new Date(date);
     yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0); // Normalizar para meia-noite
     
     for (const comp of composition) {
+      // Se processamento retroativo, SEMPRE buscar do Yahoo Finance para o dia anterior exato
+      if (isRetroactiveProcessing) {
+        console.log(`📊 [INDEX ENGINE] Retroactive processing: Fetching yesterday price from Yahoo Finance for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}`);
+        const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday);
+        if (yahooPrice && yahooPrice > 0) {
+          // Validação: Se o ativo entrou no dia anterior (entryDate = yesterday), 
+          // o preço de ontem deve ser igual ao entryPrice
+          const entryDate = new Date(comp.entryDate);
+          entryDate.setHours(0, 0, 0, 0);
+          const yesterdayDate = new Date(yesterday);
+          yesterdayDate.setHours(0, 0, 0, 0);
+          
+          if (entryDate.getTime() === yesterdayDate.getTime()) {
+            const priceDiff = Math.abs(yahooPrice - comp.entryPrice) / comp.entryPrice;
+            if (priceDiff > 0.01) { // Diferença maior que 1%
+              console.warn(`⚠️ [INDEX ENGINE] Price mismatch for ${comp.assetTicker}: entryPrice=${comp.entryPrice.toFixed(2)}, yesterdayPrice=${yahooPrice.toFixed(2)}, diff=${(priceDiff * 100).toFixed(2)}%`);
+              // Usar entryPrice como correção se a diferença for muito grande
+              if (priceDiff > 0.05) { // Diferença maior que 5%
+                console.warn(`🔧 [INDEX ENGINE] CORRECTING: Using entryPrice (${comp.entryPrice.toFixed(2)}) instead of yesterday price (${yahooPrice.toFixed(2)}) for ${comp.assetTicker}`);
+                pricesYesterday.set(comp.assetTicker, comp.entryPrice);
+                continue;
+              }
+            }
+          }
+          
+          pricesYesterday.set(comp.assetTicker, yahooPrice);
+          console.log(`✅ [INDEX ENGINE] Using Yahoo Finance price for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}: ${yahooPrice.toFixed(2)}`);
+          continue; // Próximo ativo
+        } else {
+          console.warn(`⚠️ [INDEX ENGINE] Yahoo Finance failed for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}, trying fallback...`);
+        }
+      } else {
+        // Processamento em tempo real: tentar Yahoo Finance primeiro
+        const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday);
+        if (yahooPrice && yahooPrice > 0) {
+          pricesYesterday.set(comp.assetTicker, yahooPrice);
+          console.log(`✅ [INDEX ENGINE] Using Yahoo Finance price for ${comp.assetTicker}: ${yahooPrice.toFixed(2)}`);
+          continue; // Próximo ativo
+        }
+      }
+
+      // Fallback: buscar do banco de dados apenas se Yahoo Finance falhou
       const company = await prisma.company.findUnique({
         where: { ticker: comp.assetTicker },
         select: { id: true }
@@ -340,18 +406,6 @@ export async function calculateDailyReturn(
 
       if (!company) continue;
 
-      // SEMPRE tentar Yahoo Finance primeiro para todos os ativos
-      console.log(`📊 [INDEX ENGINE] Fetching from Yahoo Finance first for ${comp.assetTicker}...`);
-      const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday);
-      if (yahooPrice && yahooPrice > 0) {
-        pricesYesterday.set(comp.assetTicker, yahooPrice);
-        console.log(`✅ [INDEX ENGINE] Using Yahoo Finance price for ${comp.assetTicker}: ${yahooPrice.toFixed(2)}`);
-        continue; // Próximo ativo
-      } else {
-        console.warn(`⚠️ [INDEX ENGINE] Yahoo Finance failed for ${comp.assetTicker}, falling back to database...`);
-      }
-
-      // Fallback: buscar do banco de dados (dailyQuote ou historicalPrice)
       const yesterdayQuote = await prisma.dailyQuote.findFirst({
         where: {
           companyId: company.id,
@@ -365,9 +419,9 @@ export async function calculateDailyReturn(
 
       if (yesterdayQuote) {
         pricesYesterday.set(comp.assetTicker, Number(yesterdayQuote.price));
+        console.log(`📊 [INDEX ENGINE] Using database price for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}: ${Number(yesterdayQuote.price).toFixed(2)}`);
       } else {
-        // Se não encontrou quote do dia anterior, tentar buscar último preço histórico disponível
-        // CRÍTICO: Validar se o preço histórico está correto comparando com entryPrice
+        // Se não encontrou quote, tentar buscar último preço histórico disponível
         const historicalPrice = await prisma.historicalPrice.findFirst({
           where: {
             companyId: company.id,
@@ -381,27 +435,8 @@ export async function calculateDailyReturn(
 
         if (historicalPrice) {
           const historicalPriceValue = Number(historicalPrice.close);
-          const entryDate = new Date(comp.entryDate);
-          entryDate.setHours(0, 0, 0, 0);
-          const daysSinceEntry = Math.floor((date.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
-          
-          // Validar se o preço histórico está razoável comparado ao entryPrice
-          const priceDiff = Math.abs(historicalPriceValue - comp.entryPrice) / comp.entryPrice;
-          const isPriceSuspicious = priceDiff > 0.5; // Diferença maior que 50%
-          
-          // Se preço histórico está suspeito e ativo entrou recentemente, usar entryPrice
-          if (daysSinceEntry <= 7 && isPriceSuspicious) {
-            console.warn(`⚠️ [INDEX ENGINE] Historical price for ${comp.assetTicker} seems incorrect (${historicalPriceValue.toFixed(2)} vs entryPrice ${comp.entryPrice.toFixed(2)}). Using entryPrice as asset entered ${daysSinceEntry} days ago.`);
-            pricesYesterday.set(comp.assetTicker, comp.entryPrice);
-          } else if (isPriceSuspicious) {
-            // Preço histórico suspeito mas ativo não é novo: usar entryPrice como fallback seguro
-            console.warn(`⚠️ [INDEX ENGINE] Historical price for ${comp.assetTicker} seems incorrect (${historicalPriceValue.toFixed(2)} vs entryPrice ${comp.entryPrice.toFixed(2)}). Using entryPrice as safer fallback.`);
-            pricesYesterday.set(comp.assetTicker, comp.entryPrice);
-          } else {
-            // Preço histórico parece válido
-            pricesYesterday.set(comp.assetTicker, historicalPriceValue);
-            console.log(`📊 [INDEX ENGINE] Using historical price for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}: ${historicalPriceValue.toFixed(2)}`);
-          }
+          pricesYesterday.set(comp.assetTicker, historicalPriceValue);
+          console.log(`📊 [INDEX ENGINE] Using historical price from DB for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}: ${historicalPriceValue.toFixed(2)}`);
         } else {
           // Se não encontrou histórico, verificar se o ativo entrou hoje
           const entryDate = new Date(comp.entryDate);
@@ -410,7 +445,6 @@ export async function calculateDailyReturn(
           todayDate.setHours(0, 0, 0, 0);
           
           // Se o ativo entrou hoje (rebalanceamento), usar preço atual como base (sem variação no primeiro dia)
-          // Isso preserva a rentabilidade do índice ao não criar variação artificial
           if (entryDate.getTime() === todayDate.getTime()) {
             // Ativo novo: usar preço atual como base (retorno zero no primeiro dia)
             const priceToday = pricesToday.get(comp.assetTicker)?.price;
@@ -424,13 +458,11 @@ export async function calculateDailyReturn(
             }
           } else {
             // Ativo antigo sem quote e sem histórico: usar preço atual como último recurso
-            // Isso evita retornos absurdos causados por entryPrice desatualizado
             const priceToday = pricesToday.get(comp.assetTicker)?.price;
             if (priceToday) {
               pricesYesterday.set(comp.assetTicker, priceToday);
               console.warn(`⚠️ [INDEX ENGINE] No historical price found for ${comp.assetTicker}, using today's price as yesterday (retorno zero): ${priceToday.toFixed(2)}`);
             } else {
-              // Se nem preço atual existe, pular este ativo (será tratado no skip abaixo)
               console.error(`❌ [INDEX ENGINE] No price data available for ${comp.assetTicker} (entryDate: ${entryDate.toISOString().split('T')[0]}, today: ${todayDate.toISOString().split('T')[0]})`);
             }
           }
@@ -451,14 +483,21 @@ export async function calculateDailyReturn(
     let totalDividendsReceived = 0; // Em pontos do índice
     const dividendsByTicker = new Map<string, number>();
 
+    console.log(`📊 [INDEX ENGINE] Calculating daily return for ${date.toISOString().split('T')[0]} (${isRetroactiveProcessing ? 'RETROACTIVE' : 'REAL-TIME'})`);
+    console.log(`📊 [INDEX ENGINE] Previous points: ${previousPoints.toFixed(4)}`);
+
     for (const comp of composition) {
       let priceToday = pricesToday.get(comp.assetTicker)?.price;
       let priceYesterday = pricesYesterday.get(comp.assetTicker);
+      const priceTodaySource = pricesToday.get(comp.assetTicker)?.source || 'unknown';
 
       if (!priceToday || !priceYesterday || priceYesterday === 0) {
         console.warn(`⚠️ [INDEX ENGINE] Missing price data for ${comp.assetTicker}, skipping`);
         continue;
       }
+
+      // Log detalhado dos preços usados
+      console.log(`📊 [INDEX ENGINE] ${comp.assetTicker}: PriceToday=${priceToday.toFixed(2)} (${priceTodaySource}), PriceYesterday=${priceYesterday.toFixed(2)}, EntryPrice=${comp.entryPrice.toFixed(2)}, EntryDate=${comp.entryDate.toISOString().split('T')[0]}`);
 
       // Validação crítica: detectar retornos absurdos que indicam problema de dados
       const rawReturn = (priceToday / priceYesterday) - 1;
@@ -498,7 +537,11 @@ export async function calculateDailyReturn(
       const weight = comp.targetWeight;
 
       // Contribuição ponderada: w_{i,t-1} × r_{i,t}
-      totalReturn += weight * dailyReturn;
+      const weightedContribution = weight * dailyReturn;
+      totalReturn += weightedContribution;
+      
+      // Log detalhado do retorno calculado
+      console.log(`📊 [INDEX ENGINE] ${comp.assetTicker}: Return=${(dailyReturn * 100).toFixed(4)}%, Weight=${(weight * 100).toFixed(2)}%, Contribution=${(weightedContribution * 100).toFixed(4)}%`);
 
       // Acumular dividendos recebidos (em pontos do índice)
       if (dividend > 0) {
@@ -528,6 +571,38 @@ export async function calculateDailyReturn(
 
     // 5. Calcular pontos do dia: Pontos_hoje = Pontos_ontem × (1 + R_t)
     const points = previousPoints * (1 + totalReturn);
+    
+    // Log detalhado do cálculo final
+    console.log(`📊 [INDEX ENGINE] Total return: ${(totalReturn * 100).toFixed(4)}%`);
+    console.log(`📊 [INDEX ENGINE] Points calculation: ${previousPoints.toFixed(4)} × (1 + ${(totalReturn * 100).toFixed(4)}%) = ${points.toFixed(4)}`);
+    console.log(`📊 [INDEX ENGINE] Points change: ${(points - previousPoints).toFixed(4)} (${((points - previousPoints) / previousPoints * 100).toFixed(4)}%)`);
+    
+    // Validação adicional: Calcular retorno esperado baseado nos retornos individuais desde entrada
+    let expectedReturnFromEntries = 0;
+    let totalWeightForValidation = 0;
+    for (const comp of composition) {
+      const priceToday = pricesToday.get(comp.assetTicker)?.price;
+      if (priceToday && comp.entryPrice > 0) {
+        const entryReturn = ((priceToday - comp.entryPrice) / comp.entryPrice);
+        expectedReturnFromEntries += comp.targetWeight * entryReturn;
+        totalWeightForValidation += comp.targetWeight;
+      }
+    }
+    const normalizedExpectedReturn = totalWeightForValidation > 0 ? expectedReturnFromEntries / totalWeightForValidation : 0;
+    const expectedPointsFromEntries = 100.0 * (1 + normalizedExpectedReturn);
+    const actualReturnFromStart = ((points - 100.0) / 100.0) * 100;
+    const expectedReturnFromStart = ((expectedPointsFromEntries - 100.0) / 100.0) * 100;
+    const discrepancy = Math.abs(actualReturnFromStart - expectedReturnFromStart);
+    
+    if (discrepancy > 0.5) { // Discrepância maior que 0.5%
+      console.warn(`⚠️ [INDEX ENGINE] VALIDATION WARNING: Discrepancy detected!`);
+      console.warn(`   Actual return from start: ${actualReturnFromStart.toFixed(4)}%`);
+      console.warn(`   Expected return from entries: ${expectedReturnFromStart.toFixed(4)}%`);
+      console.warn(`   Discrepancy: ${discrepancy.toFixed(4)}%`);
+      console.warn(`   Actual points: ${points.toFixed(4)}, Expected from entries: ${expectedPointsFromEntries.toFixed(4)}`);
+    } else {
+      console.log(`✅ [INDEX ENGINE] Validation OK: Actual=${actualReturnFromStart.toFixed(4)}%, Expected=${expectedReturnFromStart.toFixed(4)}%, Diff=${discrepancy.toFixed(4)}%`);
+    }
 
     // 6. Calcular DY médio ponderado
     const currentYield = totalWeight > 0 ? totalWeightedYield / totalWeight : null;

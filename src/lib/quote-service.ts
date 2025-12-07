@@ -331,42 +331,62 @@ export async function getYahooHistoricalPrice(
       return null;
     }
 
-    // Encontrar o preço mais próximo da data alvo (último disponível antes ou na data)
-    const targetTime = targetDate.getTime();
-    let closestQuote: any = null;
-    let closestDiff = Infinity;
-
+    // Normalizar data alvo para meia-noite (sem hora) para comparação precisa
+    const targetDateNormalized = new Date(targetDate);
+    targetDateNormalized.setHours(0, 0, 0, 0);
+    const targetDateStr = targetDateNormalized.toISOString().split('T')[0];
+    
+    // Primeiro, tentar encontrar preço EXATO da data alvo
+    let exactMatch: any = null;
+    const availableDates: string[] = [];
     for (const quote of quotes) {
       const quoteDate = new Date(quote.date);
-      const diff = Math.abs(quoteDate.getTime() - targetTime);
+      quoteDate.setHours(0, 0, 0, 0);
+      const quoteDateStr = quoteDate.toISOString().split('T')[0];
+      availableDates.push(quoteDateStr);
       
-      // Preferir datas <= targetDate
-      if (quoteDate <= targetDate && diff < closestDiff) {
-        closestQuote = quote;
-        closestDiff = diff;
+      // Comparar apenas a data (sem hora)
+      if (quoteDateStr === targetDateStr) {
+        exactMatch = quote;
+        break;
       }
     }
-
-    // Se não encontrou antes da data, usar o último disponível antes da data
-    if (!closestQuote && quotes.length > 0) {
-      // Tentar encontrar o último antes da data (iterar reverso)
-      const reversedQuotes = [...quotes].reverse();
-      for (const quote of reversedQuotes) {
-        const quoteDate = new Date(quote.date);
-        if (quoteDate <= targetDate) {
+    
+    // Log para debug: mostrar datas disponíveis vs data alvo
+    if (!exactMatch && availableDates.length > 0) {
+      console.log(`🔍 [YAHOO] Target date: ${targetDateStr}, Available dates: ${availableDates.slice(-5).join(', ')} (showing last 5)`);
+    }
+    
+    // Se encontrou match exato, usar ele
+    if (exactMatch && exactMatch.close && exactMatch.close > 0) {
+      const price = Number(exactMatch.close);
+      console.log(`📊 [YAHOO] Found EXACT historical price for ${ticker} on ${targetDateStr}: ${price.toFixed(2)}`);
+      return price;
+    }
+    
+    // Se não encontrou match exato, buscar o mais próximo ANTES da data (não depois)
+    let closestQuote: any = null;
+    let closestDiff = Infinity;
+    
+    for (const quote of quotes) {
+      const quoteDate = new Date(quote.date);
+      quoteDate.setHours(0, 0, 0, 0);
+      
+      // Apenas considerar datas <= targetDate (não datas futuras)
+      if (quoteDate <= targetDateNormalized) {
+        const diff = Math.abs(quoteDate.getTime() - targetDateNormalized.getTime());
+        if (diff < closestDiff) {
           closestQuote = quote;
-          break;
+          closestDiff = diff;
         }
       }
-      // Se ainda não encontrou, usar o último disponível
-      if (!closestQuote) {
-        closestQuote = quotes[quotes.length - 1];
-      }
     }
-
+    
+    // Se encontrou um preço próximo, usar ele
     if (closestQuote && closestQuote.close && closestQuote.close > 0) {
       const price = Number(closestQuote.close);
-      console.log(`📊 [YAHOO] Found historical price for ${ticker} on ${targetDate.toISOString().split('T')[0]}: ${price.toFixed(2)}`);
+      const closestDateStr = new Date(closestQuote.date).toISOString().split('T')[0];
+      console.log(`📊 [YAHOO] Found closest historical price for ${ticker} on ${targetDateStr}: ${price.toFixed(2)} (from ${closestDateStr})`);
       return price;
     }
 
@@ -421,4 +441,5 @@ async function updateDatabasePrice(ticker: string, price: number): Promise<void>
     console.error(`  ❌ ${ticker}: Database update failed:`, error instanceof Error ? error.message : error);
   }
 }
+
 

@@ -258,11 +258,14 @@ export async function calculateDailyReturn(
     targetDate.setHours(0, 0, 0, 0);
     
     const isRetroactiveProcessing = targetDate.getTime() < today.getTime();
+    const isToday = targetDate.getTime() === today.getTime();
     
     let pricesToday: Map<string, StockPrice>;
-    if (isRetroactiveProcessing) {
-      // Data no passado: SEMPRE buscar do Yahoo Finance para a data exata
-      console.log(`📊 [INDEX ENGINE] Retroactive processing: Fetching prices from Yahoo Finance for ${targetDate.toISOString().split('T')[0]}`);
+    if (isRetroactiveProcessing || isToday) {
+      // Data no passado ou hoje: SEMPRE buscar do Yahoo Finance para garantir preço de fechamento oficial
+      // Isso garante consistência mesmo quando CRON roda após fechamento do mercado
+      const processingType = isRetroactiveProcessing ? 'Retroactive' : 'Real-time';
+      console.log(`📊 [INDEX ENGINE] ${processingType} processing: Fetching prices from Yahoo Finance for ${targetDate.toISOString().split('T')[0]}`);
       pricesToday = new Map();
       
       // Buscar preços do Yahoo Finance para cada ticker na data exata
@@ -277,25 +280,38 @@ export async function calculateDailyReturn(
           });
           console.log(`✅ [INDEX ENGINE] Yahoo Finance price for ${ticker} on ${targetDate.toISOString().split('T')[0]}: ${yahooPrice.toFixed(2)}`);
         } else {
-          // Fallback: usar getHistoricalPricesForDate que também tenta Yahoo Finance
-          console.warn(`⚠️ [INDEX ENGINE] Yahoo Finance failed for ${ticker}, trying fallback...`);
-          const historicalPrices = await getHistoricalPricesForDate([ticker], targetDate);
-          const fallbackPrice = historicalPrices.get(ticker);
-          if (fallbackPrice && fallbackPrice > 0) {
-            pricesToday.set(ticker, {
-              ticker,
-              price: fallbackPrice,
-              source: 'database',
-              timestamp: targetDate
-            });
-            console.log(`📊 [INDEX ENGINE] Using fallback price for ${ticker}: ${fallbackPrice.toFixed(2)}`);
+          // Fallback: usar getLatestPrices se histórico não disponível (pode acontecer para data futura ou se Yahoo Finance falhar)
+          console.warn(`⚠️ [INDEX ENGINE] Yahoo Finance failed for ${ticker} on ${targetDate.toISOString().split('T')[0]}, trying fallback...`);
+          if (isRetroactiveProcessing) {
+            // Para processamento retroativo, tentar getHistoricalPricesForDate
+            const historicalPrices = await getHistoricalPricesForDate([ticker], targetDate);
+            const fallbackPrice = historicalPrices.get(ticker);
+            if (fallbackPrice && fallbackPrice > 0) {
+              pricesToday.set(ticker, {
+                ticker,
+                price: fallbackPrice,
+                source: 'database',
+                timestamp: targetDate
+              });
+              console.log(`📊 [INDEX ENGINE] Using fallback price for ${ticker}: ${fallbackPrice.toFixed(2)}`);
+            } else {
+              console.error(`❌ [INDEX ENGINE] No price found for ${ticker} on ${targetDate.toISOString().split('T')[0]}`);
+            }
           } else {
-            console.error(`❌ [INDEX ENGINE] No price found for ${ticker} on ${targetDate.toISOString().split('T')[0]}`);
+            // Para data atual, usar getLatestPrices como último recurso
+            const latestPrices = await getLatestPrices([ticker]);
+            const latestPrice = latestPrices.get(ticker);
+            if (latestPrice) {
+              pricesToday.set(ticker, latestPrice);
+              console.log(`📊 [INDEX ENGINE] Using latest price as fallback for ${ticker}: ${latestPrice.price.toFixed(2)}`);
+            } else {
+              console.error(`❌ [INDEX ENGINE] No price found for ${ticker} on ${targetDate.toISOString().split('T')[0]}`);
+            }
           }
         }
       }
     } else {
-      // Data atual ou futura: usar preços mais recentes
+      // Data futura: usar preços mais recentes
       pricesToday = await getLatestPrices(tickers);
     }
 

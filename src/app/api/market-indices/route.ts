@@ -76,7 +76,7 @@ interface MarketIndex {
 }
 
 /**
- * Busca dados de índices internacionais via BRAPI
+ * Busca dados de índices internacionais via Yahoo Finance (principal) e BRAPI (fallback)
  */
 async function fetchInternationalIndices(): Promise<MarketIndex[]> {
   const brapiToken = process.env.BRAPI_TOKEN;
@@ -95,34 +95,103 @@ async function fetchInternationalIndices(): Promise<MarketIndex[]> {
     // Buscar índices um por um para melhor compatibilidade
     for (const tickerInfo of internationalTickers) {
       try {
-        const brapiUrl = `https://brapi.dev/api/quote/${tickerInfo.symbol}${brapiToken ? `?token=${brapiToken}` : ''}`;
+        let indexData: MarketIndex | null = null;
 
-        const response = await fetch(brapiUrl, {
-          next: { revalidate: 3600 }, // Cache de 1 hora
-        });
+        // 1. Tentar Yahoo Finance primeiro (fonte principal)
+        try {
+          // Usar quoteSummary que retorna dados completos incluindo variação
+          const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/quoteSummary/${encodeURIComponent(tickerInfo.symbol)}?modules=price`;
+          
+          const yahooResponse = await fetch(yahooUrl, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache',
+            },
+          });
 
-        if (response.ok) {
-          const data = await response.json();
-          const result = data.results?.[0];
-
-          if (result) {
-            const regularMarketPrice = result.regularMarketPrice || 0;
-            const regularMarketChange = result.regularMarketChange || 0;
-            const regularMarketChangePercent = result.regularMarketChangePercent || 0;
-
-            // Criar URL externa para índices internacionais
-            const externalUrl = `https://finance.yahoo.com/quote/${tickerInfo.symbol}`;
+          if (yahooResponse.ok) {
+            const yahooData = await yahooResponse.json();
+            const price = yahooData.quoteSummary?.result?.[0]?.price;
             
-            indices.push({
-              name: tickerInfo.name,
-              ticker: tickerInfo.ticker,
-              value: regularMarketPrice,
-              change: regularMarketChange,
-              changePercent: regularMarketChangePercent,
-              isCustom: false,
-              url: externalUrl,
-            });
+            if (price) {
+              // Yahoo Finance pode retornar valores como objeto {raw: number, fmt: string} ou número direto
+              const getValue = (val: any): number => {
+                if (typeof val === 'number') return val;
+                if (val?.raw !== undefined) return val.raw;
+                if (val?.fmt) {
+                  // Tentar parsear formato string (ex: "158,939.34")
+                  const parsed = parseFloat(val.fmt.replace(/,/g, ''));
+                  return isNaN(parsed) ? 0 : parsed;
+                }
+                return 0;
+              };
+              
+              const regularMarketPrice = getValue(price.regularMarketPrice);
+              const regularMarketChange = getValue(price.regularMarketChange);
+              const regularMarketChangePercent = getValue(price.regularMarketChangePercent);
+              
+              if (regularMarketPrice && regularMarketPrice > 0) {
+                const externalUrl = `https://finance.yahoo.com/quote/${tickerInfo.symbol}`;
+                
+                indexData = {
+                  name: tickerInfo.name,
+                  ticker: tickerInfo.ticker,
+                  value: regularMarketPrice,
+                  change: regularMarketChange,
+                  changePercent: regularMarketChangePercent,
+                  isCustom: false,
+                  url: externalUrl,
+                };
+                
+                console.log(`📊 [YAHOO] ${tickerInfo.name}: ${regularMarketPrice.toFixed(2)} (${regularMarketChangePercent > 0 ? '+' : ''}${regularMarketChangePercent.toFixed(2)}%)`);
+              }
+            }
           }
+        } catch (yahooError) {
+          console.warn(`⚠️ [YAHOO] Erro ao buscar ${tickerInfo.name}, tentando BRAPI...`, yahooError instanceof Error ? yahooError.message : String(yahooError));
+        }
+
+        // 2. Fallback para BRAPI se Yahoo Finance falhou
+        if (!indexData) {
+          const brapiUrl = `https://brapi.dev/api/quote/${tickerInfo.symbol}${brapiToken ? `?token=${brapiToken}` : ''}`;
+
+          const brapiResponse = await fetch(brapiUrl, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache',
+            },
+          });
+
+          if (brapiResponse.ok) {
+            const brapiData = await brapiResponse.json();
+            const result = brapiData.results?.[0];
+
+            if (result) {
+              const regularMarketPrice = result.regularMarketPrice || 0;
+              const regularMarketChange = result.regularMarketChange || 0;
+              const regularMarketChangePercent = result.regularMarketChangePercent || 0;
+
+              const externalUrl = `https://finance.yahoo.com/quote/${tickerInfo.symbol}`;
+              
+              indexData = {
+                name: tickerInfo.name,
+                ticker: tickerInfo.ticker,
+                value: regularMarketPrice,
+                change: regularMarketChange,
+                changePercent: regularMarketChangePercent,
+                isCustom: false,
+                url: externalUrl,
+              };
+              
+              console.log(`📊 [BRAPI] ${tickerInfo.name}: ${regularMarketPrice.toFixed(2)} (${regularMarketChangePercent > 0 ? '+' : ''}${regularMarketChangePercent.toFixed(2)}%)`);
+            }
+          }
+        }
+
+        if (indexData) {
+          indices.push(indexData);
+        } else {
+          console.error(`❌ Não foi possível buscar dados para ${tickerInfo.name} (Yahoo Finance + BRAPI falharam)`);
         }
       } catch (err) {
         console.error(`Erro ao buscar ${tickerInfo.name}:`, err);

@@ -7,6 +7,26 @@ import CompanySearch from "@/components/company-search"
 export function GlobalSearchBar() {
   const { data: session } = useSession()
   const [bannerHidden, setBannerHidden] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detectar se é mobile (breakpoint lg = 1024px, igual ao usado no header)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024) // lg breakpoint
+    }
+
+    // Verificar inicialmente
+    checkMobile()
+
+    // Observar mudanças de tamanho da janela
+    window.addEventListener('resize', checkMobile)
+
+    return () => {
+      window.removeEventListener('resize', checkMobile)
+    }
+  }, [])
 
   // Verificar se o banner está fechado
   useEffect(() => {
@@ -38,12 +58,11 @@ export function GlobalSearchBar() {
   }, [session])
 
   // Posição dinâmica: 
-  // - Mobile: ~81px (header) + 40px (banner) se visível = ~121px, ou apenas ~81px se oculto
-  // - Desktop: ~81px (header) + 40px (banner) se visível = ~121px, ou apenas ~81px se oculto
-  // Aumentar valores para garantir que não seja ocultado pelo header durante scroll
-  // Header pode ter altura variável (mobile ~81px, desktop pode ser maior ~85-90px)
-  // Adicionar margem extra para garantir visibilidade completa durante scroll
-  const topPosition = (session && bannerHidden) ? '103px' : '120px'
+  // - Mobile: 81px (header) quando banner oculto, 121px (header + banner) quando visível
+  // - Desktop: 103px (header) quando banner oculto, 120px (header + banner) quando visível
+  const topPosition = (session && bannerHidden) 
+    ? (isMobile ? '81px' : '103px') 
+    : (isMobile ? '121px' : '120px')
 
   return (
     <div 

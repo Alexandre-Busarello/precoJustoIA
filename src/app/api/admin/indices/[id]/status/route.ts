@@ -11,7 +11,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdminUser } from '@/lib/user-service';
-import { checkPendingDividends } from '@/lib/index-engine';
+import { checkPendingDividends, checkMarketWasOpen } from '@/lib/index-engine';
+import { getTodayInBrazil } from '@/lib/market-status';
 
 export async function GET(
   request: NextRequest,
@@ -57,7 +58,8 @@ export async function GET(
     const lastUpdateDate = lastHistoryPoint?.date || null;
 
     // Calcular dias pendentes
-    const today = new Date();
+    // Usar getTodayInBrazil para garantir timezone correto
+    const today = getTodayInBrazil();
     today.setHours(0, 0, 0, 0);
     
     const pendingDays: string[] = [];
@@ -65,7 +67,7 @@ export async function GET(
       const lastDate = new Date(lastUpdateDate);
       lastDate.setHours(0, 0, 0, 0);
       
-      // Calcular dias úteis entre última atualização e hoje
+      // Calcular dias entre última atualização e hoje
       let currentDate = new Date(lastDate);
       currentDate.setDate(currentDate.getDate() + 1); // Começar do dia seguinte
       
@@ -84,32 +86,47 @@ export async function GET(
       });
       
       const existingDatesSet = new Set(
-        existingDates.map(h => h.date.toISOString().split('T')[0])
+        existingDates.map(h => {
+          const d = new Date(h.date);
+          d.setHours(0, 0, 0, 0);
+          return d.toISOString().split('T')[0];
+        })
       );
       
+      // Verificar cada dia entre última atualização e hoje
       while (currentDate <= today) {
-        // Verificar se é dia útil (segunda a sexta)
-        const dayOfWeek = currentDate.getDay();
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-          const dateStr = currentDate.toISOString().split('T')[0];
-          if (!existingDatesSet.has(dateStr)) {
+        // Normalizar data para comparação
+        const checkDate = new Date(currentDate);
+        checkDate.setHours(0, 0, 0, 0);
+        const dateStr = checkDate.toISOString().split('T')[0];
+        
+        // Verificar se já existe ponto histórico para este dia
+        if (!existingDatesSet.has(dateStr)) {
+          // Verificar se houve pregão neste dia (não apenas se é dia útil)
+          const marketWasOpen = await checkMarketWasOpen(checkDate);
+          if (marketWasOpen) {
+            // Só adicionar como pendente se houve pregão e não há ponto histórico
             pendingDays.push(dateStr);
           }
         }
+        
         currentDate.setDate(currentDate.getDate() + 1);
+        currentDate.setHours(0, 0, 0, 0);
       }
     } else {
-      // Se nunca foi atualizado, todos os dias desde criação são pendentes
+      // Se nunca foi atualizado, verificar todos os dias desde criação
       const createdAt = new Date(index.createdAt);
       createdAt.setHours(0, 0, 0, 0);
       
       let currentDate = new Date(createdAt);
       while (currentDate <= today) {
-        const dayOfWeek = currentDate.getDay();
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        // Verificar se houve pregão neste dia (não apenas se é dia útil)
+        const marketWasOpen = await checkMarketWasOpen(currentDate);
+        if (marketWasOpen) {
           pendingDays.push(currentDate.toISOString().split('T')[0]);
         }
         currentDate.setDate(currentDate.getDate() + 1);
+        currentDate.setHours(0, 0, 0, 0);
       }
     }
 

@@ -9,7 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdminUser } from '@/lib/user-service';
 import { updateIndexPoints, fillMissingHistory } from '@/lib/index-engine';
-import { runScreening, compareComposition, shouldRebalance, updateComposition, generateRebalanceReason } from '@/lib/index-screening-engine';
+import { runScreening, compareComposition, shouldRebalance, updateComposition, generateRebalanceReason, ensureScreeningLogOncePerDay } from '@/lib/index-screening-engine';
+import { getTodayInBrazil } from '@/lib/market-status';
 
 /**
  * Verifica se é dia útil (segunda a sexta)
@@ -109,8 +110,17 @@ export async function POST(
 
         // Executar screening
         const idealComposition = await runScreening(index);
+        const todayIndex = getTodayInBrazil();
+        todayIndex.setHours(0, 0, 0, 0);
 
         if (idealComposition.length === 0) {
+          // Garantir que o log seja criado mesmo quando screening retorna vazio (apenas uma vez por dia)
+          await ensureScreeningLogOncePerDay(
+            index.id,
+            todayIndex,
+            'Rotina de rebalanceamento executada: nenhuma empresa encontrada no screening'
+          );
+          
           results.success = true;
           results.message = 'Screening executado, mas nenhuma empresa encontrada';
           results.rebalanced = false;
@@ -129,6 +139,27 @@ export async function POST(
             const qualityResult = await filterByQuality(idealComposition, config);
             validatedComposition = qualityResult.valid;
             qualityRejected = qualityResult.rejected;
+            
+            if (validatedComposition.length === 0) {
+              // Garantir que o log seja criado mesmo quando nenhuma empresa passa no quality check (apenas uma vez por dia)
+              await ensureScreeningLogOncePerDay(
+                index.id,
+                todayIndex,
+                'Rotina de rebalanceamento executada: nenhuma empresa passou na validação de qualidade'
+              );
+              
+              results.success = true;
+              results.message = 'Screening executado, mas nenhuma empresa passou na validação de qualidade';
+              results.rebalanced = false;
+              results.changes = [];
+              results.duration = Date.now() - startTime;
+              results.endTime = new Date().toISOString();
+              
+              return NextResponse.json({
+                success: true,
+                result: results
+              });
+            }
           }
           
           const changes = compareComposition(
@@ -159,15 +190,19 @@ export async function POST(
             // Atualizar composição com motivo
             await updateComposition(index.id, validatedComposition, changes, rebalanceReason);
             
-            // Atualizar composição com motivo
-            await updateComposition(index.id, idealComposition, changes, rebalanceReason);
-            
             results.success = true;
             results.rebalanced = true;
             results.changes = changes;
             results.rebalanceReason = rebalanceReason;
             results.message = `Rebalanced com ${changes.length} mudanças: ${rebalanceReason}`;
           } else {
+            // Garantir que o log seja criado mesmo quando não há mudanças (apenas uma vez por dia)
+            await ensureScreeningLogOncePerDay(
+              index.id,
+              todayIndex,
+              'Rotina de rebalanceamento executada: nenhuma mudança necessária na composição após screening'
+            );
+            
             results.success = true;
             results.rebalanced = false;
             results.changes = [];

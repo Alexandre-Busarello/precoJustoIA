@@ -650,12 +650,22 @@ export async function regenerateRebalanceForDate(
       // Loop para cada dia útil a partir do DIA 2
       while (currentDate <= endDate) {
         try {
-          // Verificar se é dia útil usando timezone de Brasília
-          const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+          // Formatar currentDate usando timezone de Brasília (uma única vez)
+          const dateFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
             weekday: 'short',
           });
-          const weekday = weekdayFormatter.format(currentDate);
+          const dateParts = dateFormatter.formatToParts(currentDate);
+          const year = parseInt(dateParts.find(p => p.type === 'year')?.value || '0', 10);
+          const month = parseInt(dateParts.find(p => p.type === 'month')?.value || '0', 10);
+          const day = parseInt(dateParts.find(p => p.type === 'day')?.value || '0', 10);
+          const weekday = dateParts.find(p => p.type === 'weekday')?.value || '';
+          const currentDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          
+          // Verificar se é dia útil usando weekday já formatado
           const dayMap: Record<string, number> = {
             Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
           };
@@ -670,17 +680,23 @@ export async function regenerateRebalanceForDate(
           // Verificar se é o dia atual e se o mercado está aberto
           const isCurrentDateToday = currentDate.getTime() === todayDate.getTime();
           if (isCurrentDateToday && isBrazilMarketOpen()) {
-            console.log(`⏸️ [REBALANCE DATE] Mercado aberto hoje (${currentDate.toISOString().split('T')[0]}), pulando cálculo para hoje`);
+            console.log(`⏸️ [REBALANCE DATE] Mercado aberto hoje (${currentDateStr}), pulando cálculo para hoje`);
             break; // Não calcular pontos para hoje se o mercado estiver aberto
           }
-
-          const currentDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
           
           // Verificar se houve pregão antes de processar
           const marketWasOpen = await checkMarketWasOpen(currentDate);
           if (!marketWasOpen) {
-            const dayOfWeek = currentDate.getDay();
-            const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'feriado';
+            const dayNameMap: Record<string, string> = {
+              Mon: 'segunda-feira',
+              Tue: 'terça-feira',
+              Wed: 'quarta-feira',
+              Thu: 'quinta-feira',
+              Fri: 'sexta-feira',
+              Sat: 'sábado',
+              Sun: 'domingo',
+            };
+            const dayName = dayNameMap[weekday] || 'feriado';
             console.log(`  ⏸️ [REBALANCE DATE] Pulando ${currentDateStr} (${dayName} - mercado não funcionou)`);
             currentDate.setDate(currentDate.getDate() + 1);
             currentDate.setHours(0, 0, 0, 0);
@@ -935,12 +951,22 @@ export async function regenerateRebalanceForDate(
       // Loop para cada dia útil a partir da data alvo
       while (currentDate <= endDate) {
         try {
-          // Verificar se é dia útil usando timezone de Brasília
-          const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+          // Formatar currentDate usando timezone de Brasília (uma única vez)
+          const dateFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
             weekday: 'short',
           });
-          const weekday = weekdayFormatter.format(currentDate);
+          const dateParts = dateFormatter.formatToParts(currentDate);
+          const year = parseInt(dateParts.find(p => p.type === 'year')?.value || '0', 10);
+          const month = parseInt(dateParts.find(p => p.type === 'month')?.value || '0', 10);
+          const day = parseInt(dateParts.find(p => p.type === 'day')?.value || '0', 10);
+          const weekday = dateParts.find(p => p.type === 'weekday')?.value || '';
+          const currentDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          
+          // Verificar se é dia útil usando weekday já formatado
           const dayMap: Record<string, number> = {
             Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
           };
@@ -956,17 +982,23 @@ export async function regenerateRebalanceForDate(
           const todayDateCheck = getTodayInBrazil();
           const isCurrentDateToday = currentDate.getTime() === todayDateCheck.getTime();
           if (isCurrentDateToday && isBrazilMarketOpen()) {
-            console.log(`⏸️ [REBALANCE DATE] Mercado aberto hoje (${currentDate.toISOString().split('T')[0]}), pulando cálculo para hoje`);
+            console.log(`⏸️ [REBALANCE DATE] Mercado aberto hoje (${currentDateStr}), pulando cálculo para hoje`);
             break; // Não calcular pontos para hoje se o mercado estiver aberto
           }
-
-          const currentDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
           
           // Verificar se houve pregão antes de processar
           const marketWasOpen = await checkMarketWasOpen(currentDate);
           if (!marketWasOpen) {
-            const dayOfWeek = currentDate.getDay();
-            const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'feriado';
+            const dayNameMap: Record<string, string> = {
+              Mon: 'segunda-feira',
+              Tue: 'terça-feira',
+              Wed: 'quarta-feira',
+              Thu: 'quinta-feira',
+              Fri: 'sexta-feira',
+              Sat: 'sábado',
+              Sun: 'domingo',
+            };
+            const dayName = dayNameMap[weekday] || 'feriado';
             console.log(`  ⏸️ [REBALANCE DATE] Pulando ${currentDateStr} (${dayName} - mercado não funcionou)`);
             currentDate.setDate(currentDate.getDate() + 1);
             currentDate.setHours(0, 0, 0, 0);

@@ -9,6 +9,7 @@ import { requireAdminUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { runScreening, updateComposition } from '@/lib/index-screening-engine';
 import { updateIndexPoints } from '@/lib/index-engine';
+import { getTodayInBrazil } from '@/lib/market-status';
 
 export async function GET() {
   try {
@@ -112,8 +113,7 @@ export async function POST(request: NextRequest) {
         await updateComposition(index.id, selectedCompanies, initialChanges);
         
         // Criar primeiro ponto histórico (base 100)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getTodayInBrazil();
         
         await updateIndexPoints(index.id, today);
       }

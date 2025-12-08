@@ -78,8 +78,7 @@ export async function POST(
         }
 
         // Calcular pontos para hoje
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getTodayInBrazil();
         
         const success = await updateIndexPoints(index.id, today);
         

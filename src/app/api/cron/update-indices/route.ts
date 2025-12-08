@@ -267,8 +267,8 @@ async function runMarkToMarketJob(): Promise<{
       console.log(`  📊 Processing ${index.ticker} (${i + 1}/${allIndices.length})...`);
 
       // Verificar se já está atualizado para hoje
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Usar getTodayInBrazil para garantir timezone correto
+      const today = getTodayInBrazil();
       
       const existingToday = await prisma.indexHistoryPoints.findFirst({
         where: {
@@ -488,8 +488,8 @@ async function runScreeningJob(): Promise<{
       console.log(`  🔍 Processing ${index.ticker} (${i + 1}/${allIndices.length})...`);
 
       // Verificar se já foi processado hoje (verificando último log)
-      const todayIndex = new Date();
-      todayIndex.setHours(0, 0, 0, 0);
+      // Usar getTodayInBrazil para garantir timezone correto
+      const todayIndex = getTodayInBrazil();
       
       const lastLog = await prisma.indexRebalanceLog.findFirst({
         where: { indexId: index.id },

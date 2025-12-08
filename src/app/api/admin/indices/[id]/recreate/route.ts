@@ -11,6 +11,7 @@ import { requireAdminUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { runScreening, updateComposition } from '@/lib/index-screening-engine';
 import { updateIndexPoints } from '@/lib/index-engine';
+import { getTodayInBrazil } from '@/lib/market-status';
 import { cache } from '@/lib/cache-service';
 
 export async function POST(
@@ -108,8 +109,7 @@ export async function POST(
     console.log(`✅ [ADMIN INDICES] Composição inicial criada com ${selectedCompanies.length} ativos`);
 
     // 4. Criar primeiro ponto histórico (base 100) no dia atual
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getTodayInBrazil();
 
     const pointCreated = await updateIndexPoints(id, today);
 

@@ -662,9 +662,31 @@ export async function updateIndexPoints(
     // Verificar se houve pregão antes de calcular pontos
     const marketWasOpen = await checkMarketWasOpen(date);
     if (!marketWasOpen) {
-      const dateStr = date.toISOString().split('T')[0];
-      const dayOfWeek = date.getDay();
-      const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'dia útil sem pregão';
+      // Formatar data usando timezone de Brasília para consistência
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+      });
+      const parts = formatter.formatToParts(date);
+      const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+      const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10);
+      const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+      const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
+      const dayMap: Record<string, string> = {
+        Mon: 'segunda-feira',
+        Tue: 'terça-feira',
+        Wed: 'quarta-feira',
+        Thu: 'quinta-feira',
+        Fri: 'sexta-feira',
+        Sat: 'sábado',
+        Sun: 'domingo',
+      };
+      const dayName = dayMap[weekday] || 'dia útil sem pregão';
       console.log(`⏸️ [INDEX ENGINE] Pulando cálculo de pontos para ${dateStr} (${dayName}) - mercado não funcionou neste dia`);
       return false;
     }

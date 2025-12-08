@@ -289,8 +289,8 @@ async function setupIPJValue(forceRecreate: boolean = false) {
       });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { getTodayInBrazil } = await import('../src/lib/market-status');
+    const today = getTodayInBrazil();
 
     // Garantir que não há composição existente antes de criar (evitar constraint única)
     await prisma.indexComposition.deleteMany({
@@ -584,8 +584,8 @@ Empresas com alto ROIC e alto Earnings Yield tendem a ser boas oportunidades de 
     const prices = await getLatestPrices(tickers);
 
     const targetWeight = 1.0 / idealComposition.length;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { getTodayInBrazil } = await import('../src/lib/market-status');
+    const today = getTodayInBrazil();
 
     // Criar mudanças iniciais (todas são ENTRY)
     const initialChanges = idealComposition.map(candidate => ({
@@ -915,8 +915,8 @@ async function setupIPJCrescimento(forceRecreate: boolean = false) {
       });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { getTodayInBrazil } = await import('../src/lib/market-status');
+    const today = getTodayInBrazil();
 
     // Criar mudanças iniciais (todas são ENTRY)
     const initialChanges = idealComposition.map(candidate => ({
@@ -1178,8 +1178,8 @@ async function setupIPJTecnico(forceRecreate: boolean = false) {
     const prices = await getLatestPrices(tickers);
 
     const targetWeight = 1.0 / idealComposition.length;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { getTodayInBrazil } = await import('../src/lib/market-status');
+    const today = getTodayInBrazil();
 
     // Criar mudanças iniciais (todas são ENTRY)
     const initialChanges = idealComposition.map(candidate => ({

@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { updateIndexPoints, fillMissingHistory, checkMarketWasOpen } from '@/lib/index-engine';
-import { runScreening, compareComposition, shouldRebalance, updateComposition } from '@/lib/index-screening-engine';
+import { runScreening, compareComposition, shouldRebalance, updateComposition, ensureScreeningLogOncePerDay } from '@/lib/index-screening-engine';
 import { cache } from '@/lib/cache-service';
 import { getTodayInBrazil } from '@/lib/market-status';
 
@@ -512,6 +512,14 @@ async function runScreeningJob(): Promise<{
 
       if (idealComposition.length === 0) {
         console.warn(`    ⚠️ ${index.ticker}: No companies found in screening`);
+        
+        // Garantir que o log seja criado mesmo quando screening retorna vazio (apenas uma vez por dia)
+        await ensureScreeningLogOncePerDay(
+          index.id,
+          todayIndex,
+          'Rotina de rebalanceamento executada: nenhuma empresa encontrada no screening'
+        );
+        
         successCount++; // Considerar sucesso mesmo sem resultados
         continue;
       }
@@ -533,6 +541,14 @@ async function runScreeningJob(): Promise<{
         
         if (validatedComposition.length === 0) {
           console.warn(`    ⚠️ ${index.ticker}: No companies passed quality check for rebalancing (${qualityResult.rejected.length} rejected)`);
+          
+          // Garantir que o log seja criado mesmo quando nenhuma empresa passa no quality check (apenas uma vez por dia)
+          await ensureScreeningLogOncePerDay(
+            index.id,
+            todayIndex,
+            'Rotina de rebalanceamento executada: nenhuma empresa passou na validação de qualidade'
+          );
+          
           successCount++; // Considerar sucesso mesmo sem resultados
           continue;
         }
@@ -592,6 +608,17 @@ async function runScreeningJob(): Promise<{
           console.log(`    ℹ️ ${index.ticker}: No rebalancing needed (composição mantida)`);
         } else {
           console.log(`    ℹ️ ${index.ticker}: No rebalancing needed (threshold não atingido: ${changes.length} mudanças potenciais)`);
+        }
+        
+        // Garantir que o log seja criado mesmo quando não há mudanças (apenas uma vez por dia)
+        const logCreated = await ensureScreeningLogOncePerDay(
+          index.id,
+          todayIndex,
+          'Rotina de rebalanceamento executada: nenhuma mudança necessária na composição após screening'
+        );
+        
+        if (logCreated) {
+          console.log(`    📝 ${index.ticker}: Log de screening criado (nenhuma mudança necessária)`);
         }
       }
 

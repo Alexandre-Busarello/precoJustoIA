@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { runScreening, compareComposition, generateRebalanceReason, filterByQuality, getLastScreeningDetails } from './index-screening-engine';
+import { runScreening, compareComposition, generateRebalanceReason, filterByQuality, getLastScreeningDetails, ensureScreeningLogOncePerDay } from './index-screening-engine';
 import { updateIndexPoints, fixIndexStartingPoint, checkMarketWasOpen } from './index-engine';
 import { getYahooHistoricalPrice } from './quote-service';
 import { getTodayInBrazil } from './market-status';
@@ -734,6 +734,14 @@ export async function regenerateRebalanceForDate(
 
           if (idealComposition.length === 0) {
             console.warn(`  ⚠️ [REBALANCE] Nenhuma empresa encontrada no screening, mantendo composição atual`);
+            
+            // Garantir que o log seja criado apenas uma vez por dia
+            await ensureScreeningLogOncePerDay(
+              indexId,
+              currentDate,
+              'Rotina de rebalanceamento executada: nenhuma empresa encontrada no screening'
+            );
+            
             currentDate.setDate(currentDate.getDate() + 1);
             currentDate.setHours(0, 0, 0, 0);
             continue;
@@ -750,6 +758,14 @@ export async function regenerateRebalanceForDate(
 
             if (validatedComposition.length === 0) {
               console.warn(`  ⚠️ [REBALANCE] Nenhuma empresa passou na validação de qualidade, mantendo composição atual`);
+              
+              // Garantir que o log seja criado apenas uma vez por dia
+              await ensureScreeningLogOncePerDay(
+                indexId,
+                currentDate,
+                'Rotina de rebalanceamento executada: nenhuma empresa passou na validação de qualidade'
+              );
+              
               currentDate.setDate(currentDate.getDate() + 1);
               currentDate.setHours(0, 0, 0, 0);
               continue;
@@ -825,17 +841,18 @@ export async function regenerateRebalanceForDate(
           } else {
             console.log(`  ✅ [REBALANCE] Nenhuma mudança necessária, composição mantida`);
             
-            // Criar log indicando que a rotina rodou mas não foi necessária nenhuma mudança
-            await prisma.indexRebalanceLog.create({
-              data: {
-                indexId,
-                date: currentDate,
-                action: 'REBALANCE',
-                ticker: 'SYSTEM',
-                reason: 'Rotina de rebalanceamento executada: nenhuma mudança necessária na composição após screening'
-              }
-            });
-            console.log(`  📝 [REBALANCE] Log criado: rotina executada sem mudanças`);
+            // Garantir que o log seja criado apenas uma vez por dia
+            const logCreated = await ensureScreeningLogOncePerDay(
+              indexId,
+              currentDate,
+              'Rotina de rebalanceamento executada: nenhuma mudança necessária na composição após screening'
+            );
+            
+            if (logCreated) {
+              console.log(`  📝 [REBALANCE] Log criado: rotina executada sem mudanças`);
+            } else {
+              console.log(`  📝 [REBALANCE] Log já existe para esta data, pulando criação`);
+            }
           }
 
         } catch (error) {
@@ -1003,6 +1020,14 @@ export async function regenerateRebalanceForDate(
 
           if (idealComposition.length === 0) {
             console.warn(`  ⚠️ [REBALANCE] Nenhuma empresa encontrada no screening, mantendo composição atual`);
+            
+            // Garantir que o log seja criado apenas uma vez por dia
+            await ensureScreeningLogOncePerDay(
+              indexId,
+              currentDate,
+              'Rotina de rebalanceamento executada: nenhuma empresa encontrada no screening'
+            );
+            
             currentDate.setDate(currentDate.getDate() + 1);
             currentDate.setHours(0, 0, 0, 0);
             continue;
@@ -1019,6 +1044,14 @@ export async function regenerateRebalanceForDate(
 
             if (validatedComposition.length === 0) {
               console.warn(`  ⚠️ [REBALANCE] Nenhuma empresa passou na validação de qualidade, mantendo composição atual`);
+              
+              // Garantir que o log seja criado apenas uma vez por dia
+              await ensureScreeningLogOncePerDay(
+                indexId,
+                currentDate,
+                'Rotina de rebalanceamento executada: nenhuma empresa passou na validação de qualidade'
+              );
+              
               currentDate.setDate(currentDate.getDate() + 1);
               currentDate.setHours(0, 0, 0, 0);
               continue;
@@ -1094,17 +1127,18 @@ export async function regenerateRebalanceForDate(
           } else {
             console.log(`  ✅ [REBALANCE] Nenhuma mudança necessária, composição mantida`);
             
-            // Criar log indicando que a rotina rodou mas não foi necessária nenhuma mudança
-            await prisma.indexRebalanceLog.create({
-              data: {
-                indexId,
-                date: currentDate,
-                action: 'REBALANCE',
-                ticker: 'SYSTEM',
-                reason: 'Rotina de rebalanceamento executada: nenhuma mudança necessária na composição após screening'
-              }
-            });
-            console.log(`  📝 [REBALANCE] Log criado: rotina executada sem mudanças`);
+            // Garantir que o log seja criado apenas uma vez por dia
+            const logCreated = await ensureScreeningLogOncePerDay(
+              indexId,
+              currentDate,
+              'Rotina de rebalanceamento executada: nenhuma mudança necessária na composição após screening'
+            );
+            
+            if (logCreated) {
+              console.log(`  📝 [REBALANCE] Log criado: rotina executada sem mudanças`);
+            } else {
+              console.log(`  📝 [REBALANCE] Log já existe para esta data, pulando criação`);
+            }
           }
 
         } catch (error) {

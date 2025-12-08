@@ -2283,6 +2283,53 @@ function calculateWeights(
 }
 
 /**
+ * Garante que um log de rebalanceamento seja criado apenas uma vez por dia
+ * Cria o log apenas se ainda não existir um log de REBALANCE para o índice na data especificada
+ */
+export async function ensureScreeningLogOncePerDay(
+  indexId: string,
+  date: Date,
+  reason: string = 'Rotina de rebalanceamento executada: nenhuma mudança necessária na composição após screening'
+): Promise<boolean> {
+  try {
+    // Normalizar data para comparar apenas o dia (sem hora)
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0);
+
+    // Verificar se já existe um log de REBALANCE para este índice nesta data
+    const existingLog = await prisma.indexRebalanceLog.findFirst({
+      where: {
+        indexId,
+        date: normalizedDate,
+        action: 'REBALANCE',
+        ticker: 'SYSTEM'
+      }
+    });
+
+    // Se já existe, não criar novamente
+    if (existingLog) {
+      return false;
+    }
+
+    // Criar o log apenas se não existir
+    await prisma.indexRebalanceLog.create({
+      data: {
+        indexId,
+        date: normalizedDate,
+        action: 'REBALANCE',
+        ticker: 'SYSTEM',
+        reason
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.error(`❌ [SCREENING ENGINE] Error ensuring screening log:`, error);
+    return false;
+  }
+}
+
+/**
  * Atualiza composição do índice
  */
 export async function updateComposition(

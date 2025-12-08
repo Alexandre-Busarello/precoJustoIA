@@ -24,6 +24,9 @@ import { DividendRadarCompact } from '@/components/dividend-radar-compact'
 import { DividendService } from '@/lib/dividend-service'
 import { DividendRadarService } from '@/lib/dividend-radar-service'
 import { ensureTodayPrice } from '@/lib/quote-service'
+import { StrategyFactory } from '@/lib/strategies/strategy-factory'
+import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config'
+import type { CompanyData } from '@/lib/strategies/types'
 import Link from 'next/link'
 
 // Shadcn UI Components
@@ -117,7 +120,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
             roe: true,
             marketCap: true,
             receitaTotal: true,
-            updatedAt: true
+            updatedAt: true,
+            lpa: true,
+            vpa: true
           },
           orderBy: { year: 'desc' },
           take: 1
@@ -149,16 +154,77 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const latestFinancials = company.financialData?.[0]
     const currentPrice = toNumber(company.dailyQuotes?.[0]?.price) ?? 0
+    const anoAtual = new Date().getFullYear()
     
-    const title = `${ticker} - ${company.name} | Análise Completa de BDR - Preço Justo AI`
+    // Tentar calcular preço justo via Graham (leve, não bloqueia)
+    let fairPrice: number | null = null
+    let upside: number | null = null
+    try {
+      const companyAnalysisData: CompanyData = {
+        ticker,
+        name: company.name,
+        sector: company.sector,
+        currentPrice,
+        financials: {
+          lpa: toNumber(latestFinancials?.lpa) || null,
+          vpa: toNumber(latestFinancials?.vpa) || null,
+          pl: toNumber(latestFinancials?.pl) || null,
+          roe: toNumber(latestFinancials?.roe) || null,
+          roa: null,
+          dy: null,
+          pvp: null,
+          evEbitda: null,
+          margemBruta: null,
+          margemEbitda: null,
+          margemLiquida: null,
+          payout: null,
+          crescimentoReceitas: null,
+          crescimentoLucros: null,
+          dividaLiquidaEbitda: null,
+          dividaLiquidaPatrimonio: null,
+          patrimonioLiquido: null,
+          ativoTotal: null,
+          disponibilidades: null,
+          ativoCirculante: null,
+          passivoCirculante: null,
+          ebitda: null,
+          receitaLiquida: null,
+          lucroLiquido: null,
+          fluxoCaixaOperacional: null,
+          fluxoCaixaLivre: null,
+          capex: null,
+          sharesOutstanding: null,
+          marketCap: toNumber(latestFinancials?.marketCap) || null,
+        },
+        historicalFinancials: []
+      }
+      const grahamAnalysis = StrategyFactory.runGrahamAnalysis(companyAnalysisData, STRATEGY_CONFIG.graham)
+      fairPrice = grahamAnalysis.fairValue
+      upside = grahamAnalysis.upside
+    } catch (error) {
+      // Ignorar erro silenciosamente - não bloquear metadata
+    }
+    
+    const title = `${ticker} (${company.name}): Preço Justo e Potencial ${anoAtual} | Preço Justo AI`
     
     // Construir descrição base com informações financeiras
-    const priceInfo = currentPrice > 0 ? `Preço atual R$ ${currentPrice.toFixed(2)}` : ''
+    let baseDescription = `Análise completa do BDR ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}`
+    
+    if (fairPrice && fairPrice > 0) {
+      baseDescription += `, Preço Justo calculado em R$ ${fairPrice.toFixed(2)}`
+      if (upside !== null) {
+        baseDescription += `, com potencial de ${upside > 0 ? '+' : ''}${upside.toFixed(2)}%`
+      }
+    }
+    
     const plInfo = latestFinancials?.pl ? `P/L: ${(toNumber(latestFinancials.pl) ?? 0).toFixed(1)}` : ''
     const roeInfo = latestFinancials?.roe ? `ROE: ${((toNumber(latestFinancials.roe) ?? 0) * 100).toFixed(1)}%` : ''
     const sectorInfo = company.sector ? `Setor ${company.sector}` : ''
     
-    const financialMetrics = [priceInfo, plInfo, roeInfo, sectorInfo].filter(Boolean).join(', ')
+    const financialMetrics = [plInfo, roeInfo, sectorInfo].filter(Boolean)
+    if (financialMetrics.length > 0) {
+      baseDescription += `. ${financialMetrics.join(', ')}.`
+    }
     
     // Verificar se a descrição contém o texto padrão sobre BDRs
     const defaultBdrText = 'BDRs são certificados de depósito que representam ações de empresas estrangeiras negociadas na B3'
@@ -170,13 +236,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       // Pegar apenas as primeiras palavras úteis (evitar textos muito genéricos)
       const cleanDescription = company.description.trim()
       if (cleanDescription.length > 50 && !cleanDescription.toLowerCase().startsWith('bdr')) {
-        companyInfo = ` ${cleanDescription.substring(0, 120).trim()}...`
+        companyInfo = ` ${cleanDescription.substring(0, 80).trim()}...`
       }
     }
     
     // Construir descrição final priorizando informações específicas da empresa
-    const baseDescription = `Análise completa do BDR ${company.name} (${ticker}). ${financialMetrics}.`
-    const description = `${baseDescription}${companyInfo} Análise com IA, indicadores financeiros e estratégias de investimento em BDRs.`
+    const description = `${baseDescription}${companyInfo} Veja o Score de Qualidade atualizado e análise com IA.`
 
     const metadata = {
       title,
@@ -391,6 +456,92 @@ export default async function BdrPage({ params }: PageProps) {
     negativePoints: youtubeAnalysis.negativePoints as string[] | null,
     updatedAt: youtubeAnalysis.updatedAt
   } : null
+
+  // Função para gerar FAQ Schema (apenas para usuários deslogados)
+  const generateFAQSchema = () => {
+    if (session) return null // Não gerar para usuários logados
+    
+    try {
+      // Preparar dados da empresa para análise Graham
+      const companyAnalysisData: CompanyData = {
+        ticker,
+        name: companyData.name,
+        sector: companyData.sector,
+        currentPrice,
+        financials: {
+          lpa: toNumber(latestFinancials?.lpa) || null,
+          vpa: toNumber(latestFinancials?.vpa) || null,
+          pl: toNumber(latestFinancials?.pl) || null,
+          roe: toNumber(latestFinancials?.roe) || null,
+          roa: toNumber(latestFinancials?.roa) || null,
+          dy: toNumber(latestFinancials?.dy) || null,
+          pvp: toNumber(latestFinancials?.pvp) || null,
+          evEbitda: toNumber(latestFinancials?.evEbitda) || null,
+          margemBruta: toNumber(latestFinancials?.margemBruta) || null,
+          margemEbitda: toNumber(latestFinancials?.margemEbitda) || null,
+          margemLiquida: toNumber(latestFinancials?.margemLiquida) || null,
+          payout: toNumber(latestFinancials?.payout) || null,
+          crescimentoReceitas: toNumber(latestFinancials?.crescimentoReceitas) || null,
+          crescimentoLucros: toNumber(latestFinancials?.crescimentoLucros) || null,
+          dividaLiquidaEbitda: toNumber(latestFinancials?.dividaLiquidaEbitda) || null,
+          dividaLiquidaPatrimonio: toNumber((latestFinancials as any)?.dividaLiquidaPatrimonio) || null,
+          patrimonioLiquido: toNumber((latestFinancials as any)?.patrimonioLiquido) || null,
+          ativoTotal: toNumber((latestFinancials as any)?.ativoTotal) || null,
+          disponibilidades: toNumber((latestFinancials as any)?.disponibilidades) || null,
+          ativoCirculante: toNumber((latestFinancials as any)?.ativoCirculante) || null,
+          passivoCirculante: toNumber((latestFinancials as any)?.passivoCirculante) || null,
+          ebitda: toNumber((latestFinancials as any)?.ebitda) || null,
+          receitaLiquida: toNumber((latestFinancials as any)?.receitaLiquida) || null,
+          lucroLiquido: toNumber((latestFinancials as any)?.lucroLiquido) || null,
+          fluxoCaixaOperacional: toNumber((latestFinancials as any)?.fluxoCaixaOperacional) || null,
+          fluxoCaixaLivre: toNumber((latestFinancials as any)?.fluxoCaixaLivre) || null,
+          capex: toNumber((latestFinancials as any)?.capex) || null,
+          sharesOutstanding: toNumber(latestFinancials?.sharesOutstanding) || null,
+          marketCap: toNumber(latestFinancials?.marketCap) || null,
+        },
+        historicalFinancials: []
+      }
+
+      // Executar análise Graham para obter preço justo
+      const grahamAnalysis = StrategyFactory.runGrahamAnalysis(companyAnalysisData, STRATEGY_CONFIG.graham)
+      const fairPrice = grahamAnalysis.fairValue
+      const upside = grahamAnalysis.upside
+      const anoAtual = new Date().getFullYear()
+      const recommendation = upside && upside > 0 ? "compra" : "aguardar"
+
+      if (!fairPrice || fairPrice <= 0) return null
+
+      const faqs = [
+        {
+          "@type": "Question",
+          "name": `Qual é o preço justo do BDR ${ticker} (${companyData.name})?`,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": `De acordo com o método de Graham/Bazin, o preço justo estimado para o BDR ${ticker} é de R$ ${fairPrice.toFixed(2)}, o que representa um potencial de ${upside ? upside.toFixed(2) : 'N/A'}% em relação ao preço atual de R$ ${currentPrice.toFixed(2)}.`
+          }
+        },
+        {
+          "@type": "Question",
+          "name": `Vale a pena investir no BDR ${ticker} em ${anoAtual}?`,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": `Com base nos fundamentos atuais, o BDR apresenta uma margem de segurança que sugere ${recommendation}. O preço justo calculado é de R$ ${fairPrice.toFixed(2)} e o preço atual é R$ ${currentPrice.toFixed(2)}. Veja a análise completa no Preço Justo AI.`
+          }
+        }
+      ]
+
+      return {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": faqs
+      }
+    } catch (error) {
+      console.error(`Erro ao gerar FAQ Schema para BDR ${ticker}:`, error)
+      return null
+    }
+  }
+
+  const faqSchema = generateFAQSchema()
 
   return (
     <>
@@ -730,6 +881,16 @@ export default async function BdrPage({ params }: PageProps) {
               "additionalType": "BDR - Brazilian Depositary Receipt",
               "lastUpdated": latestFinancials.updatedAt?.toISOString()
             })
+          }}
+        />
+      )}
+
+      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
+      {!session && faqSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(faqSchema)
           }}
         />
       )}

@@ -1,5 +1,7 @@
 import { Metadata } from "next"
 import { notFound } from "next/navigation"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,7 +10,6 @@ import {
   Clock, 
   User,
   ArrowLeft,
-  Share2,
   BookOpen,
   Tag,
   ArrowRight
@@ -108,6 +109,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
   const post = await getPostBySlug(slug)
+  const session = await getServerSession(authOptions)
   
   if (!post) {
     notFound()
@@ -115,6 +117,39 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   // Posts relacionados (mesma categoria, excluindo o atual)
   const relatedPosts = await getRelatedPosts(slug, 3)
+  
+  // Gerar FAQs dinâmicos baseados no tema do post (apenas para usuários deslogados)
+  const generatePostFAQs = () => {
+    if (session) return null
+    
+    const anoAtual = new Date().getFullYear()
+    const baseFAQs = [
+      {
+        "@type": "Question",
+        "name": `O que é ${post.category.toLowerCase()}?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `Este artigo explica em detalhes sobre ${post.category.toLowerCase()} e como aplicar esses conceitos na análise de ações da B3. Leia o artigo completo para entender melhor.`
+        }
+      },
+      {
+        "@type": "Question",
+        "name": `Como aplicar ${post.category.toLowerCase()} em ${anoAtual}?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `Este artigo fornece um guia completo sobre como aplicar ${post.category.toLowerCase()} na prática. Use nossa plataforma Preço Justo AI para aplicar esses conhecimentos em análises reais de ações.`
+        }
+      }
+    ]
+    
+    return {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": baseFAQs
+    }
+  }
+  
+  const postFAQSchema = generatePostFAQs()
 
   // URL base para compartilhamento
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://precojusto.ai'
@@ -192,6 +227,16 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
+      
+      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
+      {!session && postFAQSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(postFAQSchema)
+          }}
+        />
+      )}
 
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/20 dark:to-background">
         {/* Header do Post */}

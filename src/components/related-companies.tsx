@@ -97,6 +97,7 @@ export function RelatedCompanies({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h4 className="font-semibold text-sm group-hover:text-blue-600 transition-colors">
+                        <span className="sr-only">Valuation </span>
                         {company.ticker}
                       </h4>
                       {company.marketCap && (
@@ -111,7 +112,7 @@ export function RelatedCompanies({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1 text-xs text-blue-600 group-hover:text-blue-700">
                         <Eye className="w-3 h-3" />
-                        <span>Ver análise</span>
+                        <span>Ver Valuation {company.name}</span>
                       </div>
                       <ArrowRight className="w-3 h-3 text-muted-foreground group-hover:text-blue-600 transition-colors" />
                     </div>

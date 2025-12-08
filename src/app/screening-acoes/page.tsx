@@ -36,6 +36,7 @@ import {
   ArrowRight
 } from "lucide-react"
 import Link from "next/link"
+import Script from "next/script"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { signIn } from "next-auth/react"
 
@@ -1353,6 +1354,62 @@ function ScreeningAcoesContent() {
       />
 
       <Footer />
+      
+      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
+      {!session && (
+        <Script
+          id="screening-faq-schema"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": [
+                {
+                  "@type": "Question",
+                  "name": "Como funciona o screening de ações?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "O screening permite filtrar ações da B3 por múltiplos critérios simultaneamente. Você define filtros como P/L máximo, ROE mínimo, Dividend Yield desejado, etc., e nossa ferramenta retorna apenas empresas que atendem TODOS os critérios selecionados."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Quantos filtros posso usar simultaneamente?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Você pode usar quantos filtros quiser! A ferramenta retorna apenas empresas que atendem TODOS os critérios selecionados. Recomendamos começar com poucos filtros e ir refinando conforme necessário."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "O screening é gratuito?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Sim! A ferramenta básica de screening é 100% gratuita e mostra até 3 resultados. Usuários Premium têm acesso ao Assistente de IA que sugere filtros personalizados automaticamente e podem ver todos os resultados encontrados sem limite."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Quais indicadores estão disponíveis?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Temos mais de 15 indicadores: P/L, P/VP, EV/EBITDA, ROE, ROIC, ROA, margem líquida, margem EBITDA, CAGR de lucros/receitas, Dividend Yield, Payout Ratio, endividamento, liquidez corrente e market cap."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Os dados são atualizados?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Sim! Nossos dados são atualizados regularmente com base nas informações mais recentes da B3 e dos balanços financeiros das empresas. Trabalhamos para garantir que você sempre tenha acesso aos números mais atuais."
+                  }
+                }
+              ]
+            })
+          }}
+        />
+      )}
       
       {/* Modal de Registro para Usuários Anônimos */}
       <Dialog open={showRegisterModal} onOpenChange={setShowRegisterModal}>

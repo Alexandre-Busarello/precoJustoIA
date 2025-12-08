@@ -904,13 +904,13 @@ export default async function CompareStocksPage({ params }: PageProps) {
   const resolvedParams = await params
   const tickersParam = resolvedParams.tickers // Manter tickers originais da URL
   const tickers = tickersParam.map(t => t.toUpperCase()) // Converter para maiúsculo apenas para consulta no BD
-
+  
   // Validar se há pelo menos 2 tickers
   if (tickers.length < 2) {
     notFound()
   }
 
-  // Verificar sessão do usuário para recursos premium
+  // Verificar sessão do usuário para recursos premium e SEO
   const session = await getServerSession(authOptions)
   let userIsPremium = false
 
@@ -1629,6 +1629,45 @@ export default async function CompareStocksPage({ params }: PageProps) {
           })
         }}
       />
+
+      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
+      {!session && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": [
+                {
+                  "@type": "Question",
+                  "name": "Como comparar múltiplas ações ao mesmo tempo?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Use nosso comparador de ações para analisar até 6 empresas simultaneamente. Você verá indicadores financeiros, valuation, scores de qualidade e estratégias de investimento lado a lado, facilitando a escolha da melhor oportunidade."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Quais indicadores são comparados?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Comparamos mais de 25 indicadores incluindo P/L, P/VP, ROE, ROIC, ROA, margens, dividend yield, endividamento, crescimento e scores de qualidade. Todos os dados são atualizados regularmente com base nas demonstrações financeiras oficiais."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "O comparador é gratuito?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Sim! O comparador básico é 100% gratuito e permite comparar até 6 ações simultaneamente. Usuários Premium têm acesso a comparações avançadas e análises mais detalhadas."
+                  }
+                }
+              ]
+            })
+          }}
+        />
+      )}
     </div>
   )
 }

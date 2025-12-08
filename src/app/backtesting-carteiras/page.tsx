@@ -1,7 +1,10 @@
 import { Metadata } from 'next';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Footer } from '@/components/footer';
+import { FAQSection } from '@/components/landing/faq-section';
 import { 
   TrendingUp, 
   BarChart3, 
@@ -50,7 +53,37 @@ export const metadata: Metadata = {
   }
 };
 
-export default function BacktestingCarteirasPage() {
+export default async function BacktestingCarteirasPage() {
+  const session = await getServerSession(authOptions)
+  
+  const faqs = [
+    {
+      question: "O que é backtesting de carteiras?",
+      answer: "Backtesting é a simulação de uma estratégia de investimento usando dados históricos reais. Você pode testar como sua carteira teria performado no passado, incluindo aportes mensais, rebalanceamento automático e reinvestimento de dividendos.",
+      iconName: "LineChart"
+    },
+    {
+      question: "Quais métricas são calculadas no backtesting?",
+      answer: "Calculamos métricas profissionais como retorno total, retorno anualizado, Sharpe Ratio, drawdown máximo, volatilidade, beta e análise detalhada por ativo. Todas as métricas são baseadas em dados históricos reais da B3.",
+      iconName: "BarChart3"
+    },
+    {
+      question: "Posso simular aportes mensais?",
+      answer: "Sim! Você pode configurar aportes mensais fixos ou variáveis, definir frequência de rebalanceamento e simular reinvestimento automático de dividendos. Isso permite testar estratégias realistas de investimento.",
+      iconName: "Calendar"
+    },
+    {
+      question: "O backtesting é preciso?",
+      answer: "Utilizamos dados históricos reais de preços e dividend yield médio histórico pagos pelas empresas da B3. As simulações não consideram custos de transação e spread e não incluem impostos. Os resultados são uma aproximação precisa do desempenho histórico real.",
+      iconName: "Shield"
+    },
+    {
+      question: "Preciso ser Premium para usar?",
+      answer: "Sim, o backtesting de carteiras é uma funcionalidade Premium. Isso permite acesso a simulações ilimitadas, métricas avançadas e análise detalhada de performance histórica.",
+      iconName: "Crown"
+    }
+  ]
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-emerald-950/10 dark:via-background dark:to-teal-950/10">
       {/* Hero Section */}
@@ -428,8 +461,38 @@ export default function BacktestingCarteirasPage() {
         </div>
       </section>
 
+      {/* FAQ Section - Apenas para usuários deslogados */}
+      {!session && (
+        <FAQSection
+          title="Perguntas Frequentes sobre Backtesting"
+          description="Tire suas dúvidas sobre simulação histórica de carteiras"
+          faqs={faqs}
+        />
+      )}
+
       {/* Footer */}
       <Footer />
+
+      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
+      {!session && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": faqs.map(faq => ({
+                "@type": "Question",
+                "name": faq.question,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": faq.answer
+                }
+              }))
+            })
+          }}
+        />
+      )}
 
       {/* Schema Markup for SEO */}
       <script

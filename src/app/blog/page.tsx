@@ -1,4 +1,6 @@
 import { Metadata } from "next"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { Footer } from "@/components/footer"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { CTASection } from "@/components/landing/cta-section"
@@ -33,10 +35,45 @@ export const metadata: Metadata = {
 }
 
 export default async function BlogPage() {
+  const session = await getServerSession(authOptions)
+  
   // Carregar dados do servidor
   const allPosts = await getAllPosts()
   const categories = await getCategoryCounts()
   const featuredPost = await getFeaturedPost()
+  
+  const faqs = [
+    {
+      question: "Com que frequência são publicados novos artigos?",
+      answer: "Publicamos novos artigos regularmente, sempre focados em trazer conteúdo de qualidade sobre análise fundamentalista, estratégias de investimento e uso da plataforma. Assine nossa newsletter para ser notificado sobre novos conteúdos.",
+      iconName: "Clock"
+    },
+    {
+      question: "Os artigos são adequados para iniciantes?",
+      answer: "Sim! Nosso blog é pensado para investidores de todos os níveis. Temos artigos introdutórios sobre conceitos básicos, bem como conteúdos avançados sobre metodologias complexas de valuation e análise técnica.",
+      iconName: "Users"
+    },
+    {
+      question: "Posso sugerir temas para artigos?",
+      answer: "Sim! Estamos sempre abertos a sugestões de temas. Entre em contato conosco através da página de contato e compartilhe suas ideias. Valorizamos muito o feedback da nossa comunidade.",
+      iconName: "Brain"
+    },
+    {
+      question: "Os artigos são gratuitos?",
+      answer: "Sim! Todo o conteúdo do blog é 100% gratuito e acessível para todos. Nosso objetivo é democratizar o conhecimento sobre análise fundamentalista e investimentos.",
+      iconName: "DollarSign"
+    },
+    {
+      question: "Como posso encontrar artigos sobre um tema específico?",
+      answer: "Você pode usar a busca no topo da página ou filtrar por categorias. Temos categorias como 'Análise Fundamentalista', 'Estratégias de Investimento', 'Como Usar a Plataforma' e mais.",
+      iconName: "Search"
+    },
+    {
+      question: "Os artigos são baseados em metodologias científicas?",
+      answer: "Sim! Todos os nossos artigos são baseados em metodologias consagradas de análise fundamentalista, como Graham, Dividend Yield, Fórmula Mágica de Greenblatt, FCD, Gordon e outras. Sempre citamos fontes e referências acadêmicas quando aplicável.",
+      iconName: "Award"
+    }
+  ]
 
   // Schema markup para Blog
   const blogSchema = {
@@ -58,6 +95,27 @@ export default async function BlogPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(blogSchema) }}
       />
+      
+      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
+      {!session && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": faqs.map(faq => ({
+                "@type": "Question",
+                "name": faq.question,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": faq.answer
+                }
+              }))
+            })
+          }}
+        />
+      )}
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
         {/* Breadcrumbs */}
         <div className="container mx-auto px-4 pt-6">
@@ -171,43 +229,14 @@ export default async function BlogPage() {
           </div>
         </section>
 
-        {/* FAQ Section */}
-        <FAQSection
-          title="Perguntas Frequentes sobre o Blog"
-          description="Tire suas dúvidas sobre nosso conteúdo educativo"
-          faqs={[
-            {
-              question: "Com que frequência são publicados novos artigos?",
-              answer: "Publicamos novos artigos regularmente, sempre focados em trazer conteúdo de qualidade sobre análise fundamentalista, estratégias de investimento e uso da plataforma. Assine nossa newsletter para ser notificado sobre novos conteúdos.",
-              iconName: "Clock"
-            },
-            {
-              question: "Os artigos são adequados para iniciantes?",
-              answer: "Sim! Nosso blog é pensado para investidores de todos os níveis. Temos artigos introdutórios sobre conceitos básicos, bem como conteúdos avançados sobre metodologias complexas de valuation e análise técnica.",
-              iconName: "Users"
-            },
-            {
-              question: "Posso sugerir temas para artigos?",
-              answer: "Sim! Estamos sempre abertos a sugestões de temas. Entre em contato conosco através da página de contato e compartilhe suas ideias. Valorizamos muito o feedback da nossa comunidade.",
-              iconName: "Brain"
-            },
-            {
-              question: "Os artigos são gratuitos?",
-              answer: "Sim! Todo o conteúdo do blog é 100% gratuito e acessível para todos. Nosso objetivo é democratizar o conhecimento sobre análise fundamentalista e investimentos.",
-              iconName: "DollarSign"
-            },
-            {
-              question: "Como posso encontrar artigos sobre um tema específico?",
-              answer: "Você pode usar a busca no topo da página ou filtrar por categorias. Temos categorias como 'Análise Fundamentalista', 'Estratégias de Investimento', 'Como Usar a Plataforma' e mais.",
-              iconName: "Search"
-            },
-            {
-              question: "Os artigos são baseados em metodologias científicas?",
-              answer: "Sim! Todos os nossos artigos são baseados em metodologias consagradas de análise fundamentalista, como Graham, Dividend Yield, Fórmula Mágica de Greenblatt, FCD, Gordon e outras. Sempre citamos fontes e referências acadêmicas quando aplicável.",
-              iconName: "Award"
-            }
-          ]}
-        />
+        {/* FAQ Section - Apenas para usuários deslogados */}
+        {!session && (
+          <FAQSection
+            title="Perguntas Frequentes sobre o Blog"
+            description="Tire suas dúvidas sobre nosso conteúdo educativo"
+            faqs={faqs}
+          />
+        )}
 
         {/* CTA Section */}
         <CTASection

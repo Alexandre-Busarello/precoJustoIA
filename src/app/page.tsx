@@ -41,9 +41,11 @@ import { FAQSection } from "@/components/landing/faq-section"
 import { SocialProof } from "@/components/landing/social-proof"
 import { FloatingCTA } from "@/components/landing/floating-cta"
 
+const anoAtual = new Date().getFullYear()
+
 export const metadata: Metadata = {
-  title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI - Investimentos Bovespa",
-  description: "Descubra as melhores ações da Bovespa com análise fundamentalista automatizada e IA. 8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica) em +350 empresas B3. Rankings instantâneos, comparador de ações e backtesting. Comece grátis!",
+  title: `Análise Fundamentalista de Ações B3 ${anoAtual} com IA | Preço Justo AI - Investimentos Bovespa`,
+  description: `Descubra as melhores ações da Bovespa ${anoAtual} com análise fundamentalista automatizada e IA. 8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica) em +350 empresas B3. Rankings instantâneos, comparador de ações e backtesting. Comece grátis!`,
   keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, valuation ações, como investir em ações, melhores ações B3, análise de ações grátis, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações, comparador ações bovespa, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista, backtesting carteiras, screening ações B3",
   authors: [{ name: "Alexandre Busarello", url: "https://precojusto.ai/fundador" }],
   creator: "Alexandre Busarello",
@@ -1231,6 +1233,46 @@ export default async function Home() {
         />
       )}
 
+      {/* FAQ Section - Apenas para usuários deslogados */}
+      {!session && (
+        <FAQSection
+          title="Perguntas Frequentes"
+          description="Tire suas dúvidas sobre análise fundamentalista e nossa plataforma"
+          faqs={[
+            {
+              question: "Como funciona a análise fundamentalista?",
+              answer: "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros.",
+              iconName: "Brain"
+            },
+            {
+              question: "Os dados são confiáveis?",
+              answer: "Sim! Utilizamos dados fornecidos pela BRAPI, que consolida informações oficiais da B3 e demonstrações financeiras auditadas. Nossos algoritmos são baseados em metodologias consagradas por investidores como Benjamin Graham e Joel Greenblatt.",
+              iconName: "Shield"
+            },
+            {
+              question: "Preciso pagar para usar?",
+              answer: "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 21,90/mês, sem fidelidade.",
+              iconName: "DollarSign"
+            },
+            {
+              question: "Como encontrar ações subvalorizadas na B3?",
+              answer: "Use nossos rankings que aplicam múltiplos modelos de valuation automaticamente. Ações com preço abaixo do preço justo calculado e com scores de qualidade altos são as melhores oportunidades.",
+              iconName: "Target"
+            },
+            {
+              question: "Os rankings são atualizados em tempo real?",
+              answer: "Sim! Nossos dados são atualizados regularmente com base nas informações mais recentes da B3. Preços são atualizados diariamente e dados financeiros são atualizados conforme novos balanços são publicados.",
+              iconName: "TrendingUp"
+            },
+            {
+              question: "Posso comparar múltiplas ações ao mesmo tempo?",
+              answer: "Sim! Nosso comparador permite analisar até 6 ações simultaneamente, vendo indicadores financeiros, valuation e scores lado a lado para facilitar sua decisão de investimento.",
+              iconName: "BarChart3"
+            }
+          ]}
+        />
+      )}
+
       {/* Footer */}
       <Footer />
 
@@ -1340,7 +1382,7 @@ export default async function Home() {
                 "query-input": "required name=search_term_string"
               }
             },
-            {
+            ...(!session ? [{
               "@context": "https://schema.org",
               "@type": "FAQPage",
               "mainEntity": [
@@ -1367,9 +1409,33 @@ export default async function Home() {
                     "@type": "Answer",
                     "text": "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 21,90/mês, sem fidelidade."
                   }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Como encontrar ações subvalorizadas na B3?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Use nossos rankings que aplicam múltiplos modelos de valuation automaticamente. Ações com preço abaixo do preço justo calculado e com scores de qualidade altos são as melhores oportunidades."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Os rankings são atualizados em tempo real?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Sim! Nossos dados são atualizados regularmente com base nas informações mais recentes da B3. Preços são atualizados diariamente e dados financeiros são atualizados conforme novos balanços são publicados."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Posso comparar múltiplas ações ao mesmo tempo?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Sim! Nosso comparador permite analisar até 6 ações simultaneamente, vendo indicadores financeiros, valuation e scores lado a lado para facilitar sua decisão de investimento."
+                  }
                 }
               ]
-            }
+            }] : [])
           ])
         }}
       />

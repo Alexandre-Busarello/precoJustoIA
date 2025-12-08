@@ -320,6 +320,61 @@ export default async function RadarDividendosPage() {
       )}
 
       {!isLoggedIn && <Footer />}
+
+      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
+      {!isLoggedIn && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": [
+                {
+                  "@type": "Question",
+                  "name": "Como funciona a projeção de dividendos com IA?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Nossa IA analisa o histórico completo de proventos de cada empresa, identificando padrões e tendências. Baseado nessa análise, projetamos os dividendos dos próximos 12 meses com maior precisão do que métodos tradicionais."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "O radar de dividendos é gratuito?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Sim! O radar básico é 100% gratuito. Você pode ver projeções de dividendos, calendário de proventos e informações básicas sem precisar criar conta. Usuários Premium têm acesso a recursos avançados."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Como evitar dividend traps?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Dividend traps são empresas com dividend yield alto mas insustentável. Nosso radar identifica empresas com payout ratio alto, dívida excessiva ou margens em queda, ajudando você a evitar essas armadilhas."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Com que frequência os dados são atualizados?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Nossos dados são atualizados regularmente com base nos anúncios de proventos das empresas. Trabalhamos para garantir que você sempre tenha acesso às informações mais recentes sobre dividendos."
+                  }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Quais empresas pagam mais dividendos?",
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Empresas de setores como financeiro, energia e utilities tradicionalmente pagam dividendos mais altos. Use nosso radar para encontrar as empresas com maior dividend yield e histórico consistente."
+                  }
+                }
+              ]
+            })
+          }}
+        />
+      )}
     </div>
   )
 }

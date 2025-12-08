@@ -96,11 +96,28 @@ export function IndexRealTimeReturn({
     ? 'text-green-600 dark:text-green-400'
     : 'text-red-600 dark:text-red-400';
 
-  const lastUpdateDate = new Date(data.lastOfficialDate);
+  // IMPORTANTE: data.lastOfficialDate vem como string ISO do servidor
+  // Precisamos interpretá-la corretamente usando timezone de Brasília
+  // A string ISO pode estar em UTC, então precisamos extrair apenas a parte da data
+  // e criar uma data local usando timezone de Brasília
+  
+  // Extrair componentes da data ISO (assumindo formato YYYY-MM-DD ou ISO string)
+  let lastUpdateDate: Date;
+  if (data.lastOfficialDate.includes('T')) {
+    // É uma ISO string completa - extrair apenas a parte da data
+    const dateOnly = data.lastOfficialDate.split('T')[0];
+    const [year, month, day] = dateOnly.split('-').map(Number);
+    // Criar data usando componentes locais (será interpretada no timezone do cliente)
+    // Mas vamos formatar usando timezone de Brasília para garantir consistência
+    lastUpdateDate = new Date(year, month - 1, day);
+  } else {
+    // Já é apenas a data (YYYY-MM-DD)
+    const [year, month, day] = data.lastOfficialDate.split('-').map(Number);
+    lastUpdateDate = new Date(year, month - 1, day);
+  }
   
   // Verificar se o último fechamento é de hoje (horário de Brasília)
   // IMPORTANTE: Se não for de hoje, significa que estamos usando dados do dia anterior
-  const now = new Date();
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
@@ -108,6 +125,7 @@ export function IndexRealTimeReturn({
     day: '2-digit',
   });
   
+  const now = new Date();
   const todayParts = formatter.formatToParts(now);
   const todayYear = parseInt(todayParts.find(p => p.type === 'year')?.value || '0', 10);
   const todayMonth = parseInt(todayParts.find(p => p.type === 'month')?.value || '0', 10) - 1;
@@ -120,7 +138,12 @@ export function IndexRealTimeReturn({
   
   const isToday = todayYear === lastYear && todayMonth === lastMonth && todayDay === lastDay;
   
-  // Formatar data usando timezone de Brasília para evitar problemas de conversão
+  // Verificar se já temos dados oficiais de hoje
+  // Se o último fechamento é de hoje E o mercado está fechado, provavelmente já temos dados oficiais
+  // Caso contrário, se é hoje mas mercado aberto, ainda não temos dados oficiais
+  const hasOfficialDataToday = isToday && !data.isMarketOpen;
+  
+  // Formatar data usando timezone de Brasília para exibição
   const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
@@ -187,7 +210,9 @@ export function IndexRealTimeReturn({
                 <p>
                   Esta rentabilidade é calculada em tempo real usando preços
                   atuais dos ativos e{' '}
-                  {isToday
+                  {hasOfficialDataToday
+                    ? `último fechamento oficial de ${formattedDate}`
+                    : isToday && data.isMarketOpen
                     ? 'será atualizada oficialmente após o fechamento do mercado'
                     : `último fechamento oficial de ${formattedDate}`}
                   . A pontuação oficial do índice é atualizada diariamente às

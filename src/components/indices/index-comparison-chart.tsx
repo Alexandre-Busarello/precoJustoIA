@@ -25,6 +25,7 @@ interface IndexComparisonChartProps {
   indexHistory: Array<{ 
     date: string; 
     points: number;
+    dailyChange?: number | null;
     dividendsReceived?: number | null;
     dividendsByTicker?: Record<string, number> | null;
   }>;
@@ -140,10 +141,11 @@ export function IndexComparisonChart({
     const startDate = indexHistory[0].date;
     const endDate = indexHistory[indexHistory.length - 1].date;
 
-    // Manter pontos reais do índice (não normalizar) e incluir dividendos
+    // Manter pontos reais do índice (não normalizar) e incluir dividendos e variação diária
     const indexPoints = indexHistory.map(point => ({
       date: point.date,
       index: point.points,
+      dailyChange: point.dailyChange || null,
       dividendsReceived: point.dividendsReceived || null,
       dividendsByTicker: point.dividendsByTicker || null
     }));
@@ -363,6 +365,7 @@ export function IndexComparisonChart({
     const dataMap = new Map<string, { 
       date: string; 
       index: number; 
+      dailyChange: number | null;
       benchmark: number | null;
       dividendsReceived: number | null;
       dividendsByTicker: Record<string, number> | null;
@@ -372,6 +375,7 @@ export function IndexComparisonChart({
       dataMap.set(point.date, {
         date: point.date,
         index: point.index,
+        dailyChange: point.dailyChange,
         benchmark: null,
         dividendsReceived: point.dividendsReceived,
         dividendsByTicker: point.dividendsByTicker
@@ -427,6 +431,7 @@ export function IndexComparisonChart({
           dataMap.set(benchmarkPoint.date, {
             date: benchmarkPoint.date,
             index: closestIndexPoint.index,
+            dailyChange: closestIndexPoint.dailyChange,
             benchmark: benchmarkPoint.value,
             dividendsReceived: closestIndexPoint.dividendsReceived,
             dividendsByTicker: closestIndexPoint.dividendsByTicker
@@ -499,6 +504,7 @@ export function IndexComparisonChart({
     if (!active || !payload || payload.length === 0) return null;
 
     const data = payload[0].payload;
+    const dailyChange = data?.dailyChange;
     const dividendsReceived = data?.dividendsReceived;
     const dividendsByTicker = data?.dividendsByTicker;
 
@@ -510,6 +516,13 @@ export function IndexComparisonChart({
             {entry.name}: {formatTooltipValue(entry.value)}
           </p>
         ))}
+        {dailyChange !== null && dailyChange !== undefined && (
+          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <p className={`text-xs font-semibold ${dailyChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              Variação do Dia: {dailyChange >= 0 ? '+' : ''}{dailyChange.toFixed(2)}%
+            </p>
+          </div>
+        )}
         {dividendsReceived && dividendsReceived > 0 && (
           <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
             <p className="text-xs text-green-600 dark:text-green-400 font-semibold">

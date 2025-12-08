@@ -32,7 +32,10 @@ export async function GET(
 
     const logs = await prisma.indexRebalanceLog.findMany({
       where: { indexId: index.id },
-      orderBy: { date: 'desc' },
+      orderBy: [
+        { date: 'desc' },        // Mais recente primeiro entre dias diferentes
+        { createdAt: 'asc' }     // Mais antigo primeiro dentro do mesmo dia (ordem cronológica)
+      ],
       take: limit,
       select: {
         id: true,

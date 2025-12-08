@@ -156,7 +156,10 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
   const [history, logs] = await Promise.all([
     prisma.indexHistoryPoints.findMany({
       where: { indexId: index.id },
-      orderBy: { date: 'asc' },
+      orderBy: [
+        { date: 'desc' },      // Mais recente primeiro
+        { createdAt: 'desc' }   // Dentro do mesmo dia, mais recente primeiro
+      ],
       select: {
         date: true,
         points: true,
@@ -168,7 +171,10 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
     }),
     prisma.indexRebalanceLog.findMany({
       where: { indexId: index.id },
-      orderBy: { date: 'desc' },
+      orderBy: [
+        { date: 'desc' },        // Mais recente primeiro entre dias diferentes
+        { createdAt: 'asc' }     // Mais antigo primeiro dentro do mesmo dia (ordem cronológica)
+      ],
       take: 50,
       select: {
         id: true,
@@ -181,9 +187,12 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
   ])
 
   // Buscar benchmarks usando o serviço diretamente
-  const startDate = history.length > 0 ? history[0].date : new Date()
+  // Com ordenação descendente: history[0] é o mais recente, history[history.length - 1] é o mais antigo
+  const startDate = history.length > 0 
+    ? history[history.length - 1].date  // Mais antigo (primeira data)
+    : new Date()
   const lastHistoryDate = history.length > 0 
-    ? history[history.length - 1].date
+    ? history[0].date  // Mais recente (última data)
     : new Date()
   
   // Expandir endDate para incluir alguns dias a mais (até hoje)
@@ -216,14 +225,19 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
     return `${year}-${month}-${day}`;
   };
 
-  const historyData = history.map(h => ({
-    date: formatDateLocal(h.date),
-    points: h.points,
-    dailyChange: h.dailyChange,
-    currentYield: h.currentYield,
-    dividendsReceived: h.dividendsReceived ? Number(h.dividendsReceived) : null,
-    dividendsByTicker: h.dividendsByTicker as Record<string, number> | null,
-  }))
+  // Converter histórico para formato necessário
+  // O histórico vem ordenado por date desc e createdAt desc (mais recente primeiro)
+  // Para o gráfico, precisamos ordem cronológica (mais antigo primeiro), então invertemos
+  const historyData = [...history]
+    .reverse() // Inverter para ordem cronológica (mais antigo primeiro) para o gráfico
+    .map(h => ({
+      date: formatDateLocal(h.date),
+      points: h.points,
+      dailyChange: h.dailyChange,
+      currentYield: h.currentYield,
+      dividendsReceived: h.dividendsReceived ? Number(h.dividendsReceived) : null,
+      dividendsByTicker: h.dividendsByTicker as Record<string, number> | null,
+    }))
 
   const logsData = logs.map(log => ({
     id: log.id,

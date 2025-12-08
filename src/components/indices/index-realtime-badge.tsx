@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Clock, TrendingUp, TrendingDown, Radio } from 'lucide-react';
 import { fetchRealTimeReturnWithCache, getCachedRealTimeReturn } from '@/lib/index-realtime-cache';
+import { isBrazilMarketOpen } from '@/lib/market-status-client';
 
 interface RealTimeReturnData {
   dailyChange: number;
@@ -34,8 +35,17 @@ export function IndexRealTimeBadge({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const hasFetchedRef = useRef(false); // Evitar múltiplos fetches
+  
+  // Verificar se mercado está aberto - se não estiver, não mostrar badge
+  const marketOpen = isBrazilMarketOpen();
 
   useEffect(() => {
+    // Se mercado fechado, não fazer fetch e não mostrar badge
+    if (!marketOpen) {
+      setIsLoading(false);
+      return;
+    }
+    
     // Se já fez fetch, não fazer novamente
     if (hasFetchedRef.current) {
       return;
@@ -93,8 +103,13 @@ export function IndexRealTimeBadge({
     return () => {
       mounted = false;
     };
-  }, [ticker]);
+  }, [ticker, marketOpen]);
 
+  // Se mercado fechado, não mostrar badge
+  if (!marketOpen) {
+    return null;
+  }
+  
   // Se ainda está carregando, mostrar badge de "Calculando"
   if (isLoading) {
     return (
@@ -120,52 +135,7 @@ export function IndexRealTimeBadge({
     return null;
   }
 
-  // Se mercado está fechado, mostrar última variação disponível se existir
-  if (!realTimeData.isMarketOpen) {
-    // Se não há última variação disponível, não mostrar badge
-    if (realTimeData.lastAvailableDailyChange === undefined || realTimeData.lastAvailableDailyChange === null) {
-      return null;
-    }
-    
-    // Mostrar última variação disponível (do último pregão)
-    const isPositive = realTimeData.lastAvailableDailyChange >= 0;
-    const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
-    const changeColor = isPositive
-      ? 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
-      : 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20';
-
-    const tooltipText = `Última variação disponível: ${isPositive ? '+' : ''}${realTimeData.lastAvailableDailyChange.toFixed(2)}% do último pregão.`;
-
-    return (
-      <TooltipProvider>
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <Badge
-              variant="outline"
-              className={`text-xs ${changeColor} relative group flex items-center gap-1`}
-            >
-              <ChangeIcon className="h-3 w-3 flex-shrink-0" />
-              <span className="hidden md:inline whitespace-nowrap">
-                {isPositive ? '+' : ''}
-                {realTimeData.lastAvailableDailyChange.toFixed(2)}%
-              </span>
-              <span className="md:hidden whitespace-nowrap">
-                {isPositive ? '+' : ''}
-                {realTimeData.lastAvailableDailyChange.toFixed(2)}%
-              </span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[260px] text-xs p-2">
-            <p className="font-semibold mb-1.5">Última Variação Disponível</p>
-            <p className="text-muted-foreground leading-relaxed">
-              {tooltipText}
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
+  // Este componente só é renderizado quando mercado está aberto
   // Mostrar variação do dia em tempo real (mercado aberto)
   const isPositive = realTimeData.dailyChange >= 0;
   const ChangeIcon = isPositive ? TrendingUp : TrendingDown;

@@ -8,8 +8,8 @@
 import { prisma } from '@/lib/prisma';
 import { runScreening, compareComposition, generateRebalanceReason, filterByQuality, getLastScreeningDetails } from './index-screening-engine';
 import { updateIndexPoints, fixIndexStartingPoint, checkMarketWasOpen } from './index-engine';
-import { toNumber } from './strategies/base-strategy';
 import { getYahooHistoricalPrice } from './quote-service';
+import { getTodayInBrazil } from './market-status';
 
 /**
  * Verifica se o mercado B3 está aberto no momento atual (horário de Brasília)
@@ -49,9 +49,9 @@ export async function getHistoricalPricesForDate(
 ): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
   
-  // Normalizar data (sem hora)
-  const date = new Date(targetDate);
-  date.setHours(0, 0, 0, 0);
+  // Normalizar data usando timezone de Brasília
+  // A data recebida já deve estar normalizada, mas vamos garantir
+  const date = targetDate;
   
   for (const ticker of tickers) {
     const company = await prisma.company.findUnique({
@@ -138,10 +138,10 @@ export async function getOpeningPriceForNextDay(
 ): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
   
-  // Calcular data do dia seguinte
+  // Calcular data do dia seguinte usando UTC para evitar problemas de timezone
   const nextDate = new Date(currentDate);
-  nextDate.setDate(nextDate.getDate() + 1);
-  nextDate.setHours(0, 0, 0, 0);
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+  nextDate.setUTCHours(0, 0, 0, 0);
   
   for (const ticker of tickers) {
     const company = await prisma.company.findUnique({
@@ -268,9 +268,8 @@ export async function updateCompositionWithHistoricalPrices(
       newComposition.forEach((c: any) => weights.set(c.ticker, equalWeight));
     }
 
-    // Normalizar data
-    const date = new Date(targetDate);
-    date.setHours(0, 0, 0, 0);
+    // Usar a data recebida diretamente (já deve estar normalizada)
+    const date = targetDate;
 
     // Identificar quais ativos são novos (entradas)
     const entryTickers = new Set(
@@ -414,24 +413,49 @@ export async function regenerateRebalanceForDate(
   errors: string[];
 }> {
   try {
-    // Normalizar data (garantir que seja data local, não UTC)
+    // Normalizar data usando timezone de Brasília
     let date: Date;
     if (targetDate instanceof Date) {
-      date = new Date(targetDate);
-      date.setHours(0, 0, 0, 0);
+      // Se já é uma Date, usar diretamente (assumindo que já está normalizada)
+      date = targetDate;
     } else {
       const dateStr = String(targetDate);
       if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Criar data a partir de string YYYY-MM-DD usando timezone de Brasília
         const [year, month, day] = dateStr.split('-').map(Number);
-        date = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        });
+        const now = new Date();
+        const parts = formatter.formatToParts(now);
+        // Criar data UTC que representa o início do dia em Brasília
+        // Usar mesma lógica de getTodayInBrazil
+        const testDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+        const testParts = formatter.formatToParts(testDate);
+        const testHour = parseInt(testParts.find(p => p.type === 'hour')?.value || '0', 10);
+        const offset = 12 - testHour;
+        const utcHour = 0 + offset;
+        date = new Date(Date.UTC(year, month - 1, day, utcHour, 0, 0, 0));
       } else {
         date = new Date(targetDate);
-        date.setHours(0, 0, 0, 0);
       }
     }
     
-    date.setHours(0, 0, 0, 0);
-    const targetDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    // Formatar string da data usando timezone de Brasília
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+    const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10);
+    const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+    const targetDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     // Buscar índice
     const index = await prisma.indexDefinition.findUnique({
@@ -473,26 +497,23 @@ export async function regenerateRebalanceForDate(
       // 0. DELETAR TUDO que existe da data alvo em diante (forçar recriação completa)
       console.log(`🗑️ [REBALANCE DATE] Deletando TODOS os dados existentes de ${targetDateStr} em diante para recriação completa`);
       
-      const dateForDelete = new Date(date);
-      dateForDelete.setHours(0, 0, 0, 0);
-      
-      // Deletar pontos históricos
+      // Deletar pontos históricos (usar date diretamente, já normalizado)
       const deletedPoints = await prisma.indexHistoryPoints.deleteMany({
         where: {
           indexId,
           date: {
-            gte: dateForDelete
+            gte: date
           }
         }
       });
       console.log(`🗑️ [REBALANCE DATE] Deletados ${deletedPoints.count} ponto(s) histórico(s)`);
       
-      // Deletar logs de rebalanceamento
+      // Deletar logs de rebalanceamento (usar date diretamente)
       const deletedLogs = await prisma.indexRebalanceLog.deleteMany({
         where: {
           indexId,
           date: {
-            gte: dateForDelete
+            gte: date
           }
         }
       });
@@ -596,12 +617,23 @@ export async function regenerateRebalanceForDate(
       const endDate = (date.getTime() === todayDate.getTime() && marketOpenToday)
         ? (() => {
             const yesterday = new Date(todayDate);
-            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
             return yesterday;
           })()
         : todayDate;
       
-      const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+      // Formatar endDate usando timezone de Brasília
+      const endDateFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const endDateParts = endDateFormatter.formatToParts(endDate);
+      const endYear = parseInt(endDateParts.find(p => p.type === 'year')?.value || '0', 10);
+      const endMonth = parseInt(endDateParts.find(p => p.type === 'month')?.value || '0', 10);
+      const endDay = parseInt(endDateParts.find(p => p.type === 'day')?.value || '0', 10);
+      const endDateStr = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
       
       if (date.getTime() === todayDate.getTime() && marketOpenToday) {
         console.log(`📊 [REBALANCE DATE] Mercado aberto hoje, calculando apenas até ${endDateStr} (ontem)`);
@@ -612,17 +644,26 @@ export async function regenerateRebalanceForDate(
       const errors: string[] = [];
       let recalculatedDays = 0;
       let currentDate = new Date(date);
-      currentDate.setDate(currentDate.getDate() + 1); // Começar do dia seguinte ao DIA 1
-      currentDate.setHours(0, 0, 0, 0);
+      currentDate.setUTCDate(currentDate.getUTCDate() + 1); // Começar do dia seguinte ao DIA 1
+      currentDate.setUTCHours(0, 0, 0, 0);
 
       // Loop para cada dia útil a partir do DIA 2
       while (currentDate <= endDate) {
         try {
-          // Verificar se é dia útil (segunda a sexta)
-          const dayOfWeek = currentDate.getDay();
+          // Verificar se é dia útil usando timezone de Brasília
+          const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Sao_Paulo',
+            weekday: 'short',
+          });
+          const weekday = weekdayFormatter.format(currentDate);
+          const dayMap: Record<string, number> = {
+            Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
+          };
+          const dayOfWeek = dayMap[weekday] ?? 0;
+          
           if (dayOfWeek === 0 || dayOfWeek === 6) {
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+            currentDate.setUTCHours(0, 0, 0, 0);
             continue;
           }
 
@@ -804,9 +845,9 @@ export async function regenerateRebalanceForDate(
           errors.push(`Erro ao processar ${currentDateStr}: ${errorMsg}`);
         }
 
-        // Avançar para o próximo dia útil
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDate.setHours(0, 0, 0, 0);
+        // Avançar para o próximo dia útil usando UTC
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        currentDate.setUTCHours(0, 0, 0, 0);
       }
       
       console.log(`\n📊 [REBALANCE DATE] Processamento concluído: ${recalculatedDays} dias processados após DIA 1, ${errors.length} erros`);
@@ -826,14 +867,11 @@ export async function regenerateRebalanceForDate(
       // Deletar todos os pontos históricos da data alvo em diante
       console.log(`🗑️ [REBALANCE DATE] Deletando todos os pontos históricos de ${targetDateStr} em diante`);
       
-      const dateForRecalcQuery = new Date(date);
-      dateForRecalcQuery.setHours(0, 0, 0, 0);
-      
       const deletedCount = await prisma.indexHistoryPoints.deleteMany({
         where: {
           indexId,
           date: {
-            gte: dateForRecalcQuery
+            gte: date
           }
         }
       });
@@ -841,19 +879,30 @@ export async function regenerateRebalanceForDate(
       console.log(`🗑️ [REBALANCE DATE] Deletados ${deletedCount.count} pontos existentes`);
 
       // Determinar data limite (hoje ou ontem se mercado aberto)
-      const todayDate = new Date();
-      todayDate.setHours(0, 0, 0, 0);
+      // Usar getTodayInBrazil para garantir timezone correto
+      const todayDate = getTodayInBrazil();
       
       const marketOpenToday = isBrazilMarketOpen();
       const endDate = (date.getTime() === todayDate.getTime() && marketOpenToday)
         ? (() => {
             const yesterday = new Date(todayDate);
-            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
             return yesterday;
           })()
         : todayDate;
       
-      const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+      // Formatar endDate usando timezone de Brasília
+      const endDateFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const endDateParts = endDateFormatter.formatToParts(endDate);
+      const endYear = parseInt(endDateParts.find(p => p.type === 'year')?.value || '0', 10);
+      const endMonth = parseInt(endDateParts.find(p => p.type === 'month')?.value || '0', 10);
+      const endDay = parseInt(endDateParts.find(p => p.type === 'day')?.value || '0', 10);
+      const endDateStr = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
       
       if (date.getTime() === todayDate.getTime() && marketOpenToday) {
         console.log(`📊 [REBALANCE DATE] Mercado aberto hoje, calculando apenas até ${endDateStr} (ontem)`);
@@ -864,22 +913,30 @@ export async function regenerateRebalanceForDate(
       const errors: string[] = [];
       let recalculatedDays = 0;
       let currentDate = new Date(date);
-      currentDate.setHours(0, 0, 0, 0);
+      currentDate.setUTCHours(0, 0, 0, 0);
 
       // Loop para cada dia útil a partir da data alvo
       while (currentDate <= endDate) {
         try {
-          // Verificar se é dia útil (segunda a sexta)
-          const dayOfWeek = currentDate.getDay();
+          // Verificar se é dia útil usando timezone de Brasília
+          const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Sao_Paulo',
+            weekday: 'short',
+          });
+          const weekday = weekdayFormatter.format(currentDate);
+          const dayMap: Record<string, number> = {
+            Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
+          };
+          const dayOfWeek = dayMap[weekday] ?? 0;
+          
           if (dayOfWeek === 0 || dayOfWeek === 6) {
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+            currentDate.setUTCHours(0, 0, 0, 0);
             continue;
           }
 
           // Verificar se é o dia atual e se o mercado está aberto
-          const todayDateCheck = new Date();
-          todayDateCheck.setHours(0, 0, 0, 0);
+          const todayDateCheck = getTodayInBrazil();
           const isCurrentDateToday = currentDate.getTime() === todayDateCheck.getTime();
           if (isCurrentDateToday && isBrazilMarketOpen()) {
             console.log(`⏸️ [REBALANCE DATE] Mercado aberto hoje (${currentDate.toISOString().split('T')[0]}), pulando cálculo para hoje`);
@@ -1057,9 +1114,9 @@ export async function regenerateRebalanceForDate(
           errors.push(`Erro ao processar ${currentDateStr}: ${errorMsg}`);
         }
 
-        // Avançar para o próximo dia útil
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDate.setHours(0, 0, 0, 0);
+        // Avançar para o próximo dia útil usando UTC
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        currentDate.setUTCHours(0, 0, 0, 0);
       }
       
       console.log(`\n📊 [REBALANCE DATE] Processamento concluído: ${recalculatedDays} dias processados, ${errors.length} erros`);

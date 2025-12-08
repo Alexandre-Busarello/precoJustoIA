@@ -12,7 +12,11 @@
  * - TTL (Time To Live) configurável
  * - Logs detalhados para debugging
  * - Reconexão automática do Redis
- * 
+ */
+
+import 'server-only';
+
+/**
  * GESTÃO DE CONEXÕES (melhorias v2 + Serverless):
  * - Singleton real: UMA única conexão Redis compartilhada POR INSTÂNCIA
  * - Mutex de inicialização: evita race conditions
@@ -74,7 +78,6 @@ export interface CacheItem<T = any> {
 let redisClient: any | null = null
 let redisConnected = false
 let reconnectAttempts = 0
-const MAX_RECONNECT_ATTEMPTS = 5
 
 // Controle de inicialização (evita múltiplas conexões)
 let initializationPromise: Promise<void> | null = null

@@ -35,6 +35,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Configuração para Turbopack: excluir pacotes que usam módulos Node.js do bundle do cliente
+  serverExternalPackages: [
+    '@deno/shim-deno',
+    'redis',
+    '@redis/client',
+    'yahoo-finance2',
+  ],
   async redirects() {
     return [
       // {

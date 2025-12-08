@@ -109,3 +109,4 @@ Os dividendos são buscados usando a função `getDividendsForDate()` que:
 **Importante**: No mercado brasileiro, o ex-date é o próprio dia em que o preço já está ajustado (já foi descontado no pregão). Portanto, ao calcular pontos para 04/12, buscamos dividendos com `exDate = 04/12`.
 
 
+

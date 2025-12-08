@@ -9,6 +9,8 @@
  * em rotas críticas (como registro, login, etc).
  */
 
+import 'server-only';
+
 import { NextRequest, NextResponse } from 'next/server'
 import { RateLimitMiddleware, RATE_LIMIT_CONFIGS } from './rate-limit-middleware'
 

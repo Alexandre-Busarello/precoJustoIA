@@ -9,6 +9,8 @@
  * - Honeypot e validações adicionais
  */
 
+import 'server-only';
+
 import { NextRequest } from 'next/server'
 import { rateLimitCache } from './rate-limit-cache-service'
 

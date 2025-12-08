@@ -5,12 +5,14 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
 import { IndexSparkline } from './index-sparkline';
 import { IndexRealTimeBadge } from './index-realtime-badge';
+import { isBrazilMarketOpen } from '@/lib/market-status-client';
 
 interface IndexCardProps {
   ticker: string;
@@ -43,6 +45,18 @@ export function IndexCard({
   // Para variação do dia, se disponível
   const hasDailyChange = dailyChange !== null;
   const isDailyPositive = hasDailyChange ? dailyChange >= 0 : null;
+  
+  // Verificar se mercado está aberto e atualizar periodicamente
+  const [marketOpen, setMarketOpen] = useState(() => isBrazilMarketOpen());
+  
+  useEffect(() => {
+    // Atualizar status do mercado a cada minuto
+    const interval = setInterval(() => {
+      setMarketOpen(isBrazilMarketOpen());
+    }, 60000); // 60 segundos
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <Link href={`/indices/${ticker}`}>
@@ -87,12 +101,14 @@ export function IndexCard({
                     {isPositive ? '+' : ''}{accumulatedReturn.toFixed(2)}%
                   </span>
                 </div>
-                {hasDailyChange && (
+                {/* Mostrar badge de tempo real apenas quando mercado aberto */}
+                {marketOpen && <IndexRealTimeBadge ticker={ticker} />}
+                {/* Mostrar variação do dia sem badge apenas quando mercado fechado */}
+                {!marketOpen && hasDailyChange && (
                   <span className={`text-xs ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {isDailyPositive ? '+' : ''}{dailyChange!.toFixed(2)}% hoje
                   </span>
                 )}
-                <IndexRealTimeBadge ticker={ticker} />
               </div>
             </div>
 

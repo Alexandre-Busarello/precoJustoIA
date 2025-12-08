@@ -8,7 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { getLatestPrices, StockPrice, getYahooHistoricalPrice } from '@/lib/quote-service';
 import { getHistoricalPricesForDate } from './index-rebalance-date';
-import { Decimal } from '@prisma/client/runtime/library';
+import { hasIBOVQuoteForDate } from './market-status';
 
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
@@ -43,73 +43,71 @@ export interface IndexDailyReturn {
  * Verifica se houve pregão na B3 para uma data específica
  * Usa IBOVESPA (^BVSP) como referência para determinar se houve pregão
  * 
+ * IMPORTANTE: Sempre usa timezone de Brasília para evitar problemas de conversão
+ * 
  * @param date Data a verificar
  * @returns true se houve pregão, false caso contrário (sábado, domingo ou feriado)
  */
 export async function checkMarketWasOpen(date: Date): Promise<boolean> {
   try {
-    // Normalizar data (sem hora)
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
+    // Normalizar data usando timezone de Brasília para evitar problemas de conversão
+    // A data recebida já deve estar no formato correto (de getTodayInBrazil)
+    // Mas vamos garantir que estamos usando o dia correto no timezone de Brasília
     
-    // Verificar se é sábado (6) ou domingo (0) - ignorar imediatamente
-    const dayOfWeek = targetDate.getDay();
+    // Obter componentes da data no timezone de Brasília
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+    });
+    
+    const parts = formatter.formatToParts(date);
+    const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+    const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1; // month é 0-indexed
+    const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+    const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+    
+    // Verificar se é sábado (6) ou domingo (0) usando o dia da semana em Brasília
+    const dayMap: Record<string, number> = {
+      Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
+    };
+    const dayOfWeek = dayMap[weekday] ?? 0;
+    
     if (dayOfWeek === 0 || dayOfWeek === 6) {
-      console.log(`⏸️ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]} é ${dayOfWeek === 0 ? 'domingo' : 'sábado'}, mercado fechado`);
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      console.log(`⏸️ [MARKET CHECK] ${dateStr} é ${dayOfWeek === 0 ? 'domingo' : 'sábado'}, mercado fechado`);
       return false;
     }
     
     // Se for dia útil (segunda a sexta), verificar se houve pregão consultando IBOVESPA
-    const yahooFinance = await getYahooFinance();
-    const ibovSymbol = '^BVSP'; // IBOVESPA no Yahoo Finance (sem .SA)
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
-    // Buscar dados do dia específico (usar intervalo diário para precisão)
-    const startDate = new Date(targetDate);
-    startDate.setDate(startDate.getDate() - 2); // Buscar alguns dias antes
-    const endDate = new Date(targetDate);
-    endDate.setDate(endDate.getDate() + 1); // Até o dia seguinte
+    const hasQuote = await hasIBOVQuoteForDate(date);
     
-    const result = await yahooFinance.chart(ibovSymbol, {
-      period1: startDate,
-      period2: endDate,
-      interval: '1d', // Dados diários para precisão
-      return: 'array'
-    });
-    
-    // O resultado pode vir como array direto ou como objeto com quotes
-    const quotes = Array.isArray(result) ? result : (result?.quotes || []);
-    
-    if (!quotes || quotes.length === 0) {
-      console.log(`⚠️ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]}: Nenhum dado do IBOVESPA encontrado, assumindo que não houve pregão`);
+    if (hasQuote) {
+      console.log(`✅ [MARKET CHECK] ${dateStr}: Pregão confirmado (IBOVESPA)`);
+      return true;
+    } else {
+      console.log(`⏸️ [MARKET CHECK] ${dateStr}: Nenhuma cotação do IBOVESPA encontrada para esta data exata, assumindo que não houve pregão`);
       return false;
     }
-    
-    // Verificar se há uma cotação exata para a data alvo
-    const targetTime = targetDate.getTime();
-    let foundExactDate = false;
-    
-    for (const quote of quotes) {
-      const quoteDate = new Date(quote.date);
-      quoteDate.setHours(0, 0, 0, 0);
-      
-      // Verificar se a data da cotação corresponde exatamente à data alvo
-      if (quoteDate.getTime() === targetTime) {
-        if (quote.close && quote.close > 0) {
-          foundExactDate = true;
-          console.log(`✅ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]}: Pregão confirmado (IBOVESPA: ${Number(quote.close).toFixed(2)})`);
-          break;
-        }
-      }
-    }
-    
-    if (!foundExactDate) {
-      console.log(`⏸️ [MARKET CHECK] ${targetDate.toISOString().split('T')[0]}: Nenhuma cotação do IBOVESPA encontrada para esta data exata, assumindo que não houve pregão`);
-      return false;
-    }
-    
-    return true;
   } catch (error) {
-    console.error(`❌ [MARKET CHECK] Erro ao verificar pregão para ${date.toISOString().split('T')[0]}:`, error);
+    // Formatar data de erro também usando timezone de Brasília
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+    const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+    const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    
+    console.error(`❌ [MARKET CHECK] Erro ao verificar pregão para ${dateStr}:`, error);
     // Em caso de erro, assumir que não houve pregão para evitar cálculos incorretos
     return false;
   }

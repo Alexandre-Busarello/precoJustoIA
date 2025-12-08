@@ -5,6 +5,8 @@
  * para isolar o rate limiting e evitar impacto no cache geral
  */
 
+import 'server-only';
+
 // Importação condicional do Redis apenas no servidor
 let createClient: any = null
 

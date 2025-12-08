@@ -6,6 +6,7 @@
 import { prisma } from '@/lib/prisma';
 import { getLatestPrices } from '@/lib/quote-service';
 import { checkMarketWasOpen } from './index-engine';
+import { getTodayInBrazil } from '@/lib/market-status';
 
 /**
  * Verifica se o mercado B3 está aberto no momento atual (horário de Brasília)
@@ -70,21 +71,7 @@ export async function calculateRealTimeReturn(
     // IMPORTANTE: Quando mercado fechado e preço de fechamento disponível, usar o ponto de hoje
     // Quando mercado aberto ou fechado sem preço, usar último ponto disponível para calcular variação
     // Usar horário de Brasília para garantir comparação correta
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-    
-    const parts = formatter.formatToParts(now);
-    const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
-    const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1; // month é 0-indexed
-    const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
-    
-    // Criar data de hoje em Brasília (início do dia)
-    const today = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const today = getTodayInBrazil();
     
     // Verificar se houve pregão hoje (sábado, domingo ou feriado não têm pregão)
     const marketWasOpenToday = await checkMarketWasOpen(today);

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getIndicesList } from '@/lib/index-data';
 import { calculateRealTimeReturn } from '@/lib/index-realtime-return';
 import { cache } from '@/lib/cache-service';
+import { hasIBOVMovementToday } from '@/lib/market-status';
 
 /**
  * Verifica se o mercado B3 está fechado (horário de Brasília)
@@ -61,6 +62,7 @@ async function hasTodayClosingPrice(indexId: string): Promise<boolean> {
   
   return !!todayPoint;
 }
+
 
 interface MarketIndex {
   name: string;
@@ -408,6 +410,7 @@ export async function GET(request: NextRequest) {
   try {
     const marketClosed = isBrazilMarketClosed();
     let shouldIgnoreCache = false;
+    let cacheTTL = CACHE_TTL; // TTL padrão de 1 hora
     
     // Se mercado fechado, verificar se preço de fechamento já está disponível
     if (marketClosed) {
@@ -426,6 +429,21 @@ export async function GET(request: NextRequest) {
         console.log('📊 [API] Mercado fechado mas preço de fechamento ainda não disponível - ignorando cache');
       } else {
         console.log('📊 [API] Mercado fechado e preço de fechamento disponível - pode usar cache');
+        cacheTTL = 86400; // 24h quando fechado e preço disponível
+      }
+    } else {
+      // Mercado aberto: verificar se IBOVESPA já teve primeira movimentação do dia
+      const hasIBOVMovement = await hasIBOVMovementToday();
+      
+      if (hasIBOVMovement) {
+        // IBOVESPA já teve movimentação - invalidar cache e usar TTL de 1 hora
+        console.log('📊 [API] IBOVESPA já teve movimentação hoje - invalidando cache e usando TTL de 1h');
+        shouldIgnoreCache = true; // Forçar recálculo
+        cacheTTL = CACHE_TTL; // 1 hora até próximo pregão
+      } else {
+        // IBOVESPA ainda não teve movimentação - usar cache curto
+        console.log('📊 [API] IBOVESPA ainda não teve movimentação hoje - usando cache curto');
+        cacheTTL = 60; // Cache curto de 1 minuto até primeira movimentação
       }
     }
     
@@ -438,7 +456,7 @@ export async function GET(request: NextRequest) {
       }>(CACHE_KEY);
       
       if (cachedData) {
-        console.log('📊 Retornando índices do mercado do cache Redis');
+        console.log(`📊 Retornando índices do mercado do cache Redis (TTL: ${cacheTTL}s)`);
         return NextResponse.json(
           {
             ...cachedData,
@@ -448,7 +466,7 @@ export async function GET(request: NextRequest) {
             headers: {
               'Cache-Control': marketClosed 
                 ? 'public, s-maxage=86400, stale-while-revalidate=86400' // Cache até próximo pregão quando fechado
-                : 'public, s-maxage=3600, stale-while-revalidate=3600', // Cache de 1h quando aberto
+                : `public, s-maxage=${cacheTTL}, stale-while-revalidate=${cacheTTL}`, // TTL dinâmico baseado em movimentação
             },
           }
         );
@@ -481,12 +499,10 @@ export async function GET(request: NextRequest) {
       count: sortedIndices.length,
     };
 
-    // Salvar no cache Redis apenas se não estamos ignorando cache
-    // Quando mercado fechado e preço disponível, cachear até próximo pregão (1h do dia seguinte)
-    if (!shouldIgnoreCache) {
-      const cacheTTL = marketClosed ? 86400 : CACHE_TTL; // 24h quando fechado, 1h quando aberto
-      await cache.set(CACHE_KEY, responseData, { ttl: cacheTTL });
-    }
+    // Salvar no cache Redis com TTL apropriado
+    // TTL já foi calculado acima baseado no estado do mercado e movimentação do IBOVESPA
+    await cache.set(CACHE_KEY, responseData, { ttl: cacheTTL });
+    console.log(`📊 [API] Cache salvo com TTL de ${cacheTTL}s (${cacheTTL / 60} minutos)`);
 
     return NextResponse.json(
       {
@@ -500,7 +516,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Cache-Control': marketClosed && !shouldIgnoreCache
             ? 'public, s-maxage=86400, stale-while-revalidate=86400' // Cache até próximo pregão quando fechado
-            : 'public, s-maxage=60, stale-while-revalidate=60', // Cache curto quando esperando fechamento
+            : `public, s-maxage=${cacheTTL}, stale-while-revalidate=${cacheTTL}`, // TTL dinâmico baseado em movimentação
       },
       }
     );

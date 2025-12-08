@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { updateIndexPoints, fillMissingHistory, checkMarketWasOpen } from '@/lib/index-engine';
 import { runScreening, compareComposition, shouldRebalance, updateComposition } from '@/lib/index-screening-engine';
 import { cache } from '@/lib/cache-service';
+import { getTodayInBrazil } from '@/lib/market-status';
 
 export const maxDuration = 60; // Limite da Vercel
 
@@ -184,14 +185,18 @@ async function runMarkToMarketJob(): Promise<{
   }
 
   // Verificar se todos os índices já estão atualizados para hoje ANTES de processar
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Usar timezone de Brasília para garantir data correta
+  const today = getTodayInBrazil();
   
   // Verificar se houve pregão hoje (sábado, domingo ou feriado)
   const marketWasOpen = await checkMarketWasOpen(today);
   if (!marketWasOpen) {
-    const dayOfWeek = today.getDay();
-    const dayName = dayOfWeek === 0 ? 'domingo' : dayOfWeek === 6 ? 'sábado' : 'feriado';
+    // Usar formatter para pegar o dia da semana no timezone de Brasília
+    const weekdayFormatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      weekday: 'long',
+    });
+    const dayName = weekdayFormatter.format(today);
     console.log(`⏸️ [CRON INDICES] Mark-to-Market job skipped: hoje é ${dayName}, mercado não funcionou`);
     return { success: 0, failed: 0, processed: 0, remaining: 0, errors: [] };
   }
@@ -369,11 +374,16 @@ async function runScreeningJob(): Promise<{
   const MAX_EXECUTION_TIME = 50 * 1000; // 50 segundos
   
   // Verificar se é dia útil (segunda a sexta)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Usar timezone de Brasília para garantir data correta
+  const today = getTodayInBrazil();
   
   if (!isTradingDay(today)) {
-    const dayName = today.toLocaleDateString('pt-BR', { weekday: 'long' });
+    // Formatar nome do dia usando timezone de Brasília
+    const weekdayFormatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      weekday: 'long',
+    });
+    const dayName = weekdayFormatter.format(today);
     console.log(`⏸️ [CRON INDICES] Screening job skipped: não é dia útil (${dayName})`);
     return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
   }
@@ -407,8 +417,8 @@ async function runScreeningJob(): Promise<{
   }
   
   // Verificar se já foi executado hoje (verificando último log de rebalanceamento)
-  const todayCheck = new Date();
-  todayCheck.setHours(0, 0, 0, 0);
+  // Usar timezone de Brasília para garantir data correta
+  const todayCheck = getTodayInBrazil();
   
   let allScreenedToday = true;
   for (const index of allIndices) {

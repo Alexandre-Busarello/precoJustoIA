@@ -1,17 +1,24 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import { applyGlobalApiProtection } from '@/lib/api-global-protection'
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
   
   // 🛡️ PROTEÇÃO GLOBAL: Rate limiting em todas as rotas /api/*
   // Isso aplica proteção básica automaticamente sem precisar alterar cada rota
+  // Import dinâmico para evitar incluir módulos Node.js no bundle do Edge Runtime
   if (pathname.startsWith('/api/')) {
-    const rateLimitResponse = await applyGlobalApiProtection(request)
-    if (rateLimitResponse) {
-      return rateLimitResponse // Rate limit excedido ou IP bloqueado
+    try {
+      const { applyGlobalApiProtection } = await import('@/lib/api-global-protection')
+      const rateLimitResponse = await applyGlobalApiProtection(request)
+      if (rateLimitResponse) {
+        return rateLimitResponse // Rate limit excedido ou IP bloqueado
+      }
+    } catch (error) {
+      // Se houver erro ao importar (ex: em Edge Runtime), continuar sem rate limiting
+      // Isso garante que o middleware funcione mesmo se o módulo não estiver disponível
+      console.warn('Rate limiting não disponível no middleware:', error)
     }
     // Se não houver problema com rate limit, continuar com o processamento normal
   }

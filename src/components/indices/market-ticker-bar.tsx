@@ -154,36 +154,54 @@ export function MarketTickerBar({ position = 'top' }: MarketTickerBarProps) {
             const now = Date.now();
             const nowDate = new Date();
             
-            // CRÍTICO: Verificar se os dados são de um dia útil diferente
-            // Se temos timestamp da API, usar ele; senão, usar timestamp do cache
-            const dataDate = cachedData.dataTimestamp 
-              ? new Date(cachedData.dataTimestamp)
-              : new Date(cachedData.timestamp);
-            
-            if (!isSameTradingDay(dataDate, nowDate)) {
-              console.log('📊 [Frontend] Cache de dia útil diferente - invalidando e buscando dados atualizados');
-              // Remover cache inválido
+            // CRÍTICO: Cache sem dataTimestamp não pode ser confiado
+            // Se não tem dataTimestamp, não sabemos quando os dados foram gerados
+            // Mesmo que o cache tenha sido salvo hoje, pode conter dados antigos
+            if (!cachedData.dataTimestamp) {
+              console.log('📊 [Frontend] Cache sem dataTimestamp - invalidando e buscando dados atualizados');
               if (typeof window !== 'undefined') {
                 localStorage.removeItem(CACHE_KEY);
               }
               // Continuar para fazer fetch
-            } else if (marketClosed && cachedData.hasClosingPrice === false) {
-              // Se mercado fechado e ainda não tem preço de fechamento, ignorar cache
-              console.log('📊 [Frontend] Mercado fechado mas preço ainda não disponível - ignorando cache');
-              // Continuar para fazer fetch
             } else {
-              // Verificar se cache ainda é válido (duração)
-              const cacheDuration = (marketClosed && cachedData.hasClosingPrice) 
-                ? CACHE_DURATION_CLOSED 
-                : CACHE_DURATION;
+              // Cache com dataTimestamp - verificar se os dados são de um dia útil diferente
+              const dataDate = new Date(cachedData.dataTimestamp);
               
-              if (now - cachedData.timestamp < cacheDuration) {
-                console.log('📊 [Frontend] Usando cache válido do localStorage');
-                setIndices(cachedData.indices);
-                setLoading(false);
-                return; // Usar dados em cache, não fazer fetch
+              // Verificação de segurança: se cache tem mais de 24 horas, invalidar
+              const cacheAge = now - cachedData.timestamp;
+              const MAX_CACHE_AGE = 24 * 60 * 60 * 1000; // 24 horas
+              
+              if (cacheAge > MAX_CACHE_AGE) {
+                console.log('📊 [Frontend] Cache muito antigo (>24h) - invalidando e buscando dados atualizados');
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem(CACHE_KEY);
+                }
+                // Continuar para fazer fetch
+              } else if (!isSameTradingDay(dataDate, nowDate)) {
+                console.log('📊 [Frontend] Cache de dia útil diferente - invalidando e buscando dados atualizados');
+                // Remover cache inválido
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem(CACHE_KEY);
+                }
+                // Continuar para fazer fetch
+              } else if (marketClosed && cachedData.hasClosingPrice === false) {
+                // Se mercado fechado e ainda não tem preço de fechamento, ignorar cache
+                console.log('📊 [Frontend] Mercado fechado mas preço ainda não disponível - ignorando cache');
+                // Continuar para fazer fetch
               } else {
-                console.log('📊 [Frontend] Cache expirado por duração - buscando dados atualizados');
+                // Verificar se cache ainda é válido (duração)
+                const cacheDuration = (marketClosed && cachedData.hasClosingPrice) 
+                  ? CACHE_DURATION_CLOSED 
+                  : CACHE_DURATION;
+                
+                if (now - cachedData.timestamp < cacheDuration) {
+                  console.log('📊 [Frontend] Usando cache válido do localStorage');
+                  setIndices(cachedData.indices);
+                  setLoading(false);
+                  return; // Usar dados em cache, não fazer fetch
+                } else {
+                  console.log('📊 [Frontend] Cache expirado por duração - buscando dados atualizados');
+                }
               }
             }
           } catch (e) {

@@ -2342,8 +2342,18 @@ export async function updateComposition(
     // Validar se after market já foi executado hoje
     const { checkAfterMarketRanToday } = await import('./index-engine');
     const { getTodayInBrazil } = await import('./market-status');
+    const { isBrazilMarketOpen } = await import('./market-status-client');
     
     const today = getTodayInBrazil();
+    
+    // Validar se mercado está fechado (não permitir rebalanceamento durante pregão)
+    if (isBrazilMarketOpen()) {
+      const errorMessage = `Rebalanceamento não permitido: mercado está aberto no momento. Rebalanceamento só é permitido após o fechamento do mercado (após 18h).`;
+      console.error(`❌ [SCREENING ENGINE] ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+    
+    // Validar se after market já foi executado hoje
     const afterMarketRan = await checkAfterMarketRanToday(indexId);
     
     if (!afterMarketRan) {

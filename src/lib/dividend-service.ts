@@ -179,6 +179,27 @@ export class DividendService {
       // O Yahoo Finance pode não retornar todos os tipos (ex: JCP)
       // Vamos apenas ADICIONAR novos dividendos, não remover os existentes
       // Save only new dividends to database (avoid unnecessary writes)
+      
+      // Log para debug: confirmar companyId antes de salvar
+      if (!company.id || typeof company.id !== 'number') {
+        console.error(
+          `❌ [DIVIDENDS] ${ticker}: Company ID inválido: ${company.id}. ` +
+          `Tipo: ${typeof company.id}. Pulando salvamento de dividendos.`
+        );
+        const errorResult = {
+          success: false,
+          dividendsCount: 0,
+          message: `Invalid company ID: ${company.id}`,
+        };
+        await cache.set(cacheKey, errorResult, { ttl: 3600 });
+        return errorResult;
+      }
+
+      console.log(
+        `💾 [DIVIDENDS] ${ticker}: Salvando ${dividends.length} dividendos ` +
+        `para companyId ${company.id}`
+      );
+      
       await this.saveDividendsToDatabase(company.id, dividends);
       
       // Log final: comparar total no banco após salvamento
@@ -533,10 +554,32 @@ export class DividendService {
   ): Promise<void> {
     if (dividends.length === 0) return;
 
+    // Validação do companyId
+    if (!companyId || typeof companyId !== 'number' || companyId <= 0) {
+      console.error(`❌ [DB] CompanyId inválido: ${companyId}. Pulando salvamento de dividendos.`);
+      return;
+    }
+
     try {
+      // Verificação adicional: confirmar que a company existe antes de tentar salvar
+      // Isso ajuda a evitar race conditions e identifica problemas de sincronização
+      const companyExists = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, ticker: true }
+      });
+
+      if (!companyExists) {
+        console.error(
+          `❌ [DB] Company com ID ${companyId} não encontrada no banco. ` +
+          `Isso pode indicar uma race condition ou problema de sincronização. ` +
+          `Pulando salvamento de ${dividends.length} dividendos.`
+        );
+        return; // Retornar silenciosamente ao invés de lançar erro
+      }
+
       // Usar upsert para cada dividendo baseado em companyId + exDate + amount
       // Isso permite ter JCP e dividendos ordinários na mesma data (com amounts diferentes)
-      await Promise.all(
+      const results = await Promise.allSettled(
         dividends.map((dividend) =>
           safeWrite(
             "upsert-dividend_history",
@@ -569,11 +612,59 @@ export class DividendService {
         )
       );
 
-      console.log(
-        `✅ [DB] Processados ${dividends.length} dividendos (upsert por exDate + amount)`
+      // Verificar se houve erros nos resultados
+      const errors = results.filter((r) => r.status === 'rejected');
+      const successes = results.filter((r) => r.status === 'fulfilled');
+
+      if (errors.length > 0) {
+        console.warn(
+          `⚠️ [DB] ${errors.length} de ${dividends.length} dividendos falharam ao salvar para companyId ${companyId} (ticker: ${companyExists.ticker})`
+        );
+        
+        // Log detalhado dos erros
+        errors.forEach((errorResult, index) => {
+          if (errorResult.status === 'rejected') {
+            const reason = errorResult.reason;
+            // Tratamento específico para erro P2025
+            if (reason?.code === 'P2025') {
+              console.error(
+                `  ❌ [DB] Erro P2025 (Record not found) no dividendo ${index + 1}: ` +
+                `${reason.message || 'Company ou relacionamento não encontrado'}`
+              );
+            } else {
+              console.error(
+                `  ❌ [DB] Erro ao salvar dividendo ${index + 1}: `,
+                reason?.code || 'UNKNOWN',
+                reason?.message || reason || 'Erro desconhecido'
+              );
+            }
+          }
+        });
+      }
+
+      if (successes.length > 0) {
+        console.log(
+          `✅ [DB] Processados ${successes.length} de ${dividends.length} dividendos ` +
+          `para companyId ${companyId} (ticker: ${companyExists.ticker})`
+        );
+      }
+    } catch (error: any) {
+      // Tratamento específico para erro P2025 (Record not found - foreign key constraint)
+      if (error.code === 'P2025') {
+        console.error(
+          `❌ [DB] Erro P2025 ao salvar dividendos para companyId ${companyId}: ` +
+          `Company ou relacionamento não encontrado. ` +
+          `Mensagem: ${error.message || 'Record not found'}`
+        );
+        // Não lançar erro para não quebrar o fluxo - pode ser uma race condition
+        return;
+      }
+
+      // Para outros erros, logar e lançar
+      console.error(
+        `❌ [DB] Erro inesperado ao salvar dividendos para companyId ${companyId}:`,
+        error
       );
-    } catch (error) {
-      console.error("❌ [DB] Erro ao salvar dividendos:", error);
       throw error;
     }
   }

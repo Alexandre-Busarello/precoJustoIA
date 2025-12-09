@@ -24,21 +24,6 @@ import {
 import { useDashboardPortfolios } from "@/hooks/use-dashboard-data";
 import { useQueryClient } from "@tanstack/react-query";
 
-interface Portfolio {
-  id: string;
-  name: string;
-  currentValue: number;
-  cashBalance: number;
-  totalInvested: number;
-  totalWithdrawn: number;
-  netInvested: number; // Capital líquido investido (totalInvested - totalWithdrawn)
-  totalReturn: number;
-  evolutionData: Array<{
-    date: string;
-    value: number;
-  }>;
-}
-
 /**
  * Invalidate dashboard portfolios cache
  * Call this when portfolio data changes (transactions, config updates, etc.)
@@ -86,10 +71,32 @@ export function DashboardPortfolios() {
 
   if (loading) {
     return (
-      <Card>
+      <Card className="border-2 border-dashed border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
         <CardContent className="py-12">
-          <div className="flex items-center justify-center">
-            <BarChart3 className="h-8 w-8 animate-pulse opacity-50" />
+          <div className="flex flex-col items-center justify-center space-y-4">
+            {/* Spinner animado com ícone */}
+            <div className="relative w-16 h-16">
+              <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-blue-600 dark:border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <BarChart3 className="absolute inset-0 m-auto w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            
+            {/* Texto informativo */}
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Carregando carteiras...
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Buscando dados e calculando métricas
+              </p>
+            </div>
+            
+            {/* Dots animados */}
+            <div className="flex items-center justify-center gap-1.5">
+              <div className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
           </div>
         </CardContent>
       </Card>

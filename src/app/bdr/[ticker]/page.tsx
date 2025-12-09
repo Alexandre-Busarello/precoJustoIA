@@ -330,7 +330,7 @@ export default async function BdrPage({ params }: PageProps) {
       setTimeout(() => {
         console.log(`[${ticker}] Timeout ao atualizar preço, continuando...`);
         resolve(false);
-      }, 3000) // Timeout de 3 segundos
+      }, 5000) // Timeout de 3 segundos
     );
     
     // Aguardar atualização ou timeout, o que acontecer primeiro

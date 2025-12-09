@@ -56,7 +56,7 @@ export default function Dashboard() {
   // Usar React Query hooks
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: topCompaniesData, isLoading: companiesLoading, refetch: refetchTopCompanies, dataUpdatedAt: companiesUpdatedAt } = useTopCompanies(3, 80);
-  const { data: dashboardPortfoliosData } = useDashboardPortfolios();
+  const { data: dashboardPortfoliosData, isLoading: portfoliosLoading } = useDashboardPortfolios();
 
   // Monitorar mudanças de portfolio e perfil para invalidar cache
   useCacheInvalidation();
@@ -217,23 +217,29 @@ export default function Dashboard() {
             {/* 4. CARTEIRAS - Para usuários Premium */}
             {isPremium && (
               <div className="space-y-4">
-                {portfolioCount > 0 ? (
+                {/* Header sempre visível */}
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                    Minhas Carteiras
+                  </h2>
+                  {!portfoliosLoading && portfolioCount > 0 && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/carteira" className="flex items-center gap-2">
+                        Ver Todas
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+                
+                {/* Conteúdo: loading, carteiras ou CTA */}
+                {portfoliosLoading ? (
+                  // Mostrar loading enquanto busca dados
+                  <DashboardPortfolios />
+                ) : portfolioCount > 0 ? (
                   // Usuário tem carteiras - mostrar dashboard normal
-                  <>
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5 text-blue-600" />
-                        Minhas Carteiras
-                      </h2>
-                      <Button asChild variant="outline" size="sm">
-                        <Link href="/carteira" className="flex items-center gap-2">
-                          Ver Todas
-                          <ArrowRight className="w-4 h-4" />
-                        </Link>
-                      </Button>
-                    </div>
-                    <DashboardPortfolios />
-                  </>
+                  <DashboardPortfolios />
                 ) : (
                   // Usuário Premium sem carteiras - chamada para criar primeira carteira
                   <Card className="border-2 border-dashed border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-emerald-950/20 dark:via-background dark:to-teal-950/20 hover:shadow-xl transition-all duration-300">

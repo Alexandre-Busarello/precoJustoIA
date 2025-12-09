@@ -37,7 +37,7 @@ async function getYahooFinance() {
 async function retryYahooRequest<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
-  baseDelay: number = 1000
+  baseDelay: number = 100
 ): Promise<T> {
   let lastError: Error | null = null;
   
@@ -100,26 +100,18 @@ export async function getLatestPrices(tickers: string[]): Promise<Map<string, St
   console.log(`💰 [QUOTE SERVICE] Fetching prices for ${tickers.length} tickers`);
 
   // Process each ticker individually for better error handling
-  // Adicionar delay entre requisições para evitar rate limiting
-  for (let i = 0; i < tickers.length; i++) {
-    const ticker = tickers[i];
-    try {
-      const price = await getTickerPrice(ticker);
-      if (price) {
-        priceMap.set(ticker, price);
+  await Promise.all(
+    tickers.map(async (ticker) => {
+      try {
+        const price = await getTickerPrice(ticker);
+        if (price) {
+          priceMap.set(ticker, price);
+        }
+      } catch (error) {
+        console.error(`❌ [QUOTE SERVICE] Failed to get price for ${ticker}:`, error);
       }
-      
-      // Delay entre requisições para evitar rate limiting em IPs compartilhados do Vercel
-      // IMPORTANTE: Lambdas do Vercel compartilham IPs, então precisamos ser mais conservadores
-      if (i < tickers.length - 1) {
-        // Delay maior em produção (Vercel) para evitar bloqueios compartilhados
-        const delay = process.env.VERCEL ? 500 : 200; // 500ms em produção, 200ms local
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    } catch (error) {
-      console.error(`❌ [QUOTE SERVICE] Failed to get price for ${ticker}:`, error);
-    }
-  }
+    })
+  );
 
   console.log(`✅ [QUOTE SERVICE] Retrieved ${priceMap.size}/${tickers.length} prices`);
   return priceMap;

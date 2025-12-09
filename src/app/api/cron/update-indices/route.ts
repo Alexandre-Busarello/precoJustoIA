@@ -62,19 +62,20 @@ function isTradingDay(date: Date = new Date()): boolean {
  */
 async function saveCheckpoint(checkpoint: Checkpoint): Promise<void> {
   try {
-    // Usar ID especial para checkpoint global (quando indexId é null)
-    const checkpointIndexId = checkpoint.indexId || GLOBAL_CHECKPOINT_ID;
+    // Converter null para GLOBAL_CHECKPOINT_ID para garantir consistência no banco
+    // Quando indexId é null na interface, salvamos '__GLOBAL__' no banco
+    const dbIndexId = checkpoint.indexId || GLOBAL_CHECKPOINT_ID;
     
     await prisma.indexCronCheckpoint.upsert({
       where: {
         jobType_indexId: {
           jobType: checkpoint.jobType,
-          indexId: checkpointIndexId
+          indexId: dbIndexId
         }
       },
       create: {
         jobType: checkpoint.jobType,
-        indexId: checkpoint.indexId, // null para global, string para específico
+        indexId: dbIndexId, // '__GLOBAL__' para global, string para específico
         lastProcessedIndexId: checkpoint.lastProcessedIndexId,
         processedCount: checkpoint.processedCount,
         totalCount: checkpoint.totalCount,
@@ -84,7 +85,8 @@ async function saveCheckpoint(checkpoint: Checkpoint): Promise<void> {
         lastProcessedIndexId: checkpoint.lastProcessedIndexId,
         processedCount: checkpoint.processedCount,
         totalCount: checkpoint.totalCount,
-        errors: checkpoint.errors
+        errors: checkpoint.errors,
+        updatedAt: new Date() // Garantir que updatedAt seja atualizado
       }
     });
   } catch (error) {
@@ -98,9 +100,11 @@ async function saveCheckpoint(checkpoint: Checkpoint): Promise<void> {
  */
 async function loadCheckpoint(jobType: 'mark-to-market' | 'screening', indexId?: string | null): Promise<Checkpoint | null> {
   try {
+    // Converter null para GLOBAL_CHECKPOINT_ID para buscar no banco
     const targetIndexId = indexId || GLOBAL_CHECKPOINT_ID;
     
-    const checkpoint = await prisma.indexCronCheckpoint.findUnique({
+    // Primeiro tentar buscar com GLOBAL_CHECKPOINT_ID
+    let checkpoint = await prisma.indexCronCheckpoint.findUnique({
       where: {
         jobType_indexId: {
           jobType,
@@ -109,13 +113,29 @@ async function loadCheckpoint(jobType: 'mark-to-market' | 'screening', indexId?:
       }
     });
 
+    // Se não encontrou e estamos buscando checkpoint global, tentar com null (checkpoints antigos)
+    if (!checkpoint && !indexId) {
+      checkpoint = await prisma.indexCronCheckpoint.findFirst({
+        where: {
+          jobType,
+          indexId: null
+        },
+        orderBy: {
+          updatedAt: 'desc' // Pegar o mais recente se houver múltiplos
+        }
+      });
+    }
+
     if (!checkpoint) {
       return null;
     }
 
+    // Converter '__GLOBAL__' de volta para null na interface
+    const interfaceIndexId = checkpoint.indexId === GLOBAL_CHECKPOINT_ID || checkpoint.indexId === null ? null : checkpoint.indexId;
+
     return {
       jobType: checkpoint.jobType as 'mark-to-market' | 'screening',
-      indexId: checkpoint.indexId, // null para global, string para específico
+      indexId: interfaceIndexId, // null para global, string para específico
       lastProcessedIndexId: checkpoint.lastProcessedIndexId,
       processedCount: checkpoint.processedCount,
       totalCount: checkpoint.totalCount,
@@ -150,6 +170,74 @@ async function clearIndexCheckpoint(jobType: 'mark-to-market' | 'screening', ind
   } catch (error) {
     // Ignorar erro se checkpoint não existe
     console.log(`ℹ️ [CRON INDICES] Checkpoint for index ${indexId} already cleared or doesn't exist`);
+  }
+}
+
+/**
+ * Limpa checkpoints duplicados/antigos com indexId null
+ * Migra checkpoints antigos para usar GLOBAL_CHECKPOINT_ID
+ */
+async function cleanupOldCheckpoints(jobType: 'mark-to-market' | 'screening'): Promise<void> {
+  try {
+    // Buscar checkpoints antigos com null
+    const oldCheckpoints = await prisma.indexCronCheckpoint.findMany({
+      where: {
+        jobType,
+        indexId: null
+      }
+    });
+
+    if (oldCheckpoints.length === 0) {
+      return;
+    }
+
+    console.log(`🧹 [CRON INDICES] Found ${oldCheckpoints.length} old checkpoints with null indexId for ${jobType}, cleaning up...`);
+
+    // Buscar checkpoint global atual (se existir)
+    const globalCheckpoint = await prisma.indexCronCheckpoint.findUnique({
+      where: {
+        jobType_indexId: {
+          jobType,
+          indexId: GLOBAL_CHECKPOINT_ID
+        }
+      }
+    });
+
+    // Se não há checkpoint global, migrar o mais recente dos antigos
+    if (!globalCheckpoint && oldCheckpoints.length > 0) {
+      // Ordenar por updatedAt (mais recente primeiro)
+      const sorted = oldCheckpoints.sort((a, b) => 
+        b.updatedAt.getTime() - a.updatedAt.getTime()
+      );
+      const mostRecent = sorted[0];
+
+      // Criar checkpoint global com dados do mais recente
+      await prisma.indexCronCheckpoint.create({
+        data: {
+          jobType: mostRecent.jobType,
+          indexId: GLOBAL_CHECKPOINT_ID,
+          lastProcessedIndexId: mostRecent.lastProcessedIndexId,
+          processedCount: mostRecent.processedCount,
+          totalCount: mostRecent.totalCount,
+          errors: mostRecent.errors as any // Cast necessário para compatibilidade com JsonValue
+        }
+      });
+
+      console.log(`✅ [CRON INDICES] Migrated most recent checkpoint to global checkpoint for ${jobType}`);
+    }
+
+    // Deletar todos os checkpoints antigos com null
+    await prisma.indexCronCheckpoint.deleteMany({
+      where: {
+        jobType,
+        indexId: null
+      }
+    });
+
+    console.log(`✅ [CRON INDICES] Cleaned up ${oldCheckpoints.length} old checkpoints for ${jobType}`);
+  } catch (error) {
+    console.error(`⚠️ [CRON INDICES] Error cleaning up old checkpoints:`, error);
+    // Não falhar o job por causa de limpeza
   }
 }
 
@@ -308,6 +396,9 @@ async function runMarkToMarketJob(): Promise<{
   const MAX_EXECUTION_TIME = 50 * 1000; // 50 segundos (deixar buffer de 10s)
   
   console.log('📊 [CRON INDICES] Starting Mark-to-Market job (incremental)...');
+
+  // Limpar checkpoints antigos com null antes de começar
+  await cleanupOldCheckpoints('mark-to-market');
 
   // Buscar todos os índices ativos
   const allIndices = await prisma.indexDefinition.findMany({
@@ -655,6 +746,9 @@ async function runScreeningJob(): Promise<{
   }
   
   console.log('🔍 [CRON INDICES] Starting Screening job (incremental)...');
+
+  // Limpar checkpoints antigos com null antes de começar
+  await cleanupOldCheckpoints('screening');
 
   const allIndices = await prisma.indexDefinition.findMany({
     include: {

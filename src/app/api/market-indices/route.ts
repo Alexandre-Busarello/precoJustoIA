@@ -102,7 +102,8 @@ async function fetchInternationalIndices(): Promise<MarketIndex[]> {
           // Usar quoteSummary que retorna dados completos incluindo variação
           const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/quoteSummary/${encodeURIComponent(tickerInfo.symbol)}?modules=price`;
           
-          const yahooResponse = await fetch(yahooUrl, {
+          const { fetchYahooFinance } = await import('@/lib/yahoo-finance-fetch');
+          const yahooResponse = await fetchYahooFinance(yahooUrl, {
             cache: 'no-store',
             headers: {
               'Cache-Control': 'no-cache',

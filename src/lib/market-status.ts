@@ -96,7 +96,7 @@ async function getYahooFinance() {
 
 /**
  * Helper: Verifica se há cotação válida do IBOVESPA para uma data específica
- * Usa Yahoo Finance para buscar cotações e compara datas usando timezone de Brasília
+ * Usa yahoo-finance2 que já configura User-Agent corretamente
  * 
  * @param date Data a verificar
  * @returns true se há cotação válida (close > 0) para a data, false caso contrário

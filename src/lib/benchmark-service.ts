@@ -173,7 +173,8 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
             const yahooPeriod2 = Math.floor(endDate.getTime() / 1000);
             const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${yahooPeriod1}&period2=${yahooPeriod2}&interval=1d`;
             
-            const yahooResponse = await fetch(yahooUrl, {
+            const { fetchYahooFinance } = await import('@/lib/yahoo-finance-fetch');
+            const yahooResponse = await fetchYahooFinance(yahooUrl, {
               next: { revalidate: 300 } // Cache de 5 minutos
             });
             
@@ -244,7 +245,8 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
     const period2 = Math.floor(endDate.getTime() / 1000);
     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${period1}&period2=${period2}&interval=1mo`;
     
-    const response = await fetch(yahooUrl, {
+    const { fetchYahooFinance } = await import('@/lib/yahoo-finance-fetch');
+    const response = await fetchYahooFinance(yahooUrl, {
       next: { revalidate: 3600 } // Cache de 1 hora
     });
 

@@ -13,15 +13,6 @@ import { hasIBOVQuoteForDate } from './market-status';
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
 
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    const module = await import('yahoo-finance2');
-    const YahooFinance = module.default;
-    yahooFinanceInstance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
-  }
-  return yahooFinanceInstance;
-}
-
 export interface CompositionSnapshot {
   weight: number; // Peso no índice neste dia
   price: number; // Preço atual do ativo

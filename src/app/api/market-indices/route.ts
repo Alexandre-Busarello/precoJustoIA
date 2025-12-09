@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getIndicesList } from '@/lib/index-data';
 import { calculateRealTimeReturn } from '@/lib/index-realtime-return';
 import { cache } from '@/lib/cache-service';
-import { hasIBOVMovementToday } from '@/lib/market-status';
+import { hasIBOVMovementToday } from '@/lib/market-status-server';
 
 /**
  * Verifica se o mercado B3 está fechado (horário de Brasília)
@@ -97,55 +97,52 @@ async function fetchInternationalIndices(): Promise<MarketIndex[]> {
       try {
         let indexData: MarketIndex | null = null;
 
-        // 1. Tentar Yahoo Finance primeiro (fonte principal)
+        // 1. Tentar Yahoo Finance primeiro (fonte principal) - usando biblioteca yahoo-finance2
         try {
-          // Usar quoteSummary que retorna dados completos incluindo variação
-          const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/quoteSummary/${encodeURIComponent(tickerInfo.symbol)}?modules=price`;
+          const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
+          const yahooFinance = await loadYahooFinance();
+          if (!yahooFinance) {
+            throw new Error('This code can only run on the server');
+          }
           
-          const { fetchYahooFinance } = await import('@/lib/yahoo-finance-fetch');
-          const yahooResponse = await fetchYahooFinance(yahooUrl, {
-            cache: 'no-store',
-            headers: {
-              'Cache-Control': 'no-cache',
-            },
+          // Usar quoteSummary que retorna dados completos incluindo variação
+          const quoteSummary = await yahooFinance.quoteSummary(tickerInfo.symbol, {
+            modules: ['price']
           });
-
-          if (yahooResponse.ok) {
-            const yahooData = await yahooResponse.json();
-            const price = yahooData.quoteSummary?.result?.[0]?.price;
+          
+          const price = quoteSummary?.price;
+          
+          if (price) {
+            // Yahoo Finance pode retornar valores como objeto {raw: number, fmt: string} ou número direto
+            const getValue = (val: any): number => {
+              if (typeof val === 'number') return val;
+              if (val?.raw !== undefined) return val.raw;
+              if (val?.fmt) {
+                // Tentar parsear formato string (ex: "158,939.34")
+                const parsed = parseFloat(val.fmt.replace(/,/g, ''));
+                return isNaN(parsed) ? 0 : parsed;
+              }
+              return 0;
+            };
             
-            if (price) {
-              // Yahoo Finance pode retornar valores como objeto {raw: number, fmt: string} ou número direto
-              const getValue = (val: any): number => {
-                if (typeof val === 'number') return val;
-                if (val?.raw !== undefined) return val.raw;
-                if (val?.fmt) {
-                  // Tentar parsear formato string (ex: "158,939.34")
-                  const parsed = parseFloat(val.fmt.replace(/,/g, ''));
-                  return isNaN(parsed) ? 0 : parsed;
-                }
-                return 0;
+            const regularMarketPrice = getValue(price.regularMarketPrice);
+            const regularMarketChange = getValue(price.regularMarketChange);
+            const regularMarketChangePercent = getValue(price.regularMarketChangePercent);
+            
+            if (regularMarketPrice && regularMarketPrice > 0) {
+              const externalUrl = `https://finance.yahoo.com/quote/${tickerInfo.symbol}`;
+              
+              indexData = {
+                name: tickerInfo.name,
+                ticker: tickerInfo.ticker,
+                value: regularMarketPrice,
+                change: regularMarketChange,
+                changePercent: regularMarketChangePercent,
+                isCustom: false,
+                url: externalUrl,
               };
               
-              const regularMarketPrice = getValue(price.regularMarketPrice);
-              const regularMarketChange = getValue(price.regularMarketChange);
-              const regularMarketChangePercent = getValue(price.regularMarketChangePercent);
-              
-              if (regularMarketPrice && regularMarketPrice > 0) {
-                const externalUrl = `https://finance.yahoo.com/quote/${tickerInfo.symbol}`;
-                
-                indexData = {
-                  name: tickerInfo.name,
-                  ticker: tickerInfo.ticker,
-                  value: regularMarketPrice,
-                  change: regularMarketChange,
-                  changePercent: regularMarketChangePercent,
-                  isCustom: false,
-                  url: externalUrl,
-                };
-                
-                console.log(`📊 [YAHOO] ${tickerInfo.name}: ${regularMarketPrice.toFixed(2)} (${regularMarketChangePercent > 0 ? '+' : ''}${regularMarketChangePercent.toFixed(2)}%)`);
-              }
+              console.log(`📊 [YAHOO] ${tickerInfo.name}: ${regularMarketPrice.toFixed(2)} (${regularMarketChangePercent > 0 ? '+' : ''}${regularMarketChangePercent.toFixed(2)}%)`);
             }
           }
         } catch (yahooError) {
@@ -513,7 +510,7 @@ export async function GET(request: NextRequest) {
       } else {
         // IBOVESPA ainda não teve movimentação - usar cache curto
         console.log('📊 [API] IBOVESPA ainda não teve movimentação hoje - usando cache curto');
-        cacheTTL = 60; // Cache curto de 1 minuto até primeira movimentação
+        cacheTTL = 600; // Cache curto
       }
     }
     
@@ -531,13 +528,6 @@ export async function GET(request: NextRequest) {
           {
             ...cachedData,
             cached: true,
-          },
-          {
-            headers: {
-              'Cache-Control': marketClosed 
-                ? 'public, s-maxage=86400, stale-while-revalidate=86400' // Cache até próximo pregão quando fechado
-                : `public, s-maxage=${cacheTTL}, stale-while-revalidate=${cacheTTL}`, // TTL dinâmico baseado em movimentação
-            },
           }
         );
       }
@@ -582,13 +572,6 @@ export async function GET(request: NextRequest) {
         marketClosed,
         hasClosingPrice: !shouldIgnoreCache,
       },
-      {
-        headers: {
-          'Cache-Control': marketClosed && !shouldIgnoreCache
-            ? 'public, s-maxage=86400, stale-while-revalidate=86400' // Cache até próximo pregão quando fechado
-            : `public, s-maxage=${cacheTTL}, stale-while-revalidate=${cacheTTL}`, // TTL dinâmico baseado em movimentação
-      },
-      }
     );
   } catch (error) {
     console.error('Erro ao buscar índices do mercado:', error);

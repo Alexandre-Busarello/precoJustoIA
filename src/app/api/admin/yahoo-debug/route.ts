@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/user-service';
-import { fetchYahooFinance, fetchYahooFinanceJson } from '@/lib/yahoo-finance-fetch';
 
 /**
  * POST /api/admin/yahoo-debug
@@ -30,15 +29,11 @@ export async function POST(request: NextRequest) {
 
     try {
       if (method === 'direct') {
-        // Requisição direta via fetch com User-Agent
-        if (!url) {
-          return NextResponse.json(
-            { error: 'URL é obrigatória para método "direct"' },
-            { status: 400 }
-          );
-        }
-
-        result = await fetchYahooFinanceJson(url);
+        // Método direto foi removido - sempre usar biblioteca yahoo-finance2
+        return NextResponse.json(
+          { error: 'Método "direct" foi removido. Use sempre "library" (yahoo-finance2) para evitar erros 429.' },
+          { status: 400 }
+        );
       } else if (method === 'library') {
         // Requisição via biblioteca yahoo-finance2
         if (!symbol) {
@@ -48,9 +43,14 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const yahooModule = await import('yahoo-finance2');
-        const YahooFinance = yahooModule.default;
-        const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+        const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
+        const yahooFinance = await loadYahooFinance();
+        if (!yahooFinance) {
+          return NextResponse.json(
+            { error: 'This endpoint can only be called on the server' },
+            { status: 500 }
+          );
+        }
 
         // Determinar qual endpoint usar
         if (endpoint === 'quote') {
@@ -128,15 +128,8 @@ export async function GET() {
     }
 
     return NextResponse.json({
+      note: '⚠️ Requisições diretas foram removidas. Use sempre a biblioteca yahoo-finance2 para evitar erros 429.',
       endpoints: {
-        direct: {
-          description: 'Requisição direta via fetch com User-Agent',
-          required: ['url'],
-          example: {
-            method: 'direct',
-            url: 'https://query1.finance.yahoo.com/v8/finance/quoteSummary/PETR4.SA?modules=price',
-          },
-        },
         library: {
           description: 'Requisição via biblioteca yahoo-finance2',
           required: ['symbol', 'endpoint'],

@@ -153,51 +153,55 @@ async function fetchIbovData(startDate: Date, endDate: Date): Promise<BenchmarkD
           if (!hasTodayData) {
             console.log('📊 BRAPI não tem dados do dia atual, buscando do Yahoo Finance...');
             try {
-              const todayPeriod1 = Math.floor((endDate.getTime() - 7 * 24 * 60 * 60 * 1000) / 1000); // 7 dias atrás
-              const todayPeriod2 = Math.floor(endDate.getTime() / 1000);
-              const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${todayPeriod1}&period2=${todayPeriod2}&interval=1d`;
+              // Usar biblioteca yahoo-finance2 em vez de requisição direta
+              const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
+              const yahooFinance = await loadYahooFinance();
+              if (!yahooFinance) {
+                throw new Error('This code can only run on the server');
+              }
               
-              const { fetchYahooFinance } = await import('@/lib/yahoo-finance-fetch');
-              const yahooResponse = await fetchYahooFinance(yahooUrl, {
-                next: { revalidate: 300 } // Cache de 5 minutos para dados do dia atual
+              const chartStartDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 dias atrás
+              const chartData = await yahooFinance.chart('^BVSP', {
+                period1: chartStartDate,
+                period2: endDate,
+                interval: '1d',
+                return: 'array'
               });
               
-              if (yahooResponse.ok) {
-                const yahooData = await yahooResponse.json();
-                const timestamps = yahooData.chart?.result?.[0]?.timestamp || [];
-                const closes = yahooData.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+              // Extrair dados do formato da biblioteca
+              const quotes = Array.isArray(chartData) ? chartData : (chartData?.quotes || []);
+              
+              // Buscar apenas dados do dia atual ou mais recente
+              const todayData: BenchmarkDataPoint[] = [];
+              for (let i = quotes.length - 1; i >= 0; i--) {
+                const quote = quotes[i];
+                if (!quote || !quote.date || !quote.close || quote.close <= 0) continue;
                 
-                // Buscar apenas dados do dia atual ou mais recente
-                const todayData: BenchmarkDataPoint[] = [];
-                for (let i = timestamps.length - 1; i >= 0; i--) {
-                  const date = new Date(timestamps[i] * 1000);
-                  const year = date.getFullYear();
-                  const month = String(date.getMonth() + 1).padStart(2, '0');
-                  const day = String(date.getDate()).padStart(2, '0');
-                  const localDate = `${year}-${month}-${day}`;
-                  
-                  if (closes[i] && closes[i] > 0) {
-                    todayData.push({
-                      date: localDate,
-                      value: closes[i]
-                    });
-                    
-                    // Se encontramos o dia atual, parar
-                    if (localDate === endDateStr) {
-                      break;
-                    }
-                  }
-                }
+                const date = new Date(quote.date);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const localDate = `${year}-${month}-${day}`;
                 
-                if (todayData.length > 0) {
-                  // Combinar dados do BRAPI com Yahoo Finance, removendo duplicatas
-                  const existingDates = new Set(finalData.map(d => d.date));
-                  const newData = todayData.filter(d => !existingDates.has(d.date));
-                  finalData = [...finalData, ...newData].sort((a, b) => 
-                    new Date(a.date).getTime() - new Date(b.date).getTime()
-                  );
-                  console.log(`✅ Adicionados ${newData.length} pontos do Yahoo Finance (dia atual)`);
+                todayData.push({
+                  date: localDate,
+                  value: quote.close
+                });
+                
+                // Se encontramos o dia atual, parar
+                if (localDate === endDateStr) {
+                  break;
                 }
+              }
+              
+              if (todayData.length > 0) {
+                // Combinar dados do BRAPI com Yahoo Finance, removendo duplicatas
+                const existingDates = new Set(finalData.map(d => d.date));
+                const newData = todayData.filter(d => !existingDates.has(d.date));
+                finalData = [...finalData, ...newData].sort((a, b) => 
+                  new Date(a.date).getTime() - new Date(b.date).getTime()
+                );
+                console.log(`✅ Adicionados ${newData.length} pontos do Yahoo Finance (dia atual)`);
               }
             } catch (yahooError) {
               console.warn('⚠️ Erro ao buscar dados do dia atual do Yahoo Finance:', yahooError);
@@ -218,34 +222,41 @@ async function fetchIbovData(startDate: Date, endDate: Date): Promise<BenchmarkD
       console.error('❌ BRAPI falhou:', brapiError);
     }
 
-    // Fallback: Yahoo Finance via servidor
-    console.log('🔄 Tentando Yahoo Finance como fallback...');
-    const period1 = Math.floor(startDate.getTime() / 1000);
-    const period2 = Math.floor(endDate.getTime() / 1000);
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${period1}&period2=${period2}&interval=1mo`;
-
-    const { fetchYahooFinance } = await import('@/lib/yahoo-finance-fetch');
-    const yahooResponse = await fetchYahooFinance(yahooUrl);
-    
-    if (yahooResponse.ok) {
-      const yahooData = await yahooResponse.json();
-      const timestamps = yahooData.chart?.result?.[0]?.timestamp || [];
-      const closes = yahooData.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
-
-      const transformedData: BenchmarkDataPoint[] = timestamps
-        .map((timestamp: number, index: number) => {
-          const date = new Date(timestamp * 1000);
+    // Fallback: Yahoo Finance via biblioteca yahoo-finance2
+    try {
+      console.log('🔄 Tentando Yahoo Finance como fallback...');
+      const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
+      const yahooFinance = await loadYahooFinance();
+      if (!yahooFinance) {
+        throw new Error('This code can only run on the server');
+      }
+      
+      const chartData = await yahooFinance.chart('^BVSP', {
+        period1: startDate,
+        period2: endDate,
+        interval: '1mo',
+        return: 'array'
+      });
+      
+      // Extrair dados do formato da biblioteca
+      const quotes = Array.isArray(chartData) ? chartData : (chartData?.quotes || []);
+      
+      const transformedData: BenchmarkDataPoint[] = quotes
+        .filter((q: any) => q && q.date && q.close && q.close > 0)
+        .map((quote: any) => {
+          const date = new Date(quote.date);
           const isoDate = date.toISOString().split('T')[0];
           
           return {
             date: isoDate,
-            value: closes[index]
+            value: quote.close
           };
-        })
-        .filter((item: BenchmarkDataPoint) => item.value !== null);
+        });
 
       console.log(`✅ IBOV: ${transformedData.length} pontos de dados carregados via Yahoo Finance`);
       return transformedData;
+    } catch (yahooError) {
+      console.error('❌ Yahoo Finance falhou:', yahooError);
     }
 
     console.error('❌ Todos os métodos de busca do IBOV falharam');

@@ -10,16 +10,17 @@ import { safeWrite, safeQueryWithParams } from "@/lib/prisma-wrapper";
 import { cache } from "@/lib/cache-service";
 import { DividendRadarService } from "@/lib/dividend-radar-service";
 
+import { loadYahooFinance } from './yahoo-finance-loader';
+
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
 
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
-    const yahooModule = await import("yahoo-finance2");
-    const YahooFinance = yahooModule.default;
-    yahooFinanceInstance = new YahooFinance({
-      suppressNotices: ["yahooSurvey", "ripHistorical"],
-    });
+    yahooFinanceInstance = await loadYahooFinance();
+    if (!yahooFinanceInstance) {
+      throw new Error('getYahooFinance() can only be called on the server');
+    }
   }
   return yahooFinanceInstance;
 }

@@ -12,14 +12,17 @@ import { prisma } from '@/lib/prisma';
 import { safeWrite } from '@/lib/prisma-wrapper';
 import type { AssetType } from '@prisma/client';
 
+import { loadYahooFinance } from './yahoo-finance-loader';
+
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
 
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
-    const module = await import('yahoo-finance2');
-    const YahooFinance = module.default;
-    yahooFinanceInstance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+    yahooFinanceInstance = await loadYahooFinance();
+    if (!yahooFinanceInstance) {
+      throw new Error('getYahooFinance() can only be called on the server');
+    }
   }
   return yahooFinanceInstance;
 }

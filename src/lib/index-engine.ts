@@ -8,10 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { getLatestPrices, StockPrice, getYahooHistoricalPrice } from '@/lib/quote-service';
 import { getHistoricalPricesForDate } from './index-rebalance-date';
-import { hasIBOVQuoteForDate } from './market-status';
-
-// Yahoo Finance instance (lazy-loaded)
-let yahooFinanceInstance: any = null;
+import { hasIBOVQuoteForDate } from './market-status-server';
 
 export interface CompositionSnapshot {
   weight: number; // Peso no índice neste dia

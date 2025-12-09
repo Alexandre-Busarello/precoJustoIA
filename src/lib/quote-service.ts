@@ -7,24 +7,17 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { loadYahooFinance } from './yahoo-finance-loader';
 
 // Yahoo Finance instance (lazy-loaded)
 let yahooFinanceInstance: any = null;
 
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
-    // Dynamic import to avoid module issues
-    const yahooModule = await import('yahoo-finance2');
-    const YahooFinance = yahooModule.default;
-    
-    // Instantiate with new keyword and suppress notices
-    // IMPORTANTE: Em Lambdas do Vercel, múltiplas instâncias podem compartilhar IP
-    // A biblioteca yahoo-finance2 já gerencia cookies/sessão internamente
-    yahooFinanceInstance = new YahooFinance({ 
-      suppressNotices: ['yahooSurvey'],
-      // A biblioteca já configura User-Agent e headers adequados
-      // Não precisamos configurar manualmente aqui
-    });
+    yahooFinanceInstance = await loadYahooFinance();
+    if (!yahooFinanceInstance) {
+      throw new Error('getYahooFinance() can only be called on the server');
+    }
   }
   return yahooFinanceInstance;
 }

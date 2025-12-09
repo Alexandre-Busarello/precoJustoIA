@@ -132,14 +132,14 @@ export default function PerfilPage() {
 
   const checkMarketTickerStatus = () => {
     if (typeof window !== 'undefined') {
-      const hidden = localStorage.getItem('market-ticker-banner-hidden') === 'true'
+      const hidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
       setMarketTickerHidden(hidden)
     }
   }
 
   const handleReenableMarketTicker = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('market-ticker-banner-hidden')
+      localStorage.removeItem('market-ticker-banner-hidden-v2')
       setMarketTickerHidden(false)
       // Disparar evento customizado para notificar outros componentes
       window.dispatchEvent(new Event('marketTickerVisibilityChange'))

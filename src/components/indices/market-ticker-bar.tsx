@@ -25,10 +25,10 @@ interface MarketTickerBarProps {
   position?: 'top' | 'bottom';
 }
 
-const CACHE_KEY = 'market-indices-cache';
+const CACHE_KEY = 'market-indices-cache-v2';
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hora em milissegundos (quando mercado aberto)
 const CACHE_DURATION_CLOSED = 24 * 60 * 60 * 1000; // 24 horas quando mercado fechado e preço disponível
-const BANNER_HIDDEN_KEY = 'market-ticker-banner-hidden'; // Chave para localStorage
+const BANNER_HIDDEN_KEY = 'market-ticker-banner-hidden-v2'; // Chave para localStorage
 
 interface CachedData {
   indices: MarketIndex[];
@@ -216,7 +216,7 @@ export function MarketTickerBar({ position = 'top' }: MarketTickerBarProps) {
 
         // Fazer fetch - não usar cache do navegador quando mercado fechado até preço estar disponível
         const response = await fetch('/api/market-indices', {
-          cache: marketClosed ? 'no-store' : 'force-cache', // Ignorar cache do navegador quando mercado fechado
+          cache: 'no-store', // Ignorar cache do navegador quando mercado fechado
         });
         
         if (!response.ok) {

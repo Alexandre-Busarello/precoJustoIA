@@ -24,9 +24,8 @@ interface DebugResult {
 export function YahooDebugClient() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DebugResult | null>(null);
-  const [method, setMethod] = useState<'direct' | 'library'>('library');
+  const [method, setMethod] = useState<'library'>('library');
   const [symbol, setSymbol] = useState('PETR4.SA');
-  const [url, setUrl] = useState('https://query1.finance.yahoo.com/v8/finance/quoteSummary/PETR4.SA?modules=price');
   const [endpoint, setEndpoint] = useState<'quote' | 'quoteSummary' | 'chart'>('quote');
   const [modules, setModules] = useState('price');
   const [interval, setInterval] = useState('1d');
@@ -38,21 +37,16 @@ export function YahooDebugClient() {
     try {
       const body: any = {
         method,
+        symbol,
+        endpoint,
       };
-
-      if (method === 'direct') {
-        body.url = url;
-      } else {
-        body.symbol = symbol;
-        body.endpoint = endpoint;
-        
-        if (endpoint === 'quoteSummary') {
-          body.modules = modules.split(',').map((m: string) => m.trim());
-        } else if (endpoint === 'chart') {
-          body.period1 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-          body.period2 = new Date().toISOString();
-          body.interval = interval;
-        }
+      
+      if (endpoint === 'quoteSummary') {
+        body.modules = modules.split(',').map((m: string) => m.trim());
+      } else if (endpoint === 'chart') {
+        body.period1 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        body.period2 = new Date().toISOString();
+        body.interval = interval;
       }
 
       const response = await fetch('/api/admin/yahoo-debug', {
@@ -100,93 +94,73 @@ export function YahooDebugClient() {
         <CardContent className="space-y-6">
           <div className="space-y-2">
             <Label>Método</Label>
-            <Select value={method} onValueChange={(value: 'direct' | 'library') => setMethod(value)}>
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-blue-800">
+                <strong>Biblioteca yahoo-finance2</strong> - Requisições diretas foram removidas para evitar erros 429.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Symbol (Ticker)</Label>
+            <Input
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              placeholder="PETR4.SA"
+            />
+            <p className="text-sm text-gray-500">
+              Use formato Yahoo Finance (ex: PETR4.SA, ^BVSP, AAPL)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Endpoint</Label>
+            <Select
+              value={endpoint}
+              onValueChange={(value: 'quote' | 'quoteSummary' | 'chart') => setEndpoint(value)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="library">Biblioteca yahoo-finance2</SelectItem>
-                <SelectItem value="direct">Requisição Direta (fetch)</SelectItem>
+                <SelectItem value="quote">Quote (Cotação)</SelectItem>
+                <SelectItem value="quoteSummary">Quote Summary (Dados Detalhados)</SelectItem>
+                <SelectItem value="chart">Chart (Dados Históricos)</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {method === 'direct' ? (
+          {endpoint === 'quoteSummary' && (
             <div className="space-y-2">
-              <Label>URL Completa</Label>
+              <Label>Módulos (separados por vírgula)</Label>
               <Input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://query1.finance.yahoo.com/v8/finance/quoteSummary/PETR4.SA?modules=price"
+                value={modules}
+                onChange={(e) => setModules(e.target.value)}
+                placeholder="price,summaryDetail,financialData"
               />
               <p className="text-sm text-gray-500">
-                Use URLs completas do Yahoo Finance API. O User-Agent será adicionado automaticamente.
+                Módulos disponíveis: price, summaryDetail, assetProfile, financialData, defaultKeyStatistics, etc.
               </p>
             </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label>Symbol (Ticker)</Label>
-                <Input
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  placeholder="PETR4.SA"
-                />
-                <p className="text-sm text-gray-500">
-                  Use formato Yahoo Finance (ex: PETR4.SA, ^BVSP, AAPL)
-                </p>
-              </div>
+          )}
 
-              <div className="space-y-2">
-                <Label>Endpoint</Label>
-                <Select
-                  value={endpoint}
-                  onValueChange={(value: 'quote' | 'quoteSummary' | 'chart') => setEndpoint(value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="quote">Quote (Cotação)</SelectItem>
-                    <SelectItem value="quoteSummary">Quote Summary (Dados Detalhados)</SelectItem>
-                    <SelectItem value="chart">Chart (Dados Históricos)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {endpoint === 'quoteSummary' && (
-                <div className="space-y-2">
-                  <Label>Módulos (separados por vírgula)</Label>
-                  <Input
-                    value={modules}
-                    onChange={(e) => setModules(e.target.value)}
-                    placeholder="price,summaryDetail,financialData"
-                  />
-                  <p className="text-sm text-gray-500">
-                    Módulos disponíveis: price, summaryDetail, assetProfile, financialData, defaultKeyStatistics, etc.
-                  </p>
-                </div>
-              )}
-
-              {endpoint === 'chart' && (
-                <div className="space-y-2">
-                  <Label>Intervalo</Label>
-                  <Select value={interval} onValueChange={setInterval}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1m">1 minuto</SelectItem>
-                      <SelectItem value="5m">5 minutos</SelectItem>
-                      <SelectItem value="15m">15 minutos</SelectItem>
-                      <SelectItem value="1d">1 dia</SelectItem>
-                      <SelectItem value="1wk">1 semana</SelectItem>
-                      <SelectItem value="1mo">1 mês</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </>
+          {endpoint === 'chart' && (
+            <div className="space-y-2">
+              <Label>Intervalo</Label>
+              <Select value={interval} onValueChange={setInterval}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1m">1 minuto</SelectItem>
+                  <SelectItem value="5m">5 minutos</SelectItem>
+                  <SelectItem value="15m">15 minutos</SelectItem>
+                  <SelectItem value="1d">1 dia</SelectItem>
+                  <SelectItem value="1wk">1 semana</SelectItem>
+                  <SelectItem value="1mo">1 mês</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           <Button onClick={handleTest} disabled={loading} className="w-full">
@@ -360,24 +334,6 @@ export function YahooDebugClient() {
               }}
             >
               Chart PETR4 (30 dias)
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setMethod('direct');
-                setUrl('https://query1.finance.yahoo.com/v8/finance/quoteSummary/PETR4.SA?modules=price');
-              }}
-            >
-              Direto: QuoteSummary PETR4
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setMethod('direct');
-                setUrl('https://query2.finance.yahoo.com/v8/finance/chart/^BVSP?interval=1d&period1=' + Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000) + '&period2=' + Math.floor(Date.now() / 1000));
-              }}
-            >
-              Direto: Chart IBOVESPA
             </Button>
           </div>
         </CardContent>

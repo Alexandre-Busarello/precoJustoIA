@@ -336,6 +336,8 @@ interface YahooFinanceData {
   fundamentalsTimeSeries?: any; // Dados históricos anuais completos
 }
 
+import { loadYahooFinance } from './yahoo-finance-loader';
+
 /**
  * Serviço para buscar dados de BDRs do Yahoo Finance
  */
@@ -387,12 +389,11 @@ export class BDRDataService {
         }...`
       );
 
-      // Importar yahoo-finance2 dinamicamente
-      const yahooModule = await import("yahoo-finance2");
-      const YahooFinance = yahooModule.default;
-      const yahooFinance = new YahooFinance({
-        suppressNotices: ["yahooSurvey"],
-      });
+      // Carregar Yahoo Finance usando helper que evita bundle no cliente
+      const yahooFinance = await loadYahooFinance();
+      if (!yahooFinance) {
+        throw new Error('fetchBDRData() can only be called on the server');
+      }
 
       const result: YahooFinanceData = {};
 
@@ -3443,12 +3444,11 @@ export class BDRDataService {
     try {
       console.log(`💵 [BDR] Buscando dividendos históricos para ${ticker}...`);
 
-      // Importar yahoo-finance2 dinamicamente
-      const yahooModule = await import("yahoo-finance2");
-      const YahooFinance = yahooModule.default;
-      const yahooFinance = new YahooFinance({
-        suppressNotices: ["yahooSurvey"],
-      });
+      // Carregar Yahoo Finance usando helper que evita bundle no cliente
+      const yahooFinance = await loadYahooFinance();
+      if (!yahooFinance) {
+        throw new Error('fetchHistoricalDividends() can only be called on the server');
+      }
 
       // Buscar dados dos últimos 10 anos (máximo possível para análises históricas)
       const endDate = new Date();

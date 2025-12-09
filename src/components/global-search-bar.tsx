@@ -31,12 +31,12 @@ export function GlobalSearchBar() {
   // Verificar se o banner está fechado
   useEffect(() => {
     if (session && typeof window !== 'undefined') {
-      const hidden = localStorage.getItem('market-ticker-banner-hidden') === 'true'
+      const hidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
       setBannerHidden(hidden)
       
       // Observar mudanças no localStorage
       const handleStorageChange = () => {
-        const newHidden = localStorage.getItem('market-ticker-banner-hidden') === 'true'
+        const newHidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
         setBannerHidden(newHidden)
       }
       
@@ -44,7 +44,7 @@ export function GlobalSearchBar() {
       
       // Também observar mudanças na mesma aba usando um evento customizado
       const handleCustomStorageChange = () => {
-        const newHidden = localStorage.getItem('market-ticker-banner-hidden') === 'true'
+        const newHidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
         setBannerHidden(newHidden)
       }
       

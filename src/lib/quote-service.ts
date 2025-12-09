@@ -18,9 +18,72 @@ async function getYahooFinance() {
     const YahooFinance = yahooModule.default;
     
     // Instantiate with new keyword and suppress notices
-    yahooFinanceInstance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+    // IMPORTANTE: Em Lambdas do Vercel, múltiplas instâncias podem compartilhar IP
+    // A biblioteca yahoo-finance2 já gerencia cookies/sessão internamente
+    yahooFinanceInstance = new YahooFinance({ 
+      suppressNotices: ['yahooSurvey'],
+      // A biblioteca já configura User-Agent e headers adequados
+      // Não precisamos configurar manualmente aqui
+    });
   }
   return yahooFinanceInstance;
+}
+
+/**
+ * Retry helper com backoff exponencial para requisições Yahoo Finance
+ * Útil para lidar com erros temporários como "Jwt verification fails"
+ * 
+ * IMPORTANTE: Em Lambdas do Vercel, IPs são compartilhados entre múltiplos usuários.
+ * O Yahoo Finance pode bloquear por:
+ * - Muitas requisições do mesmo IP (rate limiting)
+ * - Padrões de requisição que parecem automatizados
+ * - Tokens JWT/crumb expirados ou inválidos
+ * 
+ * Esta função tenta novamente com delays progressivos para evitar bloqueios.
+ */
+async function retryYahooRequest<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const errorMsg = lastError.message.toLowerCase();
+      
+      // Erros que indicam problema de autenticação/token (comum em IPs compartilhados)
+      const isAuthError = errorMsg.includes('jwt') || 
+                         errorMsg.includes('verification') || 
+                         errorMsg.includes('crumb') ||
+                         errorMsg.includes('unauthorized') ||
+                         errorMsg.includes('forbidden');
+      
+      // Erros de rate limiting (muito comum em IPs compartilhados do Vercel)
+      const isRateLimitError = errorMsg.includes('429') || 
+                               errorMsg.includes('too many') ||
+                               errorMsg.includes('rate limit');
+      
+      if ((isAuthError || isRateLimitError) && attempt < maxRetries - 1) {
+        // Backoff exponencial com jitter aleatório para evitar thundering herd
+        const delay = baseDelay * Math.pow(2, attempt);
+        const jitter = Math.random() * 500; // Adicionar até 500ms de variação
+        const totalDelay = delay + jitter;
+        
+        console.log(`  ⚠️ Yahoo Finance ${isAuthError ? 'auth' : 'rate limit'} error (attempt ${attempt + 1}/${maxRetries}), retrying in ${Math.round(totalDelay)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, totalDelay));
+        continue;
+      }
+      
+      // Para outros erros ou se esgotaram as tentativas, lançar erro
+      throw lastError;
+    }
+  }
+  
+  throw lastError || new Error('Max retries exceeded');
 }
 
 export interface StockPrice {
@@ -44,18 +107,26 @@ export async function getLatestPrices(tickers: string[]): Promise<Map<string, St
   console.log(`💰 [QUOTE SERVICE] Fetching prices for ${tickers.length} tickers`);
 
   // Process each ticker individually for better error handling
-  await Promise.all(
-    tickers.map(async (ticker) => {
-      try {
-        const price = await getTickerPrice(ticker);
-        if (price) {
-          priceMap.set(ticker, price);
-        }
-      } catch (error) {
-        console.error(`❌ [QUOTE SERVICE] Failed to get price for ${ticker}:`, error);
+  // Adicionar delay entre requisições para evitar rate limiting
+  for (let i = 0; i < tickers.length; i++) {
+    const ticker = tickers[i];
+    try {
+      const price = await getTickerPrice(ticker);
+      if (price) {
+        priceMap.set(ticker, price);
       }
-    })
-  );
+      
+      // Delay entre requisições para evitar rate limiting em IPs compartilhados do Vercel
+      // IMPORTANTE: Lambdas do Vercel compartilham IPs, então precisamos ser mais conservadores
+      if (i < tickers.length - 1) {
+        // Delay maior em produção (Vercel) para evitar bloqueios compartilhados
+        const delay = process.env.VERCEL ? 500 : 200; // 500ms em produção, 200ms local
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    } catch (error) {
+      console.error(`❌ [QUOTE SERVICE] Failed to get price for ${ticker}:`, error);
+    }
+  }
 
   console.log(`✅ [QUOTE SERVICE] Retrieved ${priceMap.size}/${tickers.length} prices`);
   return priceMap;
@@ -74,8 +145,8 @@ export async function getTickerPrice(ticker: string): Promise<StockPrice | null>
     // Get yahoo-finance2 instance
     const yahooFinance = await getYahooFinance();
     
-    // Get quote using yahoo-finance2
-    const quote = await yahooFinance.quote(yahooSymbol);
+    // Get quote using yahoo-finance2 with retry logic
+    const quote: any = await retryYahooRequest(() => yahooFinance.quote(yahooSymbol));
 
     if (quote?.regularMarketPrice) {
       const price = Number(quote.regularMarketPrice);
@@ -144,8 +215,8 @@ export async function validateTicker(ticker: string): Promise<void> {
     // Get yahoo-finance2 instance
     const yahooFinance = await getYahooFinance();
     
-    // Try to get quote from Yahoo Finance
-    const quote = await yahooFinance.quote(yahooSymbol);
+    // Try to get quote from Yahoo Finance with retry logic
+    const quote: any = await retryYahooRequest(() => yahooFinance.quote(yahooSymbol));
 
     if (quote?.regularMarketPrice) {
       console.log(`  ✅ [TICKER VALID] ${ticker}: Found on Yahoo Finance`);

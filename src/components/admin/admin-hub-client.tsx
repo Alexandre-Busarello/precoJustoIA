@@ -170,6 +170,14 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       href: '/admin/historical-prices',
       color: 'bg-cyan-500',
     },
+    {
+      id: 'yahoo-debug',
+      title: 'Yahoo Finance Debug',
+      description: 'Teste requisições ao Yahoo Finance via API direta e biblioteca',
+      icon: Activity,
+      href: '/admin/yahoo-debug',
+      color: 'bg-yellow-500',
+    },
   ];
 
   const analyticsFeatures = [

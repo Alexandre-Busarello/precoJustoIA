@@ -35,6 +35,36 @@ interface CachedData {
   timestamp: number;
   marketClosed?: boolean;
   hasClosingPrice?: boolean;
+  dataTimestamp?: string; // Timestamp ISO da API quando os dados foram gerados
+}
+
+/**
+ * Verifica se duas datas são do mesmo dia útil (horário de Brasília)
+ * Retorna true se forem do mesmo dia útil, false caso contrário
+ */
+function isSameTradingDay(date1: Date | string, date2: Date): boolean {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  
+  const d1 = typeof date1 === 'string' ? new Date(date1) : date1;
+  const d2 = date2;
+  
+  const parts1 = formatter.formatToParts(d1);
+  const parts2 = formatter.formatToParts(d2);
+  
+  const year1 = parts1.find(p => p.type === 'year')?.value;
+  const month1 = parts1.find(p => p.type === 'month')?.value;
+  const day1 = parts1.find(p => p.type === 'day')?.value;
+  
+  const year2 = parts2.find(p => p.type === 'year')?.value;
+  const month2 = parts2.find(p => p.type === 'month')?.value;
+  const day2 = parts2.find(p => p.type === 'day')?.value;
+  
+  return year1 === year2 && month1 === month2 && day1 === day2;
 }
 
 /**
@@ -122,26 +152,47 @@ export function MarketTickerBar({ position = 'top' }: MarketTickerBarProps) {
           try {
             const cachedData: CachedData = JSON.parse(cachedDataStr);
             const now = Date.now();
+            const nowDate = new Date();
             
-            // Se mercado fechado e ainda não tem preço de fechamento, ignorar cache
-            if (marketClosed && cachedData.hasClosingPrice === false) {
+            // CRÍTICO: Verificar se os dados são de um dia útil diferente
+            // Se temos timestamp da API, usar ele; senão, usar timestamp do cache
+            const dataDate = cachedData.dataTimestamp 
+              ? new Date(cachedData.dataTimestamp)
+              : new Date(cachedData.timestamp);
+            
+            if (!isSameTradingDay(dataDate, nowDate)) {
+              console.log('📊 [Frontend] Cache de dia útil diferente - invalidando e buscando dados atualizados');
+              // Remover cache inválido
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem(CACHE_KEY);
+              }
+              // Continuar para fazer fetch
+            } else if (marketClosed && cachedData.hasClosingPrice === false) {
+              // Se mercado fechado e ainda não tem preço de fechamento, ignorar cache
               console.log('📊 [Frontend] Mercado fechado mas preço ainda não disponível - ignorando cache');
               // Continuar para fazer fetch
             } else {
-              // Verificar se cache ainda é válido
+              // Verificar se cache ainda é válido (duração)
               const cacheDuration = (marketClosed && cachedData.hasClosingPrice) 
                 ? CACHE_DURATION_CLOSED 
                 : CACHE_DURATION;
               
               if (now - cachedData.timestamp < cacheDuration) {
+                console.log('📊 [Frontend] Usando cache válido do localStorage');
                 setIndices(cachedData.indices);
                 setLoading(false);
                 return; // Usar dados em cache, não fazer fetch
+              } else {
+                console.log('📊 [Frontend] Cache expirado por duração - buscando dados atualizados');
               }
             }
           } catch (e) {
             // Se houver erro ao parsear cache, continuar para fazer fetch
             console.warn('Erro ao ler cache:', e);
+            // Remover cache corrompido
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem(CACHE_KEY);
+            }
           }
         }
 
@@ -165,8 +216,10 @@ export function MarketTickerBar({ position = 'top' }: MarketTickerBarProps) {
             timestamp: Date.now(),
             marketClosed,
             hasClosingPrice,
+            dataTimestamp: data.timestamp || new Date().toISOString(), // Salvar timestamp da API
           };
           localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+          console.log('📊 [Frontend] Cache salvo no localStorage com timestamp:', cacheData.dataTimestamp);
         }
         
         setIndices(fetchedIndices);
@@ -217,6 +270,7 @@ export function MarketTickerBar({ position = 'top' }: MarketTickerBarProps) {
                 timestamp: Date.now(),
                 marketClosed,
                 hasClosingPrice,
+                dataTimestamp: data.timestamp || new Date().toISOString(), // Salvar timestamp da API
               };
               localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
             }

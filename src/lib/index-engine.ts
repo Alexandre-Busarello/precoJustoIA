@@ -1437,3 +1437,135 @@ export async function calculateCurrentYield(indexId: string): Promise<number | n
   }
 }
 
+/**
+ * Busca o último snapshot de composição disponível para um índice
+ * @param indexId ID do índice
+ * @returns Objeto com data e snapshot, ou null se não encontrar
+ */
+export async function getLastSnapshot(
+  indexId: string
+): Promise<{ date: Date; snapshot: Record<string, CompositionSnapshot> } | null> {
+  try {
+    // Buscar todos os pontos históricos ordenados por data descendente
+    // e filtrar no código para encontrar o primeiro com snapshot válido
+    const historyPoints = await prisma.indexHistoryPoints.findMany({
+      where: {
+        indexId
+      },
+      orderBy: [
+        { date: 'desc' },
+        { createdAt: 'desc' } // Ordenar também por createdAt para garantir ordem consistente
+      ],
+      select: {
+        id: true,
+        date: true,
+        compositionSnapshot: true,
+        createdAt: true
+      }
+    });
+
+    // Log para debug
+    console.log(`🔍 [GET LAST SNAPSHOT] Found ${historyPoints.length} history points for index ${indexId}`);
+    if (historyPoints.length > 0) {
+      const first5 = historyPoints.slice(0, 5).map(p => {
+        const dateStr = p.date.toISOString().split('T')[0];
+        const hasSnapshot = p.compositionSnapshot !== null && p.compositionSnapshot !== undefined;
+        let snapshotInfo = 'null';
+        if (hasSnapshot) {
+          const snapshot = p.compositionSnapshot as any;
+          const isEmpty = typeof snapshot === 'object' && Object.keys(snapshot).length === 0;
+          snapshotInfo = isEmpty ? 'empty' : `${Object.keys(snapshot).length} assets`;
+        }
+        return `${dateStr} (snapshot: ${snapshotInfo})`;
+      });
+      console.log(`🔍 [GET LAST SNAPSHOT] First 5 dates: ${first5.join(', ')}`);
+    }
+
+    // Encontrar o primeiro ponto com snapshot válido (não null, não undefined e não vazio)
+    const lastPoint = historyPoints.find(point => {
+      const hasSnapshot = point.compositionSnapshot !== null && point.compositionSnapshot !== undefined;
+      if (hasSnapshot) {
+        // Verificar se o snapshot não está vazio
+        const snapshot = point.compositionSnapshot as any;
+        const isEmpty = typeof snapshot === 'object' && snapshot !== null && Object.keys(snapshot).length === 0;
+        if (!isEmpty) {
+          // Verificar se tem pelo menos um ticker válido no snapshot
+          const tickers = Object.keys(snapshot);
+          return tickers.length > 0 && tickers.every(ticker => {
+            const assetData = snapshot[ticker];
+            return assetData && typeof assetData === 'object' && assetData.weight !== undefined;
+          });
+        }
+      }
+      return false;
+    });
+
+    if (!lastPoint || !lastPoint.compositionSnapshot) {
+      console.log(`⚠️ [GET LAST SNAPSHOT] No valid snapshot found for index ${indexId}`);
+      return null;
+    }
+
+    const snapshotKeys = Object.keys(lastPoint.compositionSnapshot as any);
+    
+    // Extrair data diretamente da string ISO (YYYY-MM-DD) sem conversão de timezone
+    // O Prisma retorna datas @db.Date como UTC midnight, mas queremos apenas a parte da data
+    const isoString = lastPoint.date.toISOString();
+    const dateStr = isoString.split('T')[0]; // Extrair YYYY-MM-DD diretamente
+    
+    console.log(`✅ [GET LAST SNAPSHOT] Found snapshot for date ${dateStr} (ISO: ${isoString}) with ${snapshotKeys.length} assets`);
+
+    // Parsear snapshot e converter entryDate de ISO string para Date
+    const snapshot = lastPoint.compositionSnapshot as Record<string, any>;
+    const parsedSnapshot: Record<string, CompositionSnapshot> = {};
+
+    for (const [ticker, data] of Object.entries(snapshot)) {
+      parsedSnapshot[ticker] = {
+        weight: data.weight,
+        price: data.price,
+        entryPrice: data.entryPrice,
+        entryDate: typeof data.entryDate === 'string' 
+          ? new Date(data.entryDate) 
+          : new Date(data.entryDate)
+      };
+    }
+
+    // Criar nova data a partir da string YYYY-MM-DD (sem conversão de timezone)
+    // Usar UTC para garantir que representa o dia correto independente do timezone
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const returnDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+
+    return {
+      date: returnDate,
+      snapshot: parsedSnapshot
+    };
+  } catch (error) {
+    console.error(`❌ [INDEX ENGINE] Error getting last snapshot for index ${indexId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Verifica se o after market (mark-to-market) já foi executado hoje
+ * @param indexId ID do índice
+ * @returns true se after market rodou hoje, false caso contrário
+ */
+export async function checkAfterMarketRanToday(indexId: string): Promise<boolean> {
+  try {
+    const { getTodayInBrazil } = await import('./market-status');
+    const today = getTodayInBrazil();
+    today.setHours(0, 0, 0, 0);
+
+    const todayPoint = await prisma.indexHistoryPoints.findFirst({
+      where: {
+        indexId,
+        date: today
+      }
+    });
+
+    return todayPoint !== null && todayPoint.compositionSnapshot !== null;
+  } catch (error) {
+    console.error(`❌ [INDEX ENGINE] Error checking if after market ran today for index ${indexId}:`, error);
+    return false;
+  }
+}
+

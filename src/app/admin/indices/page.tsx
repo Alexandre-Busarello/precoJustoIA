@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Sparkles, Trash2, Edit2, RefreshCw, Clock, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react';
+import { Loader2, Plus, Sparkles, Trash2, Edit2, RefreshCw, Clock, CheckCircle2, AlertCircle, RotateCcw, Undo2 } from 'lucide-react';
 import { JsonEditor } from '@/components/admin/json-editor';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -141,6 +141,27 @@ async function recalculateDividends(id: string, startDate?: string, dryRun: bool
   return data;
 }
 
+async function getLastSnapshotInfo(id: string): Promise<{ date: string; assetCount: number } | null> {
+  const response = await fetch(`/api/admin/indices/${id}/last-snapshot`);
+  if (!response.ok) {
+    return null;
+  }
+  const data = await response.json();
+  return data.success ? data.data : null;
+}
+
+async function restoreComposition(id: string): Promise<any> {
+  const response = await fetch(`/api/admin/indices/${id}/restore-composition`, {
+    method: 'POST'
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Erro ao restaurar composição');
+  }
+  const data = await response.json();
+  return data;
+}
+
 export default function AdminIndicesPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -149,6 +170,9 @@ export default function AdminIndicesPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<IndexDefinition | null>(null);
   const [recreatingIndex, setRecreatingIndex] = useState<IndexDefinition | null>(null);
+  const [restoringIndex, setRestoringIndex] = useState<IndexDefinition | null>(null);
+  const [restoreSnapshotInfo, setRestoreSnapshotInfo] = useState<{ date: string; assetCount: number } | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [statusIndex, setStatusIndex] = useState<IndexDefinition | null>(null);
   const [indexStatus, setIndexStatus] = useState<any>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
@@ -394,6 +418,43 @@ export default function AdminIndicesPage() {
   const handleConfirmRecreate = async () => {
     if (!recreatingIndex) return;
     await recreateIndexMutation.mutateAsync(recreatingIndex.id);
+  };
+
+  const handleRestoreClick = async (index: IndexDefinition) => {
+    setRestoringIndex(index);
+    try {
+      const snapshotInfo = await getLastSnapshotInfo(index.id);
+      if (!snapshotInfo) {
+        toast.error('Nenhum snapshot disponível para restaurar');
+        setRestoringIndex(null);
+        return;
+      }
+      setRestoreSnapshotInfo(snapshotInfo);
+    } catch (error) {
+      toast.error(`Erro ao buscar informações do snapshot: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      setRestoringIndex(null);
+    }
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!restoringIndex) return;
+    
+    setIsRestoring(true);
+    try {
+      const result = await restoreComposition(restoringIndex.id);
+      toast.success(
+        `Composição restaurada com sucesso! ` +
+        `${result.data.assetsRestored} ativos restaurados do snapshot de ${result.data.snapshotDate}. ` +
+        `${result.data.logsDeleted} logs de rebalanceamento removidos.`
+      );
+      queryClient.invalidateQueries({ queryKey: ['admin-indices'] });
+      setRestoringIndex(null);
+      setRestoreSnapshotInfo(null);
+    } catch (error) {
+      toast.error(`Erro ao restaurar composição: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   if (isLoading) {
@@ -746,6 +807,14 @@ export default function AdminIndicesPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => handleRestoreClick(index)}
+                        title="Restaurar composição do último snapshot"
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleDeleteClick(index)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -849,6 +918,65 @@ export default function AdminIndicesPage() {
                   <>
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Recriar Índice
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Dialog de Confirmação de Restauração */}
+        <AlertDialog open={!!restoringIndex} onOpenChange={(open) => {
+          if (!open) {
+            setRestoringIndex(null);
+            setRestoreSnapshotInfo(null);
+          }
+        }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Restaurar Composição do Snapshot</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja restaurar a composição do índice <strong>{restoringIndex?.ticker}</strong> ({restoringIndex?.name})?
+                <br /><br />
+                {restoreSnapshotInfo ? (
+                  <>
+                    Esta ação irá:
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li><strong>Restaurar</strong> composição do snapshot de <strong>{restoreSnapshotInfo.date.split('-').reverse().join('/')}</strong></li>
+                      <li><strong>Restaurar</strong> {restoreSnapshotInfo.assetCount} ativo(s) com seus pesos e preços de entrada originais</li>
+                      <li><strong>Remover</strong> composição atual</li>
+                      <li><strong>Remover</strong> logs de rebalanceamento posteriores ao snapshot</li>
+                    </ul>
+                    <br />
+                    <strong className="text-yellow-600 dark:text-yellow-400">
+                      ⚠️ A composição atual será sobrescrita pela composição do snapshot.
+                    </strong>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isRestoring}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmRestore}
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={isRestoring || !restoreSnapshotInfo}
+              >
+                {isRestoring ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Restaurando...
+                  </>
+                ) : (
+                  <>
+                    <Undo2 className="h-4 w-4 mr-2" />
+                    Restaurar Composição
                   </>
                 )}
               </AlertDialogAction>

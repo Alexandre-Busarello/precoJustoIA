@@ -80,3 +80,65 @@ export function getTodayInBrazil(): Date {
   return resultDate;
 }
 
+/**
+ * Normaliza uma data para o formato YYYY-MM-DD usando timezone de Brasília
+ * Garante que a data não muda independente do timezone do sistema
+ * 
+ * @param date Data a normalizar (pode ser Date ou string)
+ * @returns String no formato YYYY-MM-DD no timezone de Brasília
+ */
+export function normalizeDateToBrazil(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  // Formatar data usando timezone de Brasília
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  
+  return formatter.format(dateObj);
+}
+
+/**
+ * Cria uma Date normalizada para uma data específica no timezone de Brasília
+ * Garante que a data representa 00:00:00 no timezone de Brasília
+ * 
+ * @param dateString String no formato YYYY-MM-DD
+ * @returns Date representando 00:00:00 no timezone de Brasília
+ */
+export function createDateInBrazil(dateString: string): Date {
+  // Parsear YYYY-MM-DD
+  const [year, month, day] = dateString.split('-').map(Number);
+  
+  // Criar data usando timezone de Brasília
+  // Usar Intl para garantir que estamos criando no timezone correto
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  
+  // Criar uma data UTC que representa 00:00:00 em Brasília
+  // Brasília está UTC-3 (horário padrão) ou UTC-2 (horário de verão)
+  // Vamos usar uma abordagem mais simples: criar em UTC e ajustar
+  
+  // Criar data em UTC para o meio-dia do dia especificado
+  const testDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+  const testParts = formatter.formatToParts(testDate);
+  const testHour = parseInt(testParts.find(p => p.type === 'hour')?.value || '0', 10);
+  
+  // Calcular offset
+  const offset = 12 - testHour;
+  
+  // Criar data UTC que representa 00:00:00 em Brasília
+  const utcHour = 0 + offset;
+  return new Date(Date.UTC(year, month - 1, day, utcHour, 0, 0, 0));
+}
+

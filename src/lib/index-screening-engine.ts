@@ -2339,6 +2339,19 @@ export async function updateComposition(
   rebalanceReason?: string
 ): Promise<boolean> {
   try {
+    // Validar se after market já foi executado hoje
+    const { checkAfterMarketRanToday } = await import('./index-engine');
+    const { getTodayInBrazil } = await import('./market-status');
+    
+    const today = getTodayInBrazil();
+    const afterMarketRan = await checkAfterMarketRanToday(indexId);
+    
+    if (!afterMarketRan) {
+      const errorMessage = `Rebalanceamento não permitido: after market ainda não foi executado hoje (${today.toISOString().split('T')[0]}). Execute o mark-to-market primeiro.`;
+      console.error(`❌ [SCREENING ENGINE] ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+
     // Buscar config do índice para determinar tipo de peso
     const indexDefinition = await prisma.indexDefinition.findUnique({
       where: { id: indexId },
@@ -2365,7 +2378,7 @@ export async function updateComposition(
     });
 
     // Criar nova composição
-    const today = new Date();
+    // Usar a mesma variável 'today' já declarada acima (de getTodayInBrazil)
     today.setHours(0, 0, 0, 0);
 
     for (const candidate of newComposition) {

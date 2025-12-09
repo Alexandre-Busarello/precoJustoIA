@@ -109,7 +109,7 @@ const faqs = [
   },
   {
     question: 'Como funciona o rebalanceamento automático?',
-    answer: 'O rebalanceamento automático ocorre quando ações entram ou saem da carteira seguindo os critérios da metodologia do índice. O processamento do rebalanceamento e entrada/saída de ativos acontece diariamente às 10h da manhã quando o pregão abre, garantindo que as mudanças sejam aplicadas no início do dia de negociação. Você pode acompanhar todas as mudanças na aba "Histórico", que mostra quando cada ação foi adicionada ou removida e o motivo da decisão.',
+    answer: 'O rebalanceamento automático ocorre quando ações entram ou saem da carteira seguindo os critérios da metodologia do índice. O processamento do rebalanceamento e entrada/saída de ativos acontece diariamente às 20h após o after market. Você pode acompanhar todas as mudanças na aba "Histórico", que mostra quando cada ação foi adicionada ou removida e o motivo da decisão.',
     iconName: 'Clock'
   },
   {
@@ -129,7 +129,7 @@ const faqs = [
   },
   {
     question: 'Com que frequência a composição do índice muda?',
-    answer: 'A frequência de rebalanceamento depende da metodologia de cada índice e das condições de mercado. Alguns índices podem ter rebalanceamentos mensais, trimestrais ou semestrais. Quando ocorrem mudanças, o processamento é feito diariamente às 10h da manhã quando o pregão abre. Você pode acompanhar todas as mudanças na aba "Histórico" da página do índice.',
+    answer: 'A frequência de rebalanceamento depende da metodologia de cada índice e das condições de mercado. Alguns índices podem ter rebalanceamentos mensais, trimestrais ou semestrais. Quando ocorrem mudanças, o processamento é feito diariamente às 20h após o after market. Você pode acompanhar todas as mudanças na aba "Histórico" da página do índice.',
     iconName: 'Clock'
   },
   {

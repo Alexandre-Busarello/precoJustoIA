@@ -105,12 +105,93 @@ async function fetchInternationalIndices(): Promise<MarketIndex[]> {
             throw new Error('This code can only run on the server');
           }
           
-          // Usar quoteSummary que retorna dados completos incluindo variação
-          const quoteSummary = await yahooFinance.quoteSummary(tickerInfo.symbol, {
-            modules: ['price']
-          });
+          // Função helper para retry com timeout e tratamento de erros específicos
+          const fetchWithRetry = async <T>(
+            fn: () => Promise<T>, 
+            maxRetries: number = 2,
+            timeoutMs: number = 6000 // Reduzir timeout para 6s (mais rápido para fallback)
+          ): Promise<T> => {
+            let lastError: Error | null = null;
+            
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+              try {
+                // Adicionar timeout
+                return await Promise.race([
+                  fn(),
+                  new Promise<T>((_, reject) => 
+                    setTimeout(() => reject(new Error(`Timeout após ${timeoutMs}ms`)), timeoutMs)
+                  )
+                ]);
+              } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                const errorMsg = lastError.message.toLowerCase();
+                
+                // Erros que podem ser recuperados com retry
+                const isRetryableError = errorMsg.includes('fetch failed') ||
+                                       errorMsg.includes('timeout') ||
+                                       errorMsg.includes('network') ||
+                                       errorMsg.includes('econnreset') ||
+                                       errorMsg.includes('etimedout') ||
+                                       errorMsg.includes('econnrefused');
+                
+                if (isRetryableError && attempt < maxRetries - 1) {
+                  const delay = 300 * (attempt + 1); // 300ms, 600ms (mais rápido)
+                  console.log(`  ⚠️ [YAHOO] Erro recuperável para ${tickerInfo.name} (tentativa ${attempt + 1}/${maxRetries}): ${errorMsg.substring(0, 50)}...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                  continue;
+                }
+                
+                throw lastError;
+              }
+            }
+            
+            throw lastError || new Error('Max retries exceeded');
+          };
+
+          // Tentar usar quote primeiro (mais rápido e simples para índices)
+          // Se falhar, tentar quoteSummary como fallback
+          let quoteData: any = null;
+          let quoteSummary: any = null;
           
-          const price = quoteSummary?.price;
+          try {
+            // Tentar quote primeiro (mais rápido e mais confiável para índices)
+            quoteData = await fetchWithRetry(
+              () => yahooFinance.quote(tickerInfo.symbol),
+              1, // Apenas 1 tentativa (mais rápido para fallback)
+              6000 // 6 segundos de timeout
+            );
+          } catch (quoteError) {
+            const quoteErrorMsg = quoteError instanceof Error ? quoteError.message : String(quoteError);
+            console.log(`  ⚠️ [YAHOO] quote() falhou para ${tickerInfo.name}: ${quoteErrorMsg.substring(0, 100)}`);
+            
+            // Se quote falhar, tentar quoteSummary apenas se não for erro de "fetch failed"
+            // (fetch failed geralmente indica problema de rede que também afetará quoteSummary)
+            if (!quoteErrorMsg.toLowerCase().includes('fetch failed')) {
+              try {
+                quoteSummary = await fetchWithRetry(
+                  () => yahooFinance.quoteSummary(tickerInfo.symbol, {
+                    modules: ['price']
+                  }),
+                  1, // Apenas 1 tentativa
+                  6000 // 6 segundos de timeout
+                );
+              } catch (summaryError) {
+                const errorMsg = summaryError instanceof Error ? summaryError.message : String(summaryError);
+                console.warn(`  ⚠️ [YAHOO] quoteSummary() também falhou para ${tickerInfo.name}: ${errorMsg.substring(0, 100)}`);
+                throw new Error(`Yahoo Finance falhou: ${errorMsg}`);
+              }
+            } else {
+              // Se for "fetch failed", não tentar quoteSummary (mesmo problema de rede)
+              throw quoteError;
+            }
+          }
+          
+          // Extrair dados de price de quote ou quoteSummary
+          const price = quoteSummary?.price || (quoteData ? {
+            regularMarketPrice: quoteData.regularMarketPrice,
+            regularMarketChange: quoteData.regularMarketChange,
+            regularMarketChangePercent: quoteData.regularMarketChangePercent
+          } : null);
           
           if (price) {
             // Yahoo Finance pode retornar valores como objeto {raw: number, fmt: string} ou número direto
@@ -146,7 +227,20 @@ async function fetchInternationalIndices(): Promise<MarketIndex[]> {
             }
           }
         } catch (yahooError) {
-          console.warn(`⚠️ [YAHOO] Erro ao buscar ${tickerInfo.name}, tentando BRAPI...`, yahooError instanceof Error ? yahooError.message : String(yahooError));
+          const errorMsg = yahooError instanceof Error ? yahooError.message : String(yahooError);
+          const errorStack = yahooError instanceof Error ? yahooError.stack : undefined;
+          
+          // Log detalhado para debug
+          console.warn(`⚠️ [YAHOO] Erro ao buscar ${tickerInfo.name} (${tickerInfo.symbol}):`, {
+            message: errorMsg,
+            stack: errorStack?.split('\n').slice(0, 3).join('\n'), // Primeiras 3 linhas do stack
+            errorType: yahooError instanceof Error ? yahooError.constructor.name : typeof yahooError
+          });
+          
+          // Se for erro de "fetch failed", pode ser problema de rede/timeout
+          if (errorMsg.toLowerCase().includes('fetch failed')) {
+            console.warn(`  💡 [YAHOO] Possíveis causas: timeout, problema de rede, ou Yahoo Finance temporariamente indisponível`);
+          }
         }
 
         // 2. Fallback para BRAPI se Yahoo Finance falhou

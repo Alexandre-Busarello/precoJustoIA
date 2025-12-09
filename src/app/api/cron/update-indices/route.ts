@@ -94,16 +94,17 @@ async function saveCheckpoint(checkpoint: Checkpoint): Promise<void> {
 }
 
 /**
- * Carrega checkpoint do banco
+ * Carrega checkpoint do banco (global ou por índice)
  */
-async function loadCheckpoint(jobType: 'mark-to-market' | 'screening'): Promise<Checkpoint | null> {
+async function loadCheckpoint(jobType: 'mark-to-market' | 'screening', indexId?: string | null): Promise<Checkpoint | null> {
   try {
-    // Buscar checkpoint global usando o ID especial
+    const targetIndexId = indexId || GLOBAL_CHECKPOINT_ID;
+    
     const checkpoint = await prisma.indexCronCheckpoint.findUnique({
       where: {
         jobType_indexId: {
           jobType,
-          indexId: GLOBAL_CHECKPOINT_ID
+          indexId: targetIndexId
         }
       }
     });
@@ -114,7 +115,7 @@ async function loadCheckpoint(jobType: 'mark-to-market' | 'screening'): Promise<
 
     return {
       jobType: checkpoint.jobType as 'mark-to-market' | 'screening',
-      indexId: checkpoint.indexId, // Será null para checkpoint global
+      indexId: checkpoint.indexId, // null para global, string para específico
       lastProcessedIndexId: checkpoint.lastProcessedIndexId,
       processedCount: checkpoint.processedCount,
       totalCount: checkpoint.totalCount,
@@ -123,6 +124,148 @@ async function loadCheckpoint(jobType: 'mark-to-market' | 'screening'): Promise<
   } catch (error) {
     console.error(`⚠️ [CRON INDICES] Error loading checkpoint:`, error);
     return null;
+  }
+}
+
+/**
+ * Carrega checkpoint específico de um índice
+ */
+async function loadIndexCheckpoint(jobType: 'mark-to-market' | 'screening', indexId: string): Promise<Checkpoint | null> {
+  return loadCheckpoint(jobType, indexId);
+}
+
+/**
+ * Remove checkpoint de um índice específico (quando concluído)
+ */
+async function clearIndexCheckpoint(jobType: 'mark-to-market' | 'screening', indexId: string): Promise<void> {
+  try {
+    await prisma.indexCronCheckpoint.delete({
+      where: {
+        jobType_indexId: {
+          jobType,
+          indexId
+        }
+      }
+    });
+  } catch (error) {
+    // Ignorar erro se checkpoint não existe
+    console.log(`ℹ️ [CRON INDICES] Checkpoint for index ${indexId} already cleared or doesn't exist`);
+  }
+}
+
+/**
+ * Preenche lacunas históricas com checkpoint por índice
+ * Permite retomar de onde parou se interrompido
+ */
+async function fillMissingHistoryWithCheckpoint(
+  indexId: string,
+  indexTicker: string,
+  today: Date
+): Promise<number> {
+  try {
+    // Carregar checkpoint do índice
+    const indexCheckpoint = await loadIndexCheckpoint('mark-to-market', indexId);
+    
+    // Buscar último ponto histórico
+    const lastPoint = await prisma.indexHistoryPoints.findFirst({
+      where: { indexId },
+      orderBy: { date: 'desc' }
+    });
+
+    if (!lastPoint) {
+      console.warn(`⚠️ [CRON INDICES] No history found for index ${indexTicker}, cannot fill gaps`);
+      return 0;
+    }
+
+    const lastDate = new Date(lastPoint.date);
+    lastDate.setHours(0, 0, 0, 0);
+
+    // Se último ponto é hoje ou futuro, não há lacunas
+    if (lastDate >= today) {
+      // Limpar checkpoint se não há mais nada para processar
+      if (indexCheckpoint) {
+        await clearIndexCheckpoint('mark-to-market', indexId);
+      }
+      return 0;
+    }
+
+    // Determinar data inicial: usar checkpoint se existir, senão usar último ponto
+    let startDate = new Date(lastDate);
+    if (indexCheckpoint && indexCheckpoint.lastProcessedIndexId) {
+      // lastProcessedIndexId pode conter uma data (ISO string) ou um ID de índice
+      // Tentar interpretar como data primeiro
+      const checkpointDate = new Date(indexCheckpoint.lastProcessedIndexId);
+      if (!isNaN(checkpointDate.getTime())) {
+        startDate = checkpointDate;
+        startDate.setDate(startDate.getDate() + 1); // Começar do dia seguinte ao último processado
+        console.log(`📌 [CRON INDICES] Resuming fillMissingHistory for ${indexTicker} from ${startDate.toISOString().split('T')[0]}`);
+      }
+    } else {
+      startDate.setDate(startDate.getDate() + 1); // Começar do dia seguinte
+    }
+
+    // Gerar lista de dias úteis faltantes
+    const missingDates: Date[] = [];
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= today) {
+      // Verificar se é dia útil (segunda a sexta)
+      const dayOfWeek = currentDate.getDay();
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        // Verificar se mercado funcionou neste dia
+        const marketWasOpen = await checkMarketWasOpen(currentDate);
+        if (marketWasOpen) {
+          missingDates.push(new Date(currentDate));
+        }
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    if (missingDates.length === 0) {
+      // Limpar checkpoint se não há mais nada para processar
+      if (indexCheckpoint) {
+        await clearIndexCheckpoint('mark-to-market', indexId);
+      }
+      return 0;
+    }
+
+    console.log(`📊 [CRON INDICES] Found ${missingDates.length} missing days for ${indexTicker}`);
+
+    // Processar dias um por vez, atualizando checkpoint após cada dia
+    let filledCount = 0;
+    for (const date of missingDates) {
+      try {
+        const success = await updateIndexPoints(indexId, date);
+        if (success) {
+          filledCount++;
+          // Atualizar checkpoint com a data processada
+          await saveCheckpoint({
+            jobType: 'mark-to-market',
+            indexId: indexId, // Checkpoint específico do índice
+            lastProcessedIndexId: date.toISOString(), // Armazenar data como string
+            processedCount: filledCount,
+            totalCount: missingDates.length,
+            errors: []
+          });
+        }
+      } catch (error) {
+        console.error(`❌ [CRON INDICES] Error processing date ${date.toISOString().split('T')[0]} for ${indexTicker}:`, error);
+        // Continuar processando outros dias mesmo se um falhar
+      }
+    }
+
+    // Se todos os dias foram processados, limpar checkpoint do índice
+    if (filledCount === missingDates.length) {
+      await clearIndexCheckpoint('mark-to-market', indexId);
+      console.log(`✅ [CRON INDICES] Completed fillMissingHistory for ${indexTicker}: ${filledCount} days filled`);
+    } else {
+      console.log(`⚠️ [CRON INDICES] Partial fillMissingHistory for ${indexTicker}: ${filledCount}/${missingDates.length} days filled`);
+    }
+
+    return filledCount;
+  } catch (error) {
+    console.error(`❌ [CRON INDICES] Error filling missing history for index ${indexId}:`, error);
+    return 0;
   }
 }
 
@@ -174,17 +317,9 @@ async function runMarkToMarketJob(): Promise<{
 
   if (allIndices.length === 0) {
     console.log('⚠️ [CRON INDICES] No active indices found');
-    // Limpar checkpoint se não há índices
-    await prisma.indexCronCheckpoint.deleteMany({
-      where: {
-        jobType: 'mark-to-market',
-        indexId: GLOBAL_CHECKPOINT_ID
-      }
-    }).catch(() => {});
     return { success: 0, failed: 0, processed: 0, remaining: 0, errors: [] };
   }
 
-  // Verificar se todos os índices já estão atualizados para hoje ANTES de processar
   // Usar timezone de Brasília para garantir data correta
   const today = getTodayInBrazil();
   
@@ -200,56 +335,97 @@ async function runMarkToMarketJob(): Promise<{
     console.log(`⏸️ [CRON INDICES] Mark-to-Market job skipped: hoje é ${dayName}, mercado não funcionou`);
     return { success: 0, failed: 0, processed: 0, remaining: 0, errors: [] };
   }
-  
-  let allUpToDate = true;
-  for (const index of allIndices) {
-    const lastPoint = await prisma.indexHistoryPoints.findFirst({
-      where: { indexId: index.id },
-      orderBy: { date: 'desc' }
-    });
-    
-    if (!lastPoint) {
-      allUpToDate = false;
-      break;
-    }
-    
-    const lastDate = new Date(lastPoint.date);
-    lastDate.setHours(0, 0, 0, 0);
-    
-    if (lastDate < today) {
-      allUpToDate = false;
-      break;
-    }
-  }
-  
-  if (allUpToDate) {
-    console.log('✅ [CRON INDICES] All indices are up to date for today. Nothing to process.');
-    // Limpar checkpoint e encerrar imediatamente
-    await prisma.indexCronCheckpoint.deleteMany({
-      where: {
-        jobType: 'mark-to-market',
-        indexId: GLOBAL_CHECKPOINT_ID
-      }
-    }).catch(() => {});
-    return { success: 0, failed: 0, processed: allIndices.length, remaining: 0, errors: [] };
-  }
 
   // Carregar checkpoint (se existir)
   const checkpoint = await loadCheckpoint('mark-to-market');
+  
+  // Se checkpoint existe e foi concluído hoje, verificar se ainda precisa processar
+  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length) {
+    // Verificar se todos os índices ainda estão atualizados para hoje
+    let allUpToDate = true;
+    for (const index of allIndices) {
+      const lastPoint = await prisma.indexHistoryPoints.findFirst({
+        where: { indexId: index.id },
+        orderBy: { date: 'desc' }
+      });
+      
+      if (!lastPoint) {
+        allUpToDate = false;
+        break;
+      }
+      
+      const lastDate = new Date(lastPoint.date);
+      lastDate.setHours(0, 0, 0, 0);
+      
+      if (lastDate < today) {
+        allUpToDate = false;
+        break;
+      }
+    }
+    
+    if (allUpToDate) {
+      console.log('✅ [CRON INDICES] All indices are up to date for today. Checkpoint indicates completion.');
+      return { success: 0, failed: 0, processed: allIndices.length, remaining: 0, errors: [] };
+    } else {
+      // Resetar checkpoint se há índices que precisam ser processados
+      console.log('🔄 [CRON INDICES] Some indices need processing. Resetting checkpoint.');
+      await saveCheckpoint({
+        jobType: 'mark-to-market',
+        indexId: null,
+        lastProcessedIndexId: null,
+        processedCount: 0,
+        totalCount: allIndices.length,
+        errors: []
+      });
+    }
+  }
+  
   let startIndex = 0;
   
+  // Usar checkpoint para continuar de onde parou
   if (checkpoint && checkpoint.lastProcessedIndexId) {
     const lastIndexIndex = allIndices.findIndex(idx => idx.id === checkpoint.lastProcessedIndexId);
     if (lastIndexIndex >= 0) {
       startIndex = lastIndexIndex + 1; // Continuar do próximo
-      console.log(`📌 [CRON INDICES] Resuming from index ${startIndex}/${allIndices.length}`);
+      console.log(`📌 [CRON INDICES] Resuming from index ${startIndex}/${allIndices.length} (checkpoint: ${checkpoint.processedCount}/${checkpoint.totalCount})`);
+    } else {
+      // Se o índice do checkpoint não existe mais, resetar
+      console.log('🔄 [CRON INDICES] Checkpoint index not found. Resetting checkpoint.');
+      startIndex = 0;
     }
   }
 
   let successCount = 0;
   let failedCount = 0;
   const errors: string[] = [];
-  let lastProcessedIndexId: string | null = null;
+  let lastProcessedIndexId: string | null = checkpoint?.lastProcessedIndexId || null;
+
+  // Verificar se há índices com checkpoints pendentes (processamento parcial)
+  const pendingIndexCheckpoints = await prisma.indexCronCheckpoint.findMany({
+    where: {
+      jobType: 'mark-to-market',
+      indexId: { not: GLOBAL_CHECKPOINT_ID } // Checkpoints específicos de índices
+    }
+  });
+
+  // Se há checkpoints pendentes, processar esses índices primeiro
+  if (pendingIndexCheckpoints.length > 0) {
+    console.log(`📌 [CRON INDICES] Found ${pendingIndexCheckpoints.length} indices with pending checkpoints, processing them first`);
+    for (const pendingCheckpoint of pendingIndexCheckpoints) {
+      if (pendingCheckpoint.indexId) {
+        const pendingIndex = allIndices.find(idx => idx.id === pendingCheckpoint.indexId);
+        if (pendingIndex) {
+          const indexIndex = allIndices.findIndex(idx => idx.id === pendingIndex.id);
+          // Reordenar para processar índices pendentes primeiro
+          if (indexIndex > startIndex) {
+            // Mover para frente na lista de processamento
+            allIndices.splice(indexIndex, 1);
+            allIndices.splice(startIndex, 0, pendingIndex);
+          }
+        }
+      }
+    }
+  }
 
   // Processar índices um por vez até atingir timeout
   for (let i = startIndex; i < allIndices.length; i++) {
@@ -257,6 +433,16 @@ async function runMarkToMarketJob(): Promise<{
     const elapsed = Date.now() - startTime;
     if (elapsed >= MAX_EXECUTION_TIME) {
       console.log(`⏱️ [CRON INDICES] Timeout approaching (${elapsed}ms), stopping at index ${i}/${allIndices.length}`);
+      // Salvar checkpoint global antes de sair por timeout
+      // O checkpoint do índice já foi salvo durante o processamento
+      await saveCheckpoint({
+        jobType: 'mark-to-market',
+        indexId: null,
+        lastProcessedIndexId,
+        processedCount: startIndex + successCount + failedCount,
+        totalCount: allIndices.length,
+        errors
+      });
       break;
     }
 
@@ -266,10 +452,42 @@ async function runMarkToMarketJob(): Promise<{
     try {
       console.log(`  📊 Processing ${index.ticker} (${i + 1}/${allIndices.length})...`);
 
-      // Verificar se já está atualizado para hoje
-      // Usar getTodayInBrazil para garantir timezone correto
-      const today = getTodayInBrazil();
+      // Verificar checkpoint específico do índice
+      const indexCheckpoint = await loadIndexCheckpoint('mark-to-market', index.id);
       
+      // Se há checkpoint do índice e indica conclusão, verificar se ainda precisa processar
+      if (indexCheckpoint && indexCheckpoint.processedCount === indexCheckpoint.totalCount) {
+        // Verificar se já está atualizado para hoje
+        const existingToday = await prisma.indexHistoryPoints.findFirst({
+          where: {
+            indexId: index.id,
+            date: today
+          }
+        });
+        
+        if (existingToday) {
+          console.log(`    ⏭️ ${index.ticker}: Already up to date for today (checkpoint indicates completion), skipping`);
+          successCount++;
+          // Limpar checkpoint do índice se concluído
+          await clearIndexCheckpoint('mark-to-market', index.id);
+          // Atualizar checkpoint global
+          await saveCheckpoint({
+            jobType: 'mark-to-market',
+            indexId: null,
+            lastProcessedIndexId,
+            processedCount: startIndex + successCount + failedCount,
+            totalCount: allIndices.length,
+            errors
+          });
+          continue;
+        } else {
+          // Resetar checkpoint do índice se precisa processar novamente
+          console.log(`    🔄 ${index.ticker}: Checkpoint exists but needs reprocessing, resetting`);
+          await clearIndexCheckpoint('mark-to-market', index.id);
+        }
+      }
+
+      // Verificar se já está atualizado para hoje
       const existingToday = await prisma.indexHistoryPoints.findFirst({
         where: {
           indexId: index.id,
@@ -280,82 +498,123 @@ async function runMarkToMarketJob(): Promise<{
       if (existingToday) {
         console.log(`    ⏭️ ${index.ticker}: Already up to date for today, skipping`);
         successCount++;
+        // Limpar checkpoint do índice se existir
+        await clearIndexCheckpoint('mark-to-market', index.id);
+        // Atualizar checkpoint global
+        await saveCheckpoint({
+          jobType: 'mark-to-market',
+          indexId: null,
+          lastProcessedIndexId,
+          processedCount: startIndex + successCount + failedCount,
+          totalCount: allIndices.length,
+          errors
+        });
         continue;
       }
 
-      // 1. Preencher lacunas históricas primeiro (limitado para não demorar muito)
-      const filledDays = await fillMissingHistory(index.id);
+      // Criar checkpoint do índice antes de começar processamento
+      await saveCheckpoint({
+        jobType: 'mark-to-market',
+        indexId: index.id,
+        lastProcessedIndexId: null,
+        processedCount: 0,
+        totalCount: 0, // Será atualizado durante fillMissingHistory
+        errors: []
+      });
+
+      // 1. Preencher lacunas históricas primeiro (com checkpoint por índice)
+      const filledDays = await fillMissingHistoryWithCheckpoint(index.id, index.ticker, today);
       if (filledDays > 0) {
         console.log(`    ✅ ${index.ticker}: Filled ${filledDays} missing days`);
       }
 
-      // 2. Buscar dividendos do dia antes de calcular pontos
-      // (a função updateIndexPoints já busca dividendos internamente se não fornecidos)
-      
-      // 3. Calcular pontos para hoje
+      // 2. Calcular pontos para hoje
       const success = await updateIndexPoints(index.id, today);
       
       if (success) {
         successCount++;
         console.log(`    ✅ ${index.ticker}: Points updated successfully`);
+        // Limpar checkpoint do índice quando concluído com sucesso
+        await clearIndexCheckpoint('mark-to-market', index.id);
       } else {
         failedCount++;
         errors.push(`${index.ticker}: Failed to update points`);
         console.log(`    ⚠️ ${index.ticker}: Failed to update points`);
+        // Manter checkpoint do índice em caso de falha para retentar depois
       }
+      
+      // Atualizar checkpoint global após cada índice processado
+      await saveCheckpoint({
+        jobType: 'mark-to-market',
+        indexId: null,
+        lastProcessedIndexId,
+        processedCount: startIndex + successCount + failedCount,
+        totalCount: allIndices.length,
+        errors
+      });
     } catch (error) {
       failedCount++;
       const errorMsg = error instanceof Error ? error.message : String(error);
       errors.push(`${index.ticker}: ${errorMsg}`);
       console.error(`    ❌ ${index.ticker}: Error in mark-to-market:`, error);
-      // Continuar processando outros índices mesmo se um falhar
-    }
-  }
-
-    const duration = Date.now() - startTime;
-    const processed = successCount + failedCount;
-    const remaining = allIndices.length - (startIndex + processed);
-
-    // Se não há mais nada para processar, limpar checkpoint
-    if (remaining === 0 && processed === allIndices.length) {
-      console.log('✅ [CRON INDICES] All indices processed. Clearing checkpoint.');
-      try {
-        await prisma.indexCronCheckpoint.deleteMany({
-          where: {
-            jobType: 'mark-to-market',
-            indexId: GLOBAL_CHECKPOINT_ID
-          }
-        });
-      } catch (error) {
-        console.error('⚠️ [CRON INDICES] Error clearing checkpoint:', error);
-      }
-    } else {
-      // Salvar checkpoint apenas se ainda há trabalho pendente
+      // Manter checkpoint do índice em caso de erro para retentar depois
+      // (não limpar, para permitir retomar de onde parou)
+      // Atualizar checkpoint global
       await saveCheckpoint({
         jobType: 'mark-to-market',
         indexId: null,
         lastProcessedIndexId,
-        processedCount: startIndex + processed,
+        processedCount: startIndex + successCount + failedCount,
         totalCount: allIndices.length,
         errors
       });
+      // Continuar processando outros índices mesmo se um falhar
     }
+  }
 
-    console.log(`✅ [CRON INDICES] Mark-to-Market completed: ${successCount} success, ${failedCount} failed, ${processed} processed, ${remaining} remaining (${duration}ms)`);
+  const duration = Date.now() - startTime;
+  const processed = successCount + failedCount;
+  const remaining = allIndices.length - (startIndex + processed);
 
-    // Invalidar cache quando todos os índices foram processados
-    if (remaining === 0 && successCount > 0) {
-      await invalidateMarketIndicesCache();
-    }
+  // Sempre salvar checkpoint final (nunca deletar)
+  if (remaining === 0) {
+    console.log('✅ [CRON INDICES] All indices processed. Checkpoint marked as complete.');
+    // Marcar checkpoint como concluído (processedCount === totalCount)
+    await saveCheckpoint({
+      jobType: 'mark-to-market',
+      indexId: null,
+      lastProcessedIndexId,
+      processedCount: allIndices.length,
+      totalCount: allIndices.length,
+      errors
+    });
+  } else {
+    // Salvar checkpoint parcial
+    await saveCheckpoint({
+      jobType: 'mark-to-market',
+      indexId: null,
+      lastProcessedIndexId,
+      processedCount: startIndex + processed,
+      totalCount: allIndices.length,
+      errors
+    });
+  }
 
-    return {
-      success: successCount,
-      failed: failedCount,
-      processed: startIndex + processed,
-      remaining,
-      errors,
-      nextIndexId: lastProcessedIndexId || undefined
-    };
+  console.log(`✅ [CRON INDICES] Mark-to-Market completed: ${successCount} success, ${failedCount} failed, ${processed} processed, ${remaining} remaining (${duration}ms)`);
+
+  // Invalidar cache quando todos os índices foram processados
+  if (remaining === 0 && successCount > 0) {
+    await invalidateMarketIndicesCache();
+  }
+
+  return {
+    success: successCount,
+    failed: failedCount,
+    processed: startIndex + processed,
+    remaining,
+    errors,
+    nextIndexId: lastProcessedIndexId || undefined
+  };
 }
 
 /**
@@ -406,27 +665,25 @@ async function runScreeningJob(): Promise<{
 
   if (allIndices.length === 0) {
     console.log('⚠️ [CRON INDICES] No active indices found');
-    // Limpar checkpoint se não há índices
-    await prisma.indexCronCheckpoint.deleteMany({
-      where: {
-        jobType: 'screening',
-        indexId: GLOBAL_CHECKPOINT_ID
-      }
-    }).catch(() => {});
     return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
   }
+  
+  // Carregar checkpoint primeiro
+  const checkpoint = await loadCheckpoint('screening');
   
   // Verificar se já foi executado hoje (verificando último log de rebalanceamento)
   // Usar timezone de Brasília para garantir data correta
   const todayCheck = getTodayInBrazil();
   
-  let allScreenedToday = true;
-  for (const index of allIndices) {
-    const lastLog = await prisma.indexRebalanceLog.findFirst({
-      where: { indexId: index.id },
-      orderBy: { date: 'desc' }
-    });
-    
+  // Se checkpoint existe e foi concluído hoje, verificar se ainda precisa processar
+  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length) {
+    let allScreenedToday = true;
+    for (const index of allIndices) {
+      const lastLog = await prisma.indexRebalanceLog.findFirst({
+        where: { indexId: index.id },
+        orderBy: { date: 'desc' }
+      });
+      
       if (lastLog) {
         const lastLogDate = new Date(lastLog.date);
         lastLogDate.setHours(0, 0, 0, 0);
@@ -443,26 +700,61 @@ async function runScreeningJob(): Promise<{
     }
     
     if (allScreenedToday) {
-      console.log('✅ [CRON INDICES] All indices were screened today. Nothing to process.');
-      // Limpar checkpoint e encerrar
-      await prisma.indexCronCheckpoint.deleteMany({
-        where: {
-          jobType: 'screening',
-          indexId: GLOBAL_CHECKPOINT_ID
-        }
-      }).catch(() => {});
+      console.log('✅ [CRON INDICES] All indices were screened today. Checkpoint indicates completion.');
       return { success: 0, failed: 0, rebalanced: 0, processed: allIndices.length, remaining: 0, errors: [] };
+    } else {
+      // Resetar checkpoint se há índices que precisam ser processados
+      console.log('🔄 [CRON INDICES] Some indices need screening. Resetting checkpoint.');
+      await saveCheckpoint({
+        jobType: 'screening',
+        indexId: null,
+        lastProcessedIndexId: null,
+        processedCount: 0,
+        totalCount: allIndices.length,
+        errors: []
+      });
     }
-
-  // Carregar checkpoint
-  const checkpoint = await loadCheckpoint('screening');
+  }
+  
   let startIndex = 0;
   
+  // Usar checkpoint para continuar de onde parou
   if (checkpoint && checkpoint.lastProcessedIndexId) {
     const lastIndexIndex = allIndices.findIndex(idx => idx.id === checkpoint.lastProcessedIndexId);
     if (lastIndexIndex >= 0) {
       startIndex = lastIndexIndex + 1;
-      console.log(`📌 [CRON INDICES] Resuming screening from index ${startIndex}/${allIndices.length}`);
+      console.log(`📌 [CRON INDICES] Resuming screening from index ${startIndex}/${allIndices.length} (checkpoint: ${checkpoint.processedCount}/${checkpoint.totalCount})`);
+    } else {
+      // Se o índice do checkpoint não existe mais, resetar
+      console.log('🔄 [CRON INDICES] Checkpoint index not found. Resetting checkpoint.');
+      startIndex = 0;
+    }
+  }
+
+  // Verificar se há índices com checkpoints pendentes (processamento parcial)
+  const pendingIndexCheckpoints = await prisma.indexCronCheckpoint.findMany({
+    where: {
+      jobType: 'screening',
+      indexId: { not: GLOBAL_CHECKPOINT_ID } // Checkpoints específicos de índices
+    }
+  });
+
+  // Se há checkpoints pendentes, processar esses índices primeiro
+  if (pendingIndexCheckpoints.length > 0) {
+    console.log(`📌 [CRON INDICES] Found ${pendingIndexCheckpoints.length} indices with pending screening checkpoints, processing them first`);
+    for (const pendingCheckpoint of pendingIndexCheckpoints) {
+      if (pendingCheckpoint.indexId) {
+        const pendingIndex = allIndices.find(idx => idx.id === pendingCheckpoint.indexId);
+        if (pendingIndex) {
+          const indexIndex = allIndices.findIndex(idx => idx.id === pendingIndex.id);
+          // Reordenar para processar índices pendentes primeiro
+          if (indexIndex > startIndex) {
+            // Mover para frente na lista de processamento
+            allIndices.splice(indexIndex, 1);
+            allIndices.splice(startIndex, 0, pendingIndex);
+          }
+        }
+      }
     }
   }
 
@@ -470,7 +762,7 @@ async function runScreeningJob(): Promise<{
   let failedCount = 0;
   let rebalancedCount = 0;
   const errors: string[] = [];
-  let lastProcessedIndexId: string | null = null;
+  let lastProcessedIndexId: string | null = checkpoint?.lastProcessedIndexId || null;
 
   // Processar índices um por vez
   for (let i = startIndex; i < allIndices.length; i++) {
@@ -478,6 +770,16 @@ async function runScreeningJob(): Promise<{
     const elapsed = Date.now() - startTime;
     if (elapsed >= MAX_EXECUTION_TIME) {
       console.log(`⏱️ [CRON INDICES] Timeout approaching (${elapsed}ms), stopping screening at index ${i}/${allIndices.length}`);
+      // Salvar checkpoint global antes de sair por timeout
+      // O checkpoint do índice já foi salvo durante o processamento
+      await saveCheckpoint({
+        jobType: 'screening',
+        indexId: null,
+        lastProcessedIndexId,
+        processedCount: startIndex + successCount + failedCount,
+        totalCount: allIndices.length,
+        errors
+      });
       break;
     }
 
@@ -486,6 +788,44 @@ async function runScreeningJob(): Promise<{
 
     try {
       console.log(`  🔍 Processing ${index.ticker} (${i + 1}/${allIndices.length})...`);
+
+      // Verificar checkpoint específico do índice
+      const indexCheckpoint = await loadIndexCheckpoint('screening', index.id);
+      
+      // Se há checkpoint do índice e indica conclusão, verificar se ainda precisa processar
+      if (indexCheckpoint && indexCheckpoint.processedCount === indexCheckpoint.totalCount) {
+        // Verificar se já foi processado hoje (verificando último log)
+        const todayIndex = getTodayInBrazil();
+        const lastLog = await prisma.indexRebalanceLog.findFirst({
+          where: { indexId: index.id },
+          orderBy: { date: 'desc' }
+        });
+        
+        if (lastLog) {
+          const lastLogDate = new Date(lastLog.date);
+          lastLogDate.setHours(0, 0, 0, 0);
+          
+          if (lastLogDate >= todayIndex) {
+            console.log(`    ⏭️ ${index.ticker}: Already screened today (checkpoint indicates completion), skipping`);
+            successCount++;
+            // Limpar checkpoint do índice se concluído
+            await clearIndexCheckpoint('screening', index.id);
+            // Atualizar checkpoint global
+            await saveCheckpoint({
+              jobType: 'screening',
+              indexId: null,
+              lastProcessedIndexId,
+              processedCount: startIndex + successCount + failedCount,
+              totalCount: allIndices.length,
+              errors
+            });
+            continue;
+          }
+        }
+        // Resetar checkpoint do índice se precisa processar novamente
+        console.log(`    🔄 ${index.ticker}: Checkpoint exists but needs reprocessing, resetting`);
+        await clearIndexCheckpoint('screening', index.id);
+      }
 
       // Verificar se já foi processado hoje (verificando último log)
       // Usar getTodayInBrazil para garantir timezone correto
@@ -503,9 +843,30 @@ async function runScreeningJob(): Promise<{
         if (lastLogDate >= todayIndex) {
           console.log(`    ⏭️ ${index.ticker}: Already screened today, skipping`);
           successCount++;
+          // Limpar checkpoint do índice se existir
+          await clearIndexCheckpoint('screening', index.id);
+          // Atualizar checkpoint global
+          await saveCheckpoint({
+            jobType: 'screening',
+            indexId: null,
+            lastProcessedIndexId,
+            processedCount: startIndex + successCount + failedCount,
+            totalCount: allIndices.length,
+            errors
+          });
           continue;
         }
       }
+
+      // Criar checkpoint do índice antes de começar processamento
+      await saveCheckpoint({
+        jobType: 'screening',
+        indexId: index.id,
+        lastProcessedIndexId: null,
+        processedCount: 0,
+        totalCount: 1, // Screening é atômico, então totalCount = 1
+        errors: []
+      });
 
       // 1. Executar screening
       const idealComposition = await runScreening(index);
@@ -521,6 +882,17 @@ async function runScreeningJob(): Promise<{
         );
         
         successCount++; // Considerar sucesso mesmo sem resultados
+        // Limpar checkpoint do índice quando concluído
+        await clearIndexCheckpoint('screening', index.id);
+        // Atualizar checkpoint global
+        await saveCheckpoint({
+          jobType: 'screening',
+          indexId: null,
+          lastProcessedIndexId,
+          processedCount: startIndex + successCount + failedCount,
+          totalCount: allIndices.length,
+          errors
+        });
         continue;
       }
 
@@ -550,6 +922,17 @@ async function runScreeningJob(): Promise<{
           );
           
           successCount++; // Considerar sucesso mesmo sem resultados
+          // Limpar checkpoint do índice quando concluído
+          await clearIndexCheckpoint('screening', index.id);
+          // Atualizar checkpoint global
+          await saveCheckpoint({
+            jobType: 'screening',
+            indexId: null,
+            lastProcessedIndexId,
+            processedCount: startIndex + successCount + failedCount,
+            totalCount: allIndices.length,
+            errors
+          });
           continue;
         }
         
@@ -623,11 +1006,35 @@ async function runScreeningJob(): Promise<{
       }
 
       successCount++;
+      
+      // Limpar checkpoint do índice quando concluído com sucesso
+      await clearIndexCheckpoint('screening', index.id);
+      
+      // Atualizar checkpoint global após cada índice processado
+      await saveCheckpoint({
+        jobType: 'screening',
+        indexId: null,
+        lastProcessedIndexId,
+        processedCount: startIndex + successCount + failedCount,
+        totalCount: allIndices.length,
+        errors
+      });
     } catch (error) {
       failedCount++;
       const errorMsg = error instanceof Error ? error.message : String(error);
       errors.push(`${index.ticker}: ${errorMsg}`);
       console.error(`    ❌ ${index.ticker}: Error in screening:`, error);
+      // Manter checkpoint do índice em caso de erro para retentar depois
+      // (não limpar, para permitir retomar de onde parou)
+      // Atualizar checkpoint global
+      await saveCheckpoint({
+        jobType: 'screening',
+        indexId: null,
+        lastProcessedIndexId,
+        processedCount: startIndex + successCount + failedCount,
+        totalCount: allIndices.length,
+        errors
+      });
       // Continuar processando outros índices mesmo se um falhar
     }
   }
@@ -636,21 +1043,20 @@ async function runScreeningJob(): Promise<{
   const processed = successCount + failedCount;
   const remaining = allIndices.length - (startIndex + processed);
 
-  // Se não há mais nada para processar, limpar checkpoint
-  if (remaining === 0 && processed === allIndices.length) {
-    console.log('✅ [CRON INDICES] All indices processed. Clearing checkpoint.');
-    try {
-      await prisma.indexCronCheckpoint.deleteMany({
-        where: {
-          jobType: 'screening',
-          indexId: GLOBAL_CHECKPOINT_ID
-        }
-      });
-    } catch (error) {
-      console.error('⚠️ [CRON INDICES] Error clearing checkpoint:', error);
-    }
+  // Sempre salvar checkpoint final (nunca deletar)
+  if (remaining === 0) {
+    console.log('✅ [CRON INDICES] All indices processed. Checkpoint marked as complete.');
+    // Marcar checkpoint como concluído (processedCount === totalCount)
+    await saveCheckpoint({
+      jobType: 'screening',
+      indexId: null,
+      lastProcessedIndexId,
+      processedCount: allIndices.length,
+      totalCount: allIndices.length,
+      errors
+    });
   } else {
-    // Salvar checkpoint apenas se ainda há trabalho pendente
+    // Salvar checkpoint parcial
     await saveCheckpoint({
       jobType: 'screening',
       indexId: null,
@@ -726,23 +1132,10 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime;
     const hasMore = 'remaining' in result && result.remaining > 0;
 
-    // Se não há mais nada para processar, limpar checkpoint e invalidar cache
+    // Invalidar cache quando todos os índices foram processados completamente
+    // Isso garante que dados atualizados sejam refletidos imediatamente
     if (!hasMore && result.processed === result.totalCount) {
-      console.log('✅ [CRON INDICES] All indices processed. Clearing checkpoint.');
-      try {
-        await prisma.indexCronCheckpoint.deleteMany({
-          where: {
-            jobType: job === 'both' ? undefined : job,
-            indexId: GLOBAL_CHECKPOINT_ID
-          }
-        });
-        
-        // Invalidar cache quando todos os índices foram processados completamente
-        // Isso garante que dados atualizados sejam refletidos imediatamente
-        await invalidateMarketIndicesCache();
-      } catch (error) {
-        console.error('⚠️ [CRON INDICES] Error clearing checkpoint:', error);
-      }
+      await invalidateMarketIndicesCache();
     }
 
     return NextResponse.json({

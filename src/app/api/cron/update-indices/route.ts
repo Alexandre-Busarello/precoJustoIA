@@ -430,7 +430,7 @@ async function runMarkToMarketJob(): Promise<{
   }
 
   // Carregar checkpoint (se existir)
-  const checkpoint = await loadCheckpoint('mark-to-market');
+  let checkpoint = await loadCheckpoint('mark-to-market');
   
   // Verificar se o checkpoint foi criado HOJE (não apenas se está completo)
   const checkpointDate = checkpoint?.createdAt ? new Date(checkpoint.createdAt) : null;
@@ -490,11 +490,15 @@ async function runMarkToMarketJob(): Promise<{
       totalCount: allIndices.length,
       errors: []
     });
+    // Recarregar checkpoint após reset para usar o novo
+    const resetCheckpoint = await loadCheckpoint('mark-to-market');
+    // Substituir checkpoint antigo pelo resetado
+    checkpoint = resetCheckpoint;
   }
   
   let startIndex = 0;
   
-  // Usar checkpoint para continuar de onde parou
+  // Usar checkpoint para continuar de onde parou (só se não foi resetado ou se é válido)
   if (checkpoint && checkpoint.lastProcessedIndexId) {
     const lastIndexIndex = allIndices.findIndex(idx => idx.id === checkpoint.lastProcessedIndexId);
     if (lastIndexIndex >= 0) {
@@ -505,6 +509,8 @@ async function runMarkToMarketJob(): Promise<{
       console.log('🔄 [CRON INDICES] Checkpoint index not found. Resetting checkpoint.');
       startIndex = 0;
     }
+  } else {
+    console.log(`📌 [CRON INDICES] Starting from index 0/${allIndices.length} (no checkpoint or checkpoint reset)`);
   }
 
   let successCount = 0;

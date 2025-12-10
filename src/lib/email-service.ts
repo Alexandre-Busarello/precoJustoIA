@@ -9,7 +9,9 @@ interface SendEmailOptions {
   text?: string
 }
 
-// Configuração do transporter nodemailer (fallback)
+// Configuração do transporter nodemailer (DESABILITADO - não usado mais como fallback)
+// Mantido apenas para referência futura, mas não é mais chamado
+// O fallback SMTP foi desabilitado - apenas Resend é usado
 const createNodemailerTransporter = () => {
   // Para desenvolvimento, usar Ethereal Email (teste)
   if (process.env.NODE_ENV === 'development' && !process.env.EMAIL_HOST) {
@@ -37,23 +39,19 @@ const createNodemailerTransporter = () => {
 }
 
 /**
- * Envia um e-mail usando Resend como método principal e nodemailer como fallback
+ * Envia um e-mail usando APENAS Resend (fallback SMTP desabilitado)
  * 
  * Fluxo:
  * 1. Tenta enviar com Resend (se RESEND_API_KEY estiver configurada)
- * 2. Se falhar, tenta com nodemailer (se EMAIL_HOST/EMAIL_USER estiverem configurados)
- * 3. Se ambos falharem, retorna erro
+ * 2. Se falhar, lança erro e email permanece como PENDING na fila
+ * 
+ * IMPORTANTE: Fallback SMTP (nodemailer/Gmail) foi DESABILITADO.
+ * Se o Resend falhar, o erro será propagado e o email será mantido como PENDING
+ * na fila para reprocessamento posterior.
  * 
  * Configuração Resend:
- * - RESEND_API_KEY: Chave da API do Resend
+ * - RESEND_API_KEY: Chave da API do Resend (OBRIGATÓRIO)
  * - EMAIL_FROM ou RESEND_FROM_EMAIL: Email remetente
- * 
- * Configuração nodemailer (fallback):
- * - EMAIL_HOST: Servidor SMTP
- * - EMAIL_PORT: Porta SMTP
- * - EMAIL_USER: Usuário SMTP
- * - EMAIL_PASS: Senha SMTP
- * - EMAIL_SECURE: 'true' para porta 465
  */
 export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'Preço Justo AI <suporte@precojusto.ai>'
@@ -88,74 +86,24 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
       
       return { success: true, messageId: data?.id, method: 'resend' }
     } catch (error: any) {
-      // Se o Resend não estiver instalado, pula para fallback
+      // Se o Resend não estiver instalado, lança erro
       if (error.code === 'MODULE_NOT_FOUND') {
-        console.warn('⚠️ [EMAIL] Resend não está instalado. Tentando fallback com nodemailer...')
+        const errorMsg = 'Resend não está instalado. Instale o pacote resend.'
+        console.error('❌ [EMAIL]', errorMsg)
+        throw new Error(errorMsg)
       } else {
-        console.error('❌ [EMAIL] Erro ao enviar via Resend:', error.message || error)
-        console.log('🔄 [EMAIL] Tentando fallback com nodemailer...')
+        // Qualquer outro erro do Resend deve ser propagado (não usar fallback SMTP)
+        const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar via Resend'
+        console.error('❌ [EMAIL] Erro ao enviar via Resend:', errorMsg)
+        console.log('⚠️ [EMAIL] Fallback SMTP desabilitado. Email será mantido como PENDING na fila.')
+        throw error // Propaga o erro para que o email seja mantido como PENDING
       }
-      
-      // Continua para tentar nodemailer como fallback
     }
   } else {
-    console.log('ℹ️ [EMAIL] RESEND_API_KEY não configurada. Tentando nodemailer...')
-  }
-
-  // ============================================
-  // TENTATIVA 2: NODEMAILER (Fallback)
-  // ============================================
-  if (process.env.EMAIL_HOST || process.env.EMAIL_USER) {
-    try {
-      const transporter = createNodemailerTransporter()
-      
-      const mailOptions = {
-        from: `"${fromName}" <${fromEmail.includes('<') ? fromEmail.match(/<(.+)>/)?.[1] || fromEmail : fromEmail}>`,
-        to,
-        subject,
-        html,
-        text: textContent,
-      }
-
-      const info = await transporter.sendMail(mailOptions)
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('✅ [EMAIL] E-mail enviado com sucesso via nodemailer:', info.messageId)
-        const previewUrl = nodemailer.getTestMessageUrl(info)
-        if (previewUrl) {
-          console.log('🔗 [EMAIL] Preview URL:', previewUrl)
-        }
-      } else {
-        console.log('✅ [EMAIL] E-mail enviado com sucesso via nodemailer (fallback):', info.messageId)
-      }
-      
-      return { success: true, messageId: info.messageId, method: 'nodemailer' }
-    } catch (error: any) {
-      console.error('❌ [EMAIL] Erro ao enviar via nodemailer (fallback):', error.message || error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
-        method: 'nodemailer'
-      }
-    }
-  }
-
-  // ============================================
-  // NENHUM MÉTODO DISPONÍVEL
-  // ============================================
-  console.warn('⚠️ [EMAIL] Nenhum método de envio configurado.')
-  console.log('📧 [EMAIL] Simulando envio de e-mail:')
-  console.log('   Para:', to)
-  console.log('   Assunto:', subject)
-  console.log('   HTML:', html.substring(0, 100) + '...')
-  console.log('')
-  console.log('💡 Configure pelo menos um dos seguintes:')
-  console.log('   - RESEND_API_KEY (recomendado)')
-  console.log('   - EMAIL_HOST + EMAIL_USER + EMAIL_PASS (fallback)')
-  
-  return { 
-    success: false, 
-    error: 'Nenhum método de envio configurado. Configure RESEND_API_KEY ou EMAIL_HOST/EMAIL_USER/EMAIL_PASS' 
+    // Se RESEND_API_KEY não estiver configurada, lança erro
+    const errorMsg = 'RESEND_API_KEY não configurada. Configure RESEND_API_KEY para enviar emails.'
+    console.error('❌ [EMAIL]', errorMsg)
+    throw new Error(errorMsg)
   }
 }
 

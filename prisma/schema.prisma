@@ -1908,15 +1908,16 @@ enum NotificationSegmentType {
 
 // Checkpoint para rastrear progresso dos cron jobs
 model IndexCronCheckpoint {
-  id                   String   @id @default(uuid())
+  id                   String    @id @default(uuid())
   jobType              String // 'mark-to-market' ou 'screening'
-  indexId              String?  @map("index_id") // null = checkpoint global
-  lastProcessedIndexId String?  @map("last_processed_index_id")
-  processedCount       Int      @default(0) @map("processed_count")
-  totalCount           Int      @default(0) @map("total_count")
-  errors               Json     @default("[]") // Array de strings
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  indexId              String?   @map("index_id") // null = checkpoint global
+  lastProcessedIndexId String?   @map("last_processed_index_id")
+  processedCount       Int       @default(0) @map("processed_count")
+  totalCount           Int       @default(0) @map("total_count")
+  errors               Json      @default("[]") // Array de strings
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  completedAt          DateTime? @map("completed_at") // Data em que o checkpoint foi completado (só é definido quando processedCount === totalCount)
 
   @@unique([jobType, indexId])
   @@index([jobType])

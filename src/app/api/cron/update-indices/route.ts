@@ -27,7 +27,8 @@ interface Checkpoint {
   processedCount: number;
   totalCount: number;
   errors: string[];
-  createdAt?: Date; // Data de criação do checkpoint (para verificar se foi criado hoje)
+  createdAt?: Date; // Data de criação do checkpoint
+  completedAt?: Date | null; // Data em que o checkpoint foi completado (só é definido quando processedCount === totalCount)
 }
 
 const GLOBAL_CHECKPOINT_ID = '__GLOBAL__'; // ID especial para checkpoint global
@@ -67,6 +68,10 @@ async function saveCheckpoint(checkpoint: Checkpoint): Promise<void> {
     // Quando indexId é null na interface, salvamos '__GLOBAL__' no banco
     const dbIndexId = checkpoint.indexId || GLOBAL_CHECKPOINT_ID;
     
+    // Determinar completedAt: só é definido quando o checkpoint está completo
+    const isComplete = checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount > 0;
+    const completedAt = isComplete ? new Date() : null;
+    
     await prisma.indexCronCheckpoint.upsert({
       where: {
         jobType_indexId: {
@@ -80,15 +85,17 @@ async function saveCheckpoint(checkpoint: Checkpoint): Promise<void> {
         lastProcessedIndexId: checkpoint.lastProcessedIndexId,
         processedCount: checkpoint.processedCount,
         totalCount: checkpoint.totalCount,
-        errors: checkpoint.errors
-      },
+        errors: checkpoint.errors,
+        completedAt: completedAt // Definir completedAt apenas se completo
+      } as any, // Type assertion temporária até o banco ser atualizado
       update: {
         lastProcessedIndexId: checkpoint.lastProcessedIndexId,
         processedCount: checkpoint.processedCount,
         totalCount: checkpoint.totalCount,
         errors: checkpoint.errors,
-        updatedAt: new Date() // Garantir que updatedAt seja atualizado
-      }
+        updatedAt: new Date(), // Garantir que updatedAt seja atualizado
+        completedAt: completedAt // Atualizar completedAt: definir se completo, manter null se não
+      } as any // Type assertion temporária até o banco ser atualizado
     });
   } catch (error) {
     console.error(`⚠️ [CRON INDICES] Error saving checkpoint:`, error);
@@ -141,7 +148,8 @@ async function loadCheckpoint(jobType: 'mark-to-market' | 'screening', indexId?:
       processedCount: checkpoint.processedCount,
       totalCount: checkpoint.totalCount,
       errors: checkpoint.errors as string[],
-      createdAt: checkpoint.createdAt // Incluir data de criação
+      createdAt: checkpoint.createdAt, // Incluir data de criação
+      completedAt: (checkpoint as any).completedAt || null // Data de conclusão (type assertion temporária)
     };
   } catch (error) {
     console.error(`⚠️ [CRON INDICES] Error loading checkpoint:`, error);
@@ -432,16 +440,17 @@ async function runMarkToMarketJob(): Promise<{
   // Carregar checkpoint (se existir)
   let checkpoint = await loadCheckpoint('mark-to-market');
   
-  // Verificar se o checkpoint foi criado HOJE (não apenas se está completo)
-  const checkpointDate = checkpoint?.createdAt ? new Date(checkpoint.createdAt) : null;
-  const checkpointIsToday = checkpointDate ? (
-    checkpointDate.getFullYear() === today.getFullYear() &&
-    checkpointDate.getMonth() === today.getMonth() &&
-    checkpointDate.getDate() === today.getDate()
+  // Verificar se o checkpoint foi completado HOJE usando completedAt
+  // completedAt só é definido quando processedCount === totalCount
+  const completedAtDate = checkpoint?.completedAt ? new Date(checkpoint.completedAt) : null;
+  const wasCompletedToday = completedAtDate ? (
+    completedAtDate.getFullYear() === today.getFullYear() &&
+    completedAtDate.getMonth() === today.getMonth() &&
+    completedAtDate.getDate() === today.getDate()
   ) : false;
   
   // Se checkpoint existe e foi concluído HOJE, verificar se ainda precisa processar
-  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && checkpointIsToday) {
+  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && wasCompletedToday) {
     // Verificar se todos os índices ainda estão atualizados para hoje
     let allUpToDate = true;
     for (const index of allIndices) {
@@ -479,9 +488,9 @@ async function runMarkToMarketJob(): Promise<{
         errors: []
       });
     }
-  } else if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && !checkpointIsToday) {
-    // Checkpoint completo mas de outro dia - resetar para processar hoje
-    console.log(`🔄 [CRON INDICES] Checkpoint completo mas de outro dia (${checkpointDate?.toISOString().split('T')[0]}). Resetting checkpoint para processar hoje.`);
+  } else if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && !wasCompletedToday) {
+    // Checkpoint completo mas completado em outro dia - resetar para processar hoje
+    console.log(`🔄 [CRON INDICES] Checkpoint completo mas completado em outro dia (${completedAtDate?.toISOString().split('T')[0] || 'sem data de conclusão'}). Resetting checkpoint para processar hoje.`);
     await saveCheckpoint({
       jobType: 'mark-to-market',
       indexId: null,
@@ -796,16 +805,17 @@ async function runScreeningJob(): Promise<{
   // Usar timezone de Brasília para garantir data correta
   const todayCheck = getTodayInBrazil();
   
-  // Verificar se o checkpoint foi criado HOJE (não apenas se está completo)
-  const checkpointDate = checkpoint?.createdAt ? new Date(checkpoint.createdAt) : null;
-  const checkpointIsToday = checkpointDate ? (
-    checkpointDate.getFullYear() === todayCheck.getFullYear() &&
-    checkpointDate.getMonth() === todayCheck.getMonth() &&
-    checkpointDate.getDate() === todayCheck.getDate()
+  // Verificar se o checkpoint foi completado HOJE usando completedAt
+  // completedAt só é definido quando processedCount === totalCount
+  const completedAtDate = checkpoint?.completedAt ? new Date(checkpoint.completedAt) : null;
+  const wasCompletedToday = completedAtDate ? (
+    completedAtDate.getFullYear() === todayCheck.getFullYear() &&
+    completedAtDate.getMonth() === todayCheck.getMonth() &&
+    completedAtDate.getDate() === todayCheck.getDate()
   ) : false;
   
   // Se checkpoint existe e foi concluído HOJE, verificar se ainda precisa processar
-  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && checkpointIsToday) {
+  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && wasCompletedToday) {
     let allScreenedToday = true;
     for (const index of allIndices) {
       const lastLog = await prisma.indexRebalanceLog.findFirst({
@@ -846,9 +856,9 @@ async function runScreeningJob(): Promise<{
       const resetCheckpoint = await loadCheckpoint('screening');
       checkpoint = resetCheckpoint;
     }
-  } else if (checkpoint && checkpoint && checkpoint.processedCount === checkpoint.totalCount && !checkpointIsToday) {
-    // Checkpoint completo mas de outro dia - resetar para processar hoje
-    console.log(`🔄 [CRON INDICES] Checkpoint completo mas de outro dia (${checkpointDate?.toISOString().split('T')[0]}). Resetting checkpoint para processar hoje.`);
+  } else if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && !wasCompletedToday) {
+    // Checkpoint completo mas completado em outro dia - resetar para processar hoje
+    console.log(`🔄 [CRON INDICES] Checkpoint completo mas completado em outro dia (${completedAtDate?.toISOString().split('T')[0] || 'sem data de conclusão'}). Resetting checkpoint para processar hoje.`);
     await saveCheckpoint({
       jobType: 'screening',
       indexId: null,

@@ -640,32 +640,80 @@ export class DividendService {
             );
           }
           
+          // Normalizar a data para remover horas (exDate é @db.Date, apenas data)
+          // Isso evita problemas de comparação quando dividend.date tem hora
+          const normalizedDate = new Date(dividend.date);
+          normalizedDate.setHours(0, 0, 0, 0);
+          
+          // Normalizar paymentDate também se existir
+          const normalizedPaymentDate = dividend.paymentDate 
+            ? (() => {
+                const pd = new Date(dividend.paymentDate);
+                pd.setHours(0, 0, 0, 0);
+                return pd;
+              })()
+            : null;
+
+          // Verificar se o registro já existe antes de fazer upsert
+          // Isso evita o erro P2025 que pode ocorrer quando o Prisma tenta fazer update
+          // de um registro que não existe ou quando há problemas com foreign keys
           return safeWrite(
             "upsert-dividend_history",
-            () =>
-              prisma.dividendHistory.upsert({
+            async () => {
+              // Primeiro verificar se já existe usando a data normalizada
+              const existing = await prisma.dividendHistory.findUnique({
                 where: {
                   companyId_exDate_amount: {
                     companyId: companyId,
-                    exDate: dividend.date,
+                    exDate: normalizedDate,
                     amount: dividend.amount,
                   },
                 },
-                update: {
-                  paymentDate: dividend.paymentDate || null,
-                  type: dividend.type || null,
-                  source: dividend.source || "yahoo",
-                  updatedAt: new Date(),
-                },
-                create: {
-                  companyId: companyId,
-                  exDate: dividend.date,
-                  amount: dividend.amount,
-                  paymentDate: dividend.paymentDate || null,
-                  type: dividend.type || null,
-                  source: dividend.source || "yahoo",
-                },
-              }),
+              });
+
+              if (existing) {
+                // Se existe, fazer update
+                return prisma.dividendHistory.update({
+                  where: {
+                    companyId_exDate_amount: {
+                      companyId: companyId,
+                      exDate: normalizedDate,
+                      amount: dividend.amount,
+                    },
+                  },
+                  data: {
+                    paymentDate: normalizedPaymentDate,
+                    type: dividend.type || null,
+                    source: dividend.source || "yahoo",
+                    updatedAt: new Date(),
+                  },
+                });
+              } else {
+                // Se não existe, fazer create
+                // Verificar novamente que a company existe antes de criar
+                const companyCheck = await prisma.company.findUnique({
+                  where: { id: companyId },
+                  select: { id: true },
+                });
+
+                if (!companyCheck) {
+                  throw new Error(
+                    `Company ${companyId} não encontrada ao tentar criar dividendo`
+                  );
+                }
+
+                return prisma.dividendHistory.create({
+                  data: {
+                    companyId: companyId,
+                    exDate: normalizedDate,
+                    amount: dividend.amount,
+                    paymentDate: normalizedPaymentDate,
+                    type: dividend.type || null,
+                    source: dividend.source || "yahoo",
+                  },
+                });
+              }
+            },
             ["dividend_history"]
           );
         })
@@ -755,28 +803,57 @@ export class DividendService {
                 console.error(`  ❌ [DB] Erro ao verificar company/dividend:`, err);
               });
               
-              // Tentar criar o dividendo novamente com create direto (sem upsert) como fallback
+              // Tentar criar/atualizar o dividendo novamente como fallback
+              // Primeiro verificar se já existe para evitar erro de unique constraint
               if (index === 0) {
                 console.log(
-                  `  🔄 [DB] Tentando criar dividendo diretamente (fallback para primeiro dividendo)...`
+                  `  🔄 [DB] Tentando fallback para primeiro dividendo...`
                 );
-                prisma.dividendHistory.create({
-                  data: {
+                prisma.dividendHistory.findFirst({
+                  where: {
                     companyId: companyId,
                     exDate: dividend.date,
-                    amount: dividend.amount,
-                    paymentDate: dividend.paymentDate || null,
-                    type: dividend.type || null,
-                    source: dividend.source || "yahoo",
+                    amount: dividend.amount
+                  }
+                }).then((existing) => {
+                  if (existing) {
+                    // Se já existe, apenas atualizar
+                    console.log(`  ℹ️ [DB] Dividendo já existe (ID: ${existing.id}), atualizando...`);
+                    return prisma.dividendHistory.update({
+                      where: { id: existing.id },
+                      data: {
+                        paymentDate: dividend.paymentDate || null,
+                        type: dividend.type || null,
+                        source: dividend.source || "yahoo",
+                        updatedAt: new Date(),
+                      }
+                    });
+                  } else {
+                    // Se não existe, criar
+                    console.log(`  🔄 [DB] Criando dividendo diretamente...`);
+                    return prisma.dividendHistory.create({
+                      data: {
+                        companyId: companyId,
+                        exDate: dividend.date,
+                        amount: dividend.amount,
+                        paymentDate: dividend.paymentDate || null,
+                        type: dividend.type || null,
+                        source: dividend.source || "yahoo",
+                      }
+                    });
                   }
                 }).then(() => {
-                  console.log(`  ✅ [DB] Dividendo criado com sucesso via fallback`);
+                  console.log(`  ✅ [DB] Dividendo processado com sucesso via fallback`);
                 }).catch((fallbackError: any) => {
                   console.error(
                     `  ❌ [DB] Fallback também falhou:`,
                     fallbackError.code,
                     fallbackError.message
                   );
+                  // Se ainda falhar, pode ser race condition - logar mas não quebrar
+                  if (fallbackError.code === 'P2002') {
+                    console.log(`  ℹ️ [DB] Erro P2002 no fallback - provavelmente race condition, registro já existe`);
+                  }
                 });
               }
             } else {

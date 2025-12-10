@@ -29,7 +29,6 @@ import { DashboardPortfolios } from "@/components/dashboard-portfolios";
 import { DashboardRadarSection } from "@/components/dashboard-radar-section";
 import { DashboardNotificationBanner } from "@/components/dashboard-notification-banner";
 import { NotificationModalsWrapper } from "@/components/notification-modals-wrapper";
-import { MarketTickerBar } from "@/components/indices/market-ticker-bar";
 import { GoogleAdsConversionPixel } from "@/components/google-ads-conversion-pixel";
 import { OAuthNewUserHandler } from "@/components/oauth-new-user-handler";
 import {

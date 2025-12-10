@@ -195,9 +195,23 @@ export class DividendService {
         return errorResult;
       }
 
+      // Validação adicional: confirmar que o company.id é válido antes de passar
+      if (!company.id || typeof company.id !== 'number' || company.id <= 0) {
+        console.error(
+          `❌ [DIVIDENDS] ${ticker}: Company ID inválido após busca: ${company.id} (tipo: ${typeof company.id})`
+        );
+        const errorResult = {
+          success: false,
+          dividendsCount: 0,
+          message: `Invalid company ID: ${company.id}`,
+        };
+        await cache.set(cacheKey, errorResult, { ttl: 3600 });
+        return errorResult;
+      }
+
       console.log(
         `💾 [DIVIDENDS] ${ticker}: Salvando ${dividends.length} dividendos ` +
-        `para companyId ${company.id}`
+        `para companyId ${company.id} (ticker confirmado: ${company.ticker})`
       );
       
       await this.saveDividendsToDatabase(company.id, dividends);
@@ -561,8 +575,15 @@ export class DividendService {
     }
 
     try {
-      // Verificação adicional: confirmar que a company existe antes de tentar salvar
-      // Isso ajuda a evitar race conditions e identifica problemas de sincronização
+      // Log detalhado antes de iniciar
+      console.log(
+        `🔍 [DB] Iniciando salvamento de ${dividends.length} dividendos para companyId ${companyId}. ` +
+        `Primeiros 3 dividendos: ${dividends.slice(0, 3).map(d => 
+          `${d.date.toISOString().split('T')[0]}=R$${d.amount.toFixed(4)}`
+        ).join(', ')}`
+      );
+
+      // Verificar que a company existe antes de tentar salvar
       const companyExists = await prisma.company.findUnique({
         where: { id: companyId },
         select: { id: true, ticker: true }
@@ -571,17 +592,55 @@ export class DividendService {
       if (!companyExists) {
         console.error(
           `❌ [DB] Company com ID ${companyId} não encontrada no banco. ` +
-          `Isso pode indicar uma race condition ou problema de sincronização. ` +
+          `Isso pode indicar um companyId incorreto ou problema de sincronização. ` +
           `Pulando salvamento de ${dividends.length} dividendos.`
         );
+        
+        // Tentar encontrar a empresa por outros meios para diagnóstico
+        const allCompanies = await prisma.company.findMany({
+          where: { id: { gte: companyId - 5, lte: companyId + 5 } },
+          select: { id: true, ticker: true },
+          take: 10
+        });
+        console.error(
+          `🔍 [DB] Empresas próximas ao ID ${companyId}:`,
+          allCompanies.map(c => `${c.id}:${c.ticker}`).join(', ')
+        );
+        
         return; // Retornar silenciosamente ao invés de lançar erro
       }
 
+      console.log(
+        `✅ [DB] Company confirmada: ID ${companyExists.id}, ticker ${companyExists.ticker}`
+      );
+
       // Usar upsert para cada dividendo baseado em companyId + exDate + amount
       // Isso permite ter JCP e dividendos ordinários na mesma data (com amounts diferentes)
+      // Processar em paralelo mas sem transação para evitar locks
       const results = await Promise.allSettled(
-        dividends.map((dividend) =>
-          safeWrite(
+        dividends.map((dividend, index) => {
+          // Validar dados antes de tentar upsert
+          if (!dividend.date || !(dividend.date instanceof Date) || isNaN(dividend.date.getTime())) {
+            throw new Error(`Dividendo ${index + 1}: data inválida`);
+          }
+          if (!dividend.amount || typeof dividend.amount !== 'number' || dividend.amount <= 0) {
+            throw new Error(`Dividendo ${index + 1}: amount inválido (${dividend.amount})`);
+          }
+          
+          // Log detalhado para o primeiro dividendo (onde o erro costuma ocorrer)
+          if (index === 0) {
+            console.log(
+              `🔍 [DB] Processando primeiro dividendo: ` +
+              `date=${dividend.date.toISOString()}, ` +
+              `amount=${dividend.amount}, ` +
+              `amountType=${typeof dividend.amount}, ` +
+              `amountIsNaN=${isNaN(dividend.amount)}, ` +
+              `companyId=${companyId}, ` +
+              `ticker=${companyExists.ticker}`
+            );
+          }
+          
+          return safeWrite(
             "upsert-dividend_history",
             () =>
               prisma.dividendHistory.upsert({
@@ -608,8 +667,8 @@ export class DividendService {
                 },
               }),
             ["dividend_history"]
-          )
-        )
+          );
+        })
       );
 
       // Verificar se houve erros nos resultados
@@ -625,17 +684,108 @@ export class DividendService {
         errors.forEach((errorResult, index) => {
           if (errorResult.status === 'rejected') {
             const reason = errorResult.reason;
+            const dividend = dividends[index];
+            
             // Tratamento específico para erro P2025
             if (reason?.code === 'P2025') {
               console.error(
-                `  ❌ [DB] Erro P2025 (Record not found) no dividendo ${index + 1}: ` +
-                `${reason.message || 'Company ou relacionamento não encontrado'}`
+                `  ❌ [DB] Erro P2025 (Record not found) no dividendo ${index + 1}/${dividends.length}: ` +
+                `date=${dividend.date.toISOString().split('T')[0]}, ` +
+                `dateFull=${dividend.date.toISOString()}, ` +
+                `amount=${dividend.amount}, ` +
+                `amountType=${typeof dividend.amount}, ` +
+                `amountIsNaN=${isNaN(dividend.amount)}, ` +
+                `companyId=${companyId}, ` +
+                `ticker=${companyExists.ticker}`
               );
+              console.error(
+                `  🔍 [DB] Detalhes completos do erro P2025:`,
+                JSON.stringify({
+                  code: reason.code,
+                  meta: reason.meta,
+                  message: reason.message,
+                  dividendData: {
+                    date: dividend.date.toISOString(),
+                    amount: dividend.amount,
+                    amountType: typeof dividend.amount,
+                    paymentDate: dividend.paymentDate?.toISOString() || null,
+                    type: dividend.type || null,
+                    source: dividend.source || null,
+                  },
+                  companyId: companyId,
+                  ticker: companyExists.ticker,
+                  stack: reason.stack?.split('\n').slice(0, 10)
+                }, null, 2)
+              );
+              
+              // Tentar verificar se a empresa ainda existe quando o erro ocorreu
+              // E também verificar se já existe um dividendo com esses valores
+              Promise.all([
+                prisma.company.findUnique({
+                  where: { id: companyId },
+                  select: { id: true, ticker: true }
+                }),
+                prisma.dividendHistory.findFirst({
+                  where: {
+                    companyId: companyId,
+                    exDate: dividend.date,
+                    amount: dividend.amount
+                  }
+                })
+              ]).then(([companyCheck, existingDividend]) => {
+                if (!companyCheck) {
+                  console.error(
+                    `  ⚠️ [DB] VERIFICAÇÃO: Company ${companyId} NÃO existe mais no banco!`
+                  );
+                } else {
+                  console.log(
+                    `  ✅ [DB] VERIFICAÇÃO: Company ${companyId} ainda existe (ticker: ${companyCheck.ticker})`
+                  );
+                }
+                if (existingDividend) {
+                  console.log(
+                    `  ℹ️ [DB] VERIFICAÇÃO: Já existe um dividendo com esses valores (ID: ${existingDividend.id})`
+                  );
+                } else {
+                  console.log(
+                    `  ℹ️ [DB] VERIFICAÇÃO: Nenhum dividendo existente encontrado com esses valores`
+                  );
+                }
+              }).catch(err => {
+                console.error(`  ❌ [DB] Erro ao verificar company/dividend:`, err);
+              });
+              
+              // Tentar criar o dividendo novamente com create direto (sem upsert) como fallback
+              if (index === 0) {
+                console.log(
+                  `  🔄 [DB] Tentando criar dividendo diretamente (fallback para primeiro dividendo)...`
+                );
+                prisma.dividendHistory.create({
+                  data: {
+                    companyId: companyId,
+                    exDate: dividend.date,
+                    amount: dividend.amount,
+                    paymentDate: dividend.paymentDate || null,
+                    type: dividend.type || null,
+                    source: dividend.source || "yahoo",
+                  }
+                }).then(() => {
+                  console.log(`  ✅ [DB] Dividendo criado com sucesso via fallback`);
+                }).catch((fallbackError: any) => {
+                  console.error(
+                    `  ❌ [DB] Fallback também falhou:`,
+                    fallbackError.code,
+                    fallbackError.message
+                  );
+                });
+              }
             } else {
               console.error(
-                `  ❌ [DB] Erro ao salvar dividendo ${index + 1}: `,
-                reason?.code || 'UNKNOWN',
-                reason?.message || reason || 'Erro desconhecido'
+                `  ❌ [DB] Erro ao salvar dividendo ${index + 1}/${dividends.length}: ` +
+                `date=${dividend.date.toISOString().split('T')[0]}, ` +
+                `amount=${dividend.amount}. ` +
+                `Código: ${reason?.code || 'UNKNOWN'}, ` +
+                `Mensagem: ${reason?.message || reason || 'Erro desconhecido'}`
               );
             }
           }
@@ -648,9 +798,10 @@ export class DividendService {
           `para companyId ${companyId} (ticker: ${companyExists.ticker})`
         );
       }
+      
     } catch (error: any) {
       // Tratamento específico para erro P2025 (Record not found - foreign key constraint)
-      if (error.code === 'P2025') {
+      if (error.code === 'P2025' || error.message?.includes('P2025')) {
         console.error(
           `❌ [DB] Erro P2025 ao salvar dividendos para companyId ${companyId}: ` +
           `Company ou relacionamento não encontrado. ` +

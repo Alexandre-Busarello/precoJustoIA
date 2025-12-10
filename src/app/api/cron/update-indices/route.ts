@@ -27,6 +27,7 @@ interface Checkpoint {
   processedCount: number;
   totalCount: number;
   errors: string[];
+  createdAt?: Date; // Data de criação do checkpoint (para verificar se foi criado hoje)
 }
 
 const GLOBAL_CHECKPOINT_ID = '__GLOBAL__'; // ID especial para checkpoint global
@@ -139,7 +140,8 @@ async function loadCheckpoint(jobType: 'mark-to-market' | 'screening', indexId?:
       lastProcessedIndexId: checkpoint.lastProcessedIndexId,
       processedCount: checkpoint.processedCount,
       totalCount: checkpoint.totalCount,
-      errors: checkpoint.errors as string[]
+      errors: checkpoint.errors as string[],
+      createdAt: checkpoint.createdAt // Incluir data de criação
     };
   } catch (error) {
     console.error(`⚠️ [CRON INDICES] Error loading checkpoint:`, error);
@@ -430,8 +432,16 @@ async function runMarkToMarketJob(): Promise<{
   // Carregar checkpoint (se existir)
   const checkpoint = await loadCheckpoint('mark-to-market');
   
-  // Se checkpoint existe e foi concluído hoje, verificar se ainda precisa processar
-  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length) {
+  // Verificar se o checkpoint foi criado HOJE (não apenas se está completo)
+  const checkpointDate = checkpoint?.createdAt ? new Date(checkpoint.createdAt) : null;
+  const checkpointIsToday = checkpointDate ? (
+    checkpointDate.getFullYear() === today.getFullYear() &&
+    checkpointDate.getMonth() === today.getMonth() &&
+    checkpointDate.getDate() === today.getDate()
+  ) : false;
+  
+  // Se checkpoint existe e foi concluído HOJE, verificar se ainda precisa processar
+  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && checkpointIsToday) {
     // Verificar se todos os índices ainda estão atualizados para hoje
     let allUpToDate = true;
     for (const index of allIndices) {
@@ -469,6 +479,17 @@ async function runMarkToMarketJob(): Promise<{
         errors: []
       });
     }
+  } else if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && !checkpointIsToday) {
+    // Checkpoint completo mas de outro dia - resetar para processar hoje
+    console.log(`🔄 [CRON INDICES] Checkpoint completo mas de outro dia (${checkpointDate?.toISOString().split('T')[0]}). Resetting checkpoint para processar hoje.`);
+    await saveCheckpoint({
+      jobType: 'mark-to-market',
+      indexId: null,
+      lastProcessedIndexId: null,
+      processedCount: 0,
+      totalCount: allIndices.length,
+      errors: []
+    });
   }
   
   let startIndex = 0;

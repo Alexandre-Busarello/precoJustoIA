@@ -14,6 +14,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { PaymentSuccessHandler } from "@/components/payment-success-handler"
 import { getCurrentUser } from "@/lib/user-service"
+import { GoogleAdsPurchasePixel } from "@/components/google-ads-purchase-pixel"
 
 export const metadata: Metadata = {
   title: "Pagamento Confirmado - Preço Justo AI | Premium Ativado",
@@ -45,6 +46,7 @@ export default async function SuccessPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 via-white to-blue-50 dark:from-green-950/20 dark:via-background dark:to-blue-950/20">
+      <GoogleAdsPurchasePixel />
       <div className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto text-center">
           {/* Ícone de Sucesso */}

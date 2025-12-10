@@ -54,6 +54,29 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
   const [investmentFocus, setInvestmentFocus] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Registrar que a modal apareceu (marcar lastOnboardingSeenAt) quando modal abre pela primeira vez
+  const [hasMarkedAsSeen, setHasMarkedAsSeen] = useState(false)
+  
+  useEffect(() => {
+    // Quando modal abre pela primeira vez, marcar como visto
+    if (isOpen && !hasMarkedAsSeen && session?.user?.email) {
+      // Chamar endpoint para marcar como visto (sem salvar dados ainda)
+      fetch("/api/user/onboarding/mark-seen", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+        .then(() => {
+          setHasMarkedAsSeen(true)
+          console.log('[Onboarding] Modal marcada como vista')
+        })
+        .catch((error) => {
+          console.error("Erro ao marcar onboarding como visto:", error)
+        })
+    }
+  }, [isOpen, hasMarkedAsSeen, session?.user?.email])
+
   // Carregar dados salvos quando o modal abre
   useEffect(() => {
     if (isOpen) {
@@ -97,6 +120,9 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
         setExperienceLevel("")
         setInvestmentFocus("")
       }
+    } else {
+      // Quando modal fecha, resetar flag para permitir marcar novamente se reabrir
+      setHasMarkedAsSeen(false)
     }
   }, [isOpen, onlyQuestions, savedData])
 

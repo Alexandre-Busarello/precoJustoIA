@@ -45,6 +45,8 @@ export function useNotificationModal() {
       // Invalidar query para não mostrar mais o modal
       queryClient.invalidateQueries({ queryKey: ['notifications', 'modal'] })
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      // Invalidar query de onboarding para permitir que apareça após fechar notificação
+      queryClient.invalidateQueries({ queryKey: ['user-onboarding-status'] })
     }
   })
 

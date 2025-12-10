@@ -5,12 +5,14 @@ import { NotificationModal } from './notification-modal'
 import { QuizModal } from './quiz-modal'
 import { useNotificationModal } from '@/hooks/use-notification-modal'
 import { useQuiz } from '@/hooks/use-quiz'
+import { useQueryClient } from '@tanstack/react-query'
 
 export function NotificationModalsWrapper() {
   const { notification: modalNotification } = useNotificationModal()
   const [quizCampaignId, setQuizCampaignId] = useState<string | undefined>()
   const [isManualOpen, setIsManualOpen] = useState(false) // Indica se foi aberto manualmente (sininho)
   const { quiz, markAsViewed } = useQuiz(quizCampaignId)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     // Se modalNotification for um quiz, definir campaignId para abrir quiz modal automaticamente
@@ -32,7 +34,23 @@ export function NotificationModalsWrapper() {
     }
     setQuizCampaignId(undefined)
     setIsManualOpen(false)
+    
+    // Invalidar query de onboarding para permitir que apareça após fechar notificação
+    queryClient.invalidateQueries({ queryKey: ['user-onboarding-status'] })
   }
+  
+  // Quando não há mais notificações modais pendentes, invalidar query de onboarding
+  // para permitir que o onboarding apareça se necessário
+  useEffect(() => {
+    if (!modalNotification && !quizCampaignId) {
+      // Aguardar um pouco para garantir que a modal foi completamente fechada
+      const timer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['user-onboarding-status'] })
+      }, 500)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [modalNotification, quizCampaignId, queryClient])
 
   return (
     <>

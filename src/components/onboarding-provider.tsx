@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { OnboardingModal } from "./onboarding-modal"
 import { OnboardingBanner } from "./onboarding-banner"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useNotificationModal } from "@/hooks/use-notification-modal"
 
 async function fetchUserOnboardingStatus(email?: string) {
   // Verificar cache no localStorage primeiro
@@ -89,6 +90,10 @@ export function OnboardingProvider() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showBanner, setShowBanner] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  
+  // Verificar se há notificações modais pendentes (MODAL ou QUIZ)
+  // Se houver, não mostrar onboarding até que sejam fechadas
+  const { notification: modalNotification, isLoading: isLoadingModal } = useNotificationModal()
 
   // Verificar se está em uma página permitida
   const isAllowedPage = pathname ? isOnboardingAllowedPage(pathname) : false
@@ -129,10 +134,19 @@ export function OnboardingProvider() {
   })
 
   useEffect(() => {
+    // CRÍTICO: Não mostrar onboarding se houver notificações modais pendentes
+    // Priorizar notificações sobre onboarding
+    if (isLoadingModal || modalNotification) {
+      setShowOnboarding(false)
+      setShowBanner(false)
+      return
+    }
+
     // Mostrar onboarding completo apenas se:
     // 1. Usuário está autenticado
     // 2. lastOnboardingSeenAt é null (nunca viu o onboarding)
     // 3. Está em uma página interna permitida
+    // 4. NÃO há notificações modais pendentes (verificado acima)
     if (
       status === "authenticated" &&
       session?.user?.email &&
@@ -165,7 +179,7 @@ export function OnboardingProvider() {
         setShowBanner(false)
       }
     }
-  }, [status, session, onboardingStatus, pathname, bannerDismissed])
+  }, [status, session, onboardingStatus, pathname, bannerDismissed, modalNotification, isLoadingModal])
 
   const handleClose = () => {
     setShowOnboarding(false)

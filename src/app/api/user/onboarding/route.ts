@@ -29,14 +29,26 @@ export async function POST(request: NextRequest) {
     const validatedData = onboardingSchema.parse(body)
     const { acquisitionSource, experienceLevel, investmentFocus } = validatedData
 
+    // Buscar dados atuais do usuário para preservar lastOnboardingSeenAt se já foi marcado
+    const currentUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { lastOnboardingSeenAt: true }
+    })
+
     // Preparar dados para atualização
+    // IMPORTANTE: Se lastOnboardingSeenAt já foi marcado (via mark-seen), preservar a data original
+    // Caso contrário, atualizar com data atual
     const updateData: {
-      lastOnboardingSeenAt: Date
+      lastOnboardingSeenAt?: Date
       onboardingAcquisitionSource?: string | null
       onboardingExperienceLevel?: string | null
       onboardingInvestmentFocus?: string | null
-    } = {
-      lastOnboardingSeenAt: new Date(),
+    } = {}
+
+    // Só atualizar lastOnboardingSeenAt se ainda não foi marcado
+    // Isso garante que a data de quando a modal apareceu seja preservada
+    if (currentUser?.lastOnboardingSeenAt === null) {
+      updateData.lastOnboardingSeenAt = new Date()
     }
 
     // Atualizar apenas os campos que foram fornecidos

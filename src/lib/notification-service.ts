@@ -428,6 +428,8 @@ export class NotificationService {
       }
 
       // Buscar todas as notificações de campanhas que o usuário já recebeu
+      // GARANTIA: Uma notificação por campanha por usuário
+      // Esta verificação garante que não criamos duplicatas mesmo em race conditions
       const existingNotifications = await prisma.notification.findMany({
         where: {
           userId,
@@ -482,7 +484,9 @@ export class NotificationService {
         }
 
         // Verificação final antes de criar (double-check para prevenir race conditions)
+        // GARANTIA: Uma notificação por campanha por usuário
         // Isso garante idempotência mesmo se duas requisições chegarem simultaneamente
+        // IMPORTANTE: Esta verificação é crítica para evitar duplicatas
         const alreadyExists = await prisma.notification.findFirst({
           where: {
             userId,
@@ -492,6 +496,8 @@ export class NotificationService {
 
         if (alreadyExists) {
           // Já existe, pular (pode ter sido criado por outra requisição simultânea)
+          // Log para debugging se necessário
+          console.log(`⚠️ [NOTIFICATION] Notificação já existe para usuário ${userId} e campanha ${campaign.id}, pulando...`)
           continue
         }
 

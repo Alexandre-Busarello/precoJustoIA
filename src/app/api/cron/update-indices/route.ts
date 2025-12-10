@@ -790,14 +790,22 @@ async function runScreeningJob(): Promise<{
   }
   
   // Carregar checkpoint primeiro
-  const checkpoint = await loadCheckpoint('screening');
+  let checkpoint = await loadCheckpoint('screening');
   
   // Verificar se já foi executado hoje (verificando último log de rebalanceamento)
   // Usar timezone de Brasília para garantir data correta
   const todayCheck = getTodayInBrazil();
   
-  // Se checkpoint existe e foi concluído hoje, verificar se ainda precisa processar
-  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length) {
+  // Verificar se o checkpoint foi criado HOJE (não apenas se está completo)
+  const checkpointDate = checkpoint?.createdAt ? new Date(checkpoint.createdAt) : null;
+  const checkpointIsToday = checkpointDate ? (
+    checkpointDate.getFullYear() === todayCheck.getFullYear() &&
+    checkpointDate.getMonth() === todayCheck.getMonth() &&
+    checkpointDate.getDate() === todayCheck.getDate()
+  ) : false;
+  
+  // Se checkpoint existe e foi concluído HOJE, verificar se ainda precisa processar
+  if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && checkpointIsToday) {
     let allScreenedToday = true;
     for (const index of allIndices) {
       const lastLog = await prisma.indexRebalanceLog.findFirst({
@@ -834,12 +842,29 @@ async function runScreeningJob(): Promise<{
         totalCount: allIndices.length,
         errors: []
       });
+      // Recarregar checkpoint após reset para usar o novo
+      const resetCheckpoint = await loadCheckpoint('screening');
+      checkpoint = resetCheckpoint;
     }
+  } else if (checkpoint && checkpoint && checkpoint.processedCount === checkpoint.totalCount && !checkpointIsToday) {
+    // Checkpoint completo mas de outro dia - resetar para processar hoje
+    console.log(`🔄 [CRON INDICES] Checkpoint completo mas de outro dia (${checkpointDate?.toISOString().split('T')[0]}). Resetting checkpoint para processar hoje.`);
+    await saveCheckpoint({
+      jobType: 'screening',
+      indexId: null,
+      lastProcessedIndexId: null,
+      processedCount: 0,
+      totalCount: allIndices.length,
+      errors: []
+    });
+    // Recarregar checkpoint após reset para usar o novo
+    const resetCheckpoint = await loadCheckpoint('screening');
+    checkpoint = resetCheckpoint;
   }
   
   let startIndex = 0;
   
-  // Usar checkpoint para continuar de onde parou
+  // Usar checkpoint para continuar de onde parou (só se não foi resetado ou se é válido)
   if (checkpoint && checkpoint.lastProcessedIndexId) {
     const lastIndexIndex = allIndices.findIndex(idx => idx.id === checkpoint.lastProcessedIndexId);
     if (lastIndexIndex >= 0) {
@@ -850,6 +875,8 @@ async function runScreeningJob(): Promise<{
       console.log('🔄 [CRON INDICES] Checkpoint index not found. Resetting checkpoint.');
       startIndex = 0;
     }
+  } else {
+    console.log(`📌 [CRON INDICES] Starting screening from index 0/${allIndices.length} (no checkpoint or checkpoint reset)`);
   }
 
   // Verificar se há índices com checkpoints pendentes (processamento parcial)

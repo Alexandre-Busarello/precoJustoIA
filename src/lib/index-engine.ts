@@ -224,15 +224,50 @@ export async function calculateDailyReturn(
       return null;
     }
 
-    // 2. Buscar último ponto histórico (para pegar pontos do dia anterior)
+    // 2. Buscar último ponto histórico ANTES da data sendo calculada (para pegar pontos do dia anterior)
+    // CRÍTICO: Buscar ponto onde date < date sendo calculada, não apenas o mais recente
+    // Isso evita usar pontos do próprio dia ou dias futuros
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0);
+    
+    console.log(`📊 [INDEX ENGINE] Looking for previous point before date: ${normalizedDate.toISOString().split('T')[0]}`);
+    
     const lastHistoryPoint = await prisma.indexHistoryPoints.findFirst({
-      where: { indexId },
+      where: {
+        indexId,
+        date: {
+          lt: normalizedDate // Apenas pontos ANTES da data sendo calculada
+        }
+      },
       orderBy: { date: 'desc' }
     });
 
-    // Se não há histórico, este é o primeiro dia (base 100)
+    // Se não há histórico anterior, este é o primeiro dia (base 100)
     const isFirstDay = !lastHistoryPoint;
     const previousPoints = lastHistoryPoint?.points || 100.0;
+    
+    // Log detalhado para debug
+    if (lastHistoryPoint) {
+      console.log(`📊 [INDEX ENGINE] ✅ Previous point found: ${lastHistoryPoint.date.toISOString().split('T')[0]} = ${previousPoints.toFixed(6)} pts`);
+    } else {
+      console.log(`📊 [INDEX ENGINE] ⚠️ No previous point found before ${normalizedDate.toISOString().split('T')[0]}, using base 100.0`);
+      
+      // Debug: verificar se há pontos no índice (pode ser que esteja buscando errado)
+      const allPoints = await prisma.indexHistoryPoints.findMany({
+        where: { indexId },
+        orderBy: { date: 'desc' },
+        take: 5,
+        select: { date: true, points: true }
+      });
+      if (allPoints.length > 0) {
+        console.log(`📊 [INDEX ENGINE] 🔍 Debug: Found ${allPoints.length} recent points:`);
+        allPoints.forEach(p => {
+          const pDate = new Date(p.date).toISOString().split('T')[0];
+          const isBefore = new Date(p.date) < normalizedDate;
+          console.log(`   - ${pDate}: ${p.points.toFixed(6)} pts ${isBefore ? '✅ (before)' : '❌ (not before)'}`);
+        });
+      }
+    }
 
     // 3. Buscar preços de fechamento do dia atual (necessário para snapshot e cálculo)
     const tickers = composition.map(c => c.assetTicker);
@@ -528,6 +563,14 @@ export async function calculateDailyReturn(
       // Verificar se há dividendo no ex-date
       const dividend = dividendsMap.get(comp.assetTicker) || 0;
 
+      // Log detalhado quando há dividendo
+      if (dividend > 0) {
+        console.log(`💰 [INDEX ENGINE] ${comp.assetTicker}: Dividendo detectado!`);
+        console.log(`   Dividendo por ação: R$ ${dividend.toFixed(4)}`);
+        console.log(`   PriceToday (ex-dividendo): R$ ${priceToday.toFixed(4)}`);
+        console.log(`   PriceYesterday: R$ ${priceYesterday.toFixed(4)}`);
+      }
+
       // Ajustar preço teórico: preço_ajustado = preço_atual + dividendo
       // Isso evita penalizar quando o preço cai no ex-date
       const adjustedPriceToday = priceToday + dividend;
@@ -543,14 +586,39 @@ export async function calculateDailyReturn(
       totalReturn += weightedContribution;
       
       // Log detalhado do retorno calculado
-      console.log(`📊 [INDEX ENGINE] ${comp.assetTicker}: Return=${(dailyReturn * 100).toFixed(4)}%, Weight=${(weight * 100).toFixed(2)}%, Contribution=${(weightedContribution * 100).toFixed(4)}%`);
+      if (dividend > 0) {
+        console.log(`📊 [INDEX ENGINE] ${comp.assetTicker}: AdjustedPrice=${adjustedPriceToday.toFixed(4)}, Return=${(dailyReturn * 100).toFixed(4)}%, Weight=${(weight * 100).toFixed(2)}%, Contribution=${(weightedContribution * 100).toFixed(4)}%`);
+      } else {
+        console.log(`📊 [INDEX ENGINE] ${comp.assetTicker}: Return=${(dailyReturn * 100).toFixed(4)}%, Weight=${(weight * 100).toFixed(2)}%, Contribution=${(weightedContribution * 100).toFixed(4)}%`);
+      }
 
       // Acumular dividendos recebidos (em pontos do índice)
+      // IMPORTANTE: Calcular o impacto REAL do dividendo no retorno, não o teórico
+      // O impacto real é a diferença entre o retorno COM dividendo e o retorno SEM dividendo
       if (dividend > 0) {
-        // Dividendo em pontos = dividendo por ação × peso no índice × pontos anteriores
-        const dividendInPoints = (dividend / priceYesterday) * weight * previousPoints;
+        // Calcular retorno SEM dividendo (apenas variação de preço)
+        const returnWithoutDividend = (priceToday / priceYesterday) - 1;
+        
+        // Calcular retorno COM dividendo (já calculado acima como dailyReturn)
+        const returnWithDividend = dailyReturn;
+        
+        // Impacto do dividendo no retorno = diferença entre os dois retornos
+        const dividendImpactOnReturn = returnWithDividend - returnWithoutDividend;
+        
+        // Contribuição ponderada do dividendo no retorno total
+        const dividendContribution = weight * dividendImpactOnReturn;
+        
+        // Impacto do dividendo nos pontos = pontos anteriores × contribuição do dividendo
+        const dividendInPoints = previousPoints * dividendContribution;
+        
         totalDividendsReceived += dividendInPoints;
         dividendsByTicker.set(comp.assetTicker, dividend);
+        console.log(`💰 [INDEX ENGINE] ${comp.assetTicker}: Dividendo impacto:`);
+        console.log(`   Retorno sem dividendo: ${(returnWithoutDividend * 100).toFixed(4)}%`);
+        console.log(`   Retorno com dividendo: ${(returnWithDividend * 100).toFixed(4)}%`);
+        console.log(`   Impacto do dividendo: ${(dividendImpactOnReturn * 100).toFixed(4)}%`);
+        console.log(`   Contribuição ponderada: ${(dividendContribution * 100).toFixed(4)}%`);
+        console.log(`   Dividendo em pontos: ${dividendInPoints.toFixed(6)} pts`);
       }
 
       // Calcular DY médio ponderado (usar DY do último financialData)
@@ -578,6 +646,15 @@ export async function calculateDailyReturn(
     console.log(`📊 [INDEX ENGINE] Total return: ${(totalReturn * 100).toFixed(4)}%`);
     console.log(`📊 [INDEX ENGINE] Points calculation: ${previousPoints.toFixed(4)} × (1 + ${(totalReturn * 100).toFixed(4)}%) = ${points.toFixed(4)}`);
     console.log(`📊 [INDEX ENGINE] Points change: ${(points - previousPoints).toFixed(4)} (${((points - previousPoints) / previousPoints * 100).toFixed(4)}%)`);
+    if (totalDividendsReceived > 0) {
+      console.log(`💰 [INDEX ENGINE] Total dividends received: ${totalDividendsReceived.toFixed(6)} pts`);
+      console.log(`💰 [INDEX ENGINE] Dividends impact on return: ${((totalDividendsReceived / previousPoints) * 100).toFixed(4)}%`);
+      // NOTA: O dividendo JÁ está incluído nos pontos através do cálculo do retorno (adjustedPriceToday)
+      // Os pontos calculados (${points.toFixed(6)}) já incluem o impacto do dividendo
+      // O campo dividendsReceived é apenas informativo/contábil, não deve ser somado novamente
+      console.log(`💰 [INDEX ENGINE] ✅ Points already include dividends through totalReturn calculation`);
+      console.log(`💰 [INDEX ENGINE] ✅ Dividends are included in the ${(totalReturn * 100).toFixed(4)}% return`);
+    }
     
     // Validação adicional: Calcular retorno esperado baseado nos retornos individuais desde entrada
     let expectedReturnFromEntries = 0;

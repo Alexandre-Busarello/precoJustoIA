@@ -29,9 +29,10 @@ export function IndexPerformanceHeader({
   const ReturnIcon = isPositive ? TrendingUp : TrendingDown;
   const returnColor = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
   
-  // Converter dividendos recebidos em pontos para porcentagem
-  const dividendsAsPercentage = totalDividendsReceived > 0 
-    ? (totalDividendsReceived / 100) * 100 // Dividendo em pontos / base 100 * 100
+  // Calcular impacto dos dividendos como porcentagem do retorno total
+  // Dividendo em pontos / pontos iniciais (100) = impacto percentual dos dividendos
+  const dividendsImpactPercent = totalDividendsReceived > 0 
+    ? (totalDividendsReceived / 100) * 100 // Dividendo acumulado em pontos desde o início
     : 0;
 
   return (
@@ -51,7 +52,7 @@ export function IndexPerformanceHeader({
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
               Retorno já inclui ajuste por dividendos recebidos
               {totalDividendsReceived > 0 && (
-                <> • Dividendos acumulados: {dividendsAsPercentage.toFixed(2)} pontos</>
+                <> • {dividendsImpactPercent.toFixed(2)} pts de dividendos desde o início</>
               )}
             </p>
           </div>
@@ -60,12 +61,22 @@ export function IndexPerformanceHeader({
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Pontos Atuais</p>
               <p className="text-2xl font-semibold">{currentPoints.toFixed(2)}</p>
+              {totalDividendsReceived > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                  Dividendos já incluídos no cálculo
+                </p>
+              )}
             </div>
             {totalDividendsReceived > 0 ? (
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Dividendos Recebidos</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Contribuição dos Dividendos
+                </p>
                 <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
-                  {dividendsAsPercentage.toFixed(2)} pts
+                  +{dividendsImpactPercent.toFixed(2)} pts
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                  (acumulado desde o início, já nos pontos)
                 </p>
               </div>
             ) : currentYield !== null ? (

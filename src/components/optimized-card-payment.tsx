@@ -20,7 +20,7 @@ import { formatStripeError } from '@/lib/stripe-error-handler'
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 interface OptimizedCardPaymentProps {
-  planType: 'monthly' | 'annual'
+  planType: 'monthly' | 'annual' | 'special'
   price: number
   onSuccess: () => void
   onError: (error: string) => void

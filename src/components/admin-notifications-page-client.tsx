@@ -68,6 +68,7 @@ interface Campaign {
   segmentConfig: Record<string, any>
   showOnDashboard: boolean
   dashboardExpiresAt: Date | null
+  isActive: boolean
   stats: {
     totalSent: number
     totalRead: number
@@ -94,6 +95,7 @@ export function AdminNotificationsPageClient() {
   const [showOnDashboard, setShowOnDashboard] = useState(false)
   const [dashboardExpiresAt, setDashboardExpiresAt] = useState('')
   const [sendEmail, setSendEmail] = useState(false)
+  const [isActive, setIsActive] = useState(true)
   const [segmentUserCount, setSegmentUserCount] = useState<number | null>(null)
   const [isCountingUsers, setIsCountingUsers] = useState(false)
   const [emailList, setEmailList] = useState('')
@@ -345,6 +347,7 @@ export function AdminNotificationsPageClient() {
     setShowOnDashboard(false)
     setDashboardExpiresAt('')
     setSendEmail(false)
+    setIsActive(true)
     setEditingCampaign(null)
     setEmailList('')
     setExtendForNewUsers(false)
@@ -473,6 +476,7 @@ export function AdminNotificationsPageClient() {
       showOnDashboard,
       dashboardExpiresAt: dashboardExpiresAt ? new Date(dashboardExpiresAt).toISOString() : undefined,
       sendEmail,
+      isActive,
       displayType: finalDisplayType,
       bannerTemplate: showOnDashboard ? bannerTemplate : undefined,
       modalTemplate: !showOnDashboard ? modalTemplate : undefined,
@@ -704,6 +708,21 @@ export function AdminNotificationsPageClient() {
                   ? 'A notificação será exibida como banner na dashboard dos usuários'
                   : 'A notificação será exibida como modal ou quiz (uma vez por usuário)'
                 }
+              </p>
+
+              {/* Status Ativo/Inativo */}
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="isActive"
+                  checked={isActive}
+                  onCheckedChange={setIsActive}
+                />
+                <Label htmlFor="isActive" className="font-medium">
+                  Campanha Ativa
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Campanhas inativas não serão processadas automaticamente para novos usuários
               </p>
 
               {/* Tipo de Exibição (apenas se não estiver destacando na dashboard) */}
@@ -1324,6 +1343,15 @@ export function AdminNotificationsPageClient() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <h3 className="font-semibold text-lg">{campaign.title}</h3>
+                          {campaign.isActive ? (
+                            <span className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-2 py-1 rounded">
+                              Ativa
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 px-2 py-1 rounded">
+                              Inativa
+                            </span>
+                          )}
                           {campaign.showOnDashboard && (
                             <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
                               Dashboard
@@ -1371,6 +1399,7 @@ export function AdminNotificationsPageClient() {
                                 ? new Date(campaign.dashboardExpiresAt).toISOString().slice(0, 16)
                                 : ''
                             )
+                            setIsActive(campaign.isActive ?? true)
                             setShowCreateDialog(true)
                           }}
                         >

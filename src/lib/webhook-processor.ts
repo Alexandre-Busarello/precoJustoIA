@@ -585,24 +585,34 @@ export class WebhookProcessor {
       select: {
         type: true,
         price_in_cents: true,
+        premium_duration_days: true,
       },
     })
 
     // Converter amount para centavos para comparação
+    // O valor recebido já tem desconto PIX de 5% aplicado (95% do preço original)
     const amountInCents = Math.round(amount * 100)
     
     let planDuration: number
     let planType: string
+    let isSpecialOffer = false
     
     // Verificar se corresponde a alguma oferta do banco
     const monthlyOffer = offers.find((o) => o.type === 'MONTHLY')
     const annualOffer = offers.find((o) => o.type === 'ANNUAL')
+    const specialOffer = offers.find((o) => o.type === 'SPECIAL')
     
-    // Comparar com tolerância de 1 centavo (para arredondamentos)
-    if (monthlyOffer && Math.abs(amountInCents - monthlyOffer.price_in_cents) <= 1) {
+    // Comparar com tolerância de 2 centavos (para arredondamentos)
+    // O valor recebido já tem desconto PIX aplicado (95% do preço original)
+    if (specialOffer && Math.abs(amountInCents - Math.round(specialOffer.price_in_cents * 0.95)) <= 2) {
+      planDuration = specialOffer.premium_duration_days || 365
+      planType = 'special'
+      isSpecialOffer = true
+      console.log(`✅ Oferta especial identificada: ${planDuration} dias`)
+    } else if (monthlyOffer && Math.abs(amountInCents - Math.round(monthlyOffer.price_in_cents * 0.95)) <= 2) {
       planDuration = 30
       planType = 'monthly'
-    } else if (annualOffer && Math.abs(amountInCents - annualOffer.price_in_cents) <= 1) {
+    } else if (annualOffer && Math.abs(amountInCents - Math.round(annualOffer.price_in_cents * 0.95)) <= 2) {
       planDuration = 365
       planType = 'annual'
     } else {
@@ -614,20 +624,39 @@ export class WebhookProcessor {
         planDuration = 30
         planType = 'monthly'
       }
-      console.warn(`⚠️ Valor ${amount} não corresponde exatamente a nenhuma oferta ativa. Usando fallback: ${planType}`)
+      console.warn(`⚠️ Valor ${amount} (${amountInCents} centavos) não corresponde exatamente a nenhuma oferta ativa. Usando fallback: ${planType}`)
     }
-
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + planDuration)
 
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { wasPremiumBefore: true, firstPremiumAt: true, email: true, name: true }
+      select: { 
+        wasPremiumBefore: true, 
+        firstPremiumAt: true, 
+        email: true, 
+        name: true,
+        premiumExpiresAt: true,
+        subscriptionTier: true
+      }
     })
 
     if (!currentUser) {
       console.error('❌ User not found in database:', userId)
       return false
+    }
+
+    // Se for oferta especial e usuário já é Premium, somar tempo ao premiumExpiresAt existente
+    let expiresAt: Date
+    const now = new Date()
+    
+    if (isSpecialOffer && currentUser.premiumExpiresAt && currentUser.subscriptionTier === 'PREMIUM') {
+      // Usuário já é Premium: somar duração ao premiumExpiresAt existente
+      expiresAt = new Date(currentUser.premiumExpiresAt)
+      expiresAt.setDate(expiresAt.getDate() + planDuration)
+      console.log(`✅ Usuário Premium: somando ${planDuration} dias ao premiumExpiresAt existente`)
+    } else {
+      // Usuário não é Premium ou não tem premiumExpiresAt: usar data atual + duração
+      expiresAt = new Date(now)
+      expiresAt.setDate(expiresAt.getDate() + planDuration)
     }
 
     const updateData: any = {

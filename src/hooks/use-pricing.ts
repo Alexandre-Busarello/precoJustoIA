@@ -9,21 +9,26 @@ import {
 
 export interface Offer {
   id: string
-  type: 'MONTHLY' | 'ANNUAL'
+  type: 'MONTHLY' | 'ANNUAL' | 'SPECIAL'
   price_in_cents: number
   price_formatted: string
   stripe_price_id: string | null
   currency: string
+  expires_at?: string | null
+  premium_duration_days?: number | null
+  is_expired?: boolean
 }
 
 export interface PricingResponse {
   monthly?: Offer
   annual?: Offer
+  special?: Offer
 }
 
 export interface UsePricingReturn {
   monthly: Offer | null
   annual: Offer | null
+  special: Offer | null
   isLoading: boolean
   error: Error | null
   monthlyEquivalent: number | null // Equivalente mensal do plano anual
@@ -54,6 +59,7 @@ export function usePricing(): UsePricingReturn {
   // Calcular valores derivados
   const monthly = data?.monthly || null
   const annual = data?.annual || null
+  const special = data?.special || null
 
   let monthlyEquivalent: number | null = null
   let annualDiscount: number | null = null
@@ -71,6 +77,7 @@ export function usePricing(): UsePricingReturn {
   return {
     monthly,
     annual,
+    special,
     isLoading,
     error: error as Error | null,
     monthlyEquivalent,

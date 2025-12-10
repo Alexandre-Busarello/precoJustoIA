@@ -70,6 +70,7 @@ export interface CreateCampaignParams {
     buttonColor?: string
     buttonTextColor?: string
   }
+  isActive?: boolean
 }
 
 export interface Notification {
@@ -161,7 +162,8 @@ export class NotificationService {
       modalTemplate,
       quizConfig,
       illustrationUrl,
-      bannerColors
+      bannerColors,
+      isActive = true
     } = params
 
     try {
@@ -184,6 +186,7 @@ export class NotificationService {
           quizConfig: quizConfig || null,
           illustrationUrl: illustrationUrl || null,
           bannerColors: bannerColors || null,
+          isActive,
           stats: {
             totalSent: 0,
             totalRead: 0,
@@ -389,6 +392,117 @@ export class NotificationService {
       return newUserIds.length
     } catch (error) {
       console.error('❌ [NOTIFICATION] Erro ao contar novos usuários:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Processa campanhas ativas para um usuário específico
+   * Cria notificações apenas para campanhas ativas que o usuário ainda não recebeu
+   * e que o usuário pertence ao segmento da campanha
+   */
+  static async processActiveCampaignsForUser(userId: string): Promise<{ processed: number }> {
+    try {
+      // Buscar todas as campanhas ativas
+      const activeCampaigns = await prisma.notificationCampaign.findMany({
+        where: {
+          isActive: true
+        } as any
+      })
+
+      if (activeCampaigns.length === 0) {
+        return { processed: 0 }
+      }
+
+      // Buscar todas as notificações de campanhas que o usuário já recebeu
+      const existingNotifications = await prisma.notification.findMany({
+        where: {
+          userId,
+          campaignId: { not: null }
+        },
+        select: { campaignId: true }
+      })
+
+      const existingCampaignIds = new Set(
+        existingNotifications
+          .map(n => n.campaignId)
+          .filter((id): id is string => id !== null)
+      )
+
+      let processedCount = 0
+
+      // Processar cada campanha ativa
+      for (const campaign of activeCampaigns) {
+        // Se usuário já recebeu notificação desta campanha, pular
+        if (existingCampaignIds.has(campaign.id)) {
+          continue
+        }
+
+        // Verificar se usuário pertence ao segmento da campanha
+        const segmentUserIds = await this.getSegmentUserIds(
+          campaign.segmentType as NotificationSegmentType,
+          campaign.segmentConfig as Record<string, any>
+        )
+
+        // Se usuário não pertence ao segmento, pular
+        if (!segmentUserIds.includes(userId)) {
+          continue
+        }
+
+        // Verificação final antes de criar (double-check para prevenir race conditions)
+        // Isso garante idempotência mesmo se duas requisições chegarem simultaneamente
+        const alreadyExists = await prisma.notification.findFirst({
+          where: {
+            userId,
+            campaignId: campaign.id
+          }
+        })
+
+        if (alreadyExists) {
+          // Já existe, pular (pode ter sido criado por outra requisição simultânea)
+          continue
+        }
+
+        // Criar notificação para o usuário
+        try {
+          await prisma.notification.create({
+            data: {
+              userId,
+              campaignId: campaign.id,
+              title: campaign.title,
+              message: campaign.message,
+              link: campaign.link || null,
+              linkType: campaign.linkType as NotificationLinkType,
+              type: ((campaign as any).displayType === 'QUIZ' ? 'QUIZ' : 'CAMPAIGN') as any,
+              metadata: {
+                campaignId: campaign.id,
+                segmentType: campaign.segmentType,
+                ...(campaign.segmentConfig as Record<string, any>)
+              }
+            }
+          })
+
+          processedCount++
+
+          // Recalcular estatísticas da campanha
+          await this.recalculateCampaignStats(campaign.id)
+        } catch (error: any) {
+          // Se erro for de constraint único (duplicação), ignorar silenciosamente
+          // Isso pode acontecer em race conditions extremas
+          if (error?.code === 'P2002') {
+            console.log(`⚠️ [NOTIFICATION] Notificação já existe para usuário ${userId} e campanha ${campaign.id}, ignorando...`)
+            continue
+          }
+          // Re-throw outros erros
+          throw error
+        }
+      }
+
+      console.log(`📢 [NOTIFICATION] Processadas ${processedCount} campanhas ativas para usuário ${userId}`)
+
+      return { processed: processedCount }
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Erro ao processar campanhas ativas:', error)
       throw error
     }
   }

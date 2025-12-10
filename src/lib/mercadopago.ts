@@ -34,7 +34,7 @@ export async function createPixPayment({
   userName,
   idempotencyKey,
 }: {
-  planType: 'monthly' | 'annual'
+  planType: 'monthly' | 'annual' | 'special'
   amount: number // Preço em reais (ex: 19.90)
   userId: string
   userEmail: string
@@ -46,6 +46,7 @@ export async function createPixPayment({
     const descriptions: Record<string, string> = {
       monthly: 'Preço Justo AI - Premium Mensal',
       annual: 'Preço Justo AI - Premium Anual',
+      special: 'Preço Justo AI - Oferta Especial',
     }
     
     // Gerar uma chave de idempotência única se não fornecida

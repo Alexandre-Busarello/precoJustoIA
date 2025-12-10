@@ -2,7 +2,8 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePremiumStatus } from "@/hooks/use-premium-status";
 import { useDashboardStats, useTopCompanies, useDashboardPortfolios } from "@/hooks/use-dashboard-data";
 import { useCacheInvalidation } from "@/hooks/use-cache-invalidation";
@@ -52,6 +53,7 @@ export default function Dashboard() {
   const { data: session, status } = useSession();
   const { isPremium, subscriptionTier, isTrialActive, trialDaysRemaining } = usePremiumStatus();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // Usar React Query hooks
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
@@ -60,6 +62,10 @@ export default function Dashboard() {
 
   // Monitorar mudanças de portfolio e perfil para invalidar cache
   useCacheInvalidation();
+
+  // Ref para prevenir processamento duplicado de campanhas
+  const hasProcessedCampaignsRef = useRef(false);
+  const isProcessingCampaignsRef = useRef(false);
 
   const topCompanies = (topCompaniesData as { companies: TopCompany[] } | undefined)?.companies || [];
   const portfolioCount = (dashboardPortfoliosData as { portfolios: unknown[] } | undefined)?.portfolios?.length || 0;
@@ -70,6 +76,45 @@ export default function Dashboard() {
       router.push("/login");
     }
   }, [session, status, router]);
+
+  // Processar campanhas ativas para novos usuários (apenas uma vez)
+  useEffect(() => {
+    if (status === "loading" || !session?.user?.id) return;
+    
+    // Prevenir processamento duplicado: verificar se já foi processado ou está em processamento
+    if (hasProcessedCampaignsRef.current || isProcessingCampaignsRef.current) {
+      return;
+    }
+
+    // Marcar como em processamento para evitar race conditions
+    isProcessingCampaignsRef.current = true;
+
+    // Processar campanhas ativas silenciosamente
+    // Isso garante que usuários novos recebam notificações de campanhas ativas
+    fetch('/api/notifications/process-active-campaigns')
+      .then(res => res.json())
+      .then(data => {
+        // Marcar como processado independente do resultado
+        hasProcessedCampaignsRef.current = true;
+        isProcessingCampaignsRef.current = false;
+
+        if (data.success && data.processed > 0) {
+          console.log(`📢 Processadas ${data.processed} campanhas ativas`)
+          
+          // Invalidar queries de notificações para atualizar UI automaticamente
+          // Isso atualiza o sininho (badge) e o banner na dashboard sem precisar refresh
+          queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        }
+      })
+      .catch(err => {
+        // Marcar como processado mesmo em caso de erro para evitar tentativas infinitas
+        hasProcessedCampaignsRef.current = true;
+        isProcessingCampaignsRef.current = false;
+        
+        // Silenciosamente ignorar erros para não impactar UX
+        console.error('Erro ao processar campanhas ativas:', err)
+      })
+  }, [session?.user?.id, status, queryClient]);
 
   // Função para forçar refresh das empresas (mantida para compatibilidade)
   const fetchTopCompanies = async (forceRefresh: boolean = false) => {

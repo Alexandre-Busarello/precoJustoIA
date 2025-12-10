@@ -33,7 +33,8 @@ const updateCampaignSchema = z.object({
   segmentConfig: z.any().optional(),
   showOnDashboard: z.boolean().optional(),
   dashboardExpiresAt: z.string().optional().nullable(),
-  sendEmail: z.boolean().optional()
+  sendEmail: z.boolean().optional(),
+  isActive: z.boolean().optional()
 })
 
 /**
@@ -98,6 +99,7 @@ export async function PUT(
         ? new Date(validatedData.dashboardExpiresAt)
         : null
     }
+    if (validatedData.isActive !== undefined) updateData.isActive = validatedData.isActive
 
     // Atualizar campanha
     const updatedCampaign = await prisma.notificationCampaign.update({

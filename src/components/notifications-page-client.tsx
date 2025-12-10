@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { NotificationMarkdown } from '@/components/notification-markdown'
 
 interface Notification {
   id: string
@@ -228,9 +229,9 @@ export function NotificationsPageClient() {
                                 <div className="h-2 w-2 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground mb-2 line-clamp-3">
-                              {notification.message}
-                            </p>
+                            <div className="text-sm text-muted-foreground mb-2 line-clamp-3">
+                              <NotificationMarkdown content={notification.message} />
+                            </div>
                             <div className="flex items-center gap-4 text-xs text-muted-foreground">
                               <span>{formatTime(notification.createdAt)}</span>
                               {notification.link && (

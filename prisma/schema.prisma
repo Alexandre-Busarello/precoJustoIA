@@ -1465,21 +1465,25 @@ model PlBolsaHistory {
 enum OfferType {
   MONTHLY
   ANNUAL
+  SPECIAL
 }
 
 model Offer {
-  id              String    @id // ex: prod_premium_monthly, prod_premium_annual
-  type            OfferType
-  price_in_cents  Int       @map("price_in_cents")
-  stripe_price_id String?   @map("stripe_price_id") // ID do preço no Stripe
-  is_active       Boolean   @default(true) @map("is_active")
-  currency        String    @default("BRL")
-  created_at      DateTime  @default(now()) @map("created_at")
-  updated_at      DateTime  @updatedAt @map("updated_at")
+  id                   String     @id // ex: prod_premium_monthly, prod_premium_annual
+  type                 OfferType
+  price_in_cents       Int         @map("price_in_cents")
+  stripe_price_id      String?     @map("stripe_price_id") // ID do preço no Stripe
+  is_active            Boolean     @default(true) @map("is_active")
+  currency             String      @default("BRL")
+  expires_at           DateTime?   @map("expires_at") // Validade da oferta (para ofertas especiais)
+  premium_duration_days Int?      @map("premium_duration_days") // Duração em dias do Premium que a oferta concede
+  created_at           DateTime   @default(now()) @map("created_at")
+  updated_at           DateTime   @updatedAt @map("updated_at")
 
   @@unique([type, is_active], name: "unique_active_offer_per_type")
   @@index([type])
   @@index([is_active])
+  @@index([expires_at])
   @@map("offers")
 }
 
@@ -1720,6 +1724,9 @@ model NotificationCampaign {
   createdBy String @map("created_by") // ID do admin que criou
   stats     Json? // Estatísticas (totalSent, totalRead, totalClicked)
 
+  // Status
+  isActive Boolean @default(true) @map("is_active") // Se a campanha está ativa
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -1731,6 +1738,7 @@ model NotificationCampaign {
   @@index([createdAt])
   @@index([showOnDashboard, dashboardExpiresAt])
   @@index([displayType])
+  @@index([isActive])
   @@map("notification_campaigns")
 }
 

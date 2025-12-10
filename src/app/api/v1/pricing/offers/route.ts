@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { formatPrice } from '@/lib/price-utils'
+import { isOfferExpired } from '@/lib/offer-utils'
 
 /**
  * GET /api/v1/pricing/offers
@@ -29,6 +30,7 @@ export async function GET() {
     // Separar ofertas por tipo
     const monthlyOffer = offers.find((offer) => offer.type === 'MONTHLY')
     const annualOffer = offers.find((offer) => offer.type === 'ANNUAL')
+    const specialOffer = offers.find((offer) => offer.type === 'SPECIAL')
 
     // Formatar resposta
     const response: {
@@ -47,6 +49,17 @@ export async function GET() {
         price_formatted: string
         stripe_price_id: string | null
         currency: string
+      }
+      special?: {
+        id: string
+        type: string
+        price_in_cents: number
+        price_formatted: string
+        stripe_price_id: string | null
+        currency: string
+        expires_at: string | null
+        premium_duration_days: number | null
+        is_expired: boolean
       }
     } = {}
 
@@ -69,6 +82,21 @@ export async function GET() {
         price_formatted: formatPrice(annualOffer.price_in_cents),
         stripe_price_id: annualOffer.stripe_price_id,
         currency: annualOffer.currency,
+      }
+    }
+
+    if (specialOffer) {
+      const expired = isOfferExpired(specialOffer)
+      response.special = {
+        id: specialOffer.id,
+        type: specialOffer.type,
+        price_in_cents: specialOffer.price_in_cents,
+        price_formatted: formatPrice(specialOffer.price_in_cents),
+        stripe_price_id: specialOffer.stripe_price_id,
+        currency: specialOffer.currency,
+        expires_at: specialOffer.expires_at?.toISOString() || null,
+        premium_duration_days: specialOffer.premium_duration_days,
+        is_expired: expired,
       }
     }
 

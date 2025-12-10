@@ -197,12 +197,59 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session):
   try {
     // Buscar dados da assinatura
     const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
-    
-    // Atualizar usuário no banco de dados
+    const stripePriceId = subscription.items.data[0].price.id
+
+    // Verificar se é uma oferta especial através do stripe_price_id
+    const specialOffer = await prisma.offer.findFirst({
+      where: {
+        type: 'SPECIAL',
+        stripe_price_id: stripePriceId,
+        is_active: true,
+      },
+      select: {
+        premium_duration_days: true,
+      },
+    })
+
+    // Buscar usuário atual para verificar se já é Premium
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        premiumExpiresAt: true,
+        subscriptionTier: true,
+        firstPremiumAt: true,
+      },
+    })
+
+    if (!currentUser) {
+      console.error('❌ User not found:', userId)
+      return false
+    }
+
+    // Calcular data de expiração
+    let periodEndDate: Date
     const currentPeriodEnd = (subscription as any).current_period_end
-    const periodEndDate = currentPeriodEnd 
-      ? new Date(currentPeriodEnd * 1000)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
+
+    if (specialOffer) {
+      // É uma oferta especial
+      const planDuration = specialOffer.premium_duration_days || 365
+      const now = new Date()
+
+      // Se usuário já é Premium, somar ao premiumExpiresAt existente
+      if (currentUser.premiumExpiresAt && currentUser.subscriptionTier === 'PREMIUM') {
+        periodEndDate = new Date(currentUser.premiumExpiresAt)
+        periodEndDate.setDate(periodEndDate.getDate() + planDuration)
+        console.log(`✅ Usuário Premium: somando ${planDuration} dias ao premiumExpiresAt existente`)
+      } else {
+        periodEndDate = new Date(now)
+        periodEndDate.setDate(periodEndDate.getDate() + planDuration)
+      }
+    } else {
+      // Plano normal (mensal ou anual)
+      periodEndDate = currentPeriodEnd 
+        ? new Date(currentPeriodEnd * 1000)
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias como fallback
+    }
 
     await safeWrite(
       'stripe-checkout-completed',
@@ -212,11 +259,11 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session):
           subscriptionTier: 'PREMIUM',
           stripeCustomerId: session.customer as string,
           stripeSubscriptionId: subscription.id,
-          stripePriceId: subscription.items.data[0].price.id,
+          stripePriceId: stripePriceId,
           stripeCurrentPeriodEnd: periodEndDate,
           premiumExpiresAt: periodEndDate,
           wasPremiumBefore: true,
-          firstPremiumAt: new Date(),
+          firstPremiumAt: currentUser.firstPremiumAt || new Date(),
           lastPremiumAt: new Date(),
           premiumCount: {
             increment: 1,
@@ -708,20 +755,66 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return false
   }
 
-  if (!planType || !['monthly', 'annual'].includes(planType)) {
+  if (!planType || !['monthly', 'annual', 'special'].includes(planType)) {
     console.error('❌ Invalid plan type in payment intent metadata:', planType)
     return false
   }
 
   try {
+    // Buscar usuário atual para verificar se já é Premium
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        premiumExpiresAt: true,
+        subscriptionTier: true,
+        firstPremiumAt: true,
+      },
+    })
+
+    if (!currentUser) {
+      console.error('❌ User not found:', userId)
+      return false
+    }
+
     // Calcular data de expiração baseada no plano
     const now = new Date()
-    const expiresAt = new Date(now)
-    
-    if (planType === 'monthly') {
-      expiresAt.setMonth(expiresAt.getMonth() + 1)
+    let expiresAt: Date
+    let planDuration: number
+
+    if (planType === 'special') {
+      // Buscar oferta especial para obter premium_duration_days
+      const specialOffer = await prisma.offer.findFirst({
+        where: {
+          type: 'SPECIAL',
+          is_active: true,
+        },
+        select: {
+          premium_duration_days: true,
+        },
+      })
+
+      planDuration = specialOffer?.premium_duration_days || 365
+
+      // Se usuário já é Premium, somar ao premiumExpiresAt existente
+      if (currentUser.premiumExpiresAt && currentUser.subscriptionTier === 'PREMIUM') {
+        expiresAt = new Date(currentUser.premiumExpiresAt)
+        expiresAt.setDate(expiresAt.getDate() + planDuration)
+        console.log(`✅ Usuário Premium: somando ${planDuration} dias ao premiumExpiresAt existente`)
+      } else {
+        expiresAt = new Date(now)
+        expiresAt.setDate(expiresAt.getDate() + planDuration)
+      }
     } else {
-      expiresAt.setFullYear(expiresAt.getFullYear() + 1)
+      // Planos normais
+      if (planType === 'monthly') {
+        planDuration = 30
+        expiresAt = new Date(now)
+        expiresAt.setMonth(expiresAt.getMonth() + 1)
+      } else {
+        planDuration = 365
+        expiresAt = new Date(now)
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1)
+      }
     }
 
     // Atualizar usuário no banco de dados
@@ -733,7 +826,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
           subscriptionTier: 'PREMIUM',
           premiumExpiresAt: expiresAt,
           wasPremiumBefore: true,
-          firstPremiumAt: new Date(),
+          firstPremiumAt: currentUser.firstPremiumAt || new Date(),
           lastPremiumAt: new Date(),
           premiumCount: {
             increment: 1,

@@ -19,7 +19,7 @@ import Image from 'next/image'
 import { usePaymentVerification } from '@/components/session-refresh-provider'
 
 interface OptimizedPixPaymentProps {
-  planType: 'monthly' | 'annual'
+  planType: 'monthly' | 'annual' | 'special'
   price: number
   onSuccess: () => void
   onError: (error: string) => void
@@ -164,12 +164,14 @@ export function OptimizedPixPayment({
         <p className="text-gray-600 dark:text-gray-300 mb-4">
           Aprovação instantânea e segura
         </p>
-        <div className="mb-6">
-          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 inline-flex items-center">
-            <Zap className="w-3 h-3 mr-1" />
-            5% de desconto aplicado
-          </Badge>
-        </div>
+        {planType !== 'special' && (
+          <div className="mb-6">
+            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 inline-flex items-center">
+              <Zap className="w-3 h-3 mr-1" />
+              5% de desconto aplicado
+            </Badge>
+          </div>
+        )}
 
         <Button 
           onClick={createPixPayment}

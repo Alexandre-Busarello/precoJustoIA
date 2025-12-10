@@ -22,6 +22,8 @@ import { OptimizedPixPayment } from './optimized-pix-payment'
 import { OptimizedCardPayment } from './optimized-card-payment'
 import { usePricing } from '@/hooks/use-pricing'
 import { formatPrice, calculateDiscount, calculatePixDiscount, getPixDiscountAmount } from '@/lib/price-utils'
+import { isOfferActiveForPurchase } from '@/lib/offer-utils'
+import Link from 'next/link'
 
 type PlanType = 'monthly' | 'annual'
 type PaymentMethod = 'pix' | 'card'
@@ -34,7 +36,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   const { status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { monthly, annual, isLoading: isLoadingPricing } = usePricing()
+  const { monthly, annual, special, isLoading: isLoadingPricing } = usePricing()
   
   const [selectedPlan, setSelectedPlan] = useState<PlanType>(
     (searchParams.get('plan') as PlanType) || initialPlan
@@ -60,7 +62,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
           '🚀 Backtesting de Carteiras',
           'Comparador completo',
           'Rankings ilimitados',
-          'Análise individual completa',
+          'Análise individual por empresacompleta',
           'Relatórios mensais personalizados por IA',
           'Suporte prioritário',
           'Central de Suporte Premium'
@@ -151,9 +153,70 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
     )
   }
 
+  // Verificar se há oferta especial ativa
+  const hasActiveSpecialOffer = special && isOfferActiveForPurchase({
+    is_active: true,
+    expires_at: special.expires_at ? new Date(special.expires_at) : null
+  })
+
+  // Calcular desconto da oferta especial comparando com oferta anual
+  const calculateSpecialDiscount = () => {
+    if (!special || !annual) return null
+    
+    const annualPrice = annual.price_in_cents
+    const specialPrice = special.price_in_cents
+    const discountAmount = annualPrice - specialPrice
+    
+    if (discountAmount <= 0) return null
+    
+    return {
+      amount: discountAmount,
+      formatted: formatPrice(discountAmount),
+      percentage: Math.round((discountAmount / annualPrice) * 100)
+    }
+  }
+  
+  const specialDiscount = calculateSpecialDiscount()
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8">
+        {/* Special Offer Banner */}
+        {hasActiveSpecialOffer && (
+          <Card className="mb-6 border-2 border-orange-500 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30">
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">
+                      ⚡ Oferta Especial Disponível!
+                    </h3>
+                    <Badge variant="default" className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                      Oferta Limitada
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    {specialDiscount ? (
+                      <>
+                        Aproveite nossa oferta especial com desconto exclusivo. {specialDiscount.formatted} de economia ({specialDiscount.percentage}% OFF)!
+                      </>
+                    ) : (
+                      'Aproveite nossa oferta especial com desconto exclusivo. Oportunidade única!'
+                    )}
+                  </p>
+                </div>
+                <Link href="/checkout/oferta-especial">
+                  <Button className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold">
+                    Ver Oferta Especial
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">

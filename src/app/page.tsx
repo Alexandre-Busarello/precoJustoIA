@@ -742,7 +742,7 @@ export default async function Home() {
                 </div>
                 <h3 className="text-base sm:text-lg font-bold mb-2 sm:mb-3">Histórico Completo</h3>
                 <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed flex-grow">
-                  Dados históricos de 5+ anos para backtesting confiável
+                  Dados históricos de 10+ anos para backtesting confiável
                 </p>
               </CardContent>
             </Card>

@@ -324,7 +324,7 @@ Preço Justo AI é uma plataforma SaaS completa de análise fundamentalista de a
   - Análise setorial
   - Radar de oportunidades
   - Radar de dividendos completo
-  - Dados históricos de 5+ anos
+  - Dados históricos de 10+ anos
   - Backtesting de carteiras
   - Gestão de carteiras
   - Análise técnica

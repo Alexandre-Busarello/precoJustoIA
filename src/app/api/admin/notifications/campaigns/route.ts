@@ -84,6 +84,7 @@ export async function GET(request: NextRequest) {
           segmentConfig: c.segmentConfig,
           showOnDashboard: c.showOnDashboard,
           dashboardExpiresAt: c.dashboardExpiresAt,
+          isActive: (c as any).isActive ?? true,
           stats: updatedStats,
           createdAt: c.createdAt,
           notificationCount: c._count.notifications

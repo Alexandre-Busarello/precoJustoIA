@@ -43,6 +43,7 @@ const createCampaignSchema = z.object({
   showOnDashboard: z.boolean().optional(),
   dashboardExpiresAt: z.string().optional().nullable(),
   sendEmail: z.boolean().optional(),
+  isActive: z.boolean().optional(),
   displayType: z.enum(['BANNER', 'MODAL', 'QUIZ']).optional(),
   bannerTemplate: z.enum(['GRADIENT', 'SOLID', 'MINIMAL', 'ILLUSTRATED']).optional(),
   modalTemplate: z.enum(['GRADIENT', 'SOLID', 'MINIMAL', 'ILLUSTRATED']).optional(),
@@ -166,7 +167,8 @@ export async function POST(request: NextRequest) {
       modalTemplate: validatedData.modalTemplate,
       quizConfig: validatedData.quizConfig,
       illustrationUrl: validatedData.illustrationUrl || undefined,
-      bannerColors: validatedData.bannerColors
+      bannerColors: validatedData.bannerColors,
+      isActive: validatedData.isActive ?? true
     })
 
     return NextResponse.json({

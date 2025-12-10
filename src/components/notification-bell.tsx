@@ -17,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { NotificationMarkdown } from '@/components/notification-markdown'
 
 interface Notification {
   id: string
@@ -183,9 +184,9 @@ export function NotificationBell({ className }: NotificationBellProps) {
                       <div className="h-2 w-2 bg-blue-600 rounded-full ml-2 flex-shrink-0 mt-1" />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mb-1">
-                    {notification.message}
-                  </p>
+                  <div className="text-xs text-muted-foreground line-clamp-2 mb-1">
+                    <NotificationMarkdown content={notification.message} />
+                  </div>
                   <span className="text-xs text-muted-foreground">
                     {formatTime(notification.createdAt)}
                   </span>

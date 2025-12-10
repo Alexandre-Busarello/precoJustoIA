@@ -9,6 +9,7 @@ import { TrendingUp, ArrowRight, Check, ExternalLink } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { NotificationMarkdown } from '@/components/notification-markdown'
 
 interface DashboardNotification {
   id: string
@@ -306,15 +307,15 @@ export function DashboardNotificationBanner() {
                   Novo
                 </Badge>
               </div>
-              <p 
+              <div 
                 className={cn(
                   "text-sm sm:text-base leading-relaxed mb-4 font-medium",
                   !getTextColor() && "text-slate-300"
                 )}
                 style={{ color: getTextColor() || '#cbd5e1' }}
               >
-                {notification.message}
-              </p>
+                <NotificationMarkdown content={notification.message} />
+              </div>
               {notification.link && (
                 <Button
                   className={cn(
@@ -401,15 +402,15 @@ export function DashboardNotificationBanner() {
                 </Badge>
               </div>
               {/* Mensagem com cor do texto */}
-              <p 
+              <div 
                 className={cn(
                   "text-sm leading-relaxed mb-4",
                   !getTextColor() && "text-slate-600 dark:text-slate-400"
                 )}
                 style={{ color: getTextColor() || undefined }}
               >
-                {notification.message}
-              </p>
+                <NotificationMarkdown content={notification.message} />
+              </div>
               {/* Botão com cor do botão ou cor primária/secundária */}
               {notification.link && (
                 <Button

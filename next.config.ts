@@ -33,6 +33,11 @@ const nextConfig: NextConfig = {
         hostname: 'encrypted-tbn0.gstatic.com',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'pub-9ab8a80b2194421982276618ce0a0a7b.r2.dev',
+        pathname: '/**',
+      },
     ],
   },
   // Configuração para Turbopack: excluir pacotes que usam módulos Node.js do bundle do cliente

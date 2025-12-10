@@ -53,6 +53,7 @@ type NotificationSegmentType =
   | 'TRIAL_USERS'
   | 'RECENT_LOGINS'
   | 'NEW_USERS'
+  | 'DASHBOARD_NEW_USERS'
   | 'FEATURE_USERS'
   | 'SUPPORT_TICKET_USERS'
   | 'EMAIL_LIST'
@@ -653,6 +654,7 @@ export function AdminNotificationsPageClient() {
                     <SelectItem value="TRIAL_USERS">Usuários em trial</SelectItem>
                     <SelectItem value="RECENT_LOGINS">Login recente</SelectItem>
                     <SelectItem value="NEW_USERS">Usuários novos</SelectItem>
+                    <SelectItem value="DASHBOARD_NEW_USERS">Usuários novos (entrada na dashboard)</SelectItem>
                     <SelectItem value="FEATURE_USERS">Usaram feature X recentemente</SelectItem>
                     <SelectItem value="SUPPORT_TICKET_USERS">Abrir ticket recentemente</SelectItem>
                     <SelectItem value="EMAIL_LIST">Lista de emails</SelectItem>

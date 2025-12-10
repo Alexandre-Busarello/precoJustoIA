@@ -26,6 +26,7 @@ const updateCampaignSchema = z.object({
     'TRIAL_USERS',
     'RECENT_LOGINS',
     'NEW_USERS',
+    'DASHBOARD_NEW_USERS',
     'FEATURE_USERS',
     'SUPPORT_TICKET_USERS',
     'EMAIL_LIST'

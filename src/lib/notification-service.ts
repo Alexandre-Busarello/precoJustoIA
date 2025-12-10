@@ -29,6 +29,7 @@ export type NotificationSegmentType =
   | 'TRIAL_USERS'
   | 'RECENT_LOGINS'
   | 'NEW_USERS'
+  | 'DASHBOARD_NEW_USERS'
   | 'FEATURE_USERS'
   | 'SUPPORT_TICKET_USERS'
   | 'EMAIL_LIST'
@@ -450,15 +451,34 @@ export class NotificationService {
           continue
         }
 
-        // Verificar se usuário pertence ao segmento da campanha
-        const segmentUserIds = await this.getSegmentUserIds(
-          campaign.segmentType as NotificationSegmentType,
-          campaign.segmentConfig as Record<string, any>
-        )
+        // Tratamento especial para DASHBOARD_NEW_USERS
+        // Este segmento é populado dinamicamente quando usuário novo entra na dashboard
+        const segmentType = campaign.segmentType as NotificationSegmentType
+        if (segmentType === 'DASHBOARD_NEW_USERS') {
+          // Verificar se usuário é novo (nunca entrou na dashboard antes)
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { lastOnboardingSeenAt: true }
+          })
 
-        // Se usuário não pertence ao segmento, pular
-        if (!segmentUserIds.includes(userId)) {
-          continue
+          // Se usuário já entrou na dashboard antes (lastOnboardingSeenAt não é null), pular
+          if (user?.lastOnboardingSeenAt !== null) {
+            continue
+          }
+
+          // Usuário é novo e nunca entrou na dashboard - criar notificação
+          // (pular verificação de segmento normal)
+        } else {
+          // Para outros segmentos, verificar normalmente
+          const segmentUserIds = await this.getSegmentUserIds(
+            segmentType,
+            campaign.segmentConfig as Record<string, any>
+          )
+
+          // Se usuário não pertence ao segmento, pular
+          if (!segmentUserIds.includes(userId)) {
+            continue
+          }
         }
 
         // Verificação final antes de criar (double-check para prevenir race conditions)
@@ -1065,6 +1085,11 @@ export class NotificationService {
           select: { id: true }
         })
         return newUsers.map(u => u.id)
+
+      case 'DASHBOARD_NEW_USERS':
+        // Segmento especial: nasce vazio e é populado dinamicamente quando usuário novo entra na dashboard
+        // Não aplica filtros aqui - a lógica está em processActiveCampaignsForUser
+        return []
 
       case 'FEATURE_USERS':
         if (!featureName) throw new Error('featureName é obrigatório para FEATURE_USERS')

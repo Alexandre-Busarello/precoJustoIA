@@ -1898,6 +1898,7 @@ enum NotificationSegmentType {
   TRIAL_USERS // Usuários em trial (trialStartedAt não null e trialEndsAt > now)
   RECENT_LOGINS // Usuários que fizeram login nos últimos X dias (lastLoginAt)
   NEW_USERS // Usuários novos (criados nos últimos X dias, createdAt)
+  DASHBOARD_NEW_USERS // Usuários novos que entraram na dashboard (lastOnboardingSeenAt null ou recente)
   FEATURE_USERS // Usuários que usaram feature X recentemente (FeatureUsage)
   SUPPORT_TICKET_USERS // Usuários que abriram ticket recentemente (SupportTicket)
   EMAIL_LIST // Lista específica de emails (segmentConfig.emails: string[])

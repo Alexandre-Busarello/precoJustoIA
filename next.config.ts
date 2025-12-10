@@ -56,6 +56,14 @@ const nextConfig: NextConfig = {
       // },
     ]
   },
+  async rewrites() {
+    return [
+      {
+        source: '/files/:path*',
+        destination: 'https://uo22urxh9u674jxz.public.blob.vercel-storage.com/:path*',
+      },
+    ]
+  },
 };
 
 export default nextConfig;

@@ -118,22 +118,23 @@ export async function GET(
       }>(cacheKey);
       
       if (cachedData) {
-        console.log(`📊 [API] ${ticker}: Retornando realtime return do cache`);
-        return NextResponse.json(
-          {
-            ...cachedData,
-            cached: true,
-            marketClosed,
-            hasClosingPrice: !shouldIgnoreCache,
-          },
-          {
-            headers: {
-              'Cache-Control': marketClosed 
-                ? 'public, s-maxage=86400, stale-while-revalidate=86400' // Cache até próximo pregão quando fechado
-                : 'public, s-maxage=60, stale-while-revalidate=60', // Cache de 1 minuto quando aberto
-            },
-          }
-        );
+        // CRÍTICO: Se mercado está aberto mas cache tem isMarketOpen=false, cache está desatualizado
+        // Isso acontece quando cache foi criado quando mercado estava fechado e mercado abriu novamente
+        if (!marketClosed && cachedData.isMarketOpen === false) {
+          console.log(`📊 [API] ${ticker}: Mercado aberto mas cache contém isMarketOpen=false - ignorando cache desatualizado`);
+          shouldIgnoreCache = true;
+        } else {
+          // Cache válido - retornar
+          console.log(`📊 [API] ${ticker}: Retornando realtime return do cache`);
+          return NextResponse.json(
+            {
+              ...cachedData,
+              cached: true,
+              marketClosed,
+              hasClosingPrice: !shouldIgnoreCache,
+            }
+          );
+        }
       }
     }
 
@@ -171,13 +172,6 @@ export async function GET(
         timestamp: new Date().toISOString(),
         marketClosed,
         hasClosingPrice: !shouldIgnoreCache,
-      },
-      {
-        headers: {
-          'Cache-Control': marketClosed && !shouldIgnoreCache
-            ? 'public, s-maxage=86400, stale-while-revalidate=86400' // Cache até próximo pregão quando fechado
-            : 'public, s-maxage=60, stale-while-revalidate=60', // Cache curto quando esperando fechamento ou mercado aberto
-        },
       }
     );
   } catch (error) {

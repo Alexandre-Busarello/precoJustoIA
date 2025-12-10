@@ -401,8 +401,11 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
   runRanking(companies: CompanyData[], params: ScreeningParams): RankBuilderResult[] {
     const activeFiltersCount = this.countActiveFilters(params);
     
+    // Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
+    let companiesFiltered = this.filterTickerEndingDigits(companies);
+    
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
-    let filteredCompaniesForEmptyFilters = this.filterByAssetType(companies, params.assetTypeFilter);
+    let filteredCompaniesForEmptyFilters = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
     
     if (activeFiltersCount === 0) {
       // Se não há filtros ativos, retorna todas as empresas ordenadas por market cap
@@ -438,7 +441,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     }
 
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
-    let filteredCompanies = this.filterByAssetType(companies, params.assetTypeFilter);
+    let filteredCompanies = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
     
     // Filtrar por tamanho de empresa (se configurado)
     if (params.companySize && params.companySize !== 'all') {

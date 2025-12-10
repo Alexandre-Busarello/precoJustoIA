@@ -331,6 +331,23 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     return companies;
   }
 
+  /**
+   * Filtra empresas cujo ticker termina em 5, 6, 7, 8 ou 9
+   * Esses tickers geralmente representam classes de ações com menor liquidez ou direitos diferentes
+   */
+  protected filterTickerEndingDigits(companies: CompanyData[]): CompanyData[] {
+    return companies.filter(company => {
+      const ticker = company.ticker?.trim().toUpperCase();
+      if (!ticker) return true; // Manter se não tem ticker válido
+      
+      // Pegar o último caractere do ticker
+      const lastChar = ticker[ticker.length - 1];
+      
+      // Excluir se termina em 5, 6, 7, 8 ou 9
+      return !['5', '6', '7', '8', '9'].includes(lastChar);
+    });
+  }
+
   // Converter StrategyAnalysis para RankBuilderResult
   protected convertToRankingResult(
     companyData: CompanyData, 

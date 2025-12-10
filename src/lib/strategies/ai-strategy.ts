@@ -33,6 +33,9 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
     // ETAPA 0: Filtrar por tipo de ativo primeiro (b3, bdr, both)
     let filteredCompanies = this.filterByAssetType(companies, params.assetTypeFilter);
     
+    // ETAPA 0.25: Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
+    filteredCompanies = this.filterTickerEndingDigits(filteredCompanies);
+    
     // ETAPA 0.5: Aplicar exclusões automáticas antes da análise IA
     console.log(`🚫 [AI-STRATEGY] ETAPA 0.5: Aplicando exclusões automáticas`);
     filteredCompanies = filteredCompanies.filter(company => !this.shouldExcludeCompany(company));

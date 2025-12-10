@@ -89,6 +89,9 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
     
+    // Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
+    filteredCompanies = this.filterTickerEndingDigits(filteredCompanies);
+    
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
     filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
 

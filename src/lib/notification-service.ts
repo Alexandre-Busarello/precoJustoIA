@@ -131,7 +131,16 @@ export class NotificationService {
 
       // Se deve enviar email, verificar preferências e adicionar à fila
       if (sendEmail) {
-        await this.sendNotificationEmail(userId, notification.id, title, message, link, linkType)
+        // Buscar ilustração da campanha se houver
+        let illustrationUrl: string | null = null
+        if (campaignId) {
+          const campaign = await prisma.notificationCampaign.findUnique({
+            where: { id: campaignId },
+            select: { illustrationUrl: true }
+          })
+          illustrationUrl = (campaign as any)?.illustrationUrl || null
+        }
+        await this.sendNotificationEmail(userId, notification.id, title, message, link, linkType, undefined, illustrationUrl)
       }
 
       return notification.id
@@ -232,9 +241,10 @@ export class NotificationService {
 
         // Enviar emails se necessário
         if (sendEmail) {
+          const campaignIllustrationUrl = illustrationUrl || null
           await Promise.all(
             notifications.map(notification =>
-              this.sendNotificationEmail(notification.userId, notification.id, title, message, link, linkType, ctaText)
+              this.sendNotificationEmail(notification.userId, notification.id, title, message, link, linkType, ctaText, campaignIllustrationUrl)
             )
           )
         }
@@ -329,6 +339,7 @@ export class NotificationService {
 
         // Enviar emails se necessário
         if (sendEmail) {
+          const campaignIllustrationUrl = (campaign as any).illustrationUrl || null
           await Promise.all(
             notifications.map(notification =>
               this.sendNotificationEmail(
@@ -338,7 +349,8 @@ export class NotificationService {
                 campaign.message,
                 campaign.link,
                 campaign.linkType as NotificationLinkType,
-                (campaign as any).ctaText
+                (campaign as any).ctaText,
+                campaignIllustrationUrl
               )
             )
           )
@@ -1105,7 +1117,8 @@ export class NotificationService {
     message: string,
     link: string | null | undefined,
     linkType: NotificationLinkType,
-    ctaText?: string | null
+    ctaText?: string | null,
+    illustrationUrl?: string | null
   ): Promise<void> {
     try {
       // Buscar dados do usuário
@@ -1163,7 +1176,8 @@ export class NotificationService {
           message,
           link: emailLink,
           notificationId,
-          ctaText: ctaText || null
+          ctaText: ctaText || null,
+          illustrationUrl: illustrationUrl || null
         },
         priority: 0,
         metadata: {

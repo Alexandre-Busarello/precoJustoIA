@@ -57,13 +57,17 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
         description: 'Acesso completo por 30 dias',
         features: [
           'Tudo do plano gratuito',
-          '8 modelos de valuation',
-          '🤖 Análise com IA (Gemini)',
-          '🚀 Backtesting de Carteiras',
+          'Análise de IA e Relatórios',
+          'Análise Técnica e Preço Justo Técnico',
+          'Radar de Oportunidades',
+          'Análise de Sentimento de Mercado',
+          'Radar de Dividendos com projeções por IA',
+          'Valuation e Screening Completo',
+          'Backtesting e Carteiras',
           'Comparador completo',
           'Rankings ilimitados',
-          'Análise individual por empresacompleta',
-          'Relatórios mensais personalizados por IA',
+          'Análise individual por empresa',
+          'Relatórios mensais personalizados',
           'Suporte prioritário',
           'Central de Suporte Premium'
         ],
@@ -82,6 +86,13 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
         description: 'Melhor valor - 12 meses completos',
         features: [
           'Tudo do Premium Mensal',
+          'Análise de IA e Relatórios',
+          'Análise Técnica e Preço Justo Técnico',
+          'Radar de Oportunidades',
+          'Análise de Sentimento de Mercado',
+          'Radar de Dividendos com projeções por IA',
+          'Valuation e Screening Completo',
+          'Backtesting e Carteiras',
           `${Math.round(discount * 100)}% de desconto`,
           'Acesso antecipado a novos recursos',
           'Suporte VIP',
@@ -199,7 +210,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                   <p className="text-sm text-gray-700 dark:text-gray-300">
                     {specialDiscount ? (
                       <>
-                        Aproveite nossa oferta especial com desconto exclusivo. {specialDiscount.formatted} de economia ({specialDiscount.percentage}% OFF)!
+                        Aproveite nossa oferta especial com desconto exclusivo. {specialDiscount.formatted} de economia ({specialDiscount.percentage}% OFF) em comparação com nosso plano anual ativo!
                       </>
                     ) : (
                       'Aproveite nossa oferta especial com desconto exclusivo. Oportunidade única!'

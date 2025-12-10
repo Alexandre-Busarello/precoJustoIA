@@ -187,10 +187,50 @@ export function LandingPricingSection() {
                   )}
                 </div>
                 
-                <div className="space-y-4 mb-8 flex-1">
+                <div className="space-y-3 mb-8 flex-1">
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                     <span><strong>Tudo do Premium Mensal</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Análise de IA e Relatórios</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Análise Técnica</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Preço Justo Técnico</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Radar de Oportunidades</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Análise de Sentimento</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Radar de Dividendos</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Valuation Completo</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Screening Completo</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Backtesting</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Carteiras</strong></span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -262,22 +302,50 @@ export function LandingPricingSection() {
                   )}
                 </div>
                 
-                <div className="space-y-4 mb-8">
+                <div className="space-y-3 mb-8">
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                     <span><strong>Tudo do plano gratuito</strong></span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>8 modelos de valuation</strong></span>
+                    <span><strong>Análise de IA e Relatórios</strong></span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>Análise com IA (Gemini)</strong></span>
+                    <span><strong>Análise Técnica</strong></span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span><strong>🚀 Backtesting de Carteiras</strong></span>
+                    <span><strong>Preço Justo Técnico</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Radar de Oportunidades</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Análise de Sentimento</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Radar de Dividendos</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Valuation Completo</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Screening Completo</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Backtesting</strong></span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span><strong>Carteiras</strong></span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -289,11 +357,11 @@ export function LandingPricingSection() {
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Análise individual por empresacompleta</span>
+                    <span>Análise individual por empresa</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <span>Relatórios mensais personalizados por IA</span>
+                    <span>Relatórios mensais personalizados</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />

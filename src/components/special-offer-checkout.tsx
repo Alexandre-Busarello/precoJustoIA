@@ -102,16 +102,20 @@ export function SpecialOfferCheckout() {
       description: `Acesso Premium por ${durationText}`,
       features: [
         'Tudo do plano gratuito',
-        '8 modelos de valuation',
-        '🤖 Análise com IA (Gemini)',
-        '🚀 Backtesting de Carteiras',
+        'Análise de IA e Relatórios',
+        'Análise Técnica e Preço Justo Técnico',
+        'Radar de Oportunidades',
+        'Análise de Sentimento de Mercado',
+        'Radar de Dividendos com projeções por IA',
+        'Valuation e Screening Completo',
+        'Backtesting e Carteiras',
         'Comparador completo',
         'Rankings ilimitados',
-        'Análise individual por empresacompleta',
-        'Relatórios mensais personalizados por IA',
+        'Análise individual por empresa',
+        'Relatórios mensais personalizados',
         'Suporte prioritário',
         'Central de Suporte Premium',
-        `✨ ${durationText} de acesso Premium`
+        `${durationText} de acesso Premium`
       ],
       offerId: special.id,
       expiresAt: special.expires_at,
@@ -199,7 +203,7 @@ export function SpecialOfferCheckout() {
           <p className="text-xs sm:text-sm md:text-base lg:text-lg text-gray-700 dark:text-gray-300 font-medium break-words">
             {discount ? (
               <>
-                <span className="whitespace-normal">{discount.formatted} de desconto ({discount.percentage}% OFF)</span>
+                <span className="whitespace-normal">{discount.formatted} de desconto ({discount.percentage}% OFF) em comparação com nosso plano anual ativo</span>
                 <span className="block sm:inline"> - Oportunidade única!</span>
               </>
             ) : (

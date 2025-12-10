@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import nodemailer from 'nodemailer'
+import { marked } from 'marked'
 
 interface SendEmailOptions {
   to: string
@@ -2918,12 +2919,57 @@ ${baseUrl}
   }
 }
 
+/**
+ * Converte markdown para HTML de forma segura para emails
+ */
+function convertMarkdownToHtml(markdown: string): string {
+  try {
+    // Converter markdown para HTML
+    const html = marked(markdown, {
+      breaks: true, // Quebras de linha viram <br>
+      gfm: true, // GitHub Flavored Markdown
+    }) as string
+    
+    // Remover quebras de linha extras e limpar HTML
+    return html.trim()
+  } catch (error) {
+    console.error('Erro ao converter markdown para HTML:', error)
+    // Fallback: converter quebras de linha para <br>
+    return markdown.replace(/\n/g, '<br>')
+  }
+}
+
+/**
+ * Remove formatação markdown básica para texto plano
+ */
+function stripMarkdown(markdown: string): string {
+  return markdown
+    // Remover headers (# ## ###)
+    .replace(/^#{1,6}\s+(.+)$/gm, '$1')
+    // Remover negrito (**texto** ou __texto__)
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    // Remover itálico (*texto* ou _texto_)
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    // Remover links [texto](url)
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+    // Remover código `código`
+    .replace(/`(.+?)`/g, '$1')
+    // Remover listas (- ou *)
+    .replace(/^[-*]\s+/gm, '')
+    // Remover blockquotes (>)
+    .replace(/^>\s+/gm, '')
+    .trim()
+}
+
 export function generateNotificationEmailTemplate(
   title: string,
   message: string,
   link: string | null,
   userName?: string,
-  ctaText?: string | null
+  ctaText?: string | null,
+  illustrationUrl?: string | null
 ) {
   const baseUrl = getEmailBaseUrl()
   const logoUrl = getEmailLogoUrl()
@@ -3019,6 +3065,78 @@ export function generateNotificationEmailTemplate(
             color: #64748b;
             line-height: 1.6;
             margin-bottom: 30px;
+          }
+          
+          .notification-message h1,
+          .notification-message h2,
+          .notification-message h3,
+          .notification-message h4 {
+            color: #1e293b;
+            font-weight: 700;
+            margin-top: 20px;
+            margin-bottom: 10px;
+          }
+          
+          .notification-message h1 { font-size: 24px; }
+          .notification-message h2 { font-size: 20px; }
+          .notification-message h3 { font-size: 18px; }
+          .notification-message h4 { font-size: 16px; }
+          
+          .notification-message p {
+            margin-bottom: 12px;
+          }
+          
+          .notification-message strong {
+            font-weight: 700;
+            color: #1e293b;
+          }
+          
+          .notification-message em {
+            font-style: italic;
+          }
+          
+          .notification-message ul,
+          .notification-message ol {
+            margin-left: 20px;
+            margin-bottom: 12px;
+          }
+          
+          .notification-message li {
+            margin-bottom: 6px;
+          }
+          
+          .notification-message a {
+            color: #3b82f6;
+            text-decoration: underline;
+          }
+          
+          .notification-message code {
+            background-color: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+          }
+          
+          .notification-message blockquote {
+            border-left: 4px solid #e2e8f0;
+            padding-left: 16px;
+            margin-left: 0;
+            margin-bottom: 12px;
+            color: #64748b;
+            font-style: italic;
+          }
+          
+          .illustration-container {
+            text-align: center;
+            margin: 30px 0;
+          }
+          
+          .illustration {
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
           }
           
           .button-container {
@@ -3132,8 +3250,14 @@ export function generateNotificationEmailTemplate(
               
               <h2 class="notification-title">${title}</h2>
               
+              ${illustrationUrl ? `
+                <div class="illustration-container">
+                  <img src="${illustrationUrl}" alt="${title}" class="illustration" />
+                </div>
+              ` : ''}
+              
               <div class="notification-message">
-                ${message.replace(/\n/g, '<br>')}
+                ${convertMarkdownToHtml(message)}
               </div>
               
               ${link ? `
@@ -3171,7 +3295,7 @@ ${userName ? `Olá, ${userName}!` : 'Olá!'}
 
 ${title}
 
-${message}
+${stripMarkdown(message)}
 
 ${link ? `\nAcesse: ${link}` : ''}
 

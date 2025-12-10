@@ -299,7 +299,8 @@ export class EmailQueueService {
           emailData.message,
           emailData.link || null,
           recipientName || undefined,
-          emailData.ctaText || null
+          emailData.ctaText || null,
+          emailData.illustrationUrl || null
         )
         await sendEmail({
           to: email,

@@ -161,7 +161,8 @@ export async function GET(request: NextRequest) {
               emailData.message,
               emailData.link || null,
               emailQueue.recipientName || undefined,
-              emailData.ctaText || null
+              emailData.ctaText || null,
+              emailData.illustrationUrl || null
             )
             await sendEmail({
               to: emailQueue.email,

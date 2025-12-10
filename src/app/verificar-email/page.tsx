@@ -31,9 +31,10 @@ function VerifyEmailContent() {
 
   useEffect(() => {
     // Se verificação foi bem-sucedida e usuário está logado, redirecionar após 3 segundos
+    // Adicionar ?new_user=true para identificar novo usuário e disparar pixel de LEAD
     if (success === 'true' && status === 'authenticated') {
       const timer = setTimeout(() => {
-        router.push('/dashboard')
+        router.push('/dashboard?new_user=true')
       }, 3000)
       return () => clearTimeout(timer)
     }
@@ -176,7 +177,7 @@ function VerifyEmailContent() {
               <p className="text-sm text-gray-600 mb-4">
                 Seu período de trial de 1 dia foi iniciado automaticamente!
               </p>
-              <Link href="/dashboard">
+              <Link href="/dashboard?new_user=true">
                 <Button className="w-full">
                   Ir para Dashboard
                 </Button>

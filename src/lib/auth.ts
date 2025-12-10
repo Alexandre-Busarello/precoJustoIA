@@ -226,6 +226,8 @@ export const authOptions: NextAuthOptions = {
               },
               update: {}
             })
+            
+            // Novo usuário OAuth detectado - será processado pelo OAuthNewUserHandler na dashboard
           }
 
           // Iniciar trial se:

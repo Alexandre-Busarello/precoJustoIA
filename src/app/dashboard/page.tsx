@@ -31,6 +31,7 @@ import { DashboardNotificationBanner } from "@/components/dashboard-notification
 import { NotificationModalsWrapper } from "@/components/notification-modals-wrapper";
 import { MarketTickerBar } from "@/components/indices/market-ticker-bar";
 import { GoogleAdsConversionPixel } from "@/components/google-ads-conversion-pixel";
+import { OAuthNewUserHandler } from "@/components/oauth-new-user-handler";
 import {
   BarChart3,
   TrendingUp,
@@ -141,6 +142,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80">
+      <OAuthNewUserHandler />
       <GoogleAdsConversionPixel />
       <NotificationModalsWrapper />
       <div className="container mx-auto px-4 py-6 max-w-7xl">

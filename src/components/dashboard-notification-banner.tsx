@@ -458,6 +458,7 @@ export function DashboardNotificationBanner() {
               width={256}
               height={256}
               className="object-cover"
+              unoptimized={notification.illustrationUrl.startsWith('/files/') || notification.illustrationUrl.includes('precojusto.ai/files/')}
             />
           </div>
         )}
@@ -471,6 +472,7 @@ export function DashboardNotificationBanner() {
                   width={64}
                   height={64}
                   className="object-cover w-full h-full"
+                  unoptimized={notification.illustrationUrl.startsWith('/files/') || notification.illustrationUrl.includes('precojusto.ai/files/')}
                 />
               </div>
             ) : (

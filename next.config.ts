@@ -38,6 +38,16 @@ const nextConfig: NextConfig = {
         hostname: 'pub-9ab8a80b2194421982276618ce0a0a7b.r2.dev',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'precojusto.ai',
+        pathname: '/files/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'uo22urxh9u674jxz.public.blob.vercel-storage.com',
+        pathname: '/**',
+      },
     ],
   },
   // Configuração para Turbopack: excluir pacotes que usam módulos Node.js do bundle do cliente

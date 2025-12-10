@@ -148,6 +148,7 @@ export function NotificationModal() {
             height={256}
             className="object-cover w-full h-full"
             priority
+            unoptimized={notification.illustrationUrl.startsWith('/files/') || notification.illustrationUrl.includes('precojusto.ai/files/')}
           />
           {/* Overlay sutil no topo para melhor contraste do texto */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-transparent" />

@@ -38,16 +38,27 @@ export async function GET(request: NextRequest) {
 
     // 2. Configurações
     const BATCH_SIZE = parseInt(process.env.EMAIL_BATCH_SIZE || '50')
-    const PARALLEL_BATCH_SIZE = 5 // Processar 5 emails em paralelo
     const MAX_ATTEMPTS = 3
     const MAX_EXECUTION_TIME = 50 * 1000 // 50 segundos em ms (deixar buffer de 10s)
+    
+    // Rate limiting do Resend: máximo 2 requisições por segundo
+    // Processar sequencialmente com delay de 500ms entre requisições (garante máximo 2/s)
+    const RESEND_RATE_LIMIT_DELAY = 500 // ms entre requisições (2 req/s = 500ms)
+    
+    // Helper para detectar erros de rate limit
+    const isRateLimitError = (error: any): boolean => {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return errorMessage.toLowerCase().includes('too many requests') ||
+             errorMessage.toLowerCase().includes('rate limit') ||
+             (error as any)?.status === 429
+    }
 
-    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, PARALLEL_BATCH_SIZE=${PARALLEL_BATCH_SIZE}, MAX_ATTEMPTS=${MAX_ATTEMPTS}`)
+    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, MAX_ATTEMPTS=${MAX_ATTEMPTS}, RATE_LIMIT_DELAY=${RESEND_RATE_LIMIT_DELAY}ms`)
 
     // 3. Buscar emails pendentes ordenados por prioridade e data de criação
     const pendingEmails = await EmailQueueService.getPendingEmails(BATCH_SIZE, MAX_ATTEMPTS)
 
-    console.log(`📦 Encontrados ${pendingEmails.length} emails pendentes para processar em paralelo (${PARALLEL_BATCH_SIZE} por vez)`)
+    console.log(`📦 Encontrados ${pendingEmails.length} emails pendentes para processar sequencialmente com throttling`)
 
     if (pendingEmails.length === 0) {
       return NextResponse.json({
@@ -55,21 +66,20 @@ export async function GET(request: NextRequest) {
         message: 'Nenhum email pendente para processar',
         processed: 0,
         sent: 0,
-        failed: 0
+        skipped: 0
       })
     }
 
     let sentCount = 0
-    let failedCount = 0
     let skippedCount = 0
 
     // Função para processar um único email
     const processEmail = async (emailQueue: typeof pendingEmails[0]) => {
       const stats = {
         sent: false,
-        failed: false,
         skipped: false,
         error: null as string | null,
+        isRateLimit: false,
       };
 
       try {
@@ -176,7 +186,7 @@ export async function GET(request: NextRequest) {
             throw new Error(`Tipo de email desconhecido: ${emailQueue.emailType}`)
         }
 
-        // Marcar como enviado
+        // Marcar como enviado APENAS se não houve erro
         await EmailQueueService.markAsSent(emailQueue.id)
 
         stats.sent = true
@@ -184,55 +194,73 @@ export async function GET(request: NextRequest) {
         return stats
 
       } catch (error) {
-        console.error(`❌ Erro ao enviar email ${emailQueue.id} para ${emailQueue.email}:`, error)
-        
         const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
-        const newAttempts = emailQueue.attempts + 1
-
-        // Se excedeu o número máximo de tentativas, marcar como falha
-        if (newAttempts >= MAX_ATTEMPTS) {
-          await EmailQueueService.markAsFailed(
-            emailQueue.id,
-            `Falhou após ${newAttempts} tentativas: ${errorMessage}`
-          )
-          stats.failed = true
+        const isRateLimit = isRateLimitError(error)
+        
+        console.error(`❌ Erro ao enviar email ${emailQueue.id} para ${emailQueue.email}:`, errorMessage)
+        
+        if (isRateLimit) {
+          console.warn(`⚠️ [RATE LIMIT] Rate limit detectado para email ${emailQueue.id}. Mantendo como PENDING.`)
         } else {
-          // Manter como PENDING para nova tentativa (já atualizado pelo incrementAttempt)
-          stats.skipped = true
+          console.warn(`⚠️ [EMAIL ERROR] Erro ao enviar email ${emailQueue.id}. Mantendo como PENDING para nova tentativa.`)
         }
+        
+        // CRÍTICO: Qualquer erro mantém o email como PENDING (não marca como FAILED)
+        // O email será reprocessado na próxima execução do cron
+        // O incrementAttempt já foi chamado no início, então apenas atualizamos a mensagem de erro
+        stats.skipped = true
+        stats.isRateLimit = isRateLimit
         stats.error = errorMessage
+        
+        // Atualizar mensagem de erro mas manter como PENDING
+        // Não precisamos chamar incrementAttempt novamente pois já foi chamado no início
+        // Apenas atualizamos a mensagem de erro se necessário
+        await EmailQueueService.incrementAttempt(emailQueue.id, errorMessage)
+        
         return stats
       }
     }
 
-    // 4. Processar emails em lotes paralelos
-    for (let i = 0; i < pendingEmails.length; i += PARALLEL_BATCH_SIZE) {
-      // Verificar timeout antes de processar próximo batch
+    // 4. Processar emails sequencialmente com throttling para respeitar rate limit do Resend
+    // Resend permite máximo 2 requisições por segundo, então processamos sequencialmente
+    // com delay de 500ms entre requisições (garante máximo 2/s)
+    console.log(`\n🚀 Processando ${pendingEmails.length} email(s) sequencialmente com throttling (${RESEND_RATE_LIMIT_DELAY}ms entre requisições)...`)
+    
+    for (let i = 0; i < pendingEmails.length; i++) {
+      // Verificar timeout antes de processar próximo email
       const elapsedTime = Date.now() - startTime
       if (elapsedTime >= MAX_EXECUTION_TIME) {
-        console.log(`⏱️ Timeout atingido. Processados ${sentCount + failedCount + skippedCount} de ${pendingEmails.length} emails`)
+        console.log(`⏱️ Timeout atingido. Processados ${sentCount + skippedCount} de ${pendingEmails.length} emails`)
         break
       }
 
-      const batch = pendingEmails.slice(i, i + PARALLEL_BATCH_SIZE)
-      console.log(`\n🚀 Processando batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} com ${batch.length} email(s) em paralelo...`)
+      const emailQueue = pendingEmails[i]
+      console.log(`\n📧 [${i + 1}/${pendingEmails.length}] Processando email para ${emailQueue.email} (${emailQueue.emailType})...`)
 
-      // Processar batch em paralelo
-      const results = await Promise.allSettled(
-        batch.map(emailQueue => processEmail(emailQueue))
-      )
-
-      // Agregar estatísticas
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const stats = result.value
-          if (stats.sent) sentCount++
-          if (stats.failed) failedCount++
-          if (stats.skipped) skippedCount++
+      try {
+        const stats = await processEmail(emailQueue)
+        
+        if (stats.sent) sentCount++
+        if (stats.skipped) skippedCount++
+        
+        // Se foi rate limit, adicionar delay maior antes de continuar
+        if (stats.isRateLimit) {
+          console.log(`⏳ Rate limit detectado. Aguardando ${RESEND_RATE_LIMIT_DELAY * 2}ms antes de continuar...`)
+          await new Promise(resolve => setTimeout(resolve, RESEND_RATE_LIMIT_DELAY * 2))
         } else {
-          // Erro não tratado na função processEmail
-          failedCount++
-          console.error(`❌ Erro não tratado ao processar email:`, result.reason)
+          // Delay normal entre requisições para respeitar rate limit (exceto no último email)
+          if (i < pendingEmails.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, RESEND_RATE_LIMIT_DELAY))
+          }
+        }
+      } catch (error) {
+        // Erro não tratado na função processEmail
+        skippedCount++
+        console.error(`❌ Erro não tratado ao processar email:`, error)
+        
+        // Delay mesmo em caso de erro para não sobrecarregar
+        if (i < pendingEmails.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, RESEND_RATE_LIMIT_DELAY))
         }
       }
     }
@@ -240,14 +268,13 @@ export async function GET(request: NextRequest) {
     const executionTime = ((Date.now() - startTime) / 1000).toFixed(2)
 
     console.log(`✅ Cron job concluído em ${executionTime}s`)
-    console.log(`📊 Estatísticas: ${sentCount} enviados, ${failedCount} falharam, ${skippedCount} aguardando nova tentativa`)
+    console.log(`📊 Estatísticas: ${sentCount} enviados, ${skippedCount} aguardando nova tentativa (mantidos como PENDING)`)
 
     return NextResponse.json({
       success: true,
       message: 'Processamento de emails concluído',
       processed: pendingEmails.length,
       sent: sentCount,
-      failed: failedCount,
       skipped: skippedCount,
       executionTime: `${executionTime}s`
     })

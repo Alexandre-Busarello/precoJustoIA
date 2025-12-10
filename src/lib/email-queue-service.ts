@@ -69,18 +69,37 @@ export class EmailQueueService {
   static async queueEmail(params: QueueEmailParams): Promise<QueueEmailResult> {
     const { email, emailType, emailData, recipientName, priority = 0, metadata } = params
 
+    // Helper para detectar erros de rate limit
+    const isRateLimitError = (error: any): boolean => {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return errorMessage.toLowerCase().includes('too many requests') ||
+             errorMessage.toLowerCase().includes('rate limit') ||
+             (error as any)?.status === 429
+    }
+
     try {
       // Tentar enviar imediatamente ANTES de criar registro
       let sent = false
       let sendError: string | null = null
+      let isRateLimit = false
 
       try {
         await this.sendEmailByType(email, emailType, emailData, recipientName)
         sent = true
       } catch (error) {
         sendError = error instanceof Error ? error.message : 'Erro desconhecido ao enviar email'
-        console.log(`⚠️ [EMAIL-QUEUE] Falha ao enviar imediatamente ${emailType} para ${email}: ${sendError}`)
+        isRateLimit = isRateLimitError(error)
+        
+        if (isRateLimit) {
+          console.log(`⚠️ [EMAIL-QUEUE] Rate limit ao enviar imediatamente ${emailType} para ${email}. Adicionando à fila como PENDING.`)
+        } else {
+          console.log(`⚠️ [EMAIL-QUEUE] Falha ao enviar imediatamente ${emailType} para ${email}: ${sendError}`)
+        }
       }
+
+      // CRÍTICO: Se for erro de rate limit, SEMPRE criar como PENDING (não como SENT)
+      // Mesmo que o erro tenha ocorrido, não devemos marcar como SENT
+      const status = (sent && !isRateLimit) ? 'SENT' : 'PENDING'
 
       // Criar registro na fila
       const queueRecord = await prisma.emailQueue.create({
@@ -89,24 +108,26 @@ export class EmailQueueService {
           emailType,
           recipientName: recipientName || null,
           emailData,
-          status: sent ? 'SENT' : 'PENDING',
+          status,
           priority,
           metadata: metadata || undefined,
           attempts: sent ? 0 : 0, // Se já enviou, não precisa tentar novamente
-          sentAt: sent ? new Date() : null,
+          sentAt: (sent && !isRateLimit) ? new Date() : null,
+          errorMessage: (!sent && sendError) ? sendError : null,
         }
       })
 
-      if (sent) {
+      if (sent && !isRateLimit) {
         console.log(`✅ [EMAIL-QUEUE] Email ${emailType} enviado imediatamente para ${email} (queueId: ${queueRecord.id})`)
       } else {
-        console.log(`📋 [EMAIL-QUEUE] Email ${emailType} adicionado à fila para ${email} (queueId: ${queueRecord.id})`)
+        const reason = isRateLimit ? 'rate limit' : 'erro no envio'
+        console.log(`📋 [EMAIL-QUEUE] Email ${emailType} adicionado à fila para ${email} (queueId: ${queueRecord.id}) - Motivo: ${reason}`)
       }
 
       return {
         success: true,
         queueId: queueRecord.id,
-        sent,
+        sent: sent && !isRateLimit, // Só considerar enviado se não foi rate limit
         error: sent ? undefined : sendError || undefined
       }
     } catch (error) {

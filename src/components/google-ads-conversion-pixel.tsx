@@ -1,20 +1,28 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { getLeadConversionTransactionId } from "@/lib/google-ads-transaction-id";
 
 /**
  * Componente para disparar evento de conversão do Google Ads
  * Garante que o evento seja enviado apenas uma vez por montagem
  * e previne race conditions usando useRef
+ * Usa transactionId único persistido em sessionStorage para deduplicação em refresh
  */
 export function GoogleAdsConversionPixel() {
   const hasFiredRef = useRef(false);
   const isFiringRef = useRef(false);
+  const transactionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Prevenir disparo duplicado: verificar se já foi disparado ou está em processo
     if (hasFiredRef.current || isFiringRef.current) {
       return;
+    }
+
+    // Obter transactionId único (persistido em sessionStorage para deduplicação)
+    if (!transactionIdRef.current) {
+      transactionIdRef.current = getLeadConversionTransactionId();
     }
 
     // Marcar como em processo para evitar race conditions
@@ -23,11 +31,12 @@ export function GoogleAdsConversionPixel() {
     // Verificar se gtag está disponível
     if (typeof window !== "undefined" && typeof (window as any).gtag === "function") {
       try {
-        // Disparar evento de conversão
+        // Disparar evento de conversão com transactionId único
         (window as any).gtag("event", "conversion", {
           send_to: "AW-17611977676/nd5yCJ-Us88bEMznhc5B",
           value: 1.0,
           currency: "BRL",
+          transaction_id: transactionIdRef.current,
         });
 
         // Marcar como disparado
@@ -49,6 +58,7 @@ export function GoogleAdsConversionPixel() {
               send_to: "AW-17611977676/nd5yCJ-Us88bEMznhc5B",
               value: 1.0,
               currency: "BRL",
+              transaction_id: transactionIdRef.current || getLeadConversionTransactionId(),
             });
             hasFiredRef.current = true;
           } catch (error) {

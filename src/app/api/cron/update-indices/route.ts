@@ -449,45 +449,10 @@ async function runMarkToMarketJob(): Promise<{
     completedAtDate.getDate() === today.getDate()
   ) : false;
   
-  // Se checkpoint existe e foi concluído HOJE, verificar se ainda precisa processar
+  // Se checkpoint existe e foi concluído HOJE, confiar nele e não processar novamente
   if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && wasCompletedToday) {
-    // Verificar se todos os índices ainda estão atualizados para hoje
-    let allUpToDate = true;
-    for (const index of allIndices) {
-      const lastPoint = await prisma.indexHistoryPoints.findFirst({
-        where: { indexId: index.id },
-        orderBy: { date: 'desc' }
-      });
-      
-      if (!lastPoint) {
-        allUpToDate = false;
-        break;
-      }
-      
-      const lastDate = new Date(lastPoint.date);
-      lastDate.setHours(0, 0, 0, 0);
-      
-      if (lastDate < today) {
-        allUpToDate = false;
-        break;
-      }
-    }
-    
-    if (allUpToDate) {
-      console.log('✅ [CRON INDICES] All indices are up to date for today. Checkpoint indicates completion.');
-      return { success: 0, failed: 0, processed: allIndices.length, remaining: 0, errors: [] };
-    } else {
-      // Resetar checkpoint se há índices que precisam ser processados
-      console.log('🔄 [CRON INDICES] Some indices need processing. Resetting checkpoint.');
-      await saveCheckpoint({
-        jobType: 'mark-to-market',
-        indexId: null,
-        lastProcessedIndexId: null,
-        processedCount: 0,
-        totalCount: allIndices.length,
-        errors: []
-      });
-    }
+    console.log('✅ [CRON INDICES] Checkpoint completo e completado hoje. Não precisa processar novamente.');
+    return { success: 0, failed: 0, processed: allIndices.length, remaining: 0, errors: [] };
   } else if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && !wasCompletedToday) {
     // Checkpoint completo mas completado em outro dia - resetar para processar hoje
     console.log(`🔄 [CRON INDICES] Checkpoint completo mas completado em outro dia (${completedAtDate?.toISOString().split('T')[0] || 'sem data de conclusão'}). Resetting checkpoint para processar hoje.`);
@@ -814,48 +779,10 @@ async function runScreeningJob(): Promise<{
     completedAtDate.getDate() === todayCheck.getDate()
   ) : false;
   
-  // Se checkpoint existe e foi concluído HOJE, verificar se ainda precisa processar
+  // Se checkpoint existe e foi concluído HOJE, confiar nele e não processar novamente
   if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && checkpoint.totalCount === allIndices.length && wasCompletedToday) {
-    let allScreenedToday = true;
-    for (const index of allIndices) {
-      const lastLog = await prisma.indexRebalanceLog.findFirst({
-        where: { indexId: index.id },
-        orderBy: { date: 'desc' }
-      });
-      
-      if (lastLog) {
-        const lastLogDate = new Date(lastLog.date);
-        lastLogDate.setHours(0, 0, 0, 0);
-        
-        if (lastLogDate < todayCheck) {
-          allScreenedToday = false;
-          break;
-        }
-      } else {
-        // Se nunca teve log, precisa executar pelo menos uma vez
-        allScreenedToday = false;
-        break;
-      }
-    }
-    
-    if (allScreenedToday) {
-      console.log('✅ [CRON INDICES] All indices were screened today. Checkpoint indicates completion.');
-      return { success: 0, failed: 0, rebalanced: 0, processed: allIndices.length, remaining: 0, errors: [] };
-    } else {
-      // Resetar checkpoint se há índices que precisam ser processados
-      console.log('🔄 [CRON INDICES] Some indices need screening. Resetting checkpoint.');
-      await saveCheckpoint({
-        jobType: 'screening',
-        indexId: null,
-        lastProcessedIndexId: null,
-        processedCount: 0,
-        totalCount: allIndices.length,
-        errors: []
-      });
-      // Recarregar checkpoint após reset para usar o novo
-      const resetCheckpoint = await loadCheckpoint('screening');
-      checkpoint = resetCheckpoint;
-    }
+    console.log('✅ [CRON INDICES] Checkpoint completo e completado hoje. Não precisa processar novamente.');
+    return { success: 0, failed: 0, rebalanced: 0, processed: allIndices.length, remaining: 0, errors: [] };
   } else if (checkpoint && checkpoint.processedCount === checkpoint.totalCount && !wasCompletedToday) {
     // Checkpoint completo mas completado em outro dia - resetar para processar hoje
     console.log(`🔄 [CRON INDICES] Checkpoint completo mas completado em outro dia (${completedAtDate?.toISOString().split('T')[0] || 'sem data de conclusão'}). Resetting checkpoint para processar hoje.`);

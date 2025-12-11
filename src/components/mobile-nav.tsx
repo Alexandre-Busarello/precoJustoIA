@@ -96,13 +96,39 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
       show: !!session
-    },
+    }
+  ]
+
+  // Carteiras - Seção Expansível
+  const carteirasSections: Array<{
+    items: Array<{
+      title: string
+      href: string
+      icon: React.ReactElement
+      show: boolean
+      description: string
+      badge?: string
+      isNew?: boolean
+    }>
+  }> = [
     {
-      title: "Carteiras",
-      href: "/carteira",
-      icon: <BarChart3 className="w-5 h-5" />,
-      show: !!session && isPremium,
-      isPremiumFeature: !isPremium
+      items: [
+        {
+          title: "Carteiras Teóricas",
+          href: "/indices",
+          icon: <LineChart className="w-5 h-5" />,
+          show: true,
+          description: "Índices teóricos com performance histórica e rebalanceamento automático"
+        },
+        {
+          title: "Carteiras",
+          href: "/carteira",
+          icon: <BarChart3 className="w-5 h-5" />,
+          show: Boolean(session && isPremium),
+          description: "Gerencie suas carteiras de investimentos com acompanhamento em tempo real",
+          badge: isPremium ? "Premium" : undefined
+        }
+      ]
     }
   ]
 
@@ -196,13 +222,6 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       label: "Histórico",
       items: [
         {
-          title: "Carteiras Teóricas",
-          href: "/indices",
-          icon: <LineChart className="w-5 h-5" />,
-          show: true,
-          description: "Índices teóricos com performance histórica e rebalanceamento automático"
-        },
-        {
           title: "P/L Histórico",
           href: "/pl-bolsa",
           icon: <TrendingUp className="w-5 h-5" />,
@@ -211,7 +230,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
         },
         {
           title: "Backtesting",
-          href: "/backtest", 
+          href: "/backtest",
           icon: <History className="w-5 h-5" />,
           show: true,
           description: "Simule estratégias de investimento no passado"
@@ -411,14 +430,64 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                         >
                           {item.icon}
                           <span className="font-medium flex-1">{item.title}</span>
-                          {item.isPremiumFeature && (
-                            <Badge variant="default" className="text-xs bg-gradient-to-r from-violet-600 to-purple-600">
-                              Premium
-                            </Badge>
-                          )}
                         </Link>
                       ))}
                   </div>
+                )}
+
+                {/* Seção Carteiras - Accordion */}
+                {session && carteirasSections.some(section => section.items.some(item => item.show)) && (
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg px-4 py-3 font-medium hover:bg-accent hover:text-accent-foreground data-[state=open]:text-primary group">
+                      <span className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4" /> Carteiras
+                      </span>
+                      <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 py-2 space-y-3">
+                      {carteirasSections.map((section, sectionIndex) => (
+                        <div key={sectionIndex}>
+                          <div className="space-y-1">
+                            {section.items
+                              .filter(item => item.show)
+                              .map((item) => (
+                                <Link
+                                  key={item.href}
+                                  href={item.href}
+                                  onClick={() => setIsOpen(false)}
+                                  className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                                    pathname === item.href || pathname?.startsWith(item.href)
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                                  }`}
+                                >
+                                  <div className={`p-1.5 rounded-md ${
+                                    item.href === '/indices'
+                                      ? 'bg-gradient-to-br from-violet-500 to-purple-500'
+                                      : 'bg-gradient-to-br from-blue-500 to-indigo-500'
+                                  }`}>
+                                    <div className="text-white text-sm">
+                                      {item.icon}
+                                    </div>
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-sm">{item.title}</span>
+                                      {item.badge && (
+                                        <Badge variant="secondary" className="text-xs bg-gradient-to-r from-violet-600 to-purple-600 text-white">
+                                          {item.badge}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{item.description}</p>
+                                  </div>
+                                </Link>
+                              ))}
+                          </div>
+                        </div>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
                 )}
 
                 {/* Seção Oportunidades - Accordion */}

@@ -11,7 +11,7 @@ interface ExploreDataResponse {
 
 /**
  * Hook para buscar lista "Explorar" de oportunidades
- * Cache de 24 horas no frontend
+ * Cache de 24 horas no frontend (backend garante mudança diária via chave de cache)
  */
 export function useRadarExplore() {
   const {
@@ -30,8 +30,8 @@ export function useRadarExplore() {
     },
     staleTime: 24 * 60 * 60 * 1000, // Cache de 24 horas
     gcTime: 24 * 60 * 60 * 1000, // Manter no cache por 24 horas
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnWindowFocus: false, // Não precisa refetch frequente, backend já varia por dia
+    refetchOnMount: false, // Não precisa refetch frequente, backend já varia por dia
   })
 
   return {

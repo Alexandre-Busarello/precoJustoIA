@@ -34,8 +34,10 @@ export async function GET(request: NextRequest) {
     const isPremium = currentUser.isPremium;
     const isLoggedIn = true;
 
-    // Chave de cache (mesma para todos os usuários Premium/Free)
-    const cacheKey = `radar-explore:${isPremium ? 'premium' : 'free'}`;
+    // Usar o dia atual como parte da chave de cache para garantir mudança diária
+    const currentDate = new Date();
+    const dayKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`;
+    const cacheKey = `radar-explore:${isPremium ? 'premium' : 'free'}:${dayKey}`;
 
     // Verificar cache
     const cachedData = await cache.get(cacheKey);
@@ -47,7 +49,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar todas as empresas com dados financeiros válidos
-    const companies = await safeQueryWithParams(
+    // Usar seed baseado no dia para garantir diversidade e mudança diária
+    const daySeed = Math.floor(Date.now() / (24 * 60 * 60 * 1000)); // Dias desde epoch
+    
+    // Buscar empresas com cache que varia por dia
+    const allCompanies = await safeQueryWithParams(
       'radar-explore-companies',
       () => prisma.company.findMany({
         where: {
@@ -68,10 +74,29 @@ export async function GET(request: NextRequest) {
             take: 1,
           },
         },
-        take: 500, // Limitar busca inicial para performance
+        take: 1000, // Buscar mais empresas para ter diversidade
       }),
-      {}
+      { dayKey } // Incluir dia na chave de cache para variar diariamente
     ) as any[];
+
+    // Embaralhar aleatoriamente usando o dia atual como seed
+    // Isso garante que a ordem varie diariamente, mas seja consistente durante o mesmo dia
+    const shuffledCompanies = [...allCompanies].sort((a, b) => {
+      // Função auxiliar para calcular hash do ticker
+      const calculateHash = (ticker: string, seed: number): number => {
+        let hash = seed;
+        for (let idx = 0; idx < ticker.length; idx++) {
+          hash += ticker.charCodeAt(idx) * (idx + 1);
+        }
+        return hash % 10000;
+      };
+      
+      const hashA = calculateHash(a.ticker, daySeed);
+      const hashB = calculateHash(b.ticker, daySeed);
+      return hashA - hashB;
+    });
+
+    const companies = shuffledCompanies;
 
     // Extrair tickers e atualizar preços do Yahoo Finance
     const tickers = companies.map((c: any) => c.ticker);
@@ -257,8 +282,10 @@ export async function GET(request: NextRequest) {
 
       results.push(...batchResults.filter(r => r !== null) as any[]);
       
-      // Se já temos resultados suficientes, parar
-      if (results.length >= EXPLORE_LIMIT) {
+      // Continuar processando mais empresas para ter diversidade na seleção final
+      // Não parar quando encontra 50, mas processar pelo menos 200 empresas válidas
+      // ou todas as empresas disponíveis, o que for menor
+      if (results.length >= Math.max(EXPLORE_LIMIT * 4, 200) || i + batchSize >= companies.length) {
         break;
       }
     }
@@ -266,7 +293,7 @@ export async function GET(request: NextRequest) {
     // Ordenar por score composto (maior primeiro)
     results.sort((a, b) => b.compositeScore - a.compositeScore);
 
-    // Limitar resultados
+    // Limitar resultados finais
     const limitedResults = results.slice(0, EXPLORE_LIMIT);
 
     const response = {
@@ -276,7 +303,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     };
 
-    // Salvar no cache por 24 horas
+    // Salvar no cache por 24 horas (chave já inclui o dia, garantindo mudança diária)
     await cache.set(cacheKey, response, { ttl: CACHE_TTL });
 
     return NextResponse.json(response);

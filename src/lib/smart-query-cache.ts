@@ -465,11 +465,8 @@ export class SmartQueryCache {
       // Tentar obter do cache
       const cached = await cache.get<T>(fullCacheKey)
       if (cached !== null) {
-        console.log(`📦 Cache HIT: ${queryName} (${fullCacheKey})`)
         return cached
       }
-      
-      console.log(`📦 Cache MISS: ${queryName} (${fullCacheKey})`)
       
       // Executar query e cachear resultado
       const result = await operation()
@@ -479,7 +476,6 @@ export class SmartQueryCache {
         await cache.set(fullCacheKey, result, {
           ttl: QUERY_CACHE_TTL
         })
-        console.log(`💾 Query cacheada: ${queryName} (TTL: ${QUERY_CACHE_TTL}s)`)
       }
       
       return result

@@ -52,7 +52,7 @@ export function validateCAGR5Years(cagrLucros5a: number | null): number | null {
   // CAGR extremos são ainda mais suspeitos que crescimento anual
   // Pois representam média de 5 anos, não deveria ter valores tão extremos
   if (Math.abs(cagr) > 1.0) { // CAGR > 100% ou < -100% é muito suspeito
-    console.warn(`⚠️ CAGR 5 anos extremo detectado: ${(cagr * 100).toFixed(1)}%. Considerando como não confiável.`);
+    // console.warn(`⚠️ CAGR 5 anos extremo detectado: ${(cagr * 100).toFixed(1)}%. Considerando como não confiável.`);
     return null; // Tratar como dado não disponível
   }
 

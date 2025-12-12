@@ -453,7 +453,6 @@ export class CacheService {
           
           if (value !== null) {
             const parsed = JSON.parse(value)
-            console.log(`📦 Cache HIT (Redis): ${fullKey}`)
             return parsed
           }
         }
@@ -469,15 +468,12 @@ export class CacheService {
     if (memoryItem) {
       // Verificar se não expirou
       if (!memoryItem.ttl || (Date.now() - memoryItem.timestamp) < (memoryItem.ttl * 1000)) {
-        console.log(`📦 Cache HIT (Memory): ${fullKey}`)
         return memoryItem.data
       } else {
         // Remover item expirado
         memoryCache.delete(fullKey)
       }
     }
-
-    console.log(`📦 Cache MISS: ${fullKey}`)
     return null
   }
 
@@ -498,8 +494,7 @@ export class CacheService {
         // ✅ Tentar Redis se conectado
         if (redisConnected && redisClient) {
           await redisClient.setEx(fullKey, ttl, serialized)
-          console.log(`💾 Cache SET (Redis): ${fullKey} (TTL: ${ttl}s)`)
-          
+
           // Desconectar após operação (modo ultra-agressivo)
           await disconnectAfterOperation()
         }
@@ -516,7 +511,6 @@ export class CacheService {
       timestamp: Date.now(),
       ttl
     })
-    console.log(`💾 Cache SET (Memory): ${fullKey} (TTL: ${ttl}s)`)
   }
 
   /**

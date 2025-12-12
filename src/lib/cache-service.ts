@@ -422,14 +422,6 @@ export class CacheService {
    * Garantir que Redis está conectado (lazy loading)
    */
   private async ensureRedisConnection(): Promise<void> {
-    console.log('🔍 ensureRedisConnection:', {
-      LAZY_CONNECT,
-      redisConnected,
-      isInitializing,
-      clientExists: redisClient !== null,
-      willInitialize: LAZY_CONNECT && !redisConnected && !isInitializing
-    })
-    
     if (LAZY_CONNECT && !redisConnected && !isInitializing) {
       console.log('🔄 Iniciando Redis via lazy loading...')
       await this.initializeRedis()

@@ -39,14 +39,24 @@ export async function GET(request: NextRequest) {
     const dayKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`;
     const cacheKey = `radar-explore:${isPremium ? 'premium' : 'free'}:${dayKey}`;
 
+    console.log(`🔍 [RADAR EXPLORE] Verificando cache: ${cacheKey}`);
+    console.log(`📅 [RADAR EXPLORE] Data atual: ${currentDate.toISOString()}, dayKey: ${dayKey}`);
+
+    // Verificar informações do cache
+    const cacheInfo = cache.getConnectionInfo();
+    console.log(`🔗 [RADAR EXPLORE] Status do cache:`, cacheInfo);
+
     // Verificar cache
     const cachedData = await cache.get(cacheKey);
     if (cachedData) {
+      console.log(`✅ [RADAR EXPLORE] Cache HIT: ${cacheKey}`);
       return NextResponse.json({
         ...cachedData,
         cached: true,
       });
     }
+
+    console.log(`❌ [RADAR EXPLORE] Cache MISS: ${cacheKey}`);
 
     // Buscar todas as empresas com dados financeiros válidos
     // Usar seed baseado no dia para garantir diversidade e mudança diária
@@ -100,9 +110,7 @@ export async function GET(request: NextRequest) {
 
     // Extrair tickers e atualizar preços do Yahoo Finance
     const tickers = companies.map((c: any) => c.ticker);
-    console.log(`💰 [RADAR EXPLORE] Atualizando preços para ${tickers.length} tickers do Yahoo Finance...`);
     const updatedPrices = await getLatestPrices(tickers);
-    console.log(`✅ [RADAR EXPLORE] Preços atualizados para ${updatedPrices.size} tickers`);
 
     // Processar empresas em paralelo (limitado para não sobrecarregar)
     const results: Array<{
@@ -304,6 +312,7 @@ export async function GET(request: NextRequest) {
     };
 
     // Salvar no cache por 24 horas (chave já inclui o dia, garantindo mudança diária)
+    console.log(`💾 [RADAR EXPLORE] Salvando no cache: ${cacheKey} (TTL: ${CACHE_TTL}s)`);
     await cache.set(cacheKey, response, { ttl: CACHE_TTL });
 
     return NextResponse.json(response);

@@ -97,8 +97,6 @@ export async function getLatestPrices(tickers: string[]): Promise<Map<string, St
     return priceMap;
   }
 
-  console.log(`💰 [QUOTE SERVICE] Fetching prices for ${tickers.length} tickers`);
-
   // Process each ticker individually for better error handling
   await Promise.all(
     tickers.map(async (ticker) => {
@@ -171,7 +169,6 @@ export async function getTickerPrice(ticker: string): Promise<StockPrice | null>
     });
 
     if (dbQuote) {
-      console.log(`  📊 ${ticker}: R$ ${Number(dbQuote.price).toFixed(2)} (Database - ${dbQuote.date.toISOString().split('T')[0]})`);
       return {
         ticker,
         price: Number(dbQuote.price),

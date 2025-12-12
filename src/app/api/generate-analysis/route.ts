@@ -350,8 +350,6 @@ async function getStatementsAnalysis(ticker: string) {
           (typeof financialData[0].cagrReceitas5a === 'object' && 'toNumber' in financialData[0].cagrReceitas5a ? 
             financialData[0].cagrReceitas5a.toNumber() : financialData[0].cagrReceitas5a) : null
       };
-
-      console.log(`Dados de fallback carregados para ${ticker} (generate-analysis): ${years.length} anos de dados`);
     }
 
     // Serializar dados para análise

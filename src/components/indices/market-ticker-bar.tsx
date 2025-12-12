@@ -25,9 +25,8 @@ interface MarketTickerBarProps {
   position?: 'top' | 'bottom';
 }
 
-const CACHE_KEY = 'market-indices-cache-v4';
+const CACHE_KEY = 'market-indices-cache-v5';
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hora em milissegundos (quando mercado aberto)
-const CACHE_DURATION_CLOSED = 24 * 60 * 60 * 1000; // 24 horas quando mercado fechado e preço disponível
 const BANNER_HIDDEN_KEY = 'market-ticker-banner-hidden-v2'; // Chave para localStorage
 
 interface CachedData {
@@ -190,11 +189,8 @@ export function MarketTickerBar({ position = 'top' }: MarketTickerBarProps) {
                 // Continuar para fazer fetch
               } else {
                 // Verificar se cache ainda é válido (duração)
-                const cacheDuration = (marketClosed && cachedData.hasClosingPrice) 
-                  ? CACHE_DURATION_CLOSED 
-                  : CACHE_DURATION;
                 
-                if (now - cachedData.timestamp < cacheDuration) {
+                if (now - cachedData.timestamp < CACHE_DURATION) {
                   console.log('📊 [Frontend] Usando cache válido do localStorage');
                   setIndices(cachedData.indices);
                   setLoading(false);

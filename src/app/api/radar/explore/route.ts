@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
       return hashA - hashB;
     });
 
-    const companies = shuffledCompanies.slice(0, EXPLORE_LIMIT);
+    const companies = shuffledCompanies;
 
     // Extrair tickers e atualizar preços do Yahoo Finance
     const tickers = companies.map((c: any) => c.ticker);

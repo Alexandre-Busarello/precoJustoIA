@@ -1272,6 +1272,9 @@ export function AdminNotificationsPageClient() {
                     }
 
                     // Atualizar campanha
+                    // Se showOnDashboard estiver marcado, displayType é sempre BANNER
+                    const finalDisplayType = showOnDashboard ? 'BANNER' : displayType
+                    
                     const campaignData: any = {
                       title,
                       message,
@@ -1280,6 +1283,51 @@ export function AdminNotificationsPageClient() {
                       ctaText: ctaText.trim() || undefined,
                       showOnDashboard,
                       dashboardExpiresAt: dashboardExpiresAt ? new Date(dashboardExpiresAt).toISOString() : undefined,
+                      isActive,
+                      displayType: finalDisplayType,
+                      bannerTemplate: showOnDashboard ? bannerTemplate : undefined,
+                      modalTemplate: !showOnDashboard ? modalTemplate : undefined,
+                      quizConfig: finalDisplayType === 'QUIZ' ? { questions: quizQuestions } : undefined,
+                      illustrationUrl: illustrationUrl.trim() || undefined,
+                      bannerColors: (() => {
+                        if (!showOnDashboard) return undefined
+                        
+                        // Valores padrão por template
+                        const defaultColors: Record<string, string> = {}
+                        
+                        // Definir valores padrão baseado no template
+                        if (bannerTemplate === 'GRADIENT' || bannerTemplate === 'MINIMAL' || bannerTemplate === 'ILLUSTRATED') {
+                          defaultColors.primaryColor = '#6366f1'
+                        }
+                        if (bannerTemplate === 'GRADIENT' || bannerTemplate === 'ILLUSTRATED') {
+                          defaultColors.secondaryColor = '#9333ea'
+                        }
+                        if (bannerTemplate === 'SOLID') {
+                          defaultColors.backgroundColor = '#1e293b'
+                        }
+                        // Cor do texto e botão são sempre visíveis
+                        defaultColors.textColor = '#1e293b'
+                        defaultColors.buttonColor = '#4f46e5'
+                        defaultColors.buttonTextColor = '#ffffff'
+                        
+                        // Construir objeto final mesclando valores padrão com valores customizados
+                        const finalColors: typeof bannerColors = {}
+                        
+                        // Para cada cor relevante do template, usar valor customizado ou padrão
+                        Object.entries(defaultColors).forEach(([key, defaultValue]) => {
+                          const customValue = bannerColors[key as keyof typeof bannerColors]
+                          // Se há valor customizado e não está vazio, usar ele
+                          if (customValue && typeof customValue === 'string' && customValue.trim() !== '') {
+                            finalColors[key as keyof typeof bannerColors] = customValue.trim()
+                          } else {
+                            // Caso contrário, usar valor padrão
+                            finalColors[key as keyof typeof bannerColors] = defaultValue
+                          }
+                        })
+                        
+                        // Retornar objeto com cores (sempre terá valores devido aos padrões)
+                        return finalColors
+                      })(),
                     }
                     updateCampaignMutation.mutate({ campaignId: editingCampaign.id, campaignData })
                   } else {

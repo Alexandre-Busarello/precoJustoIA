@@ -1864,6 +1864,7 @@ enum NotificationType {
   MONTHLY_REPORT // Relatório mensal
   AI_REPORT // Relatório de IA genérico
   QUIZ // Notificações de quiz
+  MODAL // Notificações de modal
 }
 
 enum NotificationDisplayType {

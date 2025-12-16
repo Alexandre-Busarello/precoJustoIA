@@ -8,6 +8,7 @@ export type NotificationType =
   | 'MONTHLY_REPORT'
   | 'AI_REPORT'
   | 'QUIZ'
+  | 'MODAL'
 
 export type NotificationDisplayType = 'BANNER' | 'MODAL' | 'QUIZ'
 

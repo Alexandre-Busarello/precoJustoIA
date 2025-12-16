@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell } from 'lucide-react'
+import { Bell, Eye } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { NotificationMarkdown } from '@/components/notification-markdown'
+import { useNotificationModal } from '@/hooks/use-notification-modal'
+import { SimpleNotificationModal } from '@/components/simple-notification-modal'
 
 interface Notification {
   id: string
@@ -38,9 +40,19 @@ interface NotificationBellProps {
 export function NotificationBell({ className }: NotificationBellProps) {
   const queryClient = useQueryClient()
   const [isOpen, setIsOpen] = useState(false)
+  const { openModalManually } = useNotificationModal()
+  const [manualModalData, setManualModalData] = useState<{
+    title: string
+    message: string
+    link: string | null
+    linkType: 'INTERNAL' | 'EXTERNAL'
+    ctaText: string | null
+    modalTemplate: 'GRADIENT' | 'SOLID' | 'MINIMAL' | 'ILLUSTRATED' | null
+    illustrationUrl: string | null
+  } | null>(null)
 
   // Buscar contador de não lidas
-  const { data: unreadData, isLoading: isLoadingCount } = useQuery({
+  const { data: unreadData } = useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: async () => {
       const res = await fetch('/api/notifications/unread-count')
@@ -100,6 +112,25 @@ export function NotificationBell({ className }: NotificationBellProps) {
       } else {
         window.open(notification.link, '_blank', 'noopener,noreferrer')
       }
+    }
+  }
+
+  const handleViewModalDetails = async (e: React.MouseEvent, notification: Notification) => {
+    e.stopPropagation()
+    if (notification.type === 'MODAL' && notification.campaignId) {
+      const modalData = await openModalManually(notification.campaignId)
+      if (modalData) {
+        setManualModalData({
+          title: modalData.title,
+          message: modalData.message,
+          link: modalData.link,
+          linkType: modalData.linkType,
+          ctaText: modalData.ctaText,
+          modalTemplate: modalData.modalTemplate,
+          illustrationUrl: modalData.illustrationUrl
+        })
+      }
+      setIsOpen(false)
     }
   }
 
@@ -164,7 +195,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
           ) : (
             <div className="p-2">
               {notifications.map((notification: Notification) => (
-                <DropdownMenuItem
+                <div
                   key={notification.id}
                   className={`flex flex-col items-start p-3 mb-1 cursor-pointer rounded-md hover:bg-accent ${
                     !notification.isRead ? 'bg-blue-50 dark:bg-blue-950/20' : ''
@@ -179,6 +210,11 @@ export function NotificationBell({ className }: NotificationBellProps) {
                           Quiz
                         </Badge>
                       )}
+                      {notification.type === 'MODAL' && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          Modal
+                        </Badge>
+                      )}
                     </h4>
                     {!notification.isRead && (
                       <div className="h-2 w-2 bg-blue-600 rounded-full ml-2 flex-shrink-0 mt-1" />
@@ -187,10 +223,23 @@ export function NotificationBell({ className }: NotificationBellProps) {
                   <div className="text-xs text-muted-foreground line-clamp-2 mb-1">
                     <NotificationMarkdown content={notification.message} />
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {formatTime(notification.createdAt)}
-                  </span>
-                </DropdownMenuItem>
+                  <div className="flex items-center justify-between w-full mt-1">
+                    <span className="text-xs text-muted-foreground">
+                      {formatTime(notification.createdAt)}
+                    </span>
+                    {notification.type === 'MODAL' && notification.campaignId && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors duration-200 font-medium"
+                        onClick={(e) => handleViewModalDetails(e, notification)}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        Ver detalhes
+                      </Button>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -206,6 +255,21 @@ export function NotificationBell({ className }: NotificationBellProps) {
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
+      
+      {/* Modal manual quando aberto via botão */}
+      {manualModalData && (
+        <SimpleNotificationModal
+          open={!!manualModalData}
+          onClose={() => setManualModalData(null)}
+          title={manualModalData.title}
+          message={manualModalData.message}
+          link={manualModalData.link}
+          linkType={manualModalData.linkType}
+          ctaText={manualModalData.ctaText}
+          modalTemplate={manualModalData.modalTemplate}
+          illustrationUrl={manualModalData.illustrationUrl}
+        />
+      )}
     </DropdownMenu>
   )
 }

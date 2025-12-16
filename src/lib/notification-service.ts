@@ -227,7 +227,7 @@ export class NotificationService {
                 message,
                 link: link || null,
                 linkType,
-                type: (displayType === 'QUIZ' ? 'QUIZ' : 'CAMPAIGN') as any,
+                type: (displayType === 'QUIZ' ? 'QUIZ' : displayType === 'MODAL' ? 'MODAL' : 'CAMPAIGN') as any,
                 metadata: {
                   campaignId: campaign.id,
                   segmentType,
@@ -325,7 +325,7 @@ export class NotificationService {
                 message: campaign.message,
                 link: campaign.link || null,
                 linkType: campaign.linkType as NotificationLinkType,
-                type: ((campaign as any).displayType === 'QUIZ' ? 'QUIZ' : 'CAMPAIGN') as any,
+                type: ((campaign as any).displayType === 'QUIZ' ? 'QUIZ' : (campaign as any).displayType === 'MODAL' ? 'MODAL' : 'CAMPAIGN') as any,
                 metadata: {
                   campaignId: campaign.id,
                   segmentType: campaign.segmentType,
@@ -574,25 +574,47 @@ export class NotificationService {
           orderBy: { createdAt: 'desc' },
           skip,
           take: limit,
+          include: {
+            campaign: {
+              select: {
+                displayType: true
+              }
+            }
+          }
         }),
         prisma.notification.count({ where })
       ])
 
       return {
-        notifications: notifications.map(n => ({
-          id: n.id,
-          userId: n.userId,
-          campaignId: n.campaignId,
-          title: n.title,
-          message: n.message,
-          link: n.link,
-          linkType: n.linkType as NotificationLinkType,
-          type: n.type as any as NotificationType, // Cast temporário até Prisma ser regenerado
-          isRead: n.isRead,
-          readAt: n.readAt,
-          metadata: n.metadata as Record<string, any> | null,
-          createdAt: n.createdAt
-        })),
+        notifications: notifications.map((n: any) => {
+          // Se tem campanha associada, usar o displayType da campanha para determinar o tipo
+          let notificationType = n.type as any as NotificationType
+          
+          if (n.campaignId && n.campaign) {
+            const campaignDisplayType = n.campaign.displayType
+            if (campaignDisplayType === 'MODAL') {
+              notificationType = 'MODAL' as any
+            } else if (campaignDisplayType === 'QUIZ') {
+              notificationType = 'QUIZ' as any
+            }
+            // Se for BANNER ou outro tipo, manter o tipo original da notificação
+          }
+          
+          return {
+            id: n.id,
+            userId: n.userId,
+            campaignId: n.campaignId,
+            title: n.title,
+            message: n.message,
+            link: n.link,
+            linkType: n.linkType as NotificationLinkType,
+            type: notificationType,
+            isRead: n.isRead,
+            readAt: n.readAt,
+            metadata: n.metadata as Record<string, any> | null,
+            createdAt: n.createdAt
+          }
+        }),
         total,
         hasMore: skip + notifications.length < total
       }

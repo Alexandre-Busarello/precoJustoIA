@@ -14,6 +14,7 @@ export function NotificationModalsWrapper() {
   const { quiz, markAsViewed } = useQuiz(quizCampaignId)
   const queryClient = useQueryClient()
 
+
   useEffect(() => {
     // Se modalNotification for um quiz, definir campaignId para abrir quiz modal automaticamente
     // (apenas quando está na dashboard, não quando acessado pelo sininho)
@@ -54,9 +55,9 @@ export function NotificationModalsWrapper() {
 
   return (
     <>
-      {/* Modal de notificação normal - apenas se não for quiz */}
+      {/* Modal de notificação normal - automático */}
       {modalNotification && modalNotification.displayType === 'MODAL' && (
-        <NotificationModal />
+        <NotificationModal key={modalNotification.campaignId} />
       )}
       
       {/* Modal de quiz - aparece automaticamente quando há quiz pendente OU quando aberto manualmente */}

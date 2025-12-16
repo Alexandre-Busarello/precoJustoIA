@@ -27,8 +27,17 @@ export function useNotificationModal() {
       return res.json()
     },
     refetchOnWindowFocus: true,
-    staleTime: 30000 // 30 segundos
+    staleTime: 30000, // 30 segundos
+    notifyOnChangeProps: ['data', 'error'] // Garantir que notifica quando data muda
   })
+
+  // Query para buscar modal manualmente por campaignId
+  const fetchModalByCampaignId = async (campaignId: string): Promise<ModalNotification | null> => {
+    const res = await fetch(`/api/notifications/modal/${campaignId}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.notification || null
+  }
 
   // Mutation para marcar como vista
   const markAsViewedMutation = useMutation({
@@ -50,13 +59,25 @@ export function useNotificationModal() {
     }
   })
 
+  // Função para abrir modal manualmente - retorna os dados diretamente
+  const openModalManually = async (campaignId: string): Promise<ModalNotification | null> => {
+    try {
+      const notification = await fetchModalByCampaignId(campaignId)
+      return notification
+    } catch (error) {
+      console.error('❌ Erro ao abrir modal manualmente:', error)
+      return null
+    }
+  }
+
   return {
     notification: data?.notification || null,
     isLoading,
     markAsViewed: (campaignId: string, dismissed?: boolean) => {
       markAsViewedMutation.mutate({ campaignId, dismissed })
     },
-    isMarkingAsViewed: markAsViewedMutation.isPending
+    isMarkingAsViewed: markAsViewedMutation.isPending,
+    openModalManually
   }
 }
 

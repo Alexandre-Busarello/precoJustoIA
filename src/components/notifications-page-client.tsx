@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, Check, CheckCheck, ExternalLink } from 'lucide-react'
-import Link from 'next/link'
+import { Bell, Check, CheckCheck, ExternalLink, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { NotificationMarkdown } from '@/components/notification-markdown'
+import { useNotificationModal } from '@/hooks/use-notification-modal'
+import { SimpleNotificationModal } from '@/components/simple-notification-modal'
 
 interface Notification {
   id: string
@@ -31,6 +32,16 @@ export function NotificationsPageClient() {
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all')
   const [page, setPage] = useState(1)
   const limit = 20
+  const { openModalManually } = useNotificationModal()
+  const [manualModalData, setManualModalData] = useState<{
+    title: string
+    message: string
+    link: string | null
+    linkType: 'INTERNAL' | 'EXTERNAL'
+    ctaText: string | null
+    modalTemplate: 'GRADIENT' | 'SOLID' | 'MINIMAL' | 'ILLUSTRATED' | null
+    illustrationUrl: string | null
+  } | null>(null)
 
   // Buscar notificações
   const { data, isLoading, error } = useQuery({
@@ -106,6 +117,24 @@ export function NotificationsPageClient() {
     }
   }
 
+  const handleViewModalDetails = async (e: React.MouseEvent, notification: Notification) => {
+    e.stopPropagation()
+    if (notification.type === 'MODAL' && notification.campaignId) {
+      const modalData = await openModalManually(notification.campaignId)
+      if (modalData) {
+        setManualModalData({
+          title: modalData.title,
+          message: modalData.message,
+          link: modalData.link,
+          linkType: modalData.linkType,
+          ctaText: modalData.ctaText,
+          modalTemplate: modalData.modalTemplate,
+          illustrationUrl: modalData.illustrationUrl
+        })
+      }
+    }
+  }
+
   const formatTime = (date: Date) => {
     try {
       return formatDistanceToNow(new Date(date), {
@@ -114,20 +143,6 @@ export function NotificationsPageClient() {
       })
     } catch {
       return 'há pouco tempo'
-    }
-  }
-
-  const formatDate = (date: Date) => {
-    try {
-      return new Date(date).toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    } catch {
-      return ''
     }
   }
 
@@ -225,6 +240,16 @@ export function NotificationsPageClient() {
                               <h3 className="font-semibold text-base">
                                 {notification.title}
                               </h3>
+                              {notification.type === 'MODAL' && (
+                                <Badge variant="outline" className="text-xs">
+                                  Modal
+                                </Badge>
+                              )}
+                              {notification.type === 'QUIZ' && (
+                                <Badge variant="outline" className="text-xs">
+                                  Quiz
+                                </Badge>
+                              )}
                               {!notification.isRead && (
                                 <div className="h-2 w-2 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
                               )}
@@ -232,7 +257,7 @@ export function NotificationsPageClient() {
                             <div className="text-sm text-muted-foreground mb-2 line-clamp-3">
                               <NotificationMarkdown content={notification.message} />
                             </div>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                               <span>{formatTime(notification.createdAt)}</span>
                               {notification.link && (
                                 <span className="flex items-center gap-1">
@@ -241,6 +266,17 @@ export function NotificationsPageClient() {
                                   )}
                                   {notification.linkType === 'INTERNAL' ? 'Ver detalhes' : 'Abrir link'}
                                 </span>
+                              )}
+                              {notification.type === 'MODAL' && notification.campaignId && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors duration-200 font-medium hover:scale-105"
+                                  onClick={(e) => handleViewModalDetails(e, notification)}
+                                >
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  Ver modal completo
+                                </Button>
                               )}
                             </div>
                           </div>
@@ -278,6 +314,21 @@ export function NotificationsPageClient() {
           </Tabs>
         </CardContent>
       </Card>
+      
+      {/* Modal manual quando aberto via botão */}
+      {manualModalData && (
+        <SimpleNotificationModal
+          open={!!manualModalData}
+          onClose={() => setManualModalData(null)}
+          title={manualModalData.title}
+          message={manualModalData.message}
+          link={manualModalData.link}
+          linkType={manualModalData.linkType}
+          ctaText={manualModalData.ctaText}
+          modalTemplate={manualModalData.modalTemplate}
+          illustrationUrl={manualModalData.illustrationUrl}
+        />
+      )}
     </div>
   )
 }

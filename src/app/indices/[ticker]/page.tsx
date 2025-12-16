@@ -175,7 +175,7 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
         { date: 'desc' },        // Mais recente primeiro entre dias diferentes
         { createdAt: 'asc' }     // Mais antigo primeiro dentro do mesmo dia (ordem cronológica)
       ],
-      take: 50,
+      take: 200, // Aumentado para suportar paginação (200 registros = 20 páginas de 10 itens)
       select: {
         id: true,
         date: true,

@@ -2,12 +2,17 @@
  * Cron Job: Update Indices
  * 
  * Job 1: Mark-to-Market (19:00h) - Calcula pontos do índice
- * Job 2: Engine de Regras (19:30h) - Executa screening e rebalanceamento
+ * Job 2: Engine de Regras (Screening e Rebalanceamento) - Executa apenas no primeiro dia útil do mês
  * 
  * IMPORTANTE: Tolerante a falhas e incremental
  * - Pode ser executado múltiplas vezes
  * - Continua de onde parou usando checkpoints
  * - Processa índices um por vez para evitar timeout
+ * 
+ * REBALANCEAMENTO MENSAL:
+ * - O screening/rebalanceamento executa apenas uma vez por mês no primeiro dia útil
+ * - O cron pode ser configurado para rodar nos dias 1-5 do mês (ex: "0 20 1,2,3,4,5 * *")
+ * - O código verifica se é o primeiro dia útil e se já foi executado neste mês
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -57,6 +62,103 @@ function isTradingDay(date: Date = new Date()): boolean {
   // 0 = Domingo, 6 = Sábado
   // 1-5 = Segunda a Sexta
   return dayOfWeek >= 1 && dayOfWeek <= 5;
+}
+
+/**
+ * Verifica se é o primeiro dia útil do mês (timezone de Brasília)
+ * Considera que o primeiro dia útil pode ser dia 1, 2, 3, 4 ou 5 dependendo de feriados/fins de semana
+ * Verifica se houve pregão nos dias anteriores do mês
+ */
+async function isFirstTradingDayOfMonth(date: Date = new Date()): Promise<boolean> {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  });
+  
+  const parts = formatter.formatToParts(date);
+  const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+  const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+  
+  const dayMap: Record<string, number> = {
+    Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
+  };
+  const dayOfWeek = dayMap[weekday] ?? 0;
+  
+  // Se for sábado ou domingo, não é dia útil
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return false;
+  }
+  
+  // Se for dia 1 e for dia útil, verificar se houve pregão
+  if (day === 1) {
+    const marketWasOpen = await checkMarketWasOpen(date);
+    return marketWasOpen;
+  }
+  
+  // Se for dia 2-5, verificar se os dias anteriores do mês tiveram pregão
+  // Se algum dia anterior teve pregão, então hoje não é o primeiro dia útil
+  for (let checkDay = 1; checkDay < day; checkDay++) {
+    const checkDate = new Date(date);
+    checkDate.setDate(checkDate.getDate() - (day - checkDay));
+    
+    // Verificar se houve pregão neste dia
+    const marketWasOpen = await checkMarketWasOpen(checkDate);
+    if (marketWasOpen) {
+      // Se houve pregão em algum dia anterior, hoje não é o primeiro dia útil
+      return false;
+    }
+  }
+  
+  // Se chegou aqui, nenhum dia anterior teve pregão, então hoje é o primeiro dia útil
+  // Mas ainda precisamos verificar se hoje teve pregão
+  const marketWasOpenToday = await checkMarketWasOpen(date);
+  return marketWasOpenToday;
+}
+
+/**
+ * Verifica se o screening já foi executado neste mês (timezone de Brasília)
+ * Verifica nos logs de rebalanceamento se há algum log deste mês
+ */
+async function wasScreeningExecutedThisMonth(date: Date = new Date()): Promise<boolean> {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+    });
+    
+    const parts = formatter.formatToParts(date);
+    const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+    const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10);
+    
+    // Criar início e fim do mês atual em Brasília
+    const startOfMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+    const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    
+    // Verificar se há algum log de rebalanceamento neste mês
+    const logThisMonth = await prisma.indexRebalanceLog.findFirst({
+      where: {
+        action: 'REBALANCE',
+        ticker: 'SYSTEM',
+        date: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+      },
+      select: {
+        date: true,
+      },
+    });
+    
+    return !!logThisMonth;
+  } catch (error) {
+    console.error('⚠️ [CRON INDICES] Erro ao verificar se screening foi executado este mês:', error);
+    // Em caso de erro, retornar false para permitir execução (fail-safe)
+    return false;
+  }
 }
 
 /**
@@ -743,6 +845,34 @@ async function runScreeningJob(): Promise<{
   const marketWasOpen = await checkMarketWasOpen(today);
   if (!marketWasOpen) {
     console.log(`⏸️ [CRON INDICES] Screening job skipped: mercado não funcionou hoje (feriado ou sem pregão)`);
+    return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
+  }
+  
+  // Verificar se é o primeiro dia útil do mês
+  const isFirstDay = await isFirstTradingDayOfMonth(today);
+  if (!isFirstDay) {
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const dateStr = formatter.format(today);
+    console.log(`⏸️ [CRON INDICES] Screening job skipped: não é o primeiro dia útil do mês (hoje: ${dateStr})`);
+    return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
+  }
+  
+  // Verificar se já foi executado neste mês (proteção adicional)
+  const alreadyExecuted = await wasScreeningExecutedThisMonth(today);
+  if (alreadyExecuted) {
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const dateStr = formatter.format(today);
+    console.log(`⏸️ [CRON INDICES] Screening job skipped: já foi executado neste mês (hoje: ${dateStr})`);
     return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
   }
   

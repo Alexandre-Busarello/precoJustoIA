@@ -1530,6 +1530,15 @@ function getUpsideForRebalance(
 }
 
 /**
+ * Extrai o prefixo da empresa do ticker
+ * Ex: PETR3 -> PETR, PETR4 -> PETR, VALE3 -> VALE, ALUP11 -> ALUP
+ */
+function extractCompanyPrefix(ticker: string): string {
+  // Remove números e letras finais (3, 4, 11, F, etc.)
+  return ticker.replace(/[0-9]+[A-Z]*$/, '').toUpperCase();
+}
+
+/**
  * Compara composição atual com resultado ideal do screening
  */
 export function compareComposition(
@@ -1788,7 +1797,45 @@ export function compareComposition(
     }
   });
 
-  return changes;
+  // Filtrar trocas entre tickers da mesma empresa
+  // Se um ticker está saindo e outro ticker da mesma empresa está entrando, não fazer a troca
+  const filteredChanges: CompositionChange[] = [];
+  const exitPrefixes = new Set<string>(); // prefixos de empresas que estão saindo
+  const entryPrefixes = new Set<string>(); // prefixos de empresas que estão entrando
+  
+  // Primeiro, identificar todos os prefixos de empresas que estão saindo e entrando
+  for (const change of changes) {
+    const prefix = extractCompanyPrefix(change.ticker);
+    if (change.action === 'EXIT') {
+      exitPrefixes.add(prefix);
+    } else if (change.action === 'ENTRY') {
+      entryPrefixes.add(prefix);
+    }
+  }
+  
+  // Filtrar changes: remover EXIT e ENTRY se são da mesma empresa
+  for (const change of changes) {
+    const prefix = extractCompanyPrefix(change.ticker);
+    
+    if (change.action === 'EXIT') {
+      // Se há um ENTRY com o mesmo prefixo, não incluir este EXIT
+      if (entryPrefixes.has(prefix)) {
+        console.log(`    ⚠️ [REBALANCE] Bloqueando troca: ${change.ticker} (EXIT) - mesma empresa já está entrando (${prefix})`);
+        continue; // Não adicionar este EXIT
+      }
+    } else if (change.action === 'ENTRY') {
+      // Se há um EXIT com o mesmo prefixo, não incluir este ENTRY
+      if (exitPrefixes.has(prefix)) {
+        console.log(`    ⚠️ [REBALANCE] Bloqueando troca: ${change.ticker} (ENTRY) - mesma empresa já está saindo (${prefix})`);
+        continue; // Não adicionar este ENTRY
+      }
+    }
+    
+    // Se chegou aqui, não há conflito de mesma empresa, adicionar o change
+    filteredChanges.push(change);
+  }
+
+  return filteredChanges;
 }
 
 /**

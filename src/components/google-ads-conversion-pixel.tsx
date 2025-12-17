@@ -6,7 +6,12 @@ import { getLeadConversionTransactionId } from "@/lib/google-ads-transaction-id"
 
 /**
  * Componente para disparar evento de conversão do Google Ads
- * Só dispara quando o usuário acessa a dashboard com ?new_user=true (pós-cadastro)
+ * Dispara quando o usuário acessa uma página com ?new_user=true (pós-cadastro)
+ * 
+ * Uso recomendado:
+ * - Na página /verificar-email após cadastro por email (evita quebra de sessão)
+ * - Na página /dashboard após cadastro OAuth ou validação de email
+ * 
  * Garante que o evento seja enviado apenas uma vez por montagem
  * e previne race conditions usando useRef
  * Usa transactionId único persistido em sessionStorage para deduplicação em refresh

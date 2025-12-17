@@ -85,7 +85,9 @@ function RegisterForm() {
           setError("Erro ao fazer login após registro")
         } else {
           // Redirecionar para página de verificação de email (usuário já está logado)
-          router.push('/verificar-email')
+          // Adicionar ?new_user=true para disparar pixel de conversão imediatamente
+          // (antes da validação do email para evitar quebra de sessão)
+          router.push('/verificar-email?new_user=true')
         }
       } else {
         const data = await response.json()

@@ -9,11 +9,12 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { CheckCircle2, XCircle, Mail, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { invalidateEmailVerifiedCache } from "@/hooks/use-user-data"
+import { GoogleAdsConversionPixel } from "@/components/google-ads-conversion-pixel"
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const queryClient = useQueryClient()
   const [isResending, setIsResending] = useState(false)
   const [resendMessage, setResendMessage] = useState("")
@@ -31,10 +32,11 @@ function VerifyEmailContent() {
 
   useEffect(() => {
     // Se verificação foi bem-sucedida e usuário está logado, redirecionar após 3 segundos
-    // Adicionar ?new_user=true para identificar novo usuário e disparar pixel de LEAD
+    // NÃO adicionar ?new_user=true aqui porque o pixel já foi disparado quando o usuário
+    // chegou em /verificar-email?new_user=true após o cadastro (evita duplicação)
     if (success === 'true' && status === 'authenticated') {
       const timer = setTimeout(() => {
-        router.push('/dashboard?new_user=true')
+        router.push('/dashboard')
       }, 3000)
       return () => clearTimeout(timer)
     }
@@ -60,7 +62,7 @@ function VerifyEmailContent() {
       } else {
         setResendError(data.message || "Erro ao reenviar email")
       }
-    } catch (error) {
+    } catch {
       setResendError("Erro ao reenviar email. Tente novamente mais tarde.")
     } finally {
       setIsResending(false)
@@ -69,6 +71,9 @@ function VerifyEmailContent() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      {/* Disparar pixel de conversão quando usuário chega após cadastro por email */}
+      {/* Isso garante atribuição correta antes da validação do email (evita quebra de sessão) */}
+      <GoogleAdsConversionPixel />
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           {success === 'true' ? (
@@ -177,7 +182,7 @@ function VerifyEmailContent() {
               <p className="text-sm text-gray-600 mb-4">
                 Seu período de trial de 1 dia foi iniciado automaticamente!
               </p>
-              <Link href="/dashboard?new_user=true">
+              <Link href="/dashboard">
                 <Button className="w-full">
                   Ir para Dashboard
                 </Button>

@@ -845,7 +845,7 @@ function ScreeningAcoesContent() {
             <FeatureCard
               icon={<Zap className="w-6 h-6 text-white" />}
               title="Resultados Instantâneos"
-              description="Busque em +350 empresas da B3 e BDRs em segundos. Veja indicadores completos e compare empresas lado a lado."
+              description="Busque em +500 empresas da B3 e BDRs em segundos. Veja indicadores completos e compare empresas lado a lado."
               iconBgClass="bg-green-600"
             />
                             </div>
@@ -878,7 +878,7 @@ function ScreeningAcoesContent() {
                         </div>
               <h3 className="text-xl font-bold mb-2">Busque Empresas</h3>
               <p className="text-muted-foreground">
-                Nossa plataforma analisa +350 empresas da B3 e BDRs em segundos, retornando apenas as que atendem seus critérios.
+                Nossa plataforma analisa +500 empresas da B3 e BDRs em segundos, retornando apenas as que atendem seus critérios.
                                 </p>
                       </div>
             <div className="text-center">
@@ -1349,7 +1349,7 @@ function ScreeningAcoesContent() {
           "100% Gratuito",
           "Sem cadastro necessário",
           "Resultados instantâneos",
-          "+350 empresas B3"
+          "+500 empresas B3"
         ]}
       />
 

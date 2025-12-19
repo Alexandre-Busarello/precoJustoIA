@@ -11,7 +11,7 @@ export function HubMetadata({ pageType }: HubMetadataProps) {
     return (
       <Head>
         <title>Screening de Ações B3 - Filtro Customizável de Ações | Preço Justo AI</title>
-        <meta name="description" content="Screening de ações B3 com filtros customizáveis. Encontre ações por valuation (P/L, P/VP), rentabilidade (ROE, ROIC), crescimento, dividendos e endividamento. Filtre +350 empresas da Bolsa brasileira e BDRs com critérios personalizados. Análise fundamentalista gratuita." />
+        <meta name="description" content="Screening de ações B3 com filtros customizáveis. Encontre ações por valuation (P/L, P/VP), rentabilidade (ROE, ROIC), crescimento, dividendos e endividamento. Filtre +500 empresas da Bolsa brasileira e BDRs com critérios personalizados. Análise fundamentalista gratuita." />
         <meta name="keywords" content="screening ações, filtro ações B3, análise fundamentalista, buscar ações, screening ações B3, filtro ações bolsa, valuation ações, dividendos ações, ROE ações, P/L ações, P/VP ações, screening fundamentalista, encontrar ações, ações subvalorizadas, filtro ações customizado, análise ações B3, screening BDR, filtro BDR" />
         <meta property="og:title" content="Screening de Ações B3 - Filtro Customizável | Preço Justo AI" />
         <meta property="og:description" content="Configure filtros personalizados e encontre as melhores ações da B3 e BDRs baseado em seus critérios de investimento. Valuation, rentabilidade, crescimento e dividendos." />

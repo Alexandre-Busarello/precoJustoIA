@@ -241,7 +241,7 @@ Preço Justo AI é uma plataforma SaaS completa de análise fundamentalista de a
 ## 📊 DADOS E INDICADORES
 
 ### Cobertura de Dados
-- **Total de Empresas**: +350 empresas da B3
+- **Total de Empresas**: +500 empresas da B3
 - **Indicadores por Empresa**: 65 indicadores fundamentalistas
 - **Cobertura Típica**: 62/65 indicadores (95%)
 - **Módulos da API**: summaryProfile, defaultKeyStatistics, financialData, balanceSheetHistory
@@ -483,7 +483,7 @@ Preço Justo AI é uma plataforma SaaS completa de análise fundamentalista de a
 
 ### Análise Fundamentalista
 - ✅ 8 modelos de valuation
-- ✅ +350 empresas analisadas
+- ✅ +500 empresas analisadas
 - ✅ 65 indicadores por empresa
 - ✅ Análise com IA
 - ✅ Rankings personalizáveis

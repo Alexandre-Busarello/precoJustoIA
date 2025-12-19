@@ -256,7 +256,7 @@ export default async function BlogPage() {
             "8 Modelos de Valuation",
             "Análise com IA",
             "100% Gratuito para Começar",
-            "+350 Empresas B3"
+            "+500 Empresas B3"
           ]}
         />
 

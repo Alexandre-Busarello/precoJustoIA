@@ -24,12 +24,12 @@ import { CTASection } from "@/components/landing/cta-section"
 import { Breadcrumbs } from "@/components/landing/breadcrumbs"
 
 export const metadata: Metadata = {
-  title: "Metodologia de Análise Fundamentalista | Fórmula de Graham, Dividend Yield, Fórmula Mágica - Preço Justo AI",
-  description: "📚 Metodologia completa de análise fundamentalista de ações: Fórmula de Graham, Dividend Yield, Fórmula Mágica de Greenblatt, Fundamentalista 3+1, FCD, Gordon + IA. Base científica e acadêmica para investir em ações da B3/Bovespa. 8 modelos consagrados explicados em detalhes.",
+  title: "Metodologia de Análise Fundamentalista | Fórmula de Graham, Método Barsi, Fórmula Mágica - Preço Justo AI",
+  description: "📚 Metodologia completa de análise fundamentalista de ações: Fórmula de Graham, Método Barsi, Fórmula Mágica de Greenblatt, Fundamentalista 3+1, FCD, Gordon + IA. Base científica e acadêmica para investir em ações da B3/Bovespa. 8 modelos consagrados explicados em detalhes.",
   keywords: "metodologia análise fundamentalista, como fazer análise fundamentalista, fórmula benjamin graham, dividend yield como calcular, fórmula mágica joel greenblatt, fluxo caixa descontado FCD, modelo gordon dividendos, valuation ações metodologia, análise fundamentalista passo a passo, como analisar ações bovespa, modelos valuation ações",
   openGraph: {
     title: "Metodologia de Análise Fundamentalista | Preço Justo AI",
-    description: "8 modelos de valuation consagrados explicados em detalhes: Graham, Dividend Yield, Fórmula Mágica, FCD, Gordon e mais.",
+    description: "8 modelos de valuation consagrados explicados em detalhes: Graham, Método Barsi, Fórmula Mágica, FCD, Gordon e mais.",
     type: "website",
     url: "https://precojusto.ai/metodologia",
   },

@@ -21,7 +21,7 @@ import Link from "next/link"
 
 export const metadata: Metadata = {
   title: "Como Funciona - Preço Justo AI | Guia Completo da Análise Fundamentalista Automatizada",
-  description: "Entenda passo a passo como nossa plataforma aplica modelos de valuation (Graham, Dividend Yield, Fórmula Mágica) para encontrar ações subvalorizadas na B3. Tutorial completo.",
+  description: "Entenda passo a passo como nossa plataforma aplica modelos de valuation (Graham, Método Barsi, Fórmula Mágica) para encontrar ações subvalorizadas na B3. Tutorial completo.",
   keywords: "como funciona análise fundamentalista, tutorial preço justo ai, modelos valuation, graham dividend yield fórmula mágica, passo a passo análise ações",
 }
 
@@ -113,7 +113,7 @@ export default function ComoFuncionaPage() {
                 <h3 className="text-xl font-bold mb-4 text-green-900 dark:text-green-100">Aplicação dos Modelos</h3>
                 <p className="text-muted-foreground leading-relaxed">
                   Aplicamos automaticamente 7 modelos de valuation consagrados 
-                  (Graham, Dividend Yield, Fórmula Mágica, etc.) em cada empresa.
+                  (Graham, Método Barsi, Fórmula Mágica, etc.) em cada empresa.
                 </p>
               </CardContent>
             </Card>

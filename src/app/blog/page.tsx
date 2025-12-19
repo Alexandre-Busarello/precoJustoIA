@@ -70,7 +70,7 @@ export default async function BlogPage() {
     },
     {
       question: "Os artigos são baseados em metodologias científicas?",
-      answer: "Sim! Todos os nossos artigos são baseados em metodologias consagradas de análise fundamentalista, como Graham, Dividend Yield, Fórmula Mágica de Greenblatt, FCD, Gordon e outras. Sempre citamos fontes e referências acadêmicas quando aplicável.",
+      answer: "Sim! Todos os nossos artigos são baseados em metodologias consagradas de análise fundamentalista, como Graham, Método Barsi, Fórmula Mágica de Greenblatt, FCD, Gordon e outras. Sempre citamos fontes e referências acadêmicas quando aplicável.",
       iconName: "Award"
     }
   ]
@@ -209,7 +209,7 @@ export default async function BlogPage() {
                 />
                 <FeatureCard
                   title="Metodologias Comprovadas"
-                  description="Aprenda sobre Graham, Dividend Yield, Fórmula Mágica e outras metodologias de valuation consagradas."
+                  description="Aprenda sobre Graham, Método Barsi, Fórmula Mágica e outras metodologias de valuation consagradas."
                   iconName="BarChart3"
                   iconBgClass="bg-gradient-to-br from-indigo-500 to-indigo-600"
                 />

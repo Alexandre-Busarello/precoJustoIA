@@ -311,7 +311,7 @@ export default function PlanosPage() {
                     <div>
                       <h3 className="text-xl font-bold mb-3">8 Modelos Integrados</h3>
                       <p className="text-muted-foreground text-sm leading-relaxed">
-                        Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, FCD, Gordon, 
+                        Graham, Método Barsi, Fórmula Mágica, Fundamentalista 3+1, FCD, Gordon, 
                         Low P/E e IA. Todos em uma única plataforma.
                       </p>
                     </div>

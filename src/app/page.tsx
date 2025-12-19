@@ -45,7 +45,7 @@ const anoAtual = new Date().getFullYear()
 
 export const metadata: Metadata = {
   title: `Análise Fundamentalista de Ações B3 ${anoAtual} com IA | Preço Justo AI - Investimentos Bovespa`,
-  description: `Descubra as melhores ações da Bovespa ${anoAtual} com análise fundamentalista automatizada e IA. 8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica) em +500 empresas B3. Rankings instantâneos, comparador de ações e backtesting. Comece grátis!`,
+  description: `Descubra as melhores ações da Bovespa ${anoAtual} com análise fundamentalista automatizada e IA. 8 modelos de valuation (Graham, Método Barsi, Fórmula Mágica) em +500 empresas B3. Rankings instantâneos, comparador de ações e backtesting. Comece grátis!`,
   keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, valuation ações, como investir em ações, melhores ações B3, análise de ações grátis, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações, comparador ações bovespa, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista, backtesting carteiras, screening ações B3",
   authors: [{ name: "Alexandre Busarello", url: "https://precojusto.ai/fundador" }],
   creator: "Alexandre Busarello",
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Análise Fundamentalista de Ações B3 com IA | Preço Justo AI",
-    description: "Análise fundamentalista gratuita de ações B3 com IA. Fórmula de Graham, Dividend Yield, Fórmula Mágica + 5 modelos. Rankings de +500 empresas. Comece grátis!",
+    description: "Análise fundamentalista gratuita de ações B3 com IA. Fórmula de Graham, Método Barsi, Fórmula Mágica + 5 modelos. Rankings de +500 empresas. Comece grátis!",
     type: "website",
     url: "https://precojusto.ai",
     siteName: "Preço Justo AI",
@@ -132,7 +132,7 @@ export default async function Home() {
         subheadline={
           <>
             <strong>8 modelos de valuation automatizados</strong> analisam <strong>+500 empresas da Bovespa</strong> em segundos. 
-            Use <strong>Graham, Dividend Yield, Fórmula Mágica</strong> e mais 5 estratégias consagradas. 
+            Use <strong>Graham, Método Barsi, Fórmula Mágica</strong> e mais 5 estratégias consagradas. 
             <strong> Evite decisões ruins</strong> e encontre ações subvalorizadas com dados reais.
           </>
         }
@@ -914,7 +914,7 @@ export default async function Home() {
           faqs={[
             {
               question: "Como funciona a análise fundamentalista?",
-              answer: "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros.",
+              answer: "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Método Barsi, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros.",
               iconName: "Lightbulb"
             },
             {
@@ -1238,7 +1238,7 @@ export default async function Home() {
           faqs={[
             {
               question: "Como funciona a análise fundamentalista?",
-              answer: "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros.",
+              answer: "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Método Barsi, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros.",
               iconName: "Brain"
             },
             {
@@ -1328,7 +1328,7 @@ export default async function Home() {
               ],
               "featureList": [
                 "Análise fundamentalista automatizada",
-                "8 modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, DCF, Gordon, Low P/E, IA)",
+                "8 modelos de valuation (Graham, Método Barsi, Fórmula Mágica, Fundamentalista 3+1, DCF, Gordon, Low P/E, IA)",
                 "Análise preditiva com Inteligência Artificial (Google Gemini)",
                 "Mais de 350 empresas da B3 analisadas",
                 "65+ indicadores fundamentalistas por empresa",
@@ -1388,7 +1388,7 @@ export default async function Home() {
                   "name": "Como funciona a análise fundamentalista?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Dividend Yield, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros."
+                    "text": "Nossa plataforma aplica automaticamente os 8 principais modelos de valuation (Graham, Método Barsi, Fórmula Mágica, Fundamentalista 3+1, etc.) em todas as empresas da B3, calculando um preço justo baseado nos fundamentos financeiros."
                   }
                 },
                 {

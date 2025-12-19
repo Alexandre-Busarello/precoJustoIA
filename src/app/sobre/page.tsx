@@ -141,7 +141,7 @@ export default function SobrePage() {
                       <h3 className="text-xl font-bold mb-3">A Solução</h3>
                       <p className="text-muted-foreground leading-relaxed">
                         Decidimos criar uma plataforma que combinasse os melhores modelos de 
-                        valuation (Graham, Dividend Yield, Fórmula Mágica) com tecnologia 
+                        valuation (Graham, Método Barsi, Fórmula Mágica) com tecnologia 
                         moderna e inteligência artificial. O objetivo era tornar a análise 
                         fundamentalista acessível, precisa e fácil de usar.
                       </p>

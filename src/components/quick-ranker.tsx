@@ -46,6 +46,7 @@ import {
   X
 } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 // Interfaces para tipagem
 interface ScreeningFilter {
@@ -238,6 +239,7 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
   const { data: session } = useSession()
   const { trackEvent } = useTracking()
   const { trackEngagement } = useEngagementPixel()
+  const router = useRouter()
   const [selectedModel, setSelectedModel] = useState<string>("")
   const [params, setParams] = useState<RankingParams>({})
   const [loading, setLoading] = useState(false)
@@ -444,8 +446,17 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     }
   })
 
+  // Estado para controlar geração automática para usuários deslogados
+  const [shouldAutoGenerate, setShouldAutoGenerate] = useState(false)
+
   // Reset params quando trocar de modelo
   const handleModelChange = (model: string) => {
+    // Se usuário deslogado selecionar Screening, redirecionar para página de screening
+    if (!session && model === "screening") {
+      router.push('/screening-acoes')
+      return
+    }
+    
     setSelectedModel(model)
     setResults(null)
     setError(null)
@@ -453,6 +464,13 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     
     // Ajustar parâmetros padrão baseado no tipo de ativo
     const isBDR = assetTypeFilter === 'bdr'
+    
+    // Se usuário deslogado selecionar Graham (único modelo gratuito), marcar para gerar automaticamente
+    if (!session && model === "graham") {
+      setShouldAutoGenerate(true)
+    } else {
+      setShouldAutoGenerate(false)
+    }
     
     // Definir parâmetros padrão para cada modelo
     switch (model) {
@@ -554,6 +572,20 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         setParams({})
     }
   }
+
+  // Gerar ranking automaticamente quando usuário deslogado seleciona Graham
+  useEffect(() => {
+    if (shouldAutoGenerate && selectedModel === "graham" && !session && Object.keys(params).length > 0 && !loading && !results) {
+      // Pequeno delay para garantir que os parâmetros foram configurados
+      const timer = setTimeout(() => {
+        handleGenerateRanking()
+        setShouldAutoGenerate(false) // Resetar flag após gerar
+      }, 300)
+      
+      return () => clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldAutoGenerate, selectedModel, params, session, loading, results])
 
   // Etapas do processamento da IA
   const aiProcessingSteps = useMemo(() => [

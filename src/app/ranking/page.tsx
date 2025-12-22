@@ -317,7 +317,7 @@ function RankingContent() {
                 <Button
                   onClick={scrollToRankingGenerator}
                   size="lg"
-                  className="bg-white text-blue-600 hover:bg-blue-50 text-base md:text-lg px-6 md:px-8 py-3 md:py-4 shadow-xl hover:shadow-2xl transition-all font-bold"
+                  className="bg-white text-blue-600 hover:bg-blue-50 text-base md:text-lg px-6 md:px-8 py-3 md:py-4 shadow-xl hover:shadow-2xl transition-all font-bold cursor-pointer hover:scale-105 active:scale-95"
                 >
                   <BarChart3 className="w-5 h-5 mr-2" />
                   Gerar Ranking Agora

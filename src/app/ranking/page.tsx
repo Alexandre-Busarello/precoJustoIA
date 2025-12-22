@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import Head from "next/head"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 
 // FAQs para SEO
 const faqs = [
@@ -179,6 +180,7 @@ const modelDetails = [
 function RankingContent() {
   const { data: session } = useSession()
   const { isPremium } = usePremiumStatus()
+  const { trackEngagement } = useEngagementPixel()
   const searchParams = useSearchParams()
   const rankingId = searchParams.get('id')
   const assetTypeParam = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
@@ -212,6 +214,20 @@ function RankingContent() {
     setTimeout(() => {
       quickRankerRef.current?.scrollToTop()
     }, 100)
+  }
+
+  // Função para scrollar até o gerador de ranking (para usuários anônimos)
+  const scrollToRankingGenerator = () => {
+    // Disparar pixel de engajamento quando usuário anônimo clica
+    if (!isLoggedIn) {
+      trackEngagement()
+    }
+    
+    // Scroll suave até o componente de geração de ranking
+    const element = document.getElementById('ranking-generator')
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   }
 
   // Mostrar histórico se houver ID na URL (sem scroll automático)
@@ -293,6 +309,21 @@ function RankingContent() {
                   De Graham a Inteligência Artificial: escolha a estratégia ideal para seu perfil de investidor
                 </p>
               </>
+            )}
+
+            {/* CTA para usuários anônimos */}
+            {!isLoggedIn && (
+              <div className="mt-4 md:mt-6 mb-4 md:mb-6">
+                <Button
+                  onClick={scrollToRankingGenerator}
+                  size="lg"
+                  className="bg-white text-blue-600 hover:bg-blue-50 text-base md:text-lg px-6 md:px-8 py-3 md:py-4 shadow-xl hover:shadow-2xl transition-all font-bold"
+                >
+                  <BarChart3 className="w-5 h-5 mr-2" />
+                  Gerar Ranking Agora
+                  <TrendingUp className="w-5 h-5 ml-2" />
+                </Button>
+              </div>
             )}
 
             <div className={`flex flex-wrap justify-center gap-2 md:gap-3 ${isPremium ? 'mt-2 md:mt-3' : 'mt-2 md:mt-0'}`}>

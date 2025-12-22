@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +24,7 @@ interface AuthModalProps {
 
 export function AuthModal({ isOpen, onClose, type, strategy }: AuthModalProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const { data: session } = useSession()
 
   const handleRegister = async () => {
     setIsLoading(true)
@@ -32,8 +34,13 @@ export function AuthModal({ isOpen, onClose, type, strategy }: AuthModalProps) {
 
   const handleUpgrade = async () => {
     setIsLoading(true)
-    // Redirect para página de checkout
-    window.location.href = '/checkout?redirect=' + encodeURIComponent(window.location.pathname)
+    // Verificar se está logado antes de redirecionar para checkout
+    if (session) {
+      window.location.href = '/checkout?redirect=' + encodeURIComponent(window.location.pathname)
+    } else {
+      // Se não está logado, redirecionar para registro primeiro
+      window.location.href = '/register?callbackUrl=' + encodeURIComponent('/checkout?redirect=' + encodeURIComponent(window.location.pathname))
+    }
   }
 
   if (type === 'register') {

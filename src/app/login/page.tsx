@@ -69,6 +69,29 @@ function LoginForm() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* CTA Grande para Registro */}
+          <Button
+            asChild
+            size="lg"
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold"
+          >
+            <Link 
+              href={`/register${callbackUrl !== '/dashboard' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''}`}
+            >
+              Ainda não tem conta? Crie Grátis
+            </Link>
+          </Button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Ou faça login
+              </span>
+            </div>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

@@ -33,19 +33,19 @@ export default function TechnicalAnalysisPageLimited({
           <Lock className="w-16 h-16 text-amber-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-4">Análise Técnica Completa</h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-            Faça login para acessar a análise técnica completa com indicadores avançados, gráficos interativos e previsões de preços com IA.
+            Cadastre-se grátis para acessar a análise técnica completa com indicadores avançados, gráficos interativos e previsões de preços com IA.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700">
-              <Link href={`/login?callbackUrl=${encodeURIComponent(`/acao/${ticker.toLowerCase()}/analise-tecnica`)}`}>
-                Fazer Login
+              <Link href={`/register?callbackUrl=${encodeURIComponent(`/acao/${ticker.toLowerCase()}/analise-tecnica`)}`}>
+                Cadastre-se Grátis
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="border-amber-600 text-amber-600 hover:bg-amber-50">
-              <Link href="/checkout">
+              <Link href={`/register?callbackUrl=${encodeURIComponent(`/acao/${ticker.toLowerCase()}/analise-tecnica`)}`}>
                 <Crown className="w-4 h-4 mr-2" />
-                Upgrade para Premium
+                Ver Planos Premium
               </Link>
             </Button>
           </div>
@@ -141,16 +141,16 @@ export default function TechnicalAnalysisPageLimited({
             Desbloqueie o poder da análise técnica completa
           </p>
           <p className="text-muted-foreground mb-4">
-            Faça login ou faça upgrade para Premium e tenha acesso a todas as ferramentas de análise técnica.
+            Cadastre-se grátis ou faça upgrade para Premium e tenha acesso a todas as ferramentas de análise técnica.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700">
-              <Link href={`/login?callbackUrl=${encodeURIComponent(`/acao/${ticker.toLowerCase()}/analise-tecnica`)}`}>
-                Fazer Login Gratuito
+              <Link href={`/register?callbackUrl=${encodeURIComponent(`/acao/${ticker.toLowerCase()}/analise-tecnica`)}`}>
+                Cadastre-se Grátis
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="border-amber-600 text-amber-600 hover:bg-amber-50">
-              <Link href="/checkout">
+              <Link href={`/register?callbackUrl=${encodeURIComponent(`/acao/${ticker.toLowerCase()}/analise-tecnica`)}`}>
                 <Crown className="w-4 h-4 mr-2" />
                 Ver Planos Premium
               </Link>

@@ -232,6 +232,7 @@ export function OnboardingProvider() {
                 : undefined
           }
           savedData={{
+            name: onboardingStatus?.name,
             acquisitionSource: onboardingStatus?.onboardingAcquisitionSource,
             experienceLevel: onboardingStatus?.onboardingExperienceLevel,
             investmentFocus: onboardingStatus?.onboardingInvestmentFocus,

@@ -41,7 +41,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       ? `/checkout?${checkoutParams.toString()}`
       : '/checkout'
     
-    redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
+    redirect(`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`)
   }
 
   const initialPlan = searchParams.plan || 'monthly'

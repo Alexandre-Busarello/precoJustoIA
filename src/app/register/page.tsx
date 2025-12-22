@@ -9,16 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Gift, Sparkles, CheckCircle } from "lucide-react"
+import { Gift, Sparkles, CheckCircle, Eye, EyeOff } from "lucide-react"
 import { useTrialAvailable } from "@/hooks/use-trial-available"
 
 function RegisterForm() {
-  const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
@@ -37,20 +34,8 @@ function RegisterForm() {
     setIsLoading(true)
     setError("")
 
-    if (password !== confirmPassword) {
-      setError("As senhas não coincidem")
-      setIsLoading(false)
-      return
-    }
-
     if (password.length < 6) {
       setError("A senha deve ter pelo menos 6 caracteres")
-      setIsLoading(false)
-      return
-    }
-
-    if (!acceptedTerms) {
-      setError("Você deve aceitar os Termos de Uso e Política de Privacidade para criar uma conta")
       setIsLoading(false)
       return
     }
@@ -63,10 +48,10 @@ function RegisterForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name,
           email,
           password,
           acquisition, // Rastrear origem do cadastro
+          // name removido - será coletado no onboarding ou perfil
           // isEarlyAdopter removido - será definido apenas via webhooks após pagamento
         }),
       })
@@ -111,10 +96,10 @@ function RegisterForm() {
         <Card className="w-full">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">
-              Criar Conta
+              Crie sua conta grátis
             </CardTitle>
             <CardDescription className="text-center">
-              Crie sua conta para começar
+              Comece a investir com inteligência
             </CardDescription>
             {/* Trial Premium Banner - Só mostra se trial estiver disponível */}
             {isTrialAvailable && (
@@ -153,103 +138,16 @@ function RegisterForm() {
             )}
           </CardHeader>
         <CardContent className="space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Seu nome"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Mínimo 6 caracteres"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar Senha</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirme sua senha"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="flex items-start space-x-2">
-              <Checkbox
-                id="terms"
-                checked={acceptedTerms}
-                onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
-                className="mt-1"
-              />
-              <label
-                htmlFor="terms"
-                className="text-sm text-muted-foreground leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-              >
-                Eu concordo com os{" "}
-                <Link href="/termos-de-uso" target="_blank" className="underline hover:text-primary">
-                  Termos de Uso
-                </Link>{" "}
-                e{" "}
-                <Link href="/lgpd" target="_blank" className="underline hover:text-primary">
-                  Política de Privacidade
-                </Link>
-              </label>
-            </div>
-            {error && (
-              <div className="text-sm text-red-600 text-center">{error}</div>
-            )}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading || !acceptedTerms}
-            >
-              {isLoading ? "Criando conta..." : "Criar Conta"}
-            </Button>
-          </form>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Ou continue com
-              </span>
-            </div>
-          </div>
-
+          {/* Botão Google Primeiro - Gigante */}
           <Button
             variant="outline"
             type="button"
-            className="w-full"
+            size="lg"
+            className="w-full h-12 text-base font-medium"
             onClick={handleGoogleSignIn}
             disabled={isLoading}
           >
-            <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+            <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
@@ -269,6 +167,81 @@ function RegisterForm() {
             </svg>
             Continuar com Google
           </Button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                ou use seu e-mail
+              </span>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Mínimo 6 caracteres"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-12"
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            {error && (
+              <div className="text-sm text-red-600 text-center">{error}</div>
+            )}
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={isLoading}
+            >
+              {isLoading ? "Criando conta..." : "Cadastrar"}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Ao criar sua conta, você concorda com nossos{" "}
+              <Link href="/termos-de-uso" target="_blank" className="underline hover:text-primary">
+                Termos de Uso
+              </Link>{" "}
+              e{" "}
+              <Link href="/lgpd" target="_blank" className="underline hover:text-primary">
+                Política de Privacidade
+              </Link>
+              .
+            </p>
+          </form>
         </CardContent>
         <CardFooter>
           <p className="text-center text-sm text-muted-foreground w-full">

@@ -179,8 +179,8 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
           {isLoggedIn ? "Upgrade para ver o score real" : "Faça login para ver o score"}
         </p>
         <Button asChild size="sm" variant="outline" className="text-xs">
-          <Link href={isLoggedIn ? "/checkout" : "/login"}>
-            {isLoggedIn ? "Upgrade Premium" : "Fazer Login"}
+          <Link href={isLoggedIn ? "/checkout" : "/register"}>
+            {isLoggedIn ? "Upgrade Premium" : "Cadastre-se Grátis"}
           </Link>
         </Button>
       </div>

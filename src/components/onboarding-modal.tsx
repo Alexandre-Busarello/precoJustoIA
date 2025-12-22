@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { Hand, TrendingUp, Target, Sparkles } from "lucide-react"
 
-type OnboardingStep = "welcome" | "acquisition" | "experience" | "focus"
+type OnboardingStep = "welcome" | "name" | "acquisition" | "experience" | "focus"
 
 interface OnboardingModalProps {
   isOpen: boolean
@@ -16,6 +16,7 @@ interface OnboardingModalProps {
   onComplete: () => void
   onlyQuestions?: string[] // Se fornecido, mostra apenas essas perguntas (ex: ['acquisition', 'experience'])
   savedData?: {
+    name?: string | null
     acquisitionSource?: string | null
     experienceLevel?: string | null
     investmentFocus?: string | null
@@ -48,6 +49,7 @@ const FOCUS_OPTIONS = [
 export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, savedData }: OnboardingModalProps) {
   const { data: session } = useSession()
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome")
+  const [name, setName] = useState<string>("")
   const [acquisitionSource, setAcquisitionSource] = useState<string>("")
   const [acquisitionOtherDetail, setAcquisitionOtherDetail] = useState<string>("")
   const [experienceLevel, setExperienceLevel] = useState<string>("")
@@ -83,7 +85,9 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
       // Se onlyQuestions for fornecido, pular welcome e ir direto para a primeira pergunta
       if (onlyQuestions && onlyQuestions.length > 0) {
         // Determinar o primeiro passo baseado nas perguntas faltantes
-        if (onlyQuestions.includes('acquisition')) {
+        if (onlyQuestions.includes('name')) {
+          setCurrentStep("name")
+        } else if (onlyQuestions.includes('acquisition')) {
           setCurrentStep("acquisition")
         } else if (onlyQuestions.includes('experience')) {
           setCurrentStep("experience")
@@ -98,6 +102,9 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
       
       // Carregar dados salvos se existirem (quando voltando para complementar)
       if (savedData) {
+        if (savedData.name) {
+          setName(savedData.name)
+        }
         if (savedData.acquisitionSource) {
           // Se for "other: detalhe", separar
           if (savedData.acquisitionSource.startsWith('other: ')) {
@@ -115,6 +122,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
         }
       } else {
         // Se não há dados salvos, resetar tudo (onboarding novo)
+        setName("")
         setAcquisitionSource("")
         setAcquisitionOtherDetail("")
         setExperienceLevel("")
@@ -135,19 +143,28 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
 
   const handleSkip = async () => {
     if (currentStep === "welcome") {
-      await saveOnboardingData(null, null, null)
+      await saveOnboardingData(null, null, null, null)
       onClose()
       return
     }
 
     // Avançar para o próximo passo ou fechar
-    if (currentStep === "acquisition") {
+    if (currentStep === "name") {
+      const next = getNextStep("name")
+      if (next) {
+        setCurrentStep(next)
+      } else {
+        // Não há mais perguntas, salvar e fechar
+        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
+        onClose()
+      }
+    } else if (currentStep === "acquisition") {
       const next = getNextStep("acquisition")
       if (next) {
         setCurrentStep(next)
       } else {
         // Não há mais perguntas, salvar e fechar
-        await saveOnboardingData(acquisitionSource || null, experienceLevel || null, investmentFocus || null)
+        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
         onClose()
       }
     } else if (currentStep === "experience") {
@@ -156,7 +173,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
         setCurrentStep(next)
       } else {
         // Não há mais perguntas, salvar e fechar
-        await saveOnboardingData(acquisitionSource || null, experienceLevel || null, investmentFocus || null)
+        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
         onClose()
       }
     } else if (currentStep === "focus") {
@@ -165,7 +182,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
       if (acquisitionSource === "other" && acquisitionOtherDetail.trim()) {
         finalAcquisition = `other: ${acquisitionOtherDetail.trim()}`
       }
-      await saveOnboardingData(finalAcquisition, experienceLevel || null, investmentFocus || null)
+      await saveOnboardingData(name.trim() || null, finalAcquisition, experienceLevel || null, investmentFocus || null)
       onClose()
     }
   }
@@ -174,11 +191,12 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
   const getNextStep = (current: OnboardingStep): OnboardingStep | null => {
     if (onlyQuestions && onlyQuestions.length > 0) {
       // Se estamos mostrando apenas perguntas específicas, pular as que não estão na lista
-      const steps = ["acquisition", "experience", "focus"] as OnboardingStep[]
+      const steps = ["name", "acquisition", "experience", "focus"] as OnboardingStep[]
       const currentIndex = steps.indexOf(current)
       
       for (let i = currentIndex + 1; i < steps.length; i++) {
         const step = steps[i]
+        if (step === "name" && onlyQuestions.includes("name")) return step
         if (step === "acquisition" && onlyQuestions.includes("acquisition")) return step
         if (step === "experience" && onlyQuestions.includes("experience")) return step
         if (step === "focus" && onlyQuestions.includes("focus")) return step
@@ -187,7 +205,8 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
     }
     
     // Comportamento normal
-    if (current === "welcome") return "acquisition"
+    if (current === "welcome") return "name"
+    if (current === "name") return "acquisition"
     if (current === "acquisition") return "experience"
     if (current === "experience") return "focus"
     return null
@@ -202,6 +221,20 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
       return
     }
 
+    if (currentStep === "name") {
+      // Nome é opcional, pode avançar mesmo sem preencher
+      const next = getNextStep("name")
+      if (next) {
+        setCurrentStep(next)
+      } else {
+        // Última pergunta, salvar e fechar
+        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
+        onComplete()
+        onClose()
+      }
+      return
+    }
+
     if (currentStep === "acquisition") {
       if (!acquisitionSource) return
       const next = getNextStep("acquisition")
@@ -209,7 +242,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
         setCurrentStep(next)
       } else {
         // Última pergunta, salvar e fechar
-        await saveOnboardingData(acquisitionSource || null, experienceLevel || null, investmentFocus || null)
+        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
         onComplete()
         onClose()
       }
@@ -223,7 +256,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
         setCurrentStep(next)
       } else {
         // Última pergunta, salvar e fechar
-        await saveOnboardingData(acquisitionSource || null, experienceLevel || null, investmentFocus || null)
+        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
         onComplete()
         onClose()
       }
@@ -232,13 +265,19 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
 
     if (currentStep === "focus") {
       if (!investmentFocus) return
-      await saveOnboardingData(acquisitionSource || null, experienceLevel || null, investmentFocus)
+      // Preparar acquisition com detalhe se for "other"
+      let finalAcquisition = acquisitionSource || null
+      if (acquisitionSource === "other" && acquisitionOtherDetail.trim()) {
+        finalAcquisition = `other: ${acquisitionOtherDetail.trim()}`
+      }
+      await saveOnboardingData(name.trim() || null, finalAcquisition, experienceLevel || null, investmentFocus)
       onComplete()
       onClose()
     }
   }
 
   const saveOnboardingData = async (
+    userName: string | null,
     acquisition: string | null,
     experience: string | null,
     focus: string | null
@@ -251,6 +290,12 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
       // Se não há valor novo mas há valor salvo, usar o valor salvo para preservar
       // Se não há valor novo nem salvo, enviar null (pular pergunta)
       // Se há valor novo, usar o valor novo
+      
+      let finalName: string | null = userName || null
+      if (!userName && savedData?.name) {
+        // Preservar valor salvo se não há valor novo
+        finalName = savedData.name
+      }
       
       let finalAcquisition: string | null = acquisition || null
       if (acquisition === "other" && acquisitionOtherDetail.trim()) {
@@ -274,6 +319,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
 
       // Sempre enviar todos os valores para garantir que valores salvos sejam preservados
       const payload = {
+        name: finalName,
         acquisitionSource: finalAcquisition,
         experienceLevel: finalExperience,
         investmentFocus: finalFocus,
@@ -307,12 +353,14 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
 
   const getStepNumber = () => {
     switch (currentStep) {
+      case "name":
+        return "1 de 4"
       case "acquisition":
-        return "1 de 3"
+        return "2 de 4"
       case "experience":
-        return "2 de 3"
+        return "3 de 4"
       case "focus":
-        return "3 de 3"
+        return "4 de 4"
       default:
         return ""
     }
@@ -320,6 +368,9 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
 
   const canProceed = () => {
     switch (currentStep) {
+      case "name":
+        // Nome é opcional, sempre pode prosseguir
+        return true
       case "acquisition":
         // Se selecionou "other", precisa preencher o detalhe
         if (acquisitionSource === "other") {
@@ -352,7 +403,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
                 👋 Boas-vindas ao Preço Justo AI!
               </DialogTitle>
               <DialogDescription className="text-base pt-2">
-                Vamos personalizar sua experiência. São 3 perguntas rápidas para te ajudar a encontrar as melhores oportunidades da bolsa.
+                Vamos personalizar sua experiência. São algumas perguntas rápidas para te ajudar a encontrar as melhores oportunidades da bolsa.
               </DialogDescription>
             </DialogHeader>
 
@@ -372,6 +423,55 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
                 disabled={isSubmitting}
               >
                 Pular por enquanto
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Name Step */}
+        {currentStep === "name" && (
+          <div className="space-y-6 py-4">
+            <DialogHeader>
+              <DialogTitle className="text-xl">
+                Pergunta {getStepNumber()}
+              </DialogTitle>
+              <DialogDescription className="text-base pt-2">
+                Como podemos te chamar?
+                <br />
+                <span className="text-sm text-muted-foreground">
+                  Este campo é opcional. Você pode pular se preferir.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <Input
+                type="text"
+                placeholder="Seu nome (opcional)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <Button
+                onClick={handleNext}
+                className="flex-1"
+                size="lg"
+                disabled={isSubmitting}
+              >
+                Próximo
+              </Button>
+              <Button
+                onClick={handleSkip}
+                variant="outline"
+                className="flex-1"
+                size="lg"
+                disabled={isSubmitting}
+              >
+                Pular esta pergunta
               </Button>
             </div>
           </div>

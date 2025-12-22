@@ -5,6 +5,7 @@ import { safeWrite } from '@/lib/prisma-wrapper'
 import { z } from 'zod'
 
 const onboardingSchema = z.object({
+  name: z.string().nullable().optional(),
   acquisitionSource: z.string().nullable().optional(),
   experienceLevel: z.string().nullable().optional(),
   investmentFocus: z.string().nullable().optional(),
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = onboardingSchema.parse(body)
-    const { acquisitionSource, experienceLevel, investmentFocus } = validatedData
+    const { name, acquisitionSource, experienceLevel, investmentFocus } = validatedData
 
     // Buscar dados atuais do usuário para preservar lastOnboardingSeenAt se já foi marcado
     const currentUser = await prisma.user.findUnique({
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
     // Caso contrário, atualizar com data atual
     const updateData: {
       lastOnboardingSeenAt?: Date
+      name?: string | null
       onboardingAcquisitionSource?: string | null
       onboardingExperienceLevel?: string | null
       onboardingInvestmentFocus?: string | null
@@ -52,6 +54,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Atualizar apenas os campos que foram fornecidos
+    if (name !== undefined) {
+      // Se name for uma string vazia ou null, manter null (não atualizar)
+      // Se name tiver valor, trim e atualizar
+      updateData.name = name && name.trim() ? name.trim() : null
+    }
     if (acquisitionSource !== undefined) {
       updateData.onboardingAcquisitionSource = acquisitionSource
     }

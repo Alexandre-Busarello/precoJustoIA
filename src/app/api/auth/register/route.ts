@@ -78,9 +78,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Validações básicas
-        if (!name || !email || !password) {
+        if (!email || !password) {
           return NextResponse.json(
-            { message: "Todos os campos são obrigatórios" },
+            { message: "Email e senha são obrigatórios" },
             { status: 400 }
           )
         }
@@ -94,25 +94,25 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Validar formato de nome (não pode ser apenas números ou caracteres especiais)
-        if (name.trim().length < 2 || /^[0-9\s]+$/.test(name.trim())) {
-          return NextResponse.json(
-            { message: "Nome inválido" },
-            { status: 400 }
-          )
+        // Nome é opcional - se fornecido, validar formato
+        let finalName = name?.trim() || null
+        if (finalName) {
+          // Validar formato de nome (não pode ser apenas números ou caracteres especiais)
+          if (finalName.length < 2 || /^[0-9\s]+$/.test(finalName)) {
+            return NextResponse.json(
+              { message: "Nome inválido" },
+              { status: 400 }
+            )
+          }
+        } else {
+          // Se não fornecido, usar parte do email antes do @ como nome temporário
+          const emailPart = email.split('@')[0]
+          finalName = emailPart || 'Usuário'
         }
 
         if (password.length < 6) {
           return NextResponse.json(
             { message: "A senha deve ter pelo menos 6 caracteres" },
-            { status: 400 }
-          )
-        }
-
-        // Validar senha não é muito simples (apenas números ou apenas letras)
-        if (/^[0-9]+$/.test(password) || /^[a-zA-Z]+$/.test(password)) {
-          return NextResponse.json(
-            { message: "A senha deve conter letras e números" },
             { status: 400 }
           )
         }
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
         // emailVerified = null inicialmente - será verificado via email
         const user = await prisma.user.create({
           data: {
-            name,
+            name: finalName,
             email,
             password: hashedPassword,
             isEarlyAdopter: false, // Sempre false - webhooks atualizam após pagamento

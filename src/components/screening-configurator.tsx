@@ -104,8 +104,8 @@ export function ScreeningConfigurator({
               ✅ Filtros de <strong>Valuation</strong> (P/L, P/VP, EV/EBITDA, PSR) estão liberados para todos!
             </p>
             <Button asChild size="lg" className={isLoggedIn ? "bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600" : ""}>
-              <Link href={isLoggedIn ? "/checkout" : "/login"}>
-                {isLoggedIn ? <><Crown className="w-5 h-5 mr-2" /> Fazer Upgrade Premium</> : 'Fazer Login Agora'}
+              <Link href={isLoggedIn ? "/checkout" : "/register"}>
+                {isLoggedIn ? <><Crown className="w-5 h-5 mr-2" /> Fazer Upgrade Premium</> : 'Cadastre-se Grátis'}
               </Link>
             </Button>
           </div>

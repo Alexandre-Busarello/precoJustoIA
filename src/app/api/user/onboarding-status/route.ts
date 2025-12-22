@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       () => prisma.user.findUnique({
         where: { id: user.id },
         select: {
+          name: true,
           lastOnboardingSeenAt: true,
           onboardingAcquisitionSource: true,
           onboardingExperienceLevel: true,
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       shouldShowOnboarding,
       lastOnboardingSeenAt: userData.lastOnboardingSeenAt,
+      name: userData.name,
       onboardingAcquisitionSource: userData.onboardingAcquisitionSource,
       onboardingExperienceLevel: userData.onboardingExperienceLevel,
       onboardingInvestmentFocus: userData.onboardingInvestmentFocus,

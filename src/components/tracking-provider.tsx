@@ -13,12 +13,7 @@ interface TrackingProviderProps {
 }
 
 export function TrackingProvider({ children }: TrackingProviderProps) {
-  const { trackPageView, flush } = useTracking();
-
-  // Track página inicial
-  useEffect(() => {
-    trackPageView();
-  }, [trackPageView]);
+  const { flush } = useTracking();
 
   // Envia eventos pendentes ao desmontar
   useEffect(() => {

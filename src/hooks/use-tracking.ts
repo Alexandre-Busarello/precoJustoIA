@@ -160,11 +160,19 @@ export function useTracking(): UseTrackingReturn {
   const scrollDepthRef = useRef<number>(0);
   const timeOnPageRef = useRef<number>(0);
 
-  // Inicializa sessão
+  // Inicializa sessão de forma síncrona quando possível (client-side)
+  if (typeof window !== 'undefined' && !sessionIdRef.current) {
+    sessionIdRef.current = generateSessionId();
+    timeOnPageStart = Date.now();
+  }
+
+  // Garante inicialização no useEffect também (fallback)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !sessionIdRef.current) {
       sessionIdRef.current = generateSessionId();
-      timeOnPageStart = Date.now();
+      if (!timeOnPageStart) {
+        timeOnPageStart = Date.now();
+      }
     }
   }, []);
 
@@ -261,13 +269,24 @@ export function useTracking(): UseTrackingReturn {
 
   // Auto-track de mudanças de página
   useEffect(() => {
+    // Garante que sessionId está inicializado antes de tentar trackear
+    if (typeof window === 'undefined') return;
+    
+    // Inicializa sessionId se ainda não foi inicializado
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = generateSessionId();
+      if (!timeOnPageStart) {
+        timeOnPageStart = Date.now();
+      }
+    }
+
     if (isAdmin || !sessionIdRef.current || isTrackingOptedOut()) return;
 
     const currentPage = pathname;
     
-    // Track page view quando muda de página
+    // Track page view quando muda de página (incluindo primeira carga quando lastPageRef é null)
     if (lastPageRef.current !== currentPage) {
-      // Track tempo na página anterior (apenas se passou tempo suficiente)
+      // Track tempo na página anterior (apenas se passou tempo suficiente e não é primeira carga)
       if (lastPageRef.current && timeOnPageStart) {
         const timeSpent = Math.floor((Date.now() - timeOnPageStart) / 1000);
         // Só tracka se passou pelo menos 2 segundos (evita refreshs rápidos)
@@ -284,8 +303,9 @@ export function useTracking(): UseTrackingReturn {
       }
 
       // Track nova página (deduplicação já está no trackEventInternal)
+      // Na primeira carga, lastPageRef.current é null, então usa document.referrer
       trackEventInternal(EventType.PAGE_VIEW, undefined, {
-        referrer: lastPageRef.current || document.referrer,
+        referrer: lastPageRef.current || (typeof document !== 'undefined' ? document.referrer : ''),
       });
 
       lastPageRef.current = currentPage;

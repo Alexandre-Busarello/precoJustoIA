@@ -337,17 +337,40 @@ export async function GET(request: NextRequest) {
                   .substring(0, 500)
                   .trim() + '...';
 
-                // Separar Premium/Trial de Gratuitos
-                const premiumSubscribers = subscribers.filter(sub => sub.isPremium);
-                const freeSubscribers = subscribers.filter(sub => !sub.isPremium);
+                // Separar subscriptions: anônimas, Premium/Trial e Gratuitos logados
+                const anonymousSubscribers = subscribers.filter(sub => sub.userId === null);
+                const loggedInSubscribers = subscribers.filter(sub => sub.userId !== null);
+                const premiumSubscribers = loggedInSubscribers.filter(sub => sub.isPremium);
+                const freeSubscribers = loggedInSubscribers.filter(sub => !sub.isPremium);
 
-                console.log(`👑 ${company.ticker}: ${premiumSubscribers.length} Premium/Trial, ${freeSubscribers.length} Gratuitos`);
+                console.log(`👑 ${company.ticker}: ${premiumSubscribers.length} Premium/Trial, ${freeSubscribers.length} Gratuitos logados, ${anonymousSubscribers.length} Anônimos`);
 
-                // Criar notificações para Premium/Trial
+                // Enviar emails diretamente para subscriptions anônimas (via EmailQueueService)
+                const anonymousEmailPromises = anonymousSubscribers.map(async (subscriber) => {
+                  try {
+                    const { EmailQueueService } = await import('@/lib/email-queue-service');
+                    await EmailQueueService.queueEmail({
+                      email: subscriber.email,
+                      emailType: 'FREE_USER_ASSET_CHANGE',
+                      emailData: {
+                        ticker: company.ticker,
+                        companyName: company.name || company.ticker,
+                        companyLogoUrl: company.logoUrl || null,
+                      },
+                      recipientName: null,
+                    });
+                    return true;
+                  } catch (emailError) {
+                    console.error(`❌ Erro ao enviar email para anônimo ${subscriber.email}:`, emailError);
+                    return false;
+                  }
+                });
+
+                // Criar notificações para Premium/Trial (usuários logados)
                 const premiumNotificationPromises = premiumSubscribers.map(async (subscriber) => {
                   try {
                     await NotificationService.createNotificationFromAIReport({
-                      userId: subscriber.userId,
+                      userId: subscriber.userId!,
                       ticker: company.ticker,
                       companyName: company.name || company.ticker,
                       reportId,
@@ -365,11 +388,11 @@ export async function GET(request: NextRequest) {
                   }
                 });
 
-                // Criar notificações de conversão para Gratuitos
+                // Criar notificações de conversão para Gratuitos logados
                 const freeNotificationPromises = freeSubscribers.map(async (subscriber) => {
                   try {
                     await NotificationService.createNotificationFromAIReport({
-                      userId: subscriber.userId,
+                      userId: subscriber.userId!,
                       ticker: company.ticker,
                       companyName: company.name || company.ticker,
                       reportId,
@@ -385,6 +408,7 @@ export async function GET(request: NextRequest) {
                 });
 
                 const notificationResults = await Promise.allSettled([
+                  ...anonymousEmailPromises,
                   ...premiumNotificationPromises,
                   ...freeNotificationPromises,
                 ]);

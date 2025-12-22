@@ -15,6 +15,7 @@ import {
   Sparkles
 } from 'lucide-react'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 
 interface MarketSentimentSectionProps {
   ticker: string
@@ -34,6 +35,8 @@ export default function MarketSentimentSection({
   userIsPremium 
 }: MarketSentimentSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const { data: session } = useSession()
+  const isLoggedIn = !!session?.user
 
   // Determinar sentimento baseado no score
   const getSentiment = (score: number) => {
@@ -254,9 +257,9 @@ export default function MarketSentimentSection({
                       Acesse score de sentimento, análises completas de mercado e todos os insights positivos e negativos identificados por IA sobre {ticker}.
                     </p>
                     <Button asChild className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700">
-                      <Link href="/planos">
+                      <Link href={isLoggedIn ? "/checkout" : "/register"}>
                         <Sparkles className="w-4 h-4 mr-2" />
-                        Assinar Premium
+                        {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
                       </Link>
                     </Button>
                   </div>

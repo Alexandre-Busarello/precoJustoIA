@@ -32,6 +32,7 @@ import { StrategyFactory } from '@/lib/strategies/strategy-factory'
 import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config'
 import type { CompanyData } from '@/lib/strategies/types'
 import Link from 'next/link'
+import { EmailCaptureModal } from '@/components/email-capture-modal'
 
 // Shadcn UI Components
 import { Card, CardContent } from '@/components/ui/card'
@@ -978,6 +979,15 @@ export default async function TickerPage({ params }: PageProps) {
       <Suspense fallback={null}>
         <AutoSubscribeHandler ticker={ticker} />
       </Suspense>
+
+      {/* Modal de captura de email para usuários anônimos */}
+      {!session && (
+        <EmailCaptureModal
+          ticker={ticker}
+          companyId={companyData.id}
+          companyName={companyData.name}
+        />
+      )}
     </>
   )
 }

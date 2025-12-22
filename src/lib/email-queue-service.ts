@@ -7,6 +7,7 @@ import {
   sendAssetChangeEmail,
   sendMonthlyReportEmail,
   sendFreeUserAssetChangeEmail,
+  sendSubscriptionConfirmationEmail,
   generateEmailVerificationTemplate,
   generateNotificationEmailTemplate
 } from './email-service'
@@ -20,6 +21,7 @@ export type EmailType =
   | 'EMAIL_VERIFICATION'
   | 'FREE_USER_ASSET_CHANGE'
   | 'NOTIFICATION'
+  | 'SUBSCRIPTION_CONFIRMATION'
 
 export interface QueueEmailParams {
   email: string
@@ -328,6 +330,16 @@ export class EmailQueueService {
           subject: notificationTemplate.subject,
           html: notificationTemplate.html,
           text: notificationTemplate.text
+        })
+        break
+
+      case 'SUBSCRIPTION_CONFIRMATION':
+        await sendSubscriptionConfirmationEmail({
+          email,
+          ticker: emailData.ticker,
+          companyName: emailData.companyName,
+          unsubscribeUrl: emailData.unsubscribeUrl,
+          companyLogoUrl: emailData.companyLogoUrl || null,
         })
         break
 

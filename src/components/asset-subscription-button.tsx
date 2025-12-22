@@ -181,12 +181,15 @@ export default function AssetSubscriptionButton({
             {/* Conteúdo */}
             <div className={`${compact ? 'text-center' : 'flex-1'} min-w-0`}>
               <h3 className={`${compact ? 'text-sm' : 'text-base lg:text-lg'} font-semibold text-foreground mb-1`}>
-                Receba Notificações por Email
+                {session?.user 
+                  ? 'Receba Notificações por Email'
+                  : 'Avise-me quando a ação estiver barata'
+                }
               </h3>
               <p className={`text-sm text-muted-foreground ${compact ? 'mb-2' : 'mb-3 lg:mb-0'}`}>
                 {session?.user 
                   ? `Seja notificado por email quando houver mudanças significativas nos fundamentos de ${ticker}`
-                  : `Crie uma conta gratuita e receba notificações quando houver mudanças relevantes em ${ticker}`
+                  : `Receba notificações quando houver mudanças relevantes em ${ticker}`
                 }
               </p>
             </div>

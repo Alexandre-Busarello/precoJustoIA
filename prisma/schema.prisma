@@ -98,7 +98,7 @@ model User {
   notifications           Notification[]
   notificationPreferences UserNotificationPreferences?
   notificationModalViews  NotificationModalView[]
-  quizResponses          QuizResponse[]
+  quizResponses           QuizResponse[]
   debts                   Debt[]
 
   @@map("users")
@@ -1183,17 +1183,25 @@ model AlfaWaitlist {
 
 // Inscrições de usuários em ativos
 model UserAssetSubscription {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  companyId Int      @map("company_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  id               String   @id @default(cuid())
+  userId           String?  @map("user_id") // Opcional para subscriptions anônimas
+  email            String? // Email para subscriptions anônimas (quando userId é null)
+  companyId        Int      @map("company_id")
+  unsubscribeToken String? // Token único para descadastro (LGPD)
+  createdAt        DateTime @default(now()) @map("created_at")
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, companyId])
+  // Índices para performance e busca
+  // Constraints únicas serão aplicadas na aplicação (validação no código)
+  // para evitar problemas com valores NULL no db push
+  @@index([userId, companyId], name: "idx_user_company")
+  @@index([email, companyId], name: "idx_email_company")
   @@index([userId])
   @@index([companyId])
+  @@index([email])
+  @@index([unsubscribeToken])
   @@map("user_asset_subscriptions")
 }
 
@@ -1331,6 +1339,7 @@ enum EmailType {
   EMAIL_VERIFICATION // Email de verificação de email
   FREE_USER_ASSET_CHANGE // Email de mudança de ativo para usuários gratuitos (conversão)
   NOTIFICATION // Email de notificação da plataforma
+  SUBSCRIPTION_CONFIRMATION // Email de confirmação de inscrição (LGPD)
 }
 
 enum EmailStatus {
@@ -1469,16 +1478,16 @@ enum OfferType {
 }
 
 model Offer {
-  id                   String     @id // ex: prod_premium_monthly, prod_premium_annual
-  type                 OfferType
-  price_in_cents       Int         @map("price_in_cents")
-  stripe_price_id      String?     @map("stripe_price_id") // ID do preço no Stripe
-  is_active            Boolean     @default(true) @map("is_active")
-  currency             String      @default("BRL")
-  expires_at           DateTime?   @map("expires_at") // Validade da oferta (para ofertas especiais)
+  id                    String    @id // ex: prod_premium_monthly, prod_premium_annual
+  type                  OfferType
+  price_in_cents        Int       @map("price_in_cents")
+  stripe_price_id       String?   @map("stripe_price_id") // ID do preço no Stripe
+  is_active             Boolean   @default(true) @map("is_active")
+  currency              String    @default("BRL")
+  expires_at            DateTime? @map("expires_at") // Validade da oferta (para ofertas especiais)
   premium_duration_days Int?      @map("premium_duration_days") // Duração em dias do Premium que a oferta concede
-  created_at           DateTime   @default(now()) @map("created_at")
-  updated_at           DateTime   @updatedAt @map("updated_at")
+  created_at            DateTime  @default(now()) @map("created_at")
+  updated_at            DateTime  @updatedAt @map("updated_at")
 
   @@unique([type, is_active], name: "unique_active_offer_per_type")
   @@index([type])
@@ -1731,9 +1740,9 @@ model NotificationCampaign {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  notifications      Notification[]
-  modalViews         NotificationModalView[]
-  quizResponses      QuizResponse[]
+  notifications Notification[]
+  modalViews    NotificationModalView[]
+  quizResponses QuizResponse[]
 
   @@index([createdAt])
   @@index([showOnDashboard, dashboardExpiresAt])
@@ -1759,15 +1768,15 @@ model UserNotificationPreferences {
 }
 
 model NotificationModalView {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  campaignId String   @map("campaign_id")
-  viewedAt   DateTime @default(now()) @map("viewed_at")
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  campaignId  String    @map("campaign_id")
+  viewedAt    DateTime  @default(now()) @map("viewed_at")
   dismissedAt DateTime? @map("dismissed_at") // Quando fechou sem interagir
 
   // Relations
-  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campaign NotificationCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign NotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([userId, campaignId])
   @@index([userId])
@@ -1776,10 +1785,10 @@ model NotificationModalView {
 }
 
 model QuizResponse {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  campaignId String   @map("campaign_id")
-  responses  Json // Respostas do usuário { questionId: resposta }
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  campaignId  String   @map("campaign_id")
+  responses   Json // Respostas do usuário { questionId: resposta }
   completedAt DateTime @default(now()) @map("completed_at")
 
   // Relations

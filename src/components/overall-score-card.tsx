@@ -144,7 +144,7 @@ function RecommendationBadge({ recommendation }: { recommendation: string }) {
   );
 }
 
-function PremiumPrompt({ reason }: { reason: string }) {
+function PremiumPrompt({ reason, isLoggedIn }: { reason: string; isLoggedIn: boolean }) {
   return (
     <div className="relative">
       {/* Blurred content mock */}
@@ -185,9 +185,9 @@ function PremiumPrompt({ reason }: { reason: string }) {
           </p>
           <div className="flex flex-col gap-2">
             <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
-              <Link href="/checkout">
+              <Link href={isLoggedIn ? "/checkout" : "/register"}>
                 <Crown className="w-4 h-4 mr-2" />
-                Assinar Premium
+                {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
               </Link>
             </Button>
             <Button asChild variant="outline" size="sm">
@@ -302,6 +302,7 @@ export default function OverallScoreCard({ ticker, overallScore, isPremium, isLo
               ? "O Score Geral está disponível apenas para assinantes Premium"
               : "Faça login e assine o Premium para ver o Score Geral completo"
           }
+          isLoggedIn={isLoggedIn}
         />
       </CardContent>
     </Card>

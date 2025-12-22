@@ -121,11 +121,12 @@ export class AssetMonitoringService {
   }
 
   /**
-   * Lista emails dos usuários inscritos em um ativo com status Premium/Trial
+   * Lista emails dos usuários inscritos em um ativo (logados e anônimos)
+   * Retorna array unificado com subscriptions de usuários logados e anônimos
    */
   static async getSubscribersForCompany(companyId: number): Promise<
     Array<{
-      userId: string;
+      userId: string | null;
       email: string;
       name: string | null;
       isPremium: boolean;
@@ -148,20 +149,37 @@ export class AssetMonitoringService {
       { companyId }
     );
 
-    // Verificar status Premium/Trial de cada usuário
+    // Processar subscriptions: logados e anônimos
     const subscribersWithPremium = await Promise.all(
       (subscriptions as any[]).map(async (sub) => {
-        const isPremium = await isUserPremium(sub.user.id);
-        return {
-          userId: sub.user.id,
-          email: sub.user.email,
-          name: sub.user.name,
-          isPremium,
-        };
+        // Subscription anônima (sem userId, com email)
+        if (!sub.userId && sub.email) {
+          return {
+            userId: null,
+            email: sub.email,
+            name: null,
+            isPremium: false, // Anônimos sempre são gratuitos
+          };
+        }
+        
+        // Subscription de usuário logado
+        if (sub.userId && sub.user) {
+          const isPremium = await isUserPremium(sub.user.id);
+          return {
+            userId: sub.user.id,
+            email: sub.user.email,
+            name: sub.user.name,
+            isPremium,
+          };
+        }
+        
+        // Fallback (não deveria acontecer)
+        return null;
       })
     );
 
-    return subscribersWithPremium;
+    // Filtrar nulls e retornar
+    return subscribersWithPremium.filter((sub): sub is NonNullable<typeof sub> => sub !== null);
   }
 
   /**

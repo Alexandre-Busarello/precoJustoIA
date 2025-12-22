@@ -774,9 +774,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                       <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
-                        <Link href="/planos">
+                        <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          Assinar Premium
+                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">
@@ -980,9 +980,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                       <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
-                        <Link href="/planos">
+                        <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          Assinar Premium
+                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">
@@ -1186,9 +1186,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                       <Button asChild className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
-                        <Link href="/planos">
+                        <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          Assinar Premium
+                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">
@@ -1351,9 +1351,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                   Acesse 5 estratégias avançadas para identificar as melhores oportunidades do mercado
                 </p>
                 <Button asChild size="lg" className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
-                  <Link href="/planos">
+                  <Link href={isLoggedIn ? "/checkout" : "/register"}>
                     <Crown className="w-4 h-4 mr-2" />
-                    Assinar Premium - 1 dia grátis
+                    {isLoggedIn ? "Assinar Premium - 1 dia grátis" : "Cadastre-se para Ver"}
                   </Link>
                 </Button>
               </div>
@@ -2172,9 +2172,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                       <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                        <Link href="/planos">
+                        <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          Assinar Premium
+                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">

@@ -7,6 +7,7 @@ import {
   sendWelcomeEmail,
   sendPaymentFailureEmail,
   sendFreeUserAssetChangeEmail,
+  sendSubscriptionConfirmationEmail,
   sendEmail,
   generateEmailVerificationTemplate,
   generateNotificationEmailTemplate
@@ -179,6 +180,16 @@ export async function GET(request: NextRequest) {
               subject: notificationTemplate.subject,
               html: notificationTemplate.html,
               text: notificationTemplate.text
+            })
+            break
+
+          case 'SUBSCRIPTION_CONFIRMATION':
+            await sendSubscriptionConfirmationEmail({
+              email: emailQueue.email,
+              ticker: emailData.ticker,
+              companyName: emailData.companyName,
+              unsubscribeUrl: emailData.unsubscribeUrl,
+              companyLogoUrl: emailData.companyLogoUrl || null,
             })
             break
 

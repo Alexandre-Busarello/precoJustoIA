@@ -298,7 +298,7 @@ export function RadarPageContent() {
             <Card>
               <CardContent className="p-8 text-center">
                 <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground">Buscando oportunidades...</p>
+                <p className="text-muted-foreground">Buscando oportunidades (pode levar alguns minutos para carregar)...</p>
               </CardContent>
             </Card>
           ) : exploreGridData.length > 0 ? (

@@ -40,6 +40,7 @@ import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
 import { SocialProof } from "@/components/landing/social-proof"
 import { FloatingCTA } from "@/components/landing/floating-cta"
+import { CTALinkWithPixel } from "@/components/cta-link-with-pixel"
 
 const anoAtual = new Date().getFullYear()
 
@@ -276,13 +277,13 @@ export default async function Home() {
           {!session && (
             <div className="text-center px-4">
               <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-sm sm:text-lg px-4 sm:px-8 py-3 sm:py-4 shadow-xl w-full sm:w-auto max-w-full" asChild>
-                <Link href="/register" className="flex items-center justify-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                <CTALinkWithPixel href="/register" className="flex items-center justify-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis">
                   <Rocket className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                   <span className="truncate">Começar a economizar tempo e dinheiro</span>
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                </Link>
+                </CTALinkWithPixel>
               </Button>
-                  </div>
+            </div>
           )}
                 </div>
       </section>

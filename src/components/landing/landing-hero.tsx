@@ -1,7 +1,8 @@
 'use client'
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
+import { useSession } from "next-auth/react"
 import { 
   ArrowRight, 
   Rocket, 
@@ -73,6 +74,16 @@ export function LandingHero({
   socialProof,
   showQuickAccess = true
 }: LandingHeroProps) {
+  const { data: session } = useSession()
+  const { trackEngagement } = useEngagementPixel()
+
+  // Handler para disparar pixel quando usuário deslogado clica em CTA
+  const handleCTAClick = () => {
+    if (!session) {
+      trackEngagement()
+    }
+  }
+
   return (
     <section className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-4 sm:pt-6 lg:pt-32 pb-12 sm:pb-16 lg:pb-24">
       {/* Background Pattern */}
@@ -130,7 +141,7 @@ export function LandingHero({
                 className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-sm sm:text-base lg:text-lg px-5 sm:px-6 lg:px-8 py-2.5 sm:py-3 lg:py-4 shadow-xl hover:shadow-2xl transition-all w-full sm:w-auto" 
                 asChild
               >
-                <Link href={primaryCTA.href} className="flex items-center justify-center gap-2 sm:gap-3">
+                <Link href={primaryCTA.href} onClick={handleCTAClick} className="flex items-center justify-center gap-2 sm:gap-3">
                   {primaryCTA.icon || (primaryCTA.iconName && iconMap[primaryCTA.iconName] ? (
                     (() => {
                       const IconComponent = iconMap[primaryCTA.iconName]
@@ -151,7 +162,7 @@ export function LandingHero({
                 className="text-sm sm:text-base lg:text-lg px-5 sm:px-6 lg:px-8 py-2.5 sm:py-3 lg:py-4 border-2 hover:bg-blue-50 dark:hover:bg-blue-950/20 w-full sm:w-auto" 
                 asChild
               >
-                <Link href={secondaryCTA.href}>{secondaryCTA.text}</Link>
+                <Link href={secondaryCTA.href} onClick={handleCTAClick}>{secondaryCTA.text}</Link>
               </Button>
             )}
           </div>

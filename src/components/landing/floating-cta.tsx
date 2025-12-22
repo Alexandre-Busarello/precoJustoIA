@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { X, Rocket, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
+import { useSession } from "next-auth/react"
 
 interface FloatingCTAProps {
   text: string
@@ -18,8 +20,17 @@ export function FloatingCTA({
   showAfterScroll = 300,
   className = ''
 }: FloatingCTAProps) {
+  const { data: session } = useSession()
+  const { trackEngagement } = useEngagementPixel()
   const [isVisible, setIsVisible] = useState(false)
   const [isDismissed, setIsDismissed] = useState(false)
+
+  // Handler para disparar pixel quando usuário deslogado clica em CTA
+  const handleCTAClick = () => {
+    if (!session) {
+      trackEngagement()
+    }
+  }
 
   useEffect(() => {
     if (isDismissed) return
@@ -46,7 +57,7 @@ export function FloatingCTA({
           className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white rounded-full px-6"
           asChild
         >
-          <Link href={href} className="flex items-center gap-2">
+          <Link href={href} onClick={handleCTAClick} className="flex items-center gap-2">
             <Rocket className="w-4 h-4" />
             <span className="font-semibold">{text}</span>
             <ArrowRight className="w-4 h-4" />

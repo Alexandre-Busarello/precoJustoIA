@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { CTALinkWithPixel } from '@/components/cta-link-with-pixel';
 
 export const metadata: Metadata = {
   title: 'Backtesting de Carteiras de Investimento | Simulação Histórica de Performance | Preço Justo',
@@ -115,11 +116,11 @@ export default async function BacktestingCarteirasPage() {
 
             <div className="flex flex-col sm:flex-row gap-6 justify-center mb-12">
               <Button size="lg" className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-lg px-8 py-4 shadow-xl hover:shadow-2xl transition-all" asChild>
-                <Link href="/backtest" className="flex items-center gap-3">
+                <CTALinkWithPixel href="/backtest" className="flex items-center gap-3">
                   <TrendingUp className="w-5 h-5" />
                   Começar Backtesting Grátis
                   <ArrowRight className="w-5 h-5" />
-                </Link>
+                </CTALinkWithPixel>
               </Button>
               <Button variant="outline" size="lg" className="text-lg px-8 py-4 border-2 border-emerald-600 text-emerald-600 hover:bg-emerald-600 hover:text-white" asChild>
                 <Link href="#como-funciona">Ver Como Funciona</Link>
@@ -433,14 +434,14 @@ export default async function BacktestingCarteirasPage() {
           
           <div className="flex flex-col sm:flex-row gap-6 justify-center mb-8">
             <Button size="lg" className="bg-white text-emerald-600 hover:bg-gray-100 text-lg px-8 py-4 font-bold shadow-xl" asChild>
-              <Link href="/backtest" className="flex items-center gap-3">
+              <CTALinkWithPixel href="/backtest" className="flex items-center gap-3">
                 <TrendingUp className="w-5 h-5" />
                 Começar Backtesting Agora
                 <ArrowRight className="w-5 h-5" />
-              </Link>
+              </CTALinkWithPixel>
             </Button>
             <Button variant="outline" size="lg" className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-emerald-600 text-lg px-8 py-4" asChild>
-              <Link href="/planos">Ver Planos Premium</Link>
+              <CTALinkWithPixel href="/planos">Ver Planos Premium</CTALinkWithPixel>
             </Button>
           </div>
 

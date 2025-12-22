@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
+import { useSession } from "next-auth/react"
 import { 
   ArrowRight, 
   Rocket,
@@ -44,6 +46,16 @@ export function CTASection({
   className = '',
   benefits
 }: CTASectionProps) {
+  const { data: session } = useSession()
+  const { trackEngagement } = useEngagementPixel()
+
+  // Handler para disparar pixel quando usuário deslogado clica em CTA
+  const handleCTAClick = () => {
+    if (!session) {
+      trackEngagement()
+    }
+  }
+
   const gradientClasses = variant === 'gradient' 
     ? 'bg-gradient-to-r from-blue-600 to-violet-600 text-white'
     : variant === 'minimal'
@@ -82,7 +94,7 @@ export function CTASection({
             className={`${variant === 'gradient' ? 'bg-white text-blue-600 hover:bg-gray-100' : 'bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700'} text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 font-bold shadow-xl w-full sm:w-auto`} 
             asChild
           >
-            <Link href={primaryCTA.href} className="flex items-center justify-center gap-2 sm:gap-3">
+            <Link href={primaryCTA.href} onClick={handleCTAClick} className="flex items-center justify-center gap-2 sm:gap-3">
               {primaryCTA.icon || (primaryCTA.iconName && iconMap[primaryCTA.iconName] ? (
                 (() => {
                   const IconComponent = iconMap[primaryCTA.iconName]
@@ -102,7 +114,7 @@ export function CTASection({
               className={`${variant === 'gradient' ? 'border-2 border-white hover:bg-white hover:text-blue-600' : 'border-2'} text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto`} 
               asChild
             >
-              <Link href={secondaryCTA.href}>{secondaryCTA.text}</Link>
+              <Link href={secondaryCTA.href} onClick={handleCTAClick}>{secondaryCTA.text}</Link>
             </Button>
           )}
         </div>

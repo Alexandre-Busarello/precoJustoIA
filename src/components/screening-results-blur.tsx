@@ -1,5 +1,8 @@
 "use client"
 
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
+import { useSession } from "next-auth/react"
+
 interface RankingResult {
   ticker: string
   name: string
@@ -26,12 +29,21 @@ interface ScreeningResultsBlurProps {
 }
 
 export function ScreeningResultsBlur({ results, totalCount, isPremium }: ScreeningResultsBlurProps) {
+  const { data: session } = useSession()
+  const { trackEngagement } = useEngagementPixel()
   const top3 = results.slice(0, 3)
   const blurred = results.slice(3, 20) // Posições 4-20 com blur (se existirem dados reais)
   
   // SEMPRE mostrar blur quando não for premium, independente do totalCount retornado
   // Isso é um ponto de conversão - sempre mostrar que há mais resultados disponíveis
   const shouldShowBlur = !isPremium
+
+  // Handler para disparar pixel quando usuário deslogado clica em CTA
+  const handleCTAClick = () => {
+    if (!session) {
+      trackEngagement()
+    }
+  }
   
   // Usar totalCount se disponível, senão assumir que há mais resultados
   // Sempre mostrar pelo menos 10 cards com blur para criar efeito visual convincente
@@ -301,7 +313,7 @@ export function ScreeningResultsBlur({ results, totalCount, isPremium }: Screeni
               Desbloqueie a lista completa e veja todas as empresas que passaram nos filtros
             </p>
             <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-              <Link href="/register">Desbloquear Lista Completa</Link>
+              <Link href="/register" onClick={handleCTAClick}>Desbloquear Lista Completa</Link>
             </Button>
           </div>
 

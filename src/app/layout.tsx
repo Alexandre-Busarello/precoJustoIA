@@ -14,6 +14,7 @@ import { LastLoginUpdater } from "@/components/last-login-updater";
 import { TrackingProvider } from "@/components/tracking-provider";
 import { OnboardingProvider } from "@/components/onboarding-provider";
 import { ExitIntentProvider } from "@/components/exit-intent-provider";
+import { CacheCleanupOnLogin } from "@/components/cache-cleanup-on-login";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -152,6 +153,7 @@ export default function RootLayout({
           <AuthProvider>
             <SessionRefreshProvider>
               <TrackingProvider>
+                <CacheCleanupOnLogin />
                 <LastLoginUpdater />
                 <OnboardingProvider />
                 <ExitIntentProvider />

@@ -66,11 +66,12 @@ export const SCREENING_PRESETS: Record<ScreeningPresetSlug, ScreeningPreset> = {
     slug: 'oportunidades-desconto-excessivo',
     title: '📉 Oportunidades de Ouro: Desconto Excessivo vs Valor Justo',
     hook: 'O mercado bateu demais nessas ações e errou a mão. A inteligência artificial encontrou empresas com desconto excessivo em relação ao valor justo. Veja o potencial de valorização da primeira da lista...',
-    description: 'Encontre ações com desconto excessivo em relação ao valor justo. Filtros: Upside > 40%, P/VP < 0.80, EBIT > 0.',
+    description: 'Encontre ações com desconto excessivo em relação ao valor justo. Filtros: Upside > 40%, P/VP < 0.80, EBIT > 0, ROE > 10%.',
     keywords: ['deep value', 'desconto', 'valor justo', 'upside', 'oportunidades', 'ações baratas'],
     params: {
       grahamUpsideFilter: { enabled: true, min: 40 }, // Upside > 40%
       pvpFilter: { enabled: true, max: 0.80 },
+      roeFilter: { enabled: true, min: 0.10 },
       overallScoreFilter: { enabled: true, min: 60 }, // Score mínimo de 50 para eliminar empresas ruins
       // Nota: EBIT > 0 será verificado no backend
       assetTypeFilter: 'b3',

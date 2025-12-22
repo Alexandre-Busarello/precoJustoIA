@@ -301,7 +301,7 @@ export function ScreeningResultsBlur({ results, totalCount, isPremium }: Screeni
               Desbloqueie a lista completa e veja todas as empresas que passaram nos filtros
             </p>
             <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-              <Link href="/checkout">Desbloquear Lista Completa</Link>
+              <Link href="/register">Desbloquear Lista Completa</Link>
             </Button>
           </div>
 

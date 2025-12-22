@@ -995,10 +995,13 @@ export class NotificationService {
         })
         if (!company) return []
         const subscribers = await prisma.userAssetSubscription.findMany({
-          where: { companyId: company.id },
+          where: { 
+            companyId: company.id,
+            userId: { not: null } // Filtrar apenas subscriptions de usuários logados
+          },
           select: { userId: true }
         })
-        return subscribers.map(s => s.userId)
+        return subscribers.map(s => s.userId).filter((id): id is string => id !== null)
 
       case 'RECENT_RANKING_CREATORS':
         const rankingCreators = await prisma.rankingHistory.findMany({

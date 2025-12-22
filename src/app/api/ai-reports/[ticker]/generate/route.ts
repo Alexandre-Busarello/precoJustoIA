@@ -261,7 +261,7 @@ export async function POST(
       ) as { id: number; logoUrl: string | null } | null
 
       // Buscar subscribers para criar notificações
-      let subscribers: Array<{ userId: string; email: string; name: string | null }> = []
+      let subscribers: Array<{ userId: string | null; email: string; name: string | null }> = []
       if (companyForNotification) {
         try {
           console.log(`🔔 ${ticker}: Buscando subscribers para criar notificações...`)
@@ -290,8 +290,14 @@ export async function POST(
           .trim() + '...'
 
         let notificationsCreated = 0
+        let emailsSent = 0
 
-        for (const subscriber of subscribers) {
+        // Separar subscribers logados e anônimos
+        const loggedInSubscribers = subscribers.filter(sub => sub.userId !== null)
+        const anonymousSubscribers = subscribers.filter(sub => sub.userId === null)
+
+        // Criar notificações para usuários logados
+        for (const subscriber of loggedInSubscribers) {
           try {
             if (type === 'FUNDAMENTAL_CHANGE') {
               const changeDirection = (completedReport as any).changeDirection
@@ -301,7 +307,7 @@ export async function POST(
               // Só criar notificação se tiver todas as informações necessárias
               if (changeDirection && previousScore !== undefined && currentScore !== undefined) {
                 await NotificationService.createNotificationFromAIReport({
-                  userId: subscriber.userId,
+                  userId: subscriber.userId!,
                   ticker,
                   companyName: name,
                   reportId: completedReport.id,
@@ -318,7 +324,7 @@ export async function POST(
               }
             } else if (type === 'MONTHLY_OVERVIEW') {
               await NotificationService.createNotificationFromAIReport({
-                userId: subscriber.userId,
+                userId: subscriber.userId!,
                 ticker,
                 companyName: name,
                 reportId: completedReport.id,
@@ -336,7 +342,51 @@ export async function POST(
           }
         }
 
-        console.log(`✅ ${ticker}: ${notificationsCreated} notificações criadas`)
+        // Enviar emails diretamente para subscriptions anônimas
+        for (const subscriber of anonymousSubscribers) {
+          try {
+            if (type === 'FUNDAMENTAL_CHANGE') {
+              const changeDirection = (completedReport as any).changeDirection
+              const previousScore = (completedReport as any).previousScore ? Number((completedReport as any).previousScore) : undefined
+              const currentScore = (completedReport as any).currentScore ? Number((completedReport as any).currentScore) : undefined
+              
+              if (changeDirection && previousScore !== undefined && currentScore !== undefined) {
+                await EmailQueueService.queueEmail({
+                  email: subscriber.email,
+                  emailType: 'FREE_USER_ASSET_CHANGE',
+                  emailData: {
+                    ticker,
+                    companyName: name,
+                    companyLogoUrl: companyForNotification?.logoUrl || null,
+                    changeDirection,
+                    previousScore,
+                    currentScore,
+                    reportUrl: `${baseUrl}${reportUrl}`,
+                  },
+                  recipientName: subscriber.name || 'Investidor',
+                })
+                emailsSent++
+              }
+            } else if (type === 'MONTHLY_OVERVIEW') {
+              await EmailQueueService.queueEmail({
+                email: subscriber.email,
+                emailType: 'FREE_USER_ASSET_CHANGE',
+                emailData: {
+                  ticker,
+                  companyName: name,
+                  companyLogoUrl: companyForNotification?.logoUrl || null,
+                  reportUrl: `${baseUrl}${reportUrl}`,
+                },
+                recipientName: subscriber.name || 'Investidor',
+              })
+              emailsSent++
+            }
+          } catch (emailError) {
+            console.error(`❌ Erro ao enviar email para ${subscriber.email}:`, emailError)
+          }
+        }
+
+        console.log(`✅ ${ticker}: ${notificationsCreated} notificações criadas, ${emailsSent} emails enviados para subscriptions anônimas`)
       } else {
         console.log(`🔔 ${ticker}: Nenhum subscriber encontrado, pulando criação de notificações`)
       }

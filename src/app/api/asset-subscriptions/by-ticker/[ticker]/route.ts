@@ -55,12 +55,10 @@ export async function GET(
     // Verificar se existe inscrição
     const subscription = await safeQueryWithParams(
       'asset-subscription-check',
-      () => prisma.userAssetSubscription.findUnique({
+      () => prisma.userAssetSubscription.findFirst({
         where: {
-          userId_companyId: {
-            userId: user.id,
-            companyId: (company as any).id,
-          },
+          userId: user.id,
+          companyId: (company as any).id,
         },
         select: {
           id: true,

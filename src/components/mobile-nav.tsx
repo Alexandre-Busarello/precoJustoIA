@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -53,7 +54,16 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
   const pathname = usePathname()
   const { isPremium, isTrialActive, trialDaysRemaining, subscriptionTier } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
   const { data: adminData } = useAdminCheck()
+  const { trackEngagement } = useEngagementPixel()
   const isAdmin = adminData?.isAdmin || false
+
+  // Handler para disparar pixel quando usuário deslogado clica em link de navegação
+  const handleNavigationClick = () => {
+    if (!session) {
+      trackEngagement()
+    }
+    setIsOpen(false)
+  }
 
   // Extrair iniciais do nome ou email
   const getInitials = () => {
@@ -421,7 +431,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                         <Link
                           key={item.href}
                           href={item.href}
-                          onClick={() => setIsOpen(false)}
+                          onClick={handleNavigationClick}
                           className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                             pathname === item.href
                               ? 'bg-primary text-primary-foreground'
@@ -454,7 +464,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                                 <Link
                                   key={item.href}
                                   href={item.href}
-                                  onClick={() => setIsOpen(false)}
+                                  onClick={handleNavigationClick}
                                   className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                                     pathname === item.href || pathname?.startsWith(item.href)
                                       ? 'bg-primary text-primary-foreground'
@@ -513,7 +523,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                               <Link
                                 key={item.href}
                                 href={item.href}
-                                onClick={() => setIsOpen(false)}
+                                onClick={handleNavigationClick}
                                 className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                                   pathname === item.href || pathname?.startsWith(item.href)
                                     ? 'bg-primary text-primary-foreground'
@@ -571,7 +581,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                               <Link
                                 key={item.href}
                                 href={item.href}
-                                onClick={() => setIsOpen(false)}
+                                onClick={handleNavigationClick}
                                 className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                                   pathname === item.href || pathname?.startsWith(item.href)
                                     ? 'bg-primary text-primary-foreground'
@@ -656,14 +666,14 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                       <Link 
                         href="/register" 
                         className="flex items-center justify-center gap-2"
-                        onClick={() => setIsOpen(false)}
+                        onClick={handleNavigationClick}
                       >
                         <User className="w-4 h-4" />
                         Criar Conta
                       </Link>
                     </Button>
                     <Button variant="outline" size="sm" className="w-full" asChild>
-                      <Link href="/login" onClick={() => setIsOpen(false)}>
+                      <Link href="/login" onClick={handleNavigationClick}>
                         Fazer Login
                       </Link>
                     </Button>

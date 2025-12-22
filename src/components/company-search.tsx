@@ -8,6 +8,7 @@ import { CompanyLogo } from '@/components/company-logo';
 import { Badge } from '@/components/ui/badge';
 import { Search, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEngagementPixel } from '@/hooks/use-engagement-pixel';
 
 interface Company {
   id: number;
@@ -40,6 +41,7 @@ export default function CompanySearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const { trackEngagement } = useEngagementPixel();
 
   // Debounce search
   useEffect(() => {
@@ -93,6 +95,9 @@ export default function CompanySearch({
   };
 
   const handleCompanySelect = (company: Company) => {
+    // Disparar pixel de engajamento (apenas para usuários deslogados, apenas uma vez por sessão)
+    trackEngagement();
+    
     setQuery('');
     setShowResults(false);
     setSelectedIndex(-1);

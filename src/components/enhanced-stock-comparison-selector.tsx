@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTracking } from '@/hooks/use-tracking'
+import { useEngagementPixel } from '@/hooks/use-engagement-pixel'
 import { EventType } from '@/lib/tracking-types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,6 +44,7 @@ export function EnhancedStockComparisonSelector({ initialTickers = [] }: Enhance
   const resultsRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const { trackEvent } = useTracking()
+  const { trackEngagement } = useEngagementPixel()
 
   // Marcar que usuário usou o Comparador
   useEffect(() => {
@@ -126,6 +128,9 @@ export function EnhancedStockComparisonSelector({ initialTickers = [] }: Enhance
         tickerCount: tickers.length,
         tickers: tickers,
       })
+      
+      // Disparar pixel de engajamento (apenas para usuários deslogados, apenas uma vez por sessão)
+      trackEngagement()
       
       router.push(`/compara-acoes/${tickers.join('/')}`)
     }

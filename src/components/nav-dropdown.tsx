@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { cn } from "@/lib/utils"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -37,10 +39,19 @@ interface NavDropdownProps {
 
 export function NavDropdown({ title, sections }: NavDropdownProps) {
   const pathname = usePathname()
+  const { data: session } = useSession()
+  const { trackEngagement } = useEngagementPixel()
   
   // Flatten all items to check if any is active
   const allItems = sections.flatMap(section => section.items)
   const isActive = allItems.some((item) => pathname === item.href || pathname?.startsWith(item.href))
+
+  // Handler para disparar pixel quando usuário deslogado clica em link
+  const handleLinkClick = () => {
+    if (!session) {
+      trackEngagement()
+    }
+  }
 
   return (
     <DropdownMenu>
@@ -75,6 +86,7 @@ export function NavDropdown({ title, sections }: NavDropdownProps) {
                 <DropdownMenuItem key={item.href} asChild>
                   <Link
                     href={item.href}
+                    onClick={handleLinkClick}
                     className={cn(
                       "flex items-start gap-3 rounded-md p-3 transition-colors hover:bg-muted/50 focus:bg-muted/50 cursor-pointer",
                       isItemActive && "bg-muted"

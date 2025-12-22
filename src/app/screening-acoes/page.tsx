@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScreeningConfigurator } from "@/components/screening-configurator"
@@ -95,6 +96,7 @@ interface RankingResponse {
 function ScreeningAcoesContent() {
   const { data: session } = useSession()
   const { isPremium } = usePremiumStatus()
+  const { trackEngagement } = useEngagementPixel()
   const searchParams = useSearchParams()
   const assetType = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
   
@@ -206,6 +208,9 @@ function ScreeningAcoesContent() {
 
       const data: RankingResponse = await response.json()
       setResults(data)
+      
+      // Disparar pixel de engajamento (apenas para usuários deslogados, apenas uma vez por sessão)
+      trackEngagement()
       
       // Incrementar contador de screenings anônimos após sucesso
       if (!isLoggedIn && typeof window !== 'undefined') {

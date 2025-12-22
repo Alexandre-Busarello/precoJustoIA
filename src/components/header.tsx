@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -22,7 +23,15 @@ export default function Header() {
   const { data: session, status } = useSession()
   const pathname = usePathname()
   const { isPremium, isTrialActive, trialDaysRemaining, subscriptionTier } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
+  const { trackEngagement } = useEngagementPixel()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Handler para disparar pixel quando usuário deslogado clica em link de navegação
+  const handleNavigationClick = () => {
+    if (!session) {
+      trackEngagement()
+    }
+  }
 
   return (
     <>
@@ -154,6 +163,7 @@ export default function Header() {
                     size="sm"
                     onClick={(e) => {
                       e.preventDefault()
+                      handleNavigationClick()
                       const pricingSection = document.getElementById('pricing')
                       if (pricingSection) {
                         pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -164,7 +174,7 @@ export default function Header() {
                   </Button>
                 ) : (
                   <Button variant="ghost" size="sm" asChild>
-                    <Link href="/#pricing">Preços</Link>
+                    <Link href="/#pricing" onClick={handleNavigationClick}>Preços</Link>
                   </Button>
                 )}
               </div>
@@ -172,10 +182,10 @@ export default function Header() {
               {/* Auth Buttons */}
               <div className="flex items-center space-x-2">
                 <Button variant="ghost" asChild>
-                  <Link href="/login">Entrar</Link>
+                  <Link href="/login" onClick={handleNavigationClick}>Entrar</Link>
                 </Button>
                 <Button asChild>
-                  <Link href="/register">Registrar</Link>
+                  <Link href="/register" onClick={handleNavigationClick}>Registrar</Link>
                 </Button>
               </div>
             </div>

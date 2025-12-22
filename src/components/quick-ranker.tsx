@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle }
 import { useSession } from "next-auth/react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useTracking } from "@/hooks/use-tracking"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { EventType } from "@/lib/tracking-types"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -236,6 +237,7 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
   ({ rankingId, assetTypeFilter = 'both', onRankingGenerated }, ref) => {
   const { data: session } = useSession()
   const { trackEvent } = useTracking()
+  const { trackEngagement } = useEngagementPixel()
   const [selectedModel, setSelectedModel] = useState<string>("")
   const [params, setParams] = useState<RankingParams>({})
   const [loading, setLoading] = useState(false)
@@ -660,6 +662,9 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         resultCount: data.results?.length || data.count || 0,
         params: params,
       })
+      
+      // Disparar pixel de engajamento (apenas para usuários deslogados, apenas uma vez por sessão)
+      trackEngagement()
       
       // Notificar que um novo ranking foi gerado (para atualizar o histórico)
       if (onRankingGenerated) {

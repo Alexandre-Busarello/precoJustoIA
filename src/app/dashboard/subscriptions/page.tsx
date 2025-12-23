@@ -6,9 +6,10 @@ import { getCurrentUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import SubscriptionsList from '@/components/subscriptions-list';
+import ReportPreferences from '@/components/report-preferences';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { Bell, ArrowLeft } from 'lucide-react';
+import { Bell, ArrowLeft, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NotificationService } from '@/lib/notification-service';
 
@@ -57,6 +58,18 @@ export default async function SubscriptionsPage() {
   // Buscar preferências de notificações
   const notificationPreferences = await NotificationService.getUserNotificationPreferences(user.id);
 
+  // Buscar preferências de relatórios diretamente do banco
+  const userWithPreferences = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { reportPreferences: true },
+  });
+
+  const reportPreferences = userWithPreferences?.reportPreferences as {
+    MONTHLY_OVERVIEW?: boolean;
+    FUNDAMENTAL_CHANGE?: boolean;
+    PRICE_VARIATION?: boolean;
+  } | null;
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
       {/* Header */}
@@ -87,6 +100,34 @@ export default async function SubscriptionsPage() {
               <p className="text-3xl font-bold">{(subscriptions as any[]).length}</p>
             </div>
             <Bell className="w-12 h-12 text-muted-foreground/20" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Preferências de Relatórios */}
+      <div className="mb-8">
+        <ReportPreferences initialPreferences={reportPreferences} />
+      </div>
+
+      {/* Link para Monitoramentos Customizados */}
+      <Card className="mb-6 border-primary/20 bg-primary/5">
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Settings className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-lg">Monitoramentos Customizados</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Configure gatilhos personalizados para receber alertas quando ações atendem critérios específicos como P/L, P/VP, Score ou preço.
+              </p>
+            </div>
+            <Button asChild variant="default">
+              <Link href="/dashboard/monitoramentos-customizados">
+                <Settings className="w-4 h-4 mr-2" />
+                Gerenciar Monitoramentos
+              </Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

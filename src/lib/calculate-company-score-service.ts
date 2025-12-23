@@ -14,7 +14,7 @@
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { toNumber, StrategyAnalysis } from '@/lib/strategies';
-import { OverallScore } from '@/lib/strategies/overall-score';
+import { OverallScore, PenaltyInfo } from '@/lib/strategies/overall-score';
 import { executeCompanyAnalysis, CompanyAnalysisData } from '@/lib/company-analysis-service';
 
 /**
@@ -27,6 +27,7 @@ export interface CompanyScoreResult {
   currentPrice: number;
   logoUrl: string | null;
   overallScore: OverallScore | null; // ← Permitir null para usuários não-Premium
+  penaltyInfo?: PenaltyInfo | null; // Informação sobre penalização aplicada por flag
   strategies?: { // Opcional: incluir estratégias individuais
     graham: StrategyAnalysis | null;
     dividendYield: StrategyAnalysis | null;

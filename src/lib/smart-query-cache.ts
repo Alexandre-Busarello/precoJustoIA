@@ -74,6 +74,10 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   'ticketMessage': 'ticket_messages',
   'aIReport': 'ai_reports',           // AIReport -> aIReport (client) -> ai_reports (table)
   'aIReportFeedback': 'ai_report_feedbacks',  // AIReportFeedback -> aIReportFeedback -> ai_report_feedbacks
+  'aIReportsQueue': 'ai_reports_queue',
+  'aIReportsQueueProcessing': 'ai_reports_queue_processing',
+  'userAssetMonitor': 'user_asset_monitor',
+  'companyFlag': 'company_flags',
   
   // Asset Monitoring
   'userAssetSubscription': 'user_asset_subscriptions',
@@ -156,8 +160,13 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   // Sistema de suporte e IA
   'support_tickets': ['users', 'support_tickets', 'ticket_messages'],
   'ticket_messages': ['support_tickets', 'ticket_messages'],
-  'ai_reports': ['companies', 'ai_reports', 'ai_report_feedbacks'],
+  'ai_reports': ['companies', 'ai_reports', 'ai_report_feedbacks', 'ai_reports_queue', 'company_flags', 'users'],
   'ai_report_feedbacks': ['ai_reports', 'ai_report_feedbacks'],
+  'ai_reports_queue': ['companies', 'ai_reports', 'ai_reports_queue', 'ai_reports_queue_processing'],
+  'ai_reports_queue_processing': ['ai_reports_queue', 'ai_reports_queue_processing'],
+  'user_asset_monitor': ['users', 'companies', 'user_asset_monitor'],
+  'company_flags': ['companies', 'ai_reports', 'company_flags', 'asset_snapshots'],
+  'asset_snapshots': ['companies', 'asset_snapshots', 'ai_reports'],
   
   // Webhooks (afetam usuários quando processados)
   'webhook_events': ['users', 'webhook_events'],

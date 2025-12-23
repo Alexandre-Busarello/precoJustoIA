@@ -15,6 +15,7 @@ import { useTrialAvailable } from "@/hooks/use-trial-available"
 function RegisterForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [website, setWebsite] = useState("") // 🍯 HONEYPOT: Campo para detectar bots
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -34,6 +35,12 @@ function RegisterForm() {
     setIsLoading(true)
     setError("")
 
+    // 🍯 HONEYPOT: Verificação frontend (opcional, mas economiza requisição)
+    if (website) {
+      setIsLoading(false)
+      return // Simplesmente para a execução sem alertar o bot
+    }
+
     if (password.length < 6) {
       setError("A senha deve ter pelo menos 6 caracteres")
       setIsLoading(false)
@@ -50,6 +57,7 @@ function RegisterForm() {
         body: JSON.stringify({
           email,
           password,
+          website, // 🍯 HONEYPOT: Campo para detectar bots no backend
           acquisition, // Rastrear origem do cadastro
           // name removido - será coletado no onboarding ou perfil
           // isEarlyAdopter removido - será definido apenas via webhooks após pagamento
@@ -179,7 +187,7 @@ function RegisterForm() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 relative">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -219,6 +227,22 @@ function RegisterForm() {
                 </Button>
               </div>
             </div>
+            
+            {/* 🍯 HONEYPOT: Campo invisível para detectar bots */}
+            {/* Usa classe CSS sr-field (screen reader field) que parece legítima */}
+            <div className="sr-field">
+              <Label htmlFor="website">Website</Label>
+              <Input
+                type="text"
+                name="website"
+                id="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
+            </div>
+
             {error && (
               <div className="text-sm text-red-600 text-center">{error}</div>
             )}

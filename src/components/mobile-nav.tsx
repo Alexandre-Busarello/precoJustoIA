@@ -251,6 +251,13 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
       label: "Ferramentas",
       items: [
         {
+          title: "Acompanhar Ações",
+          href: "/acompanhar-acoes-bolsa-de-valores",
+          icon: <Bell className="w-5 h-5" />,
+          show: true,
+          description: "Monitore ações e receba alertas personalizados"
+        },
+        {
           title: "Arbitragem de Dívida",
           href: "/arbitragem-divida",
           icon: <ArrowLeftRight className="w-5 h-5" />,

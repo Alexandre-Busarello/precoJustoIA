@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { EmailType } from '@prisma/client'
 import { 
   sendEmail,
   sendPasswordResetEmail,
@@ -8,20 +9,12 @@ import {
   sendMonthlyReportEmail,
   sendFreeUserAssetChangeEmail,
   sendSubscriptionConfirmationEmail,
+  sendBulkMonitoringConfirmationEmail,
+  sendPriceVariationReportEmail,
+  sendCustomTriggerReportEmail,
   generateEmailVerificationTemplate,
   generateNotificationEmailTemplate
 } from './email-service'
-
-export type EmailType = 
-  | 'ASSET_CHANGE'
-  | 'MONTHLY_REPORT'
-  | 'PASSWORD_RESET'
-  | 'WELCOME'
-  | 'PAYMENT_FAILURE'
-  | 'EMAIL_VERIFICATION'
-  | 'FREE_USER_ASSET_CHANGE'
-  | 'NOTIFICATION'
-  | 'SUBSCRIPTION_CONFIRMATION'
 
 export interface QueueEmailParams {
   email: string
@@ -334,12 +327,50 @@ export class EmailQueueService {
         break
 
       case 'SUBSCRIPTION_CONFIRMATION':
-        await sendSubscriptionConfirmationEmail({
+        // Verificar se é confirmação de múltiplos monitoramentos ou único
+        if (emailData.companies && Array.isArray(emailData.companies)) {
+          // Email de confirmação em massa
+          await sendBulkMonitoringConfirmationEmail({
+            email,
+            companies: emailData.companies,
+          })
+        } else {
+          // Email de confirmação único
+          await sendSubscriptionConfirmationEmail({
+            email,
+            ticker: emailData.ticker,
+            companyName: emailData.companyName,
+            unsubscribeUrl: emailData.unsubscribeUrl,
+            companyLogoUrl: emailData.companyLogoUrl || null,
+          })
+        }
+        break
+
+      case 'PRICE_VARIATION_REPORT':
+        await sendPriceVariationReportEmail({
           email,
+          userName: recipientName || 'Investidor',
           ticker: emailData.ticker,
           companyName: emailData.companyName,
-          unsubscribeUrl: emailData.unsubscribeUrl,
           companyLogoUrl: emailData.companyLogoUrl || null,
+          reportUrl: emailData.reportUrl,
+          reportSummary: emailData.reportSummary || '',
+          isPremium: emailData.isPremium ?? true, // Default true para manter compatibilidade
+          hasFlag: (emailData as any).hasFlag ?? false, // Indica se há flag ativo (não tipado ainda)
+        } as any)
+        break
+
+      case 'CUSTOM_TRIGGER_REPORT':
+        await sendCustomTriggerReportEmail({
+          email,
+          userName: recipientName || 'Investidor',
+          ticker: emailData.ticker,
+          companyName: emailData.companyName,
+          companyLogoUrl: emailData.companyLogoUrl || null,
+          reportUrl: emailData.reportUrl,
+          reportSummary: emailData.reportSummary || '',
+          isPremium: emailData.isPremium ?? true, // Default true para manter compatibilidade
+          hasFlag: (emailData as any).hasFlag ?? false, // Indica se há flag ativo
         })
         break
 

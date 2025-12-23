@@ -1,7 +1,7 @@
 "use client"
 
 import { NavDropdown, NavSection } from "./nav-dropdown"
-import { GitCompare, Building2, TrendingUp, History, Calculator, ArrowLeftRight } from "lucide-react"
+import { GitCompare, Building2, TrendingUp, History, Calculator, ArrowLeftRight, Bell } from "lucide-react"
 
 const sections: NavSection[] = [
   {
@@ -45,6 +45,13 @@ const sections: NavSection[] = [
   {
     label: "Ferramentas",
     items: [
+      {
+        title: "Acompanhar Ações",
+        href: "/acompanhar-acoes-bolsa-de-valores",
+        icon: Bell,
+        description: "Monitore ações e receba alertas personalizados.",
+        iconGradient: "bg-gradient-to-br from-blue-500 to-indigo-500",
+      },
       {
         title: "Arbitragem de Dívida",
         href: "/arbitragem-divida",

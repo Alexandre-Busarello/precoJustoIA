@@ -10,6 +10,7 @@ import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service'
 import { EmailQueueService } from '@/lib/email-queue-service'
 import { NotificationService } from '@/lib/notification-service'
+import { shouldSendReportType } from '@/lib/report-preferences-service'
 
 // Validar se a API key do Gemini está configurada
 function validateGeminiConfig() {
@@ -299,6 +300,13 @@ export async function POST(
         // Criar notificações para usuários logados
         for (const subscriber of loggedInSubscribers) {
           try {
+            // Verificar preferências do usuário para este tipo de relatório
+            const shouldSend = await shouldSendReportType(subscriber.userId!, type);
+            if (!shouldSend) {
+              console.log(`⏭️ ${subscriber.email}: Preferências desabilitadas para ${type}, pulando envio`);
+              continue;
+            }
+
             if (type === 'FUNDAMENTAL_CHANGE') {
               const changeDirection = (completedReport as any).changeDirection
               const previousScore = (completedReport as any).previousScore ? Number((completedReport as any).previousScore) : undefined

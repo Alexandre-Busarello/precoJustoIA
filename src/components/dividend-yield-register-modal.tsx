@@ -33,6 +33,7 @@ export function DividendYieldRegisterModal({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [website, setWebsite] = useState("") // 🍯 HONEYPOT: Campo para detectar bots
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
@@ -41,6 +42,12 @@ export function DividendYieldRegisterModal({
     e.preventDefault()
     setIsLoading(true)
     setError("")
+
+    // 🍯 HONEYPOT: Verificação frontend (opcional, mas economiza requisição)
+    if (website) {
+      setIsLoading(false)
+      return // Simplesmente para a execução sem alertar o bot
+    }
 
     if (password !== confirmPassword) {
       setError("As senhas não coincidem")
@@ -65,6 +72,7 @@ export function DividendYieldRegisterModal({
           name,
           email,
           password,
+          website, // 🍯 HONEYPOT: Campo para detectar bots no backend
           acquisition: "Calculadora de Dividend Yield",
         }),
       })
@@ -123,7 +131,7 @@ export function DividendYieldRegisterModal({
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 relative">
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
               <Input
@@ -173,6 +181,21 @@ export function DividendYieldRegisterModal({
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 disabled={isLoading}
+              />
+            </div>
+
+            {/* 🍯 HONEYPOT: Campo invisível para detectar bots */}
+            {/* Usa classe CSS sr-field (screen reader field) que parece legítima */}
+            <div className="sr-field">
+              <Label htmlFor="website">Website</Label>
+              <Input
+                type="text"
+                name="website"
+                id="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
               />
             </div>
 

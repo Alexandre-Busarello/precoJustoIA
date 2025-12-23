@@ -23,6 +23,7 @@ export class MonitoringReportService {
     changeDirection: 'positive' | 'negative';
     previousScoreComposition?: ScoreComposition;
     currentScoreComposition?: ScoreComposition | null;
+    penaltyInfo?: { applied: boolean; value: number; reason: string; flagId: string } | null;
   }): Promise<string> {
     const {
       ticker,
@@ -34,6 +35,7 @@ export class MonitoringReportService {
       changeDirection,
       previousScoreComposition,
       currentScoreComposition,
+      penaltyInfo,
     } = params;
 
     const prompt = this.buildComparisonPrompt({
@@ -46,6 +48,7 @@ export class MonitoringReportService {
       changeDirection,
       previousScoreComposition,
       currentScoreComposition,
+      penaltyInfo,
     });
 
     try {
@@ -82,6 +85,7 @@ export class MonitoringReportService {
     changeDirection: 'positive' | 'negative';
     previousScoreComposition?: ScoreComposition;
     currentScoreComposition?: ScoreComposition | null;
+    penaltyInfo?: { applied: boolean; value: number; reason: string; flagId: string } | null;
   }): string {
     const {
       ticker,
@@ -93,10 +97,25 @@ export class MonitoringReportService {
       changeDirection,
       previousScoreComposition,
       currentScoreComposition,
+      penaltyInfo,
     } = params;
 
     const changeTerm = changeDirection === 'positive' ? 'melhora' : 'piora';
     const scoreDelta = Math.abs(currentScore - previousScore).toFixed(1);
+    
+    // Adicionar contexto de penalização se aplicável
+    let penaltyContext = '';
+    if (penaltyInfo && penaltyInfo.applied) {
+      penaltyContext = `
+
+IMPORTANTE: A mudança no score foi causada por uma penalização de ${penaltyInfo.value} pontos aplicada devido a uma identificação crítica de perda de fundamento pela IA.
+
+Motivo da penalização: ${penaltyInfo.reason}
+
+O score real dos fundamentos da empresa não mudou significativamente. A queda no score é resultado direto desta penalização por perda de fundamento identificada pela análise de variação de preço.
+
+IMPORTANTE: Deixe claro no relatório que esta mudança de score NÃO representa uma mudança real nos fundamentos da empresa pelos indicadores, mas sim uma penalização aplicada pela plataforma devido à identificação de perda de fundamentos pela IA.`;
+    }
 
     // Analisar mudanças na composição do score se disponível
     let scoreAnalysis = '';
@@ -218,7 +237,7 @@ ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
 - Explique siglas na primeira vez (ex: ROE - Retorno sobre Patrimônio)
 - Mantenha tom neutro e informativo
 - **IMPORTANTE**: Use APENAS os nomes exatos das categorias e estratégias listados acima. NÃO invente nomes como "categoria de estratégia" ou "categoria estratégia"
-- **IMPORTANTE**: Quando mencionar "Estratégias de Investimento", você está se referindo ao conjunto de todas as estratégias de análise fundamentalista (Graham, FCD, Gordon, Barsi, Dividend Yield, Low P/E, Fórmula Mágica, Fundamentalista 3+1). NÃO é uma categoria separada, mas sim o nome coletivo para todas essas estratégias`;
+- **IMPORTANTE**: Quando mencionar "Estratégias de Investimento", você está se referindo ao conjunto de todas as estratégias de análise fundamentalista (Graham, FCD, Gordon, Barsi, Dividend Yield, Low P/E, Fórmula Mágica, Fundamentalista 3+1). NÃO é uma categoria separada, mas sim o nome coletivo para todas essas estratégias${penaltyContext}`;
   }
 
   /**
@@ -310,9 +329,25 @@ ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
     currentScore: number;
     changeDirection: 'positive' | 'negative';
     snapshotData: Record<string, unknown>;
+    scoreChangeReason?: 'FLAG_PENALTY' | 'FUNDAMENTAL_CHANGE';
+    penaltyInfo?: { applied: boolean; value: number; reason: string; flagId: string } | null;
   }): Promise<string> {
-    const { companyId, snapshotId, content, previousScore, currentScore, changeDirection, snapshotData } =
+    const { companyId, snapshotId, content, previousScore, currentScore, changeDirection, snapshotData, scoreChangeReason, penaltyInfo } =
       params;
+
+    const metadata: any = {
+      generatedAt: new Date().toISOString(),
+      scoreDelta: currentScore - previousScore,
+      snapshotData,
+    };
+
+    if (scoreChangeReason) {
+      metadata.scoreChangeReason = scoreChangeReason;
+    }
+
+    if (penaltyInfo) {
+      metadata.penaltyInfo = penaltyInfo;
+    }
 
     const report = await safeWrite(
       'create-monitoring-report',
@@ -328,11 +363,7 @@ ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
             currentScore,
             status: 'COMPLETED',
             isActive: true,
-            metadata: {
-              generatedAt: new Date().toISOString(),
-              scoreDelta: currentScore - previousScore,
-              snapshotData,
-            } as any,
+            metadata,
           } as any,
         }),
       ['ai_reports']

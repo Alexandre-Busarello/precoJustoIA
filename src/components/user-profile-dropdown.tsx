@@ -11,7 +11,8 @@ import {
   Sparkles,
   ChevronDown,
   Clock,
-  Gift
+  Gift,
+  Settings
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -212,6 +213,13 @@ export function UserProfileDropdown({
           <Link href="/dashboard/subscriptions" className="cursor-pointer">
             <Bell className="mr-2 h-4 w-4" />
             Minhas Inscrições
+          </Link>
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard/monitoramentos-customizados" className="cursor-pointer">
+            <Settings className="mr-2 h-4 w-4" />
+            Monitoramentos Customizados
           </Link>
         </DropdownMenuItem>
         

@@ -4,6 +4,7 @@ import { MonitoringReportService } from '@/lib/monitoring-report-service';
 import { EmailQueueService } from '@/lib/email-queue-service';
 import { NotificationService } from '@/lib/notification-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
+import { shouldSendReportType } from '@/lib/report-preferences-service';
 import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
 import { toNumber, StrategyAnalysis } from '@/lib/strategies';
 import { prisma } from '@/lib/prisma';
@@ -199,11 +200,15 @@ export async function GET(request: NextRequest) {
             timestamp: new Date().toISOString(),
           };
 
+          // Extrair penaltyInfo do overallScoreResult se disponível
+          const penaltyInfo = (overallScoreResult as any)?.penaltyInfo || null;
+
           await AssetMonitoringService.createSnapshot(
             company.id,
             snapshotData,
             currentScore,
-            scoreComposition
+            scoreComposition,
+            penaltyInfo || undefined
           );
 
           console.log(`✅ ${company.ticker}: Primeiro snapshot criado`);
@@ -246,11 +251,15 @@ export async function GET(request: NextRequest) {
                 timestamp: new Date().toISOString(),
               };
 
+              // Extrair penaltyInfo do overallScoreResult se disponível
+              const penaltyInfoNoSubs = (overallScoreResult as any)?.penaltyInfo || null;
+
               await AssetMonitoringService.createSnapshot(
                 company.id,
                 snapshotData,
                 currentScore,
-                scoreComposition
+                scoreComposition,
+                penaltyInfoNoSubs || undefined
               );
               stats.snapshotCreated = true;
             } else {
@@ -293,6 +302,9 @@ export async function GET(request: NextRequest) {
                 // Buscar composição do score anterior se disponível
                 const previousScoreComposition = (existingSnapshot as any).scoreComposition as ScoreComposition | undefined;
 
+                // Extrair penaltyInfo do overallScoreResult se disponível
+                const penaltyInfo = (overallScoreResult as any)?.penaltyInfo || null;
+
                 const reportContent = await MonitoringReportService.generateChangeReport({
                   ticker: company.ticker,
                   name: company.name || company.ticker,
@@ -303,9 +315,13 @@ export async function GET(request: NextRequest) {
                   changeDirection: comparison.direction,
                   previousScoreComposition,
                   currentScoreComposition: scoreComposition,
+                  penaltyInfo: penaltyInfo || undefined,
                 });
 
                 console.log(`📝 ${company.ticker}: Relatório gerado (${reportContent.length} chars)`);
+
+                // Verificar se mudança foi causada por penalização de flag
+                const scoreChangeReason = penaltyInfo && penaltyInfo.applied ? 'FLAG_PENALTY' : 'FUNDAMENTAL_CHANGE';
 
                 // Salvar relatório associado ao snapshot
                 const reportId = await MonitoringReportService.saveReport({
@@ -316,6 +332,8 @@ export async function GET(request: NextRequest) {
                   currentScore,
                   changeDirection: comparison.direction,
                   snapshotData: currentData,
+                  scoreChangeReason,
+                  penaltyInfo: penaltyInfo || undefined,
                 });
 
                 console.log(`💾 ${company.ticker}: Relatório salvo (ID: ${reportId})`);
@@ -369,6 +387,13 @@ export async function GET(request: NextRequest) {
                 // Criar notificações para Premium/Trial (usuários logados)
                 const premiumNotificationPromises = premiumSubscribers.map(async (subscriber) => {
                   try {
+                    // Verificar preferências do usuário
+                    const shouldSend = await shouldSendReportType(subscriber.userId!, 'FUNDAMENTAL_CHANGE');
+                    if (!shouldSend) {
+                      console.log(`⏭️ ${subscriber.email}: Preferências desabilitadas para FUNDAMENTAL_CHANGE, pulando envio`);
+                      return false;
+                    }
+
                     await NotificationService.createNotificationFromAIReport({
                       userId: subscriber.userId!,
                       ticker: company.ticker,
@@ -391,6 +416,13 @@ export async function GET(request: NextRequest) {
                 // Criar notificações de conversão para Gratuitos logados
                 const freeNotificationPromises = freeSubscribers.map(async (subscriber) => {
                   try {
+                    // Verificar preferências do usuário
+                    const shouldSend = await shouldSendReportType(subscriber.userId!, 'FUNDAMENTAL_CHANGE');
+                    if (!shouldSend) {
+                      console.log(`⏭️ ${subscriber.email}: Preferências desabilitadas para FUNDAMENTAL_CHANGE, pulando envio`);
+                      return false;
+                    }
+
                     await NotificationService.createNotificationFromAIReport({
                       userId: subscriber.userId!,
                       ticker: company.ticker,

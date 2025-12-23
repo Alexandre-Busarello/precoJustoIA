@@ -333,13 +333,39 @@ export async function executeCompanyAnalysis(
     }
   }
 
+  // Buscar flags ativos para a empresa (se tiver companyId)
+  let activeFlag: { id: string; reason: string } | null = null;
+  if (options.companyId) {
+    try {
+      const flags = await safeQueryWithParams(
+        'company-flags-active',
+        () => (prisma as any).companyFlag.findMany({
+          where: {
+            companyId: parseInt(options.companyId!),
+            isActive: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }),
+        { companyId: parseInt(options.companyId!) }
+      ) as Array<{ id: string; reason: string }> | null;
+      
+      if (flags && flags.length > 0) {
+        activeFlag = flags[0];
+      }
+    } catch (error) {
+      console.warn(`⚠️ Falha ao buscar flags para ${companyData.ticker}:`, error);
+      // Continua sem flag
+    }
+  }
+
   // Calcular score geral (com breakdown se solicitado)
   const includeBreakdown = options.includeBreakdown || false;
   let overallScore: OverallScore | null = null;
   
   if (isPremium) {
     try {
-      overallScore = calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData, includeBreakdown);
+      overallScore = calculateOverallScore(strategies, financialData, companyData.currentPrice, statementsData, includeBreakdown, activeFlag);
     } catch (error) {
       console.error(`❌ [COMPANY ANALYSIS] Erro ao calcular overallScore para ${companyData.ticker}:`, error);
       // Retornar null em caso de erro, mas não propagar exceção

@@ -3714,3 +3714,664 @@ export async function sendSubscriptionConfirmationEmail(params: {
     text: template.text
   });
 }
+
+/**
+ * Template para confirmação de múltiplos monitoramentos criados em massa
+ */
+export function generateBulkMonitoringConfirmationTemplate(params: {
+  email: string;
+  companies: Array<{
+    ticker: string;
+    companyName: string;
+    unsubscribeUrl: string;
+  }>;
+}) {
+  const { email, companies } = params;
+  const baseUrl = getEmailBaseUrl();
+  const logoUrl = getEmailLogoUrl();
+  const count = companies.length;
+
+  return {
+    subject: `✅ ${count} ${count === 1 ? 'empresa monitorada' : 'empresas monitoradas'} com sucesso!`,
+    html: `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Monitoramentos Criados - Preço Justo AI</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+          }
+          
+          .email-wrapper {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          
+          .container {
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+          }
+          
+          .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 30px;
+            text-align: center;
+          }
+          
+          .logo {
+            max-width: 200px;
+            height: auto;
+            display: block;
+            margin: 0 auto 20px;
+          }
+          
+          .header-title {
+            color: #ffffff;
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 8px;
+          }
+          
+          .header-subtitle {
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 16px;
+            font-weight: 400;
+          }
+          
+          .content {
+            padding: 40px 30px;
+          }
+          
+          .success-icon {
+            text-align: center;
+            margin-bottom: 24px;
+          }
+          
+          .success-icon-circle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            font-size: 32px;
+            color: #ffffff;
+            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+          }
+          
+          .greeting {
+            font-size: 20px;
+            color: #1e293b;
+            margin-bottom: 16px;
+            text-align: center;
+            font-weight: 600;
+          }
+          
+          .main-text {
+            font-size: 16px;
+            color: #475569;
+            margin-bottom: 30px;
+            text-align: center;
+            line-height: 1.7;
+          }
+          
+          .companies-list {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 30px 0;
+          }
+          
+          .companies-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 16px;
+            text-align: center;
+          }
+          
+          .company-item {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          
+          .company-item:last-child {
+            margin-bottom: 0;
+          }
+          
+          .company-info {
+            flex: 1;
+          }
+          
+          .company-ticker {
+            font-size: 20px;
+            font-weight: 800;
+            color: #667eea;
+            margin-bottom: 4px;
+          }
+          
+          .company-name {
+            font-size: 14px;
+            color: #64748b;
+          }
+          
+          .company-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 8px 16px;
+            border: 1px solid #667eea;
+            border-radius: 6px;
+            transition: all 0.2s;
+          }
+          
+          .company-link:hover {
+            background: #667eea;
+            color: #ffffff;
+          }
+          
+          .info-box {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 30px 0;
+          }
+          
+          .info-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0369a1;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          
+          .info-list {
+            color: #475569;
+            font-size: 15px;
+            line-height: 1.8;
+            margin: 0;
+            padding-left: 24px;
+          }
+          
+          .info-list li {
+            margin-bottom: 8px;
+          }
+          
+          .button-container {
+            text-align: center;
+            margin: 30px 0;
+          }
+          
+          .button {
+            display: inline-block;
+            background-color: #667eea;
+            color: #ffffff !important;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 16px;
+            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.3);
+          }
+          
+          .footer {
+            background: #f8fafc;
+            padding: 32px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .footer-text {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 12px;
+            line-height: 1.6;
+          }
+          
+          .footer-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+          }
+          
+          .footer-link:hover {
+            text-decoration: underline;
+          }
+          
+          .footer-brand {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .footer-brand-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 18px;
+          }
+          
+          .footer-tagline {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-top: 6px;
+          }
+          
+          @media only screen and (max-width: 600px) {
+            .email-wrapper {
+              padding: 10px;
+            }
+            
+            .header {
+              padding: 30px 20px;
+            }
+            
+            .content {
+              padding: 30px 20px;
+            }
+            
+            .company-item {
+              flex-direction: column;
+              align-items: flex-start;
+              gap: 12px;
+            }
+            
+            .company-link {
+              width: 100%;
+              text-align: center;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="container">
+            <div class="header">
+              <img src="${logoUrl}" alt="Preço Justo AI" class="logo" />
+              <h1 class="header-title">✅ Monitoramentos Criados!</h1>
+              <p class="header-subtitle">Você está acompanhando ${count} ${count === 1 ? 'empresa' : 'empresas'}</p>
+            </div>
+            
+            <div class="content">
+              <div class="success-icon">
+                <div class="success-icon-circle">✓</div>
+              </div>
+              
+              <h2 class="greeting">Olá!</h2>
+              
+              <p class="main-text">
+                Sua inscrição para receber notificações foi confirmada com sucesso!<br/>
+                Você está agora monitorando <strong>${count} ${count === 1 ? 'empresa' : 'empresas'}</strong> na bolsa de valores.
+              </p>
+              
+              <div class="companies-list">
+                <h3 class="companies-title">📊 Empresas Monitoradas</h3>
+                ${companies.map(company => `
+                  <div class="company-item">
+                    <div class="company-info">
+                      <div class="company-ticker">${company.ticker}</div>
+                      <div class="company-name">${company.companyName}</div>
+                    </div>
+                    <a href="${baseUrl}/acao/${company.ticker.toLowerCase()}" class="company-link">Ver Análise</a>
+                  </div>
+                `).join('')}
+              </div>
+              
+              <div class="info-box">
+                <div class="info-title">
+                  <span>📧</span>
+                  <span>O que você receberá:</span>
+                </div>
+                <ul class="info-list">
+                  <li><strong>Relatórios Mensais:</strong> Análise completa de cada empresa monitorada</li>
+                  <li><strong>Alertas de Mudanças:</strong> Notificações quando houver alterações significativas nos fundamentos</li>
+                  <li><strong>Alertas de Variação de Preço:</strong> Avisos quando houver quedas significativas que podem indicar problemas</li>
+                </ul>
+              </div>
+              
+              <div class="button-container">
+                <a href="${baseUrl}/acompanhar-acoes-bolsa-de-valores" class="button">Gerenciar Monitoramentos</a>
+              </div>
+            </div>
+            
+            <div class="footer">
+              <p class="footer-text">
+                Você receberá emails apenas quando houver informações relevantes sobre as empresas monitoradas.
+              </p>
+              <p class="footer-text">
+                Precisa de ajuda? Entre em contato conosco em 
+                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
+              </p>
+              
+              <div class="footer-brand">
+                <a href="${baseUrl}" class="footer-brand-link">Preço Justo AI</a>
+                <p class="footer-tagline">Análise fundamentalista inteligente para seus investimentos</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+✅ Monitoramentos Criados com Sucesso!
+
+Olá!
+
+Sua inscrição para receber notificações foi confirmada com sucesso!
+Você está agora monitorando ${count} ${count === 1 ? 'empresa' : 'empresas'} na bolsa de valores.
+
+Empresas Monitoradas:
+${companies.map(c => `- ${c.ticker} - ${c.companyName}`).join('\n')}
+
+O que você receberá:
+- Relatórios Mensais: Análise completa de cada empresa monitorada
+- Alertas de Mudanças: Notificações quando houver alterações significativas nos fundamentos
+- Alertas de Variação de Preço: Avisos quando houver quedas significativas que podem indicar problemas
+
+Gerenciar Monitoramentos: ${baseUrl}/acompanhar-acoes-bolsa-de-valores
+
+Você receberá emails apenas quando houver informações relevantes sobre as empresas monitoradas.
+
+Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
+
+Preço Justo AI - Análise fundamentalista inteligente
+${baseUrl}
+    `
+  };
+}
+
+export async function sendBulkMonitoringConfirmationEmail(params: {
+  email: string;
+  companies: Array<{
+    ticker: string;
+    companyName: string;
+    unsubscribeUrl: string;
+  }>;
+}) {
+  const template = generateBulkMonitoringConfirmationTemplate(params);
+  
+  return await sendEmail({
+    to: params.email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  });
+}
+
+/**
+ * Envia email de relatório de variação de preço
+ * Para usuários não premium, envia email de conversão sem detalhes
+ * Se houver flag ativo, também usa email de conversão mesmo para premium (mas com contexto diferente)
+ */
+export async function sendPriceVariationReportEmail(params: {
+  email: string;
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+  reportUrl: string;
+  reportSummary: string;
+  isPremium?: boolean;
+  hasFlag?: boolean; // Indica se há flag ativo para a empresa
+}) {
+  // Se não for premium OU se houver flag ativo, enviar email de conversão sem detalhes
+  if (!params.isPremium || params.hasFlag) {
+    // Se houver flag, usar email específico de flag
+    if (params.hasFlag) {
+      return await sendFlagAlertConversionEmail({
+        email: params.email,
+        userName: params.userName,
+        ticker: params.ticker,
+        companyName: params.companyName,
+        companyLogoUrl: params.companyLogoUrl,
+      });
+    }
+    // Caso contrário, usar email de conversão padrão para price variation
+    return await sendPriceVariationConversionEmail({
+      email: params.email,
+      userName: params.userName,
+      ticker: params.ticker,
+      companyName: params.companyName,
+      companyLogoUrl: params.companyLogoUrl,
+    });
+  }
+
+  // Usuário premium: enviar relatório completo
+  const template = generateNotificationEmailTemplate(
+    `Relatório de Variação de Preço: ${params.ticker}`,
+    `Um relatório de variação de preço foi gerado para ${params.companyName} (${params.ticker}).\n\n${params.reportSummary}`,
+    params.reportUrl,
+    params.userName,
+    'Ver Relatório Completo',
+    params.companyLogoUrl || undefined
+  );
+  
+  return await sendEmail({
+    to: params.email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  });
+}
+
+/**
+ * Envia email de conversão para alerta de flag/perda de fundamentos (usuários não premium)
+ * Não mostra detalhes do flag ou relatório, apenas incentiva upgrade
+ */
+export async function sendFlagAlertConversionEmail(params: {
+  email: string;
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+}) {
+  // Converter URLs SVG para formato compatível com email usando base64 inline
+  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+    if (!url) return null;
+    
+    const baseUrl = getEmailBaseUrl();
+    
+    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
+      return await convertSvgToBase64DataUri(url);
+    }
+    
+    if (url.startsWith('/')) {
+      return baseUrl + url;
+    }
+    
+    return url;
+  };
+  
+  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(params.companyLogoUrl);
+
+  const template = await generateFreeUserAssetChangeEmailTemplate({
+    userName: params.userName,
+    ticker: params.ticker,
+    companyName: params.companyName,
+    companyLogoUrl: emailCompatibleLogoUrl,
+  });
+
+  // Ajustar assunto para alerta de flag
+  const customSubject = `🚨 Situação Crítica Detectada: ${params.ticker} - Upgrade para Ver Detalhes`;
+  
+  return await sendEmail({
+    to: params.email,
+    subject: customSubject,
+    html: template.html,
+    text: template.text
+  });
+}
+
+/**
+ * Envia email de conversão para relatório de variação de preço (usuários não premium)
+ * Não mostra detalhes do relatório, apenas incentiva upgrade
+ */
+export async function sendPriceVariationConversionEmail(params: {
+  email: string;
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+}) {
+  // Converter URLs SVG para formato compatível com email usando base64 inline
+  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+    if (!url) return null;
+    
+    const baseUrl = getEmailBaseUrl();
+    
+    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
+      return await convertSvgToBase64DataUri(url);
+    }
+    
+    if (url.startsWith('/')) {
+      return baseUrl + url;
+    }
+    
+    return url;
+  };
+  
+  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(params.companyLogoUrl);
+
+  const template = await generateFreeUserAssetChangeEmailTemplate({
+    userName: params.userName,
+    ticker: params.ticker,
+    companyName: params.companyName,
+    companyLogoUrl: emailCompatibleLogoUrl,
+  });
+
+  // Ajustar assunto para price variation
+  const subject = `Variação de Preço Detectada: ${params.ticker} - Veja os detalhes completos`;
+
+  return await sendEmail({
+    to: params.email,
+    subject,
+    html: template.html,
+    text: template.text
+  });
+}
+
+/**
+ * Envia email de relatório de gatilho customizado
+ * Para usuários não premium, envia email de conversão sem detalhes
+ */
+export async function sendCustomTriggerReportEmail(params: {
+  email: string;
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+  reportUrl: string;
+  reportSummary: string;
+  isPremium?: boolean;
+}) {
+  // Se não for premium, enviar email de conversão sem detalhes
+  if (!params.isPremium) {
+    return await sendCustomTriggerConversionEmail({
+      email: params.email,
+      userName: params.userName,
+      ticker: params.ticker,
+      companyName: params.companyName,
+      companyLogoUrl: params.companyLogoUrl,
+    });
+  }
+
+  // Usuário premium: enviar relatório completo
+  const template = generateNotificationEmailTemplate(
+    `Gatilho Customizado Disparado: ${params.ticker}`,
+    `Um gatilho customizado foi disparado para ${params.companyName} (${params.ticker}).\n\n${params.reportSummary}`,
+    params.reportUrl,
+    params.userName,
+    'Ver Relatório Completo',
+    params.companyLogoUrl || undefined
+  );
+  
+  return await sendEmail({
+    to: params.email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  });
+}
+
+/**
+ * Envia email de conversão para relatório de gatilho customizado (usuários não premium)
+ * Não mostra detalhes do relatório, apenas incentiva upgrade
+ */
+export async function sendCustomTriggerConversionEmail(params: {
+  email: string;
+  userName: string;
+  ticker: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+}) {
+  // Converter URLs SVG para formato compatível com email usando base64 inline
+  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+    if (!url) return null;
+    
+    const baseUrl = getEmailBaseUrl();
+    
+    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
+      return await convertSvgToBase64DataUri(url);
+    }
+    
+    if (url.startsWith('/')) {
+      return baseUrl + url;
+    }
+    
+    return url;
+  };
+  
+  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(params.companyLogoUrl);
+
+  const template = await generateFreeUserAssetChangeEmailTemplate({
+    userName: params.userName,
+    ticker: params.ticker,
+    companyName: params.companyName,
+    companyLogoUrl: emailCompatibleLogoUrl,
+  });
+
+  // Ajustar assunto para custom trigger
+  const subject = `Gatilho Customizado Disparado: ${params.ticker} - Veja os detalhes completos`;
+
+  return await sendEmail({
+    to: params.email,
+    subject,
+    html: template.html,
+    text: template.text
+  });
+}

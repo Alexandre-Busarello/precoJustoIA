@@ -1,12 +1,13 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, TrendingUp, TrendingDown, Calendar, FileText, Crown, Lock, Brain } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowLeft, TrendingUp, TrendingDown, Calendar, FileText, Crown, Lock, Brain, AlertTriangle, Settings } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { isCurrentUserPremium } from '@/lib/user-service';
+import { isCurrentUserPremium, getCurrentUser } from '@/lib/user-service';
 
 interface PageProps {
   params: Promise<{
@@ -56,8 +57,12 @@ export default async function ReportsListPage({ params }: PageProps) {
   }
 
   const isPremium = await isCurrentUserPremium();
+  const currentUser = await getCurrentUser();
+  const currentUserId = currentUser?.id || null;
 
-  const reports = await prisma.aIReport.findMany({
+  // Buscar todos os relatórios, depois filtrar por tipo e userId
+  // Nota: userId pode não estar disponível no Prisma Client até regenerar após migration
+  const allReportsRaw = await prisma.aIReport.findMany({
     where: {
       companyId: company.id,
       status: 'COMPLETED',
@@ -66,19 +71,33 @@ export default async function ReportsListPage({ params }: PageProps) {
       createdAt: 'desc',
     },
     take: 50,
-    select: {
-      id: true,
-      type: true,
-      content: true,
-      changeDirection: true,
-      previousScore: true,
-      currentScore: true,
-      createdAt: true,
-    },
+  });
+
+  const allReports = allReportsRaw.map(report => ({
+    id: report.id,
+    type: report.type as string,
+    content: report.content,
+    changeDirection: report.changeDirection,
+    previousScore: report.previousScore,
+    currentScore: report.currentScore,
+    userId: (report as any).userId || null, // Campo pode não estar tipado ainda
+    createdAt: report.createdAt,
+  }));
+
+  // Filtrar relatórios: CUSTOM_TRIGGER só aparece para o criador
+  const reports = allReports.filter(report => {
+    if (report.type === 'CUSTOM_TRIGGER') {
+      // Só mostrar se o usuário logado criou este relatório
+      return report.userId === currentUserId;
+    }
+    // Outros tipos são públicos
+    return true;
   });
 
   const fundamentalChangeReports = reports.filter(r => r.type === 'FUNDAMENTAL_CHANGE');
   const monthlyReports = reports.filter(r => r.type === 'MONTHLY_OVERVIEW');
+  const priceVariationReports = reports.filter(r => r.type === 'PRICE_VARIATION');
+  const customTriggerReports = reports.filter(r => r.type === 'CUSTOM_TRIGGER');
   const positiveCount = fundamentalChangeReports.filter(r => r.changeDirection === 'positive').length;
   const negativeCount = fundamentalChangeReports.filter(r => r.changeDirection === 'negative').length;
 
@@ -104,9 +123,11 @@ export default async function ReportsListPage({ params }: PageProps) {
           </div>
           
           {company.logoUrl && (
-            <img 
+            <Image 
               src={company.logoUrl} 
               alt={company.name}
+              width={64}
+              height={64}
               className="w-16 h-16 rounded-lg object-contain"
             />
           )}
@@ -114,7 +135,7 @@ export default async function ReportsListPage({ params }: PageProps) {
 
         {/* Stats */}
         {reports.length > 0 && (
-          <div className="flex flex-wrap gap-4 mt-4">
+          <div className="flex flex-wrap gap-3 sm:gap-4 mt-4">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
@@ -125,7 +146,23 @@ export default async function ReportsListPage({ params }: PageProps) {
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-purple-600" />
                 <span className="text-sm text-muted-foreground">
-                  {monthlyReports.length} relatório{monthlyReports.length !== 1 ? 's' : ''} mensal{monthlyReports.length !== 1 ? 'is' : ''}
+                  {monthlyReports.length} mensal{monthlyReports.length !== 1 ? 'is' : ''}
+                </span>
+              </div>
+            )}
+            {priceVariationReports.length > 0 && (
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-600" />
+                <span className="text-sm text-muted-foreground">
+                  {priceVariationReports.length} variação{priceVariationReports.length !== 1 ? 'ões' : ''} de preço
+                </span>
+              </div>
+            )}
+            {customTriggerReports.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-blue-600" />
+                <span className="text-sm text-muted-foreground">
+                  {customTriggerReports.length} customizado{customTriggerReports.length !== 1 ? 's' : ''}
                 </span>
               </div>
             )}
@@ -190,7 +227,11 @@ export default async function ReportsListPage({ params }: PageProps) {
       ) : (
         <div className="space-y-4">
           {reports.map((report) => {
-            const isMonthlyReport = report.type === 'MONTHLY_OVERVIEW';
+            const reportType = report.type as string;
+            const isMonthlyReport = reportType === 'MONTHLY_OVERVIEW';
+            const isPriceVariation = reportType === 'PRICE_VARIATION';
+            const isCustomTrigger = reportType === 'CUSTOM_TRIGGER';
+            const isFundamentalChange = reportType === 'FUNDAMENTAL_CHANGE';
             const isPositive = report.changeDirection === 'positive';
             const scoreDelta = report.currentScore && report.previousScore 
               ? Number(report.currentScore) - Number(report.previousScore)
@@ -209,19 +250,29 @@ export default async function ReportsListPage({ params }: PageProps) {
                 key={report.id} 
                 href={`/acao/${ticker.toLowerCase()}/relatorios/${report.id}`}
               >
-                <Card className="p-6 hover:shadow-md transition-shadow cursor-pointer">
+                <Card className="p-4 sm:p-6 hover:shadow-md transition-shadow cursor-pointer">
                   <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
                         {isMonthlyReport ? (
-                          <Badge variant="secondary" className="text-sm">
+                          <Badge variant="secondary" className="text-xs sm:text-sm">
                             <Brain className="h-3 w-3 mr-1" />
                             Relatório Mensal
+                          </Badge>
+                        ) : isPriceVariation ? (
+                          <Badge variant="outline" className="text-xs sm:text-sm border-orange-500 text-orange-700 dark:text-orange-400">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Variação de Preço
+                          </Badge>
+                        ) : isCustomTrigger ? (
+                          <Badge variant="outline" className="text-xs sm:text-sm border-blue-500 text-blue-700 dark:text-blue-400">
+                            <Settings className="h-3 w-3 mr-1" />
+                            Customizado
                           </Badge>
                         ) : (
                           <Badge 
                             variant={isPositive ? 'default' : 'destructive'}
-                            className="text-sm"
+                            className="text-xs sm:text-sm"
                           >
                             {isPositive ? (
                               <>
@@ -237,18 +288,20 @@ export default async function ReportsListPage({ params }: PageProps) {
                           </Badge>
                         )}
                         
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                          <Calendar className="h-3 w-3 flex-shrink-0" />
+                          <span className="whitespace-nowrap">
                           {new Date(report.createdAt).toLocaleDateString('pt-BR', {
                             day: '2-digit',
                             month: 'short',
                             year: 'numeric',
                           })}
+                          </span>
                         </div>
                       </div>
 
                       {/* Score - apenas para relatórios de mudança fundamental */}
-                      {!isMonthlyReport && (
+                      {isFundamentalChange && (
                         <>
                           {isPremium ? (
                             <div className="mb-3">

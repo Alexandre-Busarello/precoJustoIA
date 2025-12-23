@@ -477,9 +477,13 @@ export class RateLimitMiddleware {
    * Verificar honeypot field (campo oculto que bots preenchem)
    */
   static checkHoneypot(body: any): boolean {
-    // Campos honeypot comuns que bots preenchem
+    // 🍯 HONEYPOT: Verificar campo 'website' primeiro (campo principal de honeypot)
+    if (body.website && body.website.trim().length > 0) {
+      return true // Bot detectado!
+    }
+    
+    // Campos honeypot adicionais que bots podem preencher (camada extra de segurança)
     const honeypotFields = [
-      'website',
       'url',
       'homepage',
       'phone',

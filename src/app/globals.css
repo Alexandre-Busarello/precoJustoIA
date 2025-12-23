@@ -152,5 +152,18 @@
     overflow-x: hidden;
   }
 
+  /* Screen reader only field - campo visível apenas para leitores de tela e bots */
+  .sr-field {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    transform: scale(0);
+    opacity: 0.01;
+    pointer-events: none;
+    z-index: -1;
+  }
+
   /* Tarja de índices agora está entre header e search bar, não precisa mais de espaçamento condicional */
 }

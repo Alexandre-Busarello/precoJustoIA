@@ -15,9 +15,32 @@ export async function POST(request: NextRequest) {
         
         // 🔒 SEGURANÇA: Whitelist explícita de campos permitidos
         // Extrair apenas os campos permitidos e ignorar qualquer campo extra
-        const { name, email, password, acquisition, ...rest } = body
+        const { name, email, password, website, acquisition, ...rest } = body
         
-        // 🍯 HONEYPOT: Verificar se campos ocultos foram preenchidos (indica bot)
+        // 🍯 HONEYPOT: Verificar se campo honeypot foi preenchido (indica bot)
+        // Estratégia do "Sucesso Falso": Retornar 200 OK para não alertar o criador do bot
+        if (website && website.trim().length > 0) {
+          const ip = RateLimitMiddleware.getClientIP(request)
+          RateLimitMiddleware.logSuspiciousActivity(ip, 'HONEYPOT_TRIGGERED', 'register', {
+            honeypotField: 'website',
+            honeypotValue: website.substring(0, 50) // Log apenas primeiros 50 caracteres
+          })
+          
+          // Bloquear IP imediatamente por tentativa de bot
+          await RateLimitMiddleware.checkRateLimit(request, {
+            ...RATE_LIMIT_CONFIGS.REGISTER,
+            blockAfterViolations: 1 // Bloquear imediatamente
+          })
+          
+          // Retornar sucesso falso (200 OK) para não alertar o bot
+          // NÃO criar usuário, NÃO enviar email, NÃO disparar pixels
+          return NextResponse.json(
+            { success: true, message: "Cadastro realizado!" },
+            { status: 200 }
+          )
+        }
+        
+        // 🍯 HONEYPOT: Verificar se outros campos ocultos foram preenchidos (camada adicional)
         // Também detecta tentativas de injeção de campos sensíveis
         if (RateLimitMiddleware.checkHoneypot(rest)) {
           const ip = RateLimitMiddleware.getClientIP(request)
@@ -31,9 +54,10 @@ export async function POST(request: NextRequest) {
             blockAfterViolations: 1 // Bloquear imediatamente
           })
           
+          // Retornar sucesso falso (200 OK) para não alertar o bot
           return NextResponse.json(
-            { message: "Erro ao processar requisição" },
-            { status: 400 }
+            { success: true, message: "Cadastro realizado!" },
+            { status: 200 }
           )
         }
         
@@ -62,6 +86,254 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             { message: "Erro ao processar requisição" },
             { status: 400 }
+          )
+        }
+
+        // 🚫 BLACKLIST: Verificar emails/domínios conhecidos de bots e testes
+        const emailBlacklist = [
+          // Domínios temporários conhecidos
+          '10minutemail.com',
+          'tempmail.com',
+          'guerrillamail.com',
+          'mailinator.com',
+          'throwaway.email',
+          'temp-mail.org',
+          'getnada.com',
+          'mohmal.com',
+          'fakeinbox.com',
+          'trashmail.com',
+          'dispostable.com',
+          'yopmail.com',
+          'sharklasers.com',
+          'grr.la',
+          'spamgourmet.com',
+          'mintemail.com',
+          'emailondeck.com',
+          'maildrop.cc',
+          'getairmail.com',
+          'meltmail.com',
+          'melt.li',
+          '33mail.com',
+          'inboxbear.com',
+          'mailcatch.com',
+          'spambox.us',
+          'spamfree24.org',
+          'spamfree24.de',
+          'spamfree24.eu',
+          'spamgourmet.com',
+          'spamhole.com',
+          'spam.la',
+          'spamex.com',
+          'spamtraps.com',
+          'tempail.com',
+          'tempmailaddress.com',
+          'tempmailer.com',
+          'tempmailer.de',
+          'tempinbox.co.uk',
+          'tempinbox.com',
+          'tempmail.de',
+          'tempmail.net',
+          'tempmail.org',
+          'tempmail.us',
+          'tempmailbox.com',
+          'tempmailer.com',
+          'tempmailer.de',
+          'tempmailer.net',
+          'tempmailer.org',
+          'tempmailer.ru',
+          'tempmailer.se',
+          'tempmailer.tk',
+          'tempmailer.ws',
+          'tempmailer.xyz',
+          'tempmailo.com',
+          'tempmailo.net',
+          'tempmailo.org',
+          'tempmailo.tk',
+          'tempmailo.ws',
+          'tempmailo.xyz',
+          'tempmails.org',
+          'tempmails.tk',
+          'tempmails.ws',
+          'tempmails.xyz',
+          'tempmailto.com',
+          'tempmailto.net',
+          'tempmailto.org',
+          'tempmailto.tk',
+          'tempmailto.ws',
+          'tempmailto.xyz',
+          'tempmail.us',
+          'tempmail.ws',
+          'tempmail.xyz',
+          'temp-mail.io',
+          'temp-mail.org',
+          'temp-mail.ru',
+          'temp-mail.xyz',
+          'tempail.com',
+          'tempail.net',
+          'tempail.org',
+          'tempail.tk',
+          'tempail.ws',
+          'tempail.xyz',
+          'tempalias.com',
+          'tempalias.net',
+          'tempalias.org',
+          'tempalias.tk',
+          'tempalias.ws',
+          'tempalias.xyz',
+          'tempinbox.co.uk',
+          'tempinbox.com',
+          'tempinbox.net',
+          'tempinbox.org',
+          'tempinbox.tk',
+          'tempinbox.ws',
+          'tempinbox.xyz',
+          'tempmailaddress.com',
+          'tempmailer.com',
+          'tempmailer.de',
+          'tempmailer.net',
+          'tempmailer.org',
+          'tempmailer.ru',
+          'tempmailer.se',
+          'tempmailer.tk',
+          'tempmailer.ws',
+          'tempmailer.xyz',
+          'tempmailo.com',
+          'tempmailo.net',
+          'tempmailo.org',
+          'tempmailo.tk',
+          'tempmailo.ws',
+          'tempmailo.xyz',
+          'tempmails.org',
+          'tempmails.tk',
+          'tempmails.ws',
+          'tempmails.xyz',
+          'tempmailto.com',
+          'tempmailto.net',
+          'tempmailto.org',
+          'tempmailto.tk',
+          'tempmailto.ws',
+          'tempmailto.xyz',
+          'tempmail.us',
+          'tempmail.ws',
+          'tempmail.xyz',
+          'throwaway.email',
+          'throwawaymail.com',
+          'throwawaymail.net',
+          'throwawaymail.org',
+          'throwawaymail.tk',
+          'throwawaymail.ws',
+          'throwawaymail.xyz',
+          'trashmail.com',
+          'trashmail.net',
+          'trashmail.org',
+          'trashmail.tk',
+          'trashmail.ws',
+          'trashmail.xyz',
+          'yopmail.com',
+          'yopmail.fr',
+          'yopmail.net',
+          'yopmail.org',
+          'yopmail.tk',
+          'yopmail.ws',
+          'yopmail.xyz',
+          // Domínios de teste conhecidos
+          'test.com',
+          'test.net',
+          'test.org',
+          'example.com',
+          'example.net',
+          'example.org',
+          'sample.com',
+          'sample.net',
+          'sample.org',
+          'demo.com',
+          'demo.net',
+          'demo.org',
+          'fake.com',
+          'fake.net',
+          'fake.org',
+          'invalid.com',
+          'invalid.net',
+          'invalid.org',
+          // Domínios de bots conhecidos
+          'bot.com',
+          'bot.net',
+          'bot.org',
+          'spam.com',
+          'spam.net',
+          'spam.org',
+          'noreply.com',
+          'no-reply.com',
+          'donotreply.com',
+          'do-not-reply.com',
+        ]
+        
+        // Normalizar email para verificação
+        const normalizedEmail = email?.toLowerCase().trim() || ''
+        const emailDomain = normalizedEmail.split('@')[1] || ''
+        
+        // Verificar se domínio está na blacklist
+        if (emailDomain && emailBlacklist.includes(emailDomain.toLowerCase())) {
+          const ip = RateLimitMiddleware.getClientIP(request)
+          RateLimitMiddleware.logSuspiciousActivity(ip, 'BLACKLISTED_EMAIL_DOMAIN', 'register', {
+            email: normalizedEmail.substring(0, 50), // Log apenas primeiros 50 caracteres
+            domain: emailDomain
+          })
+          
+          // Bloquear IP por tentativa de cadastro com email blacklisted
+          await RateLimitMiddleware.checkRateLimit(request, {
+            ...RATE_LIMIT_CONFIGS.REGISTER,
+            blockAfterViolations: 1
+          })
+          
+          // Retornar sucesso falso (200 OK) para não alertar o bot
+          return NextResponse.json(
+            { success: true, message: "Cadastro realizado!" },
+            { status: 200 }
+          )
+        }
+        
+        // Verificar padrões comuns de emails de teste/bot
+        const testEmailPatterns = [
+          /^test\d*@/i,
+          /^bot\d*@/i,
+          /^spam\d*@/i,
+          /^fake\d*@/i,
+          /^demo\d*@/i,
+          /^sample\d*@/i,
+          /^invalid\d*@/i,
+          /^noreply\d*@/i,
+          /^no-reply\d*@/i,
+          /^donotreply\d*@/i,
+          /^do-not-reply\d*@/i,
+          /^admin\d*@/i,
+          /^administrator\d*@/i,
+          /^root\d*@/i,
+          /^user\d+@/i,
+          /^email\d+@/i,
+          /^account\d+@/i,
+          /^temp\d+@/i,
+          /^temporary\d+@/i,
+        ]
+        
+        const matchesTestPattern = testEmailPatterns.some(pattern => pattern.test(normalizedEmail))
+        if (matchesTestPattern) {
+          const ip = RateLimitMiddleware.getClientIP(request)
+          RateLimitMiddleware.logSuspiciousActivity(ip, 'TEST_EMAIL_PATTERN', 'register', {
+            email: normalizedEmail.substring(0, 50),
+            pattern: 'test/bot pattern detected'
+          })
+          
+          // Bloquear IP por tentativa de cadastro com email de teste
+          await RateLimitMiddleware.checkRateLimit(request, {
+            ...RATE_LIMIT_CONFIGS.REGISTER,
+            blockAfterViolations: 1
+          })
+          
+          // Retornar sucesso falso (200 OK) para não alertar o bot
+          return NextResponse.json(
+            { success: true, message: "Cadastro realizado!" },
+            { status: 200 }
           )
         }
 
@@ -194,6 +466,39 @@ export async function POST(request: NextRequest) {
             `IP possui ${ipCheck.totalCount} contas cadastradas`,
             ip
           )
+        }
+
+        // Vincular subscriptions anônimas existentes ao novo usuário
+        try {
+          const normalizedEmail = email.toLowerCase().trim()
+          const anonymousSubscriptions = await prisma.userAssetSubscription.findMany({
+            where: {
+              email: normalizedEmail,
+              userId: null, // Apenas subscriptions anônimas
+            },
+          })
+
+          if (anonymousSubscriptions.length > 0) {
+            console.log(`[REGISTER] Vinculando ${anonymousSubscriptions.length} subscription(s) anônima(s) ao novo usuário ${user.id} (${email})`)
+            
+            // Atualizar todas as subscriptions anônimas para vincular ao novo usuário
+            await prisma.userAssetSubscription.updateMany({
+              where: {
+                email: normalizedEmail,
+                userId: null,
+              },
+              data: {
+                userId: user.id,
+                email: null, // Remover email já que agora tem userId
+                unsubscribeToken: null, // Remover token já que agora tem userId
+              },
+            })
+
+            console.log(`[REGISTER] ✅ ${anonymousSubscriptions.length} subscription(s) vinculada(s) com sucesso`)
+          }
+        } catch (error) {
+          // Não falhar o registro se houver erro ao vincular subscriptions
+          console.error('Erro ao vincular subscriptions anônimas:', error)
         }
 
         // Enviar email de verificação (NÃO iniciar trial ainda)

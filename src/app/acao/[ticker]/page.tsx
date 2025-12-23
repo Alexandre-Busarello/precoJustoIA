@@ -33,6 +33,8 @@ import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config'
 import type { CompanyData } from '@/lib/strategies/types'
 import Link from 'next/link'
 import { EmailCaptureModal } from '@/components/email-capture-modal'
+import { CompanyFlagBanner } from '@/components/company-flag-banner'
+import { isCurrentUserPremium } from '@/lib/user-service'
 
 // Shadcn UI Components
 import { Card, CardContent } from '@/components/ui/card'
@@ -542,11 +544,42 @@ export default async function TickerPage({ params }: PageProps) {
 
   const faqSchema = generateFAQSchema()
 
+  // Buscar flags ativos para a empresa
+  // Nota: companyFlag pode não estar tipado ainda até regenerar Prisma Client após migration
+  const activeFlags = await prisma.companyFlag.findMany({
+    where: {
+      companyId: companyData.id,
+      isActive: true,
+    },
+    include: {
+      report: {
+        select: { id: true }
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 1
+  });
+
+  const activeFlag = activeFlags.length > 0 ? activeFlags[0] : null;
+  const isPremium = await isCurrentUserPremium();
+
   return (
     <>
       <TrackingAssetView ticker={ticker} assetType={companyData.assetType} />
 
       <div className="container mx-auto py-8 px-4">
+        {/* Banner de Flag */}
+        {activeFlag && (
+          <CompanyFlagBanner
+            flag={{
+              id: activeFlag.id,
+              reason: activeFlag.reason,
+              reportId: activeFlag.reportId,
+            }}
+            ticker={ticker}
+            isPremium={isPremium}
+          />
+        )}
         {/* Layout Responsivo: 2 Cards Separados */}
         <div className="mb-8">
           {/* Desktop: Cards lado a lado (a partir de 1024px) */}

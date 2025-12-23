@@ -3958,6 +3958,14 @@ export interface OverallScoreWithBreakdown extends OverallScore {
   rawScore?: number;
 }
 
+// Interface para informação de penalização por flag
+export interface PenaltyInfo {
+  applied: boolean;
+  value: number;
+  reason: string;
+  flagId: string;
+}
+
 // === FUNÇÃO CENTRALIZADA PARA CALCULAR SCORE GERAL ===
 export function calculateOverallScore(
   strategies: {
@@ -3973,7 +3981,8 @@ export function calculateOverallScore(
   financialData: FinancialData,
   currentPrice: number,
   statementsData?: FinancialStatementsData,
-  includeBreakdown: boolean = false
+  includeBreakdown: boolean = false,
+  activeFlag?: { id: string; reason: string } | null
 ): OverallScore | OverallScoreWithBreakdown {
   // Verificar se há análise do YouTube
   const hasYouTubeAnalysis = !!financialData.youtubeAnalysis?.score;
@@ -4791,7 +4800,68 @@ export function calculateOverallScore(
     recommendation = "Empresa Péssima";
   }
 
-  const result: OverallScore = {
+  // Aplicar penalização por flag de perda de fundamentos ANTES de calcular grade
+  let penaltyInfo: PenaltyInfo | null = null;
+  if (activeFlag) {
+    const penaltyValue = -20;
+    finalScore = Math.max(0, finalScore + penaltyValue); // Garantir que não fique abaixo de 0
+    penaltyInfo = {
+      applied: true,
+      value: penaltyValue,
+      reason: activeFlag.reason,
+      flagId: activeFlag.id,
+    };
+    weaknesses.push(`Penalização de ${Math.abs(penaltyValue)} pontos por perda de fundamentos detectada pela IA`);
+  }
+
+  // Determinar grade e classificação (já considera penalização se aplicada)
+  if (finalScore >= 95) {
+    grade = "A+";
+    classification = "Excelente";
+    recommendation = "Empresa Excelente";
+  } else if (finalScore >= 90) {
+    grade = "A";
+    classification = "Excelente";
+    recommendation = "Empresa Excelente";
+  } else if (finalScore >= 85) {
+    grade = "A-";
+    classification = "Muito Bom";
+    recommendation = "Empresa Excelente";
+  } else if (finalScore >= 80) {
+    grade = "B+";
+    classification = "Muito Bom";
+    recommendation = "Empresa Boa";
+  } else if (finalScore >= 75) {
+    grade = "B";
+    classification = "Bom";
+    recommendation = "Empresa Boa";
+  } else if (finalScore >= 70) {
+    grade = "B-";
+    classification = "Bom";
+    recommendation = "Empresa Boa";
+  } else if (finalScore >= 65) {
+    grade = "C+";
+    classification = "Regular";
+    recommendation = "Empresa Regular";
+  } else if (finalScore >= 60) {
+    grade = "C";
+    classification = "Regular";
+    recommendation = "Empresa Regular";
+  } else if (finalScore >= 50) {
+    grade = "C-";
+    classification = "Regular";
+    recommendation = "Empresa Regular";
+  } else if (finalScore >= 30) {
+    grade = "D";
+    classification = "Fraco";
+    recommendation = "Empresa Fraca";
+  } else {
+    grade = "F";
+    classification = "Péssimo";
+    recommendation = "Empresa Péssima";
+  }
+
+  const result: OverallScore & { penaltyInfo?: PenaltyInfo | null } = {
     score: finalScore,
     grade,
     classification,
@@ -4799,6 +4869,7 @@ export function calculateOverallScore(
     weaknesses: weaknesses.slice(0, 5), // Máximo 5 pontos fracos
     recommendation,
     statementsAnalysis: statementsAnalysis || undefined, // Incluir análise das demonstrações financeiras
+    penaltyInfo: penaltyInfo || undefined,
   };
 
   // Se incluir breakdown, adicionar contribuições e rawScore

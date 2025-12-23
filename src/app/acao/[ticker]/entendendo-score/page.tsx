@@ -372,6 +372,51 @@ export default async function EntendendoScorePage({
                 </div>
               </div>
 
+              {/* Penalização de Flag de IA */}
+              {breakdown.flagPenalty && (
+                <div className="border border-red-200 dark:border-red-800 rounded-lg p-3 sm:p-4 bg-red-50 dark:bg-red-950/30">
+                  <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4 mb-3">
+                    <div className="flex-1 min-w-0 w-full">
+                      <div className="flex items-start gap-2 mb-1">
+                        <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                        <h4 className="font-semibold text-sm sm:text-base text-red-900 dark:text-red-100 break-words">
+                          Penalização por Perda de Fundamentos (IA)
+                        </h4>
+                      </div>
+                      <p className="text-xs sm:text-sm text-red-700 dark:text-red-300 mt-2 break-words">
+                        {breakdown.flagPenalty.reason}
+                      </p>
+                    </div>
+
+                    <div className="text-left sm:text-right shrink-0">
+                      <div className="text-xs sm:text-sm text-red-600 dark:text-red-400">
+                        Penalização
+                      </div>
+                      <div className="text-xl sm:text-2xl font-bold text-red-600">
+                        {breakdown.flagPenalty.value.toFixed(1)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Link para relatório */}
+                  {breakdown.flagPenalty.reportId && (
+                    <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50"
+                      >
+                        <Link href={`/acao/${ticker.toLowerCase()}/relatorios#report-${breakdown.flagPenalty.reportId}`}>
+                          <Info className="w-3 h-3 mr-2" />
+                          Ver Relatório Completo
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Penalidades */}
               {breakdown.penalties && breakdown.penalties.length > 0 && (
                 <>

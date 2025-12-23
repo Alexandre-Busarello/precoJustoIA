@@ -32,6 +32,12 @@ export interface OverallScoreBreakdown {
     details?: string[]; // Detalhes específicos (red flags, contradições, etc)
   }[];
   rawScore: number; // Score antes das penalidades
+  flagPenalty?: {
+    value: number;
+    reason: string;
+    flagId: string;
+    reportId?: string;
+  };
 }
 
 /**
@@ -66,12 +72,22 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
 
     const rawScore = overallScoreWithBreakdown.rawScore;
     const finalScore = overallScoreWithBreakdown.score;
-    const penaltyAmount = rawScore - finalScore;
+    
+    // Verificar se há penalização de flag
+    const flagPenalty = (overallScoreWithBreakdown as any).penaltyInfo;
+    const flagPenaltyAmount = flagPenalty?.applied ? Math.abs(flagPenalty.value) : 0;
+    
+    // Calcular penalidades gerais (excluindo penalização de flag)
+    // O rawScore não inclui a penalização de flag, então:
+    // finalScore = rawScore - outrasPenalidades - flagPenalty
+    // Portanto: outrasPenalidades = rawScore - finalScore - flagPenalty
+    const totalPenaltyAmount = rawScore - finalScore;
+    const generalPenaltyAmount = totalPenaltyAmount - flagPenaltyAmount;
     
     // Calcular penalidades e extrair detalhes
     const penalties = [];
 
-    if (penaltyAmount > 0.5) {
+    if (generalPenaltyAmount > 0.5) {
       // Coletar detalhes das penalidades
       const penaltyDetails: string[] = [];
       
@@ -143,9 +159,23 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
 
       penalties.push({
         reason: 'Penalidades por Qualidade e Riscos Identificados',
-        amount: -penaltyAmount,
+        amount: -generalPenaltyAmount,
         details: penaltyDetails
       });
+    }
+
+    // Buscar reportId do flag se existir
+    let flagReportId: string | undefined;
+    if (flagPenalty?.flagId) {
+      try {
+        const flag = await prisma.companyFlag.findUnique({
+          where: { id: flagPenalty.flagId },
+          select: { reportId: true }
+        });
+        flagReportId = flag?.reportId;
+      } catch (error) {
+        console.warn('Erro ao buscar reportId do flag:', error);
+      }
     }
 
     return {
@@ -164,7 +194,13 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
         description: c.description || ''
       })),
       penalties: penalties.length > 0 ? penalties : undefined,
-      rawScore
+      rawScore,
+      flagPenalty: flagPenalty?.applied ? {
+        value: flagPenalty.value,
+        reason: flagPenalty.reason,
+        flagId: flagPenalty.flagId,
+        reportId: flagReportId
+      } : undefined
     };
   } catch (error) {
     console.error('Erro ao buscar breakdown do score:', error);

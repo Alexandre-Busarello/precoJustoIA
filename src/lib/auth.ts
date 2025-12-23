@@ -227,6 +227,39 @@ export const authOptions: NextAuthOptions = {
               update: {}
             })
             
+            // Vincular subscriptions anônimas existentes ao novo usuário OAuth
+            try {
+              const normalizedEmail = user.email.toLowerCase().trim()
+              const anonymousSubscriptions = await prisma.userAssetSubscription.findMany({
+                where: {
+                  email: normalizedEmail,
+                  userId: null, // Apenas subscriptions anônimas
+                },
+              })
+
+              if (anonymousSubscriptions.length > 0) {
+                console.log(`[OAUTH] Vinculando ${anonymousSubscriptions.length} subscription(s) anônima(s) ao novo usuário OAuth ${dbUser.id} (${user.email})`)
+                
+                // Atualizar todas as subscriptions anônimas para vincular ao novo usuário
+                await prisma.userAssetSubscription.updateMany({
+                  where: {
+                    email: normalizedEmail,
+                    userId: null,
+                  },
+                  data: {
+                    userId: dbUser.id,
+                    email: null, // Remover email já que agora tem userId
+                    unsubscribeToken: null, // Remover token já que agora tem userId
+                  },
+                })
+
+                console.log(`[OAUTH] ✅ ${anonymousSubscriptions.length} subscription(s) vinculada(s) com sucesso`)
+              }
+            } catch (error) {
+              // Não falhar o login se houver erro ao vincular subscriptions
+              console.error('[OAUTH] Erro ao vincular subscriptions anônimas:', error)
+            }
+            
             // Novo usuário OAuth detectado - será processado pelo OAuthNewUserHandler na dashboard
           }
 

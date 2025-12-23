@@ -12,6 +12,7 @@ export default function robots(): MetadataRoute.Robots {
           '/acao/',
           '/compara-acoes/',
           '/ranking',
+          '/acompanhar-acoes-bolsa-de-valores',
           '/comparador',
           '/analise-setorial',
           '/metodologia',

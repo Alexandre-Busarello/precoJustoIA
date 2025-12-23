@@ -77,6 +77,9 @@ model User {
   trialStartedAt DateTime? @map("trial_started_at") // Data de início do trial
   trialEndsAt    DateTime? @map("trial_ends_at") // Data de término do trial
 
+  // Preferências de relatórios
+  reportPreferences Json? @map("report_preferences") // Preferências de tipos de relatórios a receber
+
   // Metadata
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -89,6 +92,7 @@ model User {
   ticketMessages          TicketMessage[]
   assignedTickets         SupportTicket[]              @relation("AssignedTickets")
   aiReportFeedbacks       AIReportFeedback[]
+  customReports           AIReport[]              @relation("CustomReports")
   backtestConfigs         BacktestConfig[]
   assetSubscriptions      UserAssetSubscription[]
   userEvents              UserEvent[]
@@ -100,6 +104,7 @@ model User {
   notificationModalViews  NotificationModalView[]
   quizResponses           QuizResponse[]
   debts                   Debt[]
+  userAssetMonitors       UserAssetMonitor[]
 
   @@map("users")
 }
@@ -215,6 +220,9 @@ model Company {
   youtubeLastCheckedAt DateTime?                @map("youtube_last_checked_at")
   yahooLastUpdatedAt   DateTime?                @map("yahoo_last_updated_at")
   technicalAnalyses    AssetTechnicalAnalysis[]
+  aiReportsQueue       AIReportsQueue[]
+  userAssetMonitors    UserAssetMonitor[]
+  flags                CompanyFlag[]
 
   @@index([sector])
   @@index([industry])
@@ -980,6 +988,7 @@ model AIReport {
   id                String       @id @default(cuid())
   companyId         Int          @map("company_id")
   snapshotId        String?      @map("snapshot_id") // FK para o snapshot associado
+  userId            String?      @map("user_id") // Usuário que criou o monitoramento customizado (para CUSTOM_TRIGGER)
   content           String // Conteúdo markdown do relatório
   strategicAnalyses Json? // Análises estratégicas aplicadas
   metadata          Json? // Metadados adicionais (preço na época, etc)
@@ -997,13 +1006,17 @@ model AIReport {
 
   company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   snapshot  AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id], onDelete: SetNull)
+  user      User?              @relation("CustomReports", fields: [userId], references: [id], onDelete: SetNull)
   feedbacks AIReportFeedback[]
+  queueEntries AIReportsQueue[] @relation("QueueReports")
+  flags     CompanyFlag[] @relation("FlagReports")
 
   @@index([companyId, isActive])
   @@index([companyId, createdAt])
   @@index([companyId, status])
   @@index([companyId, type])
   @@index([snapshotId])
+  @@index([userId])
   @@index([createdAt])
   @@map("ai_reports")
 }
@@ -1041,6 +1054,8 @@ enum ReportStatus {
 enum AIReportType {
   MONTHLY_OVERVIEW
   FUNDAMENTAL_CHANGE
+  PRICE_VARIATION
+  CUSTOM_TRIGGER
 }
 
 // ===== MODELOS DE BACKTESTING =====
@@ -1212,6 +1227,7 @@ model AssetSnapshot {
   snapshotData     Json     @map("snapshot_data") // Dados completos do ativo
   overallScore     Decimal  @map("overall_score") @db.Decimal(5, 2)
   scoreComposition Json?    @map("score_composition") // Composição detalhada da nota
+  penaltyInfo      Json?    @map("penalty_info") // Informação sobre penalização aplicada por flag
   isLatest         Boolean  @default(true) @map("is_latest") // Se é o snapshot mais recente
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
@@ -1340,6 +1356,8 @@ enum EmailType {
   FREE_USER_ASSET_CHANGE // Email de mudança de ativo para usuários gratuitos (conversão)
   NOTIFICATION // Email de notificação da plataforma
   SUBSCRIPTION_CONFIRMATION // Email de confirmação de inscrição (LGPD)
+  PRICE_VARIATION_REPORT // Relatório de variação de preço
+  CUSTOM_TRIGGER_REPORT // Relatório de gatilho customizado
 }
 
 enum EmailStatus {
@@ -2034,4 +2052,105 @@ model IndexRebalanceLog {
   @@index([indexId, action])
   @@index([date])
   @@map("index_rebalance_logs")
+}
+
+// ===== SISTEMA DE RELATÓRIOS DE IA EXPANDIDO =====
+
+// Fila de relatórios pendentes de geração
+model AIReportsQueue {
+  id            String          @id @default(cuid())
+  companyId     Int             @map("company_id")
+  reportType    AIReportType    @map("report_type")
+  triggerReason Json            @map("trigger_reason") // Detalhes do gatilho (variação %, filtros, etc)
+  status        QueueStatus     @default(PENDING)
+  priority      Int             @default(0) // 0=normal, 1=high, 2=urgent
+  createdAt     DateTime        @default(now()) @map("created_at")
+  processedAt   DateTime?       @map("processed_at")
+  reportId      String?         @map("report_id") // FK para AIReport quando completado
+  errorMessage  String?         @map("error_message") // Mensagem de erro se falhou
+
+  company Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  report  AIReport?            @relation("QueueReports", fields: [reportId], references: [id], onDelete: SetNull)
+  processingSteps AIReportsQueueProcessing[]
+
+  @@index([status, createdAt])
+  @@index([status, priority, createdAt])
+  @@index([companyId, status])
+  @@index([reportType, status])
+  @@index([createdAt])
+  @@map("ai_reports_queue")
+}
+
+// Checkpointing para processamento fragmentado
+model AIReportsQueueProcessing {
+  id          String          @id @default(cuid())
+  queueId     String          @map("queue_id")
+  step        ProcessingStep
+  stepData    Json            @map("step_data") // Output completo da etapa
+  completedAt DateTime        @default(now()) @map("completed_at")
+
+  queue AIReportsQueue       @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  @@unique([queueId, step])
+  @@index([queueId])
+  @@index([completedAt])
+  @@map("ai_reports_queue_processing")
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ProcessingStep {
+  RESEARCH
+  ANALYSIS
+  COMPILATION
+}
+
+// Gatilhos customizados do usuário
+model UserAssetMonitor {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  companyId     Int       @map("company_id")
+  triggerConfig Json      @map("trigger_config") // Filtros: P/L, P/VP, Score, Preço, etc
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastTriggeredAt DateTime? @map("last_triggered_at") // Última vez que o gatilho foi disparado
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([companyId, isActive])
+  @@index([isActive, lastTriggeredAt])
+  @@index([createdAt])
+  @@map("user_asset_monitor")
+}
+
+// Flags de perda de fundamento
+model CompanyFlag {
+  id        String    @id @default(cuid())
+  companyId Int       @map("company_id")
+  reportId  String    @map("report_id") // FK para AIReport que gerou o flag
+  flagType  FlagType  @map("flag_type")
+  reason    String    @db.Text // Explicação do flag
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  report  AIReport @relation("FlagReports", fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, isActive])
+  @@index([reportId])
+  @@index([flagType, isActive])
+  @@index([createdAt])
+  @@map("company_flags")
+}
+
+enum FlagType {
+  FUNDAMENTAL_LOSS
 }

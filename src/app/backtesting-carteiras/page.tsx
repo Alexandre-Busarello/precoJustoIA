@@ -117,7 +117,7 @@ export default async function BacktestingCarteirasPage() {
             <div className="flex flex-col sm:flex-row gap-6 justify-center mb-12">
               <Button size="lg" className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-lg px-8 py-4 shadow-xl hover:shadow-2xl transition-all" asChild>
                 <CTALinkWithPixel 
-                  href="/register?returnUrl=/backtesting-carteiras"
+                  href="/register?returnUrl=/backtest"
                   className="flex items-center gap-3"
                 >
                   <TrendingUp className="w-5 h-5" />
@@ -438,7 +438,7 @@ export default async function BacktestingCarteirasPage() {
           <div className="flex flex-col sm:flex-row gap-6 justify-center mb-8">
             <Button size="lg" className="bg-white text-emerald-600 hover:bg-gray-100 text-lg px-8 py-4 font-bold shadow-xl" asChild>
               <CTALinkWithPixel 
-                href="/register?returnUrl=/backtesting-carteiras"
+                href="/register?returnUrl=/backtest"
                 className="flex items-center gap-3"
               >
                 <TrendingUp className="w-5 h-5" />

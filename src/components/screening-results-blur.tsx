@@ -2,6 +2,9 @@
 
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { useSession } from "next-auth/react"
+import { useEmailVerified } from "@/hooks/use-user-data"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
+import { Mail, Crown } from "lucide-react"
 
 interface RankingResult {
   ticker: string
@@ -29,8 +32,10 @@ interface ScreeningResultsBlurProps {
 }
 
 export function ScreeningResultsBlur({ results, totalCount, isPremium }: ScreeningResultsBlurProps) {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const { trackEngagement } = useEngagementPixel()
+  const { data: emailVerifiedData, isLoading: isLoadingEmail } = useEmailVerified()
+  const { subscriptionTier, trialStartedAt, trialEndsAt, isTrialActive } = usePremiumStatus()
   const top3 = results.slice(0, 3)
   const blurred = results.slice(3, 20) // Posições 4-20 com blur (se existirem dados reais)
   
@@ -38,6 +43,22 @@ export function ScreeningResultsBlur({ results, totalCount, isPremium }: Screeni
   // Isso é um ponto de conversão - sempre mostrar que há mais resultados disponíveis
   const shouldShowBlur = !isPremium
 
+  // Verificar se usuário está logado mas não é Premium
+  const isLoggedIn = status === 'authenticated' && !!session
+  const isFreeUser = isLoggedIn && subscriptionTier === 'FREE' && !isTrialActive
+  
+  // Verificar se email está verificado
+  const emailVerified = emailVerifiedData?.verified ?? false
+  
+  // Verificar se trial já expirou (teve trial mas não está mais ativo)
+  // Trial expirou se: teve trial (trialStartedAt existe) mas não está ativo e trialEndsAt já passou
+  const now = new Date()
+  const trialExpired = isLoggedIn && 
+                       trialStartedAt && 
+                       !isTrialActive && 
+                       trialEndsAt && 
+                       new Date(trialEndsAt) < now
+  
   // Handler para disparar pixel quando usuário deslogado clica em CTA
   const handleCTAClick = () => {
     if (!session) {
@@ -309,17 +330,75 @@ export function ScreeningResultsBlur({ results, totalCount, isPremium }: Screeni
             <h3 className="text-xl font-bold mb-2">
               A IA encontrou mais oportunidades nesta estratégia
             </h3>
-            <p className="text-muted-foreground mb-4 px-4">
-              Desbloqueie a lista completa e veja todas as empresas que passaram nos filtros
-            </p>
-            <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-              <Link 
-                href={`/register${typeof window !== 'undefined' ? `?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}` : ''}`} 
-                onClick={handleCTAClick}
-              >
-                Desbloquear Lista Completa
-              </Link>
-            </Button>
+            
+            {/* Mensagem e CTA baseado no status do usuário */}
+            {isLoggedIn && isFreeUser && !isLoadingEmail ? (
+              // Usuário logado mas não Premium
+              emailVerified === false ? (
+                // Email não verificado - pedir para verificar
+                <>
+                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-3">
+                      <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                          Verifique seu email para ativar seu trial de 1 dia
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                          Seu período de trial Premium só será ativado após verificar seu email. Verifique agora e desbloqueie a lista completa!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                    <Link href="/verificar-email">
+                      Verificar Email e Ativar Trial
+                    </Link>
+                  </Button>
+                </>
+              ) : trialExpired ? (
+                // Trial expirado - CTA para checkout
+                <>
+                  <p className="text-muted-foreground mb-4 px-4">
+                    Seu trial expirou. Assine Premium para desbloquear a lista completa e todas as funcionalidades avançadas.
+                  </p>
+                  <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                    <Link href="/checkout">
+                      <Crown className="w-4 h-4 mr-2" />
+                      Assinar Premium
+                    </Link>
+                  </Button>
+                </>
+              ) : (
+                // Email verificado mas não tem trial ativo (nunca teve ou expirou) - checkout
+                <>
+                  <p className="text-muted-foreground mb-4 px-4">
+                    Desbloqueie a lista completa e veja todas as empresas que passaram nos filtros
+                  </p>
+                  <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                    <Link href="/checkout">
+                      <Crown className="w-4 h-4 mr-2" />
+                      Assinar Premium
+                    </Link>
+                  </Button>
+                </>
+              )
+            ) : (
+              // Usuário não logado - CTA para registro
+              <>
+                <p className="text-muted-foreground mb-4 px-4">
+                  Desbloqueie a lista completa e veja todas as empresas que passaram nos filtros
+                </p>
+                <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                  <Link 
+                    href={`/register${typeof window !== 'undefined' ? `?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}` : ''}`} 
+                    onClick={handleCTAClick}
+                  >
+                    Desbloquear Lista Completa
+                  </Link>
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Cards restantes com blur */}

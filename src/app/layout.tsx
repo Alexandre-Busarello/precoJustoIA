@@ -15,6 +15,9 @@ import { TrackingProvider } from "@/components/tracking-provider";
 import { OnboardingProvider } from "@/components/onboarding-provider";
 import { ExitIntentProvider } from "@/components/exit-intent-provider";
 import { CacheCleanupOnLogin } from "@/components/cache-cleanup-on-login";
+import { GoogleAdsConversionPixel } from "@/components/google-ads-conversion-pixel";
+import { OAuthNewUserHandler } from "@/components/oauth-new-user-handler";
+import { Suspense } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -158,6 +161,10 @@ export default function RootLayout({
                 <OnboardingProvider />
                 <ExitIntentProvider />
                 <ScrollToTop />
+                <Suspense fallback={null}>
+                  <OAuthNewUserHandler />
+                  <GoogleAdsConversionPixel />
+                </Suspense>
                 <div className="min-h-screen bg-background">
                   <Header />
                   <main>

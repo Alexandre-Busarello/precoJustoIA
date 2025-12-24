@@ -25,6 +25,8 @@ function RegisterForm() {
   
   // Obter callbackUrl da URL ou usar dashboard como padrão
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  // Obter returnUrl da URL (para redirecionar após cadastro/verificação)
+  const returnUrl = searchParams.get('returnUrl') || null
   // Obter acquisition da URL para rastrear origem do cadastro
   const acquisition = searchParams.get('acquisition') || undefined
   // 🔒 SEGURANÇA: Removido isEarlyAdopter da URL - não deve ser controlado pelo cliente
@@ -34,6 +36,11 @@ function RegisterForm() {
     e.preventDefault()
     setIsLoading(true)
     setError("")
+
+    // Armazenar returnUrl em cookie para uso após verificação de email
+    if (returnUrl) {
+      document.cookie = `returnUrl=${encodeURIComponent(returnUrl)}; path=/; max-age=3600; SameSite=Lax`
+    }
 
     // 🍯 HONEYPOT: Verificação frontend (opcional, mas economiza requisição)
     if (website) {
@@ -80,7 +87,11 @@ function RegisterForm() {
           // Redirecionar para página de verificação de email (usuário já está logado)
           // Adicionar ?new_user=true para disparar pixel de conversão imediatamente
           // (antes da validação do email para evitar quebra de sessão)
-          router.push('/verificar-email?new_user=true')
+          // Preservar returnUrl se fornecido
+          const verifyEmailUrl = returnUrl 
+            ? `/verificar-email?new_user=true&returnUrl=${encodeURIComponent(returnUrl)}`
+            : '/verificar-email?new_user=true'
+          router.push(verifyEmailUrl)
         }
       } else {
         const data = await response.json()
@@ -95,7 +106,13 @@ function RegisterForm() {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
-    await signIn("google", { callbackUrl })
+    // Armazenar returnUrl em cookie para uso após OAuth
+    if (returnUrl) {
+      document.cookie = `returnUrl=${encodeURIComponent(returnUrl)}; path=/; max-age=3600; SameSite=Lax`
+    }
+    // Para OAuth, usar returnUrl se fornecido, senão usar callbackUrl padrão
+    const oauthCallbackUrl = returnUrl || callbackUrl
+    await signIn("google", { callbackUrl: oauthCallbackUrl })
   }
 
   return (

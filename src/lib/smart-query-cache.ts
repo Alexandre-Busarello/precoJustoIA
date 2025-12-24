@@ -153,7 +153,6 @@ const TABLE_DEPENDENCIES: Record<string, string[]> = {
   
   // Asset Monitoring
   'user_asset_subscriptions': ['users', 'companies', 'user_asset_subscriptions'],
-  'asset_snapshots': ['companies', 'asset_snapshots'],
   'backtest_assets': ['backtest_configs', 'backtest_assets'],
   'backtest_transactions': ['backtest_configs', 'backtest_transactions'],
   

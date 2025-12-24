@@ -135,7 +135,7 @@ export async function PATCH(
     // Atualizar gatilho
     const updateData: any = {};
     if (triggerConfig !== undefined) {
-      updateData.triggerConfig = triggerConfig as TriggerConfig;
+      updateData.triggerConfig = triggerConfig as any;
     }
     if (isActive !== undefined) {
       updateData.isActive = isActive;

@@ -370,7 +370,6 @@ export class EmailQueueService {
           reportUrl: emailData.reportUrl,
           reportSummary: emailData.reportSummary || '',
           isPremium: emailData.isPremium ?? true, // Default true para manter compatibilidade
-          hasFlag: (emailData as any).hasFlag ?? false, // Indica se há flag ativo
         })
         break
 

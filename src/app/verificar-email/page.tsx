@@ -22,6 +22,7 @@ function VerifyEmailContent() {
 
   const success = searchParams.get('success')
   const error = searchParams.get('error')
+  const returnUrl = searchParams.get('returnUrl')
 
   useEffect(() => {
     // Se verificação foi bem-sucedida, invalidar cache de email verification
@@ -36,11 +37,13 @@ function VerifyEmailContent() {
     // chegou em /verificar-email?new_user=true após o cadastro (evita duplicação)
     if (success === 'true' && status === 'authenticated') {
       const timer = setTimeout(() => {
-        router.push('/dashboard')
+        // Redirecionar para returnUrl se fornecido, senão para dashboard
+        const redirectUrl = returnUrl || '/dashboard'
+        router.push(redirectUrl)
       }, 3000)
       return () => clearTimeout(timer)
     }
-  }, [success, status, router])
+  }, [success, status, router, returnUrl])
 
   const handleResend = async () => {
     setIsResending(true)
@@ -182,9 +185,9 @@ function VerifyEmailContent() {
               <p className="text-sm text-gray-600 mb-4">
                 Seu período de trial de 1 dia foi iniciado automaticamente!
               </p>
-              <Link href="/dashboard">
+              <Link href={returnUrl || '/dashboard'}>
                 <Button className="w-full">
-                  Ir para Dashboard
+                  {returnUrl ? 'Continuar' : 'Ir para Dashboard'}
                 </Button>
               </Link>
             </div>

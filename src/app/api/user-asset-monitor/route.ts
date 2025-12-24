@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
       const updated = await prisma.userAssetMonitor.update({
         where: { id: existingMonitor.id },
         data: {
-          triggerConfig: triggerConfig as TriggerConfig,
+          triggerConfig: triggerConfig as any,
         },
       });
 
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.id,
         companyId,
-        triggerConfig: triggerConfig as TriggerConfig,
+        triggerConfig: triggerConfig as any,
         isActive: true,
       },
       include: {

@@ -90,7 +90,7 @@ async function main() {
       if (existingMonitor) {
         monitor = await prisma.userAssetMonitor.update({
           where: { id: existingMonitor.id },
-          data: { triggerConfig },
+          data: { triggerConfig: triggerConfig as any },
         });
         console.log(`✅ Gatilho atualizado: ${monitor.id}`);
       } else {
@@ -98,7 +98,7 @@ async function main() {
           data: {
             userId: testUser.id,
             companyId: company.id,
-            triggerConfig,
+            triggerConfig: triggerConfig as any,
             isActive: true,
           },
         });
@@ -138,7 +138,12 @@ async function main() {
       console.log(`🔔 Avaliando Gatilho: ${monitor.id}`);
       console.log('='.repeat(60));
 
-      const evaluation = await evaluateTrigger(monitor);
+      const evaluation = await evaluateTrigger({
+        id: monitor.id,
+        companyId: monitor.companyId,
+        triggerConfig: monitor.triggerConfig as TriggerConfig,
+        company: monitor.company,
+      });
 
       if (!evaluation) {
         console.log('✅ Gatilho não disparado (condições não atendidas)');

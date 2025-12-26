@@ -2962,6 +2962,29 @@ export function generateNotificationEmailTemplate(
   const baseUrl = getEmailBaseUrl()
   const logoUrl = getEmailLogoUrl()
   
+  // Converter URLs SVG para formato compatível com email usando wsrv.nl
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null
+    
+    // Se for uma URL da brapi.dev (SVG), usar wsrv.nl para converter para PNG
+    if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
+      // Extrair ticker da URL ou do título se possível
+      const tickerMatch = url.match(/icons\/([A-Z0-9]+)\.svg/i) || title.match(/([A-Z0-9]{4,5})/i)
+      const ticker = tickerMatch ? tickerMatch[1].toUpperCase() : 'LOGO'
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/667eea/ffffff?text=${ticker}`
+    }
+    
+    // Se for URL relativa, adicionar base URL
+    if (url.startsWith('/')) {
+      return baseUrl + url
+    }
+    
+    // Se já for URL absoluta e não for SVG problemático, retornar como está
+    return url
+  }
+  
+  const emailCompatibleIllustrationUrl = getEmailCompatibleImageUrl(illustrationUrl)
+  
   return {
     subject: title,
     html: `
@@ -3238,9 +3261,9 @@ export function generateNotificationEmailTemplate(
               
               <h2 class="notification-title">${convertMarkdownToHtml(title)}</h2>
               
-              ${illustrationUrl ? `
+              ${emailCompatibleIllustrationUrl ? `
                 <div class="illustration-container">
-                  <img src="${illustrationUrl}" alt="${title}" class="illustration" />
+                  <img src="${emailCompatibleIllustrationUrl}" alt="${stripMarkdown(title) || 'Notificação'}" class="illustration" />
                 </div>
               ` : ''}
               

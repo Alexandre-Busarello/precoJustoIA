@@ -118,7 +118,83 @@ export interface TriggerEvaluation {
 }
 
 /**
+ * Busca monitores ativos separados por prioridade (Premium primeiro)
+ */
+export async function getMonitorsByPriority(): Promise<{
+  premium: Array<{
+    id: string;
+    companyId: number;
+    triggerConfig: TriggerConfig;
+    company: { ticker: string };
+    isAlertActive: boolean;
+  }>;
+  free: Array<{
+    id: string;
+    companyId: number;
+    triggerConfig: TriggerConfig;
+    company: { ticker: string };
+    isAlertActive: boolean;
+  }>;
+}> {
+  const { isUserPremium } = await import('./user-service');
+
+  const monitors = await prisma.userAssetMonitor.findMany({
+    where: {
+      isActive: true,
+    },
+    select: {
+      id: true,
+      companyId: true,
+      triggerConfig: true,
+      isAlertActive: true,
+      company: {
+        select: {
+          id: true,
+          ticker: true,
+        },
+      },
+      user: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  const premium: typeof monitors = [];
+  const free: typeof monitors = [];
+
+  // Separar por status Premium
+  for (const monitor of monitors) {
+    const userIsPremium = await isUserPremium(monitor.user.id);
+    if (userIsPremium) {
+      premium.push(monitor);
+    } else {
+      free.push(monitor);
+    }
+  }
+
+  return {
+    premium: premium.map(m => ({
+      id: m.id,
+      companyId: m.companyId,
+      triggerConfig: m.triggerConfig as TriggerConfig,
+      company: m.company,
+      isAlertActive: m.isAlertActive ?? false,
+    })),
+    free: free.map(m => ({
+      id: m.id,
+      companyId: m.companyId,
+      triggerConfig: m.triggerConfig as TriggerConfig,
+      company: m.company,
+      isAlertActive: m.isAlertActive ?? false,
+    })),
+  };
+}
+
+/**
  * Busca todos os monitoramentos ativos e avalia se devem ser disparados
+ * @deprecated Use getMonitorsByPriority() para processamento prioritário
  */
 export async function checkCustomTriggers(): Promise<TriggerEvaluation[]> {
   const monitors = await prisma.userAssetMonitor.findMany({
@@ -426,10 +502,13 @@ export async function createQueueEntry(
     },
   });
 
-  // Atualizar lastTriggeredAt do monitoramento
+  // Atualizar lastTriggeredAt e marcar isAlertActive = true do monitoramento
   await prisma.userAssetMonitor.update({
     where: { id: monitorId },
-    data: { lastTriggeredAt: new Date() },
+    data: {
+      lastTriggeredAt: new Date(),
+      isAlertActive: true,
+    },
   });
 
   return queueEntry.id;

@@ -91,7 +91,8 @@ async function main() {
       company.ticker,
       company.name,
       variation,
-      research
+      research,
+      company.id // Passar companyId para verificar dividendos
     );
 
     console.log('✅ Análise concluída!\n');
@@ -113,7 +114,7 @@ async function main() {
       companyName: company.name,
       variation,
       researchData: research,
-    });
+    }, company.id); // Passar companyId para verificar dividendos
 
     console.log('✅ Relatório gerado!\n');
     console.log('📄 Relatório Completo:');

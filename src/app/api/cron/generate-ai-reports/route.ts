@@ -202,7 +202,8 @@ async function processStep(
             currentPrice: entry.triggerReason.currentPrice,
             previousPrice: entry.triggerReason.previousPrice,
           },
-          researchCheckpoint.data.research
+          researchCheckpoint.data.research,
+          entry.companyId // Passar companyId para verificar dividendos
         );
         stepData = { analysis };
       } else if (entry.reportType === 'CUSTOM_TRIGGER') {
@@ -231,7 +232,7 @@ async function processStep(
             previousPrice: entry.triggerReason.previousPrice,
           },
           researchData: researchCheckpoint.data.research,
-        });
+        }, entry.companyId); // Passar companyId para verificar dividendos
 
         stepData = {
           report,
@@ -458,6 +459,19 @@ async function processFinalReport(
   }
 
   console.log(`📬 ${entry.id}: ${notificationsCreated} notificação(ões) criada(s), ${emailsQueued} email(s) adicionado(s) à fila`);
+
+  // Para CUSTOM_TRIGGER, confirmar que isAlertActive = true após envio de emails
+  if (entry.reportType === 'CUSTOM_TRIGGER' && entry.triggerReason?.monitorId) {
+    try {
+      await prisma.userAssetMonitor.update({
+        where: { id: entry.triggerReason.monitorId },
+        data: { isAlertActive: true },
+      });
+      console.log(`✅ ${entry.id}: Confirmado isAlertActive = true para monitor ${entry.triggerReason.monitorId}`);
+    } catch (error) {
+      console.warn(`⚠️ Erro ao confirmar isAlertActive para monitor ${entry.triggerReason.monitorId}:`, error);
+    }
+  }
 
   // Finalizar fila
   await completeQueue(entry.id, report.id);

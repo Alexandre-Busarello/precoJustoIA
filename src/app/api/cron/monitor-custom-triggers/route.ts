@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { checkCustomTriggers, createQueueEntry } from '@/lib/custom-trigger-service';
+import { getMonitorsByPriority, evaluateTrigger, createQueueEntry } from '@/lib/custom-trigger-service';
 
 export const maxDuration = 60;
 
@@ -29,39 +29,61 @@ export async function GET(request: NextRequest) {
     // 2. Configurações
     const BATCH_SIZE = parseInt(process.env.CUSTOM_TRIGGER_BATCH_SIZE || '30');
     const MAX_EXECUTION_TIME = 50 * 1000; // 50 segundos em ms
-    const MIN_HOURS_BETWEEN_TRIGGERS = 24; // Evitar disparos muito frequentes
 
-    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}, MIN_HOURS_BETWEEN_TRIGGERS=${MIN_HOURS_BETWEEN_TRIGGERS}`);
+    console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}`);
 
-    // 3. Buscar gatilhos customizados ativos
-    const evaluations = await checkCustomTriggers();
-
-    console.log(`📦 Encontrados ${evaluations.length} gatilhos que podem ter sido disparados`);
+    // 3. Buscar monitores separados por prioridade (Premium primeiro)
+    const { premium, free } = await getMonitorsByPriority();
+    console.log(`📦 Encontrados ${premium.length} monitores Premium e ${free.length} monitores Gratuitos`);
 
     let processedCount = 0;
     let queueEntriesCreated = 0;
+    let alertsActivated = 0;
+    let alertsDeactivated = 0;
     const errors: string[] = [];
 
-    // Processar avaliações
-    for (const evaluation of evaluations.slice(0, BATCH_SIZE)) {
+    // Função auxiliar para processar um monitor
+    const processMonitor = async (monitor: typeof premium[0]) => {
       try {
-        if (!evaluation.triggered) {
-          continue;
-        }
-
-        // Buscar monitoramento para verificar lastTriggeredAt
-        const monitor = await prisma.userAssetMonitor.findUnique({
-          where: { id: evaluation.monitorId },
-          select: { lastTriggeredAt: true },
+        // Avaliar gatilho
+        const evaluation = await evaluateTrigger({
+          id: monitor.id,
+          companyId: monitor.companyId,
+          triggerConfig: monitor.triggerConfig,
+          company: monitor.company,
         });
 
-        // Verificar se já foi disparado recentemente
-        if (monitor?.lastTriggeredAt) {
-          const hoursSinceTrigger = (Date.now() - monitor.lastTriggeredAt.getTime()) / (1000 * 60 * 60);
-          if (hoursSinceTrigger < MIN_HOURS_BETWEEN_TRIGGERS) {
-            console.log(`⏭️ ${evaluation.ticker}: Gatilho disparado há ${hoursSinceTrigger.toFixed(1)}h, aguardando ${MIN_HOURS_BETWEEN_TRIGGERS}h`);
-            continue;
+        if (!evaluation) {
+          // Gatilho não disparou - verificar se precisa desativar alerta
+          if (monitor.isAlertActive) {
+            await prisma.userAssetMonitor.update({
+              where: { id: monitor.id },
+              data: { isAlertActive: false },
+            });
+            alertsDeactivated++;
+            console.log(`🔄 ${monitor.company.ticker}: Gatilho não disparado, desativando alerta`);
           }
+          return;
+        }
+
+        // Gatilho disparou
+        if (!evaluation.triggered) {
+          // Se não disparou mas tinha alerta ativo, desativar
+          if (monitor.isAlertActive) {
+            await prisma.userAssetMonitor.update({
+              where: { id: monitor.id },
+              data: { isAlertActive: false },
+            });
+            alertsDeactivated++;
+            console.log(`🔄 ${monitor.company.ticker}: Condições não atendidas, desativando alerta`);
+          }
+          return;
+        }
+
+        // Gatilho disparou - verificar se já está ativo
+        if (monitor.isAlertActive) {
+          console.log(`⏭️ ${evaluation.ticker}: Alerta já está ativo, evitando spam`);
+          return;
         }
 
         // Verificar se já existe entrada na fila recente
@@ -79,14 +101,42 @@ export async function GET(request: NextRequest) {
         });
 
         if (!existingQueue) {
-          // Criar entrada na fila
+          // Criar entrada na fila e marcar alerta como ativo
           await createQueueEntry(evaluation.monitorId, evaluation);
           queueEntriesCreated++;
+          alertsActivated++;
           console.log(`✅ ${evaluation.ticker}: Gatilho customizado disparado - ${evaluation.reasons.join(', ')}`);
         } else {
           console.log(`⏭️ ${evaluation.ticker}: Já existe entrada na fila recente, pulando`);
         }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        errors.push(`${monitor.company.ticker}: ${errorMsg}`);
+        console.error(`❌ Erro ao processar gatilho ${monitor.id}:`, error);
+      }
+    };
 
+    // Processar Premium primeiro
+    console.log(`👑 Processando ${premium.length} monitores Premium...`);
+    for (const monitor of premium.slice(0, BATCH_SIZE)) {
+      await processMonitor(monitor);
+      processedCount++;
+
+      // Verificar timeout
+      if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+        console.log(`⏱️ Tempo limite atingido, interrompendo processamento`);
+        break;
+      }
+    }
+
+    // Processar Gratuitos depois (se ainda houver tempo)
+    if (Date.now() - startTime < MAX_EXECUTION_TIME) {
+      const remainingTime = MAX_EXECUTION_TIME - (Date.now() - startTime);
+      const remainingBatch = Math.min(free.length, Math.floor(remainingTime / 1000)); // Estimativa conservadora
+      
+      console.log(`🆓 Processando ${Math.min(remainingBatch, free.length)} monitores Gratuitos...`);
+      for (const monitor of free.slice(0, remainingBatch)) {
+        await processMonitor(monitor);
         processedCount++;
 
         // Verificar timeout
@@ -94,20 +144,21 @@ export async function GET(request: NextRequest) {
           console.log(`⏱️ Tempo limite atingido, interrompendo processamento`);
           break;
         }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        errors.push(`${evaluation.ticker}: ${errorMsg}`);
-        console.error(`❌ Erro ao processar gatilho ${evaluation.monitorId}:`, error);
       }
+    } else {
+      console.log(`⏱️ Tempo limite atingido após processar Premium, pulando Gratuitos`);
     }
 
     const duration = Date.now() - startTime;
 
     return NextResponse.json({
       success: true,
-      evaluated: evaluations.length,
+      premiumProcessed: premium.length,
+      freeProcessed: free.length,
       processed: processedCount,
       queueEntriesCreated,
+      alertsActivated,
+      alertsDeactivated,
       errors: errors.length > 0 ? errors : undefined,
       duration: `${duration}ms`,
     });

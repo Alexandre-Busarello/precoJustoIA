@@ -92,7 +92,7 @@ model User {
   ticketMessages          TicketMessage[]
   assignedTickets         SupportTicket[]              @relation("AssignedTickets")
   aiReportFeedbacks       AIReportFeedback[]
-  customReports           AIReport[]              @relation("CustomReports")
+  customReports           AIReport[]                   @relation("CustomReports")
   backtestConfigs         BacktestConfig[]
   assetSubscriptions      UserAssetSubscription[]
   userEvents              UserEvent[]
@@ -1004,12 +1004,12 @@ model AIReport {
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
-  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  snapshot  AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id], onDelete: SetNull)
-  user      User?              @relation("CustomReports", fields: [userId], references: [id], onDelete: SetNull)
-  feedbacks AIReportFeedback[]
-  queueEntries AIReportsQueue[] @relation("QueueReports")
-  flags     CompanyFlag[] @relation("FlagReports")
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  snapshot     AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id], onDelete: SetNull)
+  user         User?              @relation("CustomReports", fields: [userId], references: [id], onDelete: SetNull)
+  feedbacks    AIReportFeedback[]
+  queueEntries AIReportsQueue[]   @relation("QueueReports")
+  flags        CompanyFlag[]      @relation("FlagReports")
 
   @@index([companyId, isActive])
   @@index([companyId, createdAt])
@@ -2058,19 +2058,19 @@ model IndexRebalanceLog {
 
 // Fila de relatórios pendentes de geração
 model AIReportsQueue {
-  id            String          @id @default(cuid())
-  companyId     Int             @map("company_id")
-  reportType    AIReportType    @map("report_type")
-  triggerReason Json            @map("trigger_reason") // Detalhes do gatilho (variação %, filtros, etc)
-  status        QueueStatus     @default(PENDING)
-  priority      Int             @default(0) // 0=normal, 1=high, 2=urgent
-  createdAt     DateTime        @default(now()) @map("created_at")
-  processedAt   DateTime?       @map("processed_at")
-  reportId      String?         @map("report_id") // FK para AIReport quando completado
-  errorMessage  String?         @map("error_message") // Mensagem de erro se falhou
+  id            String       @id @default(cuid())
+  companyId     Int          @map("company_id")
+  reportType    AIReportType @map("report_type")
+  triggerReason Json         @map("trigger_reason") // Detalhes do gatilho (variação %, filtros, etc)
+  status        QueueStatus  @default(PENDING)
+  priority      Int          @default(0) // 0=normal, 1=high, 2=urgent
+  createdAt     DateTime     @default(now()) @map("created_at")
+  processedAt   DateTime?    @map("processed_at")
+  reportId      String?      @map("report_id") // FK para AIReport quando completado
+  errorMessage  String?      @map("error_message") // Mensagem de erro se falhou
 
-  company Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  report  AIReport?            @relation("QueueReports", fields: [reportId], references: [id], onDelete: SetNull)
+  company         Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  report          AIReport?                  @relation("QueueReports", fields: [reportId], references: [id], onDelete: SetNull)
   processingSteps AIReportsQueueProcessing[]
 
   @@index([status, createdAt])
@@ -2083,13 +2083,13 @@ model AIReportsQueue {
 
 // Checkpointing para processamento fragmentado
 model AIReportsQueueProcessing {
-  id          String          @id @default(cuid())
-  queueId     String          @map("queue_id")
+  id          String         @id @default(cuid())
+  queueId     String         @map("queue_id")
   step        ProcessingStep
-  stepData    Json            @map("step_data") // Output completo da etapa
-  completedAt DateTime        @default(now()) @map("completed_at")
+  stepData    Json           @map("step_data") // Output completo da etapa
+  completedAt DateTime       @default(now()) @map("completed_at")
 
-  queue AIReportsQueue       @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  queue AIReportsQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
 
   @@unique([queueId, step])
   @@index([queueId])
@@ -2112,13 +2112,14 @@ enum ProcessingStep {
 
 // Gatilhos customizados do usuário
 model UserAssetMonitor {
-  id            String    @id @default(cuid())
-  userId        String    @map("user_id")
-  companyId     Int       @map("company_id")
-  triggerConfig Json      @map("trigger_config") // Filtros: P/L, P/VP, Score, Preço, etc
-  isActive      Boolean   @default(true) @map("is_active")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  companyId       Int       @map("company_id")
+  triggerConfig   Json      @map("trigger_config") // Filtros: P/L, P/VP, Score, Preço, etc
+  isActive        Boolean   @default(true) @map("is_active")
+  isAlertActive   Boolean   @default(false) @map("is_alert_active") // Flag para evitar spam: true quando gatilho disparado e email enviado
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
   lastTriggeredAt DateTime? @map("last_triggered_at") // Última vez que o gatilho foi disparado
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -2127,21 +2128,22 @@ model UserAssetMonitor {
   @@index([userId, isActive])
   @@index([companyId, isActive])
   @@index([isActive, lastTriggeredAt])
+  @@index([isActive, isAlertActive])
   @@index([createdAt])
   @@map("user_asset_monitor")
 }
 
 // Flags de perda de fundamento
 model CompanyFlag {
-  id        String    @id @default(cuid())
-  companyId Int       @map("company_id")
-  reportId  String    @map("report_id") // FK para AIReport que gerou o flag
-  flagType  FlagType  @map("flag_type")
-  reason    String    @db.Text // Explicação do flag
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id        String   @id @default(cuid())
+  companyId Int      @map("company_id")
+  reportId  String   @map("report_id") // FK para AIReport que gerou o flag
+  flagType  FlagType @map("flag_type")
+  reason    String   @db.Text // Explicação do flag
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   report  AIReport @relation("FlagReports", fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([companyId, isActive])

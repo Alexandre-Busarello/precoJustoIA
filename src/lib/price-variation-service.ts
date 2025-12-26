@@ -29,7 +29,7 @@ export interface PriceVariationCheck {
 
 /**
  * Verifica variações de preço para uma empresa
- * Retorna variações para 1 dia, 30 dias e 365 dias
+ * Retorna variações para 1 dia, 5 dias, 30 dias e 365 dias
  */
 export async function checkPriceVariations(
   companyId: number,
@@ -38,6 +38,7 @@ export async function checkPriceVariations(
   const variations: PriceVariation[] = [];
   const thresholds = {
     '1': parseFloat(process.env.PRICE_DROP_1D || '5'),
+    '5': parseFloat(process.env.PRICE_DROP_5D || '8'),
     '30': parseFloat(process.env.PRICE_DROP_30D || '20'),
     '365': parseFloat(process.env.PRICE_DROP_1Y || '50'),
   };
@@ -51,7 +52,7 @@ export async function checkPriceVariations(
   const currentDate = currentPriceData.timestamp;
 
   // Verificar variações para cada janela de tempo
-  const timeWindows = [1, 30, 365];
+  const timeWindows = [1, 5, 30, 365];
   let triggered = false;
   let triggerReason: PriceVariationCheck['triggerReason'] | undefined;
 

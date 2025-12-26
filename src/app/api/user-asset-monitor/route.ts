@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getCurrentUser } from '@/lib/user-service';
+import { getCurrentUser, isUserPremium } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { TriggerConfig } from '@/lib/custom-trigger-service';
 
@@ -53,6 +53,11 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Verificar status Premium e calcular limites
+    const isPremium = user.isPremium;
+    const activeMonitorsCount = monitors.filter(m => m.isActive).length;
+    const maxMonitors = isPremium ? null : 1; // null = ilimitado
+
     return NextResponse.json({
       success: true,
       monitors: monitors.map(m => ({
@@ -66,6 +71,11 @@ export async function GET(request: NextRequest) {
         createdAt: m.createdAt,
         lastTriggeredAt: m.lastTriggeredAt,
       })),
+      limits: {
+        current: activeMonitorsCount,
+        max: maxMonitors,
+        isPremium,
+      },
     });
   } catch (error) {
     console.error('Erro ao listar gatilhos customizados:', error);
@@ -109,6 +119,35 @@ export async function POST(request: NextRequest) {
         { error: 'companyId e triggerConfig são obrigatórios' },
         { status: 400 }
       );
+    }
+
+    // Verificar se usuário é Premium
+    const isPremium = user.isPremium;
+
+    // Se não for Premium, verificar limite de 1 monitor
+    if (!isPremium) {
+      const activeMonitorsCount = await prisma.userAssetMonitor.count({
+        where: {
+          userId: user.id,
+          isActive: true,
+        },
+      });
+
+      if (activeMonitorsCount >= 1) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'LIMIT_REACHED',
+            message: 'Você atingiu o limite de 1 monitoramento no plano gratuito. Faça upgrade para Premium e crie monitores ilimitados.',
+            limits: {
+              current: activeMonitorsCount,
+              max: 1,
+              isPremium: false,
+            },
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Validar que a empresa existe

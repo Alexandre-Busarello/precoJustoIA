@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Building2, ChevronDown, ChevronUp, Settings } from 'lucide-react';
+import { Loader2, Building2, ChevronDown, ChevronUp, Settings, Crown } from 'lucide-react';
 import { TriggerConfig } from '@/lib/custom-trigger-service';
 import { AssetSearchInput } from '@/components/asset-search-input';
 import { Card, CardContent } from '@/components/ui/card';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
+import { MonitorLimitBanner } from '@/components/monitor-limit-banner';
+import Link from 'next/link';
 
 interface CustomMonitorFormProps {
   initialData?: {
@@ -26,7 +29,10 @@ interface CustomMonitorFormProps {
 export default function CustomMonitorForm({ initialData }: CustomMonitorFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { isPremium, isLoading: isPremiumLoading } = usePremiumStatus();
   const [isLoading, setIsLoading] = useState(false);
+  const [limits, setLimits] = useState<{ current: number; max: number | null; isPremium: boolean } | null>(null);
+  const [isLoadingLimits, setIsLoadingLimits] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState<{
     id: number;
     ticker: string;
@@ -46,6 +52,27 @@ export default function CustomMonitorForm({ initialData }: CustomMonitorFormProp
   );
   const [isActive, setIsActive] = useState(initialData?.isActive ?? true);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Buscar limites ao carregar componente (apenas para criação, não edição)
+  useEffect(() => {
+    if (!initialData && !isPremiumLoading) {
+      fetch('/api/user-asset-monitor')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.limits) {
+            setLimits(data.limits);
+          }
+        })
+        .catch(err => {
+          console.error('Erro ao buscar limites:', err);
+        })
+        .finally(() => {
+          setIsLoadingLimits(false);
+        });
+    } else {
+      setIsLoadingLimits(false);
+    }
+  }, [initialData, isPremiumLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,7 +129,26 @@ export default function CustomMonitorForm({ initialData }: CustomMonitorFormProp
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Erro ao salvar monitoramento');
+        // Tratar erro de limite atingido
+        if (response.status === 403 && data.error === 'LIMIT_REACHED') {
+          toast({
+            title: 'Limite Atingido',
+            description: data.message || 'Você atingiu o limite de monitores no plano gratuito.',
+            variant: 'destructive',
+            duration: 5000,
+          });
+          
+          // Atualizar limites se fornecidos
+          if (data.limits) {
+            setLimits(data.limits);
+          }
+          
+          // Scroll para o topo para mostrar banner de upgrade
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        
+        throw new Error(data.error || data.message || 'Erro ao salvar monitoramento');
       }
 
       toast({
@@ -133,8 +179,68 @@ export default function CustomMonitorForm({ initialData }: CustomMonitorFormProp
     }
   };
 
+  // Verificar se pode criar (não é edição e não atingiu limite)
+  const canCreate = initialData || (limits && (limits.max === null || limits.current < limits.max));
+  const isLimitReached = !initialData && limits && limits.max !== null && limits.current >= limits.max;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Banner de Limite */}
+      {!initialData && !isLoadingLimits && limits && (
+        <MonitorLimitBanner
+          current={limits.current}
+          max={limits.max}
+          showUpgrade={isLimitReached}
+        />
+      )}
+
+      {/* Card de Conversão quando limite atingido */}
+      {isLimitReached && !initialData && (
+        <Card className="border-yellow-300 bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-950 dark:to-orange-950">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center">
+                  <Crown className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold mb-2 text-yellow-900 dark:text-yellow-100">
+                  Desbloqueie Monitores Ilimitados
+                </h3>
+                <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-4">
+                  Faça upgrade para Premium e crie quantos monitores customizados você precisar.
+                </p>
+                <ul className="text-sm space-y-2 mb-4 text-yellow-700 dark:text-yellow-300">
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-600">✓</span>
+                    Monitores customizados ilimitados
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-600">✓</span>
+                    Alertas em tempo real sem delay
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-600">✓</span>
+                    Relatórios completos de IA
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-600">✓</span>
+                    Acesso a todas as estratégias de investimento
+                  </li>
+                </ul>
+                <Button asChild className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-white">
+                  <Link href="/checkout">
+                    <Crown className="w-4 h-4 mr-2" />
+                    Fazer Upgrade Premium
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Seleção de Empresa */}
       <div className="space-y-2">
         <Label htmlFor="company">Empresa *</Label>
@@ -1020,7 +1126,11 @@ export default function CustomMonitorForm({ initialData }: CustomMonitorFormProp
         >
           Cancelar
         </Button>
-        <Button type="submit" disabled={isLoading}>
+        <Button 
+          type="submit" 
+          disabled={isLoading || isLimitReached}
+          title={isLimitReached ? 'Limite de monitores atingido. Faça upgrade para Premium.' : undefined}
+        >
           {isLoading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

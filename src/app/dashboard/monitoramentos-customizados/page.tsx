@@ -8,8 +8,9 @@ import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import CustomMonitorsList from '@/components/custom-monitors-list';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { Bell, ArrowLeft, Plus, Settings } from 'lucide-react';
+import { Bell, ArrowLeft, Plus, Settings, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MonitorLimitBanner } from '@/components/monitor-limit-banner';
 
 export const metadata: Metadata = {
   title: 'Monitoramentos Customizados | Preço Justo AI',
@@ -73,6 +74,11 @@ export default async function CustomMonitorsPage() {
     };
   }).filter((m): m is NonNullable<typeof m> => m !== null);
 
+  // Calcular limites
+  const activeMonitorsCount = monitors.filter(m => m.isActive).length;
+  const maxMonitors = user.isPremium ? null : 1; // null = ilimitado
+  const isLimitReached = !user.isPremium && activeMonitorsCount >= 1;
+
   // Debug: log temporário para verificar dados
   if (process.env.NODE_ENV === 'development') {
     console.log('[Monitoramentos] Total encontrado:', monitors.length);
@@ -103,12 +109,27 @@ export default async function CustomMonitorsPage() {
             <div className="flex items-center space-x-3 mb-2">
               <Settings className="w-8 h-8 text-primary" />
               <h1 className="text-3xl font-bold">Monitoramentos Customizados</h1>
+              {user.isPremium ? (
+                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gradient-to-r from-yellow-400 to-yellow-500 text-white flex items-center gap-1">
+                  <Crown className="w-3 h-3" />
+                  Premium
+                </span>
+              ) : (
+                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                  Gratuito
+                </span>
+              )}
             </div>
             <p className="text-muted-foreground">
               Configure gatilhos personalizados para receber alertas quando ações atendem seus critérios específicos.
             </p>
           </div>
-          <Button asChild size="lg">
+          <Button 
+            asChild 
+            size="lg"
+            disabled={isLimitReached}
+            title={isLimitReached ? 'Limite de monitores atingido. Faça upgrade para Premium.' : undefined}
+          >
             <Link href="/dashboard/monitoramentos-customizados/criar">
               <Plus className="w-4 h-4 mr-2" />
               Criar Monitoramento
@@ -117,6 +138,15 @@ export default async function CustomMonitorsPage() {
         </div>
       </div>
 
+      {/* Banner de Limite */}
+      {!user.isPremium && (
+        <MonitorLimitBanner
+          current={activeMonitorsCount}
+          max={maxMonitors}
+          showUpgrade={isLimitReached}
+        />
+      )}
+
       {/* Stats Card */}
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -124,9 +154,19 @@ export default async function CustomMonitorsPage() {
             <div>
               <p className="text-sm text-muted-foreground">Total de Monitoramentos</p>
               <p className="text-3xl font-bold">{monitors.length}</p>
+              {!user.isPremium && maxMonitors !== null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {activeMonitorsCount}/{maxMonitors} ativo{activeMonitorsCount !== 1 ? 's' : ''} utilizados
+                </p>
+              )}
             </div>
             <div className="text-sm text-muted-foreground">
               {monitors.filter((m) => m.isActive).length} ativo(s)
+              {user.isPremium && (
+                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
+                  Ilimitado
+                </span>
+              )}
             </div>
           </div>
         </CardContent>

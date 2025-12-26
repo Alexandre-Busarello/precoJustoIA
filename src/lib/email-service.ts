@@ -3228,7 +3228,7 @@ export function generateNotificationEmailTemplate(
               <div class="logo-container">
                 <img src="${logoUrl}" alt="Preço Justo AI" class="logo" />
               </div>
-              <h1 class="header-title">Nova Notificação</h1>
+              <h1 class="header-title">${stripMarkdown(title) || 'Nova Notificação'}</h1>
             </div>
             
             <div class="content">

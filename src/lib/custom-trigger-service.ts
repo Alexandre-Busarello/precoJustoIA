@@ -119,6 +119,7 @@ export interface TriggerEvaluation {
 
 /**
  * Busca monitores ativos separados por prioridade (Premium primeiro)
+ * Ordena por lastProcessedAt (mais antigos primeiro) para garantir loop de processamento
  */
 export async function getMonitorsByPriority(): Promise<{
   premium: Array<{
@@ -127,6 +128,7 @@ export async function getMonitorsByPriority(): Promise<{
     triggerConfig: TriggerConfig;
     company: { ticker: string };
     isAlertActive: boolean;
+    lastProcessedAt: Date | null;
   }>;
   free: Array<{
     id: string;
@@ -134,6 +136,7 @@ export async function getMonitorsByPriority(): Promise<{
     triggerConfig: TriggerConfig;
     company: { ticker: string };
     isAlertActive: boolean;
+    lastProcessedAt: Date | null;
   }>;
 }> {
   const { isUserPremium } = await import('./user-service');
@@ -142,11 +145,15 @@ export async function getMonitorsByPriority(): Promise<{
     where: {
       isActive: true,
     },
+    orderBy: [
+      { lastProcessedAt: { sort: 'asc', nulls: 'first' } }, // Processar os mais antigos primeiro
+    ],
     select: {
       id: true,
       companyId: true,
       triggerConfig: true,
       isAlertActive: true,
+      lastProcessedAt: true,
       company: {
         select: {
           id: true,
@@ -181,6 +188,7 @@ export async function getMonitorsByPriority(): Promise<{
       triggerConfig: m.triggerConfig as TriggerConfig,
       company: m.company,
       isAlertActive: m.isAlertActive ?? false,
+      lastProcessedAt: m.lastProcessedAt,
     })),
     free: free.map(m => ({
       id: m.id,
@@ -188,6 +196,7 @@ export async function getMonitorsByPriority(): Promise<{
       triggerConfig: m.triggerConfig as TriggerConfig,
       company: m.company,
       isAlertActive: m.isAlertActive ?? false,
+      lastProcessedAt: m.lastProcessedAt,
     })),
   };
 }

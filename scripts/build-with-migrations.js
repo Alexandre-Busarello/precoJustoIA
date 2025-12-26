@@ -14,12 +14,12 @@ try {
   execSync('npx prisma db push', { stdio: 'inherit' });
 
   // Verificar se existem migrations pendentes e aplicá-las
-  try {
-    console.log('🚀 Deploying migrations...');
-    execSync('npx prisma migrate deploy', { stdio: 'inherit' });
-  } catch (migrateError) {
-    console.log('ℹ️  No migrations to deploy or migration deploy failed, continuing with db push...');
-  }
+  // try {
+  //   console.log('🚀 Deploying migrations...');
+  //   execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+  // } catch (migrateError) {
+  //   console.log('ℹ️  No migrations to deploy or migration deploy failed, continuing with db push...');
+  // }
 
   // Build da aplicação Next.js
   console.log('🏗️  Building Next.js application...');

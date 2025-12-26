@@ -58,10 +58,19 @@ export async function GET(request: NextRequest) {
           if (monitor.isAlertActive) {
             await prisma.userAssetMonitor.update({
               where: { id: monitor.id },
-              data: { isAlertActive: false },
+              data: { 
+                isAlertActive: false,
+                lastProcessedAt: new Date(),
+              },
             });
             alertsDeactivated++;
             console.log(`🔄 ${monitor.company.ticker}: Gatilho não disparado, desativando alerta`);
+          } else {
+            // Atualizar lastProcessedAt mesmo quando não há mudança de estado
+            await prisma.userAssetMonitor.update({
+              where: { id: monitor.id },
+              data: { lastProcessedAt: new Date() },
+            });
           }
           return;
         }
@@ -72,16 +81,30 @@ export async function GET(request: NextRequest) {
           if (monitor.isAlertActive) {
             await prisma.userAssetMonitor.update({
               where: { id: monitor.id },
-              data: { isAlertActive: false },
+              data: { 
+                isAlertActive: false,
+                lastProcessedAt: new Date(),
+              },
             });
             alertsDeactivated++;
             console.log(`🔄 ${monitor.company.ticker}: Condições não atendidas, desativando alerta`);
+          } else {
+            // Atualizar lastProcessedAt mesmo quando não há mudança de estado
+            await prisma.userAssetMonitor.update({
+              where: { id: monitor.id },
+              data: { lastProcessedAt: new Date() },
+            });
           }
           return;
         }
 
         // Gatilho disparou - verificar se já está ativo
         if (monitor.isAlertActive) {
+          // Atualizar lastProcessedAt mesmo quando já está ativo
+          await prisma.userAssetMonitor.update({
+            where: { id: monitor.id },
+            data: { lastProcessedAt: new Date() },
+          });
           console.log(`⏭️ ${evaluation.ticker}: Alerta já está ativo, evitando spam`);
           return;
         }
@@ -107,12 +130,27 @@ export async function GET(request: NextRequest) {
           alertsActivated++;
           console.log(`✅ ${evaluation.ticker}: Gatilho customizado disparado - ${evaluation.reasons.join(', ')}`);
         } else {
+          // Atualizar lastProcessedAt mesmo quando já existe entrada na fila
+          await prisma.userAssetMonitor.update({
+            where: { id: monitor.id },
+            data: { lastProcessedAt: new Date() },
+          });
           console.log(`⏭️ ${evaluation.ticker}: Já existe entrada na fila recente, pulando`);
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         errors.push(`${monitor.company.ticker}: ${errorMsg}`);
         console.error(`❌ Erro ao processar gatilho ${monitor.id}:`, error);
+        
+        // Atualizar lastProcessedAt mesmo em caso de erro para não ficar travado
+        try {
+          await prisma.userAssetMonitor.update({
+            where: { id: monitor.id },
+            data: { lastProcessedAt: new Date() },
+          });
+        } catch (updateError) {
+          console.error(`❌ Erro ao atualizar lastProcessedAt para monitor ${monitor.id}:`, updateError);
+        }
       }
     };
 

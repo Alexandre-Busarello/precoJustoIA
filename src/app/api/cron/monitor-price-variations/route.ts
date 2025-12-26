@@ -34,20 +34,20 @@ export async function GET(request: NextRequest) {
     console.log(`📊 Configurações: BATCH_SIZE=${BATCH_SIZE}`);
 
     // 3. Buscar próximo lote de empresas para processar
-    // Priorizar empresas com lastCheckedAt mais antigo ou NULL
+    // Priorizar empresas com priceVariationLastCheckedAt mais antigo ou NULL
     const companies = await prisma.company.findMany({
       where: {
         assetType: 'STOCK', // Apenas ações (não ETFs, FIIs, etc)
       },
       orderBy: [
-        { lastCheckedAt: { sort: 'asc', nulls: 'first' } },
+        { priceVariationLastCheckedAt: { sort: 'asc', nulls: 'first' } },
       ],
       take: BATCH_SIZE,
       select: {
         id: true,
         ticker: true,
         name: true,
-        lastCheckedAt: true,
+        priceVariationLastCheckedAt: true,
       },
     });
 
@@ -62,8 +62,8 @@ export async function GET(request: NextRequest) {
       try {
         // Verificar se já passou tempo suficiente desde última verificação
         // (evitar verificar mesma empresa múltiplas vezes no mesmo dia)
-        if (company.lastCheckedAt) {
-          const hoursSinceCheck = (Date.now() - company.lastCheckedAt.getTime()) / (1000 * 60 * 60);
+        if (company.priceVariationLastCheckedAt) {
+          const hoursSinceCheck = (Date.now() - company.priceVariationLastCheckedAt.getTime()) / (1000 * 60 * 60);
           if (hoursSinceCheck < 6) {
             // Verificou nas últimas 6 horas, pular
             continue;
@@ -110,10 +110,10 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // Atualizar lastCheckedAt
+        // Atualizar priceVariationLastCheckedAt
         await prisma.company.update({
           where: { id: company.id },
-          data: { lastCheckedAt: new Date() },
+          data: { priceVariationLastCheckedAt: new Date() },
         });
 
         processedCount++;
@@ -128,14 +128,14 @@ export async function GET(request: NextRequest) {
         errors.push(`${company.ticker}: ${errorMsg}`);
         console.error(`❌ Erro ao processar ${company.ticker}:`, error);
 
-        // Atualizar lastCheckedAt mesmo em caso de erro para não ficar travado
+        // Atualizar priceVariationLastCheckedAt mesmo em caso de erro para não ficar travado
         try {
           await prisma.company.update({
             where: { id: company.id },
-            data: { lastCheckedAt: new Date() },
+            data: { priceVariationLastCheckedAt: new Date() },
           });
         } catch (updateError) {
-          console.error(`❌ Erro ao atualizar lastCheckedAt para ${company.ticker}:`, updateError);
+          console.error(`❌ Erro ao atualizar priceVariationLastCheckedAt para ${company.ticker}:`, updateError);
         }
       }
     }

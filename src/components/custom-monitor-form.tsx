@@ -180,7 +180,6 @@ export default function CustomMonitorForm({ initialData }: CustomMonitorFormProp
   };
 
   // Verificar se pode criar (não é edição e não atingiu limite)
-  const canCreate = initialData || (limits && (limits.max === null || limits.current < limits.max));
   const isLimitReached = !initialData && limits && limits.max !== null && limits.current >= limits.max;
 
   return (
@@ -190,7 +189,7 @@ export default function CustomMonitorForm({ initialData }: CustomMonitorFormProp
         <MonitorLimitBanner
           current={limits.current}
           max={limits.max}
-          showUpgrade={isLimitReached}
+          showUpgrade={isLimitReached ?? false}
         />
       )}
 
@@ -1128,7 +1127,7 @@ export default function CustomMonitorForm({ initialData }: CustomMonitorFormProp
         </Button>
         <Button 
           type="submit" 
-          disabled={isLoading || isLimitReached}
+          disabled={isLoading || (isLimitReached ?? false)}
           title={isLimitReached ? 'Limite de monitores atingido. Faça upgrade para Premium.' : undefined}
         >
           {isLoading ? (

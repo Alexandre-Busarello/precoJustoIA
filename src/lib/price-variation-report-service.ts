@@ -287,8 +287,7 @@ export async function analyzeFundamentalImpact(
 - Datas ex-dividendo: ${dividendsInfo.dividends.map(d => d.exDate.toISOString().split('T')[0]).join(', ')}
 
 **IMPORTANTE**: A queda observada de ${Math.abs(variation.variation).toFixed(2)}% inclui um ajuste de aproximadamente ${dividendsInfo.dividendImpact.toFixed(2)}% devido aos dividendos pagos. Considere isso ao avaliar se há perda de fundamento.`
-    : '**DIVIDENDOS NO PERÍODO:**
-Nenhum pagamento de dividendo detectado no período.';
+    : '**DIVIDENDOS NO PERÍODO:** Nenhum pagamento de dividendo detectado no período analisado.';
 
   const prompt = `Você é um analista fundamentalista experiente.
 

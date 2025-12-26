@@ -43,6 +43,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   const isMonthlyReport = report.type === 'MONTHLY_OVERVIEW';
+  const isCustomTrigger = report.type === 'CUSTOM_TRIGGER';
+  const isPriceVariation = report.type === 'PRICE_VARIATION';
+  const isFundamentalChange = report.type === 'FUNDAMENTAL_CHANGE';
   const isPremium = await isCurrentUserPremium();
   
   if (isMonthlyReport) {
@@ -52,6 +55,21 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
   
+  if (isCustomTrigger) {
+    return {
+      title: `Gatilho Customizado: ${report.company.name} (${report.company.ticker}) | Preço Justo AI`,
+      description: `Relatório de gatilho customizado disparado para ${report.company.name}.`,
+    };
+  }
+  
+  if (isPriceVariation) {
+    return {
+      title: `Variação de Preço: ${report.company.name} (${report.company.ticker}) | Preço Justo AI`,
+      description: `Análise detalhada da variação de preço em ${report.company.name}.`,
+    };
+  }
+  
+  // FUNDAMENTAL_CHANGE
   const changeText = report.changeDirection === 'positive' ? 'Melhora' : 'Piora';
   return {
     title: `${changeText} Fundamental: ${report.company.name} (${report.company.ticker}) | Preço Justo AI`,
@@ -93,8 +111,15 @@ export default async function ReportDetailPage({ params }: PageProps) {
 
   const isPremium = await isCurrentUserPremium();
   const isMonthlyReport = report.type === 'MONTHLY_OVERVIEW';
-  const isPositive = report.changeDirection === 'positive';
-  const scoreDelta = report.currentScore && report.previousScore 
+  const isCustomTrigger = report.type === 'CUSTOM_TRIGGER';
+  const isPriceVariation = report.type === 'PRICE_VARIATION';
+  const isFundamentalChange = report.type === 'FUNDAMENTAL_CHANGE';
+  
+  // Direção de mudança e score só fazem sentido para FUNDAMENTAL_CHANGE e PRICE_VARIATION
+  // CUSTOM_TRIGGER não tem sentido de mudança
+  const hasChangeDirection = isFundamentalChange || isPriceVariation;
+  const isPositive = hasChangeDirection && report.changeDirection === 'positive';
+  const scoreDelta = hasChangeDirection && report.currentScore && report.previousScore 
     ? Number(report.currentScore) - Number(report.previousScore)
     : 0;
 
@@ -137,7 +162,13 @@ export default async function ReportDetailPage({ params }: PageProps) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">
-              {isMonthlyReport ? 'Relatório Mensal' : 'Análise de Mudança Fundamental'}
+              {isMonthlyReport 
+                ? 'Relatório Mensal' 
+                : isCustomTrigger 
+                  ? 'Relatório de Gatilho Customizado'
+                  : isPriceVariation
+                    ? 'Relatório de Variação de Preço'
+                    : 'Análise de Mudança Fundamental'}
             </h1>
             <p className="text-muted-foreground">
               {report.company.name} ({report.company.ticker})
@@ -156,7 +187,11 @@ export default async function ReportDetailPage({ params }: PageProps) {
 
       {/* Metadata Card */}
       <Card className="p-6 mb-6">
-        <div className={`grid grid-cols-1 ${isMonthlyReport ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
+        <div className={`grid grid-cols-1 ${
+          isMonthlyReport || isCustomTrigger 
+            ? 'md:grid-cols-2' 
+            : 'md:grid-cols-3'
+        } gap-6`}>
           {/* Data */}
           <div>
             <div className="flex items-center text-sm text-muted-foreground mb-1">
@@ -172,8 +207,8 @@ export default async function ReportDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Mudança - apenas para FUNDAMENTAL_CHANGE */}
-          {!isMonthlyReport && (
+          {/* Mudança - apenas para FUNDAMENTAL_CHANGE e PRICE_VARIATION */}
+          {hasChangeDirection && (
             <div>
               <div className="text-sm text-muted-foreground mb-1">
                 Direção da Mudança
@@ -197,8 +232,8 @@ export default async function ReportDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Score - apenas para FUNDAMENTAL_CHANGE */}
-          {!isMonthlyReport && (
+          {/* Score - apenas para FUNDAMENTAL_CHANGE e PRICE_VARIATION */}
+          {hasChangeDirection && (
             <div>
               <div className="text-sm text-muted-foreground mb-1">
                 Overall Score
@@ -223,14 +258,14 @@ export default async function ReportDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Badge de tipo para relatórios mensais */}
-          {isMonthlyReport && (
+          {/* Badge de tipo para relatórios mensais e custom triggers */}
+          {(isMonthlyReport || isCustomTrigger) && (
             <div>
               <div className="text-sm text-muted-foreground mb-1">
                 Tipo de Relatório
               </div>
               <Badge variant="secondary" className="text-base py-1.5 px-3">
-                🤖 Análise Mensal com IA
+                {isMonthlyReport ? '🤖 Análise Mensal com IA' : '⚙️ Gatilho Customizado'}
               </Badge>
             </div>
           )}

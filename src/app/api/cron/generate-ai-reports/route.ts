@@ -25,6 +25,7 @@ import { EmailQueueService } from '@/lib/email-queue-service';
 import { NotificationService } from '@/lib/notification-service';
 import { AssetMonitoringService } from '@/lib/asset-monitoring-service';
 import { shouldSendReportType } from '@/lib/report-preferences-service';
+import { getUserById } from '@/lib/user-service';
 
 export const maxDuration = 60;
 
@@ -345,19 +346,6 @@ async function processFinalReport(
   });
   const hasActiveFlag = activeFlags.length > 0;
 
-  // IMPORTANTE: Para PRICE_VARIATION, emails só são enviados para usuários que monitoram o ativo
-  // Buscar subscribers da tabela user_asset_subscriptions
-  const subscribers = await AssetMonitoringService.getSubscribersForCompany(entry.companyId);
-
-  // Para PRICE_VARIATION, verificar se há subscribers antes de continuar
-  if (entry.reportType === 'PRICE_VARIATION' && subscribers.length === 0) {
-    console.log(`⚠️ ${entry.id}: Nenhum subscriber encontrado para ${company.ticker}, pulando envio de emails`);
-    await completeQueue(entry.id, report.id);
-    return;
-  }
-
-  console.log(`📧 ${entry.id}: Encontrados ${subscribers.length} subscriber(s) para ${company.ticker}`);
-
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
   const reportUrl = `/acao/${company.ticker.toLowerCase()}/relatorios/${report.id}`;
   const reportSummary = reportContent
@@ -365,12 +353,55 @@ async function processFinalReport(
     .substring(0, 500)
     .trim() + '...';
 
-  // Separar usuários logados e anônimos
-  // IMPORTANTE: 
-  // - Usuários logados (com userId): usar email da tabela user (já vem em subscriber.email)
-  // - Usuários anônimos (sem userId): usar email da tabela subscription (já vem em subscriber.email)
-  const loggedInSubscribers = subscribers.filter(sub => sub.userId !== null);
-  const anonymousSubscribers = subscribers.filter(sub => sub.userId === null);
+  // IMPORTANTE: Para CUSTOM_TRIGGER, emails só são enviados para o usuário que criou o monitor
+  // Para PRICE_VARIATION, emails são enviados para todos que monitoram o ativo
+  let loggedInSubscribers: Array<{ userId: string; email: string; name: string | null; isPremium: boolean }> = [];
+  let anonymousSubscribers: Array<{ email: string; name: string | null }> = [];
+
+  if (entry.reportType === 'CUSTOM_TRIGGER') {
+    // Para CUSTOM_TRIGGER: enviar apenas para o usuário que criou o monitor
+    if (!userId) {
+      console.log(`⚠️ ${entry.id}: userId não encontrado para CUSTOM_TRIGGER, pulando envio de emails`);
+      await completeQueue(entry.id, report.id);
+      return;
+    }
+
+    // Buscar dados do usuário que criou o monitor
+    const monitorUser = await getUserById(userId as string);
+    if (!monitorUser) {
+      console.log(`⚠️ ${entry.id}: Usuário ${userId} não encontrado, pulando envio de emails`);
+      await completeQueue(entry.id, report.id);
+      return;
+    }
+
+    // Criar estrutura compatível com o código existente
+    loggedInSubscribers = [{
+      userId: monitorUser.id,
+      email: monitorUser.email,
+      name: monitorUser.name ?? null,
+      isPremium: monitorUser.isPremium,
+    }];
+
+    console.log(`📧 ${entry.id}: Enviando email de CUSTOM_TRIGGER apenas para ${monitorUser.email} (criador do monitor)`);
+  } else {
+    // Para PRICE_VARIATION: buscar todos os subscribers da tabela user_asset_subscriptions
+    const subscribers = await AssetMonitoringService.getSubscribersForCompany(entry.companyId);
+
+    if (subscribers.length === 0) {
+      console.log(`⚠️ ${entry.id}: Nenhum subscriber encontrado para ${company.ticker}, pulando envio de emails`);
+      await completeQueue(entry.id, report.id);
+      return;
+    }
+
+    console.log(`📧 ${entry.id}: Encontrados ${subscribers.length} subscriber(s) para ${company.ticker}`);
+
+    // Separar usuários logados e anônimos
+    // IMPORTANTE: 
+    // - Usuários logados (com userId): usar email da tabela user (já vem em subscriber.email)
+    // - Usuários anônimos (sem userId): usar email da tabela subscription (já vem em subscriber.email)
+    loggedInSubscribers = subscribers.filter(sub => sub.userId !== null) as Array<{ userId: string; email: string; name: string | null; isPremium: boolean }>;
+    anonymousSubscribers = subscribers.filter(sub => sub.userId === null) as Array<{ email: string; name: string | null }>;
+  }
 
   // Criar notificações E enviar emails para usuários logados que monitoram o ativo
   // Email usado: da tabela user (via subscriber.email que já vem do AssetMonitoringService)
@@ -434,27 +465,30 @@ async function processFinalReport(
   }
 
   // Adicionar emails à fila para subscriptions anônimas que monitoram o ativo
+  // IMPORTANTE: Apenas para PRICE_VARIATION (CUSTOM_TRIGGER não tem subscribers anônimos)
   // Email usado: da tabela subscription (via subscriber.email que já vem do AssetMonitoringService)
-  // IMPORTANTE: Anônimos sempre são não-premium, então receberão email de conversão
-  for (const subscriber of anonymousSubscribers) {
-    try {
-      await EmailQueueService.queueEmail({
-        email: subscriber.email, // Email da tabela subscription
-        emailType: entry.reportType === 'PRICE_VARIATION' ? 'PRICE_VARIATION_REPORT' : 'CUSTOM_TRIGGER_REPORT',
-        emailData: {
-          ticker: company.ticker,
-          companyName: company.name,
-          companyLogoUrl: company.logoUrl || null,
-          reportUrl: `${baseUrl}${reportUrl}`,
-          reportSummary,
-          isPremium: false, // Anônimos sempre são não-premium
-          hasFlag: hasActiveFlag, // Indicar que há flag ativo (para usar email de conversão)
-        },
-        recipientName: subscriber.name || 'Investidor',
-      });
-      emailsQueued++;
-    } catch (error) {
-      console.error(`❌ Erro ao adicionar email à fila para ${subscriber.email}:`, error);
+  // Anônimos sempre são não-premium, então receberão email de conversão
+  if (entry.reportType === 'PRICE_VARIATION') {
+    for (const subscriber of anonymousSubscribers) {
+      try {
+        await EmailQueueService.queueEmail({
+          email: subscriber.email, // Email da tabela subscription
+          emailType: 'PRICE_VARIATION_REPORT',
+          emailData: {
+            ticker: company.ticker,
+            companyName: company.name,
+            companyLogoUrl: company.logoUrl || null,
+            reportUrl: `${baseUrl}${reportUrl}`,
+            reportSummary,
+            isPremium: false, // Anônimos sempre são não-premium
+            hasFlag: hasActiveFlag, // Indicar que há flag ativo (para usar email de conversão)
+          },
+          recipientName: subscriber.name || 'Investidor',
+        });
+        emailsQueued++;
+      } catch (error) {
+        console.error(`❌ Erro ao adicionar email à fila para ${subscriber.email}:`, error);
+      }
     }
   }
 

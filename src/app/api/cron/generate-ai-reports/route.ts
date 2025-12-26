@@ -223,6 +223,11 @@ async function processStep(
           throw new Error('Checkpoints anteriores não encontrados');
         }
 
+        // Validar estrutura do checkpoint de ANALYSIS
+        if (!analysisCheckpoint.data.analysis) {
+          throw new Error('Dados de análise não encontrados no checkpoint de ANALYSIS');
+        }
+
         const report = await generatePriceVariationReport({
           ticker: company.ticker,
           companyName: company.name,
@@ -235,10 +240,20 @@ async function processStep(
           researchData: researchCheckpoint.data.research,
         }, entry.companyId); // Passar companyId para verificar dividendos
 
+        // Garantir que currentFundamentals existe ou criar fallback
+        const currentFundamentals = analysisCheckpoint.data.analysis.currentFundamentals || {
+          overallAssessment: 'MODERADO',
+          strengths: [],
+          weaknesses: [],
+          keyIndicators: 'Análise de indicadores não disponível.',
+          outlook: 'Perspectiva não disponível.',
+        };
+
         stepData = {
           report,
-          isFundamentalLoss: analysisCheckpoint.data.analysis.isFundamentalLoss,
-          conclusion: analysisCheckpoint.data.analysis.conclusion,
+          isFundamentalLoss: analysisCheckpoint.data.analysis.isFundamentalLoss ?? false,
+          conclusion: analysisCheckpoint.data.analysis.conclusion || 'ANALISE_INDISPONIVEL',
+          currentFundamentals,
         };
       } else if (entry.reportType === 'CUSTOM_TRIGGER') {
         const report = await generateCustomTriggerReport({
@@ -322,16 +337,47 @@ async function processFinalReport(
     },
   });
 
-  // Criar flag se necessário (apenas para PRICE_VARIATION com perda de fundamento)
+  // Criar flag se necessário (apenas para PRICE_VARIATION)
+  // Flags são criados quando:
+  // 1. Há perda de fundamento detectada na queda de preço (isFundamentalLoss = true), OU
+  // 2. A análise de fundamentos indica fundamentos fracos ou em deterioração
   // Flags são usados apenas para determinar o template do email (conversão), não limitam envio
   let hasActiveFlag = false;
   
   if (entry.reportType === 'PRICE_VARIATION') {
-    if (compilationCheckpoint.data.isFundamentalLoss) {
+    // Garantir que currentFundamentals existe com fallback
+    const currentFundamentals = compilationCheckpoint.data.currentFundamentals || {
+      overallAssessment: 'MODERADO',
+      strengths: [],
+      weaknesses: [],
+      keyIndicators: '',
+      outlook: '',
+    };
+
+    // Garantir que isFundamentalLoss existe
+    const isFundamentalLoss = compilationCheckpoint.data.isFundamentalLoss ?? false;
+    
+    // Garantir que conclusion existe
+    const conclusion = compilationCheckpoint.data.conclusion || 'ANALISE_INDISPONIVEL';
+
+    const shouldCreateFlag = 
+      isFundamentalLoss || // Perda de fundamento detectada na queda
+      (currentFundamentals.overallAssessment === 'FRACO') || // Fundamentos fracos
+      (currentFundamentals.overallAssessment === 'EM_DETERIORACAO'); // Fundamentos em deterioração
+
+    if (shouldCreateFlag) {
+      // Construir motivo do flag baseado na análise
+      let flagReason = conclusion;
+      
+      const assessment = currentFundamentals.overallAssessment;
+      if (assessment === 'FRACO' || assessment === 'EM_DETERIORACAO') {
+        flagReason = `Fundamentos ${assessment === 'FRACO' ? 'fracos' : 'em deterioração'} detectados. ${currentFundamentals.outlook || ''}`.trim();
+      }
+
       await createFlagIfNeeded(
         entry.companyId,
         report.id,
-        compilationCheckpoint.data.conclusion || 'Perda de fundamento detectada'
+        flagReason || 'Perda de fundamento detectada'
       );
     }
 

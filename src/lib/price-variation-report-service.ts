@@ -25,6 +25,13 @@ export interface FundamentalAnalysisResult {
   isFundamentalLoss: boolean;
   conclusion: string;
   reasoning: string;
+  currentFundamentals?: {
+    overallAssessment: string; // "FORTE", "MODERADO", "FRACO", "EM_RECUPERACAO", "EM_DETERIORACAO"
+    strengths: string[]; // Pontos fortes dos fundamentos
+    weaknesses: string[]; // Pontos fracos dos fundamentos
+    keyIndicators: string; // Análise dos principais indicadores
+    outlook: string; // Perspectiva futura
+  };
 }
 
 export interface DividendInfo {
@@ -234,6 +241,109 @@ Preço atual: R$ ${variation.currentPrice.toFixed(2)}
 }
 
 /**
+ * Identifica se a empresa está sem lucro ou em processo de turnaround
+ */
+async function identifyProfitabilityStatus(companyId: number): Promise<{
+  isUnprofitable: boolean;
+  isTurnaround: boolean;
+  profitabilityContext: string;
+}> {
+  try {
+    // Buscar dados financeiros dos últimos 5 anos
+    const financialData = await prisma.financialData.findMany({
+      where: {
+        companyId,
+      },
+      orderBy: {
+        year: 'desc',
+      },
+      take: 5,
+      select: {
+        year: true,
+        lucroLiquido: true,
+        receitaTotal: true,
+      },
+    });
+
+    if (financialData.length === 0) {
+      return {
+        isUnprofitable: false,
+        isTurnaround: false,
+        profitabilityContext: '',
+      };
+    }
+
+    const toNumber = (value: any): number | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'object' && 'toNumber' in value) {
+        return (value as any).toNumber();
+      }
+      return Number(value);
+    };
+
+    // Converter para números e ordenar por ano (mais antigo primeiro)
+    const profits = financialData
+      .map(f => ({
+        year: f.year,
+        profit: toNumber(f.lucroLiquido),
+        revenue: toNumber(f.receitaTotal),
+      }))
+      .sort((a, b) => a.year - b.year);
+
+    // Verificar situação atual
+    const currentProfit = profits[profits.length - 1]?.profit;
+    const previousProfit = profits.length >= 2 ? profits[profits.length - 2]?.profit : null;
+    const oldestProfit = profits[0]?.profit;
+
+    // Empresa sem lucro: lucro negativo ou null no ano mais recente
+    const isUnprofitable = currentProfit === null || currentProfit <= 0;
+
+    // Turnaround: estava com prejuízo e agora tem lucro, ou está melhorando consistentemente
+    let isTurnaround = false;
+    let profitabilityContext = '';
+
+    if (isUnprofitable) {
+      // Verificar se está melhorando (reduzindo prejuízo)
+      if (oldestProfit !== null && currentProfit !== null && oldestProfit < 0 && currentProfit < 0) {
+        // Estava com prejuízo e ainda está, mas melhorou
+        if (currentProfit > oldestProfit) {
+          isTurnaround = true;
+          profitabilityContext = `A empresa está em processo de recuperação: reduziu o prejuízo de R$ ${Math.abs(oldestProfit).toFixed(2)}M (${profits[0].year}) para R$ ${Math.abs(currentProfit).toFixed(2)}M (${profits[profits.length - 1].year}).`;
+        } else {
+          profitabilityContext = `A empresa está sem lucro: prejuízo de R$ ${Math.abs(currentProfit).toFixed(2)}M no último ano disponível.`;
+        }
+      } else if (currentProfit === null) {
+        profitabilityContext = `A empresa não possui dados de lucro líquido disponíveis recentemente.`;
+      } else {
+        profitabilityContext = `A empresa está sem lucro: prejuízo de R$ ${Math.abs(currentProfit).toFixed(2)}M no último ano disponível.`;
+      }
+    } else {
+      // Tem lucro atual - verificar se é turnaround (estava com prejuízo antes)
+      if (oldestProfit !== null && oldestProfit < 0 && currentProfit !== null && currentProfit > 0) {
+        isTurnaround = true;
+        profitabilityContext = `A empresa completou um turnaround: saiu de um prejuízo de R$ ${Math.abs(oldestProfit).toFixed(2)}M (${profits[0].year}) para um lucro de R$ ${currentProfit.toFixed(2)}M (${profits[profits.length - 1].year}).`;
+      } else if (previousProfit !== null && previousProfit < 0 && currentProfit !== null && currentProfit > 0) {
+        isTurnaround = true;
+        profitabilityContext = `A empresa está em processo de turnaround: saiu de prejuízo no ano anterior para lucro no ano atual.`;
+      }
+    }
+
+    return {
+      isUnprofitable,
+      isTurnaround,
+      profitabilityContext,
+    };
+  } catch (error) {
+    console.error(`Erro ao identificar status de lucratividade para companyId ${companyId}:`, error);
+    return {
+      isUnprofitable: false,
+      isTurnaround: false,
+      profitabilityContext: '',
+    };
+  }
+}
+
+/**
  * Analisa se a queda de preço indica perda de fundamento
  */
 export async function analyzeFundamentalImpact(
@@ -273,6 +383,17 @@ export async function analyzeFundamentalImpact(
     dividendsInfo.adjustedVariation = variation.variation - dividendsInfo.dividendImpact;
   }
 
+  // Identificar status de lucratividade (sem lucro ou turnaround)
+  let profitabilityStatus = {
+    isUnprofitable: false,
+    isTurnaround: false,
+    profitabilityContext: '',
+  };
+
+  if (companyId) {
+    profitabilityStatus = await identifyProfitabilityStatus(companyId);
+  }
+
   const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
   });
@@ -289,22 +410,42 @@ export async function analyzeFundamentalImpact(
 **IMPORTANTE**: A queda observada de ${Math.abs(variation.variation).toFixed(2)}% inclui um ajuste de aproximadamente ${dividendsInfo.dividendImpact.toFixed(2)}% devido aos dividendos pagos. Considere isso ao avaliar se há perda de fundamento.`
     : '**DIVIDENDOS NO PERÍODO:** Nenhum pagamento de dividendo detectado no período analisado.';
 
+  // Construir seção sobre lucratividade
+  const profitabilitySection = profitabilityStatus.profitabilityContext
+    ? `**CONTEXTO DE LUCRATIVIDADE:**
+${profitabilityStatus.profitabilityContext}
+
+**IMPORTANTE**: ${profitabilityStatus.isTurnaround ? 'Empresas em processo de turnaround podem apresentar maior volatilidade de preço. A queda observada pode estar relacionada a expectativas de mercado sobre a continuidade da recuperação.' : 'Empresas sem lucro podem apresentar maior volatilidade de preço. A queda observada pode estar relacionada a expectativas sobre a capacidade da empresa de se tornar lucrativa.'}`
+    : '';
+
   const prompt = `Você é um analista fundamentalista experiente.
 
 A ação ${ticker} (${companyName}) teve uma queda de ${Math.abs(variation.variation).toFixed(2)}% nos últimos ${variation.days} dias.
 
 ${dividendsSection}
 
+${profitabilitySection}
+
 **DADOS DA PESQUISA:**
 ${researchData}
 
 **SUA TAREFA:**
 
-Analise se esta queda de preço indica uma **PERDA DE FUNDAMENTO** ou se é apenas:
-- Movimento de mercado (correção geral, volatilidade)
-- Notícia atípica (evento pontual, especulação)
-- Ajuste técnico (sem relação com fundamentos)
-${dividendsInfo.dividends.length > 0 ? '- Ajuste por pagamento de dividendos (normal e esperado)' : ''}
+Você precisa realizar DUAS análises:
+
+1. **Análise da Queda de Preço**: Determine se esta queda indica **PERDA DE FUNDAMENTO** ou se é apenas:
+   - Movimento de mercado (correção geral, volatilidade)
+   - Notícia atípica (evento pontual, especulação)
+   - Ajuste técnico (sem relação com fundamentos)
+   ${dividendsInfo.dividends.length > 0 ? '- Ajuste por pagamento de dividendos (normal e esperado)' : ''}
+   ${profitabilityStatus.isUnprofitable || profitabilityStatus.isTurnaround ? '- Volatilidade esperada para empresa sem lucro ou em processo de turnaround' : ''}
+
+2. **Análise do Fundamento Atual**: Avalie o estado atual dos fundamentos da empresa, independentemente da queda de preço. Considere:
+   - Resultados financeiros recentes
+   - Posição competitiva
+   - Gestão e operações
+   - Perspectivas futuras
+   - Indicadores-chave (lucratividade, crescimento, endividamento, etc.)
 
 **CRITÉRIOS PARA "PERDA DE FUNDAMENTO":**
 - Mudanças negativas nos resultados financeiros
@@ -325,12 +466,19 @@ ${dividendsInfo.dividends.length > 0 ? '- Ajuste por pagamento de dividendos (qu
 \`\`\`json
 {
   "isFundamentalLoss": true/false,
-  "conclusion": "PERDA_DE_FUNDAMENTO" ou "MOVIMENTO_MERCADO" ou "NOTICIA_ATIPICA" ou "AJUSTE_TECNICO"${dividendsInfo.dividends.length > 0 ? ' ou "AJUSTE_DIVIDENDOS"' : ''},
-  "reasoning": "Explicação detalhada do raciocínio (máximo 300 palavras). ${dividendsInfo.dividends.length > 0 ? 'Mencione o impacto dos dividendos na sua análise.' : ''}"
+  "conclusion": "PERDA_DE_FUNDAMENTO" ou "MOVIMENTO_MERCADO" ou "NOTICIA_ATIPICA" ou "AJUSTE_TECNICO"${dividendsInfo.dividends.length > 0 ? ' ou "AJUSTE_DIVIDENDOS"' : ''}${profitabilityStatus.isUnprofitable || profitabilityStatus.isTurnaround ? ' ou "VOLATILIDADE_ESPERADA"' : ''},
+  "reasoning": "Explicação detalhada sobre a queda de preço e se indica perda de fundamento (máximo 200 palavras). ${dividendsInfo.dividends.length > 0 ? 'Mencione o impacto dos dividendos na sua análise. ' : ''}${profitabilityStatus.profitabilityContext ? `IMPORTANTE: Considere o contexto de lucratividade: ${profitabilityStatus.profitabilityContext}. ` : ''}${profitabilityStatus.isTurnaround ? 'Para empresas em turnaround, volatilidade de preço é comum e pode não indicar perda de fundamento se a recuperação está em curso.' : profitabilityStatus.isUnprofitable ? 'Para empresas sem lucro, quedas de preço podem ser mais comuns e nem sempre indicam perda de fundamento estrutural.' : ''}",
+  "currentFundamentals": {
+    "overallAssessment": "FORTE" ou "MODERADO" ou "FRACO" ou "EM_RECUPERACAO" ou "EM_DETERIORACAO",
+    "strengths": ["ponto forte 1", "ponto forte 2", ...],
+    "weaknesses": ["ponto fraco 1", "ponto fraco 2", ...],
+    "keyIndicators": "Análise dos principais indicadores financeiros e operacionais (máximo 150 palavras)",
+    "outlook": "Perspectiva futura dos fundamentos da empresa (máximo 100 palavras)"
+  }
 }
 \`\`\`
 
-Seja objetivo e baseie sua análise nos dados da pesquisa e nas informações sobre dividendos quando disponíveis.`;
+Seja objetivo e baseie sua análise nos dados da pesquisa, informações sobre dividendos e contexto de lucratividade quando disponíveis.`;
 
   try {
     const model = 'gemini-2.5-flash-lite';
@@ -378,6 +526,17 @@ Seja objetivo e baseie sua análise nos dados da pesquisa e nas informações so
 
     const analysis = JSON.parse(jsonStr.trim()) as FundamentalAnalysisResult;
 
+    // Garantir que currentFundamentals existe mesmo se a IA não retornar
+    if (!analysis.currentFundamentals) {
+      analysis.currentFundamentals = {
+        overallAssessment: 'MODERADO',
+        strengths: [],
+        weaknesses: [],
+        keyIndicators: 'Análise de indicadores não disponível.',
+        outlook: 'Perspectiva não disponível.',
+      };
+    }
+
     return analysis;
   } catch (error) {
     console.error(`Erro ao analisar impacto fundamental para ${ticker}:`, error);
@@ -386,6 +545,13 @@ Seja objetivo e baseie sua análise nos dados da pesquisa e nas informações so
       isFundamentalLoss: false,
       conclusion: 'ANALISE_INDISPONIVEL',
       reasoning: 'Não foi possível realizar análise completa devido a erro técnico.',
+      currentFundamentals: {
+        overallAssessment: 'MODERADO',
+        strengths: [],
+        weaknesses: [],
+        keyIndicators: 'Análise de indicadores não disponível devido a erro técnico.',
+        outlook: 'Perspectiva não disponível devido a erro técnico.',
+      },
     };
   }
 }
@@ -413,25 +579,36 @@ export async function generatePriceVariationReport(
     adjustedVariation: 0,
   };
 
+  // Identificar status de lucratividade
+  let profitabilityStatus = {
+    isUnprofitable: false,
+    isTurnaround: false,
+    profitabilityContext: '',
+  };
+
   if (companyId) {
     const currentDate = new Date();
     const startDate = new Date(currentDate);
     startDate.setDate(startDate.getDate() - variation.days - 5); // Janela extra de 5 dias
     startDate.setHours(0, 0, 0, 0);
     
-    dividendsInfo = await checkDividendsInPeriod(
-      companyId,
-      ticker,
-      startDate,
-      currentDate,
-      variation.previousPrice
-    );
-
-    // Calcular variação ajustada
-    dividendsInfo.adjustedVariation = variation.variation - dividendsInfo.dividendImpact;
+    // Buscar dividendos e status de lucratividade em paralelo
+    [dividendsInfo, profitabilityStatus] = await Promise.all([
+      checkDividendsInPeriod(
+        companyId,
+        ticker,
+        startDate,
+        currentDate,
+        variation.previousPrice
+      ).then(result => {
+        result.adjustedVariation = variation.variation - result.dividendImpact;
+        return result;
+      }),
+      identifyProfitabilityStatus(companyId),
+    ]);
   }
 
-  // Analisar impacto fundamental (passando companyId para verificar dividendos)
+  // Analisar impacto fundamental (passando companyId para verificar dividendos e lucratividade)
   const analysis = await analyzeFundamentalImpact(
     ticker, 
     companyName, 
@@ -455,6 +632,19 @@ ${dividendsInfo.dividends.map(d => `- **${d.exDate.toISOString().split('T')[0]}*
 
 Nenhum pagamento de dividendo detectado no período analisado.`;
 
+  // Construir seção de contexto de lucratividade para o relatório
+  const profitabilitySection = profitabilityStatus.profitabilityContext
+    ? `## Contexto de Lucratividade
+
+${profitabilityStatus.profitabilityContext}
+
+${profitabilityStatus.isTurnaround 
+  ? '> **Nota sobre Turnaround**: Empresas em processo de recuperação podem apresentar maior volatilidade de preço. A queda observada pode estar relacionada a expectativas de mercado sobre a continuidade da recuperação, e não necessariamente indica perda de fundamento estrutural.'
+  : profitabilityStatus.isUnprofitable
+  ? '> **Nota sobre Empresas sem Lucro**: Empresas sem lucro podem apresentar maior volatilidade de preço. A queda observada pode estar relacionada a expectativas sobre a capacidade da empresa de se tornar lucrativa, e não necessariamente indica perda de fundamento estrutural.'
+  : ''}`
+    : '';
+
   // Gerar relatório final
   const report = `# Relatório de Variação de Preço: ${companyName} (${ticker})
 
@@ -469,16 +659,38 @@ ${dividendsInfo.dividends.length > 0 ? `- **Variação ajustada (sem dividendos)
 
 ${dividendsSection}
 
+${profitabilitySection}
+
 ## Pesquisa de Mercado
 
 ${research}
 
 ## Análise de Impacto Fundamental
 
-**Conclusão**: ${analysis.conclusion === 'PERDA_DE_FUNDAMENTO' ? '⚠️ **PERDA DE FUNDAMENTO DETECTADA**' : analysis.conclusion === 'AJUSTE_DIVIDENDOS' ? '✅ **Ajuste por Dividendos**' : '✅ **Não indica perda de fundamento estrutural**'}
+### Sobre a Queda de Preço
+
+**Conclusão**: ${analysis.conclusion === 'PERDA_DE_FUNDAMENTO' ? '⚠️ **PERDA DE FUNDAMENTO DETECTADA**' : analysis.conclusion === 'AJUSTE_DIVIDENDOS' ? '✅ **Ajuste por Dividendos**' : analysis.conclusion === 'VOLATILIDADE_ESPERADA' ? '📊 **Volatilidade Esperada**' : '✅ **Não indica perda de fundamento estrutural**'}
 
 **Raciocínio**:
 ${analysis.reasoning}
+
+### Estado Atual dos Fundamentos
+
+${analysis.currentFundamentals ? `
+**Avaliação Geral**: ${analysis.currentFundamentals.overallAssessment === 'FORTE' ? '🟢 **FORTE**' : analysis.currentFundamentals.overallAssessment === 'MODERADO' ? '🟡 **MODERADO**' : analysis.currentFundamentals.overallAssessment === 'FRACO' ? '🔴 **FRACO**' : analysis.currentFundamentals.overallAssessment === 'EM_RECUPERACAO' ? '🔄 **EM RECUPERAÇÃO**' : '📉 **EM DETERIORAÇÃO**'}
+
+${analysis.currentFundamentals.strengths && analysis.currentFundamentals.strengths.length > 0 ? `**Pontos Fortes**:
+${analysis.currentFundamentals.strengths.map(s => `- ✅ ${s}`).join('\n')}
+
+` : ''}${analysis.currentFundamentals.weaknesses && analysis.currentFundamentals.weaknesses.length > 0 ? `**Pontos Fracos**:
+${analysis.currentFundamentals.weaknesses.map(w => `- ⚠️ ${w}`).join('\n')}
+
+` : ''}**Análise dos Indicadores-Chave**:
+${analysis.currentFundamentals.keyIndicators}
+
+**Perspectiva Futura**:
+${analysis.currentFundamentals.outlook}
+` : ''}
 
 ## Recomendações
 

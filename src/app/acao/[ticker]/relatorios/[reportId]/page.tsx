@@ -115,13 +115,38 @@ export default async function ReportDetailPage({ params }: PageProps) {
   const isPriceVariation = report.type === 'PRICE_VARIATION';
   const isFundamentalChange = report.type === 'FUNDAMENTAL_CHANGE';
   
-  // Direção de mudança e score só fazem sentido para FUNDAMENTAL_CHANGE e PRICE_VARIATION
-  // CUSTOM_TRIGGER não tem sentido de mudança
-  const hasChangeDirection = isFundamentalChange || isPriceVariation;
+  // Direção de mudança e score só fazem sentido para FUNDAMENTAL_CHANGE
+  // PRICE_VARIATION não tem sentido de mudança (é sobre variação de preço, não mudança fundamental)
+  const hasChangeDirection = isFundamentalChange;
   const isPositive = hasChangeDirection && report.changeDirection === 'positive';
   const scoreDelta = hasChangeDirection && report.currentScore && report.previousScore 
     ? Number(report.currentScore) - Number(report.previousScore)
     : 0;
+
+  // Extrair conclusão do relatório para PRICE_VARIATION (manter markdown para renderização)
+  let fundamentalConclusion: string | null = null;
+  if (isPriceVariation) {
+    // Buscar a seção "## Análise de Impacto Fundamental" > "### Sobre a Queda de Preço" > "**Conclusão**:"
+    // O padrão pode ser: **Conclusão**: ⚠️ **PERDA DE FUNDAMENTO DETECTADA**
+    // ou: **Conclusão**: ✅ **Não indica perda de fundamento estrutural**
+    const analysisSectionMatch = report.content.match(/## Análise de Impacto Fundamental[\s\S]*?### Sobre a Queda de Preço[\s\S]*?\*\*Conclusão\*\*:\s*([^\n]+)/i);
+    if (analysisSectionMatch && analysisSectionMatch[1]) {
+      fundamentalConclusion = analysisSectionMatch[1].trim();
+      // Manter markdown para renderização correta
+      // Limitar tamanho para exibição (mas preservar markdown)
+      if (fundamentalConclusion && fundamentalConclusion.length > 150) {
+        // Tentar cortar em um ponto seguro (após fechar tags markdown)
+        const truncated = fundamentalConclusion.substring(0, 147);
+        const lastBold = truncated.lastIndexOf('**');
+        if (lastBold > 100) {
+          // Se encontrou um ** próximo, cortar após ele
+          fundamentalConclusion = truncated.substring(0, lastBold + 2) + '...';
+        } else {
+          fundamentalConclusion = truncated + '...';
+        }
+      }
+    }
+  }
 
   // Para usuários não-premium, mostrar apenas uma parte do conteúdo
   // Trunca em um ponto natural (após parágrafo ou sentença)
@@ -188,9 +213,13 @@ export default async function ReportDetailPage({ params }: PageProps) {
       {/* Metadata Card */}
       <Card className="p-6 mb-6">
         <div className={`grid grid-cols-1 ${
-          isMonthlyReport || isCustomTrigger 
-            ? 'md:grid-cols-2' 
-            : 'md:grid-cols-3'
+          isPriceVariation && fundamentalConclusion
+            ? 'md:grid-cols-2'
+            : isMonthlyReport || isCustomTrigger 
+              ? 'md:grid-cols-2' 
+              : hasChangeDirection
+                ? 'md:grid-cols-3'
+                : 'md:grid-cols-1'
         } gap-6`}>
           {/* Data */}
           <div>
@@ -207,7 +236,19 @@ export default async function ReportDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Mudança - apenas para FUNDAMENTAL_CHANGE e PRICE_VARIATION */}
+          {/* Conclusão do Fundamento - apenas para PRICE_VARIATION */}
+          {isPriceVariation && fundamentalConclusion && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Conclusão do Fundamento
+              </div>
+              <div className="text-base font-medium prose prose-sm max-w-none dark:prose-invert">
+                <MarkdownRenderer content={fundamentalConclusion} />
+              </div>
+            </div>
+          )}
+
+          {/* Mudança - apenas para FUNDAMENTAL_CHANGE */}
           {hasChangeDirection && (
             <div>
               <div className="text-sm text-muted-foreground mb-1">
@@ -232,7 +273,7 @@ export default async function ReportDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Score - apenas para FUNDAMENTAL_CHANGE e PRICE_VARIATION */}
+          {/* Score - apenas para FUNDAMENTAL_CHANGE */}
           {hasChangeDirection && (
             <div>
               <div className="text-sm text-muted-foreground mb-1">

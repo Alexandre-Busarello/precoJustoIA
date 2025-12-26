@@ -553,7 +553,11 @@ export default async function TickerPage({ params }: PageProps) {
     },
     include: {
       report: {
-        select: { id: true }
+        select: { 
+          id: true,
+          content: true,
+          type: true,
+        }
       }
     },
     orderBy: { createdAt: 'desc' },
@@ -562,6 +566,49 @@ export default async function TickerPage({ params }: PageProps) {
 
   const activeFlag = activeFlags.length > 0 ? activeFlags[0] : null;
   const isPremium = await isCurrentUserPremium();
+
+  // Se o reason for um código (como "PERDA_DE_FUNDAMENTO"), tentar extrair trecho do relatório
+  let flagReason = activeFlag?.reason || '';
+  if (activeFlag && activeFlag.report && activeFlag.report.content) {
+    // Verificar se o reason é um código (contém apenas letras maiúsculas, números e underscore)
+    const isCodePattern = /^[A-Z0-9_]+$/.test(flagReason);
+    
+    if (isCodePattern) {
+      // Tentar extrair o raciocínio da análise do relatório
+      const reportContent = activeFlag.report.content;
+      
+      // Para PRICE_VARIATION, buscar a seção "Raciocínio:" após "### Sobre a Queda de Preço"
+      if (activeFlag.report.type === 'PRICE_VARIATION') {
+        const reasoningMatch = reportContent.match(/## Análise de Impacto Fundamental[\s\S]*?### Sobre a Queda de Preço[\s\S]*?\*\*Raciocínio\*\*:\s*([\s\S]*?)(?=\n##|\n###|$)/i);
+        if (reasoningMatch && reasoningMatch[1]) {
+          let reasoning = reasoningMatch[1].trim();
+          // Limitar tamanho e remover markdown excessivo
+          if (reasoning.length > 300) {
+            reasoning = reasoning.substring(0, 297) + '...';
+          }
+          // Remover múltiplas quebras de linha
+          reasoning = reasoning.replace(/\n{3,}/g, '\n\n');
+          flagReason = reasoning;
+        } else {
+          // Fallback: buscar qualquer texto após a conclusão
+          const conclusionMatch = reportContent.match(/## Análise de Impacto Fundamental[\s\S]*?\*\*Conclusão\*\*:[^\n]*\n([\s\S]{100,500})/i);
+          if (conclusionMatch && conclusionMatch[1]) {
+            let fallbackText = conclusionMatch[1].trim();
+            if (fallbackText.length > 300) {
+              fallbackText = fallbackText.substring(0, 297) + '...';
+            }
+            flagReason = fallbackText.replace(/\n{3,}/g, '\n\n');
+          }
+        }
+      } else {
+        // Para outros tipos de relatório, buscar primeiro parágrafo significativo
+        const firstParagraphMatch = reportContent.match(/\n\n([^\n]{50,300})/);
+        if (firstParagraphMatch && firstParagraphMatch[1]) {
+          flagReason = firstParagraphMatch[1].trim();
+        }
+      }
+    }
+  }
 
   return (
     <>
@@ -573,7 +620,7 @@ export default async function TickerPage({ params }: PageProps) {
           <CompanyFlagBanner
             flag={{
               id: activeFlag.id,
-              reason: activeFlag.reason,
+              reason: flagReason,
               reportId: activeFlag.reportId,
             }}
             ticker={ticker}

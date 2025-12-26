@@ -5,6 +5,7 @@ import { AlertTriangle, X, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useState } from 'react';
+import { MarkdownRenderer } from '@/components/markdown-renderer';
 
 interface CompanyFlagBannerProps {
   flag: {
@@ -23,10 +24,15 @@ export function CompanyFlagBanner({ flag, ticker, isPremium }: CompanyFlagBanner
     return null;
   }
 
-  // Resumo do motivo (primeiros 200 caracteres)
-  const reasonSummary = flag.reason.length > 200 
-    ? flag.reason.substring(0, 200) + '...'
-    : flag.reason;
+  // Verificar se o reason contém markdown (contém **, *, #, etc)
+  const hasMarkdown = /[\*\#\[\]\(\)]/.test(flag.reason);
+  
+  // Resumo do motivo (primeiros 300 caracteres se não for markdown, ou manter completo se for markdown)
+  const reasonSummary = hasMarkdown 
+    ? flag.reason
+    : flag.reason.length > 300 
+      ? flag.reason.substring(0, 300) + '...'
+      : flag.reason;
 
   if (isPremium) {
     // Banner para usuários Premium: mostra detalhes completos
@@ -50,9 +56,16 @@ export function CompanyFlagBanner({ flag, ticker, isPremium }: CompanyFlagBanner
                   <X className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>
               </div>
-              <p className="text-sm sm:text-base text-red-800 dark:text-red-200 mb-4">
-                {reasonSummary}
-              </p>
+              <div className="text-sm sm:text-base text-red-800 dark:text-red-200 mb-4 prose prose-sm max-w-none dark:prose-invert prose-red">
+                {hasMarkdown ? (
+                  <MarkdownRenderer 
+                    content={reasonSummary} 
+                    className="prose-sm prose-red dark:prose-invert"
+                  />
+                ) : (
+                  <p>{reasonSummary}</p>
+                )}
+              </div>
               {flag.reportId && (
                 <Button
                   asChild

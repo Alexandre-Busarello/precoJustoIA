@@ -11,6 +11,7 @@ import { authOptions } from '@/lib/auth';
 import { getCurrentUser, isUserPremium } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { TriggerConfig } from '@/lib/custom-trigger-service';
+import { clearQueryCache } from '@/lib/prisma-wrapper';
 
 /**
  * GET /api/user-asset-monitor
@@ -181,6 +182,9 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      // Invalidar cache após atualização
+      await clearQueryCache(['user_asset_monitor']);
+
       return NextResponse.json({
         success: true,
         monitor: {
@@ -212,6 +216,9 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Invalidar cache após criação
+    await clearQueryCache(['user_asset_monitor']);
 
     return NextResponse.json({
       success: true,

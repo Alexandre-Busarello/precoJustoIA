@@ -32,7 +32,7 @@ export default async function CustomMonitorsPage() {
 
   // Buscar monitoramentos customizados do usuário
   const monitorsRaw = await safeQueryWithParams(
-    'user-custom-monitors',
+    'user_asset_monitor',
     () =>
       prisma.userAssetMonitor.findMany({
         where: { userId: user.id },

@@ -11,6 +11,7 @@ import { authOptions } from '@/lib/auth';
 import { getCurrentUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { TriggerConfig } from '@/lib/custom-trigger-service';
+import { clearQueryCache } from '@/lib/prisma-wrapper';
 
 /**
  * DELETE /api/user-asset-monitor/[id]
@@ -65,6 +66,9 @@ export async function DELETE(
       where: { id: monitorId },
       data: { isActive: false },
     });
+
+    // Invalidar cache após desativação
+    await clearQueryCache(['user_asset_monitor']);
 
     return NextResponse.json({
       success: true,
@@ -154,6 +158,9 @@ export async function PATCH(
         },
       },
     });
+
+    // Invalidar cache após atualização
+    await clearQueryCache(['user_asset_monitor']);
 
     return NextResponse.json({
       success: true,

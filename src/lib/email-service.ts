@@ -3196,7 +3196,7 @@ export function generateNotificationEmailTemplate(
                 ${userName ? `Olá, <strong>${userName}</strong>!` : 'Olá!'} 👋
               </p>
               
-              <h2 class="notification-title">${title}</h2>
+              <h2 class="notification-title">${convertMarkdownToHtml(title)}</h2>
               
               ${illustrationUrl ? `
                 <div class="illustration-container">
@@ -3237,11 +3237,11 @@ export function generateNotificationEmailTemplate(
       </html>
     `,
     text: `
-${title} - Preço Justo AI
+${stripMarkdown(title)} - Preço Justo AI
 
 ${userName ? `Olá, ${userName}!` : 'Olá!'}
 
-${title}
+${stripMarkdown(title)}
 
 ${stripMarkdown(message)}
 

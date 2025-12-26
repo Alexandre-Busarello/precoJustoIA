@@ -99,6 +99,17 @@ export interface NotificationPreferences {
  * 
  * Gerencia criação, leitura e segmentação de notificações
  */
+/**
+ * Substitui placeholders {{name}} e {{nome}} pelo nome do usuário
+ * Se o nome for null ou undefined, substitui por string vazia
+ */
+function replaceUserNamePlaceholders(text: string, userName: string | null | undefined): string {
+  if (!text) return text
+  // Se não houver nome (null ou undefined), substituir por string vazia
+  const nameToUse = userName || ''
+  return text.replace(/\{\{name\}\}/gi, nameToUse).replace(/\{\{nome\}\}/gi, nameToUse)
+}
+
 export class NotificationService {
   /**
    * Cria uma notificação individual para um usuário
@@ -117,13 +128,22 @@ export class NotificationService {
     } = params
 
     try {
+      // Buscar nome do usuário para substituição de placeholders
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      })
+      const userName = user?.name || null
+      const personalizedTitle = replaceUserNamePlaceholders(title, userName)
+      const personalizedMessage = replaceUserNamePlaceholders(message, userName)
+      
       // Criar notificação
       const notification = await prisma.notification.create({
         data: {
           userId,
           campaignId: campaignId || null,
-          title,
-          message,
+          title: personalizedTitle,
+          message: personalizedMessage,
           link: link || null,
           linkType,
           type,
@@ -142,7 +162,7 @@ export class NotificationService {
           })
           illustrationUrl = (campaign as any)?.illustrationUrl || null
         }
-        await this.sendNotificationEmail(userId, notification.id, title, message, link, linkType, undefined, illustrationUrl)
+        await this.sendNotificationEmail(userId, notification.id, personalizedTitle, personalizedMessage, link, linkType, undefined, illustrationUrl)
       }
 
       return notification.id
@@ -218,14 +238,25 @@ export class NotificationService {
       for (let i = 0; i < userIds.length; i += batchSize) {
         const batch = userIds.slice(i, i + batchSize)
         
+        // Buscar nomes dos usuários em batch para substituição de placeholders
+        const users = await prisma.user.findMany({
+          where: { id: { in: batch } },
+          select: { id: true, name: true }
+        })
+        const userNamesMap = new Map(users.map(u => [u.id, u.name]))
+
         const notifications = await Promise.all(
-          batch.map(userId =>
-            prisma.notification.create({
+          batch.map(userId => {
+            const userName = userNamesMap.get(userId) || null
+            const personalizedTitle = replaceUserNamePlaceholders(title, userName)
+            const personalizedMessage = replaceUserNamePlaceholders(message, userName)
+            
+            return prisma.notification.create({
               data: {
                 userId,
                 campaignId: campaign.id,
-                title,
-                message,
+                title: personalizedTitle,
+                message: personalizedMessage,
                 link: link || null,
                 linkType,
                 type: (displayType === 'QUIZ' ? 'QUIZ' : displayType === 'MODAL' ? 'MODAL' : 'CAMPAIGN') as any,
@@ -236,7 +267,7 @@ export class NotificationService {
                 }
               }
             })
-          )
+          })
         )
 
         notificationsCreated += notifications.length
@@ -245,9 +276,12 @@ export class NotificationService {
         if (sendEmail) {
           const campaignIllustrationUrl = illustrationUrl || null
           await Promise.all(
-            notifications.map(notification =>
-              this.sendNotificationEmail(notification.userId, notification.id, title, message, link, linkType, ctaText, campaignIllustrationUrl)
-            )
+            notifications.map(notification => {
+              const userName = userNamesMap.get(notification.userId) || null
+              const personalizedTitle = replaceUserNamePlaceholders(title, userName)
+              const personalizedMessage = replaceUserNamePlaceholders(message, userName)
+              return this.sendNotificationEmail(notification.userId, notification.id, personalizedTitle, personalizedMessage, link, linkType, ctaText, campaignIllustrationUrl)
+            })
           )
         }
       }
@@ -316,14 +350,25 @@ export class NotificationService {
       for (let i = 0; i < newUserIds.length; i += batchSize) {
         const batch = newUserIds.slice(i, i + batchSize)
         
+        // Buscar nomes dos usuários em batch para substituição de placeholders
+        const users = await prisma.user.findMany({
+          where: { id: { in: batch } },
+          select: { id: true, name: true }
+        })
+        const userNamesMap = new Map(users.map(u => [u.id, u.name]))
+
         const notifications = await Promise.all(
-          batch.map(userId =>
-            prisma.notification.create({
+          batch.map(userId => {
+            const userName = userNamesMap.get(userId) || null
+            const personalizedTitle = replaceUserNamePlaceholders(campaign.title, userName)
+            const personalizedMessage = replaceUserNamePlaceholders(campaign.message, userName)
+            
+            return prisma.notification.create({
               data: {
                 userId,
                 campaignId: campaign.id,
-                title: campaign.title,
-                message: campaign.message,
+                title: personalizedTitle,
+                message: personalizedMessage,
                 link: campaign.link || null,
                 linkType: campaign.linkType as NotificationLinkType,
                 type: ((campaign as any).displayType === 'QUIZ' ? 'QUIZ' : (campaign as any).displayType === 'MODAL' ? 'MODAL' : 'CAMPAIGN') as any,
@@ -334,7 +379,7 @@ export class NotificationService {
                 }
               }
             })
-          )
+          })
         )
 
         notificationsCreated += notifications.length
@@ -343,18 +388,21 @@ export class NotificationService {
         if (sendEmail) {
           const campaignIllustrationUrl = (campaign as any).illustrationUrl || null
           await Promise.all(
-            notifications.map(notification =>
-              this.sendNotificationEmail(
+            notifications.map(notification => {
+              const userName = userNamesMap.get(notification.userId) || null
+              const personalizedTitle = replaceUserNamePlaceholders(campaign.title, userName)
+              const personalizedMessage = replaceUserNamePlaceholders(campaign.message, userName)
+              return this.sendNotificationEmail(
                 notification.userId,
                 notification.id,
-                campaign.title,
-                campaign.message,
+                personalizedTitle,
+                personalizedMessage,
                 campaign.link,
                 campaign.linkType as NotificationLinkType,
                 (campaign as any).ctaText,
                 campaignIllustrationUrl
               )
-            )
+            })
           )
         }
       }
@@ -504,12 +552,21 @@ export class NotificationService {
 
         // Criar notificação para o usuário
         try {
+          // Buscar nome do usuário para substituição de placeholders
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true }
+          })
+          const userName = user?.name || null
+          const personalizedTitle = replaceUserNamePlaceholders(campaign.title, userName)
+          const personalizedMessage = replaceUserNamePlaceholders(campaign.message, userName)
+          
           await prisma.notification.create({
             data: {
               userId,
               campaignId: campaign.id,
-              title: campaign.title,
-              message: campaign.message,
+              title: personalizedTitle,
+              message: personalizedMessage,
               link: campaign.link || null,
               linkType: campaign.linkType as NotificationLinkType,
               type: ((campaign as any).displayType === 'QUIZ' ? 'QUIZ' : 'CAMPAIGN') as any,

@@ -204,7 +204,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
                 >
                   <div className="flex items-start justify-between w-full mb-1">
                     <h4 className="font-semibold text-sm flex-1">
-                      {notification.title}
+                      <NotificationMarkdown content={notification.title} inline />
                       {notification.type === 'QUIZ' && (
                         <Badge variant="outline" className="ml-2 text-xs">
                           Quiz

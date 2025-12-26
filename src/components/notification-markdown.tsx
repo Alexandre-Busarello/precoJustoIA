@@ -9,13 +9,43 @@ import { cn } from '@/lib/utils'
 interface NotificationMarkdownProps {
   content: string
   className?: string
+  inline?: boolean // Para renderização inline (títulos, etc)
 }
 
 /**
  * Componente para renderizar markdown em notificações
  * Suporta formatação básica: negrito, itálico, links, quebras de linha
  */
-export function NotificationMarkdown({ content, className }: NotificationMarkdownProps) {
+export function NotificationMarkdown({ content, className, inline = false }: NotificationMarkdownProps) {
+  if (inline) {
+    // Renderização inline para títulos e textos curtos
+    return (
+      <span className={className}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            // Para inline, não criar parágrafos, apenas renderizar o conteúdo diretamente
+            p: ({ children }) => <>{children}</>,
+            strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+            em: ({ children }) => <em className="italic">{children}</em>,
+            a: ({ href, children }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {children}
+              </a>
+            ),
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </span>
+    )
+  }
+
   return (
     <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
       <ReactMarkdown

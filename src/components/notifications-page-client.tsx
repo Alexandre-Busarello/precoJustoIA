@@ -238,7 +238,7 @@ export function NotificationsPageClient() {
                           <div className="flex-1">
                             <div className="flex items-start gap-2 mb-2">
                               <h3 className="font-semibold text-base">
-                                {notification.title}
+                                <NotificationMarkdown content={notification.title} inline />
                               </h3>
                               {notification.type === 'MODAL' && (
                                 <Badge variant="outline" className="text-xs">

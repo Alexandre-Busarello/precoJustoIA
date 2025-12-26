@@ -55,7 +55,7 @@ export function SimpleNotificationModal({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-lg sm:text-xl text-slate-900 dark:text-slate-100 mb-2">
-              {title}
+              <NotificationMarkdown content={title} inline />
             </h3>
             <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
               <NotificationMarkdown content={message} />
@@ -89,7 +89,7 @@ export function SimpleNotificationModal({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-lg sm:text-xl text-white mb-2">
-              {title}
+              <NotificationMarkdown content={title} inline />
             </h3>
             <div className="text-sm text-slate-300 leading-relaxed">
               <NotificationMarkdown content={message} />
@@ -119,7 +119,7 @@ export function SimpleNotificationModal({
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="font-semibold text-base sm:text-lg text-slate-900 dark:text-slate-100 mb-2">
-            {title}
+            <NotificationMarkdown content={title} inline />
           </h3>
           <div className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
             <NotificationMarkdown content={message} />
@@ -163,7 +163,7 @@ export function SimpleNotificationModal({
       <div className="p-4 sm:p-6 space-y-4">
         <div className="space-y-2">
           <h3 className="font-bold text-xl sm:text-2xl text-slate-900 dark:text-slate-100 leading-tight">
-            {title}
+            <NotificationMarkdown content={title} inline />
           </h3>
           <div className="text-sm sm:text-base text-slate-600 dark:text-slate-400 leading-relaxed">
             <NotificationMarkdown content={message} />

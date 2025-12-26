@@ -223,7 +223,7 @@ export function DashboardNotificationBanner() {
                   )}
                   style={{ color: getTextColor() || '#ffffff' }}
                 >
-                  {notification.title}
+                  <NotificationMarkdown content={notification.title} inline />
                 </h3>
                 <Badge 
                   variant="secondary" 
@@ -318,7 +318,7 @@ export function DashboardNotificationBanner() {
                   )}
                   style={{ color: getTextColor() || undefined }}
                 >
-                  {notification.title}
+                  <NotificationMarkdown content={notification.title} inline />
                 </h3>
                 {/* Badge com cor primária ou secundária */}
                 <Badge 

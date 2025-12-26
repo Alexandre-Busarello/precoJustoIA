@@ -2,11 +2,14 @@ import { Resend } from 'resend'
 import nodemailer from 'nodemailer'
 import { marked } from 'marked'
 
+export type EmailProvider = 'RESEND' | 'GMAIL'
+
 interface SendEmailOptions {
   to: string
   subject: string
   html: string
   text?: string
+  provider?: EmailProvider // Provider de email a ser usado (padrão: RESEND)
 }
 
 // Configuração do transporter nodemailer (DESABILITADO - não usado mais como fallback)
@@ -39,71 +42,108 @@ const createNodemailerTransporter = () => {
 }
 
 /**
- * Envia um e-mail usando APENAS Resend (fallback SMTP desabilitado)
+ * Envia um e-mail usando Resend ou Gmail conforme o provider especificado
  * 
  * Fluxo:
- * 1. Tenta enviar com Resend (se RESEND_API_KEY estiver configurada)
- * 2. Se falhar, lança erro e email permanece como PENDING na fila
- * 
- * IMPORTANTE: Fallback SMTP (nodemailer/Gmail) foi DESABILITADO.
- * Se o Resend falhar, o erro será propagado e o email será mantido como PENDING
- * na fila para reprocessamento posterior.
+ * 1. Se provider for GMAIL, usa nodemailer com configurações SMTP do Gmail
+ * 2. Se provider for RESEND (ou não especificado), usa Resend API
+ * 3. Se falhar, lança erro e email permanece como PENDING na fila
  * 
  * Configuração Resend:
- * - RESEND_API_KEY: Chave da API do Resend (OBRIGATÓRIO)
- * - EMAIL_FROM ou RESEND_FROM_EMAIL: Email remetente
+ * - RESEND_API_KEY: Chave da API do Resend
+ * - RESEND_FROM_EMAIL: Email remetente para Resend
+ * 
+ * Configuração Gmail:
+ * - EMAIL_HOST: smtp.gmail.com
+ * - EMAIL_PORT: 587
+ * - EMAIL_SECURE: false
+ * - EMAIL_USER: Seu email do Gmail
+ * - EMAIL_PASS: App Password do Gmail
+ * - EMAIL_FROM: Email remetente
  */
-export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Preço Justo AI <suporte@precojusto.ai>'
+export async function sendEmail({ to, subject, html, text, provider = 'RESEND' }: SendEmailOptions) {
+  const fromEmail = provider === 'GMAIL' 
+    ? (process.env.EMAIL_FROM || process.env.EMAIL_USER || '')
+    : (process.env.RESEND_FROM_EMAIL || 'Preço Justo AI <suporte@precojusto.ai>')
   const fromName = 'Preço Justo AI'
   const textContent = text || html.replace(/<[^>]*>/g, '') // Remove HTML tags para versão texto
 
   // ============================================
-  // TENTATIVA 1: RESEND (Método Principal)
+  // GMAIL (SMTP via nodemailer)
   // ============================================
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const resend = new Resend(process.env.RESEND_API_KEY)
-      
-      // Formatar o remetente: "Nome <email@dominio.com>"
-      const from = fromEmail.includes('<') ? fromEmail : `"${fromName}" <${fromEmail}>`
+  if (provider === 'GMAIL') {
+    if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      const errorMsg = 'Configuração Gmail incompleta. Configure EMAIL_HOST, EMAIL_USER e EMAIL_PASS.'
+      console.error('❌ [EMAIL]', errorMsg)
+      throw new Error(errorMsg)
+    }
 
-      const { data, error } = await resend.emails.send({
-        from,
-        to: Array.isArray(to) ? to : [to],
+    try {
+      const transporter = createNodemailerTransporter()
+      
+      const info = await transporter.sendMail({
+        from: fromEmail.includes('<') ? fromEmail : `"${fromName}" <${fromEmail}>`,
+        to: Array.isArray(to) ? to.join(', ') : to,
         subject,
         html,
         text: textContent,
       })
 
-      if (error) {
-        throw new Error(`Resend error: ${error.message}`)
-      }
-
       if (process.env.NODE_ENV === 'development') {
-        console.log('✅ [EMAIL] E-mail enviado com sucesso via Resend:', data?.id)
+        console.log('✅ [EMAIL] E-mail enviado com sucesso via Gmail:', info.messageId)
       }
       
-      return { success: true, messageId: data?.id, method: 'resend' }
+      return { success: true, messageId: info.messageId, method: 'gmail' }
     } catch (error: any) {
-      // Se o Resend não estiver instalado, lança erro
-      if (error.code === 'MODULE_NOT_FOUND') {
-        const errorMsg = 'Resend não está instalado. Instale o pacote resend.'
-        console.error('❌ [EMAIL]', errorMsg)
-        throw new Error(errorMsg)
-      } else {
-        // Qualquer outro erro do Resend deve ser propagado (não usar fallback SMTP)
-        const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar via Resend'
-        console.error('❌ [EMAIL] Erro ao enviar via Resend:', errorMsg)
-        console.log('⚠️ [EMAIL] Fallback SMTP desabilitado. Email será mantido como PENDING na fila.')
-        throw error // Propaga o erro para que o email seja mantido como PENDING
-      }
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar via Gmail'
+      console.error('❌ [EMAIL] Erro ao enviar via Gmail:', errorMsg)
+      throw error
     }
-  } else {
-    // Se RESEND_API_KEY não estiver configurada, lança erro
+  }
+
+  // ============================================
+  // RESEND (Método Padrão)
+  // ============================================
+  if (!process.env.RESEND_API_KEY) {
     const errorMsg = 'RESEND_API_KEY não configurada. Configure RESEND_API_KEY para enviar emails.'
     console.error('❌ [EMAIL]', errorMsg)
     throw new Error(errorMsg)
+  }
+
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    
+    // Formatar o remetente: "Nome <email@dominio.com>"
+    const from = fromEmail.includes('<') ? fromEmail : `"${fromName}" <${fromEmail}>`
+
+    const { data, error } = await resend.emails.send({
+      from,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html,
+      text: textContent,
+    })
+
+    if (error) {
+      throw new Error(`Resend error: ${error.message}`)
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ [EMAIL] E-mail enviado com sucesso via Resend:', data?.id)
+    }
+    
+    return { success: true, messageId: data?.id, method: 'resend' }
+  } catch (error: any) {
+    // Se o Resend não estiver instalado, lança erro
+    if (error.code === 'MODULE_NOT_FOUND') {
+      const errorMsg = 'Resend não está instalado. Instale o pacote resend.'
+      console.error('❌ [EMAIL]', errorMsg)
+      throw new Error(errorMsg)
+    } else {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar via Resend'
+      console.error('❌ [EMAIL] Erro ao enviar via Resend:', errorMsg)
+      throw error
+    }
   }
 }
 

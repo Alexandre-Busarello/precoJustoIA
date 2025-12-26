@@ -96,6 +96,7 @@ export function AdminNotificationsPageClient() {
   const [showOnDashboard, setShowOnDashboard] = useState(false)
   const [dashboardExpiresAt, setDashboardExpiresAt] = useState('')
   const [sendEmail, setSendEmail] = useState(false)
+  const [emailProvider, setEmailProvider] = useState<'RESEND' | 'GMAIL'>('RESEND')
   const [isActive, setIsActive] = useState(true)
   const [segmentUserCount, setSegmentUserCount] = useState<number | null>(null)
   const [isCountingUsers, setIsCountingUsers] = useState(false)
@@ -358,6 +359,7 @@ export function AdminNotificationsPageClient() {
     setIllustrationUrl('')
     setBannerColors({})
     setQuizQuestions([])
+    setEmailProvider('RESEND')
   }
 
   const handleCreateCampaign = () => {
@@ -477,6 +479,7 @@ export function AdminNotificationsPageClient() {
       showOnDashboard,
       dashboardExpiresAt: dashboardExpiresAt ? new Date(dashboardExpiresAt).toISOString() : undefined,
       sendEmail,
+      emailProvider: sendEmail ? emailProvider : undefined,
       isActive,
       displayType: finalDisplayType,
       bannerTemplate: showOnDashboard ? bannerTemplate : undefined,
@@ -1198,13 +1201,34 @@ export function AdminNotificationsPageClient() {
                 </div>
               )}
 
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="sendEmail"
-                  checked={sendEmail}
-                  onCheckedChange={setSendEmail}
-                />
-                <Label htmlFor="sendEmail">Enviar também por email</Label>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="sendEmail"
+                    checked={sendEmail}
+                    onCheckedChange={setSendEmail}
+                  />
+                  <Label htmlFor="sendEmail">Enviar também por email</Label>
+                </div>
+                {sendEmail && (
+                  <div className="ml-8">
+                    <Label htmlFor="emailProvider">Provider de Email</Label>
+                    <Select value={emailProvider} onValueChange={(value: 'RESEND' | 'GMAIL') => setEmailProvider(value)}>
+                      <SelectTrigger id="emailProvider">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="RESEND">Resend (Padrão)</SelectItem>
+                        <SelectItem value="GMAIL">Gmail (Email Pessoal)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {emailProvider === 'GMAIL' 
+                        ? 'Usa configurações SMTP do Gmail (EMAIL_HOST, EMAIL_USER, EMAIL_PASS)'
+                        : 'Usa API do Resend (RESEND_API_KEY)'}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Opção para recriar notificações para novos usuários (apenas ao editar) */}

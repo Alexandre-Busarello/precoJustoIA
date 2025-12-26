@@ -70,12 +70,19 @@ export async function GET(
       )
     }
 
+    // Buscar a notificação completa para obter título e mensagem personalizados
+    const notificationId = campaign.notifications[0].id
+    const fullNotification = await prisma.notification.findUnique({
+      where: { id: notificationId },
+      select: { title: true, message: true }
+    })
+
     return NextResponse.json({
       notification: {
-        id: campaign.notifications[0].id,
+        id: notificationId,
         campaignId: campaign.id,
-        title: campaign.title,
-        message: campaign.message,
+        title: fullNotification?.title || campaign.title,
+        message: fullNotification?.message || campaign.message,
         link: campaign.link,
         linkType: campaign.linkType,
         ctaText: campaign.ctaText,

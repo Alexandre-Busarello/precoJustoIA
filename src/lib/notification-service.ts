@@ -59,6 +59,7 @@ export interface CreateCampaignParams {
   dashboardExpiresAt?: Date
   createdBy: string
   sendEmail?: boolean
+  emailProvider?: 'RESEND' | 'GMAIL' // Provider de email a ser usado (padrão: RESEND)
   displayType?: NotificationDisplayType
   bannerTemplate?: NotificationTemplate
   modalTemplate?: NotificationTemplate
@@ -153,16 +154,18 @@ export class NotificationService {
 
       // Se deve enviar email, verificar preferências e adicionar à fila
       if (sendEmail) {
-        // Buscar ilustração da campanha se houver
+        // Buscar ilustração e provider da campanha se houver
         let illustrationUrl: string | null = null
+        let emailProvider: 'RESEND' | 'GMAIL' | null = null
         if (campaignId) {
           const campaign = await prisma.notificationCampaign.findUnique({
             where: { id: campaignId },
             select: { illustrationUrl: true }
-          })
-          illustrationUrl = (campaign as any)?.illustrationUrl || null
+          }) as any
+          illustrationUrl = campaign?.illustrationUrl || null
+          emailProvider = campaign?.emailProvider || null
         }
-        await this.sendNotificationEmail(userId, notification.id, personalizedTitle, personalizedMessage, link, linkType, undefined, illustrationUrl)
+        await this.sendNotificationEmail(userId, notification.id, personalizedTitle, personalizedMessage, link, linkType, undefined, illustrationUrl, emailProvider)
       }
 
       return notification.id
@@ -188,6 +191,7 @@ export class NotificationService {
       dashboardExpiresAt,
       createdBy,
       sendEmail = false,
+      emailProvider = 'RESEND',
       displayType = 'BANNER',
       bannerTemplate,
       modalTemplate,
@@ -218,6 +222,7 @@ export class NotificationService {
           illustrationUrl: illustrationUrl || null,
           bannerColors: bannerColors || null,
           isActive,
+          emailProvider: emailProvider as any || 'RESEND',
           stats: {
             totalSent: 0,
             totalRead: 0,
@@ -280,7 +285,7 @@ export class NotificationService {
               const userName = userNamesMap.get(notification.userId) || null
               const personalizedTitle = replaceUserNamePlaceholders(title, userName)
               const personalizedMessage = replaceUserNamePlaceholders(message, userName)
-              return this.sendNotificationEmail(notification.userId, notification.id, personalizedTitle, personalizedMessage, link, linkType, ctaText, campaignIllustrationUrl)
+              return this.sendNotificationEmail(notification.userId, notification.id, personalizedTitle, personalizedMessage, link, linkType, ctaText, campaignIllustrationUrl, emailProvider as 'RESEND' | 'GMAIL' | null)
             })
           )
         }
@@ -387,6 +392,7 @@ export class NotificationService {
         // Enviar emails se necessário
         if (sendEmail) {
           const campaignIllustrationUrl = (campaign as any).illustrationUrl || null
+          const campaignEmailProvider = (campaign as any).emailProvider || null
           await Promise.all(
             notifications.map(notification => {
               const userName = userNamesMap.get(notification.userId) || null
@@ -400,7 +406,8 @@ export class NotificationService {
                 campaign.link,
                 campaign.linkType as NotificationLinkType,
                 (campaign as any).ctaText,
-                campaignIllustrationUrl
+                campaignIllustrationUrl,
+                campaignEmailProvider
               )
             })
           )
@@ -1232,7 +1239,8 @@ export class NotificationService {
     link: string | null | undefined,
     linkType: NotificationLinkType,
     ctaText?: string | null,
-    illustrationUrl?: string | null
+    illustrationUrl?: string | null,
+    emailProvider?: 'RESEND' | 'GMAIL' | null
   ): Promise<void> {
     try {
       // Buscar dados do usuário
@@ -1291,7 +1299,8 @@ export class NotificationService {
           link: emailLink,
           notificationId,
           ctaText: ctaText || null,
-          illustrationUrl: illustrationUrl || null
+          illustrationUrl: illustrationUrl || null,
+          emailProvider: emailProvider || 'RESEND' // Provider de email (padrão: RESEND)
         },
         priority: 0,
         metadata: {
@@ -1369,11 +1378,18 @@ export class NotificationService {
       } as any)
 
       if (quizCampaign && (quizCampaign as any).notifications.length > 0) {
+        const notification = (quizCampaign as any).notifications[0]
+        // Buscar a notificação completa para obter título e mensagem personalizados
+        const fullNotification = await prisma.notification.findUnique({
+          where: { id: notification.id },
+          select: { title: true, message: true }
+        })
+        
         return {
-          id: (quizCampaign as any).notifications[0].id,
+          id: notification.id,
           campaignId: quizCampaign.id,
-          title: quizCampaign.title,
-          message: quizCampaign.message,
+          title: fullNotification?.title || quizCampaign.title,
+          message: fullNotification?.message || quizCampaign.message,
           link: quizCampaign.link,
           linkType: quizCampaign.linkType as NotificationLinkType,
           ctaText: quizCampaign.ctaText,
@@ -1430,11 +1446,18 @@ export class NotificationService {
         return null
       }
 
+      // Buscar a notificação completa para obter título e mensagem personalizados
+      const notificationId = (modalCampaign as any).notifications[0].id
+      const fullNotification = await prisma.notification.findUnique({
+        where: { id: notificationId },
+        select: { title: true, message: true }
+      })
+
       return {
-        id: (modalCampaign as any).notifications[0].id,
+        id: notificationId,
         campaignId: modalCampaign.id,
-        title: modalCampaign.title,
-        message: modalCampaign.message,
+        title: fullNotification?.title || modalCampaign.title,
+        message: fullNotification?.message || modalCampaign.message,
         link: modalCampaign.link,
         linkType: modalCampaign.linkType as NotificationLinkType,
         ctaText: modalCampaign.ctaText,
@@ -1558,11 +1581,18 @@ export class NotificationService {
         return null
       }
 
+      // Buscar a notificação completa para obter título e mensagem personalizados
+      const notificationId = (campaign as any).notifications[0].id
+      const fullNotification = await prisma.notification.findUnique({
+        where: { id: notificationId },
+        select: { title: true, message: true }
+      })
+
       return {
-        id: (campaign as any).notifications[0].id,
+        id: notificationId,
         campaignId: campaign.id,
-        title: campaign.title,
-        message: campaign.message,
+        title: fullNotification?.title || campaign.title,
+        message: fullNotification?.message || campaign.message,
         quizConfig: (campaign as any).quizConfig as Record<string, any>,
         modalTemplate: (campaign as any).modalTemplate as NotificationTemplate | null,
         illustrationUrl: (campaign as any).illustrationUrl
@@ -1688,11 +1718,18 @@ export class NotificationService {
         }
       })
 
+      // Buscar a notificação completa para obter título e mensagem personalizados
+      const notificationId = (campaign as any).notifications[0].id
+      const fullNotification = await prisma.notification.findUnique({
+        where: { id: notificationId },
+        select: { title: true, message: true }
+      })
+
       return {
-        id: (campaign as any).notifications[0].id,
+        id: notificationId,
         campaignId: campaign.id,
-        title: campaign.title,
-        message: campaign.message,
+        title: fullNotification?.title || campaign.title,
+        message: fullNotification?.message || campaign.message,
         quizConfig: (campaign as any).quizConfig as Record<string, any>,
         modalTemplate: (campaign as any).modalTemplate as NotificationTemplate | null,
         illustrationUrl: (campaign as any).illustrationUrl,

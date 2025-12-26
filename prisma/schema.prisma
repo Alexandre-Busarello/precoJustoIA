@@ -1284,6 +1284,7 @@ model NotificationCampaign {
   quizConfig         Json?                   @map("quiz_config")
   bannerColors       Json?                   @map("banner_colors")
   isActive           Boolean                 @default(true) @map("is_active")
+  emailProvider      EmailProvider?          @default(RESEND) @map("email_provider")
   modalViews         NotificationModalView[]
   notifications      Notification[]
   quizResponses      QuizResponse[]
@@ -1753,6 +1754,11 @@ enum NotificationSegmentType {
   SUPPORT_TICKET_USERS
   EMAIL_LIST
   DASHBOARD_NEW_USERS
+}
+
+enum EmailProvider {
+  RESEND
+  GMAIL
 }
 
 enum QueueStatus {

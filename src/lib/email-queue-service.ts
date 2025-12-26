@@ -322,7 +322,8 @@ export class EmailQueueService {
           to: email,
           subject: notificationTemplate.subject,
           html: notificationTemplate.html,
-          text: notificationTemplate.text
+          text: notificationTemplate.text,
+          provider: emailData.emailProvider || 'RESEND' // Usar provider da campanha ou padrão RESEND
         })
         break
 

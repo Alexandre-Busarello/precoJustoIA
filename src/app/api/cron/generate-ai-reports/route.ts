@@ -323,28 +323,29 @@ async function processFinalReport(
   });
 
   // Criar flag se necessário (apenas para PRICE_VARIATION com perda de fundamento)
-  let flagCreated = false;
-  if (
-    entry.reportType === 'PRICE_VARIATION' &&
-    compilationCheckpoint.data.isFundamentalLoss
-  ) {
-    await createFlagIfNeeded(
-      entry.companyId,
-      report.id,
-      compilationCheckpoint.data.conclusion || 'Perda de fundamento detectada'
-    );
-    flagCreated = true;
-  }
+  // Flags são usados apenas para determinar o template do email (conversão), não limitam envio
+  let hasActiveFlag = false;
+  
+  if (entry.reportType === 'PRICE_VARIATION') {
+    if (compilationCheckpoint.data.isFundamentalLoss) {
+      await createFlagIfNeeded(
+        entry.companyId,
+        report.id,
+        compilationCheckpoint.data.conclusion || 'Perda de fundamento detectada'
+      );
+    }
 
-  // Buscar flags ativos para a empresa (para verificar se devemos usar email de conversão)
-  const activeFlags = await prisma.companyFlag.findMany({
-    where: {
-      companyId: entry.companyId,
-      isActive: true,
-    },
-    take: 1,
-  });
-  const hasActiveFlag = activeFlags.length > 0;
+    // Buscar flags ativos para determinar template do email
+    const activeFlags = await prisma.companyFlag.findMany({
+      where: {
+        companyId: entry.companyId,
+        isActive: true,
+      },
+      take: 1,
+    });
+    hasActiveFlag = activeFlags.length > 0;
+  }
+  // Para CUSTOM_TRIGGER: não verificar flags (não há perda de fundamento)
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://precojusto.ai';
   const reportUrl = `/acao/${company.ticker.toLowerCase()}/relatorios/${report.id}`;
@@ -438,12 +439,13 @@ async function processFinalReport(
       });
       notificationsCreated++;
 
-      // Verificar se há flag ativo e usuário não é premium - usar email de conversão
-      const shouldUseConversionEmail = hasActiveFlag && !subscriber.isPremium;
-      
-      // Enviar email usando o email da tabela user
-      // IMPORTANTE: Passar isPremium para diferenciar premium vs não-premium
-      // Se houver flag ativo e usuário não for premium, usar email de conversão (sem detalhes)
+      // IMPORTANTE: Sempre enviar email para todos
+      // Flags e isPremium determinam apenas o TEMPLATE do email (conversão vs completo)
+      // Lógica de templates:
+      // - Não Premium + Flag = Email de situação crítica (conversão)
+      // - Premium + Flag = Email destacando perda de fundamento + relatório completo
+      // - Não Premium + Sem Flag = Email padrão não premium
+      // - Premium + Sem Flag = Email padrão premium com relatório completo
       await EmailQueueService.queueEmail({
         email: subscriber.email, // Email da tabela user
         emailType: entry.reportType === 'PRICE_VARIATION' ? 'PRICE_VARIATION_REPORT' : 'CUSTOM_TRIGGER_REPORT',
@@ -452,9 +454,9 @@ async function processFinalReport(
           companyName: company.name,
           companyLogoUrl: company.logoUrl || null,
           reportUrl: `${baseUrl}${reportUrl}`,
-          reportSummary: shouldUseConversionEmail ? '' : reportSummary, // Não incluir resumo se for conversão
-          isPremium: subscriber.isPremium && !shouldUseConversionEmail, // Forçar não-premium se usar conversão
-          hasFlag: hasActiveFlag, // Indicar que há flag ativo
+          reportSummary: reportSummary, // Sempre enviar resumo completo
+          isPremium: subscriber.isPremium, // Sempre usar isPremium real do usuário
+          hasFlag: entry.reportType === 'PRICE_VARIATION' ? hasActiveFlag : false, // Flags só para PRICE_VARIATION
         },
         recipientName: subscriber.name || 'Investidor',
       });
@@ -479,9 +481,9 @@ async function processFinalReport(
             companyName: company.name,
             companyLogoUrl: company.logoUrl || null,
             reportUrl: `${baseUrl}${reportUrl}`,
-            reportSummary,
+            reportSummary: reportSummary, // Sempre enviar resumo completo
             isPremium: false, // Anônimos sempre são não-premium
-            hasFlag: hasActiveFlag, // Indicar que há flag ativo (para usar email de conversão)
+            hasFlag: hasActiveFlag, // Flags determinam template (conversão vs padrão)
           },
           recipientName: subscriber.name || 'Investidor',
         });

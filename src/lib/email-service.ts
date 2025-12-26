@@ -4132,8 +4132,12 @@ export async function sendBulkMonitoringConfirmationEmail(params: {
 
 /**
  * Envia email de relatório de variação de preço
- * Para usuários não premium, envia email de conversão sem detalhes
- * Se houver flag ativo, também usa email de conversão mesmo para premium (mas com contexto diferente)
+ * 
+ * Lógica de templates baseada em isPremium e hasFlag:
+ * 1. Não Premium + Flag = Email de situação crítica (conversão)
+ * 2. Premium + Flag = Email destacando perda de fundamento + relatório completo
+ * 3. Não Premium + Sem Flag = Email padrão não premium (conversão)
+ * 4. Premium + Sem Flag = Email padrão premium com relatório completo
  */
 export async function sendPriceVariationReportEmail(params: {
   email: string;
@@ -4146,19 +4150,38 @@ export async function sendPriceVariationReportEmail(params: {
   isPremium?: boolean;
   hasFlag?: boolean; // Indica se há flag ativo para a empresa
 }) {
-  // Se não for premium OU se houver flag ativo, enviar email de conversão sem detalhes
-  if (!params.isPremium || params.hasFlag) {
-    // Se houver flag, usar email específico de flag
-    if (params.hasFlag) {
-      return await sendFlagAlertConversionEmail({
-        email: params.email,
-        userName: params.userName,
-        ticker: params.ticker,
-        companyName: params.companyName,
-        companyLogoUrl: params.companyLogoUrl,
-      });
-    }
-    // Caso contrário, usar email de conversão padrão para price variation
+  // Cenário 1: Não Premium + Flag = Email de situação crítica (conversão)
+  if (!params.isPremium && params.hasFlag) {
+    return await sendFlagAlertConversionEmail({
+      email: params.email,
+      userName: params.userName,
+      ticker: params.ticker,
+      companyName: params.companyName,
+      companyLogoUrl: params.companyLogoUrl,
+    });
+  }
+
+  // Cenário 2: Premium + Flag = Email destacando perda de fundamento + relatório completo
+  if (params.isPremium && params.hasFlag) {
+    const template = generateNotificationEmailTemplate(
+      `🚨 Perda de Fundamentos Detectada: ${params.ticker}`,
+      `Detectamos uma **perda de fundamentos** em ${params.companyName} (${params.ticker}).\n\nEsta é uma situação crítica que requer atenção imediata. O relatório completo analisa em detalhes o que aconteceu e o impacto dessa mudança.\n\n${params.reportSummary}`,
+      params.reportUrl,
+      params.userName,
+      'Ver Relatório Completo',
+      params.companyLogoUrl || undefined
+    );
+    
+    return await sendEmail({
+      to: params.email,
+      subject: `🚨 Perda de Fundamentos: ${params.ticker} - Análise Completa`,
+      html: template.html,
+      text: template.text
+    });
+  }
+
+  // Cenário 3: Não Premium + Sem Flag = Email padrão não premium (conversão)
+  if (!params.isPremium) {
     return await sendPriceVariationConversionEmail({
       email: params.email,
       userName: params.userName,
@@ -4168,7 +4191,7 @@ export async function sendPriceVariationReportEmail(params: {
     });
   }
 
-  // Usuário premium: enviar relatório completo
+  // Cenário 4: Premium + Sem Flag = Email padrão premium com relatório completo
   const template = generateNotificationEmailTemplate(
     `Relatório de Variação de Preço: ${params.ticker}`,
     `Um relatório de variação de preço foi gerado para ${params.companyName} (${params.ticker}).\n\n${params.reportSummary}`,

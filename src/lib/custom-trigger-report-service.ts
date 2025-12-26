@@ -237,31 +237,30 @@ export async function generateCustomTriggerReport(
     .filter(content => content.length > 0)
     .join('\n\n');
 
+  // Preparar dados da empresa para o final do relatório
+  const companyDataSection = Object.entries(companyData)
+    .filter(([_, value]) => value !== undefined)
+    .map(([key, value]) => {
+      const labels: Record<string, string> = {
+        pl: 'P/L',
+        pvp: 'P/VP',
+        score: 'Score Geral',
+        currentPrice: 'Preço Atual',
+      };
+      const label = labels[key] || key;
+      const formattedValue = key === 'currentPrice' 
+        ? `R$ ${Number(value).toFixed(2)}`
+        : Number(value).toFixed(2);
+      return `- **${label}**: ${formattedValue}`;
+    })
+    .join('\n');
+
   // Compilar relatório
   const report = `# Relatório de Gatilho Customizado: ${companyName} (${ticker})
 
 ## Resumo
 
 Um gatilho customizado foi disparado para ${ticker}. Abaixo estão os detalhes do que aconteceu e o que isso significa.
-
-## Dados Atuais da Empresa
-
-${Object.entries(companyData)
-  .filter(([_, value]) => value !== undefined)
-  .map(([key, value]) => {
-    const labels: Record<string, string> = {
-      pl: 'P/L',
-      pvp: 'P/VP',
-      score: 'Score Geral',
-      currentPrice: 'Preço Atual',
-    };
-    const label = labels[key] || key;
-    const formattedValue = key === 'currentPrice' 
-      ? `R$ ${Number(value).toFixed(2)}`
-      : Number(value).toFixed(2);
-    return `- **${label}**: ${formattedValue}`;
-  })
-  .join('\n')}
 
 ## Motivos do Disparo
 
@@ -277,6 +276,10 @@ ${educationalSections ? `\n${educationalSections}` : ''}
 2. **Contexto**: Considere o contexto de mercado e setor
 3. **Decisão**: Use essas informações como parte de uma análise mais ampla
 4. **Monitoramento**: Continue acompanhando a evolução dos indicadores
+
+## Dados Atuais da Empresa
+
+${companyDataSection}
 
 ---
 *Relatório gerado automaticamente em ${new Date().toLocaleString('pt-BR')}*`;

@@ -716,12 +716,27 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                 asChild
               >
                 <Link 
-                  href="/perfil" 
+                  href="/dashboard/monitoramentos-customizados" 
                   className="flex items-center gap-3"
                   onClick={() => setIsOpen(false)}
                 >
                   <Settings className="w-4 h-4" />
-                  Configurações
+                  Monitoramentos Customizados
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                asChild
+              >
+                <Link 
+                  href="/perfil" 
+                  className="flex items-center gap-3"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <User className="w-4 h-4" />
+                  Perfil
                 </Link>
               </Button>
               <Button

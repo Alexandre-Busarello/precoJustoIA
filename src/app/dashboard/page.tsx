@@ -250,6 +250,31 @@ export default function Dashboard() {
         {/* NOTIFICAÇÃO DESTACADA OU BANNER PADRÃO */}
         <DashboardNotificationBanner />
 
+        {/* MONITORAMENTOS CUSTOMIZADOS */}
+        <Link href="/dashboard/monitoramentos-customizados">
+          <Card className="group cursor-pointer border-2 border-dashed border-blue-300 dark:border-blue-700 hover:border-blue-500 dark:hover:border-blue-600 hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+            <CardContent className="p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+                  <Bell className="w-8 h-8 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    Monitoramentos Customizados
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                    Configure alertas personalizados com critérios específicos para suas ações favoritas
+                  </p>
+                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium text-sm">
+                    <span>Gerenciar monitoramentos</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
         {/* RADAR DE OPORTUNIDADES */}
         <DashboardRadarSection />
 

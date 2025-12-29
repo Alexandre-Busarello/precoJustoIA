@@ -16,9 +16,10 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
   private isValueInRange(value: number | null, filter: ScreeningFilter | undefined, strictNullCheck: boolean = false): boolean {
     if (!filter || !filter.enabled) return true; // Filtro desativado, aceita qualquer valor
     
-    // Para Market Cap e outros filtros críticos, null deve reprovar
+    // Se o valor é null (N/A), a empresa deve ser reprovada quando o filtro está ativo
+    // strictNullCheck=true mantém o comportamento antigo para compatibilidade (mas não é mais necessário)
     if (value === null) {
-      return strictNullCheck ? false : true; // Sem dados, IGNORA o filtro (não reprova) exceto se strictNullCheck=true
+      return false; // Sem dados, REPROVA o filtro (empresa não passa)
     }
     
     // Verifica min
@@ -253,11 +254,11 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       });
     }
 
-    // Market Cap (strictNullCheck=true: empresas sem Market Cap são reprovadas)
+    // Market Cap (empresas sem Market Cap são reprovadas)
     if (params.marketCapFilter?.enabled) {
       const marketCap = toNumber(financials.marketCap);
       const marketCapBi = marketCap ? marketCap / 1_000_000_000 : null;
-      const inRange = this.isValueInRange(marketCap, params.marketCapFilter, true); // strictNullCheck=true
+      const inRange = this.isValueInRange(marketCap, params.marketCapFilter);
       criteria.push({
         label: 'Market Cap',
         value: inRange,

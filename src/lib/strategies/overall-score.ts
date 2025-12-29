@@ -4092,6 +4092,39 @@ export function calculateOverallScore(
     return upside >= 10;
   };
 
+  /**
+   * Calcula penalização progressiva baseada no upside
+   * @param upside - Upside em porcentagem (pode ser null)
+   * @param originalScore - Score original da estratégia
+   * @returns Score após aplicar penalização progressiva
+   */
+  const calculateProgressivePenalty = (
+    upside: number | null,
+    originalScore: number
+  ): number => {
+    if (upside === null || upside === undefined) {
+      return originalScore; // Sem penalização se upside não calculável
+    }
+    
+    let penaltyPercent = 0;
+    
+    if (upside < 5) {
+      penaltyPercent = 0.50; // 50% de penalização
+    } else if (upside < 10) {
+      penaltyPercent = 0.25; // 25% de penalização
+    } else if (upside < 15) {
+      penaltyPercent = 0.10; // 10% de penalização
+    } else if (upside < 20) {
+      penaltyPercent = 0.05; // 5% de penalização
+    }
+    
+    // Aplicar penalização: reduzir o score pela porcentagem calculada
+    const penalizedScore = originalScore * (1 - penaltyPercent);
+    
+    // Garantir que o score não fique negativo
+    return Math.max(0, Math.round(penalizedScore));
+  };
+
   // Função auxiliar para obter descrição da estratégia
   const getStrategyDescription = (key: string): string => {
     const descriptions: Record<string, string> = {
@@ -4117,10 +4150,16 @@ export function calculateOverallScore(
       strategies.graham.upside
     );
 
-    // Sempre inclui o peso, mas penaliza se incompatível
+    // Aplicar penalização progressiva sempre que upside < 20
     let grahamScoreUsed = strategies.graham.score;
+    if (strategies.graham.fairValue && strategies.graham.upside !== null && strategies.graham.upside !== undefined) {
+      if (strategies.graham.upside < 20) {
+        grahamScoreUsed = calculateProgressivePenalty(strategies.graham.upside, strategies.graham.score);
+      }
+    }
+
     if (isPriceCompatible) {
-      const grahamContribution = strategies.graham.score * grahamWeight;
+      const grahamContribution = grahamScoreUsed * grahamWeight;
       totalScore += grahamContribution;
 
       if (strategies.graham.isEligible && strategies.graham.score >= 80) {
@@ -4129,13 +4168,6 @@ export function calculateOverallScore(
         weaknesses.push("Fundamentos fracos (Graham)");
       }
     } else if (strategies.graham.fairValue) {
-      // Penaliza com score baixo se preço incompatível
-      grahamScoreUsed =
-        strategies.graham.fairValue &&
-        strategies.graham.upside &&
-        strategies.graham.upside < 10
-          ? 20
-          : strategies.graham.score;
       const grahamContribution = grahamScoreUsed * grahamWeight;
       totalScore += grahamContribution;
 
@@ -4258,10 +4290,17 @@ export function calculateOverallScore(
       strategies.fcd.upside
     );
 
+    // Aplicar penalização progressiva sempre que upside < 20
     let fcdScoreUsed = strategies.fcd.score;
+    if (strategies.fcd.fairValue && strategies.fcd.upside !== null && strategies.fcd.upside !== undefined) {
+      if (strategies.fcd.upside < 20) {
+        fcdScoreUsed = calculateProgressivePenalty(strategies.fcd.upside, strategies.fcd.score);
+      }
+    }
+
     // Sempre inclui o peso, mas penaliza se incompatível
     if (isPriceCompatible) {
-      const fcdContribution = strategies.fcd.score * fcdWeight;
+      const fcdContribution = fcdScoreUsed * fcdWeight;
       totalScore += fcdContribution;
 
       if (
@@ -4272,13 +4311,6 @@ export function calculateOverallScore(
         strengths.push("Alto potencial de valorização");
       }
     } else if (strategies.fcd.fairValue) {
-      // Penaliza com score baixo se preço incompatível
-      fcdScoreUsed =
-        strategies.fcd.fairValue &&
-        strategies.fcd.upside &&
-        strategies.fcd.upside < 10
-          ? 20
-          : strategies.fcd.score;
       const fcdContribution = fcdScoreUsed * fcdWeight;
       totalScore += fcdContribution;
 
@@ -4364,10 +4396,17 @@ export function calculateOverallScore(
       strategies.barsi.upside
     );
 
+    // Aplicar penalização progressiva sempre que upside < 20 (usando discountFromCeiling)
     let barsiScoreUsed = strategies.barsi.score;
+    if (strategies.barsi.fairValue && strategies.barsi.upside !== null && strategies.barsi.upside !== undefined) {
+      if (strategies.barsi.upside < 20) {
+        barsiScoreUsed = calculateProgressivePenalty(strategies.barsi.upside, strategies.barsi.score);
+      }
+    }
+
     // Sempre inclui o peso, mas penaliza se incompatível
     if (isPriceCompatible) {
-      const barsiContribution = strategies.barsi.score * barsiWeight;
+      const barsiContribution = barsiScoreUsed * barsiWeight;
       totalScore += barsiContribution;
 
       if (strategies.barsi.isEligible && strategies.barsi.score >= 80) {
@@ -4376,13 +4415,6 @@ export function calculateOverallScore(
         weaknesses.push("Não atende critérios do Método Barsi");
       }
     } else if (strategies.barsi.fairValue) {
-      // Penaliza com score baixo se preço incompatível
-      barsiScoreUsed =
-        strategies.barsi.fairValue &&
-        strategies.barsi.upside &&
-        strategies.barsi.upside < 10
-          ? 20
-          : strategies.barsi.score;
       const barsiContribution = barsiScoreUsed * barsiWeight;
       totalScore += barsiContribution;
 

@@ -206,11 +206,10 @@ function getCriteriaPercentage(strategy: StrategyAnalysis | null): {
   const passedCriteria = strategy.criteria.filter(c => c.value).length;
   const realPercentage = (passedCriteria / strategy.criteria.length) * 100;
   
-  // Verificar se o score foi ajustado por penalização
-  // Scores ajustados geralmente são valores fixos baixos (20 ou 25) quando há penalização
-  // por upside insuficiente, mesmo que a porcentagem real de critérios seja maior
-  const isAdjustedValue = strategy.score === 20 || strategy.score === 25;
-  const wasAdjusted = isAdjustedValue && strategy.score < realPercentage - 5; // Margem de 5% para considerar ajuste
+  // Detectar penalização progressiva: score significativamente menor que porcentagem real
+  // Considerar ajustado se diferença for >= 5% (permite detectar penalizações de 5% ou mais)
+  const scoreDifference = realPercentage - strategy.score;
+  const wasAdjusted = scoreDifference >= 5; // Threshold para detectar penalização
   
   return {
     realPercentage,
@@ -684,7 +683,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                                   Score Ajustado
                                 </p>
                                 <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
-                                  A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.graham?.upside?.toFixed(1)}% &lt; 10%).
+                                  A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.graham?.upside?.toFixed(1)}%).
                                 </p>
                               </div>
                             </div>
@@ -888,7 +887,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                                     Score Ajustado
                                   </p>
                                   <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
-                                    A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.fcd?.upside?.toFixed(1)}% &lt; 10%).
+                                    A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.fcd?.upside?.toFixed(1)}%).
                                   </p>
                                 </div>
                               </div>
@@ -2048,7 +2047,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                                   Score Ajustado
                                 </p>
                                 <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-1">
-                                  A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.barsi?.upside?.toFixed(1)}% &lt; 10%).
+                                  A empresa atendeu {criteriaInfo.realPercentage.toFixed(0)}% dos critérios, mas o score foi ajustado para {criteriaInfo.adjustedScore?.toFixed(0)} devido ao upside insuficiente ({strategies.barsi?.upside?.toFixed(1)}%).
                                 </p>
                               </div>
                             </div>

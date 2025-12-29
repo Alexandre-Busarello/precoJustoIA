@@ -26,11 +26,13 @@ interface CompanySearchResponse {
 interface CompanySearchProps {
   placeholder?: string;
   className?: string;
+  onCompanySelect?: (company: Company) => void; // Callback opcional para customizar comportamento
 }
 
 export default function CompanySearch({ 
   placeholder = "Buscar empresas por ticker ou nome...", 
-  className 
+  className,
+  onCompanySelect
 }: CompanySearchProps) {
   const [query, setQuery] = useState('');
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -101,7 +103,14 @@ export default function CompanySearch({
     setQuery('');
     setShowResults(false);
     setSelectedIndex(-1);
-    router.push(getAssetUrl(company.ticker, company.assetType));
+    
+    // Se callback fornecido, usar callback em vez de navegar
+    if (onCompanySelect) {
+      onCompanySelect(company);
+    } else {
+      // Comportamento padrão: navegar para página da empresa
+      router.push(getAssetUrl(company.ticker, company.assetType));
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

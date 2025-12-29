@@ -198,8 +198,8 @@ export default function Header() {
       {/* Tarja de Índices do Mercado - Entre Header e Search Bar */}
       <MarketTickerBar position="top" />
 
-      {/* Global Search Bar - Below Market Ticker */}
-      <GlobalSearchBar />
+      {/* Global Search Bar - Below Market Ticker (ocultar em /analisar-acoes) */}
+      {pathname !== '/analisar-acoes' && <GlobalSearchBar />}
 
       {/* Mobile Navigation Drawer */}
       <MobileNav 

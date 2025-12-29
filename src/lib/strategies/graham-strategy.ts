@@ -21,7 +21,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const lpa = toNumber(financials.lpa);
     const vpa = toNumber(financials.vpa);
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const crescimentoLucros = toNumber(financials.crescimentoLucros);
@@ -155,7 +155,7 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       const lpa = toNumber(financials.lpa)!;
       const vpa = toNumber(financials.vpa)!;
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
-      const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
+      const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials) || 0;
       const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials) || 0;
       const crescimentoLucros = toNumber(financials.crescimentoLucros) || 0;
       const cagrLucros5a = toNumber(financials.cagrLucros5a);

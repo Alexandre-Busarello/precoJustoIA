@@ -23,7 +23,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoReceitas = toNumber(financials.crescimentoReceitas);
     const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const roa = toNumber(financials.roa);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);

@@ -157,7 +157,7 @@ export default async function SubscriptionsPage() {
             <h4 className="font-semibold mb-1">🔔 Notificações Inteligentes</h4>
             <p className="text-muted-foreground">
               Você receberá um email sempre que o Score Geral de um ativo variar significativamente
-              (mais de 5 pontos).
+              (mais de 10 pontos).
             </p>
           </div>
           <div>

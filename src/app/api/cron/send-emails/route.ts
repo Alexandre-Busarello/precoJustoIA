@@ -8,6 +8,7 @@ import {
   sendPaymentFailureEmail,
   sendFreeUserAssetChangeEmail,
   sendSubscriptionConfirmationEmail,
+  sendPremiumExpirationEmail,
   sendEmail,
   generateEmailVerificationTemplate,
   generateNotificationEmailTemplate
@@ -191,6 +192,13 @@ export async function GET(request: NextRequest) {
               unsubscribeUrl: emailData.unsubscribeUrl,
               companyLogoUrl: emailData.companyLogoUrl || null,
             })
+            break
+
+          case 'PREMIUM_EXPIRED':
+            await sendPremiumExpirationEmail(
+              emailQueue.email,
+              emailQueue.recipientName || emailData.userName
+            )
             break
 
           default:

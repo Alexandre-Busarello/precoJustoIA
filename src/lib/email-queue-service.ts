@@ -12,6 +12,7 @@ import {
   sendBulkMonitoringConfirmationEmail,
   sendPriceVariationReportEmail,
   sendCustomTriggerReportEmail,
+  sendPremiumExpirationEmail,
   generateEmailVerificationTemplate,
   generateNotificationEmailTemplate
 } from './email-service'
@@ -372,6 +373,13 @@ export class EmailQueueService {
           reportSummary: emailData.reportSummary || '',
           isPremium: emailData.isPremium ?? true, // Default true para manter compatibilidade
         })
+        break
+
+      case 'PREMIUM_EXPIRED':
+        await sendPremiumExpirationEmail(
+          email,
+          recipientName || emailData.userName
+        )
         break
 
       default:

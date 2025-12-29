@@ -171,7 +171,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
     const payout = toNumber(financials.payout);
     const marketCap = toNumber(financials.marketCap);
@@ -360,7 +360,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
       
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
       const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
-      const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+      const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
       const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
       const marketCap = toNumber(financials.marketCap);
 

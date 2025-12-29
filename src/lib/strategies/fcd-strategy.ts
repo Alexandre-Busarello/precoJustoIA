@@ -25,7 +25,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const margemEbitda = this.getMargemEbitda(financials, use7YearAverages, historicalFinancials);
     const crescimentoReceitas = toNumber(financials.crescimentoReceitas);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
     
     // Ajustar taxa de desconto para BDRs (mercado internacional tem WACC diferente)
@@ -163,7 +163,7 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
       const margemEbitda = this.getMargemEbitda(financials, use7YearAverages, historicalFinancials) || 0;
       const crescimentoReceitas = toNumber(financials.crescimentoReceitas) || 0;
-      const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
+      const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials) || 0;
 
       // === CÁLCULO DO FCD ===
       // IMPORTANTE: No modelo DCF, não subtraímos a dívida líquida do Enterprise Value porque:

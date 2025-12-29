@@ -1621,6 +1621,436 @@ export async function sendWelcomeEmail(email: string, userName?: string, isEarly
   })
 }
 
+export function generatePremiumExpirationEmailTemplate(userName?: string) {
+  const baseUrl = getEmailBaseUrl()
+  const logoUrl = getEmailLogoUrl()
+  const plansUrl = 'https://precojusto.ai/planos'
+  
+  return {
+    subject: 'Sua assinatura Premium expirou',
+    html: `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sua assinatura Premium expirou</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #0f172a;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+          }
+          
+          .email-wrapper {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          
+          .container {
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e2e8f0;
+          }
+          
+          .header {
+            background-color: #1e293b;
+            padding: 48px 32px;
+            text-align: center;
+          }
+          
+          .logo-container {
+            position: relative;
+            z-index: 2;
+            margin-bottom: 24px;
+            text-align: center;
+          }
+          
+          .logo {
+            max-width: 180px;
+            height: auto;
+            filter: brightness(0) invert(1);
+            display: block;
+            margin: 0 auto;
+          }
+          
+          .header-title {
+            color: #ffffff;
+            font-size: 36px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 2;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            letter-spacing: -0.5px;
+          }
+          
+          .header-subtitle {
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 500;
+            position: relative;
+            z-index: 2;
+            opacity: 0.95;
+          }
+          
+          .content {
+            padding: 48px 32px;
+            background-color: #ffffff;
+          }
+          
+          .greeting {
+            font-size: 22px;
+            color: #0f172a;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 700;
+          }
+          
+          .main-text {
+            font-size: 16px;
+            color: #475569;
+            margin-bottom: 32px;
+            text-align: center;
+            line-height: 1.7;
+          }
+          
+          .expiration-notice {
+            background-color: #fef2f2;
+            border: 2px solid #fca5a5;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 32px 0;
+            text-align: center;
+          }
+          
+          .expiration-title {
+            color: #991b1b;
+            font-weight: 700;
+            margin-bottom: 12px;
+            font-size: 20px;
+          }
+          
+          .expiration-text {
+            color: #7f1d1d;
+            font-size: 15px;
+            line-height: 1.6;
+            margin: 0;
+          }
+          
+          .benefits-section {
+            margin: 32px 0;
+          }
+          
+          .benefits-title {
+            color: #0f172a;
+            font-weight: 700;
+            margin-bottom: 20px;
+            font-size: 20px;
+            text-align: center;
+          }
+          
+          .benefits-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+          }
+          
+          .benefit-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 16px;
+            margin-bottom: 12px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid #1e293b;
+          }
+          
+          .benefit-icon {
+            font-size: 24px;
+            margin-right: 16px;
+            flex-shrink: 0;
+          }
+          
+          .benefit-content {
+            flex: 1;
+          }
+          
+          .benefit-title {
+            color: #0f172a;
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 16px;
+          }
+          
+          .benefit-desc {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.5;
+          }
+          
+          .button-container {
+            text-align: center;
+            margin: 36px 0;
+          }
+          
+          .button {
+            display: inline-block;
+            background-color: #1e293b;
+            color: #ffffff !important;
+            padding: 18px 40px;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 17px;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3), 0 4px 6px -2px rgba(37, 99, 235, 0.05);
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            letter-spacing: 0.3px;
+          }
+          
+          .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.4), 0 10px 10px -5px rgba(37, 99, 235, 0.1);
+          }
+          
+          .footer {
+            background: #f8fafc;
+            padding: 32px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .footer-text {
+            color: #64748b;
+            font-size: 15px;
+            margin-bottom: 12px;
+            line-height: 1.6;
+          }
+          
+          .footer-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+          }
+          
+          .footer-link:hover {
+            text-decoration: underline;
+          }
+          
+          .footer-brand {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .footer-brand-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 18px;
+          }
+          
+          .footer-tagline {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-top: 6px;
+          }
+          
+          @media only screen and (max-width: 600px) {
+            .email-wrapper {
+              padding: 10px;
+            }
+            
+            .header {
+              padding: 30px 20px;
+            }
+            
+            .content {
+              padding: 30px 20px;
+            }
+            
+            .footer {
+              padding: 25px 20px;
+            }
+            
+            .header-title {
+              font-size: 28px;
+            }
+            
+            .header-subtitle {
+              font-size: 16px;
+            }
+            
+            .button {
+              padding: 14px 24px;
+              font-size: 15px;
+            }
+            
+            .greeting {
+              font-size: 18px;
+            }
+            
+            .main-text {
+              font-size: 15px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="container">
+            <div class="header">
+              <div class="logo-container">
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto;" />
+              </div>
+              <h1 class="header-title">Sua assinatura expirou</h1>
+              <p class="header-subtitle">Mas você pode renovar a qualquer momento</p>
+            </div>
+            
+            <div class="content">
+              <p class="greeting">
+                ${userName ? `Olá, <strong>${userName}</strong>!` : 'Olá!'}
+              </p>
+              
+              <p class="main-text">
+                Informamos que sua assinatura <strong>Premium</strong> expirou. 
+                Você ainda pode usar a plataforma com recursos gratuitos, mas alguns recursos exclusivos não estarão mais disponíveis.
+              </p>
+              
+              <div class="expiration-notice">
+                <h3 class="expiration-title">⚠️ Assinatura Expirada</h3>
+                <p class="expiration-text">
+                  Sua assinatura Premium expirou e você foi movido para o plano gratuito. 
+                  Para continuar aproveitando todos os recursos Premium, considere renovar sua assinatura.
+                </p>
+              </div>
+              
+              <div class="benefits-section">
+                <h3 class="benefits-title">O que você está perdendo:</h3>
+                <ul class="benefits-list">
+                  <li class="benefit-item">
+                    <span class="benefit-icon">🤖</span>
+                    <div class="benefit-content">
+                      <div class="benefit-title">Acesso a todos os modelos de análise</div>
+                      <div class="benefit-desc">8 modelos Premium incluindo Graham, Fórmula Mágica, DCF e mais</div>
+                    </div>
+                  </li>
+                  <li class="benefit-item">
+                    <span class="benefit-icon">📊</span>
+                    <div class="benefit-content">
+                      <div class="benefit-title">Relatórios completos de IA</div>
+                      <div class="benefit-desc">Análises detalhadas e insights inteligentes sobre seus investimentos</div>
+                    </div>
+                  </li>
+                  <li class="benefit-item">
+                    <span class="benefit-icon">🔍</span>
+                    <div class="benefit-content">
+                      <div class="benefit-title">Monitoramento avançado de ativos</div>
+                      <div class="benefit-desc">Alertas personalizados e acompanhamento em tempo real</div>
+                    </div>
+                  </li>
+                  <li class="benefit-item">
+                    <span class="benefit-icon">📈</span>
+                    <div class="benefit-content">
+                      <div class="benefit-title">Backtests e simulações</div>
+                      <div class="benefit-desc">Teste suas estratégias com dados históricos reais</div>
+                    </div>
+                  </li>
+                  <li class="benefit-item">
+                    <span class="benefit-icon">🎯</span>
+                    <div class="benefit-content">
+                      <div class="benefit-title">Suporte VIP</div>
+                      <div class="benefit-desc">Atendimento prioritário e especializado</div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+              
+              <div class="button-container">
+                <a href="${plansUrl}" class="button">Renovar Assinatura</a>
+              </div>
+              
+              <p class="main-text" style="margin-top: 24px; font-size: 14px; color: #64748b;">
+                Não se preocupe, você pode renovar a qualquer momento e ter acesso imediato a todos os recursos Premium novamente.
+              </p>
+            </div>
+            
+            <div class="footer">
+              <p class="footer-text">
+                Precisa de ajuda? Nossa equipe está sempre disponível!
+              </p>
+              <p class="footer-text">
+                Entre em contato conosco em 
+                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
+              </p>
+              
+              <div class="footer-brand">
+                <a href="${baseUrl}" class="footer-brand-link">Preço Justo AI</a>
+                <p class="footer-tagline">Análise fundamentalista inteligente para seus investimentos</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+Sua assinatura Premium expirou
+
+${userName ? `Olá, ${userName}!` : 'Olá!'}
+
+Informamos que sua assinatura Premium expirou. Você ainda pode usar a plataforma com recursos gratuitos, mas alguns recursos exclusivos não estarão mais disponíveis.
+
+⚠️ Assinatura Expirada
+Sua assinatura Premium expirou e você foi movido para o plano gratuito. Para continuar aproveitando todos os recursos Premium, considere renovar sua assinatura.
+
+O que você está perdendo:
+• Acesso a todos os modelos de análise - 8 modelos Premium incluindo Graham, Fórmula Mágica, DCF e mais
+• Relatórios completos de IA - Análises detalhadas e insights inteligentes sobre seus investimentos
+• Monitoramento avançado de ativos - Alertas personalizados e acompanhamento em tempo real
+• Backtests e simulações - Teste suas estratégias com dados históricos reais
+• Suporte VIP - Atendimento prioritário e especializado
+
+Renovar Assinatura: ${plansUrl}
+
+Não se preocupe, você pode renovar a qualquer momento e ter acesso imediato a todos os recursos Premium novamente.
+
+Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
+
+Preço Justo AI - Análise fundamentalista inteligente
+${baseUrl}
+    `
+  }
+}
+
+export async function sendPremiumExpirationEmail(email: string, userName?: string) {
+  const template = generatePremiumExpirationEmailTemplate(userName)
+  
+  return await sendEmail({
+    to: email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  })
+}
+
 // ===== FUNÇÃO AUXILIAR PARA CONVERSÃO DE IMAGENS =====
 
 /**

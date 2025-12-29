@@ -25,7 +25,7 @@ export class MagicFormulaStrategy extends AbstractStrategy<MagicFormulaParams> {
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoReceitas = toNumber(financials.crescimentoReceitas);
     const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const marketCap = toNumber(financials.marketCap);
 

@@ -21,7 +21,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
     
     const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     const pl = this.getPL(financials, false, historicalFinancials);
     const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
@@ -118,7 +118,7 @@ export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams>
       const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials)!;
       const pl = this.getPL(financials, false, historicalFinancials);
       const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
-      const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials) || 0;
+      const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials) || 0;
       const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials) || 0;
       const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials) || 0;
       const marketCap = toNumber(financials.marketCap);

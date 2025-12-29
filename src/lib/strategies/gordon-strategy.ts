@@ -149,7 +149,7 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoLucros = toNumber(financials.crescimentoLucros);
     const cagrLucros5a = toNumber(financials.cagrLucros5a);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, use7YearAverages, historicalFinancials);
+    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
     
     // Calcular dividendo estimado usando a melhor fonte disponível

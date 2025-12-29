@@ -1525,20 +1525,24 @@ model UserAssetMonitor {
 }
 
 model CompanyFlag {
-  id        String   @id @default(cuid())
-  companyId Int      @map("company_id")
-  reportId  String   @map("report_id")
-  flagType  FlagType @map("flag_type")
-  reason    String
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  report    AIReport @relation("FlagReports", fields: [reportId], references: [id], onDelete: Cascade)
+  id                String                  @id @default(cuid())
+  companyId         Int                      @map("company_id")
+  reportId          String                   @map("report_id")
+  flagType          FlagType                 @map("flag_type")
+  reason            String
+  isActive          Boolean                  @default(true) @map("is_active")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  lastReevaluatedAt DateTime?                @map("last_reevaluated_at")
+  reevaluationCount Int                      @default(0) @map("reevaluation_count")
+  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  report            AIReport                 @relation("FlagReports", fields: [reportId], references: [id], onDelete: Cascade)
+  queueEntries      CompanyFlagsQueue[]
 
   @@index([companyId, isActive])
   @@index([reportId])
   @@index([flagType, isActive])
   @@index([createdAt])
+  @@index([isActive, createdAt])
   @@map("company_flags")
 }
 
@@ -1780,4 +1784,42 @@ enum ProcessingStep {
 
 enum FlagType {
   FUNDAMENTAL_LOSS
+}
+
+model CompanyFlagsQueue {
+  id              String                        @id @default(cuid())
+  flagId          String                        @map("flag_id")
+  status          QueueStatus                   @default(PENDING)
+  priority        Int                           @default(0)
+  createdAt       DateTime                      @default(now()) @map("created_at")
+  processedAt     DateTime?                     @map("processed_at")
+  errorMessage    String?                       @map("error_message")
+  flag            CompanyFlag                   @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  processingSteps CompanyFlagsQueueProcessing[]
+
+  @@index([status, createdAt])
+  @@index([status, priority, createdAt])
+  @@index([flagId, status])
+  @@index([createdAt])
+  @@map("company_flags_queue")
+}
+
+model CompanyFlagsQueueProcessing {
+  id          String                  @id @default(cuid())
+  queueId     String                  @map("queue_id")
+  step        FlagReevaluationStep
+  stepData    Json                    @map("step_data")
+  completedAt DateTime                @default(now()) @map("completed_at")
+  queue       CompanyFlagsQueue       @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  @@unique([queueId, step])
+  @@index([queueId])
+  @@index([completedAt])
+  @@map("company_flags_queue_processing")
+}
+
+enum FlagReevaluationStep {
+  RESEARCH
+  ANALYSIS
+  EVALUATION
 }

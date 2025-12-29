@@ -561,7 +561,8 @@ Seja objetivo e baseie sua análise nos dados da pesquisa, informações sobre d
  */
 export async function generatePriceVariationReport(
   params: PriceVariationReportParams,
-  companyId?: number
+  companyId?: number,
+  existingAnalysis?: FundamentalAnalysisResult
 ): Promise<string> {
   const { ticker, companyName, variation, researchData } = params;
 
@@ -608,8 +609,9 @@ export async function generatePriceVariationReport(
     ]);
   }
 
-  // Analisar impacto fundamental (passando companyId para verificar dividendos e lucratividade)
-  const analysis = await analyzeFundamentalImpact(
+  // Usar análise existente se disponível, senão fazer nova análise
+  // Isso evita chamadas duplicadas à IA e garante consistência com os dados do checkpoint
+  const analysis = existingAnalysis || await analyzeFundamentalImpact(
     ticker, 
     companyName, 
     variation, 
@@ -677,7 +679,19 @@ ${analysis.reasoning}
 ### Estado Atual dos Fundamentos
 
 ${analysis.currentFundamentals ? `
-**Avaliação Geral**: ${analysis.currentFundamentals.overallAssessment === 'FORTE' ? '🟢 **FORTE**' : analysis.currentFundamentals.overallAssessment === 'MODERADO' ? '🟡 **MODERADO**' : analysis.currentFundamentals.overallAssessment === 'FRACO' ? '🔴 **FRACO**' : analysis.currentFundamentals.overallAssessment === 'EM_RECUPERACAO' ? '🔄 **EM RECUPERAÇÃO**' : '📉 **EM DETERIORAÇÃO**'}
+**Avaliação Geral**: ${
+  analysis.currentFundamentals.overallAssessment === 'FORTE' 
+    ? '🟢 **FORTE**' 
+    : analysis.currentFundamentals.overallAssessment === 'MODERADO' 
+    ? '🟡 **MODERADO**' 
+    : analysis.currentFundamentals.overallAssessment === 'FRACO' 
+    ? '🔴 **FRACO**' 
+    : analysis.currentFundamentals.overallAssessment === 'EM_RECUPERACAO' 
+    ? '🔄 **EM RECUPERAÇÃO**' 
+    : analysis.currentFundamentals.overallAssessment === 'EM_DETERIORACAO'
+    ? '📉 **EM DETERIORAÇÃO**'
+    : `📊 **${analysis.currentFundamentals.overallAssessment}**`
+}
 
 ${analysis.currentFundamentals.strengths && analysis.currentFundamentals.strengths.length > 0 ? `**Pontos Fortes**:
 ${analysis.currentFundamentals.strengths.map(s => `- ✅ ${s}`).join('\n')}

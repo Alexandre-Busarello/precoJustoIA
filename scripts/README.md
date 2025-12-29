@@ -104,6 +104,31 @@ npx tsx scripts/update-quotes.ts 10
 
 ### 4. Scripts de Migração
 
+#### `migrate-price-variation-reports.ts` - Migração de Relatórios de Variação de Preço
+Script para preencher campos `windowDays` e `conclusion` em relatórios existentes e remover duplicatas.
+
+**Uso:**
+```bash
+# Modo dry-run (apenas visualizar, sem fazer alterações)
+npx tsx scripts/migrate-price-variation-reports.ts --dry-run
+
+# Executar migração real
+npx tsx scripts/migrate-price-variation-reports.ts
+```
+
+**Funcionalidades:**
+- ✅ Preenche `windowDays` extraindo de `metadata.triggerReason.days`
+- ✅ Preenche `conclusion` extraindo do conteúdo do relatório via regex
+- ✅ Remove relatórios duplicados (mantém apenas o mais recente para cada empresa/dia)
+- ✅ Modo dry-run para visualizar alterações antes de aplicar
+- ✅ Relatório detalhado do processo
+
+**Características:**
+- Processa apenas relatórios `PRICE_VARIATION` com status `COMPLETED`
+- Identifica duplicatas por empresa e data (normalizada para dia)
+- Mantém sempre o relatório mais recente em caso de duplicatas
+- Logs detalhados de cada etapa do processo
+
 #### `migrate-to-year.ts` (removido)
 Migra dados existentes de `reportDate` para `year`.
 

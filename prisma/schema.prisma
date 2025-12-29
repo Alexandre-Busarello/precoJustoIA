@@ -777,6 +777,8 @@ model AIReport {
   type              AIReportType       @default(MONTHLY_OVERVIEW)
   snapshotId        String?            @map("snapshot_id")
   userId            String?            @map("user_id")
+  windowDays        Int?               @map("window_days")
+  conclusion        String?            @db.Text
   feedbacks         AIReportFeedback[]
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   snapshot          AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id])
@@ -788,6 +790,7 @@ model AIReport {
   @@index([companyId, createdAt])
   @@index([companyId, status])
   @@index([companyId, type])
+  @@index([companyId, type, windowDays])
   @@index([snapshotId])
   @@index([userId])
   @@index([createdAt])

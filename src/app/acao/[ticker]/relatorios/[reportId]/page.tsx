@@ -94,6 +94,8 @@ export default async function ReportDetailPage({ params }: PageProps) {
       likeCount: true,
       dislikeCount: true,
       createdAt: true,
+      windowDays: true,
+      conclusion: true,
       company: {
         select: {
           ticker: true,
@@ -123,30 +125,50 @@ export default async function ReportDetailPage({ params }: PageProps) {
     ? Number(report.currentScore) - Number(report.previousScore)
     : 0;
 
-  // Extrair conclusão do relatório para PRICE_VARIATION (manter markdown para renderização)
+  // Extrair conclusão do relatório para PRICE_VARIATION
+  // Priorizar conclusão salva no banco, com fallback para extração via regex (relatórios antigos)
   let fundamentalConclusion: string | null = null;
   if (isPriceVariation) {
-    // Buscar a seção "## Análise de Impacto Fundamental" > "### Sobre a Queda de Preço" > "**Conclusão**:"
-    // O padrão pode ser: **Conclusão**: ⚠️ **PERDA DE FUNDAMENTO DETECTADA**
-    // ou: **Conclusão**: ✅ **Não indica perda de fundamento estrutural**
-    const analysisSectionMatch = report.content.match(/## Análise de Impacto Fundamental[\s\S]*?### Sobre a Queda de Preço[\s\S]*?\*\*Conclusão\*\*:\s*([^\n]+)/i);
-    if (analysisSectionMatch && analysisSectionMatch[1]) {
-      fundamentalConclusion = analysisSectionMatch[1].trim();
-      // Manter markdown para renderização correta
+    // Usar conclusão salva se disponível
+    if (report.conclusion) {
+      fundamentalConclusion = report.conclusion.trim();
       // Limitar tamanho para exibição (mas preservar markdown)
       if (fundamentalConclusion && fundamentalConclusion.length > 150) {
-        // Tentar cortar em um ponto seguro (após fechar tags markdown)
         const truncated = fundamentalConclusion.substring(0, 147);
         const lastBold = truncated.lastIndexOf('**');
         if (lastBold > 100) {
-          // Se encontrou um ** próximo, cortar após ele
           fundamentalConclusion = truncated.substring(0, lastBold + 2) + '...';
         } else {
           fundamentalConclusion = truncated + '...';
         }
       }
+    } else {
+      // Fallback: extrair do conteúdo via regex (para relatórios antigos)
+      const analysisSectionMatch = report.content.match(/## Análise de Impacto Fundamental[\s\S]*?### Sobre a Queda de Preço[\s\S]*?\*\*Conclusão\*\*:\s*([^\n]+)/i);
+      if (analysisSectionMatch && analysisSectionMatch[1]) {
+        fundamentalConclusion = analysisSectionMatch[1].trim();
+        if (fundamentalConclusion && fundamentalConclusion.length > 150) {
+          const truncated = fundamentalConclusion.substring(0, 147);
+          const lastBold = truncated.lastIndexOf('**');
+          if (lastBold > 100) {
+            fundamentalConclusion = truncated.substring(0, lastBold + 2) + '...';
+          } else {
+            fundamentalConclusion = truncated + '...';
+          }
+        }
+      }
     }
   }
+
+  // Formatar janela para exibição
+  const getWindowLabel = (days: number | null | undefined): string => {
+    if (!days) return '';
+    if (days === 1) return '1 dia';
+    if (days === 5) return '5 dias';
+    if (days === 30) return '30 dias';
+    if (days === 365) return '365 dias';
+    return `${days} dias`;
+  };
 
   // Para usuários não-premium, mostrar apenas uma parte do conteúdo
   // Trunca em um ponto natural (após parágrafo ou sentença)
@@ -213,8 +235,8 @@ export default async function ReportDetailPage({ params }: PageProps) {
       {/* Metadata Card */}
       <Card className="p-6 mb-6">
         <div className={`grid grid-cols-1 ${
-          isPriceVariation && fundamentalConclusion
-            ? 'md:grid-cols-2'
+          isPriceVariation && (fundamentalConclusion || report.windowDays)
+            ? 'md:grid-cols-3'
             : isMonthlyReport || isCustomTrigger 
               ? 'md:grid-cols-2' 
               : hasChangeDirection
@@ -235,6 +257,18 @@ export default async function ReportDetailPage({ params }: PageProps) {
               })}
             </div>
           </div>
+
+          {/* Janela - apenas para PRICE_VARIATION */}
+          {isPriceVariation && report.windowDays && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Janela Avaliada
+              </div>
+              <Badge variant="outline" className="text-base py-1.5 px-3">
+                {getWindowLabel(report.windowDays)}
+              </Badge>
+            </div>
+          )}
 
           {/* Conclusão do Fundamento - apenas para PRICE_VARIATION */}
           {isPriceVariation && fundamentalConclusion && (

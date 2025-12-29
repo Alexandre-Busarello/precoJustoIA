@@ -164,15 +164,74 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
       });
     }
 
-    // Buscar reportId do flag se existir
+    // Buscar reportId e reason do flag se existir
     let flagReportId: string | undefined;
+    let flagReason = flagPenalty?.reason || '';
+    
     if (flagPenalty?.flagId) {
       try {
         const flag = await prisma.companyFlag.findUnique({
           where: { id: flagPenalty.flagId },
-          select: { reportId: true }
+          select: { 
+            reportId: true,
+            reason: true,
+            report: {
+              select: {
+                id: true,
+                content: true,
+                type: true,
+              }
+            }
+          }
         });
-        flagReportId = flag?.reportId;
+        
+        if (flag) {
+          flagReportId = flag.reportId;
+          
+          // Se o reason for um código (como "PERDA_DE_FUNDAMENTO"), tentar extrair trecho do relatório
+          if (flag.reason && flag.report && flag.report.content) {
+            flagReason = flag.reason;
+            
+            // Verificar se o reason é um código (contém apenas letras maiúsculas, números e underscore)
+            const isCodePattern = /^[A-Z0-9_]+$/.test(flagReason);
+            
+            if (isCodePattern) {
+              // Tentar extrair o raciocínio da análise do relatório
+              const reportContent = flag.report.content;
+              
+              // Para PRICE_VARIATION, buscar a seção "Raciocínio:" após "### Sobre a Queda de Preço"
+              if (flag.report.type === 'PRICE_VARIATION') {
+                const reasoningMatch = reportContent.match(/## Análise de Impacto Fundamental[\s\S]*?### Sobre a Queda de Preço[\s\S]*?\*\*Raciocínio\*\*:\s*([\s\S]*?)(?=\n##|\n###|$)/i);
+                if (reasoningMatch && reasoningMatch[1]) {
+                  let reasoning = reasoningMatch[1].trim();
+                  // Limitar tamanho e remover markdown excessivo
+                  if (reasoning.length > 300) {
+                    reasoning = reasoning.substring(0, 297) + '...';
+                  }
+                  // Remover múltiplas quebras de linha
+                  reasoning = reasoning.replace(/\n{3,}/g, '\n\n');
+                  flagReason = reasoning;
+                } else {
+                  // Fallback: buscar qualquer texto após a conclusão
+                  const conclusionMatch = reportContent.match(/## Análise de Impacto Fundamental[\s\S]*?\*\*Conclusão\*\*:[^\n]*\n([\s\S]{100,500})/i);
+                  if (conclusionMatch && conclusionMatch[1]) {
+                    let fallbackText = conclusionMatch[1].trim();
+                    if (fallbackText.length > 300) {
+                      fallbackText = fallbackText.substring(0, 297) + '...';
+                    }
+                    flagReason = fallbackText.replace(/\n{3,}/g, '\n\n');
+                  }
+                }
+              } else {
+                // Para outros tipos de relatório, buscar primeiro parágrafo significativo
+                const firstParagraphMatch = reportContent.match(/\n\n([^\n]{50,300})/);
+                if (firstParagraphMatch && firstParagraphMatch[1]) {
+                  flagReason = firstParagraphMatch[1].trim();
+                }
+              }
+            }
+          }
+        }
       } catch (error) {
         console.warn('Erro ao buscar reportId do flag:', error);
       }
@@ -197,7 +256,7 @@ export async function getScoreBreakdown(ticker: string, isPremium: boolean, isLo
       rawScore,
       flagPenalty: flagPenalty?.applied ? {
         value: flagPenalty.value,
-        reason: flagPenalty.reason,
+        reason: flagReason, // Usar reason extraído do relatório se necessário
         flagId: flagPenalty.flagId,
         reportId: flagReportId
       } : undefined

@@ -73,6 +73,31 @@ export default async function ReportsListPage({ params }: PageProps) {
     take: 50,
   });
 
+  // Buscar flags ativos associados aos relatórios para indicar perda de fundamento
+  const flagsByReportId = new Map<string, boolean>();
+  try {
+    const activeFlags = await prisma.companyFlag.findMany({
+      where: {
+        companyId: company.id,
+        isActive: true,
+        reportId: {
+          in: allReportsRaw.map(r => r.id),
+        },
+      },
+      select: {
+        reportId: true,
+      },
+    });
+    
+    activeFlags.forEach(flag => {
+      if (flag.reportId) {
+        flagsByReportId.set(flag.reportId, true);
+      }
+    });
+  } catch (error) {
+    console.warn('Erro ao buscar flags para relatórios:', error);
+  }
+
   const allReports = allReportsRaw.map(report => ({
     id: report.id,
     type: report.type as string,
@@ -82,6 +107,8 @@ export default async function ReportsListPage({ params }: PageProps) {
     currentScore: report.currentScore,
     userId: (report as any).userId || null, // Campo pode não estar tipado ainda
     createdAt: report.createdAt,
+    windowDays: (report as any).windowDays || null,
+    conclusion: (report as any).conclusion || null,
   }));
 
   // Filtrar relatórios: CUSTOM_TRIGGER só aparece para o criador
@@ -237,6 +264,16 @@ export default async function ReportsListPage({ params }: PageProps) {
               ? Number(report.currentScore) - Number(report.previousScore)
               : 0;
 
+            // Formatar janela para exibição
+            const getWindowLabel = (days: number | null | undefined): string => {
+              if (!days) return '';
+              if (days === 1) return '1 dia';
+              if (days === 5) return '5 dias';
+              if (days === 30) return '30 dias';
+              if (days === 365) return '365 dias';
+              return `${days} dias`;
+            };
+
             // Extrair primeiro parágrafo do relatório como preview
             const preview = report.content
               .replace(/^#.*\n/gm, '') // Remove títulos
@@ -244,6 +281,9 @@ export default async function ReportsListPage({ params }: PageProps) {
               .split('\n\n')
               .find(p => p.trim().length > 50)
               ?.substring(0, 200) + '...';
+
+            // Verificar se há flag associado a este relatório (perda de fundamento)
+            const hasFlag = flagsByReportId.has(report.id);
 
             return (
               <Link 
@@ -260,10 +300,23 @@ export default async function ReportsListPage({ params }: PageProps) {
                             Relatório Mensal
                           </Badge>
                         ) : isPriceVariation ? (
-                          <Badge variant="outline" className="text-xs sm:text-sm border-orange-500 text-orange-700 dark:text-orange-400">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            Variação de Preço
-                          </Badge>
+                          <>
+                            <Badge variant="outline" className="text-xs sm:text-sm border-orange-500 text-orange-700 dark:text-orange-400">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Variação de Preço
+                            </Badge>
+                            {report.windowDays && (
+                              <Badge variant="secondary" className="text-xs sm:text-sm">
+                                {getWindowLabel(report.windowDays)}
+                              </Badge>
+                            )}
+                            {hasFlag && isPremium && (
+                              <Badge variant="destructive" className="text-xs sm:text-sm">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Perda de Fundamentos
+                              </Badge>
+                            )}
+                          </>
                         ) : isCustomTrigger ? (
                           <Badge variant="outline" className="text-xs sm:text-sm border-blue-500 text-blue-700 dark:text-blue-400">
                             <Settings className="h-3 w-3 mr-1" />
@@ -325,10 +378,18 @@ export default async function ReportsListPage({ params }: PageProps) {
                       )}
 
                       {preview && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
                           {preview}
                         </p>
                       )}
+
+                      {/* Conclusão - apenas para PRICE_VARIATION */}
+                      {/* {isPriceVariation && conclusionPreview && (
+                        <div className="mt-2 p-2 bg-muted/50 rounded-md border-l-2 border-orange-500">
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">Conclusão:</p>
+                          <p className="text-sm text-foreground">{conclusionPreview}</p>
+                        </div>
+                      )} */}
                     </div>
                   </div>
                 </Card>

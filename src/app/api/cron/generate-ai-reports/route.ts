@@ -228,6 +228,7 @@ async function processStep(
           throw new Error('Dados de análise não encontrados no checkpoint de ANALYSIS');
         }
 
+        // Usar análise já feita na etapa ANALYSIS para garantir consistência
         const report = await generatePriceVariationReport({
           ticker: company.ticker,
           companyName: company.name,
@@ -238,7 +239,7 @@ async function processStep(
             previousPrice: entry.triggerReason.previousPrice,
           },
           researchData: researchCheckpoint.data.research,
-        }, entry.companyId); // Passar companyId para verificar dividendos
+        }, entry.companyId, analysisCheckpoint.data.analysis); // Passar análise já feita para evitar chamada duplicada à IA
 
         // Garantir que currentFundamentals existe ou criar fallback
         const currentFundamentals = analysisCheckpoint.data.analysis.currentFundamentals || {
@@ -321,6 +322,18 @@ async function processFinalReport(
     }
   }
 
+  // Extrair windowDays e conclusion para PRICE_VARIATION
+  let windowDays: number | undefined;
+  let conclusion: string | undefined;
+
+  if (entry.reportType === 'PRICE_VARIATION') {
+    // Extrair windowDays de triggerReason.days
+    windowDays = entry.triggerReason?.days;
+    
+    // Extrair conclusion do compilationCheckpoint
+    conclusion = compilationCheckpoint.data.conclusion || undefined;
+  }
+
   // Criar relatório no banco
   const report = await prisma.aIReport.create({
     data: {
@@ -330,6 +343,8 @@ async function processFinalReport(
       status: 'COMPLETED',
       isActive: true,
       userId: userId || undefined,
+      windowDays: windowDays,
+      conclusion: conclusion,
       metadata: {
         triggerReason: entry.triggerReason,
         generatedAt: new Date().toISOString(),

@@ -74,39 +74,124 @@ export async function GET(request: NextRequest) {
         const variationCheck = await checkPriceVariations(company.id, company.ticker);
 
         if (variationCheck.triggered && variationCheck.triggerReason) {
-          // Verificar se já existe entrada na fila recente para evitar duplicatas
-          const existingQueue = await prisma.aIReportsQueue.findFirst({
-            where: {
-              companyId: company.id,
-              reportType: 'PRICE_VARIATION',
-              status: {
-                in: ['PENDING', 'PROCESSING'],
-              },
-              createdAt: {
-                gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Últimas 24 horas
-              },
-            },
-          });
+          const windowDays = variationCheck.triggerReason.days;
+          
+          // Verificar se já existe relatório recente baseado na janela temporal
+          let shouldCreateReport = false;
+          let checkDate: Date;
 
-          if (!existingQueue) {
-            // Criar entrada na fila
-            await addToQueue({
-              companyId: company.id,
-              reportType: 'PRICE_VARIATION',
-              triggerReason: {
-                variation: variationCheck.triggerReason.variation,
-                days: variationCheck.triggerReason.days,
-                threshold: variationCheck.triggerReason.threshold,
-                currentPrice: variationCheck.variations.find(v => v.days === variationCheck.triggerReason!.days)?.currentPrice,
-                previousPrice: variationCheck.variations.find(v => v.days === variationCheck.triggerReason!.days)?.previousPrice,
+          if (windowDays === 1) {
+            // Janela de 1 dia: verificar se já existe relatório criado no mesmo dia
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            checkDate = today;
+            
+            const existingReport = await prisma.aIReport.findFirst({
+              where: {
+                companyId: company.id,
+                type: 'PRICE_VARIATION',
+                windowDays: 1,
+                status: 'COMPLETED',
+                createdAt: {
+                  gte: checkDate,
+                },
               },
-              priority: variationCheck.triggerReason.days === 1 ? 2 : variationCheck.triggerReason.days === 30 ? 1 : 0, // Quedas de 1 dia têm prioridade alta
             });
 
-            queueEntriesCreated++;
-            console.log(`✅ ${company.ticker}: Variação de ${variationCheck.triggerReason.variation.toFixed(2)}% detectada (${variationCheck.triggerReason.days} dias)`);
+            shouldCreateReport = !existingReport;
+          } else if (windowDays === 5) {
+            // Janela de 5 dias: verificar se já existe relatório criado nos últimos 5 dias
+            checkDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+            
+            const existingReport = await prisma.aIReport.findFirst({
+              where: {
+                companyId: company.id,
+                type: 'PRICE_VARIATION',
+                windowDays: 5,
+                status: 'COMPLETED',
+                createdAt: {
+                  gte: checkDate,
+                },
+              },
+            });
+
+            shouldCreateReport = !existingReport;
+          } else if (windowDays === 30) {
+            // Janela de 30 dias: verificar se já existe relatório criado nos últimos 30 dias
+            checkDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            
+            const existingReport = await prisma.aIReport.findFirst({
+              where: {
+                companyId: company.id,
+                type: 'PRICE_VARIATION',
+                windowDays: 30,
+                status: 'COMPLETED',
+                createdAt: {
+                  gte: checkDate,
+                },
+              },
+            });
+
+            shouldCreateReport = !existingReport;
+          } else if (windowDays === 365) {
+            // Janela de 365 dias: verificar se já existe relatório criado nos últimos 3 meses (trimestre)
+            checkDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+            
+            const existingReport = await prisma.aIReport.findFirst({
+              where: {
+                companyId: company.id,
+                type: 'PRICE_VARIATION',
+                windowDays: 365,
+                status: 'COMPLETED',
+                createdAt: {
+                  gte: checkDate,
+                },
+              },
+            });
+
+            shouldCreateReport = !existingReport;
           } else {
-            console.log(`⏭️ ${company.ticker}: Já existe entrada na fila recente, pulando`);
+            // Janela desconhecida: criar relatório (fallback)
+            shouldCreateReport = true;
+          }
+
+          // Também verificar se já existe entrada na fila pendente para evitar duplicatas
+          if (shouldCreateReport) {
+            const existingQueue = await prisma.aIReportsQueue.findFirst({
+              where: {
+                companyId: company.id,
+                reportType: 'PRICE_VARIATION',
+                status: {
+                  in: ['PENDING', 'PROCESSING'],
+                },
+                createdAt: {
+                  gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Últimas 24 horas
+                },
+              },
+            });
+
+            if (!existingQueue) {
+              // Criar entrada na fila
+              await addToQueue({
+                companyId: company.id,
+                reportType: 'PRICE_VARIATION',
+                triggerReason: {
+                  variation: variationCheck.triggerReason.variation,
+                  days: variationCheck.triggerReason.days,
+                  threshold: variationCheck.triggerReason.threshold,
+                  currentPrice: variationCheck.variations.find(v => v.days === variationCheck.triggerReason!.days)?.currentPrice,
+                  previousPrice: variationCheck.variations.find(v => v.days === variationCheck.triggerReason!.days)?.previousPrice,
+                },
+                priority: variationCheck.triggerReason.days === 1 ? 2 : variationCheck.triggerReason.days === 30 ? 1 : 0, // Quedas de 1 dia têm prioridade alta
+              });
+
+              queueEntriesCreated++;
+              console.log(`✅ ${company.ticker}: Variação de ${variationCheck.triggerReason.variation.toFixed(2)}% detectada (${variationCheck.triggerReason.days} dias)`);
+            } else {
+              console.log(`⏭️ ${company.ticker}: Já existe entrada na fila recente, pulando`);
+            }
+          } else {
+            console.log(`⏭️ ${company.ticker}: Já existe relatório recente para janela de ${windowDays} dias, pulando`);
           }
         }
 

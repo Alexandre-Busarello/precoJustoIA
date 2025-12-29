@@ -407,7 +407,7 @@ export default async function EntendendoScorePage({
                         size="sm"
                         className="w-full sm:w-auto border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50"
                       >
-                        <Link href={`/acao/${ticker.toLowerCase()}/relatorios#report-${breakdown.flagPenalty.reportId}`}>
+                        <Link href={`/acao/${ticker.toLowerCase()}/relatorios/${breakdown.flagPenalty.reportId}`}>
                           <Info className="w-3 h-3 mr-2" />
                           Ver Relatório Completo
                         </Link>

@@ -125,37 +125,51 @@ export default async function ReportDetailPage({ params }: PageProps) {
     ? Number(report.currentScore) - Number(report.previousScore)
     : 0;
 
+  // Função para formatar conclusão de forma amigável
+  const formatConclusion = (conclusion: string | null): string | null => {
+    if (!conclusion) return null;
+    
+    const trimmed = conclusion.trim();
+    
+    // Se já está formatado (contém emojis ou markdown), retornar como está
+    if (trimmed.includes('✅') || trimmed.includes('⚠️') || trimmed.includes('📊') || trimmed.includes('**')) {
+      return trimmed;
+    }
+    
+    // Formatar valores raw com labels descritivos
+    switch (trimmed) {
+      case 'AJUSTE_DIVIDENDOS':
+        return '✅ **Ajuste por Dividendos**';
+      case 'PERDA_DE_FUNDAMENTO':
+        return '⚠️ **PERDA DE FUNDAMENTO DETECTADA**';
+      case 'VOLATILIDADE_ESPERADA':
+        return '📊 **Volatilidade Esperada**';
+      case 'MOVIMENTO_MERCADO':
+        return '✅ **Movimento Normal de Mercado**';
+      case 'NOTICIA_ATIPICA':
+        return '✅ **Reação a Notícia Atípica**';
+      case 'AJUSTE_TECNICO':
+        return '✅ **Ajuste Técnico**';
+      default:
+        return '✅ **Não indica perda de fundamento estrutural**';
+    }
+  };
+
   // Extrair conclusão do relatório para PRICE_VARIATION
   // Priorizar conclusão salva no banco, com fallback para extração via regex (relatórios antigos)
   let fundamentalConclusion: string | null = null;
   if (isPriceVariation) {
     // Usar conclusão salva se disponível
     if (report.conclusion) {
-      fundamentalConclusion = report.conclusion.trim();
-      // Limitar tamanho para exibição (mas preservar markdown)
-      if (fundamentalConclusion && fundamentalConclusion.length > 150) {
-        const truncated = fundamentalConclusion.substring(0, 147);
-        const lastBold = truncated.lastIndexOf('**');
-        if (lastBold > 100) {
-          fundamentalConclusion = truncated.substring(0, lastBold + 2) + '...';
-        } else {
-          fundamentalConclusion = truncated + '...';
-        }
-      }
+      fundamentalConclusion = formatConclusion(report.conclusion);
     } else {
       // Fallback: extrair do conteúdo via regex (para relatórios antigos)
       const analysisSectionMatch = report.content.match(/## Análise de Impacto Fundamental[\s\S]*?### Sobre a Queda de Preço[\s\S]*?\*\*Conclusão\*\*:\s*([^\n]+)/i);
       if (analysisSectionMatch && analysisSectionMatch[1]) {
-        fundamentalConclusion = analysisSectionMatch[1].trim();
-        if (fundamentalConclusion && fundamentalConclusion.length > 150) {
-          const truncated = fundamentalConclusion.substring(0, 147);
-          const lastBold = truncated.lastIndexOf('**');
-          if (lastBold > 100) {
-            fundamentalConclusion = truncated.substring(0, lastBold + 2) + '...';
-          } else {
-            fundamentalConclusion = truncated + '...';
-          }
-        }
+        fundamentalConclusion = formatConclusion(analysisSectionMatch[1].trim());
+      } else {
+        // Se não encontrou conclusão, usar padrão
+        fundamentalConclusion = '✅ **Não indica perda de fundamento estrutural**';
       }
     }
   }

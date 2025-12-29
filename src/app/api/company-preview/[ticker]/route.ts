@@ -207,7 +207,7 @@ export async function GET(
         { companyId: company.id, type: 'PRICE_VARIATION' }
       ) as unknown as { id: string; conclusion: string | null; content: string; windowDays: number | null; createdAt: Date } | null,
 
-      // Flags ativos
+      // Flags ativos com relatório para extrair texto amigável
       safeQueryWithParams(
         'company-flags-active-preview',
         () => prisma.companyFlag.findMany({
@@ -221,10 +221,23 @@ export async function GET(
             flagType: true,
             reason: true,
             reportId: true,
+            report: {
+              select: {
+                id: true,
+                content: true,
+                type: true,
+              },
+            },
           },
         }),
         { companyId: company.id }
-      ) as unknown as Array<{ id: string; flagType: string; reason: string; reportId: string }>,
+      ) as unknown as Array<{ 
+        id: string; 
+        flagType: string; 
+        reason: string; 
+        reportId: string;
+        report: { id: string; content: string; type: string } | null;
+      }>,
     ]);
 
     // Processar relatórios: extrair conclusão se não estiver disponível
@@ -332,12 +345,64 @@ export async function GET(
           },
         }),
       },
-      flags: activeFlags.map(flag => ({
-        id: flag.id,
-        flagType: flag.flagType,
-        reason: flag.reason,
-        reportId: flag.reportId,
-      })),
+      flags: activeFlags.map(flag => {
+        // Se o reason for um código (como "PERDA_DE_FUNDAMENTO"), tentar extrair texto amigável do relatório
+        let friendlyReason = flag.reason;
+        const isCodePattern = /^[A-Z0-9_]+$/.test(flag.reason);
+        
+        if (isCodePattern && flag.report?.content) {
+          const reportContent = flag.report.content;
+          
+          // Para PRICE_VARIATION, buscar a seção "Raciocínio:" após "### Sobre a Queda de Preço"
+          if (flag.report.type === 'PRICE_VARIATION') {
+            const reasoningMatch = reportContent.match(/## Análise de Impacto Fundamental[\s\S]*?### Sobre a Queda de Preço[\s\S]*?\*\*Raciocínio\*\*:\s*([\s\S]*?)(?=\n##|\n###|$)/i);
+            if (reasoningMatch && reasoningMatch[1]) {
+              let reasoning = reasoningMatch[1].trim();
+              // Limitar tamanho e remover markdown excessivo
+              if (reasoning.length > 300) {
+                reasoning = reasoning.substring(0, 297) + '...';
+              }
+              // Remover múltiplas quebras de linha
+              reasoning = reasoning.replace(/\n{3,}/g, '\n\n');
+              friendlyReason = reasoning;
+            } else {
+              // Fallback: buscar qualquer texto após a conclusão
+              const conclusionMatch = reportContent.match(/## Análise de Impacto Fundamental[\s\S]*?\*\*Conclusão\*\*:[^\n]*\n([\s\S]{100,500})/i);
+              if (conclusionMatch && conclusionMatch[1]) {
+                let fallbackText = conclusionMatch[1].trim();
+                if (fallbackText.length > 300) {
+                  fallbackText = fallbackText.substring(0, 297) + '...';
+                }
+                friendlyReason = fallbackText.replace(/\n{3,}/g, '\n\n');
+              } else {
+                // Se não encontrar, usar mensagem genérica
+                friendlyReason = 'Nossa inteligência artificial detectou uma situação crítica nesta empresa que requer atenção imediata.';
+              }
+            }
+          } else {
+            // Para outros tipos de relatório, buscar primeiro parágrafo significativo
+            const firstParagraphMatch = reportContent.match(/\n\n([^\n]{50,300})/);
+            if (firstParagraphMatch && firstParagraphMatch[1]) {
+              friendlyReason = firstParagraphMatch[1].trim();
+            } else {
+              // Se não encontrar, usar mensagem genérica
+              friendlyReason = 'Nossa inteligência artificial detectou uma situação crítica nesta empresa que requer atenção imediata.';
+            }
+          }
+        }
+        
+        // Se ainda for um código, usar mensagem genérica
+        if (/^[A-Z0-9_]+$/.test(friendlyReason)) {
+          friendlyReason = 'Nossa inteligência artificial detectou uma situação crítica nesta empresa que requer atenção imediata.';
+        }
+        
+        return {
+          id: flag.id,
+          flagType: 'Situação Crítica Detectada pela IA', // Título amigável
+          reason: friendlyReason,
+          reportId: flag.reportId,
+        };
+      }),
       strategies,
       overallScore: null, // Sempre null para anônimo (com blur no frontend)
       valuation: mockValuation, // Valores mockados para preview

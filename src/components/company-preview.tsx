@@ -243,23 +243,31 @@ export function CompanyPreview({ ticker }: CompanyPreviewProps) {
 
       {/* Flags */}
       {data.flags.length > 0 && (
-        <Card>
+        <Card className="border-orange-300 dark:border-orange-700 bg-gradient-to-r from-orange-50 via-red-50 to-orange-50 dark:from-orange-950/30 dark:via-red-950/30 dark:to-orange-950/30">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
+            <CardTitle className="flex items-center gap-2 text-orange-900 dark:text-orange-100">
+              <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
               Alertas Ativos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {data.flags.map((flag) => (
-                <div key={flag.id} className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                  <div className="font-semibold text-sm text-red-900 dark:text-red-100 mb-1">
+                <div key={flag.id} className="p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <h3 className="font-semibold text-base text-orange-900 dark:text-orange-100 mb-2">
                     {flag.flagType}
-                  </div>
-                  <div className="text-sm text-red-700 dark:text-red-300">
+                  </h3>
+                  <p className="text-sm text-orange-800 dark:text-orange-200 leading-relaxed">
                     {flag.reason}
-                  </div>
+                  </p>
+                  {flag.reportId && (
+                    <Button asChild variant="outline" size="sm" className="mt-3 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/50">
+                      <Link href={`/acao/${ticker.toLowerCase()}/relatorios/${flag.reportId}`}>
+                        Ver Relatório Completo
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

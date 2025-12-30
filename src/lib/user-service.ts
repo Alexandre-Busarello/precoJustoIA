@@ -143,7 +143,7 @@ export async function isCurrentUserPremium(): Promise<boolean> {
 /**
  * Verifica se um usuário específico é Premium (por ID ou email)
  */
-export async function isUserPremium(identifier: string): Promise<boolean> {
+export async function isUserPremium(identifier: string, skipCache: boolean = false): Promise<boolean> {
   try {
     // Tentar como ID primeiro
     let user = await safeQueryWithParams(
@@ -157,7 +157,8 @@ export async function isUserPremium(identifier: string): Promise<boolean> {
           trialEndsAt: true
         }
       }),
-      { identifier, type: 'id' }
+      { identifier, type: 'id' },
+      { skipCache }
     ) as any
 
     // Se não encontrar, tentar como email
@@ -173,7 +174,8 @@ export async function isUserPremium(identifier: string): Promise<boolean> {
             trialEndsAt: true
           }
         }),
-        { identifier, type: 'email' }
+        { identifier, type: 'email' },
+        { skipCache }
       ) as any
     }
 

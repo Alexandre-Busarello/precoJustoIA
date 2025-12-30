@@ -2416,13 +2416,14 @@ export async function generateFreeUserAssetChangeEmailTemplate(params: {
   const upgradeUrl = `${baseUrl}/planos`;
   const manageSubscriptionsUrl = `${baseUrl}/dashboard/subscriptions`;
   
-  // Converter URLs SVG para formato compatível com email usando base64 inline
-  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+  // Converter URLs SVG para formato compatível com email usando wsrv.nl (PNG)
+  // wsrv.nl é mais confiável e compatível com clientes de email do que SVG base64
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
     
-    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    // Se for uma URL da brapi.dev (SVG), usar wsrv.nl para converter para PNG
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return await convertSvgToBase64DataUri(url);
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/8b5cf6/ffffff?text=${ticker}`;
     }
     
     if (url.startsWith('/')) {
@@ -2432,7 +2433,7 @@ export async function generateFreeUserAssetChangeEmailTemplate(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(companyLogoUrl);
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(companyLogoUrl);
 
   return {
     subject: `Mudança detectada em ${ticker} - Veja os detalhes completos`,
@@ -4713,15 +4714,15 @@ export async function sendFlagAlertConversionEmail(params: {
   companyName: string;
   companyLogoUrl?: string | null;
 }) {
-  // Converter URLs SVG para formato compatível com email usando base64 inline
-  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+  // Converter URLs SVG para formato compatível com email usando wsrv.nl (PNG)
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
     
     const baseUrl = getEmailBaseUrl();
     
-    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    // Se for uma URL da brapi.dev (SVG), usar wsrv.nl para converter para PNG
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return await convertSvgToBase64DataUri(url);
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/8b5cf6/ffffff?text=${params.ticker}`;
     }
     
     if (url.startsWith('/')) {
@@ -4731,7 +4732,7 @@ export async function sendFlagAlertConversionEmail(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(params.companyLogoUrl);
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(params.companyLogoUrl);
 
   const template = await generateFreeUserAssetChangeEmailTemplate({
     userName: params.userName,
@@ -4762,15 +4763,15 @@ export async function sendPriceVariationConversionEmail(params: {
   companyName: string;
   companyLogoUrl?: string | null;
 }) {
-  // Converter URLs SVG para formato compatível com email usando base64 inline
-  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+  // Converter URLs SVG para formato compatível com email usando wsrv.nl (PNG)
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
     
     const baseUrl = getEmailBaseUrl();
     
-    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    // Se for uma URL da brapi.dev (SVG), usar wsrv.nl para converter para PNG
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return await convertSvgToBase64DataUri(url);
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/8b5cf6/ffffff?text=${params.ticker}`;
     }
     
     if (url.startsWith('/')) {
@@ -4780,7 +4781,7 @@ export async function sendPriceVariationConversionEmail(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(params.companyLogoUrl);
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(params.companyLogoUrl);
 
   const template = await generateFreeUserAssetChangeEmailTemplate({
     userName: params.userName,
@@ -4854,15 +4855,15 @@ export async function sendCustomTriggerConversionEmail(params: {
   companyName: string;
   companyLogoUrl?: string | null;
 }) {
-  // Converter URLs SVG para formato compatível com email usando base64 inline
-  const getEmailCompatibleImageUrl = async (url: string | null | undefined): Promise<string | null> => {
+  // Converter URLs SVG para formato compatível com email usando wsrv.nl (PNG)
+  const getEmailCompatibleImageUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
     
     const baseUrl = getEmailBaseUrl();
     
-    // Se for uma URL da brapi.dev (SVG), converter para base64 data URI
+    // Se for uma URL da brapi.dev (SVG), usar wsrv.nl para converter para PNG
     if (url.includes('icons.brapi.dev') && url.endsWith('.svg')) {
-      return await convertSvgToBase64DataUri(url);
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=128&h=128&output=png&default=https://via.placeholder.com/128x128/8b5cf6/ffffff?text=${params.ticker}`;
     }
     
     if (url.startsWith('/')) {
@@ -4872,7 +4873,7 @@ export async function sendCustomTriggerConversionEmail(params: {
     return url;
   };
   
-  const emailCompatibleLogoUrl = await getEmailCompatibleImageUrl(params.companyLogoUrl);
+  const emailCompatibleLogoUrl = getEmailCompatibleImageUrl(params.companyLogoUrl);
 
   const template = await generateFreeUserAssetChangeEmailTemplate({
     userName: params.userName,

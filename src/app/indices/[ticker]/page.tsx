@@ -266,10 +266,43 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
         },
       })
 
+      // CORREÇÃO: Buscar preço de entrada do primeiro snapshot onde o ativo aparece
+      // Este é o preço de entrada real do ativo no índice
+      // Buscar todos os pontos históricos ordenados por data
+      const historyPoints = await prisma.indexHistoryPoints.findMany({
+        where: {
+          indexId: index.id
+        },
+        orderBy: { date: 'asc' },
+        select: {
+          compositionSnapshot: true
+        }
+      })
+
+      // Filtrar pontos onde o ticker estava presente (mesma lógica da Performance Individual)
+      const relevantPoints = historyPoints.filter(point => {
+        if (!point.compositionSnapshot) return false;
+        const snapshot = point.compositionSnapshot as any;
+        return snapshot[comp.assetTicker] !== undefined;
+      })
+
+      // CORREÇÃO: Sempre usar entryPrice do primeiro snapshot onde o ativo aparece
+      let entryPrice = comp.entryPrice; // Fallback para preço de index_compositions
+      let entryDate = comp.entryDate; // Fallback para data de index_compositions
+      if (relevantPoints.length > 0) {
+        const firstPoint = relevantPoints[0];
+        const firstSnapshot = firstPoint.compositionSnapshot as any;
+        const firstEntryData = firstSnapshot[comp.assetTicker];
+        if (firstEntryData?.entryPrice) {
+          entryPrice = firstEntryData.entryPrice;
+          entryDate = new Date(firstEntryData.entryDate);
+        }
+      }
+
       const { getTickerPrice } = await import('@/lib/quote-service')
       const priceData = await getTickerPrice(comp.assetTicker)
-      const currentPrice = priceData?.price || comp.entryPrice
-      const entryReturn = ((currentPrice - comp.entryPrice) / comp.entryPrice) * 100
+      const currentPrice = priceData?.price || entryPrice
+      const entryReturn = ((currentPrice - entryPrice) / entryPrice) * 100
 
       return {
         ticker: comp.assetTicker,
@@ -277,8 +310,8 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
         logoUrl: company?.logoUrl || null,
         sector: company?.sector || null,
         targetWeight: comp.targetWeight,
-        entryPrice: comp.entryPrice,
-        entryDate: comp.entryDate.toISOString().split('T')[0],
+        entryPrice, // Usar preço do primeiro snapshot
+        entryDate: entryDate.toISOString().split('T')[0], // Usar data do primeiro snapshot
         currentPrice,
         entryReturn,
         dividendYield: company?.financialData[0]?.dy 

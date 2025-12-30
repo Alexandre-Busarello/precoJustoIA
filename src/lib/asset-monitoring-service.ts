@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper';
 import { calculateScoreComposition, ScoreComposition } from '@/lib/score-composition-service';
-import { isUserPremium } from '@/lib/user-service';
 
 /**
  * Serviço de Monitoramento de Ativos
@@ -144,6 +143,10 @@ export class AssetMonitoringService {
               id: true,
               email: true,
               name: true,
+              subscriptionTier: true,
+              premiumExpiresAt: true,
+              trialStartedAt: true,
+              trialEndsAt: true,
             },
           },
         },
@@ -152,33 +155,50 @@ export class AssetMonitoringService {
     );
 
     // Processar subscriptions: logados e anônimos
-    const subscribersWithPremium = await Promise.all(
-      (subscriptions as any[]).map(async (sub) => {
-        // Subscription anônima (sem userId, com email)
-        if (!sub.userId && sub.email) {
-          return {
-            userId: null,
-            email: sub.email,
-            name: null,
-            isPremium: false, // Anônimos sempre são gratuitos
-          };
+    const subscribersWithPremium = (subscriptions as any[]).map((sub) => {
+      // Subscription anônima (sem userId, com email)
+      if (!sub.userId && sub.email) {
+        return {
+          userId: null,
+          email: sub.email,
+          name: null,
+          isPremium: false, // Anônimos sempre são gratuitos
+        };
+      }
+      
+      // Subscription de usuário logado
+      if (sub.userId && sub.user) {
+        // Calcular isPremium diretamente dos dados do user já incluídos
+        // Evita query adicional e garante dados corretos
+        const now = new Date();
+        const hasValidPremium = sub.user.subscriptionTier === 'PREMIUM' && 
+                               (!sub.user.premiumExpiresAt || new Date(sub.user.premiumExpiresAt) > now);
+        
+        // Verificar se tem trial ativo
+        const hasTrial = sub.user.trialStartedAt && sub.user.trialEndsAt &&
+                        new Date(sub.user.trialEndsAt) > new Date(sub.user.trialStartedAt) &&
+                        new Date(sub.user.trialEndsAt) > now;
+        
+        const isPremium = hasValidPremium || hasTrial;
+        
+        // Log detalhado para debug de problemas Premium
+        if (!isPremium && sub.user.email) {
+          console.log(`⚠️ [ASSET-MONITORING] Usuário ${sub.user.email} (${sub.user.id}) não é Premium - subscriptionTier: ${sub.user.subscriptionTier}, premiumExpiresAt: ${sub.user.premiumExpiresAt}, trialEndsAt: ${sub.user.trialEndsAt}`);
+        } else if (isPremium && sub.user.email) {
+          console.log(`✅ [ASSET-MONITORING] Usuário ${sub.user.email} (${sub.user.id}) é Premium - subscriptionTier: ${sub.user.subscriptionTier}`);
         }
         
-        // Subscription de usuário logado
-        if (sub.userId && sub.user) {
-          const isPremium = await isUserPremium(sub.user.id);
-          return {
-            userId: sub.user.id,
-            email: sub.user.email,
-            name: sub.user.name,
-            isPremium,
-          };
-        }
-        
-        // Fallback (não deveria acontecer)
-        return null;
-      })
-    );
+        return {
+          userId: sub.user.id,
+          email: sub.user.email,
+          name: sub.user.name,
+          isPremium,
+        };
+      }
+      
+      // Fallback (não deveria acontecer)
+      return null;
+    });
 
     // Filtrar nulls e retornar
     return subscribersWithPremium.filter((sub): sub is NonNullable<typeof sub> => sub !== null);

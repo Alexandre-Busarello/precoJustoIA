@@ -349,6 +349,17 @@ export class EmailQueueService {
         break
 
       case 'PRICE_VARIATION_REPORT':
+        // Garantir que isPremium seja sempre um boolean explícito
+        // Se não estiver definido, assumir false (não Premium) para evitar emails de upgrade incorretos
+        const isPremium = typeof emailData.isPremium === 'boolean' 
+          ? emailData.isPremium 
+          : false;
+        
+        // Log para debug caso o valor não esteja definido
+        if (typeof emailData.isPremium !== 'boolean') {
+          console.warn(`⚠️ PRICE_VARIATION_REPORT: isPremium não está definido como boolean para ${email}, assumindo false`);
+        }
+        
         await sendPriceVariationReportEmail({
           email,
           userName: recipientName || 'Investidor',
@@ -357,12 +368,22 @@ export class EmailQueueService {
           companyLogoUrl: emailData.companyLogoUrl || null,
           reportUrl: emailData.reportUrl,
           reportSummary: emailData.reportSummary || '',
-          isPremium: emailData.isPremium ?? true, // Default true para manter compatibilidade
+          isPremium,
           hasFlag: (emailData as any).hasFlag ?? false, // Indica se há flag ativo (não tipado ainda)
         } as any)
         break
 
       case 'CUSTOM_TRIGGER_REPORT':
+        // Garantir que isPremium seja sempre um boolean explícito
+        const isPremiumCustom = typeof emailData.isPremium === 'boolean' 
+          ? emailData.isPremium 
+          : false;
+        
+        // Log para debug caso o valor não esteja definido
+        if (typeof emailData.isPremium !== 'boolean') {
+          console.warn(`⚠️ CUSTOM_TRIGGER_REPORT: isPremium não está definido como boolean para ${email}, assumindo false`);
+        }
+        
         await sendCustomTriggerReportEmail({
           email,
           userName: recipientName || 'Investidor',
@@ -371,7 +392,7 @@ export class EmailQueueService {
           companyLogoUrl: emailData.companyLogoUrl || null,
           reportUrl: emailData.reportUrl,
           reportSummary: emailData.reportSummary || '',
-          isPremium: emailData.isPremium ?? true, // Default true para manter compatibilidade
+          isPremium: isPremiumCustom,
         })
         break
 

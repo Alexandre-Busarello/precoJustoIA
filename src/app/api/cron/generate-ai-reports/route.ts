@@ -507,6 +507,26 @@ async function processFinalReport(
       // - Premium + Flag = Email destacando perda de fundamento + relatório completo
       // - Não Premium + Sem Flag = Email padrão não premium
       // - Premium + Sem Flag = Email padrão premium com relatório completo
+      
+      // Garantir que isPremium seja sempre um boolean explícito
+      const isPremiumValue = typeof subscriber.isPremium === 'boolean' 
+        ? subscriber.isPremium 
+        : false;
+      
+      // Log para debug caso o valor não esteja definido corretamente
+      if (typeof subscriber.isPremium !== 'boolean') {
+        console.warn(`⚠️ ${entry.id}: subscriber.isPremium não está definido como boolean para ${subscriber.email}, assumindo false`);
+      } else {
+        console.log(`📧 ${entry.id}: Enviando email para ${subscriber.email} (userId: ${subscriber.userId}, isPremium: ${isPremiumValue}, subscriber.isPremium original: ${subscriber.isPremium}, hasFlag: ${entry.reportType === 'PRICE_VARIATION' ? hasActiveFlag : false})`);
+        
+        // Log adicional se for Premium para garantir que está sendo passado corretamente
+        if (isPremiumValue) {
+          console.log(`✅ ${entry.id}: Usuário Premium detectado para ${subscriber.email}, será enviado template Premium`);
+        } else {
+          console.log(`⚠️ ${entry.id}: Usuário NÃO Premium para ${subscriber.email}, será enviado template de conversão`);
+        }
+      }
+      
       await EmailQueueService.queueEmail({
         email: subscriber.email, // Email da tabela user
         emailType: entry.reportType === 'PRICE_VARIATION' ? 'PRICE_VARIATION_REPORT' : 'CUSTOM_TRIGGER_REPORT',
@@ -516,7 +536,7 @@ async function processFinalReport(
           companyLogoUrl: company.logoUrl || null,
           reportUrl: `${baseUrl}${reportUrl}`,
           reportSummary: reportSummary, // Sempre enviar resumo completo
-          isPremium: subscriber.isPremium, // Sempre usar isPremium real do usuário
+          isPremium: isPremiumValue, // Sempre usar isPremium real do usuário como boolean explícito
           hasFlag: entry.reportType === 'PRICE_VARIATION' ? hasActiveFlag : false, // Flags só para PRICE_VARIATION
         },
         recipientName: subscriber.name || 'Investidor',

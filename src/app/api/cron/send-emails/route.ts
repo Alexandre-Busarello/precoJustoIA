@@ -9,6 +9,8 @@ import {
   sendFreeUserAssetChangeEmail,
   sendSubscriptionConfirmationEmail,
   sendPremiumExpirationEmail,
+  sendPriceVariationReportEmail,
+  sendCustomTriggerReportEmail,
   sendEmail,
   generateEmailVerificationTemplate,
   generateNotificationEmailTemplate
@@ -199,6 +201,43 @@ export async function GET(request: NextRequest) {
               emailQueue.email,
               emailQueue.recipientName || emailData.userName
             )
+            break
+
+          case 'PRICE_VARIATION_REPORT':
+            // Garantir que isPremium seja sempre um boolean explícito
+            const isPremium = typeof emailData.isPremium === 'boolean' 
+              ? emailData.isPremium 
+              : false;
+            
+            await sendPriceVariationReportEmail({
+              email: emailQueue.email,
+              userName: emailQueue.recipientName || 'Investidor',
+              ticker: emailData.ticker,
+              companyName: emailData.companyName,
+              companyLogoUrl: emailData.companyLogoUrl || null,
+              reportUrl: emailData.reportUrl,
+              reportSummary: emailData.reportSummary || '',
+              isPremium,
+              hasFlag: emailData.hasFlag ?? false,
+            })
+            break
+
+          case 'CUSTOM_TRIGGER_REPORT':
+            // Garantir que isPremium seja sempre um boolean explícito
+            const isPremiumCustom = typeof emailData.isPremium === 'boolean' 
+              ? emailData.isPremium 
+              : false;
+            
+            await sendCustomTriggerReportEmail({
+              email: emailQueue.email,
+              userName: emailQueue.recipientName || 'Investidor',
+              ticker: emailData.ticker,
+              companyName: emailData.companyName,
+              companyLogoUrl: emailData.companyLogoUrl || null,
+              reportUrl: emailData.reportUrl,
+              reportSummary: emailData.reportSummary || '',
+              isPremium: isPremiumCustom,
+            })
             break
 
           default:

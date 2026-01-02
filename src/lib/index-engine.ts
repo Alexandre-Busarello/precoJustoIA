@@ -1407,88 +1407,9 @@ export async function calculateAssetPerformance(
       ? ((exitPrice - finalEntryPrice) / finalEntryPrice) * 100
       : null;
 
-    // NOVA ABORDAGEM: Calcular contribuição diária usando snapshots históricos
-    // Iterar pelos snapshots em ordem cronológica e calcular contribuição diária
-    let totalContribution = 0;
-    let totalWeight = 0;
-    let pointCount = 0;
-
-    // Encontrar o primeiro snapshot do índice (para aplicar regra especial)
-    const firstIndexSnapshot = historyPoints.find(point => {
-      if (!point.compositionSnapshot) return false;
-      const snapshot = point.compositionSnapshot as any;
-      return Object.keys(snapshot).length > 0;
-    });
-    const isFirstIndexSnapshot = firstIndexSnapshot && firstPoint.date.getTime() === firstIndexSnapshot.date.getTime();
-
-    // Iterar pelos snapshots relevantes em ordem cronológica
-    for (let i = 0; i < relevantPoints.length; i++) {
-      const currentPoint = relevantPoints[i];
-      const currentSnapshot = currentPoint.compositionSnapshot as any;
-      const assetData = currentSnapshot[ticker];
-
-      if (!assetData) continue;
-
-      // Determinar preço de entrada do dia seguindo as regras especificadas
-      let entryPriceDay: number;
-      if (i === 0) {
-        // Primeiro snapshot onde o ativo aparece
-        if (isFirstIndexSnapshot) {
-          // É o primeiro snapshot do índice: usar entryPrice do snapshot
-          entryPriceDay = assetData.entryPrice;
-        } else {
-          // Ativo apareceu pela primeira vez em snapshot subsequente: usar entryPrice do snapshot
-          entryPriceDay = assetData.entryPrice;
-        }
-      } else {
-        // Snapshot subsequente: verificar se ativo já existia no snapshot anterior
-        const previousPoint = relevantPoints[i - 1];
-        const previousSnapshot = previousPoint.compositionSnapshot as any;
-        const previousAssetData = previousSnapshot[ticker];
-
-        if (previousAssetData) {
-          // Ativo já existia no snapshot anterior: usar price do snapshot anterior
-          entryPriceDay = previousAssetData.price;
-        } else {
-          // Ativo apareceu pela primeira vez neste snapshot (re-entrada): usar entryPrice do snapshot
-          entryPriceDay = assetData.entryPrice;
-        }
-      }
-
-      // Preço de fechamento do dia
-      const exitPriceDay = assetData.price;
-
-      // Buscar dividendos do dia (se houver)
-      const dividendsByTicker = currentPoint.dividendsByTicker as any;
-      const dividend = dividendsByTicker && dividendsByTicker[ticker] ? Number(dividendsByTicker[ticker]) : 0;
-
-      // Calcular retorno diário incluindo dividendos
-      const adjustedPriceToday = exitPriceDay + dividend;
-      const dailyReturn = (adjustedPriceToday / entryPriceDay) - 1;
-
-      // Peso do ativo (do snapshot anterior ou atual se primeiro dia)
-      let weight: number;
-      if (i === 0) {
-        weight = assetData.weight;
-      } else {
-        const previousPoint = relevantPoints[i - 1];
-        const previousSnapshot = previousPoint.compositionSnapshot as any;
-        const previousAssetData = previousSnapshot[ticker];
-        weight = previousAssetData ? previousAssetData.weight : assetData.weight;
-      }
-
-      // Contribuição diária ponderada
-      const dailyContribution = weight * dailyReturn;
-      totalContribution += dailyContribution;
-
-      // Acumular peso para cálculo de peso médio
-      totalWeight += assetData.weight;
-      pointCount++;
-    }
-
-    // Calcular peso médio
-    const averageWeight = pointCount > 0 ? totalWeight / pointCount : 0;
-
+    // NOVA ABORDAGEM: Dividir o retorno total do índice proporcionalmente
+    // por peso médio do ativo e dias que o ativo esteve na carteira
+    // 
     // Buscar o último ponto histórico para obter o retorno total do índice
     const lastHistoryPoint = await prisma.indexHistoryPoints.findFirst({
       where: { indexId },
@@ -1507,223 +1428,332 @@ export async function calculateAssetPerformance(
     const initialPoints = 100.0;
     const totalIndexReturn = ((lastHistoryPoint.points - initialPoints) / initialPoints) * 100;
 
-    // Calcular contribuições individuais para TODOS os ativos usando snapshots
-    // Isso é necessário para calcular a soma total e compensar diferenças
-    const allTickers = new Set<string>();
-    for (const point of historyPoints) {
+    // Calcular peso médio e dias no índice para este ativo
+    let totalWeight = 0;
+    let pointCount = 0;
+
+    for (const point of relevantPoints) {
+      const snapshot = point.compositionSnapshot as any;
+      const assetData = snapshot[ticker];
+      
+      if (assetData) {
+        totalWeight += assetData.weight;
+        pointCount++;
+      }
+    }
+
+    const averageWeight = pointCount > 0 ? totalWeight / pointCount : 0;
+
+    // Buscar TODOS os pontos históricos para calcular fatores de proporção de todos os ativos
+    const allHistoryPoints = await prisma.indexHistoryPoints.findMany({
+      where: { indexId },
+      orderBy: { date: 'asc' },
+      select: {
+        date: true,
+        compositionSnapshot: true
+      }
+    });
+
+    // Coletar todos os tickers únicos e calcular fatores de proporção
+    const tickerData = new Map<string, { totalWeight: number; pointCount: number; firstDate: Date; lastDate: Date }>();
+    
+    for (const point of allHistoryPoints) {
       if (!point.compositionSnapshot) continue;
       const snapshot = point.compositionSnapshot as any;
       if (Object.keys(snapshot).length === 0) continue;
-      for (const assetTicker of Object.keys(snapshot)) {
-        allTickers.add(assetTicker);
+      
+      for (const [assetTicker, assetData] of Object.entries(snapshot)) {
+        const data = assetData as any;
+        if (!tickerData.has(assetTicker)) {
+          tickerData.set(assetTicker, {
+            totalWeight: 0,
+            pointCount: 0,
+            firstDate: new Date(point.date),
+            lastDate: new Date(point.date)
+          });
+        }
+        
+        const tickerInfo = tickerData.get(assetTicker)!;
+        tickerInfo.totalWeight += data.weight || 0;
+        tickerInfo.pointCount++;
+        
+        const pointDate = new Date(point.date);
+        if (pointDate < tickerInfo.firstDate) {
+          tickerInfo.firstDate = pointDate;
+        }
+        if (pointDate > tickerInfo.lastDate) {
+          tickerInfo.lastDate = pointDate;
+        }
       }
     }
 
-    // Calcular contribuição individual para cada ativo
-    const assetContributions = new Map<string, number>();
+    // Calcular fator de proporção para cada ativo: peso_médio × dias_no_índice × rentabilidade
+    // Quanto maior a rentabilidade, maior a contribuição proporcional
+    let totalProportionalFactor = 0;
+    const assetFactors = new Map<string, number>();
     const assetReturns = new Map<string, number>();
 
-    for (const assetTicker of allTickers) {
-      // Buscar pontos relevantes para este ativo
-      const assetRelevantPoints = historyPoints.filter(point => {
-        if (!point.compositionSnapshot) return false;
+    // Primeiro, calcular rentabilidade de cada ativo
+    for (const [assetTicker, tickerInfo] of tickerData.entries()) {
+      // Buscar primeiro e último snapshot do ativo para calcular rentabilidade
+      let firstSnapshot: any = null;
+      let lastSnapshot: any = null;
+      
+      for (const point of allHistoryPoints) {
+        if (!point.compositionSnapshot) continue;
         const snapshot = point.compositionSnapshot as any;
-        return Object.keys(snapshot).length > 0 && snapshot[assetTicker] !== undefined;
-      });
-
-      if (assetRelevantPoints.length === 0) continue;
-
-      // Calcular contribuição diária para este ativo
-      let assetTotalContribution = 0;
-      const firstAssetPoint = assetRelevantPoints[0];
-      const lastAssetPoint = assetRelevantPoints[assetRelevantPoints.length - 1];
-      const firstAssetSnapshot = firstAssetPoint.compositionSnapshot as any;
-      const lastAssetSnapshot = lastAssetPoint.compositionSnapshot as any;
-      const firstAssetData = firstAssetSnapshot[assetTicker];
-      const lastAssetData = lastAssetSnapshot[assetTicker];
-
-      // Verificar se ainda está ativo
-      const assetIsActive = await prisma.indexComposition.findFirst({
-        where: { indexId, assetTicker }
-      });
+        if (Object.keys(snapshot).length === 0) continue;
+        
+        const assetData = snapshot[assetTicker];
+        if (assetData) {
+          if (!firstSnapshot) {
+            firstSnapshot = assetData;
+          }
+          lastSnapshot = assetData;
+        }
+      }
 
       // Calcular rentabilidade do ativo
-      const assetEntryPrice = firstAssetData.entryPrice;
-      let assetCurrentPrice: number | null = null;
-      if (assetIsActive) {
-        try {
-          const { getTickerPrice } = await import('@/lib/quote-service');
-          const priceData = await getTickerPrice(assetTicker);
-          assetCurrentPrice = priceData?.price || null;
-        } catch (error) {
-          assetCurrentPrice = lastAssetData.price;
+      let assetReturn = 0;
+      if (firstSnapshot && lastSnapshot) {
+        const entryPrice = firstSnapshot.entryPrice || firstSnapshot.price;
+        const exitPrice = lastSnapshot.price;
+        
+        if (entryPrice && entryPrice > 0) {
+          // Verificar se o ativo ainda está ativo
+          const currentComposition = await prisma.indexComposition.findFirst({
+            where: {
+              indexId,
+              assetTicker
+            }
+          });
+
+          if (currentComposition) {
+            // Ativo ainda está ativo: buscar preço atual
+            try {
+              const { getTickerPrice } = await import('@/lib/quote-service');
+              const priceData = await getTickerPrice(assetTicker);
+              const currentPrice = priceData?.price || exitPrice;
+              assetReturn = ((currentPrice - entryPrice) / entryPrice) * 100;
+            } catch (error) {
+              assetReturn = ((exitPrice - entryPrice) / entryPrice) * 100;
+            }
+          } else {
+            // Ativo foi removido: usar preço de saída
+            assetReturn = ((exitPrice - entryPrice) / entryPrice) * 100;
+          }
         }
       }
-      const assetExitPrice = assetIsActive ? assetCurrentPrice : lastAssetData.price;
-      const assetReturn = assetExitPrice && assetEntryPrice
-        ? ((assetExitPrice - assetEntryPrice) / assetEntryPrice) * 100
-        : 0;
+      
       assetReturns.set(assetTicker, assetReturn);
-
-      // Encontrar primeiro snapshot do índice
-      const firstIndexSnapshot = historyPoints.find(point => {
-        if (!point.compositionSnapshot) return false;
-        const snapshot = point.compositionSnapshot as any;
-        return Object.keys(snapshot).length > 0;
-      });
-      const isFirstIndexSnapshotForAsset = firstIndexSnapshot && firstAssetPoint.date.getTime() === firstIndexSnapshot.date.getTime();
-
-      // Iterar pelos snapshots do ativo
-      for (let i = 0; i < assetRelevantPoints.length; i++) {
-        const currentPoint = assetRelevantPoints[i];
-        const currentSnapshot = currentPoint.compositionSnapshot as any;
-        const assetData = currentSnapshot[assetTicker];
-
-        if (!assetData) continue;
-
-        // Determinar preço de entrada do dia
-        let entryPriceDay: number;
-        if (i === 0) {
-          if (isFirstIndexSnapshotForAsset) {
-            entryPriceDay = assetData.entryPrice;
-          } else {
-            entryPriceDay = assetData.entryPrice;
-          }
-        } else {
-          const previousPoint = assetRelevantPoints[i - 1];
-          const previousSnapshot = previousPoint.compositionSnapshot as any;
-          const previousAssetData = previousSnapshot[assetTicker];
-          if (previousAssetData) {
-            entryPriceDay = previousAssetData.price;
-          } else {
-            entryPriceDay = assetData.entryPrice;
-          }
-        }
-
-        const exitPriceDay = assetData.price;
-
-        // Buscar dividendos do dia
-        const dividendsByTicker = currentPoint.dividendsByTicker as any;
-        const dividend = dividendsByTicker && dividendsByTicker[assetTicker] ? Number(dividendsByTicker[assetTicker]) : 0;
-
-        // Calcular retorno diário incluindo dividendos
-        const adjustedPriceToday = exitPriceDay + dividend;
-        const dailyReturn = (adjustedPriceToday / entryPriceDay) - 1;
-
-        // Peso do ativo
-        let weight: number;
-        if (i === 0) {
-          weight = assetData.weight;
-        } else {
-          const previousPoint = assetRelevantPoints[i - 1];
-          const previousSnapshot = previousPoint.compositionSnapshot as any;
-          const previousAssetData = previousSnapshot[assetTicker];
-          weight = previousAssetData ? previousAssetData.weight : assetData.weight;
-        }
-
-        // Contribuição diária ponderada
-        const dailyContribution = weight * dailyReturn;
-        assetTotalContribution += dailyContribution;
-      }
-
-      assetContributions.set(assetTicker, assetTotalContribution);
     }
 
-    // Calcular soma total de todas as contribuições
-    let totalContributionsSum = 0;
-    for (const contribution of assetContributions.values()) {
-      totalContributionsSum += contribution;
+    // Calcular fatores de proporção incluindo rentabilidade
+    // IMPORTANTE: Preservar o sinal da rentabilidade e usar valor absoluto como peso
+    // Quanto maior a rentabilidade (em valor absoluto), maior o peso
+    // 
+    // Estratégia de redistribuição:
+    // 1. Calcular contribuições iniciais proporcionalmente
+    // 2. Se retorno total > 0: redistribuir contribuições negativas entre positivos
+    // 3. Se retorno total < 0: redistribuir contribuições positivas entre negativos
+    // 4. A redistribuição favorece ativos com maior rentabilidade (positiva ou menos negativa)
+    
+    let totalAbsFactor = 0; // Soma dos valores absolutos dos fatores (para normalização)
+    const assetFactorMap = new Map<string, number>();
+    const assetAvgWeights = new Map<string, number>();
+    const assetDaysInIndex = new Map<string, number>();
+
+    // Calcular fatores para todos os ativos
+    for (const [assetTicker, tickerInfo] of tickerData.entries()) {
+      const avgWeight = tickerInfo.pointCount > 0 ? tickerInfo.totalWeight / tickerInfo.pointCount : 0;
+      const daysInIndex = Math.ceil(
+        (tickerInfo.lastDate.getTime() - tickerInfo.firstDate.getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1;
+      
+      const assetReturn = assetReturns.get(assetTicker) || 0;
+      
+      // Fator base = peso_médio × dias × (1 + |rentabilidade|/100)
+      // Quanto maior a rentabilidade (em valor absoluto), maior o fator
+      const absReturn = Math.abs(assetReturn);
+      const returnMultiplier = 1 + absReturn / 100;
+      const factorBase = avgWeight * daysInIndex * returnMultiplier;
+      
+      assetFactorMap.set(assetTicker, factorBase);
+      assetAvgWeights.set(assetTicker, avgWeight);
+      assetDaysInIndex.set(assetTicker, daysInIndex);
+      totalAbsFactor += factorBase;
     }
 
-    // Converter para porcentagem (multiplicar por 100)
-    totalContributionsSum = totalContributionsSum * 100;
+    // Separar ativos por sinal de rentabilidade
+    const positiveAssets: string[] = [];
+    const negativeAssets: string[] = [];
 
-    // Calcular diferença entre soma e retorno total
-    const difference = totalIndexReturn - totalContributionsSum;
-
-    // Compensar diferença se necessário
-    let finalContribution = assetContributions.get(ticker) || 0;
-    finalContribution = finalContribution * 100; // Converter para porcentagem
-
-    if (Math.abs(difference) > 0.0001) {
-      // Há diferença significativa, precisa compensar
-      const assetReturn = assetReturns.get(ticker) || 0;
-
-      if (difference > 0) {
-        // Diferença positiva: distribuir entre ativos positivos
-        if (assetReturn >= 0) {
-          // Este ativo tem rentabilidade positiva, pode receber parte da diferença
-          const positiveAssets = Array.from(allTickers).filter(t => (assetReturns.get(t) || 0) >= 0);
-          positiveAssets.sort((a, b) => {
-            const returnA = assetReturns.get(a) || 0;
-            const returnB = assetReturns.get(b) || 0;
-            return returnB - returnA; // Maior primeiro
-          });
-
-          // Calcular fatores de redistribuição baseados em rentabilidade
-          let totalRedistFactor = 0;
-          const redistFactors = new Map<string, number>();
-          for (const assetTicker of positiveAssets) {
-            const assetReturn = assetReturns.get(assetTicker) || 0;
-            const factor = Math.max(0.1, 1 + assetReturn / 100); // Favorecer maior rentabilidade
-            redistFactors.set(assetTicker, factor);
-            totalRedistFactor += factor;
-          }
-
-          // Distribuir diferença proporcionalmente
-          let distributedTotal = 0;
-          for (let i = 0; i < positiveAssets.length; i++) {
-            const assetTicker = positiveAssets[i];
-            const redistFactor = redistFactors.get(assetTicker) || 0;
-            const adjustment = i === positiveAssets.length - 1
-              ? difference - distributedTotal
-              : (redistFactor / totalRedistFactor) * difference;
-
-            if (assetTicker === ticker) {
-              finalContribution += adjustment;
-            }
-            distributedTotal += adjustment;
-          }
-        }
+    for (const [assetTicker] of assetFactorMap.entries()) {
+      const assetReturn = assetReturns.get(assetTicker) || 0;
+      if (assetReturn >= 0) {
+        positiveAssets.push(assetTicker);
       } else {
-        // Diferença negativa: distribuir entre ativos negativos
-        if (assetReturn < 0) {
-          // Este ativo tem rentabilidade negativa, pode receber parte da diferença
-          const negativeAssets = Array.from(allTickers).filter(t => (assetReturns.get(t) || 0) < 0);
-          negativeAssets.sort((a, b) => {
-            const returnA = assetReturns.get(a) || 0;
-            const returnB = assetReturns.get(b) || 0;
-            return returnA - returnB; // Menor primeiro (mais negativo)
-          });
+        negativeAssets.push(assetTicker);
+      }
+    }
 
-          // Calcular fatores de redistribuição baseados em rentabilidade negativa
-          let totalRedistFactor = 0;
-          const redistFactors = new Map<string, number>();
-          for (const assetTicker of negativeAssets) {
-            const assetReturn = assetReturns.get(assetTicker) || 0;
-            const absReturn = Math.abs(assetReturn);
-            const factor = Math.max(0.1, 1 + absReturn / 100); // Favorecer maior rentabilidade negativa (mais negativo)
-            redistFactors.set(assetTicker, factor);
-            totalRedistFactor += factor;
-          }
+    // Calcular fatores totais para cada grupo
+    let totalPositiveFactor = 0;
+    let totalNegativeFactor = 0;
+    
+    for (const assetTicker of positiveAssets) {
+      const factorBase = assetFactorMap.get(assetTicker) || 0;
+      totalPositiveFactor += factorBase;
+    }
+    
+    for (const assetTicker of negativeAssets) {
+      const factorBase = assetFactorMap.get(assetTicker) || 0;
+      totalNegativeFactor += factorBase;
+    }
 
-          // Distribuir diferença proporcionalmente (diferença já é negativa)
-          let distributedTotal = 0;
-          for (let i = 0; i < negativeAssets.length; i++) {
-            const assetTicker = negativeAssets[i];
-            const redistFactor = redistFactors.get(assetTicker) || 0;
-            const adjustment = i === negativeAssets.length - 1
-              ? difference - distributedTotal
-              : (redistFactor / totalRedistFactor) * difference;
-
-            if (assetTicker === ticker) {
-              finalContribution += adjustment;
-            }
-            distributedTotal += adjustment;
-          }
+    // Redistribuir contribuições para garantir que a soma bata com o retorno total
+    // REGRA:
+    // - Se retorno total > 0: calcular contribuições negativas proporcionais, ajustar positivos para que soma(positivos) + soma(negativos) = retorno total
+    // - Se retorno total < 0: calcular contribuições positivas proporcionais, ajustar negativos para que soma(positivos) + soma(negativos) = retorno total
+    const finalContributions = new Map<string, number>();
+    
+    if (totalIndexReturn >= 0) {
+      // Retorno total positivo (+4.35%):
+      // 1. Calcular contribuições negativas proporcionais (ex: -1%)
+      // 2. Calcular quanto os positivos devem somar: soma(positivos) = retorno_total - soma(negativos)
+      // 3. Redistribuir essa soma ajustada entre ativos positivos, favorecendo maior rentabilidade
+      
+      // Calcular contribuições negativas proporcionais
+      // Primeiro, calcular quanto os negativos devem somar proporcionalmente
+      // Depois distribuir entre os negativos, e ajustar os positivos para garantir que a soma total seja exata
+      let totalNegativeContributions = 0;
+      if (totalNegativeFactor > 0 && totalAbsFactor > 0) {
+        // Proporção dos fatores negativos no total
+        const negativeProportion = totalNegativeFactor / totalAbsFactor;
+        // Estimativa inicial: proporção × retorno total (será negativo)
+        const estimatedNegativeTotal = -(negativeProportion * Math.abs(totalIndexReturn));
+        
+        // Distribuir proporcionalmente entre negativos
+        for (const assetTicker of negativeAssets) {
+          const factorBase = assetFactorMap.get(assetTicker) || 0;
+          const negativeContribution = totalNegativeFactor > 0
+            ? (factorBase / totalNegativeFactor) * estimatedNegativeTotal
+            : 0;
+          finalContributions.set(assetTicker, negativeContribution);
+          totalNegativeContributions += negativeContribution;
+        }
+      }
+      
+      // Calcular quanto os positivos devem somar no total para garantir que a soma seja exata
+      // soma(positivos) = retorno_total - soma(negativos)
+      const totalPositiveTarget = totalIndexReturn - totalNegativeContributions;
+      
+      // Ordenar ativos positivos por rentabilidade (maior primeiro)
+      positiveAssets.sort((a, b) => {
+        const returnA = assetReturns.get(a) || 0;
+        const returnB = assetReturns.get(b) || 0;
+        return returnB - returnA; // Maior primeiro
+      });
+      
+      // Calcular fatores de redistribuição para ativos positivos
+      // Favorecer maior rentabilidade: usar fator_base × (1 + rentabilidade/100)
+      let totalPositiveRedistFactor = 0;
+      const positiveRedistFactors = new Map<string, number>();
+      
+      for (const assetTicker of positiveAssets) {
+        const assetReturn = assetReturns.get(assetTicker) || 0;
+        const factorBase = assetFactorMap.get(assetTicker) || 0;
+        // Fator de redistribuição: favorecer maior rentabilidade positiva
+        const redistFactor = factorBase * (1 + assetReturn / 100);
+        positiveRedistFactors.set(assetTicker, redistFactor);
+        totalPositiveRedistFactor += redistFactor;
+      }
+      
+      // Distribuir o total ajustado entre ativos positivos
+      let distributedPositiveTotal = 0;
+      for (let i = 0; i < positiveAssets.length; i++) {
+        const assetTicker = positiveAssets[i];
+        const redistFactor = positiveRedistFactors.get(assetTicker) || 0;
+        
+        // Para o último ativo, garantir que a soma seja exata
+        if (i === positiveAssets.length - 1) {
+          const contribution = totalPositiveTarget - distributedPositiveTotal;
+          finalContributions.set(assetTicker, contribution);
+        } else {
+          const contribution = totalPositiveRedistFactor > 0
+            ? (redistFactor / totalPositiveRedistFactor) * totalPositiveTarget
+            : 0;
+          finalContributions.set(assetTicker, contribution);
+          distributedPositiveTotal += contribution;
+        }
+      }
+      
+    } else {
+      // Retorno total negativo (-2.5%):
+      // 1. Calcular contribuições positivas proporcionais (ex: +0.5%)
+      // 2. Calcular quanto os negativos devem somar: soma(negativos) = retorno_total - soma(positivos)
+      // 3. Redistribuir essa soma ajustada entre ativos negativos, favorecendo menor rentabilidade negativa
+      
+      // Calcular contribuições positivas proporcionais
+      let totalPositiveContributions = 0;
+      for (const assetTicker of positiveAssets) {
+        const factorBase = assetFactorMap.get(assetTicker) || 0;
+        const positiveContribution = totalPositiveFactor > 0
+          ? (factorBase / totalPositiveFactor) * Math.abs(totalIndexReturn)
+          : 0;
+        finalContributions.set(assetTicker, positiveContribution);
+        totalPositiveContributions += positiveContribution;
+      }
+      
+      // Calcular quanto os negativos devem somar no total
+      // soma(negativos) = retorno_total - soma(positivos)
+      const totalNegativeTarget = totalIndexReturn - totalPositiveContributions;
+      
+      // Ordenar ativos negativos por rentabilidade (menor primeiro, ou seja, menos negativo)
+      negativeAssets.sort((a, b) => {
+        const returnA = assetReturns.get(a) || 0;
+        const returnB = assetReturns.get(b) || 0;
+        return returnA - returnB; // Menor primeiro (menos negativo)
+      });
+      
+      // Calcular fatores de redistribuição para ativos negativos
+      // Favorecer menor rentabilidade negativa (menos negativo): usar fator_base × (1 + |rentabilidade|/100)
+      let totalNegativeRedistFactor = 0;
+      const negativeRedistFactors = new Map<string, number>();
+      
+      for (const assetTicker of negativeAssets) {
+        const assetReturn = assetReturns.get(assetTicker) || 0;
+        const factorBase = assetFactorMap.get(assetTicker) || 0;
+        // Fator de redistribuição: favorecer menor rentabilidade negativa (menos negativo)
+        // Quanto menos negativo, maior o fator
+        const absReturn = Math.abs(assetReturn);
+        const redistFactor = factorBase * (1 + absReturn / 100);
+        negativeRedistFactors.set(assetTicker, redistFactor);
+        totalNegativeRedistFactor += redistFactor;
+      }
+      
+      // Distribuir o total ajustado entre ativos negativos
+      let distributedNegativeTotal = 0;
+      for (let i = 0; i < negativeAssets.length; i++) {
+        const assetTicker = negativeAssets[i];
+        const redistFactor = negativeRedistFactors.get(assetTicker) || 0;
+        
+        // Para o último ativo, garantir que a soma seja exata
+        if (i === negativeAssets.length - 1) {
+          const contribution = totalNegativeTarget - distributedNegativeTotal;
+          finalContributions.set(assetTicker, contribution);
+        } else {
+          const contribution = totalNegativeRedistFactor > 0
+            ? (redistFactor / totalNegativeRedistFactor) * totalNegativeTarget
+            : 0;
+          finalContributions.set(assetTicker, contribution);
+          distributedNegativeTotal += contribution;
         }
       }
     }
+
+    // Obter contribuição final para este ativo
+    const proportionalContribution = finalContributions.get(ticker) || 0;
 
     return {
       ticker,
@@ -1733,7 +1763,7 @@ export async function calculateAssetPerformance(
       exitPrice,
       daysInIndex,
       totalReturn,
-      contributionToIndex: finalContribution,
+      contributionToIndex: proportionalContribution,
       averageWeight,
       status: isActive ? 'ACTIVE' : 'EXITED',
       firstSnapshotDate: new Date(firstPoint.date),

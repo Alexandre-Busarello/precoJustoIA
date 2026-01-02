@@ -153,15 +153,11 @@ async function fetchIbovData(startDate: Date, endDate: Date): Promise<BenchmarkD
           if (!hasTodayData) {
             console.log('📊 BRAPI não tem dados do dia atual, buscando do Yahoo Finance...');
             try {
-              // Usar biblioteca yahoo-finance2 em vez de requisição direta
-              const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
-              const yahooFinance = await loadYahooFinance();
-              if (!yahooFinance) {
-                throw new Error('This code can only run on the server');
-              }
+              // Usar yahooFinance2-service com cache e proteção de erros
+              const { getChart } = await import('@/lib/yahooFinance2-service');
               
               const chartStartDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 dias atrás
-              const chartData = await yahooFinance.chart('^BVSP', {
+              const chartData = await getChart('^BVSP', {
                 period1: chartStartDate,
                 period2: endDate,
                 interval: '1d',
@@ -222,16 +218,12 @@ async function fetchIbovData(startDate: Date, endDate: Date): Promise<BenchmarkD
       console.error('❌ BRAPI falhou:', brapiError);
     }
 
-    // Fallback: Yahoo Finance via biblioteca yahoo-finance2
+    // Fallback: Yahoo Finance via yahooFinance2-service
     try {
       console.log('🔄 Tentando Yahoo Finance como fallback...');
-      const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
-      const yahooFinance = await loadYahooFinance();
-      if (!yahooFinance) {
-        throw new Error('This code can only run on the server');
-      }
+      const { getChart } = await import('@/lib/yahooFinance2-service');
       
-      const chartData = await yahooFinance.chart('^BVSP', {
+      const chartData = await getChart('^BVSP', {
         period1: startDate,
         period2: endDate,
         interval: '1mo',

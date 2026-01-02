@@ -336,7 +336,7 @@ interface YahooFinanceData {
   fundamentalsTimeSeries?: any; // Dados históricos anuais completos
 }
 
-import { loadYahooFinance } from './yahoo-finance-loader';
+import { getQuote, getQuoteSummary, getFundamentalsTimeSeries, getHistorical } from './yahooFinance2-service';
 
 /**
  * Serviço para buscar dados de BDRs do Yahoo Finance
@@ -389,17 +389,11 @@ export class BDRDataService {
         }...`
       );
 
-      // Carregar Yahoo Finance usando helper que evita bundle no cliente
-      const yahooFinance = await loadYahooFinance();
-      if (!yahooFinance) {
-        throw new Error('fetchBDRData() can only be called on the server');
-      }
-
       const result: YahooFinanceData = {};
 
       // 1. Buscar Quote básico
       try {
-        const quote = await (yahooFinance as any).quote(ticker);
+        const quote = await getQuote(ticker);
         result.quote = quote as any;
         console.log(
           `  ✅ Quote obtido: ${quote.shortName || quote.longName || ticker}`
@@ -418,7 +412,7 @@ export class BDRDataService {
 
       for (const moduleName of modules) {
         try {
-          const moduleData = await (yahooFinance as any).quoteSummary(ticker, {
+          const moduleData = await getQuoteSummary(ticker, {
             modules: [moduleName as any],
           });
           if (moduleData && moduleData[moduleName]) {
@@ -448,7 +442,7 @@ export class BDRDataService {
 
         for (const moduleName of historicalModules) {
           try {
-            const moduleData = await (yahooFinance as any).quoteSummary(
+            const moduleData = await getQuoteSummary(
               ticker,
               {
                 modules: [moduleName as any],
@@ -482,7 +476,7 @@ export class BDRDataService {
 
           for (const config of configs) {
             try {
-              const data = await (yahooFinance as any).fundamentalsTimeSeries(
+              const data = await getFundamentalsTimeSeries(
                 ticker,
                 {
                   period1: "2020-01-01",
@@ -543,7 +537,7 @@ export class BDRDataService {
 
           for (const moduleName of additionalModules) {
             try {
-              const moduleData = await (yahooFinance as any).quoteSummary(
+              const moduleData = await getQuoteSummary(
                 ticker,
                 {
                   modules: [moduleName as any],
@@ -3444,18 +3438,12 @@ export class BDRDataService {
     try {
       console.log(`💵 [BDR] Buscando dividendos históricos para ${ticker}...`);
 
-      // Carregar Yahoo Finance usando helper que evita bundle no cliente
-      const yahooFinance = await loadYahooFinance();
-      if (!yahooFinance) {
-        throw new Error('fetchHistoricalDividends() can only be called on the server');
-      }
-
       // Buscar dados dos últimos 10 anos (máximo possível para análises históricas)
       const endDate = new Date();
       const startDate = new Date();
       startDate.setFullYear(startDate.getFullYear() - 10);
 
-      const dividendData = await (yahooFinance as any).historical(ticker, {
+      const dividendData = await getHistorical(ticker, {
         period1: startDate,
         period2: endDate,
         events: "dividends" as any,

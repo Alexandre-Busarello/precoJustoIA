@@ -13,21 +13,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { safeWrite } from '@/lib/prisma-wrapper';
-
-import { loadYahooFinance } from './yahoo-finance-loader';
-
-// Yahoo Finance instance (lazy-loaded)
-let yahooFinanceInstance: any = null;
-
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    yahooFinanceInstance = await loadYahooFinance();
-    if (!yahooFinanceInstance) {
-      throw new Error('getYahooFinance() can only be called on the server');
-    }
-  }
-  return yahooFinanceInstance;
-}
+import { getChart, getQuote, getQuoteSummary } from './yahooFinance2-service';
 
 // Types
 export interface HistoricalPriceData {
@@ -268,11 +254,10 @@ export class HistoricalDataService {
     interval: '1mo' | '1wk' | '1d'
   ): Promise<HistoricalPriceData[]> {
     try {
-      const yahooFinance = await getYahooFinance();
       const yahooSymbol = `${ticker}.SA`;
 
       // Use chart() instead of deprecated historical()
-      const result = await yahooFinance.chart(yahooSymbol, {
+      const result = await getChart(yahooSymbol, {
         period1: startDate,
         period2: endDate,
         interval: interval,
@@ -584,11 +569,10 @@ export class HistoricalDataService {
    */
   static async fetchAssetInfo(ticker: string): Promise<AssetInfo | null> {
     try {
-      const yahooFinance = await getYahooFinance();
       const yahooSymbol = `${ticker}.SA`;
 
       // Get quote (basic info)
-      const quote = await yahooFinance.quote(yahooSymbol);
+      const quote = await getQuote(yahooSymbol);
       
       if (!quote) {
         console.log(`⚠️ [ASSET INFO] ${ticker}: Não encontrado no Yahoo Finance`);
@@ -598,7 +582,7 @@ export class HistoricalDataService {
       // Get quoteSummary (detailed info)
       let quoteSummary: any = null;
       try {
-        quoteSummary = await yahooFinance.quoteSummary(yahooSymbol, {
+        quoteSummary = await getQuoteSummary(yahooSymbol, {
           modules: ['price', 'summaryDetail', 'assetProfile']
         });
       } catch (error) {

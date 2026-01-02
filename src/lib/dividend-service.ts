@@ -9,21 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { safeWrite, safeQueryWithParams } from "@/lib/prisma-wrapper";
 import { cache } from "@/lib/cache-service";
 import { DividendRadarService } from "@/lib/dividend-radar-service";
-
-import { loadYahooFinance } from './yahoo-finance-loader';
-
-// Yahoo Finance instance (lazy-loaded)
-let yahooFinanceInstance: any = null;
-
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    yahooFinanceInstance = await loadYahooFinance();
-    if (!yahooFinanceInstance) {
-      throw new Error('getYahooFinance() can only be called on the server');
-    }
-  }
-  return yahooFinanceInstance;
-}
+import { getChart, getQuoteSummary } from './yahooFinance2-service';
 
 /**
  * Interface para dividendos extraídos de fontes externas (Yahoo Finance)
@@ -302,7 +288,6 @@ export class DividendService {
     startDate?: Date
   ): Promise<DividendData[]> {
     try {
-      const yahooFinance = await getYahooFinance();
       const yahooSymbol = `${ticker}.SA`;
 
       // Default: buscar o máximo disponível (10 anos atrás)
@@ -325,7 +310,7 @@ export class DividendService {
       // Tentar primeiro com "1d" para capturar todos os dividendos, incluindo futuros
       let result;
       try {
-        result = await yahooFinance.chart(yahooSymbol, {
+        result = await getChart(yahooSymbol, {
           period1,
           period2,
           interval: "1d", // Intervalo diário para capturar todos os dividendos
@@ -338,7 +323,7 @@ export class DividendService {
       } catch (error) {
         console.log(`⚠️ [YAHOO] ${ticker}: Erro com interval "1d", tentando "1mo":`, error);
         // Fallback para intervalo mensal se diário falhar
-        result = await yahooFinance.chart(yahooSymbol, {
+        result = await getChart(yahooSymbol, {
           period1,
           period2,
           interval: "1mo",
@@ -350,7 +335,7 @@ export class DividendService {
       // Tentar também buscar via quoteSummary para ver se há mais informações
       let quoteSummaryDividends: any = null;
       try {
-        const quoteSummary = await yahooFinance.quoteSummary(yahooSymbol, {
+        const quoteSummary = await getQuoteSummary(yahooSymbol, {
           modules: ['summaryDetail', 'defaultKeyStatistics', 'calendarEvents']
         });
         quoteSummaryDividends = quoteSummary;

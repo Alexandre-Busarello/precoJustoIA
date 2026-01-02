@@ -12,20 +12,7 @@ import { prisma } from '@/lib/prisma';
 import { safeWrite } from '@/lib/prisma-wrapper';
 import type { AssetType } from '@prisma/client';
 
-import { loadYahooFinance } from './yahoo-finance-loader';
-
-// Yahoo Finance instance (lazy-loaded)
-let yahooFinanceInstance: any = null;
-
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    yahooFinanceInstance = await loadYahooFinance();
-    if (!yahooFinanceInstance) {
-      throw new Error('getYahooFinance() can only be called on the server');
-    }
-  }
-  return yahooFinanceInstance;
-}
+import { getQuote, getQuoteSummary, getChart } from './yahooFinance2-service';
 
 export interface YahooFinanceCompleteData {
   // === Dados Básicos ===
@@ -191,7 +178,6 @@ export class YahooFinanceComplementService {
    */
   static async fetchCompleteData(ticker: string): Promise<YahooFinanceCompleteData | null> {
     try {
-      const yahooFinance = await getYahooFinance();
       const symbol = ticker.toUpperCase().endsWith('.SA') ? ticker.toUpperCase() : `${ticker.toUpperCase()}.SA`;
       
       console.log(`🔍 [YAHOO] Buscando dados completos para ${symbol}...`);
@@ -199,13 +185,13 @@ export class YahooFinanceComplementService {
       // Parallel fetch for performance
       const [quoteData, quoteSummaryData, chartData] = await Promise.all([
         // 1. Quote (dados principais)
-        yahooFinance.quote(symbol).catch((e: any) => {
+        getQuote(symbol).catch((e: any) => {
           console.warn(`⚠️ [YAHOO] Erro ao buscar quote: ${e.message}`);
           return null;
         }),
         
         // 2. QuoteSummary (dados detalhados)
-        yahooFinance.quoteSummary(symbol, {
+        getQuoteSummary(symbol, {
           modules: ['summaryDetail', 'assetProfile', 'financialData', 'defaultKeyStatistics', 'price']
         }).catch((e: any) => {
           console.warn(`⚠️ [YAHOO] Erro ao buscar quoteSummary: ${e.message}`);
@@ -213,7 +199,7 @@ export class YahooFinanceComplementService {
         }),
         
         // 3. Chart (histórico + dividendos)
-        yahooFinance.chart(symbol, {
+        getChart(symbol, {
           period1: new Date(Date.now() - 10 * 365 * 24 * 60 * 60 * 1000), // 10 anos
           period2: new Date(),
           interval: '1mo',

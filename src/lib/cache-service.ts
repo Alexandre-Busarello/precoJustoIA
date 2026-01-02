@@ -12,9 +12,11 @@
  * - TTL (Time To Live) configurável
  * - Logs detalhados para debugging
  * - Reconexão automática do Redis
+ * 
+ * IMPORTANTE: Este serviço só funciona no servidor. O código já possui
+ * verificações internas (typeof window === 'undefined') para garantir que
+ * Redis só seja usado no servidor.
  */
-
-import 'server-only';
 
 /**
  * GESTÃO DE CONEXÕES (melhorias v2 + Serverless):

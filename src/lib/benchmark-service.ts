@@ -168,15 +168,10 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
           
           // Buscar dados diários do Yahoo Finance para preencher todos os dias úteis
           try {
-            // Buscar dados diários do período completo
-            // Usar biblioteca yahoo-finance2 em vez de requisição direta
-            const { loadYahooFinance } = await import('./yahoo-finance-loader');
-            const yahooFinance = await loadYahooFinance();
-            if (!yahooFinance) {
-              throw new Error('This code can only run on the server');
-            }
+            // Buscar dados diários do período completo usando yahooFinance2-service
+            const { getChart } = await import('./yahooFinance2-service');
             
-            const chartData = await yahooFinance.chart('^BVSP', {
+            const chartData = await getChart('^BVSP', {
               period1: startDate,
               period2: endDate,
               interval: '1d',
@@ -241,15 +236,11 @@ async function fetchIBOVData(startDate: Date, endDate: Date): Promise<BenchmarkD
       console.log('🔄 Tentando Yahoo Finance como fallback...');
     }
 
-    // Fallback: Yahoo Finance usando biblioteca yahoo-finance2
+    // Fallback: Yahoo Finance usando yahooFinance2-service
     try {
-      const { loadYahooFinance } = await import('./yahoo-finance-loader');
-      const yahooFinance = await loadYahooFinance();
-      if (!yahooFinance) {
-        throw new Error('This code can only run on the server');
-      }
+      const { getChart } = await import('./yahooFinance2-service');
       
-      const chartData = await yahooFinance.chart('^BVSP', {
+      const chartData = await getChart('^BVSP', {
         period1: startDate,
         period2: endDate,
         interval: '1mo',

@@ -7,77 +7,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { loadYahooFinance } from './yahoo-finance-loader';
-
-// Yahoo Finance instance (lazy-loaded)
-let yahooFinanceInstance: any = null;
-
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    yahooFinanceInstance = await loadYahooFinance();
-    if (!yahooFinanceInstance) {
-      throw new Error('getYahooFinance() can only be called on the server');
-    }
-  }
-  return yahooFinanceInstance;
-}
-
-/**
- * Retry helper com backoff exponencial para requisições Yahoo Finance
- * Útil para lidar com erros temporários como "Jwt verification fails"
- * 
- * IMPORTANTE: Em Lambdas do Vercel, IPs são compartilhados entre múltiplos usuários.
- * O Yahoo Finance pode bloquear por:
- * - Muitas requisições do mesmo IP (rate limiting)
- * - Padrões de requisição que parecem automatizados
- * - Tokens JWT/crumb expirados ou inválidos
- * 
- * Esta função tenta novamente com delays progressivos para evitar bloqueios.
- */
-async function retryYahooRequest<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelay: number = 100
-): Promise<T> {
-  let lastError: Error | null = null;
-  
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      const errorMsg = lastError.message.toLowerCase();
-      
-      // Erros que indicam problema de autenticação/token (comum em IPs compartilhados)
-      const isAuthError = errorMsg.includes('jwt') || 
-                         errorMsg.includes('verification') || 
-                         errorMsg.includes('crumb') ||
-                         errorMsg.includes('unauthorized') ||
-                         errorMsg.includes('forbidden');
-      
-      // Erros de rate limiting (muito comum em IPs compartilhados do Vercel)
-      const isRateLimitError = errorMsg.includes('429') || 
-                               errorMsg.includes('too many') ||
-                               errorMsg.includes('rate limit');
-      
-      if ((isAuthError || isRateLimitError) && attempt < maxRetries - 1) {
-        // Backoff exponencial com jitter aleatório para evitar thundering herd
-        const delay = baseDelay * Math.pow(2, attempt);
-        const jitter = Math.random() * 500; // Adicionar até 500ms de variação
-        const totalDelay = delay + jitter;
-        
-        console.log(`  ⚠️ Yahoo Finance ${isAuthError ? 'auth' : 'rate limit'} error (attempt ${attempt + 1}/${maxRetries}), retrying in ${Math.round(totalDelay)}ms...`);
-        await new Promise(resolve => setTimeout(resolve, totalDelay));
-        continue;
-      }
-      
-      // Para outros erros ou se esgotaram as tentativas, lançar erro
-      throw lastError;
-    }
-  }
-  
-  throw lastError || new Error('Max retries exceeded');
-}
+import { getQuote, getChart } from './yahooFinance2-service';
 
 export interface StockPrice {
   ticker: string;
@@ -125,11 +55,8 @@ export async function getTickerPrice(ticker: string): Promise<StockPrice | null>
   try {
     const yahooSymbol = `${ticker}.SA`; // Brazilian stocks suffix
     
-    // Get yahoo-finance2 instance
-    const yahooFinance = await getYahooFinance();
-    
-    // Get quote using yahoo-finance2 with retry logic
-    const quote: any = await retryYahooRequest(() => yahooFinance.quote(yahooSymbol));
+    // Get quote using yahooFinance2-service (with cache and error protection)
+    const quote: any = await getQuote(yahooSymbol);
 
     if (quote?.regularMarketPrice) {
       const price = Number(quote.regularMarketPrice);
@@ -194,11 +121,8 @@ export async function validateTicker(ticker: string): Promise<void> {
   try {
     const yahooSymbol = `${ticker}.SA`; // Brazilian stocks suffix
     
-    // Get yahoo-finance2 instance
-    const yahooFinance = await getYahooFinance();
-    
-    // Try to get quote from Yahoo Finance with retry logic
-    const quote: any = await retryYahooRequest(() => yahooFinance.quote(yahooSymbol));
+    // Try to get quote from Yahoo Finance using yahooFinance2-service
+    const quote: any = await getQuote(yahooSymbol);
 
     if (quote?.regularMarketPrice) {
       console.log(`  ✅ [TICKER VALID] ${ticker}: Found on Yahoo Finance`);
@@ -361,7 +285,6 @@ export async function getYahooHistoricalPrice(
   targetDate: Date
 ): Promise<number | null> {
   try {
-    const yahooFinance = await getYahooFinance();
     const yahooSymbol = `${ticker}.SA`;
     
     // Buscar dados do dia específico (usar intervalo diário para precisão)
@@ -370,7 +293,7 @@ export async function getYahooHistoricalPrice(
     const endDate = new Date(targetDate);
     endDate.setDate(endDate.getDate() + 1); // Até o dia seguinte
 
-    const result = await yahooFinance.chart(yahooSymbol, {
+    const result = await getChart(yahooSymbol, {
       period1: startDate,
       period2: endDate,
       interval: '1d', // Dados diários para precisão

@@ -6,20 +6,7 @@
  * Para funções server-side que não usam Yahoo Finance, use market-status.ts
  */
 
-import { loadYahooFinance } from './yahoo-finance-loader';
-
-// Yahoo Finance instance (lazy-loaded)
-let yahooFinanceInstance: any = null;
-
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    yahooFinanceInstance = await loadYahooFinance();
-    if (!yahooFinanceInstance) {
-      throw new Error('getYahooFinance() can only be called on the server');
-    }
-  }
-  return yahooFinanceInstance;
-}
+import { getChart } from './yahooFinance2-service';
 
 /**
  * Helper: Verifica se há cotação válida do IBOVESPA para uma data específica
@@ -30,7 +17,6 @@ async function getYahooFinance() {
  */
 export async function hasIBOVQuoteForDate(date: Date): Promise<boolean> {
   try {
-    const yahooFinance = await getYahooFinance();
     const ibovSymbol = '^BVSP'; // IBOVESPA no Yahoo Finance (sem .SA)
     
     // Buscar dados do dia específico (usar intervalo diário para precisão)
@@ -39,7 +25,7 @@ export async function hasIBOVQuoteForDate(date: Date): Promise<boolean> {
     const endDate = new Date(date);
     endDate.setUTCDate(endDate.getUTCDate() + 1); // Até o dia seguinte
     
-    const result = await yahooFinance.chart(ibovSymbol, {
+    const result = await getChart(ibovSymbol, {
       period1: startDate,
       period2: endDate,
       interval: '1d', // Dados diários para precisão

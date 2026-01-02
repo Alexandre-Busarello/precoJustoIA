@@ -97,57 +97,10 @@ async function fetchInternationalIndices(): Promise<MarketIndex[]> {
       try {
         let indexData: MarketIndex | null = null;
 
-        // 1. Tentar Yahoo Finance primeiro (fonte principal) - usando biblioteca yahoo-finance2
+        // 1. Tentar Yahoo Finance primeiro (fonte principal) - usando yahooFinance2-service
         try {
-          const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
-          const yahooFinance = await loadYahooFinance();
-          if (!yahooFinance) {
-            throw new Error('This code can only run on the server');
-          }
+          const { getQuote, getQuoteSummary } = await import('@/lib/yahooFinance2-service');
           
-          // Função helper para retry com timeout e tratamento de erros específicos
-          const fetchWithRetry = async <T>(
-            fn: () => Promise<T>, 
-            maxRetries: number = 2,
-            timeoutMs: number = 6000 // Reduzir timeout para 6s (mais rápido para fallback)
-          ): Promise<T> => {
-            let lastError: Error | null = null;
-            
-            for (let attempt = 0; attempt < maxRetries; attempt++) {
-              try {
-                // Adicionar timeout
-                return await Promise.race([
-                  fn(),
-                  new Promise<T>((_, reject) => 
-                    setTimeout(() => reject(new Error(`Timeout após ${timeoutMs}ms`)), timeoutMs)
-                  )
-                ]);
-              } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-                const errorMsg = lastError.message.toLowerCase();
-                
-                // Erros que podem ser recuperados com retry
-                const isRetryableError = errorMsg.includes('fetch failed') ||
-                                       errorMsg.includes('timeout') ||
-                                       errorMsg.includes('network') ||
-                                       errorMsg.includes('econnreset') ||
-                                       errorMsg.includes('etimedout') ||
-                                       errorMsg.includes('econnrefused');
-                
-                if (isRetryableError && attempt < maxRetries - 1) {
-                  const delay = 300 * (attempt + 1); // 300ms, 600ms (mais rápido)
-                  console.log(`  ⚠️ [YAHOO] Erro recuperável para ${tickerInfo.name} (tentativa ${attempt + 1}/${maxRetries}): ${errorMsg.substring(0, 50)}...`);
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                  continue;
-                }
-                
-                throw lastError;
-              }
-            }
-            
-            throw lastError || new Error('Max retries exceeded');
-          };
-
           // Tentar usar quote primeiro (mais rápido e simples para índices)
           // Se falhar, tentar quoteSummary como fallback
           let quoteData: any = null;
@@ -155,33 +108,24 @@ async function fetchInternationalIndices(): Promise<MarketIndex[]> {
           
           try {
             // Tentar quote primeiro (mais rápido e mais confiável para índices)
-            quoteData = await fetchWithRetry(
-              () => yahooFinance.quote(tickerInfo.symbol),
-              1, // Apenas 1 tentativa (mais rápido para fallback)
-              6000 // 6 segundos de timeout
-            );
+            quoteData = await getQuote(tickerInfo.symbol);
           } catch (quoteError) {
             const quoteErrorMsg = quoteError instanceof Error ? quoteError.message : String(quoteError);
             console.log(`  ⚠️ [YAHOO] quote() falhou para ${tickerInfo.name}: ${quoteErrorMsg.substring(0, 100)}`);
             
-            // Se quote falhar, tentar quoteSummary apenas se não for erro de "fetch failed"
-            // (fetch failed geralmente indica problema de rede que também afetará quoteSummary)
-            if (!quoteErrorMsg.toLowerCase().includes('fetch failed')) {
+            // Se quote falhar, tentar quoteSummary apenas se não for erro de indisponibilidade
+            if (!quoteErrorMsg.toLowerCase().includes('indisponível')) {
               try {
-                quoteSummary = await fetchWithRetry(
-                  () => yahooFinance.quoteSummary(tickerInfo.symbol, {
-                    modules: ['price']
-                  }),
-                  1, // Apenas 1 tentativa
-                  6000 // 6 segundos de timeout
-                );
+                quoteSummary = await getQuoteSummary(tickerInfo.symbol, {
+                  modules: ['price']
+                });
               } catch (summaryError) {
                 const errorMsg = summaryError instanceof Error ? summaryError.message : String(summaryError);
                 console.warn(`  ⚠️ [YAHOO] quoteSummary() também falhou para ${tickerInfo.name}: ${errorMsg.substring(0, 100)}`);
                 throw new Error(`Yahoo Finance falhou: ${errorMsg}`);
               }
             } else {
-              // Se for "fetch failed", não tentar quoteSummary (mesmo problema de rede)
+              // Se Yahoo está indisponível, não tentar quoteSummary
               throw quoteError;
             }
           }

@@ -43,26 +43,19 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const { loadYahooFinance } = await import('@/lib/yahoo-finance-loader');
-        const yahooFinance = await loadYahooFinance();
-        if (!yahooFinance) {
-          return NextResponse.json(
-            { error: 'This endpoint can only be called on the server' },
-            { status: 500 }
-          );
-        }
+        const { getQuote, getQuoteSummary, getChart } = await import('@/lib/yahooFinance2-service');
 
         // Determinar qual endpoint usar
         if (endpoint === 'quote') {
-          result = await yahooFinance.quote(symbol);
+          result = await getQuote(symbol);
         } else if (endpoint === 'quoteSummary') {
           const modules = body.modules || ['price'];
-          result = await yahooFinance.quoteSummary(symbol, { modules });
+          result = await getQuoteSummary(symbol, { modules });
         } else if (endpoint === 'chart') {
           const period1 = body.period1 ? new Date(body.period1) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
           const period2 = body.period2 ? new Date(body.period2) : new Date();
           const interval = body.interval || '1d';
-          result = await yahooFinance.chart(symbol, {
+          result = await getChart(symbol, {
             period1,
             period2,
             interval,

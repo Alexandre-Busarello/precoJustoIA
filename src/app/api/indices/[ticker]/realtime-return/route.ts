@@ -2,13 +2,18 @@
  * API Endpoint para rentabilidade em tempo real do índice
  * GET /api/indices/[ticker]/realtime-return
  * 
- * IMPORTANTE: Quando mercado fechado, ignora cache até preço de fechamento estar disponível
+ * IMPORTANTE: 
+ * - Quando mercado fechado, ignora cache até preço de fechamento estar disponível
+ * - Quando não há pregão no dia (feriados, fins de semana), sempre ignora cache
+ * - TTL do cache: 15 minutos quando mercado aberto, 24 horas quando fechado com preço disponível
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateRealTimeReturn } from '@/lib/index-realtime-return';
 import { cache } from '@/lib/cache-service';
+import { checkMarketWasOpen } from '@/lib/index-engine';
+import { getTodayInBrazil } from '@/lib/market-status';
 
 /**
  * Verifica se o mercado B3 está fechado (horário de Brasília)
@@ -67,7 +72,7 @@ async function hasTodayClosingPrice(indexId: string): Promise<boolean> {
   return !!todayPoint;
 }
 
-const CACHE_TTL = 60; // 1 minuto quando mercado aberto
+const CACHE_TTL = 900; // 15 minutos quando mercado aberto (TTL reduzido para garantir dados mais atualizados)
 const CACHE_TTL_CLOSED = 86400; // 24 horas quando mercado fechado e preço disponível
 
 export async function GET(
@@ -95,8 +100,16 @@ export async function GET(
     let shouldIgnoreCache = false;
     const cacheKey = `index-realtime-return-${index.id}`;
     
-    // Se mercado fechado, verificar se preço de fechamento já está disponível
-    if (marketClosed) {
+    // Verificar se houve pregão hoje (sábado, domingo ou feriado não têm pregão)
+    const today = getTodayInBrazil();
+    const marketWasOpenToday = await checkMarketWasOpen(today);
+    
+    // Se não houve pregão hoje, sempre ignorar cache para garantir dados corretos
+    if (!marketWasOpenToday) {
+      shouldIgnoreCache = true;
+      console.log(`📊 [API] ${ticker}: Não houve pregão hoje - ignorando cache`);
+    } else if (marketClosed) {
+      // Se mercado fechado mas houve pregão, verificar se preço de fechamento já está disponível
       const hasClosingPrice = await hasTodayClosingPrice(index.id);
       shouldIgnoreCache = !hasClosingPrice;
       
@@ -118,10 +131,11 @@ export async function GET(
       }>(cacheKey);
       
       if (cachedData) {
-        // CRÍTICO: Se mercado está aberto mas cache tem isMarketOpen=false, cache está desatualizado
-        // Isso acontece quando cache foi criado quando mercado estava fechado e mercado abriu novamente
+        // CRÍTICO: Se mercado está aberto AGORA mas cache tem isMarketOpen=false, cache está desatualizado
+        // Isso acontece quando cache foi criado antes das 10h (mercado fechado) com TTL de 24h
+        // Quando mercado abre após 10h, não podemos usar esse cache antigo
         if (!marketClosed && cachedData.isMarketOpen === false) {
-          console.log(`📊 [API] ${ticker}: Mercado aberto mas cache contém isMarketOpen=false - ignorando cache desatualizado`);
+          console.log(`📊 [API] ${ticker}: Mercado aberto agora mas cache foi criado quando estava fechado - ignorando cache desatualizado`);
           shouldIgnoreCache = true;
         } else {
           // Cache válido - retornar

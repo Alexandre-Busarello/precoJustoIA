@@ -6,16 +6,17 @@
  * Para funções server-side que não usam Yahoo Finance, use market-status.ts
  */
 
-import { getChart } from './yahooFinance2-service';
+import { getChart, getChartWithoutCache } from './yahooFinance2-service';
 
 /**
  * Helper: Verifica se há cotação válida do IBOVESPA para uma data específica
  * Usa yahoo-finance2 que já configura User-Agent corretamente
  * 
  * @param date Data a verificar
+ * @param skipCache Se true, não usa cache (útil para realtime-return)
  * @returns true se há cotação válida (close > 0) para a data, false caso contrário
  */
-export async function hasIBOVQuoteForDate(date: Date): Promise<boolean> {
+export async function hasIBOVQuoteForDate(date: Date, skipCache: boolean = false): Promise<boolean> {
   try {
     const ibovSymbol = '^BVSP'; // IBOVESPA no Yahoo Finance (sem .SA)
     
@@ -25,12 +26,17 @@ export async function hasIBOVQuoteForDate(date: Date): Promise<boolean> {
     const endDate = new Date(date);
     endDate.setUTCDate(endDate.getUTCDate() + 1); // Até o dia seguinte
     
-    const result = await getChart(ibovSymbol, {
+    const chartOptions = {
       period1: startDate,
       period2: endDate,
       interval: '1d', // Dados diários para precisão
       return: 'array'
-    });
+    };
+    
+    // Usar versão sem cache se solicitado (para realtime-return)
+    const result = skipCache 
+      ? await getChartWithoutCache(ibovSymbol, chartOptions)
+      : await getChart(ibovSymbol, chartOptions);
     
     // O resultado pode vir como array direto ou como objeto com quotes
     const quotes = Array.isArray(result) ? result : (result?.quotes || []);

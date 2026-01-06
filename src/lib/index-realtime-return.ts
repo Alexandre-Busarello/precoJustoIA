@@ -74,7 +74,8 @@ export async function calculateRealTimeReturn(
     const today = getTodayInBrazil();
     
     // Verificar se houve pregão hoje (sábado, domingo ou feriado não têm pregão)
-    const marketWasOpenToday = await checkMarketWasOpen(today);
+    // IMPORTANTE: skipCache=true para sempre buscar dados atualizados do IBOVESPA
+    const marketWasOpenToday = await checkMarketWasOpen(today, true);
     if (!marketWasOpenToday) {
       // Não houve pregão hoje - retornar dados do último fechamento oficial sem calcular variação em tempo real
       const lastHistoryPoint = await prisma.indexHistoryPoints.findFirst({

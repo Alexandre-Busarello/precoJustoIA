@@ -253,6 +253,45 @@ export class YahooFinance2Service {
   }
 
   /**
+   * Obtém dados de gráfico (histórico) de um símbolo SEM CACHE
+   * Útil para realtime-return que precisa sempre buscar dados atualizados
+   */
+  static async getChartWithoutCache(symbol: string, options?: any): Promise<any> {
+    const yahooFinance = await getYahooFinanceInstance();
+    
+    // Verificar se Yahoo está indisponível (mesma proteção, mas sem cache)
+    const unavailable = await isYahooUnavailable();
+    if (unavailable) {
+      const error = new Error(`Yahoo Finance está temporariamente indisponível (marcado após erros consecutivos). Tente novamente em até 1 hora.`);
+      console.warn(`🚫 [YAHOO SERVICE] Bloqueado (sem cache): chart(${symbol}) - Yahoo indisponível`);
+      throw error;
+    }
+    
+    try {
+      console.log(`🔄 [YAHOO SERVICE] Consultando Yahoo SEM CACHE: chart(${symbol})`);
+      const result = await yahooFinance.chart(symbol, options);
+      await resetErrorCount();
+      console.log(`✅ [YAHOO SERVICE] Sucesso (sem cache): chart(${symbol})`);
+      return result;
+    } catch (error) {
+      const isRetryable = isRetryableError(error);
+      
+      if (isRetryable) {
+        const errorCount = await incrementErrorCount();
+        console.warn(`⚠️ [YAHOO SERVICE] Erro recuperável (${errorCount}/${MAX_CONSECUTIVE_ERRORS}) sem cache: chart(${symbol}) - ${error instanceof Error ? error.message : String(error)}`);
+        
+        if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
+          await markYahooUnavailable();
+        }
+      } else {
+        console.error(`❌ [YAHOO SERVICE] Erro não recuperável (sem cache): chart(${symbol}) - ${error instanceof Error ? error.message : String(error)}`);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
    * Obtém resumo detalhado de um símbolo
    */
   static async getQuoteSummary(symbol: string, options?: any): Promise<any> {
@@ -295,6 +334,7 @@ export class YahooFinance2Service {
 // Exportar métodos como funções standalone para facilitar uso
 export const getQuote = YahooFinance2Service.getQuote.bind(YahooFinance2Service);
 export const getChart = YahooFinance2Service.getChart.bind(YahooFinance2Service);
+export const getChartWithoutCache = YahooFinance2Service.getChartWithoutCache.bind(YahooFinance2Service);
 export const getQuoteSummary = YahooFinance2Service.getQuoteSummary.bind(YahooFinance2Service);
 export const getFundamentalsTimeSeries = YahooFinance2Service.getFundamentalsTimeSeries.bind(YahooFinance2Service);
 export const getHistorical = YahooFinance2Service.getHistorical.bind(YahooFinance2Service);

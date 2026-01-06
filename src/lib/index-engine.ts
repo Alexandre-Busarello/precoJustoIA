@@ -36,7 +36,7 @@ export interface IndexDailyReturn {
  * @param date Data a verificar
  * @returns true se houve pregão, false caso contrário (sábado, domingo ou feriado)
  */
-export async function checkMarketWasOpen(date: Date): Promise<boolean> {
+export async function checkMarketWasOpen(date: Date, skipCache: boolean = false): Promise<boolean> {
   try {
     // Normalizar data usando timezone de Brasília para evitar problemas de conversão
     // A data recebida já deve estar no formato correto (de getTodayInBrazil)
@@ -72,7 +72,8 @@ export async function checkMarketWasOpen(date: Date): Promise<boolean> {
     // Se for dia útil (segunda a sexta), verificar se houve pregão consultando IBOVESPA
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
-    const hasQuote = await hasIBOVQuoteForDate(date);
+    // Usar skipCache se fornecido (útil para realtime-return que precisa sempre buscar dados atualizados)
+    const hasQuote = await hasIBOVQuoteForDate(date, skipCache);
     
     if (hasQuote) {
       console.log(`✅ [MARKET CHECK] ${dateStr}: Pregão confirmado (IBOVESPA)`);

@@ -7,7 +7,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { getQuote, getChart } from './yahooFinance2-service';
+import { getQuote, getChart, getQuoteWithoutCache, getChartWithoutCache } from './yahooFinance2-service';
 
 export interface StockPrice {
   ticker: string;
@@ -19,8 +19,11 @@ export interface StockPrice {
 /**
  * Get latest prices for multiple tickers
  * Tries Yahoo Finance first, falls back to database
+ * 
+ * @param tickers Array of ticker symbols
+ * @param skipCache If true, bypasses Yahoo Finance cache (for realtime-return)
  */
-export async function getLatestPrices(tickers: string[]): Promise<Map<string, StockPrice>> {
+export async function getLatestPrices(tickers: string[], skipCache: boolean = false): Promise<Map<string, StockPrice>> {
   const priceMap = new Map<string, StockPrice>();
   
   if (tickers.length === 0) {
@@ -31,7 +34,7 @@ export async function getLatestPrices(tickers: string[]): Promise<Map<string, St
   await Promise.all(
     tickers.map(async (ticker) => {
       try {
-        const price = await getTickerPrice(ticker);
+        const price = await getTickerPrice(ticker, skipCache);
         if (price) {
           priceMap.set(ticker, price);
         }
@@ -41,7 +44,7 @@ export async function getLatestPrices(tickers: string[]): Promise<Map<string, St
     })
   );
 
-  console.log(`✅ [QUOTE SERVICE] Retrieved ${priceMap.size}/${tickers.length} prices`);
+  console.log(`✅ [QUOTE SERVICE] Retrieved ${priceMap.size}/${tickers.length} prices${skipCache ? ' (sem cache)' : ''}`);
   return priceMap;
 }
 
@@ -49,14 +52,19 @@ export async function getLatestPrices(tickers: string[]): Promise<Map<string, St
  * Get price for a single ticker
  * Yahoo Finance -> Database fallback
  * Auto-updates database when Yahoo Finance succeeds
+ * 
+ * @param ticker Ticker symbol
+ * @param skipCache If true, bypasses Yahoo Finance cache (for realtime-return)
  */
-export async function getTickerPrice(ticker: string): Promise<StockPrice | null> {
+export async function getTickerPrice(ticker: string, skipCache: boolean = false): Promise<StockPrice | null> {
   // 1. Try Yahoo Finance first
   try {
     const yahooSymbol = `${ticker}.SA`; // Brazilian stocks suffix
     
-    // Get quote using yahooFinance2-service (with cache and error protection)
-    const quote: any = await getQuote(yahooSymbol);
+    // Get quote using yahooFinance2-service (with or without cache based on skipCache)
+    const quote: any = skipCache 
+      ? await getQuoteWithoutCache(yahooSymbol)
+      : await getQuote(yahooSymbol);
 
     if (quote?.regularMarketPrice) {
       const price = Number(quote.regularMarketPrice);
@@ -293,12 +301,22 @@ export async function getYahooHistoricalPrice(
     const endDate = new Date(targetDate);
     endDate.setDate(endDate.getDate() + 1); // Até o dia seguinte
 
-    const result = await getChart(yahooSymbol, {
-      period1: startDate,
-      period2: endDate,
-      interval: '1d', // Dados diários para precisão
-      return: 'array'
-    });
+    // Para realtime-return, sempre usar sem cache
+    // Para outros casos, usar com cache
+    const skipCache = false; // getYahooHistoricalPrice não é usado pelo realtime-return
+    const result = skipCache
+      ? await getChartWithoutCache(yahooSymbol, {
+          period1: startDate,
+          period2: endDate,
+          interval: '1d',
+          return: 'array'
+        })
+      : await getChart(yahooSymbol, {
+          period1: startDate,
+          period2: endDate,
+          interval: '1d', // Dados diários para precisão
+          return: 'array'
+        });
 
     // O resultado pode vir como array direto ou como objeto com quotes
     const quotes = Array.isArray(result) ? result : (result?.quotes || []);

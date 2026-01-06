@@ -203,8 +203,9 @@ export async function calculateRealTimeReturn(
     }
 
     // 3. Buscar preços atuais de todos os ativos
+    // IMPORTANTE: skipCache=true para sempre buscar dados atualizados do Yahoo Finance
     const tickers = composition.map((c) => c.assetTicker);
-    const currentPrices = await getLatestPrices(tickers);
+    const currentPrices = await getLatestPrices(tickers, true);
 
     // 4. Buscar preços do último fechamento do snapshot ou do banco
     const lastSnapshot = lastHistoryPoint.compositionSnapshot as

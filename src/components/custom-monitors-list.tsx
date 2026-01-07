@@ -51,15 +51,19 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [monitorToDelete, setMonitorToDelete] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const { toast } = useToast();
 
-  // Sincronizar estado quando props mudarem
+  // Sincronizar estado quando props mudarem, mas apenas se não estiver atualizando
   useEffect(() => {
-    setMonitorsList(monitors);
-  }, [monitors]);
+    if (!isUpdating) {
+      setMonitorsList(monitors);
+    }
+  }, [monitors, isUpdating]);
 
   const handleToggleActive = async (monitorId: string, currentStatus: boolean) => {
     setIsLoading(monitorId);
+    setIsUpdating(true);
     try {
       const response = await fetch(`/api/user-asset-monitor/${monitorId}`, {
         method: 'PATCH',
@@ -76,9 +80,18 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
         throw new Error(data.error || 'Erro ao atualizar monitoramento');
       }
 
+      const data = await response.json();
+      const updatedMonitor = data.monitor;
+
+      // Atualizar estado local com os dados retornados do servidor
       setMonitorsList((prev) =>
         prev.map((m) =>
-          m.id === monitorId ? { ...m, isActive: !currentStatus } : m
+          m.id === monitorId
+            ? {
+                ...m,
+                isActive: updatedMonitor.isActive,
+              }
+            : m
         )
       );
 
@@ -89,8 +102,10 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
           : 'Monitoramento ativado com sucesso.',
       });
 
-      // Atualizar página para garantir sincronização
-      router.refresh();
+      // Atualizar página após um pequeno delay para garantir sincronização
+      setTimeout(() => {
+        router.refresh();
+      }, 100);
     } catch (error) {
       console.error('Erro ao atualizar monitoramento:', error);
       toast({
@@ -98,8 +113,15 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
         description: error instanceof Error ? error.message : 'Erro ao atualizar monitoramento.',
         variant: 'destructive',
       });
+      // Reverter estado em caso de erro
+      setMonitorsList((prev) =>
+        prev.map((m) =>
+          m.id === monitorId ? { ...m, isActive: currentStatus } : m
+        )
+      );
     } finally {
       setIsLoading(null);
+      setTimeout(() => setIsUpdating(false), 200);
     }
   };
 
@@ -350,7 +372,7 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
           <AlertDialogHeader>
             <AlertDialogTitle>Remover Monitoramento?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação irá desativar o monitoramento. Você poderá reativá-lo posteriormente se desejar.
+              Esta ação irá excluir permanentemente o monitoramento. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

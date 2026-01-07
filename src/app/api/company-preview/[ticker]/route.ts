@@ -117,6 +117,8 @@ export async function GET(
       switch (trimmed) {
         case 'AJUSTE_DIVIDENDOS':
           return '✅ **Ajuste por Dividendos** - A variação de preço foi causada por ajuste de dividendos, não indicando perda de fundamento estrutural.';
+        case 'AJUSTE_BONIFICACAO':
+          return '✅ **Ajuste por Bonificação** - A variação de preço foi causada por ajuste após distribuição de ações gratuitas (bonificação), não indicando perda de fundamento estrutural.';
         case 'PERDA_DE_FUNDAMENTO':
           return '⚠️ **PERDA DE FUNDAMENTO DETECTADA** - A análise indica possível deterioração dos fundamentos da empresa.';
         case 'VOLATILIDADE_ESPERADA':

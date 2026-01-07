@@ -61,13 +61,12 @@ export async function DELETE(
       );
     }
 
-    // Desativar ao invés de deletar (manter histórico)
-    await prisma.userAssetMonitor.update({
+    // Deletar o monitoramento
+    await prisma.userAssetMonitor.delete({
       where: { id: monitorId },
-      data: { isActive: false },
     });
 
-    // Invalidar cache após desativação
+    // Invalidar cache após exclusão
     await clearQueryCache(['user_asset_monitor']);
 
     return NextResponse.json({

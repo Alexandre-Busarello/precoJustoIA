@@ -140,6 +140,8 @@ export default async function ReportDetailPage({ params }: PageProps) {
     switch (trimmed) {
       case 'AJUSTE_DIVIDENDOS':
         return '✅ **Ajuste por Dividendos**';
+      case 'AJUSTE_BONIFICACAO':
+        return '✅ **Ajuste por Bonificação**';
       case 'PERDA_DE_FUNDAMENTO':
         return '⚠️ **PERDA DE FUNDAMENTO DETECTADA**';
       case 'VOLATILIDADE_ESPERADA':

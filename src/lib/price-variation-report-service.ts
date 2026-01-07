@@ -189,18 +189,21 @@ Preço atual: R$ ${variation.currentPrice.toFixed(2)}
    - Movimentos de mercado (correção geral, setor em baixa, etc)
    - Mudanças nos fundamentos da empresa (resultados, gestão, regulatório, etc)
    - Análises de especialistas sobre a empresa
+   - **BONIFICAÇÕES RECENTES**: Pesquise especificamente se houve pagamento de bonificações (distribuição de ações gratuitas) nos últimos ${variation.days} dias. Bonificações causam ajuste automático no preço da ação (ajuste para pós-bonificação) e podem explicar parte ou toda a queda observada. Procure por termos como "bonificação", "distribuição de ações", "grupamento", "desdobramento", "ajuste de preço" combinados com o ticker ${ticker}
 
 3. **IMPORTANTE**: Seja objetivo e factual. Cite fontes quando possível.
 
 4. Retorne um resumo estruturado com:
    - Principais notícias encontradas
    - Possíveis causas da queda
+   - **Informações sobre bonificações**: Se encontrou evidências de bonificação recente, mencione claramente a data, proporção (ex: 1 ação para cada 10 possuídas) e o impacto esperado no preço
    - Contexto de mercado (se relevante)
 
 **FORMATO DE RESPOSTA:**
 - Use markdown
 - Seja conciso (máximo 500 palavras)
 - Foque em informações recentes (últimos ${variation.days} dias)
+- Se encontrar bonificação recente, destaque essa informação de forma clara
 - Se não encontrar informações específicas, indique isso claramente`;
 
   try {
@@ -437,6 +440,7 @@ Você precisa realizar DUAS análises:
    - Movimento de mercado (correção geral, volatilidade)
    - Notícia atípica (evento pontual, especulação)
    - Ajuste técnico (sem relação com fundamentos)
+   - **Ajuste por bonificação**: Se os dados da pesquisa indicarem que houve pagamento de bonificação (distribuição de ações gratuitas) recente, isso causa ajuste automático no preço (ajuste para pós-bonificação) e NÃO indica perda de fundamento. O preço é ajustado proporcionalmente para manter o valor total da participação do acionista constante.
    ${dividendsInfo.dividends.length > 0 ? '- Ajuste por pagamento de dividendos (normal e esperado)' : ''}
    ${profitabilityStatus.isUnprofitable || profitabilityStatus.isTurnaround ? '- Volatilidade esperada para empresa sem lucro ou em processo de turnaround' : ''}
 
@@ -460,14 +464,15 @@ Você precisa realizar DUAS análises:
 - Notícia pontual sem impacto estrutural
 - Especulação de curto prazo
 - Ajuste técnico
+- **Ajuste por bonificação**: Quando há distribuição de ações gratuitas (bonificação), o preço é ajustado automaticamente para manter o valor total constante. Isso é um ajuste contábil normal e não indica perda de fundamento.
 ${dividendsInfo.dividends.length > 0 ? '- Ajuste por pagamento de dividendos (quando a variação ajustada é menor que a observada)' : ''}
 
 **FORMATO DE RESPOSTA (JSON):**
 \`\`\`json
 {
   "isFundamentalLoss": true/false,
-  "conclusion": "PERDA_DE_FUNDAMENTO" ou "MOVIMENTO_MERCADO" ou "NOTICIA_ATIPICA" ou "AJUSTE_TECNICO"${dividendsInfo.dividends.length > 0 ? ' ou "AJUSTE_DIVIDENDOS"' : ''}${profitabilityStatus.isUnprofitable || profitabilityStatus.isTurnaround ? ' ou "VOLATILIDADE_ESPERADA"' : ''},
-  "reasoning": "Explicação detalhada sobre a queda de preço e se indica perda de fundamento (máximo 200 palavras). ${dividendsInfo.dividends.length > 0 ? 'Mencione o impacto dos dividendos na sua análise. ' : ''}${profitabilityStatus.profitabilityContext ? `IMPORTANTE: Considere o contexto de lucratividade: ${profitabilityStatus.profitabilityContext}. ` : ''}${profitabilityStatus.isTurnaround ? 'Para empresas em turnaround, volatilidade de preço é comum e pode não indicar perda de fundamento se a recuperação está em curso.' : profitabilityStatus.isUnprofitable ? 'Para empresas sem lucro, quedas de preço podem ser mais comuns e nem sempre indicam perda de fundamento estrutural.' : ''}",
+  "conclusion": "PERDA_DE_FUNDAMENTO" ou "MOVIMENTO_MERCADO" ou "NOTICIA_ATIPICA" ou "AJUSTE_TECNICO" ou "AJUSTE_BONIFICACAO"${dividendsInfo.dividends.length > 0 ? ' ou "AJUSTE_DIVIDENDOS"' : ''}${profitabilityStatus.isUnprofitable || profitabilityStatus.isTurnaround ? ' ou "VOLATILIDADE_ESPERADA"' : ''},
+  "reasoning": "Explicação detalhada sobre a queda de preço e se indica perda de fundamento (máximo 200 palavras). Se os dados da pesquisa indicarem bonificação recente, explique claramente que o ajuste de preço é normal e esperado após bonificação, não indicando perda de fundamento. ${dividendsInfo.dividends.length > 0 ? 'Mencione o impacto dos dividendos na sua análise. ' : ''}${profitabilityStatus.profitabilityContext ? `IMPORTANTE: Considere o contexto de lucratividade: ${profitabilityStatus.profitabilityContext}. ` : ''}${profitabilityStatus.isTurnaround ? 'Para empresas em turnaround, volatilidade de preço é comum e pode não indicar perda de fundamento se a recuperação está em curso.' : profitabilityStatus.isUnprofitable ? 'Para empresas sem lucro, quedas de preço podem ser mais comuns e nem sempre indicam perda de fundamento estrutural.' : ''}",
   "currentFundamentals": {
     "overallAssessment": "FORTE" ou "MODERADO" ou "FRACO" ou "EM_RECUPERACAO" ou "EM_DETERIORACAO",
     "strengths": ["ponto forte 1", "ponto forte 2", ...],
@@ -671,7 +676,7 @@ ${research}
 
 ### Sobre a Queda de Preço
 
-**Conclusão**: ${analysis.conclusion === 'PERDA_DE_FUNDAMENTO' ? '⚠️ **PERDA DE FUNDAMENTO DETECTADA**' : analysis.conclusion === 'AJUSTE_DIVIDENDOS' ? '✅ **Ajuste por Dividendos**' : analysis.conclusion === 'VOLATILIDADE_ESPERADA' ? '📊 **Volatilidade Esperada**' : '✅ **Não indica perda de fundamento estrutural**'}
+**Conclusão**: ${analysis.conclusion === 'PERDA_DE_FUNDAMENTO' ? '⚠️ **PERDA DE FUNDAMENTO DETECTADA**' : analysis.conclusion === 'AJUSTE_BONIFICACAO' ? '✅ **Ajuste por Bonificação**' : analysis.conclusion === 'AJUSTE_DIVIDENDOS' ? '✅ **Ajuste por Dividendos**' : analysis.conclusion === 'VOLATILIDADE_ESPERADA' ? '📊 **Volatilidade Esperada**' : '✅ **Não indica perda de fundamento estrutural**'}
 
 **Raciocínio**:
 ${analysis.reasoning}
@@ -710,6 +715,8 @@ ${analysis.currentFundamentals.outlook}
 
 ${analysis.isFundamentalLoss 
   ? '⚠️ **ATENÇÃO**: Esta queda pode indicar problemas estruturais na empresa. Recomenda-se análise mais profunda dos fundamentos antes de tomar decisões de investimento.'
+  : analysis.conclusion === 'AJUSTE_BONIFICACAO'
+  ? '✅ **Ajuste Normal por Bonificação**: A queda observada é resultado do ajuste automático de preço após a distribuição de ações gratuitas (bonificação). Este é um ajuste contábil normal que mantém o valor total da participação constante. Não indica perda de fundamento. Continue monitorando os indicadores financeiros e resultados trimestrais.'
   : dividendsInfo.dividends.length > 0 && Math.abs(dividendsInfo.adjustedVariation) < Math.abs(variation.variation) * 0.5
   ? '✅ **Ajuste Normal**: A maior parte da queda observada pode ser explicada pelo pagamento de dividendos. Continue monitorando os indicadores financeiros e resultados trimestrais.'
   : 'Esta variação parece estar relacionada a movimentos de mercado ou eventos pontuais, sem impacto estrutural nos fundamentos da empresa. Continue monitorando os indicadores financeiros e resultados trimestrais.'}

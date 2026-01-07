@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -51,18 +51,28 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [monitorToDelete, setMonitorToDelete] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const skipSyncRef = useRef(false);
   const { toast } = useToast();
 
-  // Sincronizar estado quando props mudarem (dados do servidor são a fonte da verdade)
+  // Sincronizar estado quando props mudarem, mas evitar sobrescrever durante atualizações
   useEffect(() => {
+    if (skipSyncRef.current) {
+      // Pular esta sincronização se acabamos de atualizar manualmente
+      skipSyncRef.current = false;
+      return;
+    }
+    
+    // Sincronizar normalmente quando props mudarem
     setMonitorsList(monitors);
   }, [monitors]);
 
   const handleToggleActive = async (monitorId: string, currentStatus: boolean) => {
     setIsLoading(monitorId);
     
-    // Atualização otimista para melhor UX
+    // Guardar estado anterior para reverter em caso de erro
     const previousState = monitorsList;
+    
+    // Atualização otimista para melhor UX
     setMonitorsList((prev) =>
       prev.map((m) =>
         m.id === monitorId ? { ...m, isActive: !currentStatus } : m
@@ -85,6 +95,28 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
         throw new Error(data.error || 'Erro ao atualizar monitoramento');
       }
 
+      const data = await response.json();
+      const updatedMonitor = data.monitor;
+
+      // Atualizar estado local com os dados retornados pela API (fonte da verdade)
+      // Isso garante que temos os dados corretos antes de qualquer refresh
+      setMonitorsList((prev) =>
+        prev.map((m) =>
+          m.id === monitorId
+            ? {
+                ...m,
+                isActive: updatedMonitor.isActive,
+                triggerConfig: updatedMonitor.triggerConfig,
+                lastTriggeredAt: updatedMonitor.lastTriggeredAt,
+              }
+            : m
+        )
+      );
+
+      // Marcar para pular próxima sincronização do useEffect
+      // Isso evita que dados antigos do cache sobrescrevam nossa atualização
+      skipSyncRef.current = true;
+
       toast({
         title: 'Monitoramento atualizado',
         description: currentStatus
@@ -92,9 +124,11 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
           : 'Monitoramento ativado com sucesso.',
       });
 
-      // Revalidar página para buscar dados atualizados do servidor
-      // O revalidatePath no backend garante que os dados estarão corretos
-      router.refresh();
+      // Aguardar um pouco antes de fazer refresh para garantir que o cache foi invalidado
+      // O revalidatePath no backend já foi executado, mas pode levar alguns ms para propagar
+      setTimeout(() => {
+        router.refresh();
+      }, 500);
     } catch (error) {
       console.error('Erro ao atualizar monitoramento:', error);
       

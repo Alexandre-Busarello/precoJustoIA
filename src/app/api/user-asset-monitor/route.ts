@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getCurrentUser, isUserPremium } from '@/lib/user-service';
@@ -184,6 +185,9 @@ export async function POST(request: NextRequest) {
 
       // Invalidar cache após atualização
       await clearQueryCache(['user_asset_monitor']);
+      
+      // Invalidar cache do Next.js para forçar recarregamento da página
+      revalidatePath('/dashboard/monitoramentos-customizados');
 
       return NextResponse.json({
         success: true,
@@ -219,6 +223,9 @@ export async function POST(request: NextRequest) {
 
     // Invalidar cache após criação
     await clearQueryCache(['user_asset_monitor']);
+    
+    // Invalidar cache do Next.js para forçar recarregamento da página
+    revalidatePath('/dashboard/monitoramentos-customizados');
 
     return NextResponse.json({
       success: true,

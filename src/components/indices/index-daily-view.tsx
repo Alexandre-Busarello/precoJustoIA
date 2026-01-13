@@ -143,9 +143,9 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
   const totalPages = Math.ceil(data.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const paginatedData = isPremium ? data.slice(startIndex, endIndex) : data.slice(0, 3)
+  const paginatedData = isPremium ? data.slice(startIndex, endIndex) : data.slice(startIndex, endIndex)
   const visibleData = paginatedData
-  const blurredData = isPremium ? [] : data.slice(3)
+  const shouldBlur = !isPremium
 
   const formatDate = (dateStr: string) => {
     // Parse a data como YYYY-MM-DD e criar Date no timezone local
@@ -222,7 +222,11 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
       <CardContent>
         <div className="space-y-4">
           {visibleData.map((day) => (
-        <Card key={day.date} className="overflow-hidden">
+            <Card 
+              key={day.date} 
+              className={`overflow-hidden ${shouldBlur ? 'relative' : ''}`}
+              style={shouldBlur ? { filter: 'blur(4px)', pointerEvents: 'none' } : {}}
+            >
           <CardHeader className="pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <CardTitle className="text-lg font-semibold">
@@ -330,44 +334,15 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
         </Card>
           ))}
 
-          {/* Dias com blur para Free users */}
-          {blurredData.map((day, index) => (
-            <Card key={`blurred-${index}`} className="overflow-hidden" style={{ filter: 'blur(4px)', pointerEvents: 'none' }}>
-              <CardHeader className="pb-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <CardTitle className="text-lg font-semibold bg-gray-300 h-6 w-32 rounded" />
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 bg-gray-300 rounded" />
-                    <div className="h-6 w-16 bg-gray-300 rounded" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
-                    <div>
-                      <div className="h-4 w-24 bg-gray-300 rounded mb-2" />
-                      <div className="h-6 w-20 bg-gray-300 rounded" />
-                    </div>
-                    <div>
-                      <div className="h-4 w-32 bg-gray-300 rounded mb-2" />
-                      <div className="h-6 w-20 bg-gray-300 rounded" />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-
           {/* CTA para upgrade */}
-          {!isPremium && blurredData.length > 0 && (
+          {!isPremium && visibleData.length > 0 && (
             <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-start gap-3">
                 <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div className="flex-1">
                   <h4 className="font-semibold text-sm mb-1">Desbloqueie a Visão Diária Completa</h4>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Veja todos os {data.length} dias de histórico com detalhes completos de contribuições por ativo.
+                    Veja todos os {data.length} dias de histórico com detalhes completos de contribuições por ativo sem blur.
                   </p>
                   <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
                     <Link href="/checkout">
@@ -379,8 +354,8 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
             </div>
           )}
 
-          {/* Paginação - Apenas para Premium */}
-          {isPremium && totalPages > 1 && (
+          {/* Paginação */}
+          {totalPages > 1 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
               <p className="text-sm text-muted-foreground text-center sm:text-left">
                 Mostrando {startIndex + 1} a {Math.min(endIndex, data.length)} de {data.length} dias

@@ -137,9 +137,9 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
-  // Mostrar apenas 3 ativos para usuários Free, resto com blur
-  const visiblePerformances = isPremium ? sortedPerformances : sortedPerformances.slice(0, 3);
-  const blurredPerformances = isPremium ? [] : sortedPerformances.slice(3);
+  // Para não premium: mostrar todos mas com blur
+  const visiblePerformances = sortedPerformances;
+  const shouldBlur = !isPremium;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -251,7 +251,11 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
               </TableHeader>
               <TableBody>
                 {visiblePerformances.map((perf) => (
-                  <TableRow key={perf.ticker}>
+                  <TableRow 
+                    key={perf.ticker}
+                    className={shouldBlur ? "relative overflow-hidden" : ""}
+                    style={shouldBlur ? { filter: 'blur(4px)', pointerEvents: 'none' } : {}}
+                  >
                     <TableCell className="font-medium">{perf.ticker}</TableCell>
                     <TableCell>
                       <Badge variant={perf.status === 'ACTIVE' ? 'default' : 'secondary'}>
@@ -276,35 +280,6 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
                     </TableCell>
                   </TableRow>
                 ))}
-                {blurredPerformances.map((perf, index) => (
-                  <TableRow 
-                    key={`blurred-${perf.ticker}-${index}`} 
-                    className="relative overflow-hidden"
-                    style={{ filter: 'blur(4px)', pointerEvents: 'none' }}
-                  >
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-16 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-5 w-16 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-20 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-20 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-12 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-16 rounded ml-auto" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-12 rounded ml-auto" />
-                    </TableCell>
-                  </TableRow>
-                ))}
               </TableBody>
             </Table>
           </div>
@@ -315,14 +290,14 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
             </p>
           )}
 
-          {!isPremium && blurredPerformances.length > 0 && (
+          {!isPremium && visiblePerformances.length > 0 && (
             <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-start gap-3">
                 <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div className="flex-1">
                   <h4 className="font-semibold text-sm mb-1">Desbloqueie a Performance Completa</h4>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Veja todos os {sortedPerformances.length} ativos que passaram pelo índice e suas performances detalhadas.
+                    Veja todos os {sortedPerformances.length} ativos que passaram pelo índice e suas performances detalhadas sem blur.
                   </p>
                   <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
                     <Link href="/checkout">

@@ -341,18 +341,14 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
               <TabsList className="inline-flex md:inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-max min-w-full md:min-w-0">
                 <TabsTrigger value="performance" className="whitespace-nowrap flex-shrink-0">Performance</TabsTrigger>
                 <TabsTrigger value="composition" className="whitespace-nowrap flex-shrink-0">Composição</TabsTrigger>
-                {isPremium && (
-                  <TabsTrigger value="asset-performance" className="whitespace-nowrap flex-shrink-0">
-                    <span className="hidden sm:inline">Performance Individual</span>
-                    <span className="sm:hidden">Individual</span>
-                  </TabsTrigger>
-                )}
-                {isPremium && (
-                  <TabsTrigger value="daily-view" className="whitespace-nowrap flex-shrink-0">
-                    <span className="hidden sm:inline">Visão Diária</span>
-                    <span className="sm:hidden">Diária</span>
-                  </TabsTrigger>
-                )}
+                <TabsTrigger value="asset-performance" className="whitespace-nowrap flex-shrink-0">
+                  <span className="hidden sm:inline">Performance Individual</span>
+                  <span className="sm:hidden">Individual</span>
+                </TabsTrigger>
+                <TabsTrigger value="daily-view" className="whitespace-nowrap flex-shrink-0">
+                  <span className="hidden sm:inline">Visão Diária</span>
+                  <span className="sm:hidden">Diária</span>
+                </TabsTrigger>
                 <TabsTrigger value="history" className="whitespace-nowrap flex-shrink-0">Histórico</TabsTrigger>
               </TabsList>
             </div>
@@ -377,17 +373,13 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
               <IndexCompositionTable composition={compositionWithDetails} />
             </TabsContent>
 
-            {isPremium && (
-              <TabsContent value="asset-performance">
-                <IndexDetailClient ticker={index.ticker} />
-              </TabsContent>
-            )}
+            <TabsContent value="asset-performance">
+              <IndexDetailClient ticker={index.ticker} />
+            </TabsContent>
 
-            {isPremium && (
-              <TabsContent value="daily-view">
-                <IndexDailyView ticker={index.ticker} />
-              </TabsContent>
-            )}
+            <TabsContent value="daily-view">
+              <IndexDailyView ticker={index.ticker} />
+            </TabsContent>
 
             <TabsContent value="history">
               <IndexRebalanceTimeline logs={logsData} />

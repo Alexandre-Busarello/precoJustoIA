@@ -40,6 +40,45 @@ function isBrazilMarketOpen(): boolean {
 // Importar calculateWeights do index-screening-engine (função privada, precisamos recriar a lógica)
 
 /**
+ * Normaliza uma data para o formato usado por getTodayInBrazil
+ * Garante que a comparação de datas funcione corretamente
+ */
+function normalizeDateForBrazil(date: Date): Date {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+  const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+  const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+  // Criar data UTC que representa 00:00:00 em Brasília (mesma lógica de getTodayInBrazil)
+  const testDate = new Date(Date.UTC(year, month, day, 12, 0, 0, 0));
+  const testParts = formatter.formatToParts(testDate);
+  const testHour = parseInt(testParts.find(p => p.type === 'hour')?.value || '0', 10);
+  const offset = 12 - testHour;
+  const utcHour = 0 + offset;
+  return new Date(Date.UTC(year, month, day, utcHour, 0, 0, 0));
+}
+
+/**
+ * Incrementa uma data normalizada em um dia, mantendo a normalização
+ */
+function incrementNormalizedDate(date: Date): Date {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  // Adicionar 24 horas e normalizar novamente
+  const nextDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+  return normalizeDateForBrazil(nextDate);
+}
+
+/**
  * Busca preços históricos para uma data específica
  * Tenta buscar o último preço disponível até aquela data
  */
@@ -405,7 +444,8 @@ export async function updateCompositionWithHistoricalPrices(
  */
 export async function regenerateRebalanceForDate(
   indexId: string,
-  targetDate: Date
+  targetDate: Date,
+  skipScreening: boolean = false
 ): Promise<{
   success: boolean;
   message: string;
@@ -416,31 +456,18 @@ export async function regenerateRebalanceForDate(
     // Normalizar data usando timezone de Brasília
     let date: Date;
     if (targetDate instanceof Date) {
-      // Se já é uma Date, usar diretamente (assumindo que já está normalizada)
-      date = targetDate;
+      // Normalizar a data para garantir consistência
+      date = normalizeDateForBrazil(targetDate);
     } else {
       const dateStr = String(targetDate);
       if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        // Criar data a partir de string YYYY-MM-DD usando timezone de Brasília
+        // Criar data a partir de string YYYY-MM-DD e normalizar
         const [year, month, day] = dateStr.split('-').map(Number);
-        const formatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: 'America/Sao_Paulo',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        });
-        const now = new Date();
-        const parts = formatter.formatToParts(now);
-        // Criar data UTC que representa o início do dia em Brasília
-        // Usar mesma lógica de getTodayInBrazil
-        const testDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
-        const testParts = formatter.formatToParts(testDate);
-        const testHour = parseInt(testParts.find(p => p.type === 'hour')?.value || '0', 10);
-        const offset = 12 - testHour;
-        const utcHour = 0 + offset;
-        date = new Date(Date.UTC(year, month - 1, day, utcHour, 0, 0, 0));
+        const tempDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+        date = normalizeDateForBrazil(tempDate);
       } else {
-        date = new Date(targetDate);
+        const tempDate = new Date(targetDate);
+        date = normalizeDateForBrazil(tempDate);
       }
     }
     
@@ -606,21 +633,15 @@ export async function regenerateRebalanceForDate(
         console.log(`✅ [REBALANCE DATE] Ponto inicial corrigido (criado ponto virtual com 100 pontos)`);
       }
 
-      // CONTINUAR: Processar dias seguintes (DIA 2 em diante) até hoje
+      // CONTINUAR: Processar dias seguintes (DIA 2 em diante) até o dia anterior
       console.log(`\n📅 [REBALANCE DATE] Continuando processamento dos dias seguintes a partir de ${targetDateStr}`);
       
-      // Determinar data limite (hoje ou ontem se mercado aberto)
-      const todayDate = new Date();
-      todayDate.setHours(0, 0, 0, 0);
-      
-      const marketOpenToday = isBrazilMarketOpen();
-      const endDate = (date.getTime() === todayDate.getTime() && marketOpenToday)
-        ? (() => {
-            const yesterday = new Date(todayDate);
-            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-            return yesterday;
-          })()
-        : todayDate;
+      // Determinar data limite: sempre até o dia anterior ao dia atual
+      // Não recalcular o dia atual pois o mercado pode estar aberto ou os dados podem estar incompletos
+      const todayDate = getTodayInBrazil();
+      // Criar endDate como o dia anterior ao dia atual, normalizado corretamente
+      const endDateTemp = new Date(todayDate.getTime() - 24 * 60 * 60 * 1000);
+      const endDate = normalizeDateForBrazil(endDateTemp);
       
       // Formatar endDate usando timezone de Brasília
       const endDateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -635,17 +656,13 @@ export async function regenerateRebalanceForDate(
       const endDay = parseInt(endDateParts.find(p => p.type === 'day')?.value || '0', 10);
       const endDateStr = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
       
-      if (date.getTime() === todayDate.getTime() && marketOpenToday) {
-        console.log(`📊 [REBALANCE DATE] Mercado aberto hoje, calculando apenas até ${endDateStr} (ontem)`);
-      } else {
-        console.log(`📊 [REBALANCE DATE] Processando de ${targetDateStr} até ${endDateStr}`);
-      }
+      console.log(`📊 [REBALANCE DATE] Processando de ${targetDateStr} até ${endDateStr} (dia anterior ao dia atual)`);
 
       const errors: string[] = [];
       let recalculatedDays = 0;
-      let currentDate = new Date(date);
-      currentDate.setUTCDate(currentDate.getUTCDate() + 1); // Começar do dia seguinte ao DIA 1
-      currentDate.setUTCHours(0, 0, 0, 0);
+      // Normalizar date e depois incrementar um dia
+      let currentDate = normalizeDateForBrazil(date);
+      currentDate = incrementNormalizedDate(currentDate); // Começar do dia seguinte ao DIA 1
 
       // Loop para cada dia útil a partir do DIA 2
       while (currentDate <= endDate) {
@@ -677,11 +694,11 @@ export async function regenerateRebalanceForDate(
             continue;
           }
 
-          // Verificar se é o dia atual e se o mercado está aberto
+          // Verificar se é o dia atual - sempre pular o dia atual
           const isCurrentDateToday = currentDate.getTime() === todayDate.getTime();
-          if (isCurrentDateToday && isBrazilMarketOpen()) {
-            console.log(`⏸️ [REBALANCE DATE] Mercado aberto hoje (${currentDateStr}), pulando cálculo para hoje`);
-            break; // Não calcular pontos para hoje se o mercado estiver aberto
+          if (isCurrentDateToday) {
+            console.log(`⏸️ [REBALANCE DATE] Pulando dia atual (${currentDateStr}) - recalcular apenas até o dia anterior`);
+            break; // Sempre parar antes do dia atual
           }
           
           // Verificar se houve pregão antes de processar
@@ -698,8 +715,7 @@ export async function regenerateRebalanceForDate(
             };
             const dayName = dayNameMap[weekday] || 'feriado';
             console.log(`  ⏸️ [REBALANCE DATE] Pulando ${currentDateStr} (${dayName} - mercado não funcionou)`);
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate = incrementNormalizedDate(currentDate);
             continue;
           }
           
@@ -709,14 +725,15 @@ export async function regenerateRebalanceForDate(
           // Calcular e salvar pontos do dia usando composição atual e preços de fechamento
           console.log(`  📊 [AFTER MARKET] Calculando pontos do dia com composição atual`);
           
-          const afterMarketSuccess = await updateIndexPoints(indexId, currentDate);
+          // CRÍTICO: Usar skipCache=true para garantir preços mais atualizados do Yahoo Finance
+          // O recalculo retroativo não pode usar cache (nem do ibovespa nem dos ativos)
+          const afterMarketSuccess = await updateIndexPoints(indexId, currentDate, false, true);
           
           if (!afterMarketSuccess) {
             const errorMsg = `Falha ao calcular after market para ${currentDateStr}`;
             console.error(`  ❌ [AFTER MARKET] ${errorMsg}`);
             errors.push(errorMsg);
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate = incrementNormalizedDate(currentDate);
             continue;
           }
 
@@ -738,6 +755,13 @@ export async function regenerateRebalanceForDate(
 
           // ========== PASSO 2: REBALANCEAMENTO (se necessário) ==========
           // Executar screening e verificar se precisa rebalancear
+          // Pular se skipScreening = true (apenas recalcular after market)
+          if (skipScreening) {
+            console.log(`  ⏭️ [REBALANCE] Pulando rebalanceamento (modo apenas after market)`);
+            currentDate = incrementNormalizedDate(currentDate);
+            continue;
+          }
+          
           console.log(`  🔄 [REBALANCE] Executando screening para verificar necessidade de rebalanceamento`);
           
           // Buscar composição atual (pode ter mudado em dias anteriores)
@@ -758,8 +782,7 @@ export async function regenerateRebalanceForDate(
               'Rotina de rebalanceamento executada: nenhuma empresa encontrada no screening'
             );
             
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate = incrementNormalizedDate(currentDate);
             continue;
           }
 
@@ -878,9 +901,8 @@ export async function regenerateRebalanceForDate(
           errors.push(`Erro ao processar ${currentDateStr}: ${errorMsg}`);
         }
 
-        // Avançar para o próximo dia útil usando UTC
-        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
-        currentDate.setUTCHours(0, 0, 0, 0);
+        // Avançar para o próximo dia útil mantendo normalização
+        currentDate = incrementNormalizedDate(currentDate);
       }
       
       console.log(`\n📊 [REBALANCE DATE] Processamento concluído: ${recalculatedDays} dias processados após DIA 1, ${errors.length} erros`);
@@ -911,18 +933,12 @@ export async function regenerateRebalanceForDate(
       
       console.log(`🗑️ [REBALANCE DATE] Deletados ${deletedCount.count} pontos existentes`);
 
-      // Determinar data limite (hoje ou ontem se mercado aberto)
-      // Usar getTodayInBrazil para garantir timezone correto
+      // Determinar data limite: sempre até o dia anterior ao dia atual
+      // Não recalcular o dia atual pois o mercado pode estar aberto ou os dados podem estar incompletos
       const todayDate = getTodayInBrazil();
-      
-      const marketOpenToday = isBrazilMarketOpen();
-      const endDate = (date.getTime() === todayDate.getTime() && marketOpenToday)
-        ? (() => {
-            const yesterday = new Date(todayDate);
-            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-            return yesterday;
-          })()
-        : todayDate;
+      // Criar endDate como o dia anterior ao dia atual, normalizado corretamente
+      const endDateTemp = new Date(todayDate.getTime() - 24 * 60 * 60 * 1000);
+      const endDate = normalizeDateForBrazil(endDateTemp);
       
       // Formatar endDate usando timezone de Brasília
       const endDateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -937,16 +953,18 @@ export async function regenerateRebalanceForDate(
       const endDay = parseInt(endDateParts.find(p => p.type === 'day')?.value || '0', 10);
       const endDateStr = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
       
-      if (date.getTime() === todayDate.getTime() && marketOpenToday) {
-        console.log(`📊 [REBALANCE DATE] Mercado aberto hoje, calculando apenas até ${endDateStr} (ontem)`);
-      } else {
-        console.log(`📊 [REBALANCE DATE] Recalculando de ${targetDateStr} até ${endDateStr}`);
-      }
+      console.log(`📊 [REBALANCE DATE] Recalculando de ${targetDateStr} até ${endDateStr} (dia anterior ao dia atual)`);
 
       const errors: string[] = [];
       let recalculatedDays = 0;
-      let currentDate = new Date(date);
-      currentDate.setUTCHours(0, 0, 0, 0);
+      // Normalizar currentDate usando a mesma lógica de getTodayInBrazil para garantir comparação correta
+      const todayDateCheck = getTodayInBrazil();
+      let currentDate = normalizeDateForBrazil(date);
+
+      // Debug: log das datas para verificar normalização
+      console.log(`🔍 [REBALANCE DATE] Debug - currentDate: ${currentDate.toISOString()}, endDate: ${endDate.toISOString()}`);
+      console.log(`🔍 [REBALANCE DATE] Debug - currentDate <= endDate: ${currentDate <= endDate}`);
+      console.log(`🔍 [REBALANCE DATE] Debug - currentDate.getTime(): ${currentDate.getTime()}, endDate.getTime(): ${endDate.getTime()}`);
 
       // Loop para cada dia útil a partir da data alvo
       while (currentDate <= endDate) {
@@ -966,6 +984,8 @@ export async function regenerateRebalanceForDate(
           const weekday = dateParts.find(p => p.type === 'weekday')?.value || '';
           const currentDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           
+          console.log(`🔍 [REBALANCE DATE] Verificando dia ${currentDateStr} (${weekday})`);
+          
           // Verificar se é dia útil usando weekday já formatado
           const dayMap: Record<string, number> = {
             Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
@@ -973,17 +993,17 @@ export async function regenerateRebalanceForDate(
           const dayOfWeek = dayMap[weekday] ?? 0;
           
           if (dayOfWeek === 0 || dayOfWeek === 6) {
-            currentDate.setUTCDate(currentDate.getUTCDate() + 1);
-            currentDate.setUTCHours(0, 0, 0, 0);
+            console.log(`  ⏭️ [REBALANCE DATE] Pulando ${currentDateStr} (${weekday} - fim de semana)`);
+            // Incrementar data mantendo normalização
+            currentDate = incrementNormalizedDate(currentDate);
             continue;
           }
 
-          // Verificar se é o dia atual e se o mercado está aberto
-          const todayDateCheck = getTodayInBrazil();
+          // Verificar se é o dia atual - sempre pular o dia atual
           const isCurrentDateToday = currentDate.getTime() === todayDateCheck.getTime();
-          if (isCurrentDateToday && isBrazilMarketOpen()) {
-            console.log(`⏸️ [REBALANCE DATE] Mercado aberto hoje (${currentDateStr}), pulando cálculo para hoje`);
-            break; // Não calcular pontos para hoje se o mercado estiver aberto
+          if (isCurrentDateToday) {
+            console.log(`⏸️ [REBALANCE DATE] Pulando dia atual (${currentDateStr}) - recalcular apenas até o dia anterior`);
+            break; // Sempre parar antes do dia atual
           }
           
           // Verificar se houve pregão antes de processar
@@ -1000,8 +1020,7 @@ export async function regenerateRebalanceForDate(
             };
             const dayName = dayNameMap[weekday] || 'feriado';
             console.log(`  ⏸️ [REBALANCE DATE] Pulando ${currentDateStr} (${dayName} - mercado não funcionou)`);
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate = incrementNormalizedDate(currentDate);
             continue;
           }
           
@@ -1011,14 +1030,15 @@ export async function regenerateRebalanceForDate(
           // Calcular e salvar pontos do dia usando composição atual e preços de fechamento
           console.log(`  📊 [AFTER MARKET] Calculando pontos do dia com composição atual`);
           
-          const afterMarketSuccess = await updateIndexPoints(indexId, currentDate);
+          // CRÍTICO: Usar skipCache=true para garantir preços mais atualizados do Yahoo Finance
+          // O recalculo retroativo não pode usar cache (nem do ibovespa nem dos ativos)
+          const afterMarketSuccess = await updateIndexPoints(indexId, currentDate, false, true);
           
           if (!afterMarketSuccess) {
             const errorMsg = `Falha ao calcular after market para ${currentDateStr}`;
             console.error(`  ❌ [AFTER MARKET] ${errorMsg}`);
             errors.push(errorMsg);
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate = incrementNormalizedDate(currentDate);
             continue;
           }
 
@@ -1040,6 +1060,13 @@ export async function regenerateRebalanceForDate(
 
           // ========== PASSO 2: REBALANCEAMENTO (se necessário) ==========
           // Executar screening e verificar se precisa rebalancear
+          // Pular se skipScreening = true (apenas recalcular after market)
+          if (skipScreening) {
+            console.log(`  ⏭️ [REBALANCE] Pulando rebalanceamento (modo apenas after market)`);
+            currentDate = incrementNormalizedDate(currentDate);
+            continue;
+          }
+          
           console.log(`  🔄 [REBALANCE] Executando screening para verificar necessidade de rebalanceamento`);
           
           // Buscar composição atual (pode ter mudado em dias anteriores)
@@ -1060,8 +1087,7 @@ export async function regenerateRebalanceForDate(
               'Rotina de rebalanceamento executada: nenhuma empresa encontrada no screening'
             );
             
-            currentDate.setDate(currentDate.getDate() + 1);
-            currentDate.setHours(0, 0, 0, 0);
+            currentDate = incrementNormalizedDate(currentDate);
             continue;
           }
 
@@ -1180,9 +1206,8 @@ export async function regenerateRebalanceForDate(
           errors.push(`Erro ao processar ${currentDateStr}: ${errorMsg}`);
         }
 
-        // Avançar para o próximo dia útil usando UTC
-        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
-        currentDate.setUTCHours(0, 0, 0, 0);
+        // Avançar para o próximo dia útil mantendo normalização
+        currentDate = incrementNormalizedDate(currentDate);
       }
       
       console.log(`\n📊 [REBALANCE DATE] Processamento concluído: ${recalculatedDays} dias processados, ${errors.length} erros`);

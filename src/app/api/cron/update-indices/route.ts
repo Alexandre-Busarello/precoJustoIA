@@ -723,7 +723,9 @@ async function runMarkToMarketJob(): Promise<{
       }
 
       // 2. Calcular pontos para hoje
-      const success = await updateIndexPoints(index.id, today);
+      // CRÍTICO: Usar skipCache=true para garantir preços mais atualizados do Yahoo Finance
+      // O cron de after market não pode usar cache (nem do ibovespa nem dos ativos)
+      const success = await updateIndexPoints(index.id, today, false, true);
       
       if (success) {
         successCount++;

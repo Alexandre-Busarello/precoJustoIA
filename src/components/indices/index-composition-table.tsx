@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CompanyLogo } from '@/components/company-logo';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
-import { TrendingUp, TrendingDown, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import Link from 'next/link';
 
 interface CompositionAsset {
@@ -18,10 +18,6 @@ interface CompositionAsset {
   logoUrl: string | null;
   sector: string | null;
   targetWeight: number;
-  entryPrice: number;
-  entryDate: string;
-  currentPrice: number;
-  entryReturn: number;
   dividendYield: number | null;
 }
 
@@ -31,13 +27,6 @@ interface IndexCompositionTableProps {
 
 export function IndexCompositionTable({ composition }: IndexCompositionTableProps) {
   const { isPremium } = usePremiumStatus();
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
 
   const formatPercentage = (value: number) => {
     return `${(value * 100).toFixed(1)}%`;
@@ -72,27 +61,12 @@ export function IndexCompositionTable({ composition }: IndexCompositionTableProp
                   Peso
                 </th>
                 <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Preço Entrada
-                </th>
-                <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Preço Atual
-                </th>
-                <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Retorno
-                </th>
-                <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400">
                   DY
                 </th>
               </tr>
             </thead>
             <tbody>
               {visibleAssets.map((asset) => {
-                const isPositive = asset.entryReturn >= 0;
-                const ReturnIcon = isPositive ? TrendingUp : TrendingDown;
-                const returnColor = isPositive 
-                  ? 'text-green-600 dark:text-green-400' 
-                  : 'text-red-600 dark:text-red-400';
-
                 return (
                   <tr key={asset.ticker} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-2">
@@ -112,22 +86,8 @@ export function IndexCompositionTable({ composition }: IndexCompositionTableProp
                         </div>
                       </Link>
                     </td>
-                    <td className="text-right py-3 px-2">
-                      {formatPercentage(asset.targetWeight)}
-                    </td>
-                    <td className="text-right py-3 px-2 text-sm">
-                      {formatCurrency(asset.entryPrice)}
-                    </td>
                     <td className="text-right py-3 px-2 font-medium">
-                      {formatCurrency(asset.currentPrice)}
-                    </td>
-                    <td className={`text-right py-3 px-2 ${returnColor}`}>
-                      <div className="flex items-center justify-end gap-1">
-                        <ReturnIcon className="h-4 w-4" />
-                        <span className="font-medium">
-                          {isPositive ? '+' : ''}{asset.entryReturn.toFixed(2)}%
-                        </span>
-                      </div>
+                      {formatPercentage(asset.targetWeight)}
                     </td>
                     <td className="text-right py-3 px-2 text-sm">
                       {asset.dividendYield !== null 
@@ -153,15 +113,6 @@ export function IndexCompositionTable({ composition }: IndexCompositionTableProp
                         <div className="text-xs bg-gray-200 h-3 w-24 rounded mt-1" />
                       </div>
                     </div>
-                  </td>
-                  <td className="text-right py-3 px-2">
-                    <div className="bg-gray-300 h-4 w-12 rounded ml-auto" />
-                  </td>
-                  <td className="text-right py-3 px-2">
-                    <div className="bg-gray-300 h-4 w-16 rounded ml-auto" />
-                  </td>
-                  <td className="text-right py-3 px-2">
-                    <div className="bg-gray-300 h-4 w-16 rounded ml-auto" />
                   </td>
                   <td className="text-right py-3 px-2">
                     <div className="bg-gray-300 h-4 w-12 rounded ml-auto" />

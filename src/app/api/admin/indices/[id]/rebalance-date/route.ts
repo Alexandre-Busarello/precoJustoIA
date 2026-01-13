@@ -64,7 +64,9 @@ export async function POST(
     console.log(`🔄 [ADMIN REBALANCE DATE] Re-generating rebalance for index ${id} on ${targetDate.toISOString().split('T')[0]}`);
 
     // Executar re-geração
-    const result = await regenerateRebalanceForDate(id, targetDate);
+    // CRÍTICO: skipScreening=true para fazer apenas after market (sem screening/rebalanceamento)
+    // Isso garante que apenas os pontos sejam recalculados com preços atualizados do Yahoo Finance
+    const result = await regenerateRebalanceForDate(id, targetDate, true);
 
     if (result.success) {
       return NextResponse.json({

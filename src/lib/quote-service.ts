@@ -287,10 +287,15 @@ export async function ensureTodayPriceBackground(ticker: string): Promise<void> 
 /**
  * Busca preço histórico do Yahoo Finance para uma data específica
  * Prioriza Yahoo Finance, usa banco apenas como fallback
+ * 
+ * @param ticker Ticker symbol
+ * @param targetDate Data alvo para buscar o preço
+ * @param skipCache Se true, bypassa o cache do Yahoo Finance (para after market cron)
  */
 export async function getYahooHistoricalPrice(
   ticker: string,
-  targetDate: Date
+  targetDate: Date,
+  skipCache: boolean = false
 ): Promise<number | null> {
   try {
     const yahooSymbol = `${ticker}.SA`;
@@ -301,9 +306,7 @@ export async function getYahooHistoricalPrice(
     const endDate = new Date(targetDate);
     endDate.setDate(endDate.getDate() + 1); // Até o dia seguinte
 
-    // Para realtime-return, sempre usar sem cache
-    // Para outros casos, usar com cache
-    const skipCache = false; // getYahooHistoricalPrice não é usado pelo realtime-return
+    // Usar skipCache quando fornecido (para after market cron que precisa de preços atualizados)
     const result = skipCache
       ? await getChartWithoutCache(yahooSymbol, {
           period1: startDate,

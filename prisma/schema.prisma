@@ -1430,17 +1430,18 @@ model IndexComposition {
 }
 
 model IndexHistoryPoints {
-  id                  String          @id @default(uuid())
-  indexId             String          @map("index_id")
-  date                DateTime        @db.Date
-  points              Float
-  dailyChange         Float           @map("daily_change")
-  currentYield        Float?          @map("current_yield")
-  createdAt           DateTime        @default(now()) @map("created_at")
-  dividendsByTicker   Json?           @map("dividends_by_ticker")
-  dividendsReceived   Decimal?        @map("dividends_received") @db.Decimal(15, 6)
-  compositionSnapshot Json?           @map("composition_snapshot")
-  definition          IndexDefinition @relation(fields: [indexId], references: [id], onDelete: Cascade)
+  id                        String          @id @default(uuid())
+  indexId                   String          @map("index_id")
+  date                      DateTime        @db.Date
+  points                    Float
+  dailyChange               Float           @map("daily_change")
+  currentYield              Float?          @map("current_yield")
+  createdAt                 DateTime        @default(now()) @map("created_at")
+  dividendsByTicker         Json?           @map("dividends_by_ticker")
+  dividendsReceived         Decimal?        @map("dividends_received") @db.Decimal(15, 6)
+  compositionSnapshot       Json?           @map("composition_snapshot")
+  dailyContributionsByTicker Json?          @map("daily_contributions_by_ticker")
+  definition                IndexDefinition @relation(fields: [indexId], references: [id], onDelete: Cascade)
 
   @@unique([indexId, date])
   @@index([indexId, date])

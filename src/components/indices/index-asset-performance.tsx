@@ -183,7 +183,7 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
           )}
         </CardTitle>
         <CardDescription>
-          Rastreamento completo de rentabilidade de cada ativo que passou pelo índice
+          Contribuição histórica de cada ativo para a rentabilidade acumulada do índice
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -223,7 +223,6 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
               className="text-sm border rounded px-2 py-1"
             >
               <option value="entryDate">Data de Entrada</option>
-              <option value="totalReturn">Rentabilidade</option>
               <option value="contribution">Contribuição</option>
               <option value="days">Dias no Índice</option>
             </select>
@@ -246,9 +245,6 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
                   <TableHead>Entrada</TableHead>
                   <TableHead>Saída</TableHead>
                   <TableHead>Dias</TableHead>
-                  <TableHead>Preço Entrada</TableHead>
-                  <TableHead>Preço Saída</TableHead>
-                  <TableHead className="text-right">Rentabilidade</TableHead>
                   <TableHead className="text-right">Contribuição</TableHead>
                   <TableHead className="text-right">Peso Médio</TableHead>
                 </TableRow>
@@ -269,18 +265,11 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
                       {perf.exitDate ? new Date(perf.exitDate).toLocaleDateString('pt-BR') : '-'}
                     </TableCell>
                     <TableCell>{perf.daysInIndex}</TableCell>
-                    <TableCell>{formatCurrency(perf.entryPrice)}</TableCell>
-                    <TableCell>
-                      {perf.exitPrice ? formatCurrency(perf.exitPrice) : '-'}
-                    </TableCell>
-                    <TableCell className={`text-right font-medium ${getReturnColor(perf.totalReturn)}`}>
+                    <TableCell className={`text-right font-medium ${getReturnColor(perf.contributionToIndex)}`}>
                       <div className="flex items-center justify-end gap-1">
-                        {getReturnIcon(perf.totalReturn)}
-                        {formatPercent(perf.totalReturn)}
+                        {getReturnIcon(perf.contributionToIndex)}
+                        {formatPercent(perf.contributionToIndex)}
                       </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatPercent(perf.contributionToIndex)}
                     </TableCell>
                     <TableCell className="text-right">
                       {(perf.averageWeight * 100).toFixed(2)}%
@@ -307,15 +296,6 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
                     </TableCell>
                     <TableCell>
                       <div className="bg-gray-300 h-4 w-12 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-16 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-16 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-gray-300 h-4 w-16 rounded ml-auto" />
                     </TableCell>
                     <TableCell>
                       <div className="bg-gray-300 h-4 w-16 rounded ml-auto" />

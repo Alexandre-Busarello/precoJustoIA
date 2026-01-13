@@ -25,6 +25,7 @@ export interface IndexDailyReturn {
   dividendsReceived: number; // Total de dividendos recebidos (em pontos)
   dividendsByTicker: Map<string, number>; // Detalhamento por ticker
   compositionSnapshot?: Record<string, CompositionSnapshot>; // Snapshot da composição neste dia
+  dailyContributionsByTicker?: Record<string, number>; // Contribuição diária de cada ativo (em pontos ou %)
 }
 
 /**
@@ -205,11 +206,14 @@ async function getDividendsForDate(
  * onde:
  * - w_{i,t-1}: Peso do ativo no fechamento do dia anterior
  * - r_{i,t}: Variação percentual do preço do ativo hoje (incluindo ajuste por dividendos)
+ * 
+ * @param skipCache Se true, bypassa o cache do Yahoo Finance (para after market cron)
  */
 export async function calculateDailyReturn(
   indexId: string,
   date: Date,
-  dividends?: Map<string, number>
+  dividends?: Map<string, number>,
+  skipCache: boolean = false
 ): Promise<IndexDailyReturn | null> {
   try {
     // 1. Buscar composição atual do índice
@@ -292,7 +296,7 @@ export async function calculateDailyReturn(
       
       // Buscar preços do Yahoo Finance para cada ticker na data exata
       for (const ticker of tickers) {
-        const yahooPrice = await getYahooHistoricalPrice(ticker, targetDate);
+        const yahooPrice = await getYahooHistoricalPrice(ticker, targetDate, skipCache);
         if (yahooPrice && yahooPrice > 0) {
           pricesToday.set(ticker, {
             ticker,
@@ -398,7 +402,7 @@ export async function calculateDailyReturn(
       // Se processamento retroativo, SEMPRE buscar do Yahoo Finance para o dia anterior exato
       if (isRetroactiveProcessing) {
         console.log(`📊 [INDEX ENGINE] Retroactive processing: Fetching yesterday price from Yahoo Finance for ${comp.assetTicker} on ${yesterday.toISOString().split('T')[0]}`);
-        const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday);
+        const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday, skipCache);
         if (yahooPrice && yahooPrice > 0) {
           // Validação: Se o ativo entrou no dia anterior (entryDate = yesterday), 
           // o preço de ontem deve ser igual ao entryPrice
@@ -428,7 +432,7 @@ export async function calculateDailyReturn(
         }
       } else {
         // Processamento em tempo real: tentar Yahoo Finance primeiro
-        const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday);
+        const yahooPrice = await getYahooHistoricalPrice(comp.assetTicker, yesterday, skipCache);
         if (yahooPrice && yahooPrice > 0) {
           pricesYesterday.set(comp.assetTicker, yahooPrice);
           console.log(`✅ [INDEX ENGINE] Using Yahoo Finance price for ${comp.assetTicker}: ${yahooPrice.toFixed(2)}`);
@@ -520,6 +524,7 @@ export async function calculateDailyReturn(
     let totalWeight = 0;
     let totalDividendsReceived = 0; // Em pontos do índice
     const dividendsByTicker = new Map<string, number>();
+    const dailyContributionsByTicker = new Map<string, number>(); // Contribuição diária de cada ativo (em %)
 
     console.log(`📊 [INDEX ENGINE] Calculating daily return for ${date.toISOString().split('T')[0]} (${isRetroactiveProcessing ? 'RETROACTIVE' : 'REAL-TIME'})`);
     console.log(`📊 [INDEX ENGINE] Previous points: ${previousPoints.toFixed(4)}`);
@@ -585,6 +590,9 @@ export async function calculateDailyReturn(
       // Contribuição ponderada: w_{i,t-1} × r_{i,t}
       const weightedContribution = weight * dailyReturn;
       totalReturn += weightedContribution;
+      
+      // Armazenar contribuição diária deste ativo (em porcentagem)
+      dailyContributionsByTicker.set(comp.assetTicker, weightedContribution * 100);
       
       // Log detalhado do retorno calculado
       if (dividend > 0) {
@@ -701,6 +709,12 @@ export async function calculateDailyReturn(
       }
     }
 
+    // Converter Map de contribuições para objeto Record
+    const dailyContributionsByTickerRecord: Record<string, number> = {};
+    dailyContributionsByTicker.forEach((contribution, ticker) => {
+      dailyContributionsByTickerRecord[ticker] = contribution;
+    });
+
     return {
       date,
       dailyReturn: totalReturn,
@@ -708,7 +722,8 @@ export async function calculateDailyReturn(
       currentYield,
       dividendsReceived: totalDividendsReceived,
       dividendsByTicker,
-      compositionSnapshot: Object.keys(compositionSnapshot).length > 0 ? compositionSnapshot : undefined
+      compositionSnapshot: Object.keys(compositionSnapshot).length > 0 ? compositionSnapshot : undefined,
+      dailyContributionsByTicker: Object.keys(dailyContributionsByTickerRecord).length > 0 ? dailyContributionsByTickerRecord : undefined
     };
   } catch (error) {
     console.error(`❌ [INDEX ENGINE] Error calculating daily return for index ${indexId}:`, error);
@@ -718,11 +733,14 @@ export async function calculateDailyReturn(
 
 /**
  * Atualiza pontos do índice para uma data específica
+ * 
+ * @param skipCache Se true, bypassa o cache do Yahoo Finance (para after market cron)
  */
 export async function updateIndexPoints(
   indexId: string,
   date: Date,
-  forceUpdate: boolean = false
+  forceUpdate: boolean = false,
+  skipCache: boolean = false
 ): Promise<boolean> {
   try {
     // Verificar se houve pregão antes de calcular pontos
@@ -757,7 +775,7 @@ export async function updateIndexPoints(
       return false;
     }
     
-    const dailyReturn = await calculateDailyReturn(indexId, date);
+    const dailyReturn = await calculateDailyReturn(indexId, date, undefined, skipCache);
     
     if (!dailyReturn) {
       return false;
@@ -857,12 +875,42 @@ export async function updateIndexPoints(
       updateData.compositionSnapshot = compositionSnapshotJson;
     }
 
+    // Incluir contribuições diárias por ativo
+    if (dailyReturn.dailyContributionsByTicker && Object.keys(dailyReturn.dailyContributionsByTicker).length > 0) {
+      updateData.dailyContributionsByTicker = dailyReturn.dailyContributionsByTicker;
+    }
+
     if (existing) {
       // Atualizar registro existente
       await prisma.indexHistoryPoints.update({
         where: { id: existing.id },
         data: updateData
       });
+      
+      // Garantir que as contribuições batam com o dailyChange
+      // Se temos snapshots, recalcular contribuições garantindo que a soma bata
+      if (dailyReturn.compositionSnapshot && updateData.dailyChange !== null) {
+        // Buscar snapshot anterior
+        const previousPoint = await prisma.indexHistoryPoints.findFirst({
+          where: {
+            indexId,
+            date: { lt: date }
+          },
+          orderBy: { date: 'desc' },
+          select: { compositionSnapshot: true }
+        });
+        
+        if (previousPoint?.compositionSnapshot) {
+          await calculateAndPersistDailyContributions(
+            indexId,
+            date,
+            dailyReturn.compositionSnapshot,
+            previousPoint.compositionSnapshot as any,
+            dividendsByTickerJson || null,
+            updateData.dailyChange // Passar dailyChange para garantir que bata
+          );
+        }
+      }
     } else {
       // Criar novo registro
       await prisma.indexHistoryPoints.create({
@@ -872,6 +920,31 @@ export async function updateIndexPoints(
           ...updateData
         }
       });
+      
+      // Garantir que as contribuições batam com o dailyChange
+      // Se temos snapshots, recalcular contribuições garantindo que a soma bata
+      if (dailyReturn.compositionSnapshot && updateData.dailyChange !== null) {
+        // Buscar snapshot anterior
+        const previousPoint = await prisma.indexHistoryPoints.findFirst({
+          where: {
+            indexId,
+            date: { lt: date }
+          },
+          orderBy: { date: 'desc' },
+          select: { compositionSnapshot: true }
+        });
+        
+        if (previousPoint?.compositionSnapshot) {
+          await calculateAndPersistDailyContributions(
+            indexId,
+            date,
+            dailyReturn.compositionSnapshot,
+            previousPoint.compositionSnapshot as any,
+            dividendsByTickerJson || null,
+            updateData.dailyChange // Passar dailyChange para garantir que bata
+          );
+        }
+      }
 
       // Verificar se este é o primeiro ponto histórico e se não começa em 100
       // Se não começar em 100, criar um ponto virtual no dia anterior com 100 pontos
@@ -1135,7 +1208,8 @@ export async function recalculateIndexWithDividends(
         }
 
         // Recalcular retorno diário incluindo dividendos
-        const dailyReturn = await calculateDailyReturn(indexId, pointDate, dividends);
+        // Para recálculo retroativo, usar cache (skipCache = false)
+        const dailyReturn = await calculateDailyReturn(indexId, pointDate, dividends, false);
 
         if (!dailyReturn) {
           errors.push(`Failed to calculate return for ${pointDate.toISOString()}`);
@@ -1320,6 +1394,238 @@ export interface AssetPerformance {
 }
 
 /**
+ * Processa e persiste contribuições retroativas para todos os dias que não têm o campo preenchido
+ */
+async function processRetroactiveContributions(indexId: string): Promise<void> {
+  try {
+    console.log(`🔄 [INDEX ENGINE] Starting processRetroactiveContributions for index ${indexId}`);
+    
+    // Buscar todos os pontos históricos ordenados por data
+    const allPoints = await prisma.indexHistoryPoints.findMany({
+      where: { indexId },
+      orderBy: { date: 'asc' },
+      select: {
+        id: true,
+        date: true,
+        compositionSnapshot: true,
+        dividendsByTicker: true,
+        dailyContributionsByTicker: true,
+        dailyChange: true
+      }
+    });
+
+    console.log(`🔄 [INDEX ENGINE] Found ${allPoints.length} total points to check`);
+
+    let processedCount = 0;
+    let skippedCount = 0;
+    
+    // GARANTIR QUE O PRIMEIRO PONTO TENHA SNAPSHOT VÁLIDO
+    // Se não tiver, reconstruir usando os logs de rebalanceamento do primeiro dia
+    if (allPoints.length > 0) {
+      const firstPoint = allPoints[0];
+      const hasValidSnapshot = firstPoint.compositionSnapshot && 
+        Object.keys(firstPoint.compositionSnapshot as any || {}).length > 0;
+      
+      if (!hasValidSnapshot) {
+        console.log(`⚠️ [INDEX ENGINE] First point missing snapshot, reconstructing from rebalance logs...`);
+        
+        // Buscar logs de ENTRY do primeiro dia
+        const firstDayLogs = await prisma.indexRebalanceLog.findMany({
+          where: {
+            indexId,
+            date: firstPoint.date,
+            action: 'ENTRY'
+          },
+          orderBy: {
+            createdAt: 'asc' // Ordenar por ordem de criação para manter ordem original
+          }
+        });
+        
+        if (firstDayLogs.length > 0) {
+          // Extrair tickers dos logs
+          const tickers = firstDayLogs.map(log => log.ticker);
+          
+          // Buscar preços históricos do primeiro dia
+          const { getHistoricalPricesForDate } = await import('./index-rebalance-date');
+          const historicalPrices = await getHistoricalPricesForDate(tickers, firstPoint.date);
+          
+          // Calcular pesos (iguais para todos os ativos)
+          const equalWeight = 1.0 / tickers.length;
+          
+          // Criar snapshot do primeiro dia
+          const reconstructedSnapshot: Record<string, any> = {};
+          for (const log of firstDayLogs) {
+            const historicalPrice = historicalPrices.get(log.ticker);
+            
+            if (historicalPrice && historicalPrice > 0) {
+              reconstructedSnapshot[log.ticker] = {
+                weight: equalWeight,
+                price: historicalPrice, // Preço de fechamento do primeiro dia
+                entryPrice: historicalPrice, // No primeiro dia, entryPrice = price
+                entryDate: firstPoint.date
+              };
+            } else {
+              console.warn(`⚠️ [INDEX ENGINE] No historical price found for ${log.ticker} on ${firstPoint.date.toISOString().split('T')[0]}, skipping`);
+            }
+          }
+          
+          if (Object.keys(reconstructedSnapshot).length > 0) {
+            // Atualizar o primeiro ponto com o snapshot reconstruído
+            await prisma.indexHistoryPoints.updateMany({
+              where: {
+                indexId,
+                date: firstPoint.date
+              },
+              data: {
+                compositionSnapshot: reconstructedSnapshot
+              }
+            });
+            
+            console.log(`✅ [INDEX ENGINE] Reconstructed snapshot for first day ${firstPoint.date.toISOString().split('T')[0]}: ${Object.keys(reconstructedSnapshot).length} assets`);
+            
+            // Atualizar o objeto firstPoint em memória para uso posterior
+            (firstPoint as any).compositionSnapshot = reconstructedSnapshot;
+          } else {
+            console.warn(`⚠️ [INDEX ENGINE] Could not reconstruct snapshot: no valid prices found`);
+          }
+        } else {
+          console.warn(`⚠️ [INDEX ENGINE] No ENTRY logs found for first day ${firstPoint.date.toISOString().split('T')[0]}`);
+        }
+      }
+      
+      // TRATAR CONTRIBUIÇÕES DO PRIMEIRO DIA
+      // O primeiro dia não tem snapshot anterior, então contribuições são zero
+      const hasContributions = firstPoint.dailyContributionsByTicker && 
+        Object.keys(firstPoint.dailyContributionsByTicker as any || {}).length > 0;
+      
+      if (!hasContributions && firstPoint.compositionSnapshot) {
+        const firstSnapshot = firstPoint.compositionSnapshot as any;
+        const isFirstDay = firstPoint.dailyChange === null || firstPoint.dailyChange === 0;
+        
+        if (isFirstDay && Object.keys(firstSnapshot).length > 0) {
+          // Para o primeiro dia, todas as contribuições são zero (não há variação diária)
+          const zeroContributions: Record<string, number> = {};
+          for (const ticker of Object.keys(firstSnapshot)) {
+            zeroContributions[ticker] = 0;
+          }
+          
+          await prisma.indexHistoryPoints.updateMany({
+            where: {
+              indexId,
+              date: firstPoint.date
+            },
+            data: {
+              dailyContributionsByTicker: zeroContributions
+            }
+          });
+          
+          console.log(`✅ [INDEX ENGINE] Set zero contributions for first day ${firstPoint.date.toISOString().split('T')[0]}: ${Object.keys(zeroContributions).length} assets`);
+          processedCount++;
+        }
+      }
+    }
+    
+    // Processar cada ponto que não tem contribuições salvas (começando do segundo ponto)
+    for (let i = 1; i < allPoints.length; i++) {
+      const currentPoint = allPoints[i];
+      const previousPoint = allPoints[i - 1];
+      
+      // Verificar se precisa calcular contribuições
+      const hasContributions = currentPoint.dailyContributionsByTicker && 
+        Object.keys(currentPoint.dailyContributionsByTicker as any || {}).length > 0;
+      
+      if (!hasContributions && currentPoint.compositionSnapshot) {
+        const currentSnapshot = currentPoint.compositionSnapshot as any;
+        
+        // Se o primeiro ponto não tem snapshot válido, tentar reconstruir usando logs
+        let previousSnapshot = previousPoint.compositionSnapshot as any;
+        
+        if (!previousSnapshot || Object.keys(previousSnapshot || {}).length === 0) {
+          console.log(`⚠️ [INDEX ENGINE] Previous point (${previousPoint.date.toISOString().split('T')[0]}) missing snapshot, attempting to reconstruct from logs...`);
+          
+          // Buscar logs de ENTRY do dia anterior
+          const previousDayLogs = await prisma.indexRebalanceLog.findMany({
+            where: {
+              indexId,
+              date: previousPoint.date,
+              action: 'ENTRY'
+            },
+            orderBy: {
+              createdAt: 'asc'
+            }
+          });
+          
+          if (previousDayLogs.length > 0) {
+            const tickers = previousDayLogs.map(log => log.ticker);
+            const { getHistoricalPricesForDate } = await import('./index-rebalance-date');
+            const historicalPrices = await getHistoricalPricesForDate(tickers, previousPoint.date);
+            
+            const equalWeight = 1.0 / tickers.length;
+            const reconstructedPreviousSnapshot: Record<string, any> = {};
+            
+            for (const log of previousDayLogs) {
+              const historicalPrice = historicalPrices.get(log.ticker);
+              
+              if (historicalPrice && historicalPrice > 0) {
+                reconstructedPreviousSnapshot[log.ticker] = {
+                  weight: equalWeight,
+                  price: historicalPrice,
+                  entryPrice: historicalPrice,
+                  entryDate: previousPoint.date
+                };
+              }
+            }
+            
+            if (Object.keys(reconstructedPreviousSnapshot).length > 0) {
+              previousSnapshot = reconstructedPreviousSnapshot;
+              
+              // Atualizar o primeiro ponto no banco também
+              await prisma.indexHistoryPoints.updateMany({
+                where: {
+                  indexId,
+                  date: previousPoint.date
+                },
+                data: {
+                  compositionSnapshot: reconstructedPreviousSnapshot
+                }
+              });
+              
+              console.log(`✅ [INDEX ENGINE] Reconstructed previous snapshot for ${previousPoint.date.toISOString().split('T')[0]}: ${Object.keys(reconstructedPreviousSnapshot).length} assets`);
+            }
+          }
+        }
+        
+        // Agora calcular contribuições usando os snapshots (reconstruídos ou originais)
+        if (Object.keys(currentSnapshot).length > 0 && previousSnapshot && Object.keys(previousSnapshot).length > 0) {
+          processedCount++;
+          if (processedCount % 10 === 0) {
+            console.log(`🔄 [INDEX ENGINE] Processing contribution ${processedCount} for date ${currentPoint.date.toISOString().split('T')[0]}`);
+          }
+          await calculateAndPersistDailyContributions(
+            indexId,
+            currentPoint.date,
+            currentSnapshot,
+            previousSnapshot,
+            currentPoint.dividendsByTicker as Record<string, number> | null,
+            currentPoint.dailyChange // Passar dailyChange para garantir que a soma bata
+          );
+        } else {
+          skippedCount++;
+          console.warn(`⚠️ [INDEX ENGINE] Skipping ${currentPoint.date.toISOString().split('T')[0]}: invalid snapshots`);
+        }
+      } else {
+        skippedCount++;
+      }
+    }
+    
+    console.log(`✅ [INDEX ENGINE] processRetroactiveContributions completed: ${processedCount} processed, ${skippedCount} skipped`);
+  } catch (error) {
+    console.error(`❌ [INDEX ENGINE] Error processing retroactive contributions:`, error);
+    // Não lançar erro para não quebrar o cálculo principal
+  }
+}
+
+/**
  * Calcula performance individual de um ativo usando snapshots históricos
  */
 export async function calculateAssetPerformance(
@@ -1336,7 +1642,8 @@ export async function calculateAssetPerformance(
         compositionSnapshot: true,
         points: true,
         dailyChange: true,
-        dividendsByTicker: true // Incluir dividendos para cálculo correto
+        dividendsByTicker: true, // Incluir dividendos para cálculo correto
+        dailyContributionsByTicker: true // Contribuições diárias por ativo (quando disponível)
       }
     });
 
@@ -1408,25 +1715,29 @@ export async function calculateAssetPerformance(
       ? ((exitPrice - finalEntryPrice) / finalEntryPrice) * 100
       : null;
 
-    // NOVA ABORDAGEM: Dividir o retorno total do índice proporcionalmente
-    // por peso médio do ativo e dias que o ativo esteve na carteira
+    // CALCULAR CONTRIBUIÇÃO REAL: Somar contribuições diárias do ativo
+    // Contribuição diária = peso × retorno_diário
+    // A soma de todas as contribuições diárias deve ser exatamente igual à rentabilidade acumulada do índice
     // 
-    // Buscar o último ponto histórico para obter o retorno total do índice
-    const lastHistoryPoint = await prisma.indexHistoryPoints.findFirst({
+    // Buscar todos os pontos históricos ordenados por data para calcular contribuição diária
+    const allHistoryPoints = await prisma.indexHistoryPoints.findMany({
       where: { indexId },
-      orderBy: { date: 'desc' },
+      orderBy: { date: 'asc' },
       select: {
-        points: true,
-        date: true
+        date: true,
+        dailyChange: true,
+        compositionSnapshot: true,
+        points: true
       }
     });
 
-    if (!lastHistoryPoint) {
+    if (allHistoryPoints.length === 0) {
       return null; // Não há histórico do índice
     }
 
     // Calcular retorno total do índice desde o início (base 100)
     const initialPoints = 100.0;
+    const lastHistoryPoint = allHistoryPoints[allHistoryPoints.length - 1];
     const totalIndexReturn = ((lastHistoryPoint.points - initialPoints) / initialPoints) * 100;
 
     // Calcular peso médio e dias no índice para este ativo
@@ -1445,316 +1756,143 @@ export async function calculateAssetPerformance(
 
     const averageWeight = pointCount > 0 ? totalWeight / pointCount : 0;
 
-    // Buscar TODOS os pontos históricos para calcular fatores de proporção de todos os ativos
-    const allHistoryPoints = await prisma.indexHistoryPoints.findMany({
-      where: { indexId },
-      orderBy: { date: 'asc' },
-      select: {
-        date: true,
-        compositionSnapshot: true
-      }
+    // CALCULAR CONTRIBUIÇÃO: Usar campo dailyContributionsByTicker quando disponível, senão calcular retroativamente
+    let totalContribution = 0;
+    
+    // Verificar se temos contribuições salvas nos pontos históricos
+    const pointsWithContributions = historyPoints.filter(point => {
+      if (!point.compositionSnapshot) return false;
+      const snapshot = point.compositionSnapshot as any;
+      return Object.keys(snapshot).length > 0 && snapshot[ticker] !== undefined;
     });
 
-    // Coletar todos os tickers únicos e calcular fatores de proporção
-    const tickerData = new Map<string, { totalWeight: number; pointCount: number; firstDate: Date; lastDate: Date }>();
-    
-    for (const point of allHistoryPoints) {
-      if (!point.compositionSnapshot) continue;
-      const snapshot = point.compositionSnapshot as any;
-      if (Object.keys(snapshot).length === 0) continue;
-      
-      for (const [assetTicker, assetData] of Object.entries(snapshot)) {
-        const data = assetData as any;
-        if (!tickerData.has(assetTicker)) {
-          tickerData.set(assetTicker, {
-            totalWeight: 0,
-            pointCount: 0,
-            firstDate: new Date(point.date),
-            lastDate: new Date(point.date)
-          });
-        }
-        
-        const tickerInfo = tickerData.get(assetTicker)!;
-        tickerInfo.totalWeight += data.weight || 0;
-        tickerInfo.pointCount++;
-        
-        const pointDate = new Date(point.date);
-        if (pointDate < tickerInfo.firstDate) {
-          tickerInfo.firstDate = pointDate;
-        }
-        if (pointDate > tickerInfo.lastDate) {
-          tickerInfo.lastDate = pointDate;
-        }
-      }
-    }
+    // Verificar quantos pontos têm o campo dailyContributionsByTicker preenchido
+    const pointsWithSavedContributions = pointsWithContributions.filter(point => {
+      const contributions = point.dailyContributionsByTicker as Record<string, number> | null;
+      return contributions && contributions[ticker] !== undefined && contributions[ticker] !== null;
+    });
 
-    // Calcular fator de proporção para cada ativo: peso_médio × dias_no_índice × rentabilidade
-    // Quanto maior a rentabilidade, maior a contribuição proporcional
-    let totalProportionalFactor = 0;
-    const assetFactors = new Map<string, number>();
-    const assetReturns = new Map<string, number>();
-
-    // Primeiro, calcular rentabilidade de cada ativo
-    for (const [assetTicker, tickerInfo] of tickerData.entries()) {
-      // Buscar primeiro e último snapshot do ativo para calcular rentabilidade
-      let firstSnapshot: any = null;
-      let lastSnapshot: any = null;
+    if (pointsWithSavedContributions.length > 0) {
+      // Usar contribuições salvas quando disponíveis
+      console.log(`✅ [INDEX ENGINE] Using saved contributions for ${ticker}: ${pointsWithSavedContributions.length} days with saved data`);
       
-      for (const point of allHistoryPoints) {
-        if (!point.compositionSnapshot) continue;
-        const snapshot = point.compositionSnapshot as any;
-        if (Object.keys(snapshot).length === 0) continue;
-        
-        const assetData = snapshot[assetTicker];
-        if (assetData) {
-          if (!firstSnapshot) {
-            firstSnapshot = assetData;
-          }
-          lastSnapshot = assetData;
-        }
-      }
-
-      // Calcular rentabilidade do ativo
-      let assetReturn = 0;
-      if (firstSnapshot && lastSnapshot) {
-        const entryPrice = firstSnapshot.entryPrice || firstSnapshot.price;
-        const exitPrice = lastSnapshot.price;
-        
-        if (entryPrice && entryPrice > 0) {
-          // Verificar se o ativo ainda está ativo
-          const currentComposition = await prisma.indexComposition.findFirst({
-            where: {
-              indexId,
-              assetTicker
-            }
-          });
-
-          if (currentComposition) {
-            // Ativo ainda está ativo: buscar preço atual
-            try {
-              const { getTickerPrice } = await import('@/lib/quote-service');
-              const priceData = await getTickerPrice(assetTicker);
-              const currentPrice = priceData?.price || exitPrice;
-              assetReturn = ((currentPrice - entryPrice) / entryPrice) * 100;
-            } catch (error) {
-              assetReturn = ((exitPrice - entryPrice) / entryPrice) * 100;
-            }
-          } else {
-            // Ativo foi removido: usar preço de saída
-            assetReturn = ((exitPrice - entryPrice) / entryPrice) * 100;
-          }
-        }
-      }
-      
-      assetReturns.set(assetTicker, assetReturn);
-    }
-
-    // Calcular fatores de proporção incluindo rentabilidade
-    // IMPORTANTE: Preservar o sinal da rentabilidade e usar valor absoluto como peso
-    // Quanto maior a rentabilidade (em valor absoluto), maior o peso
-    // 
-    // Estratégia de redistribuição:
-    // 1. Calcular contribuições iniciais proporcionalmente
-    // 2. Se retorno total > 0: redistribuir contribuições negativas entre positivos
-    // 3. Se retorno total < 0: redistribuir contribuições positivas entre negativos
-    // 4. A redistribuição favorece ativos com maior rentabilidade (positiva ou menos negativa)
-    
-    let totalAbsFactor = 0; // Soma dos valores absolutos dos fatores (para normalização)
-    const assetFactorMap = new Map<string, number>();
-    const assetAvgWeights = new Map<string, number>();
-    const assetDaysInIndex = new Map<string, number>();
-
-    // Calcular fatores para todos os ativos
-    for (const [assetTicker, tickerInfo] of tickerData.entries()) {
-      const avgWeight = tickerInfo.pointCount > 0 ? tickerInfo.totalWeight / tickerInfo.pointCount : 0;
-      const daysInIndex = Math.ceil(
-        (tickerInfo.lastDate.getTime() - tickerInfo.firstDate.getTime()) / (1000 * 60 * 60 * 24)
-      ) + 1;
-      
-      const assetReturn = assetReturns.get(assetTicker) || 0;
-      
-      // Fator base = peso_médio × dias × (1 + |rentabilidade|/100)
-      // Quanto maior a rentabilidade (em valor absoluto), maior o fator
-      const absReturn = Math.abs(assetReturn);
-      const returnMultiplier = 1 + absReturn / 100;
-      const factorBase = avgWeight * daysInIndex * returnMultiplier;
-      
-      assetFactorMap.set(assetTicker, factorBase);
-      assetAvgWeights.set(assetTicker, avgWeight);
-      assetDaysInIndex.set(assetTicker, daysInIndex);
-      totalAbsFactor += factorBase;
-    }
-
-    // Separar ativos por sinal de rentabilidade
-    const positiveAssets: string[] = [];
-    const negativeAssets: string[] = [];
-
-    for (const [assetTicker] of assetFactorMap.entries()) {
-      const assetReturn = assetReturns.get(assetTicker) || 0;
-      if (assetReturn >= 0) {
-        positiveAssets.push(assetTicker);
-      } else {
-        negativeAssets.push(assetTicker);
-      }
-    }
-
-    // Calcular fatores totais para cada grupo
-    let totalPositiveFactor = 0;
-    let totalNegativeFactor = 0;
-    
-    for (const assetTicker of positiveAssets) {
-      const factorBase = assetFactorMap.get(assetTicker) || 0;
-      totalPositiveFactor += factorBase;
-    }
-    
-    for (const assetTicker of negativeAssets) {
-      const factorBase = assetFactorMap.get(assetTicker) || 0;
-      totalNegativeFactor += factorBase;
-    }
-
-    // Redistribuir contribuições para garantir que a soma bata com o retorno total
-    // REGRA:
-    // - Se retorno total > 0: calcular contribuições negativas proporcionais, ajustar positivos para que soma(positivos) + soma(negativos) = retorno total
-    // - Se retorno total < 0: calcular contribuições positivas proporcionais, ajustar negativos para que soma(positivos) + soma(negativos) = retorno total
-    const finalContributions = new Map<string, number>();
-    
-    if (totalIndexReturn >= 0) {
-      // Retorno total positivo (+4.35%):
-      // 1. Calcular contribuições negativas proporcionais (ex: -1%)
-      // 2. Calcular quanto os positivos devem somar: soma(positivos) = retorno_total - soma(negativos)
-      // 3. Redistribuir essa soma ajustada entre ativos positivos, favorecendo maior rentabilidade
-      
-      // Calcular contribuições negativas proporcionais
-      // Primeiro, calcular quanto os negativos devem somar proporcionalmente
-      // Depois distribuir entre os negativos, e ajustar os positivos para garantir que a soma total seja exata
-      let totalNegativeContributions = 0;
-      if (totalNegativeFactor > 0 && totalAbsFactor > 0) {
-        // Proporção dos fatores negativos no total
-        const negativeProportion = totalNegativeFactor / totalAbsFactor;
-        // Estimativa inicial: proporção × retorno total (será negativo)
-        const estimatedNegativeTotal = -(negativeProportion * Math.abs(totalIndexReturn));
-        
-        // Distribuir proporcionalmente entre negativos
-        for (const assetTicker of negativeAssets) {
-          const factorBase = assetFactorMap.get(assetTicker) || 0;
-          const negativeContribution = totalNegativeFactor > 0
-            ? (factorBase / totalNegativeFactor) * estimatedNegativeTotal
-            : 0;
-          finalContributions.set(assetTicker, negativeContribution);
-          totalNegativeContributions += negativeContribution;
-        }
-      }
-      
-      // Calcular quanto os positivos devem somar no total para garantir que a soma seja exata
-      // soma(positivos) = retorno_total - soma(negativos)
-      const totalPositiveTarget = totalIndexReturn - totalNegativeContributions;
-      
-      // Ordenar ativos positivos por rentabilidade (maior primeiro)
-      positiveAssets.sort((a, b) => {
-        const returnA = assetReturns.get(a) || 0;
-        const returnB = assetReturns.get(b) || 0;
-        return returnB - returnA; // Maior primeiro
-      });
-      
-      // Calcular fatores de redistribuição para ativos positivos
-      // Favorecer maior rentabilidade: usar fator_base × (1 + rentabilidade/100)
-      let totalPositiveRedistFactor = 0;
-      const positiveRedistFactors = new Map<string, number>();
-      
-      for (const assetTicker of positiveAssets) {
-        const assetReturn = assetReturns.get(assetTicker) || 0;
-        const factorBase = assetFactorMap.get(assetTicker) || 0;
-        // Fator de redistribuição: favorecer maior rentabilidade positiva
-        const redistFactor = factorBase * (1 + assetReturn / 100);
-        positiveRedistFactors.set(assetTicker, redistFactor);
-        totalPositiveRedistFactor += redistFactor;
-      }
-      
-      // Distribuir o total ajustado entre ativos positivos
-      let distributedPositiveTotal = 0;
-      for (let i = 0; i < positiveAssets.length; i++) {
-        const assetTicker = positiveAssets[i];
-        const redistFactor = positiveRedistFactors.get(assetTicker) || 0;
-        
-        // Para o último ativo, garantir que a soma seja exata
-        if (i === positiveAssets.length - 1) {
-          const contribution = totalPositiveTarget - distributedPositiveTotal;
-          finalContributions.set(assetTicker, contribution);
+      for (const point of pointsWithContributions) {
+        const contributions = point.dailyContributionsByTicker as Record<string, number> | null;
+        if (contributions && contributions[ticker] !== undefined && contributions[ticker] !== null) {
+          // Contribuição já está em porcentagem
+          totalContribution += contributions[ticker] / 100; // Converter de % para decimal
         } else {
-          const contribution = totalPositiveRedistFactor > 0
-            ? (redistFactor / totalPositiveRedistFactor) * totalPositiveTarget
-            : 0;
-          finalContributions.set(assetTicker, contribution);
-          distributedPositiveTotal += contribution;
+          // Se não tem contribuição salva, calcular retroativamente para este dia específico
+          const pointIndex = historyPoints.findIndex(p => p.date.getTime() === point.date.getTime());
+          if (pointIndex > 0) {
+            // Buscar snapshot anterior válido (pode não ser o imediatamente anterior)
+            let validPreviousPoint = null;
+            for (let j = pointIndex - 1; j >= 0; j--) {
+              const candidatePoint = historyPoints[j];
+              if (candidatePoint.compositionSnapshot && 
+                  Object.keys(candidatePoint.compositionSnapshot as any).length > 0) {
+                validPreviousPoint = candidatePoint;
+                break;
+              }
+            }
+            
+            if (!validPreviousPoint) continue;
+            
+            const currentSnapshot = point.compositionSnapshot as any;
+            const previousSnapshot = validPreviousPoint.compositionSnapshot as any;
+            
+            // Validar que ambos os snapshots são válidos antes de usar
+            if (!currentSnapshot || !previousSnapshot || 
+                Object.keys(currentSnapshot).length === 0 || 
+                Object.keys(previousSnapshot).length === 0) {
+              continue;
+            }
+            
+            // Obter dividendsByTicker do ponto atual (fora do bloco condicional para estar no escopo)
+            const dividendsByTicker = point.dividendsByTicker as Record<string, number> | null;
+            
+            const currentAssetData = currentSnapshot[ticker];
+            const previousAssetData = previousSnapshot[ticker];
+            
+            if (currentAssetData && previousAssetData) {
+              const weight = previousAssetData.weight;
+              const previousPrice = previousAssetData.price;
+              const currentPrice = currentAssetData.price;
+              const dividend = dividendsByTicker?.[ticker] || 0;
+              
+              if (previousPrice && previousPrice > 0) {
+                const adjustedCurrentPrice = currentPrice + dividend;
+                const dailyReturn = (adjustedCurrentPrice - previousPrice) / previousPrice;
+                const dailyContribution = weight * dailyReturn;
+                totalContribution += dailyContribution;
+              }
+            }
+            
+            // Se o ponto atual não tem contribuições salvas, calcular e persistir para TODOS os ativos deste dia
+            const pointWithContributions = historyPoints.find(p => p.date.getTime() === point.date.getTime());
+            if (!pointWithContributions?.dailyContributionsByTicker || Object.keys(pointWithContributions.dailyContributionsByTicker as any || {}).length === 0) {
+              await calculateAndPersistDailyContributions(
+                indexId,
+                point.date,
+                currentSnapshot,
+                previousSnapshot,
+                dividendsByTicker,
+                pointWithContributions?.dailyChange ?? null
+              );
+            }
+          }
         }
       }
-      
     } else {
-      // Retorno total negativo (-2.5%):
-      // 1. Calcular contribuições positivas proporcionais (ex: +0.5%)
-      // 2. Calcular quanto os negativos devem somar: soma(negativos) = retorno_total - soma(positivos)
-      // 3. Redistribuir essa soma ajustada entre ativos negativos, favorecendo menor rentabilidade negativa
+      // Nenhum ponto tem contribuição salva, calcular tudo retroativamente
+      console.log(`⚠️ [INDEX ENGINE] No saved contributions found for ${ticker}, calculating retroactively`);
       
-      // Calcular contribuições positivas proporcionais
-      let totalPositiveContributions = 0;
-      for (const assetTicker of positiveAssets) {
-        const factorBase = assetFactorMap.get(assetTicker) || 0;
-        const positiveContribution = totalPositiveFactor > 0
-          ? (factorBase / totalPositiveFactor) * Math.abs(totalIndexReturn)
-          : 0;
-        finalContributions.set(assetTicker, positiveContribution);
-        totalPositiveContributions += positiveContribution;
-      }
-      
-      // Calcular quanto os negativos devem somar no total
-      // soma(negativos) = retorno_total - soma(positivos)
-      const totalNegativeTarget = totalIndexReturn - totalPositiveContributions;
-      
-      // Ordenar ativos negativos por rentabilidade (menor primeiro, ou seja, menos negativo)
-      negativeAssets.sort((a, b) => {
-        const returnA = assetReturns.get(a) || 0;
-        const returnB = assetReturns.get(b) || 0;
-        return returnA - returnB; // Menor primeiro (menos negativo)
-      });
-      
-      // Calcular fatores de redistribuição para ativos negativos
-      // Favorecer menor rentabilidade negativa (menos negativo): usar fator_base × (1 + |rentabilidade|/100)
-      let totalNegativeRedistFactor = 0;
-      const negativeRedistFactors = new Map<string, number>();
-      
-      for (const assetTicker of negativeAssets) {
-        const assetReturn = assetReturns.get(assetTicker) || 0;
-        const factorBase = assetFactorMap.get(assetTicker) || 0;
-        // Fator de redistribuição: favorecer menor rentabilidade negativa (menos negativo)
-        // Quanto menos negativo, maior o fator
-        const absReturn = Math.abs(assetReturn);
-        const redistFactor = factorBase * (1 + absReturn / 100);
-        negativeRedistFactors.set(assetTicker, redistFactor);
-        totalNegativeRedistFactor += redistFactor;
-      }
-      
-      // Distribuir o total ajustado entre ativos negativos
-      let distributedNegativeTotal = 0;
-      for (let i = 0; i < negativeAssets.length; i++) {
-        const assetTicker = negativeAssets[i];
-        const redistFactor = negativeRedistFactors.get(assetTicker) || 0;
+      // Processar cada ponto onde o ativo estava presente (exceto o primeiro, que não tem dia anterior)
+      for (let i = 1; i < relevantPoints.length; i++) {
+        const currentPoint = relevantPoints[i];
+        const previousPoint = relevantPoints[i - 1];
         
-        // Para o último ativo, garantir que a soma seja exata
-        if (i === negativeAssets.length - 1) {
-          const contribution = totalNegativeTarget - distributedNegativeTotal;
-          finalContributions.set(assetTicker, contribution);
-        } else {
-          const contribution = totalNegativeRedistFactor > 0
-            ? (redistFactor / totalNegativeRedistFactor) * totalNegativeTarget
-            : 0;
-          finalContributions.set(assetTicker, contribution);
-          distributedNegativeTotal += contribution;
+        const currentSnapshot = currentPoint.compositionSnapshot as any;
+        const previousSnapshot = previousPoint.compositionSnapshot as any;
+        
+        const currentAssetData = currentSnapshot[ticker];
+        const previousAssetData = previousSnapshot[ticker];
+        
+        if (!currentAssetData || !previousAssetData) continue;
+        
+        // Peso do ativo no dia anterior (usado para calcular contribuição)
+        const weight = previousAssetData.weight;
+        
+        // Preços do ativo
+        const previousPrice = previousAssetData.price;
+        const currentPrice = currentAssetData.price;
+        
+        // Verificar se há dividendo neste dia
+        const dividendsByTicker = currentPoint.dividendsByTicker as Record<string, number> | null;
+        const dividend = dividendsByTicker?.[ticker] || 0;
+        
+        // Calcular retorno diário do ativo (incluindo dividendo)
+        // Retorno = (preço_atual + dividendo - preço_anterior) / preço_anterior
+        if (previousPrice && previousPrice > 0) {
+          const adjustedCurrentPrice = currentPrice + dividend;
+          const dailyReturn = (adjustedCurrentPrice - previousPrice) / previousPrice;
+          
+          // Contribuição diária = peso × retorno_diário_do_ativo
+          const dailyContribution = weight * dailyReturn;
+          totalContribution += dailyContribution;
+        }
+        
+        // Se o ponto atual não tem contribuições salvas, calcular e persistir para TODOS os ativos deste dia
+        const currentPointFull = historyPoints.find(p => p.date.getTime() === currentPoint.date.getTime());
+        if (currentPointFull && (!currentPointFull.dailyContributionsByTicker || Object.keys(currentPointFull.dailyContributionsByTicker as any || {}).length === 0)) {
+          await calculateAndPersistDailyContributions(indexId, currentPoint.date, currentSnapshot, previousSnapshot, dividendsByTicker);
         }
       }
     }
-
-    // Obter contribuição final para este ativo
-    const proportionalContribution = finalContributions.get(ticker) || 0;
+    
+    // Converter contribuição acumulada para porcentagem (mesma base do índice)
+    // A contribuição já está em termos relativos (peso × retorno), então multiplicamos por 100 para porcentagem
+    const contributionPercentage = totalContribution * 100;
 
     return {
       ticker,
@@ -1764,7 +1902,7 @@ export async function calculateAssetPerformance(
       exitPrice,
       daysInIndex,
       totalReturn,
-      contributionToIndex: proportionalContribution,
+      contributionToIndex: contributionPercentage,
       averageWeight,
       status: isActive ? 'ACTIVE' : 'EXITED',
       firstSnapshotDate: new Date(firstPoint.date),
@@ -1777,12 +1915,135 @@ export async function calculateAssetPerformance(
 }
 
 /**
+ * Calcula e persiste contribuições diárias de todos os ativos para um ponto histórico específico
+ * Garante que a soma das contribuições seja igual ao dailyChange registrado no banco
+ */
+async function calculateAndPersistDailyContributions(
+  indexId: string,
+  date: Date,
+  currentSnapshot: Record<string, any>,
+  previousSnapshot: Record<string, any> | null,
+  dividendsByTicker: Record<string, number> | null,
+  expectedDailyChange: number | null = null
+): Promise<void> {
+  try {
+    // Validar que ambos os snapshots existem e são válidos
+    if (!currentSnapshot || !previousSnapshot || 
+        Object.keys(currentSnapshot).length === 0 || 
+        Object.keys(previousSnapshot).length === 0) {
+      console.warn(`⚠️ [INDEX ENGINE] Cannot calculate contributions for ${date.toISOString().split('T')[0]}: invalid snapshots`);
+      return;
+    }
+    
+    // Se não temos dailyChange, buscar do banco
+    if (expectedDailyChange === null) {
+      const point = await prisma.indexHistoryPoints.findFirst({
+        where: {
+          indexId,
+          date
+        },
+        select: {
+          dailyChange: true
+        }
+      });
+      
+      if (point && point.dailyChange !== null) {
+        expectedDailyChange = point.dailyChange; // dailyChange já está em porcentagem
+      }
+    }
+    
+    const contributions: Record<string, number> = {};
+    let totalCalculatedContribution = 0;
+    
+    // Calcular contribuição de cada ativo presente no snapshot atual
+    for (const ticker of Object.keys(currentSnapshot)) {
+      const currentAssetData = currentSnapshot[ticker];
+      const previousAssetData = previousSnapshot[ticker];
+      
+      if (!currentAssetData || !previousAssetData) continue;
+      
+      const weight = previousAssetData.weight;
+      const previousPrice = previousAssetData.price;
+      const currentPrice = currentAssetData.price;
+      const dividend = dividendsByTicker?.[ticker] || 0;
+      
+      if (previousPrice && previousPrice > 0) {
+        const adjustedCurrentPrice = currentPrice + dividend;
+        const dailyReturn = (adjustedCurrentPrice - previousPrice) / previousPrice;
+        const dailyContribution = weight * dailyReturn;
+        
+        // Armazenar em porcentagem
+        contributions[ticker] = dailyContribution * 100;
+        totalCalculatedContribution += dailyContribution * 100;
+      }
+    }
+    
+    // Se temos dailyChange esperado e a soma não bate, aplicar proporção
+    if (expectedDailyChange !== null && Object.keys(contributions).length > 0) {
+      const difference = Math.abs(totalCalculatedContribution - expectedDailyChange);
+      
+      // Se a diferença for significativa (> 0.01%), aplicar proporção
+      if (difference > 0.01) {
+        console.log(`⚠️ [INDEX ENGINE] Contribution sum mismatch for ${date.toISOString().split('T')[0]}: calculated=${totalCalculatedContribution.toFixed(4)}%, expected=${expectedDailyChange.toFixed(4)}%, diff=${difference.toFixed(4)}%`);
+        
+        // Calcular fator de proporção
+        const ratio = totalCalculatedContribution !== 0 
+          ? expectedDailyChange / totalCalculatedContribution 
+          : 1;
+        
+        // Aplicar proporção a todas as contribuições
+        for (const ticker of Object.keys(contributions)) {
+          contributions[ticker] = contributions[ticker] * ratio;
+        }
+        
+        // Recalcular soma para validar
+        const adjustedSum = Object.values(contributions).reduce((sum, val) => sum + val, 0);
+        console.log(`✅ [INDEX ENGINE] Applied ratio ${ratio.toFixed(6)} to contributions. Adjusted sum: ${adjustedSum.toFixed(4)}% (expected: ${expectedDailyChange.toFixed(4)}%)`);
+      }
+    }
+    
+    // Persistir no banco apenas se houver contribuições calculadas
+    if (Object.keys(contributions).length > 0) {
+      // Usar updateMany para garantir que atualiza mesmo se houver múltiplos registros (não deveria acontecer, mas por segurança)
+      const result = await prisma.indexHistoryPoints.updateMany({
+        where: {
+          indexId,
+          date
+        },
+        data: {
+          dailyContributionsByTicker: contributions
+        }
+      });
+      
+      if (result.count > 0) {
+        const finalSum = Object.values(contributions).reduce((sum, val) => sum + val, 0);
+        console.log(`✅ [INDEX ENGINE] Persisted daily contributions for ${date.toISOString().split('T')[0]}: ${Object.keys(contributions).length} assets, sum=${finalSum.toFixed(4)}% (updated ${result.count} record(s))`);
+      } else {
+        console.warn(`⚠️ [INDEX ENGINE] No records found to update for ${date.toISOString().split('T')[0]}`);
+      }
+    }
+  } catch (error) {
+    console.error(`❌ [INDEX ENGINE] Error calculating and persisting daily contributions for ${date.toISOString().split('T')[0]}:`, error);
+    // Não lançar erro para não quebrar o cálculo principal
+  }
+}
+
+/**
  * Lista todos os ativos que passaram pelo índice com suas performances
  */
 export async function listAllAssetsPerformance(
   indexId: string
 ): Promise<AssetPerformance[]> {
   try {
+    console.log(`📊 [INDEX ENGINE] Starting listAllAssetsPerformance for index ${indexId}`);
+    
+    // Primeiro, processar contribuições retroativas para todos os dias que não têm o campo preenchido
+    // Isso garante que quando calcularmos a performance, os dados já estarão disponíveis
+    // IMPORTANTE: Fazer isso apenas UMA VEZ antes do loop, não para cada ativo
+    console.log(`🔄 [INDEX ENGINE] Processing retroactive contributions...`);
+    await processRetroactiveContributions(indexId);
+    console.log(`✅ [INDEX ENGINE] Retroactive contributions processed`);
+    
     // Buscar todos os pontos históricos com snapshot
     const historyPoints = await prisma.indexHistoryPoints.findMany({
       where: { indexId },
@@ -1792,6 +2053,8 @@ export async function listAllAssetsPerformance(
         compositionSnapshot: true
       }
     });
+
+    console.log(`📊 [INDEX ENGINE] Found ${historyPoints.length} history points`);
 
     // Coletar todos os tickers únicos que apareceram em algum snapshot
     const allTickers = new Set<string>();
@@ -1803,15 +2066,22 @@ export async function listAllAssetsPerformance(
       }
     }
 
+    console.log(`📊 [INDEX ENGINE] Found ${allTickers.size} unique tickers`);
+
     // Calcular performance para cada ticker
     const performances: AssetPerformance[] = [];
     
+    let processedCount = 0;
     for (const ticker of allTickers) {
+      processedCount++;
+      console.log(`📊 [INDEX ENGINE] Calculating performance for ${ticker} (${processedCount}/${allTickers.size})`);
       const performance = await calculateAssetPerformance(indexId, ticker);
       if (performance) {
         performances.push(performance);
       }
     }
+    
+    console.log(`✅ [INDEX ENGINE] Completed listAllAssetsPerformance: ${performances.length} performances calculated`);
 
     return performances.sort((a, b) => {
       // Ordenar por data de entrada (mais recente primeiro)

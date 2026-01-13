@@ -188,6 +188,26 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* Banner de Upgrade - Topo */}
+          {!isPremium && visiblePerformances.length > 0 && (
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm mb-1">Desbloqueie a Performance Completa</h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Veja todos os {sortedPerformances.length} ativos que passaram pelo índice e suas performances detalhadas sem blur.
+                  </p>
+                  <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
+                    <Link href="/checkout">
+                      Fazer Upgrade para Premium
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Filtros */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-muted-foreground">Filtrar:</span>
@@ -288,25 +308,6 @@ export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
             <p className="text-sm text-muted-foreground text-center py-4">
               Nenhum ativo encontrado com o filtro selecionado.
             </p>
-          )}
-
-          {!isPremium && visiblePerformances.length > 0 && (
-            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-3">
-                <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <h4 className="font-semibold text-sm mb-1">Desbloqueie a Performance Completa</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Veja todos os {sortedPerformances.length} ativos que passaram pelo índice e suas performances detalhadas sem blur.
-                  </p>
-                  <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
-                    <Link href="/checkout">
-                      Fazer Upgrade para Premium
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
           )}
         </div>
       </CardContent>

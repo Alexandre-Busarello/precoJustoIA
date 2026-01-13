@@ -221,6 +221,26 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* Banner de Upgrade - Topo */}
+          {!isPremium && visibleData.length > 0 && (
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm mb-1">Desbloqueie a Visão Diária Completa</h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Veja todos os {data.length} dias de histórico com detalhes completos de contribuições por ativo sem blur.
+                  </p>
+                  <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
+                    <Link href="/checkout">
+                      Fazer Upgrade para Premium
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {visibleData.map((day) => (
             <Card 
               key={day.date} 
@@ -333,26 +353,6 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
           </CardContent>
         </Card>
           ))}
-
-          {/* CTA para upgrade */}
-          {!isPremium && visibleData.length > 0 && (
-            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-3">
-                <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <h4 className="font-semibold text-sm mb-1">Desbloqueie a Visão Diária Completa</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Veja todos os {data.length} dias de histórico com detalhes completos de contribuições por ativo sem blur.
-                  </p>
-                  <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
-                    <Link href="/checkout">
-                      Fazer Upgrade para Premium
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Paginação */}
           {totalPages > 1 && (

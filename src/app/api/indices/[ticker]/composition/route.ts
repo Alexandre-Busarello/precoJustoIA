@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/user-service';
 
 export async function GET(
   request: NextRequest,
@@ -32,9 +33,13 @@ export async function GET(
       );
     }
 
+    // Verificar se usuário é premium
+    const user = await getCurrentUser();
+    const isPremium = user?.isPremium || false;
+
     // Buscar dados detalhados dos ativos
     const compositionWithDetails = await Promise.all(
-      index.composition.map(async (comp) => {
+      index.composition.map(async (comp, compIndex) => {
         const company = await prisma.company.findUnique({
           where: { ticker: comp.assetTicker },
           select: {
@@ -92,7 +97,7 @@ export async function GET(
         // Calcular variação desde entrada usando preço correto
         const entryReturn = ((currentPrice - entryPrice) / entryPrice) * 100;
 
-        return {
+        const result = {
           ticker: comp.assetTicker,
           name: company?.name || comp.assetTicker,
           logoUrl: company?.logoUrl || null,
@@ -106,12 +111,39 @@ export async function GET(
             ? Number(company.financialData[0].dy) * 100 
             : null
         };
+
+        // Se não for premium, ofuscar dados mas manter estrutura
+        if (!isPremium) {
+          // Usar hash simples baseado no índice para valores determinísticos mas ofuscados
+          const hash = (compIndex * 7919 + 997) % 1000; // Número primo para distribuição
+          const variation = (hash / 1000 - 0.5) * 0.15; // Variação de -7.5% a +7.5%
+          
+          return {
+            ticker: `MOCK${compIndex + 1}`,
+            name: 'Empresa Ocultada',
+            logoUrl: null,
+            sector: null,
+            targetWeight: Math.round((comp.targetWeight * (1 + variation * 0.1)) * 1000) / 1000,
+            entryPrice: Math.round(entryPrice * (1 + variation) * 100) / 100,
+            entryDate: result.entryDate,
+            currentPrice: Math.round(currentPrice * (1 + variation * 0.8) * 100) / 100,
+            entryReturn: Math.round((entryReturn + variation * 25) * 10) / 10,
+            dividendYield: result.dividendYield ? Math.round((result.dividendYield + variation * 3) * 10) / 10 : null,
+            isObfuscated: true
+          };
+        }
+
+        return {
+          ...result,
+          isObfuscated: false
+        };
       })
     );
 
     return NextResponse.json({
       success: true,
-      composition: compositionWithDetails
+      composition: compositionWithDetails,
+      isObfuscated: !isPremium
     });
   } catch (error) {
     const { ticker: tickerParam } = await params;

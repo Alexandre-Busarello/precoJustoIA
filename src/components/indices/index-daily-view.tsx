@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, RefreshCw, ChevronLeft, ChevronRight, Lock } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { useAdminStatus } from '@/hooks/use-admin-status'
+import { usePremiumStatus } from '@/hooks/use-premium-status'
+import Link from 'next/link'
 
 // Função auxiliar para formatar porcentagem (valor já está em porcentagem)
 const formatPercent = (value: number | null): string => {
@@ -35,7 +38,35 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recalculating, setRecalculating] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isMobile, setIsMobile] = useState(false)
   const { isAdmin } = useAdminStatus()
+  const { isPremium } = usePremiumStatus()
+
+  // Configuração de paginação
+  const ITEMS_PER_PAGE = 10 // Desktop: 10 itens por página
+  const ITEMS_PER_PAGE_MOBILE = 5 // Mobile: 5 itens por página
+
+  // Detectar tamanho da tela
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    // Verificar no mount
+    checkMobile()
+    
+    // Adicionar listener para resize
+    window.addEventListener('resize', checkMobile)
+    
+    // Limpar listener ao desmontar
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Resetar para página 1 quando mudar de mobile para desktop ou vice-versa
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [isMobile])
 
   useEffect(() => {
     async function fetchData() {
@@ -89,12 +120,32 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
   if (data.length === 0) {
     return (
       <Card>
-        <CardContent className="pt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Visão Diária</span>
+            {!isPremium && (
+              <Badge variant="outline" className="text-xs">
+                <Lock className="h-3 w-3 mr-1" />
+                Premium
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
           <p className="text-gray-500 dark:text-gray-400">Nenhum dado disponível</p>
         </CardContent>
       </Card>
     )
   }
+
+  // Calcular paginação após dados carregados
+  const itemsPerPage = isMobile ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE
+  const totalPages = Math.ceil(data.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedData = isPremium ? data.slice(startIndex, endIndex) : data.slice(0, 3)
+  const visibleData = paginatedData
+  const blurredData = isPremium ? [] : data.slice(3)
 
   const formatDate = (dateStr: string) => {
     // Parse a data como YYYY-MM-DD e criar Date no timezone local
@@ -156,8 +207,21 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
   }
 
   return (
-    <div className="space-y-4">
-      {data.map((day) => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span>Visão Diária</span>
+          {!isPremium && (
+            <Badge variant="outline" className="text-xs">
+              <Lock className="h-3 w-3 mr-1" />
+              Premium
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {visibleData.map((day) => (
         <Card key={day.date} className="overflow-hidden">
           <CardHeader className="pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -264,8 +328,128 @@ export function IndexDailyView({ ticker }: IndexDailyViewProps) {
             </div>
           </CardContent>
         </Card>
-      ))}
-    </div>
+          ))}
+
+          {/* Dias com blur para Free users */}
+          {blurredData.map((day, index) => (
+            <Card key={`blurred-${index}`} className="overflow-hidden" style={{ filter: 'blur(4px)', pointerEvents: 'none' }}>
+              <CardHeader className="pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <CardTitle className="text-lg font-semibold bg-gray-300 h-6 w-32 rounded" />
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 bg-gray-300 rounded" />
+                    <div className="h-6 w-16 bg-gray-300 rounded" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <div className="h-4 w-24 bg-gray-300 rounded mb-2" />
+                      <div className="h-6 w-20 bg-gray-300 rounded" />
+                    </div>
+                    <div>
+                      <div className="h-4 w-32 bg-gray-300 rounded mb-2" />
+                      <div className="h-6 w-20 bg-gray-300 rounded" />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* CTA para upgrade */}
+          {!isPremium && blurredData.length > 0 && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm mb-1">Desbloqueie a Visão Diária Completa</h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Veja todos os {data.length} dias de histórico com detalhes completos de contribuições por ativo.
+                  </p>
+                  <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
+                    <Link href="/checkout">
+                      Fazer Upgrade para Premium
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Paginação - Apenas para Premium */}
+          {isPremium && totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+              <p className="text-sm text-muted-foreground text-center sm:text-left">
+                Mostrando {startIndex + 1} a {Math.min(endIndex, data.length)} de {data.length} dias
+              </p>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="h-9 px-3"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1 sm:mr-0" />
+                  <span className="hidden sm:inline">Anterior</span>
+                </Button>
+                
+                {/* Números de página - mostrar apenas em desktop */}
+                <div className="hidden sm:flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                    // Mostrar primeira página, última página, página atual e páginas adjacentes
+                    if (
+                      page === 1 ||
+                      page === totalPages ||
+                      (page >= currentPage - 1 && page <= currentPage + 1)
+                    ) {
+                      return (
+                        <Button
+                          key={page}
+                          variant={currentPage === page ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setCurrentPage(page)}
+                          className="h-9 w-9 p-0"
+                        >
+                          {page}
+                        </Button>
+                      )
+                    } else if (page === currentPage - 2 || page === currentPage + 2) {
+                      return (
+                        <span key={page} className="px-2 text-muted-foreground">
+                          ...
+                        </span>
+                      )
+                    }
+                    return null
+                  })}
+                </div>
+                
+                {/* Indicador de página atual em mobile */}
+                <div className="sm:hidden text-sm text-muted-foreground px-2">
+                  {currentPage} / {totalPages}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-9 px-3"
+                >
+                  <span className="hidden sm:inline">Próxima</span>
+                  <ChevronRight className="h-4 w-4 ml-1 sm:ml-0" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

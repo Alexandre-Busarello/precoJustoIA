@@ -63,7 +63,9 @@ export async function GET(
             ticker: `MOCK${perfIndex + 1}`,
             entryPrice: Math.round(perf.entryPrice * (1 + variation) * 100) / 100,
             exitPrice: perf.exitPrice ? Math.round(perf.exitPrice * (1 + variation * 0.9) * 100) / 100 : null,
-            totalReturn: Math.round((perf.totalReturn + variation * 35) * 10) / 10,
+            totalReturn: perf.totalReturn !== null 
+              ? Math.round((perf.totalReturn + variation * 35) * 10) / 10 
+              : null,
             contributionToIndex: Math.round((perf.contributionToIndex + variation * 2.5) * 100) / 100,
             averageWeight: Math.round((perf.averageWeight * (1 + variation * 0.15)) * 1000) / 1000,
             isObfuscated: true

@@ -93,8 +93,9 @@ async function isFirstTradingDayOfMonth(date: Date = new Date()): Promise<boolea
   }
   
   // Se for dia 1 e for dia útil, verificar se houve pregão
+  // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
   if (day === 1) {
-    const marketWasOpen = await checkMarketWasOpen(date);
+    const marketWasOpen = await checkMarketWasOpen(date, true);
     return marketWasOpen;
   }
   
@@ -105,7 +106,8 @@ async function isFirstTradingDayOfMonth(date: Date = new Date()): Promise<boolea
     checkDate.setDate(checkDate.getDate() - (day - checkDay));
     
     // Verificar se houve pregão neste dia
-    const marketWasOpen = await checkMarketWasOpen(checkDate);
+    // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
+    const marketWasOpen = await checkMarketWasOpen(checkDate, true);
     if (marketWasOpen) {
       // Se houve pregão em algum dia anterior, hoje não é o primeiro dia útil
       return false;
@@ -114,7 +116,8 @@ async function isFirstTradingDayOfMonth(date: Date = new Date()): Promise<boolea
   
   // Se chegou aqui, nenhum dia anterior teve pregão, então hoje é o primeiro dia útil
   // Mas ainda precisamos verificar se hoje teve pregão
-  const marketWasOpenToday = await checkMarketWasOpen(date);
+  // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
+  const marketWasOpenToday = await checkMarketWasOpen(date, true);
   return marketWasOpenToday;
 }
 
@@ -413,7 +416,8 @@ async function fillMissingHistoryWithCheckpoint(
       const dayOfWeek = currentDate.getDay();
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         // Verificar se mercado funcionou neste dia
-        const marketWasOpen = await checkMarketWasOpen(currentDate);
+        // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
+        const marketWasOpen = await checkMarketWasOpen(currentDate, true);
         if (marketWasOpen) {
           missingDates.push(new Date(currentDate));
         }
@@ -435,7 +439,8 @@ async function fillMissingHistoryWithCheckpoint(
     let filledCount = 0;
     for (const date of missingDates) {
       try {
-        const success = await updateIndexPoints(indexId, date);
+        // CRÍTICO: Não usar cache para atualização de pontos no cron do after market
+        const success = await updateIndexPoints(indexId, date, false, true);
         if (success) {
           filledCount++;
           // Atualizar checkpoint com a data processada
@@ -527,7 +532,8 @@ async function runMarkToMarketJob(): Promise<{
   const today = getTodayInBrazil();
   
   // Verificar se houve pregão hoje (sábado, domingo ou feriado)
-  const marketWasOpen = await checkMarketWasOpen(today);
+  // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
+  const marketWasOpen = await checkMarketWasOpen(today, true);
   if (!marketWasOpen) {
     // Usar formatter para pegar o dia da semana no timezone de Brasília
     const weekdayFormatter = new Intl.DateTimeFormat('pt-BR', {
@@ -844,7 +850,8 @@ async function runScreeningJob(): Promise<{
   }
   
   // Verificar se houve pregão hoje (pode ser feriado mesmo sendo dia útil)
-  const marketWasOpen = await checkMarketWasOpen(today);
+  // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
+  const marketWasOpen = await checkMarketWasOpen(today, true);
   if (!marketWasOpen) {
     console.log(`⏸️ [CRON INDICES] Screening job skipped: mercado não funcionou hoje (feriado ou sem pregão)`);
     return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };

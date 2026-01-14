@@ -744,7 +744,8 @@ export async function updateIndexPoints(
 ): Promise<boolean> {
   try {
     // Verificar se houve pregão antes de calcular pontos
-    const marketWasOpen = await checkMarketWasOpen(date);
+    // Passar skipCache para checkMarketWasOpen quando updateIndexPoints recebe skipCache=true
+    const marketWasOpen = await checkMarketWasOpen(date, skipCache);
     if (!marketWasOpen) {
       // Formatar data usando timezone de Brasília para consistência
       const formatter = new Intl.DateTimeFormat('en-US', {

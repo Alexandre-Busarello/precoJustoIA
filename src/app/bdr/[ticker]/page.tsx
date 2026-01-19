@@ -313,6 +313,23 @@ export default async function BdrPage({ params }: PageProps) {
   const tickerParam = resolvedParams.ticker
   const ticker = tickerParam.toUpperCase()
 
+  // Verificar se ticker foi migrado e redirecionar
+  const company = await prisma.company.findUnique({
+    where: { ticker },
+    select: {
+      isActive: true,
+      successor: {
+        select: {
+          ticker: true,
+        },
+      },
+    },
+  });
+
+  if (company && !company.isActive && company.successor) {
+    redirect(`/bdr/${company.successor.ticker.toLowerCase()}`);
+  }
+
   // Verificar sessão do usuário para recursos premium
   const session = await getServerSession(authOptions)
   let userIsPremium = false

@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import TechnicalAnalysisPage from '@/components/technical-analysis-page'
 import TechnicalAnalysisPageLimited from '@/components/technical-analysis-page-limited'
+import { PredecessorTickerLink } from '@/components/predecessor-ticker-link'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -134,6 +135,11 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
       name: true,
       sector: true,
       logoUrl: true,
+      predecessor: {
+        select: {
+          ticker: true,
+        },
+      },
       dailyQuotes: {
         orderBy: { date: 'desc' },
         take: 1,
@@ -160,11 +166,20 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
               </Link>
             </Button>
             <div className="flex items-center space-x-4">
-              <div>
+              <div className="flex-1">
                 <h1 className="text-3xl font-bold">Análise Técnica</h1>
                 <p className="text-muted-foreground mt-1">
                   {ticker} - {companyData?.name || company.name}
                 </p>
+                {companyData?.predecessor && (
+                  <div className="mt-2">
+                    <PredecessorTickerLink
+                      predecessorTicker={companyData.predecessor.ticker}
+                      currentTicker={ticker}
+                      pageType="analise-tecnica"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -195,6 +210,15 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
             </Button>
             <h1 className="text-3xl font-bold">Análise Técnica - {ticker}</h1>
             <p className="text-muted-foreground mt-2">{company.name}</p>
+            {companyData?.predecessor && (
+              <div className="mt-2">
+                <PredecessorTickerLink
+                  predecessorTicker={companyData.predecessor.ticker}
+                  currentTicker={ticker}
+                  pageType="analise-tecnica"
+                />
+              </div>
+            )}
           </div>
 
           {/* Premium CTA */}
@@ -257,11 +281,20 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
             </Link>
           </Button>
           <div className="flex items-center space-x-4">
-            <div>
+            <div className="flex-1">
               <h1 className="text-3xl font-bold">Análise Técnica</h1>
               <p className="text-muted-foreground mt-1">
                 {ticker} - {companyData?.name || company.name}
               </p>
+              {companyData?.predecessor && (
+                <div className="mt-2">
+                  <PredecessorTickerLink
+                    predecessorTicker={companyData.predecessor.ticker}
+                    currentTicker={ticker}
+                    pageType="analise-tecnica"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

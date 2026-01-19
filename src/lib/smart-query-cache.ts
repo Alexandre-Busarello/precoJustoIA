@@ -38,6 +38,7 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
   
   // Companies & Market Data
   'company': 'companies',
+  'Company': 'companies', // Adicionar também com primeira letra maiúscula
   'financialData': 'financial_data',
   'dailyQuote': 'daily_quotes',
   'historicalPrice': 'historical_prices',
@@ -118,7 +119,20 @@ const PRISMA_MODEL_TO_TABLE: Record<string, string> = {
 // Quando uma tabela é modificada, invalida cache de tabelas relacionadas
 const TABLE_DEPENDENCIES: Record<string, string[]> = {
   // Empresas e dados relacionados
-  'companies': ['companies', 'financial_data', 'daily_quotes', 'key_statistics', 'dividend_history'],
+  'companies': [
+    'companies',
+    'financial_data',
+    'daily_quotes',
+    'key_statistics',
+    'dividend_history',
+    'balance_sheets',
+    'income_statements',
+    'cashflow_statements',
+    'historical_prices',
+    'value_added_statements',
+    'quarterly_financials',
+    'price_oscillations',
+  ],
   'financial_data': ['companies', 'financial_data', 'key_statistics'],
   'daily_quotes': ['companies', 'daily_quotes', 'key_statistics'],
   'dividend_history': ['companies', 'dividend_history'], // Quando dividendos são atualizados, pode afetar projeções do radar em companies

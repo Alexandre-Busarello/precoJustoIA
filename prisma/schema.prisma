@@ -170,6 +170,10 @@ model Company {
   dividendRadarLastProcessedAt  DateTime?                @map("dividend_radar_last_processed_at")
   dividendRadarProjections      Json?                    @map("dividend_radar_projections")
   priceVariationLastCheckedAt   DateTime?                @map("price_variation_last_checked_at")
+  isActive                      Boolean                  @default(true) @map("is_active")
+  successorId                   Int?                     @unique @map("successor_id")
+  successor                     Company?                 @relation("TickerHistory", fields: [successorId], references: [id])
+  predecessor                   Company?                 @relation("TickerHistory")
   aiReports                     AIReport[]
   aiReportsQueue                AIReportsQueue[]
   snapshots                     AssetSnapshot[]
@@ -201,6 +205,8 @@ model Company {
   @@index([yahooLastUpdatedAt])
   @@index([priceVariationLastCheckedAt])
   @@index([dataUltimoDividendo])
+  @@index([isActive])
+  @@index([successorId])
   @@map("companies")
 }
 

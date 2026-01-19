@@ -26,6 +26,7 @@ import {
   Bell,
   FileQuestion,
   RefreshCw,
+  GitMerge,
 } from 'lucide-react';
 
 interface AdminHubClientProps {
@@ -177,6 +178,14 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       icon: Activity,
       href: '/admin/yahoo-debug',
       color: 'bg-yellow-500',
+    },
+    {
+      id: 'ticker-migration',
+      title: 'Migração de Tickers',
+      description: 'Unifique histórico financeiro quando empresas mudam código',
+      icon: GitMerge,
+      href: '/admin/ticker-migration',
+      color: 'bg-teal-500',
     },
   ];
 

@@ -301,6 +301,23 @@ export default async function TickerPage({ params }: PageProps) {
   const tickerParam = resolvedParams.ticker // Manter ticker original da URL
   const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
 
+  // Verificar se ticker foi migrado e redirecionar
+  const company = await prisma.company.findUnique({
+    where: { ticker },
+    select: {
+      isActive: true,
+      successor: {
+        select: {
+          ticker: true,
+        },
+      },
+    },
+  });
+
+  if (company && !company.isActive && company.successor) {
+    redirect(`/acao/${company.successor.ticker.toLowerCase()}`);
+  }
+
   // Verificar sessão do usuário para recursos premium
   const session = await getServerSession(authOptions)
   let userIsPremium = false

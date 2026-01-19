@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { PredecessorTickerLink } from '@/components/predecessor-ticker-link';
 import { isCurrentUserPremium, getCurrentUser } from '@/lib/user-service';
 
 interface PageProps {
@@ -49,6 +50,11 @@ export default async function ReportsListPage({ params }: PageProps) {
       name: true,
       logoUrl: true,
       sector: true,
+      predecessor: {
+        select: {
+          ticker: true,
+        },
+      },
     },
   });
 
@@ -140,13 +146,22 @@ export default async function ReportsListPage({ params }: PageProps) {
         </Link>
 
         <div className="flex items-start justify-between mb-4">
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl font-bold mb-2">
               Relatórios
             </h1>
             <p className="text-muted-foreground">
               {company.name} ({company.ticker})
             </p>
+            {company.predecessor && (
+              <div className="mt-2">
+                <PredecessorTickerLink
+                  predecessorTicker={company.predecessor.ticker}
+                  currentTicker={company.ticker}
+                  pageType="relatorios"
+                />
+              </div>
+            )}
           </div>
           
           {company.logoUrl && (

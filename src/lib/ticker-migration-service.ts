@@ -504,6 +504,97 @@ export class TickerMigrationService {
           });
         }
 
+        // Copiar dados faltantes da empresa origem para a destino
+        // Se o nome da empresa destino é igual ao ticker (empresa recém-criada sem dados),
+        // ou se campos importantes estão faltando, copiar da empresa origem
+        const isNewCompanyWithNoData =
+          newCompany.name.toUpperCase() === normalizedNewTicker;
+        
+        const updateData: Record<string, any> = {};
+
+        // Lista de campos que devem ser copiados se faltarem na empresa destino
+        const fieldsToCopy: Array<keyof typeof oldCompany> = [
+          'sector',
+          'industry',
+          'cnpj',
+          'description',
+          'address',
+          'city',
+          'state',
+          'country',
+          'fullTimeEmployees',
+          'address2',
+          'address3',
+          'fax',
+          'industryDisp',
+          'industryKey',
+          'phone',
+          'sectorDisp',
+          'sectorKey',
+          'zip',
+          'website',
+        ];
+
+        // Se é empresa nova sem dados OU se campos importantes estão faltando, copiar
+        if (isNewCompanyWithNoData) {
+          // Copiar o nome da empresa origem se o destino tem apenas o ticker como nome
+          if (oldCompany.name && oldCompany.name !== normalizedOldTicker) {
+            updateData.name = oldCompany.name;
+          }
+
+          // Copiar todos os campos disponíveis da origem
+          for (const field of fieldsToCopy) {
+            const oldValue = oldCompany[field];
+            const newValue = newCompany[field];
+            
+            // Copiar se o valor da origem existe e o destino não tem ou está vazio
+            if (
+              oldValue !== null &&
+              oldValue !== undefined &&
+              (newValue === null || newValue === undefined || newValue === '')
+            ) {
+              updateData[field] = oldValue;
+            }
+          }
+        } else {
+          // Mesmo que não seja empresa nova, copiar campos específicos se faltarem
+          const criticalFields: Array<keyof typeof oldCompany> = [
+            'sector',
+            'industry',
+            'cnpj',
+            'description',
+            'address',
+            'city',
+            'state',
+            'country',
+          ];
+
+          for (const field of criticalFields) {
+            const oldValue = oldCompany[field];
+            const newValue = newCompany[field];
+            
+            // Copiar se o valor da origem existe e o destino não tem ou está vazio
+            if (
+              oldValue !== null &&
+              oldValue !== undefined &&
+              (newValue === null || newValue === undefined || newValue === '')
+            ) {
+              updateData[field] = oldValue;
+            }
+          }
+        }
+
+        // Atualizar empresa destino com dados copiados
+        if (Object.keys(updateData).length > 0) {
+          console.log(
+            `📋 Copiando ${Object.keys(updateData).length} campos da empresa origem para destino`
+          );
+          await tx.company.update({
+            where: { id: newCompany.id },
+            data: updateData,
+          });
+        }
+
         // Atualizar empresa antiga: marcar como inativa e vincular sucessor
         await tx.company.update({
           where: { id: oldCompany.id },

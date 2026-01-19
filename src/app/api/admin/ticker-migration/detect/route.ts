@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/user-service';
 import { GoogleGenAI } from '@google/genai';
 import { TickerMigrationService } from '@/lib/ticker-migration-service';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,6 +44,27 @@ export async function POST(request: NextRequest) {
             .map((m) => `${m.oldTicker}->${m.newTicker}`)
             .join(', ')
         : 'Nenhuma migração realizada ainda.';
+
+    // Criar sets para validação rápida
+    const migratedOldTickers = new Set(
+      completedMigrations.map((m) => m.oldTicker.toUpperCase())
+    );
+    const migratedNewTickers = new Set(
+      completedMigrations.map((m) => m.newTicker.toUpperCase())
+    );
+
+    /**
+     * Valida formato de ticker B3
+     * Formato válido: 4 letras + 1-2 dígitos (ex: PETR4, VALE3, ITUB4)
+     * Ou ETFs/FIIs/BDRs: 4 letras + 11 (ex: BOVA11, HGBS11)
+     * Ou BDRs: 4 letras + 34/35 (ex: AAPL34, MSFT35)
+     */
+    const isValidTickerFormat = (ticker: string): boolean => {
+      const normalized = ticker.toUpperCase().trim();
+      // Padrão: 4 letras + 1-2 dígitos ou 11, 34, 35
+      const b3Pattern = /^[A-Z]{4}\d{1,2}$/;
+      return b3Pattern.test(normalized);
+    };
 
     // Configurar Gemini AI
     const ai = new GoogleGenAI({
@@ -126,8 +148,8 @@ Se não houver mudanças recentes para sugerir, retorne um array vazio: [].`;
         );
       }
 
-      // Validar cada sugestão
-      const validSuggestions = suggestions.filter(
+      // Validar estrutura básica de cada sugestão
+      const structurallyValidSuggestions = suggestions.filter(
         (s: any) =>
           s.oldTicker &&
           s.newTicker &&
@@ -135,10 +157,69 @@ Se não houver mudanças recentes para sugerir, retorne um array vazio: [].`;
           ['High', 'Medium', 'Low'].includes(s.confidence)
       );
 
+      // Buscar empresas já migradas no banco (verificação adicional)
+      const migratedCompaniesInDb = await prisma.company.findMany({
+        where: {
+          isActive: false,
+          successorId: { not: null },
+        },
+        select: {
+          ticker: true,
+        },
+      });
+      const migratedTickersInDb = new Set(
+        migratedCompaniesInDb.map((c) => c.ticker.toUpperCase())
+      );
+
+      // Filtrar tickers inválidos e já migrados
+      const filteredSuggestions = structurallyValidSuggestions.filter(
+        (s: any) => {
+          const oldTicker = s.oldTicker.toUpperCase().trim();
+          const newTicker = s.newTicker.toUpperCase().trim();
+
+          // Validar formato dos tickers (formato B3: 4 letras + 1-2 dígitos)
+          if (!isValidTickerFormat(oldTicker) || !isValidTickerFormat(newTicker)) {
+            console.log(
+              `⚠️ Sugestão filtrada - formato inválido: ${oldTicker} -> ${newTicker}`
+            );
+            return false;
+          }
+
+          // Verificar se oldTicker já foi migrado (no histórico ou no banco)
+          if (
+            migratedOldTickers.has(oldTicker) ||
+            migratedTickersInDb.has(oldTicker)
+          ) {
+            console.log(
+              `⚠️ Sugestão filtrada - ticker antigo já migrado: ${oldTicker}`
+            );
+            return false;
+          }
+
+          // Verificar se newTicker já foi migrado (como oldTicker de outra migração)
+          if (
+            migratedOldTickers.has(newTicker) ||
+            migratedTickersInDb.has(newTicker)
+          ) {
+            console.log(
+              `⚠️ Sugestão filtrada - ticker novo já foi migrado anteriormente: ${newTicker}`
+            );
+            return false;
+          }
+
+          return true;
+        }
+      );
+
+      const filteredCount =
+        structurallyValidSuggestions.length - filteredSuggestions.length;
+
       return NextResponse.json({
-        suggestions: validSuggestions,
+        suggestions: filteredSuggestions,
         exclusionList,
         totalExcluded: completedMigrations.length,
+        filteredCount,
+        totalReceived: suggestions.length,
       });
     } catch (parseError) {
       console.error('Erro ao parsear resposta do Gemini:', parseError);

@@ -142,8 +142,10 @@ export async function GET(request: NextRequest) {
         const currentPrice = scoreResult.currentPrice;
         const overallScoreResult = scoreResult.overallScore;
         const strategies = scoreResult.strategies;
+        // Extrair penaltyInfo do scoreResult (já vem extraído do calculateCompanyOverallScore)
+        const penaltyInfoFromResult = scoreResult.penaltyInfo || null;
 
-        console.log(`📈 ${company.ticker}: Score atual = ${currentScore.toFixed(1)}`);
+        console.log(`📈 ${company.ticker}: Score atual = ${currentScore.toFixed(1)}${penaltyInfoFromResult?.applied ? ` (com penalização de ${Math.abs(penaltyInfoFromResult.value)} pontos)` : ''}`);
 
         // 6. Buscar dados financeiros para o snapshot
         const companyWithData = await prisma.company.findUnique({
@@ -180,6 +182,31 @@ export async function GET(request: NextRequest) {
 
         // 7. Calcular composição do score usando função centralizada
         const scoreComposition = await calculateScoreComposition(company.ticker);
+        
+        // Validação: garantir que scoreComposition foi calculado corretamente
+        if (!scoreComposition) {
+          console.error(`❌ ${company.ticker}: scoreComposition não pôde ser calculado`);
+          await AssetMonitoringService.updateLastChecked(company.id);
+          stats.processed = true;
+          return stats;
+        }
+        
+        // Log de validação das penalidades (remover após confirmação)
+        if (scoreComposition.penalties && scoreComposition.penalties.length > 0) {
+          console.log(`[MONITOR-ASSETS] ${company.ticker}: Penalidades no scoreComposition -`, {
+            penaltiesCount: scoreComposition.penalties.length,
+            totalPenalty: (scoreComposition.rawScore - scoreComposition.score).toFixed(1),
+            penalties: scoreComposition.penalties.map(p => ({ reason: p.reason, amount: p.amount.toFixed(1) }))
+          });
+        }
+        
+        if (penaltyInfoFromResult?.applied) {
+          console.log(`[MONITOR-ASSETS] ${company.ticker}: penaltyInfo detectado -`, {
+            applied: penaltyInfoFromResult.applied,
+            value: penaltyInfoFromResult.value,
+            flagId: penaltyInfoFromResult.flagId
+          });
+        }
 
         // 8. Verificar se existe snapshot
         const existingSnapshot = await AssetMonitoringService.getLatestSnapshot(company.id);
@@ -200,8 +227,8 @@ export async function GET(request: NextRequest) {
             timestamp: new Date().toISOString(),
           };
 
-          // Extrair penaltyInfo do overallScoreResult se disponível
-          const penaltyInfo = (overallScoreResult as any)?.penaltyInfo || null;
+          // Usar penaltyInfo do scoreResult (já extraído corretamente)
+          const penaltyInfo = penaltyInfoFromResult;
 
           await AssetMonitoringService.createSnapshot(
             company.id,
@@ -251,8 +278,8 @@ export async function GET(request: NextRequest) {
                 timestamp: new Date().toISOString(),
               };
 
-              // Extrair penaltyInfo do overallScoreResult se disponível
-              const penaltyInfoNoSubs = (overallScoreResult as any)?.penaltyInfo || null;
+              // Usar penaltyInfo do scoreResult (já extraído corretamente)
+              const penaltyInfoNoSubs = penaltyInfoFromResult;
 
               await AssetMonitoringService.createSnapshot(
                 company.id,
@@ -278,11 +305,15 @@ export async function GET(request: NextRequest) {
                 timestamp: new Date().toISOString(),
               };
 
+              // Usar penaltyInfo do scoreResult (já extraído corretamente)
+              const penaltyInfo = penaltyInfoFromResult;
+
               const snapshotId = await AssetMonitoringService.createSnapshot(
                 company.id,
                 snapshotData,
                 currentScore,
-                scoreComposition
+                scoreComposition,
+                penaltyInfo || undefined
               );
 
               console.log(`📸 ${company.ticker}: Novo snapshot criado (ID: ${snapshotId})`);
@@ -302,8 +333,7 @@ export async function GET(request: NextRequest) {
                 // Buscar composição do score anterior se disponível
                 const previousScoreComposition = (existingSnapshot as any).scoreComposition as ScoreComposition | undefined;
 
-                // Extrair penaltyInfo do overallScoreResult se disponível
-                const penaltyInfo = (overallScoreResult as any)?.penaltyInfo || null;
+                // penaltyInfo já foi extraído acima
 
                 const reportContent = await MonitoringReportService.generateChangeReport({
                   ticker: company.ticker,

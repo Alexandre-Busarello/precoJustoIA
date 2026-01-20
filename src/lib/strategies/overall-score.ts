@@ -4182,11 +4182,12 @@ export function calculateOverallScore(
     totalWeight += grahamWeight;
     
     if (includeBreakdown) {
+      const grahamPoints = grahamScoreUsed * grahamWeight;
       contributions.push({
         name: 'Graham (Valor Intrínseco)',
         score: grahamScoreUsed,
         weight: grahamWeight,
-        points: grahamScoreUsed * grahamWeight,
+        points: grahamPoints,
         eligible: strategies.graham.isEligible || false,
         description: getStrategyDescription('graham')
       });
@@ -4733,18 +4734,24 @@ export function calculateOverallScore(
   // Aplicar penalização adicional no score geral para risco crítico
   if (statementsAnalysis?.riskLevel === "CRITICAL") {
     // Penalização adicional de 15 pontos no score final para risco crítico
-    finalScore = Math.max(0, finalScore - 15);
+    const riskPenalty = 15;
+    const finalScoreBeforeRisk = finalScore;
+    finalScore = Math.max(0, finalScore - riskPenalty);
     // Garantir que empresas com risco crítico nunca tenham score superior a 50
-    finalScore = Math.min(finalScore, 50);
-    weaknesses.push(
+    const finalScoreBeforeCap = finalScore;
+      finalScore = Math.min(finalScore, 50);
+      weaknesses.push(
       "Penalização por risco crítico em análise das demonstrações financeiras"
     );
   } else if (statementsAnalysis?.riskLevel === "HIGH") {
     // Penalização adicional de 8 pontos no score final para alto risco
-    finalScore = Math.max(0, finalScore - 8);
+    const riskPenalty = 8;
+    const finalScoreBeforeRisk = finalScore;
+    finalScore = Math.max(0, finalScore - riskPenalty);
     // Garantir que empresas com alto risco nunca tenham score superior a 70
-    finalScore = Math.min(finalScore, 70);
-    weaknesses.push(
+    const finalScoreBeforeCap = finalScore;
+      finalScore = Math.min(finalScore, 70);
+      weaknesses.push(
       "Penalização por risco alto em análise das demonstrações financeiras"
     );
   }
@@ -4836,6 +4843,7 @@ export function calculateOverallScore(
   let penaltyInfo: PenaltyInfo | null = null;
   if (activeFlag) {
     const penaltyValue = -20;
+    const finalScoreBeforeFlag = finalScore;
     finalScore = Math.max(0, finalScore + penaltyValue); // Garantir que não fique abaixo de 0
     penaltyInfo = {
       applied: true,
@@ -4906,9 +4914,12 @@ export function calculateOverallScore(
 
   // Se incluir breakdown, adicionar contribuições e rawScore
   if (includeBreakdown) {
-    const rawScore = totalWeight > 0 ? totalScore / totalWeight : 0;
     // Ordenar contribuições por pontos (maior primeiro)
     contributions.sort((a, b) => b.points - a.points);
+    
+    // rawScore deve ser a soma das contribuições (não a média ponderada)
+    // Isso garante que a soma exibida na tela corresponda ao rawScore
+    const rawScore = contributions.reduce((sum, c) => sum + c.points, 0);
     
     return {
       ...result,

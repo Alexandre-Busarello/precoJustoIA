@@ -53,13 +53,27 @@ export async function calculateScoreComposition(
       category: getCategoryFromName(contrib.name)
     }));
 
-    return {
+    const composition: ScoreComposition = {
       score: breakdown.score,
       rawScore: breakdown.rawScore,
       contributions,
       penalties: breakdown.penalties,
       methodology: 'Score calculado pela soma ponderada das contribuições de cada estratégia, com penalidades aplicadas quando há contradições ou alertas críticos'
     };
+
+    // Log de validação (remover após confirmação)
+    if (composition.penalties && composition.penalties.length > 0) {
+      const totalPenalty = composition.rawScore - composition.score;
+      console.log(`[SCORE-COMPOSITION] ${ticker}: Penalidades incluídas -`, {
+        penaltiesCount: composition.penalties.length,
+        totalPenalty: totalPenalty.toFixed(1),
+        rawScore: composition.rawScore.toFixed(1),
+        finalScore: composition.score.toFixed(1),
+        penalties: composition.penalties.map(p => ({ reason: p.reason, amount: p.amount.toFixed(1) }))
+      });
+    }
+
+    return composition;
   } catch (error) {
     console.error('Erro ao calcular composição do score:', error);
     return null;

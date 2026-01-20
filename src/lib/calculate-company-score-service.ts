@@ -179,13 +179,19 @@ export async function calculateCompanyOverallScore(
     }
 
     // === 6. RETORNAR RESULTADO ===
+    // Extrair penaltyInfo do overallScore se disponível
+    const penaltyInfo = overallScore && 'penaltyInfo' in overallScore 
+      ? (overallScore as any).penaltyInfo as PenaltyInfo | null | undefined
+      : null;
+
     const result: CompanyScoreResult = {
       ticker: companyData.ticker,
       companyName: companyData.name,
       sector: companyData.sector,
       currentPrice,
       logoUrl: companyData.logoUrl,
-      overallScore
+      overallScore,
+      penaltyInfo: penaltyInfo || null
     };
 
     // Incluir estratégias individuais se solicitado (para /api/company-analysis)

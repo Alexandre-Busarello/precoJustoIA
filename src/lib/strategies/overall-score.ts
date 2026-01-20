@@ -817,12 +817,24 @@ function detectHoldingCompany(
   let totalNonOperationalResult = 0;
   let positiveNetIncomeYears = 0;
 
+  // Detectar se é empresa financeira/seguradora
+  const isFinancial = 
+    (sector?.toLowerCase().includes("bank") ?? false) ||
+    (sector?.toLowerCase().includes("financ") ?? false) ||
+    (sector?.toLowerCase().includes("seguros") ?? false) ||
+    (sector?.toLowerCase().includes("insurance") ?? false) ||
+    (sector?.toLowerCase().includes("previdência") ?? false) ||
+    (industry?.toLowerCase().includes("bank") ?? false) ||
+    (industry?.toLowerCase().includes("financ") ?? false) ||
+    (industry?.toLowerCase().includes("seguros") ?? false) ||
+    (industry?.toLowerCase().includes("insurance") ?? false) ||
+    (industry?.toLowerCase().includes("previdência") ?? false);
+
   for (let i = 0; i < yearsToAnalyze; i++) {
     const incomeStmt = incomeStatements[i];
-    const revenue =
-      toNumber(incomeStmt.totalRevenue) ||
-      toNumber(incomeStmt.operatingIncome) ||
-      0;
+    // Receita: usar função auxiliar que considera tipo de empresa
+    const revenue = extractRevenue(incomeStmt, isFinancial);
+    
     const netIncome = toNumber(incomeStmt.netIncome) || 0;
     const ebit = toNumber(incomeStmt.ebit) || 0;
     const operatingIncome = toNumber(incomeStmt.operatingIncome) || 0;
@@ -867,6 +879,68 @@ function detectHoldingCompany(
     nonOpToNetIncomeRatio > 0.5;
 
   return hasHoldingKeywords && isHoldingPattern;
+}
+
+// === FUNÇÃO AUXILIAR PARA EXTRAIR RECEITA ===
+/**
+ * Extrai receita da DRE considerando o tipo de empresa
+ * - Empresas financeiras/seguradoras: usa campos específicos (insuranceOperations, etc.) ou operatingIncome
+ * - Empresas tradicionais: usa totalRevenue ou calcula de grossProfit + costOfRevenue
+ */
+function extractRevenue(
+  incomeStmt: Record<string, unknown>,
+  isFinancial: boolean = false
+): number {
+  // Para empresas financeiras/seguradoras
+  if (isFinancial) {
+    // Tentar campos específicos de seguros primeiro
+    const insuranceOps = toNumber(incomeStmt.insuranceOperations);
+    const reinsuranceOps = toNumber(incomeStmt.reinsuranceOperations);
+    const pensionOps = toNumber(incomeStmt.complementaryPensionOperations);
+    const capitalizationOps = toNumber(incomeStmt.capitalizationOperations);
+    
+    // Soma de operações de seguros (se disponível)
+    const totalInsuranceOps = 
+      (insuranceOps || 0) + 
+      (reinsuranceOps || 0) + 
+      (pensionOps || 0) + 
+      (capitalizationOps || 0);
+    
+    if (totalInsuranceOps !== 0) {
+      return totalInsuranceOps;
+    }
+    
+    // Fallback: usar totalRevenue se disponível
+    const totalRevenue = toNumber(incomeStmt.totalRevenue);
+    if (totalRevenue) {
+      return totalRevenue;
+    }
+    
+    // Último fallback para financeiras: operatingIncome pode ser usado
+    // pois para essas empresas representa receita operacional líquida
+    const operatingIncome = toNumber(incomeStmt.operatingIncome);
+    if (operatingIncome) {
+      return operatingIncome;
+    }
+    
+    return 0;
+  }
+  
+  // Para empresas tradicionais
+  // Prioridade 1: totalRevenue
+  const totalRevenue = toNumber(incomeStmt.totalRevenue);
+  if (totalRevenue) {
+    return totalRevenue;
+  }
+  
+  // Prioridade 2: calcular de grossProfit + costOfRevenue
+  const grossProfit = toNumber(incomeStmt.grossProfit) || 0;
+  const costOfRevenue = toNumber(incomeStmt.costOfRevenue) || 0;
+  if (grossProfit > 0 && costOfRevenue > 0) {
+    return grossProfit + costOfRevenue;
+  }
+  
+  return 0;
 }
 
 // === FUNÇÃO PARA CALCULAR MÉDIAS DOS INDICADORES ===
@@ -951,10 +1025,10 @@ function calculateAverageMetrics(
     let periodContributedMetrics = false;
 
     // Extrair valores básicos
-    const revenue =
-      toNumber(incomeStmt.totalRevenue) ||
-      toNumber(incomeStmt.operatingIncome) ||
-      0;
+    // Receita: usar função auxiliar que considera tipo de empresa (financeira vs tradicional)
+    const isFinancial = dataValidation?.isBankOrFinancial || false;
+    const revenue = extractRevenue(incomeStmt, isFinancial);
+    
     const netIncome = toNumber(incomeStmt.netIncome) || 0;
     const grossProfit = toNumber(incomeStmt.grossProfit) || 0;
     const operatingIncome = toNumber(incomeStmt.operatingIncome) || 0;
@@ -1973,8 +2047,22 @@ function validateFinancialData(
     const receivables = toNumber(balance.accountsReceivable) || 0;
     const cash = toNumber(balance.cash) || 0;
     const totalAssets = toNumber(balance.totalAssets) || 0;
-    const revenue =
-      toNumber(income.totalRevenue) || toNumber(income.operatingIncome) || 0;
+    
+    // Detectar se é empresa financeira para extração correta de receita
+    const isFinancial =
+      sectorContext?.type === "FINANCIAL" ||
+      (sector?.toLowerCase().includes("bank") ?? false) ||
+      (sector?.toLowerCase().includes("financ") ?? false) ||
+      (sector?.toLowerCase().includes("seguros") ?? false) ||
+      (sector?.toLowerCase().includes("insurance") ?? false) ||
+      (sector?.toLowerCase().includes("previdência") ?? false) ||
+      (industry?.toLowerCase().includes("bank") ?? false) ||
+      (industry?.toLowerCase().includes("financ") ?? false) ||
+      (industry?.toLowerCase().includes("seguros") ?? false) ||
+      (industry?.toLowerCase().includes("insurance") ?? false) ||
+      (industry?.toLowerCase().includes("previdência") ?? false);
+    
+    const revenue = extractRevenue(income, isFinancial);
 
     // Considerar válido se > 0 e faz sentido proporcionalmente
     if (currentAssets > 0 && currentAssets < totalAssets * 2)

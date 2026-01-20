@@ -10,6 +10,14 @@ async function runFetchWard() {
   const noBrapi = args.includes('--no-brapi');
   const forceFullUpdate = args.includes('--force-full');
   const resetState = args.includes('--reset');
+  
+  // Extrair tickers para resetar
+  let resetTickers = null;
+  const resetTickerArg = args.find(arg => arg.startsWith('--reset-ticker='));
+  if (resetTickerArg) {
+    const tickersStr = resetTickerArg.split('=')[1];
+    resetTickers = tickersStr.split(',').map(t => t.trim().toUpperCase());
+  }
 
   if (isLocal) {
     // Executar localmente
@@ -45,7 +53,8 @@ async function runFetchWard() {
         tickers: tickers.length > 0 ? tickers : undefined,
         noBrapi,
         forceFullUpdate,
-        resetState
+        resetState,
+        resetTickers
       }, {
         headers,
         timeout: 300000 // 5 minutos

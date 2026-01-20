@@ -634,6 +634,7 @@ async function fetchBrapiTTMData(ticker: string): Promise<BrapiProResponse['resu
     }
   } catch (error: any) {
     console.error(`❌ Erro ao buscar dados TTM da Brapi PRO para ${ticker}:`, error.message);
+    console.error(`❌ Erro completo:`, error);
     return null;
   }
 }
@@ -3482,10 +3483,19 @@ async function main() {
     const forceFullIndex = args.indexOf('--force-full');
     const resetIndex = args.indexOf('--reset');
     const discoverIndex = args.indexOf('--discover');
+    const resetTickerIndex = args.findIndex(arg => arg.startsWith('--reset-ticker='));
     const enableBrapiComplement = true; //noBrapiIndex === -1;
     const forceFullUpdate = forceFullIndex !== -1;
     const resetState = resetIndex !== -1;
     const discoverTickers = discoverIndex !== -1;
+    
+    // Extrair tickers para resetar
+    let resetTickers: string[] = [];
+    if (resetTickerIndex !== -1) {
+      const resetTickerArg = args[resetTickerIndex];
+      const tickersStr = resetTickerArg.split('=')[1];
+      resetTickers = tickersStr.split(',').map(t => t.trim().toUpperCase());
+    }
     
     // Remover opções dos tickers
     const tickers = args.filter((arg, index) => 
@@ -3493,21 +3503,32 @@ async function main() {
       index !== forceFullIndex && 
       index !== resetIndex &&
       index !== discoverIndex &&
+      index !== resetTickerIndex &&
       arg !== '--no-brapi' && 
       arg !== '--force-full' &&
       arg !== '--reset' &&
-      arg !== '--discover'
+      arg !== '--discover' &&
+      !arg.startsWith('--reset-ticker=')
     ).map(t => t.toUpperCase());
     
     console.log(`🔧 Complemento Brapi: ${enableBrapiComplement ? '✅ Ativado' : '❌ Desativado'}`);
     console.log(`🔄 Atualização completa: ${forceFullUpdate ? '✅ Forçada' : '❌ Inteligente'}`);
     console.log(`🔄 Reset de estado: ${resetState ? '✅ Sim' : '❌ Não'}`);
     console.log(`🔍 Descobrir tickers: ${discoverTickers ? '✅ Sim' : '❌ Não'}`);
+    if (resetTickers.length > 0) {
+      console.log(`🔄 Resetar tickers específicos: ${resetTickers.join(', ')}`);
+    }
     
     // Reset do estado se solicitado
     if (resetState) {
       await tickerManager.resetAllTickers();
       console.log('🔄 Estado de todos os tickers resetado.\n');
+    }
+    
+    // Resetar tickers específicos se solicitado
+    if (resetTickers.length > 0) {
+      await tickerManager.resetTickers(resetTickers);
+      console.log(`🔄 Tickers resetados: ${resetTickers.join(', ')}\n`);
     }
     
     // Descobrir novos tickers se solicitado
@@ -3787,9 +3808,6 @@ async function processCompanyTTMOnly(
         
         // Converter dados do Fundamentus
         fundamentusFinancialData = convertFundamentusToFinancialData(fundamentusData);
-        
-        // Recalcular métricas de crescimento para todos os anos
-        await calculateAndUpdateAllGrowthMetrics(company.id);
         
         console.log(`  📊 Dados do Fundamentus processados para ${ticker}`);
       } else {
@@ -4076,6 +4094,16 @@ async function processCompanyTTMOnly(
         hasBrapiProData: !!brapiTTMData,
         hasHistoricalData: true // Manter como true se já tinha
       });
+      
+      // Recalcular métricas de crescimento para todos os anos APÓS todos os dados serem salvos
+      // Isso garante que o CAGR seja calculado com dados completos e corretos
+      try {
+        await calculateAndUpdateAllGrowthMetrics(company.id);
+        console.log(`  ✅ Métricas de crescimento recalculadas para todos os anos`);
+      } catch (cagrError: any) {
+        console.log(`  ⚠️  Erro ao recalcular CAGR (não crítico):`, cagrError.message);
+        // Não lançar erro - CAGR pode ser recalculado depois
+      }
     } else {
       console.log(`⚠️  Nenhuma fonte de dados TTM disponível para ${ticker}`);
       await tickerManager.updateProgress(ticker, { 
@@ -4116,6 +4144,16 @@ async function processCompanyWithTracking(
 
     // Usar a função original de processamento
     await processCompany(ticker, enableBrapiComplement, forceFullUpdate);
+
+    // Recalcular métricas de crescimento para todos os anos APÓS todos os dados serem salvos
+    // Isso garante que o CAGR seja calculado com dados completos e corretos
+    try {
+      await calculateAndUpdateAllGrowthMetrics(company.id);
+      console.log(`  ✅ Métricas de crescimento recalculadas para todos os anos`);
+    } catch (cagrError: any) {
+      console.log(`  ⚠️  Erro ao recalcular CAGR (não crítico):`, cagrError.message);
+      // Não lançar erro - CAGR pode ser recalculado depois
+    }
 
     // Atualizar progresso final como completo
     await tickerManager.updateProgress(ticker, {
@@ -4169,8 +4207,9 @@ async function processWithTickerManagement(
     console.log(`⏱️  Tempo restante: ${Math.round(remainingTime / 1000)}s, lote: ${batchSize} tickers`);
     
     const tickers = await tickerManager.getTickersToProcess(batchSize, {
-      excludeErrors: true,
-      maxErrorCount: 2
+      excludeErrors: false, // Permitir reprocessar erros após timeout
+      maxErrorCount: 5, // Aumentar limite de erros para permitir mais tentativas
+      resetStuckTickers: true // Resetar automaticamente tickers travados
     });
     
     if (tickers.length === 0) {

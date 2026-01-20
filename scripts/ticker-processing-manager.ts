@@ -295,6 +295,66 @@ export class TickerProcessingManager {
   }
 
   /**
+   * Reseta tickers travados em PROCESSING há mais de X minutos
+   * Isso resolve o problema de tickers que ficam travados após timeout ou crash
+   */
+  async resetStuckProcessingTickers(timeoutMinutes: number = 10): Promise<number> {
+    const timeoutDate = new Date();
+    timeoutDate.setMinutes(timeoutDate.getMinutes() - timeoutMinutes);
+    
+    const result = await backgroundPrisma.tickerProcessingStatus.updateMany({
+      where: {
+        processType: this.processType,
+        status: 'PROCESSING',
+        lastProcessedAt: {
+          lt: timeoutDate
+        }
+      },
+      data: {
+        status: 'PENDING',
+        lastError: 'Reset automático: ticker travado em PROCESSING há mais de ' + timeoutMinutes + ' minutos'
+      }
+    });
+    
+    if (result.count > 0) {
+      console.log(`🔄 Resetados ${result.count} tickers travados em PROCESSING`);
+    }
+    
+    return result.count;
+  }
+
+  /**
+   * Reseta tickers com ERROR que podem ser reprocessados após um tempo
+   */
+  async resetStaleErrorTickers(retryAfterMinutes: number = 30, maxErrorCount: number = 5): Promise<number> {
+    const retryDate = new Date();
+    retryDate.setMinutes(retryDate.getMinutes() - retryAfterMinutes);
+    
+    const result = await backgroundPrisma.tickerProcessingStatus.updateMany({
+      where: {
+        processType: this.processType,
+        status: 'ERROR',
+        errorCount: {
+          lte: maxErrorCount
+        },
+        lastProcessedAt: {
+          lt: retryDate
+        }
+      },
+      data: {
+        status: 'PENDING',
+        lastError: null // Limpar erro para permitir nova tentativa
+      }
+    });
+    
+    if (result.count > 0) {
+      console.log(`🔄 Resetados ${result.count} tickers com ERROR para retry`);
+    }
+    
+    return result.count;
+  }
+
+  /**
    * Busca tickers que precisam ser processados
    */
   async getTickersToProcess(
@@ -305,11 +365,22 @@ export class TickerProcessingManager {
       ttmOnly?: boolean;
       excludeErrors?: boolean;
       maxErrorCount?: number;
+      resetStuckTickers?: boolean; // Novo: resetar tickers travados automaticamente
     } = {}
   ): Promise<TickerProcessingInfo[]> {
+    // Resetar tickers travados antes de buscar (se habilitado)
+    if (options.resetStuckTickers !== false) {
+      await this.resetStuckProcessingTickers(10); // Resetar PROCESSING travados há mais de 10 minutos
+      await this.resetStaleErrorTickers(30, options.maxErrorCount ?? 5); // Resetar ERROR antigos para retry
+    }
+    
     // Buscar tickers que precisam de processamento
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
+    // Data limite para considerar PROCESSING como travado (10 minutos)
+    const stuckProcessingDate = new Date();
+    stuckProcessingDate.setMinutes(stuckProcessingDate.getMinutes() - 10);
     
     const where: any = {
       processType: this.processType,
@@ -348,6 +419,15 @@ export class TickerProcessingManager {
       { status: 'PENDING' },
       { status: 'PARTIAL' }
     );
+    
+    // Incluir PROCESSING travados (há mais de 10 minutos)
+    // Isso resolve o problema de tickers que ficam travados após timeout ou crash
+    orConditions.push({
+      status: 'PROCESSING',
+      lastProcessedAt: {
+        lt: stuckProcessingDate
+      }
+    });
     
     // Incluir ERROR se não excluído
     if (!options.excludeErrors) {
@@ -530,6 +610,51 @@ export class TickerProcessingManager {
       needsTTM,
       needsBrapiPro
     };
+  }
+
+  /**
+   * Reseta o status de um ticker específico
+   */
+  async resetTicker(ticker: string): Promise<void> {
+    await backgroundPrisma.tickerProcessingStatus.update({
+      where: { ticker },
+      data: {
+        status: 'PENDING',
+        hasBasicData: false,
+        hasHistoricalData: false,
+        hasTTMData: false,
+        hasBrapiProData: false,
+        lastProcessedAt: null,
+        lastSuccessAt: null,
+        lastError: null,
+        errorCount: 0
+      }
+    });
+    console.log(`🔄 Ticker ${ticker} resetado para PENDING`);
+  }
+
+  /**
+   * Reseta múltiplos tickers específicos
+   */
+  async resetTickers(tickers: string[]): Promise<void> {
+    await backgroundPrisma.tickerProcessingStatus.updateMany({
+      where: {
+        ticker: { in: tickers },
+        processType: this.processType
+      },
+      data: {
+        status: 'PENDING',
+        hasBasicData: false,
+        hasHistoricalData: false,
+        hasTTMData: false,
+        hasBrapiProData: false,
+        lastProcessedAt: null,
+        lastSuccessAt: null,
+        lastError: null,
+        errorCount: 0
+      }
+    });
+    console.log(`🔄 ${tickers.length} tickers resetados para PENDING: ${tickers.join(', ')}`);
   }
 
   /**

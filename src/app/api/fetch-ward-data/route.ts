@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     // Obter parâmetros do body
     const body = await request.json().catch(() => ({}));
-    const { tickers, noBrapi, forceFullUpdate, resetState } = body;
+    const { tickers, noBrapi, forceFullUpdate, resetState, resetTickers } = body;
 
     // Simular argumentos do processo para o script
     const originalArgv = process.argv;
@@ -39,6 +39,10 @@ export async function POST(request: NextRequest) {
     
     if (resetState) {
       process.argv.push('--reset');
+    }
+    
+    if (resetTickers && Array.isArray(resetTickers) && resetTickers.length > 0) {
+      process.argv.push(`--reset-ticker=${resetTickers.join(',')}`);
     }
 
     // Capturar logs

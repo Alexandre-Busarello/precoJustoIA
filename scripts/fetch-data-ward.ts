@@ -4308,11 +4308,11 @@ async function processCompanyTTMOnly(
         }
       }
       
-      // Mesclar dados com prioridade: Yahoo > Fundamentus > Brapi
+      // Mesclar dados com prioridade: Fundamentus > Brapi > Yahoo
       let finalFinancialData: FinancialDataComplete;
       if (existingFinancialData) {
-        // Se temos Yahoo, sempre priorizar (dados mais recentes)
-        // Mesclar primeiro com prioridade Yahoo > Fundamentus > Brapi
+        // Yahoo é usado como terceira fonte (complementar) quando Fundamentus e Brapi não têm o dado
+        // Mesclar primeiro com prioridade Fundamentus > Brapi > Yahoo
         const mergedNewData = mergeFinancialDataWithPriority(
           fundamentusFinancialData,
           brapiFormattedData,
@@ -4332,11 +4332,11 @@ async function processCompanyTTMOnly(
           }
         });
         
-        // Atualizar dataSource para refletir todas as fontes
+        // Atualizar dataSource para refletir todas as fontes (ordem de prioridade: Fundamentus > Brapi > Yahoo)
         const sources: string[] = [];
-        if (yahooFormattedData) sources.push('yahoo');
-        if (fundamentusFinancialData) sources.push('fundamentus');
+        if (fundamentusFinancialData) sources.push('fundamentus'); // Fundamentus primeiro (prioridade máxima)
         if (brapiFormattedData) sources.push('brapi');
+        if (yahooFormattedData) sources.push('yahoo'); // Yahoo por último (terceira fonte)
         const existingSources = existingFinancialData.dataSource ? existingFinancialData.dataSource.split('+') : [];
         existingSources.forEach((s: string) => {
           if (!sources.includes(s)) sources.push(s);
@@ -4349,7 +4349,7 @@ async function processCompanyTTMOnly(
         if (brapiFormattedData) newSources.push('Brapi');
         console.log(`  🔄 Dados mesclados: ${newSources.join(' + ')} + existentes`);
       } else {
-        // Criar novo registro com prioridade Yahoo > Fundamentus > Brapi
+        // Criar novo registro com prioridade Fundamentus > Brapi > Yahoo
         finalFinancialData = mergeFinancialDataWithPriority(
           fundamentusFinancialData,
           brapiFormattedData,
@@ -4357,9 +4357,9 @@ async function processCompanyTTMOnly(
           currentYear
         );
         const sources: string[] = [];
-        if (yahooFormattedData) sources.push('Yahoo');
         if (fundamentusFinancialData) sources.push('Fundamentus');
         if (brapiFormattedData) sources.push('Brapi');
+        if (yahooFormattedData) sources.push('Yahoo');
         console.log(`  🆕 Novos dados TTM criados (${sources.join(' + ')})`);
       }
       

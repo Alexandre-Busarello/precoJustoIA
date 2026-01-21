@@ -1040,20 +1040,22 @@ function isValidValue(value: any, isLargeValue: boolean = false): boolean {
   return numValue !== 0;
 }
 
-// Função para mesclar dados com prioridade: Fundamentus > Brapi > Yahoo
+// Função para mesclar dados com prioridade: Fundamentus > Brapi > Yahoo (para dados TTM/atuais)
+// Para dados históricos: Fundamentus > Brapi (Yahoo não tem dados históricos)
 function mergeFinancialDataWithPriority(
   fundamentusData: any | null, 
   brapiData: any | null,
   yahooData: any | null,
   year: number
 ): FinancialDataComplete {
-  // Prioridade: Fundamentus > Brapi > Yahoo
-  // Usar Yahoo apenas quando Fundamentus e Brapi forem null/undefined/0
+  // Prioridade para dados TTM/atuais: Fundamentus > Brapi > Yahoo
+  // Prioridade para dados históricos: Fundamentus > Brapi (Yahoo não tem dados históricos)
+  // Fundamentus tem prioridade máxima porque geralmente tem dados mais confiáveis
   // Seguir exatamente o schema do Prisma para garantir compatibilidade
   
   // Determinar fonte de dados para metadados
   const sources = [];
-  if (fundamentusData) sources.push('fundamentus');
+  if (fundamentusData) sources.push('fundamentus'); // Fundamentus primeiro na lista (prioridade)
   if (brapiData) sources.push('brapi');
   if (yahooData) sources.push('yahoo');
   const dataSource = sources.join('+');
@@ -1061,8 +1063,11 @@ function mergeFinancialDataWithPriority(
   // Helper para escolher valor com prioridade Fundamentus > Brapi > Yahoo
   // Para marketCap e valores grandes, usar validação mais rigorosa
   const chooseValue = (fundamentus: any, brapi: any, yahoo: any, isLargeValue: boolean = false) => {
+    // Priorizar Fundamentus primeiro (dados mais confiáveis)
     if (isValidValue(fundamentus, isLargeValue)) return fundamentus;
+    // Depois Brapi
     if (isValidValue(brapi, isLargeValue)) return brapi;
+    // Por último Yahoo
     if (isValidValue(yahoo, isLargeValue)) return yahoo;
     return null;
   };
@@ -2516,6 +2521,29 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
     // Verificar dados existentes para otimização
     const existingData = await checkExistingHistoricalData(company.id);
     
+    // 1. BUSCAR DADOS DO FUNDAMENTUS (PRIORIDADE MÁXIMA PARA TTM)
+    let fundamentusFinancialData = null;
+    console.log(`🔄 Buscando dados TTM do Fundamentus para ${ticker}...`);
+    try {
+      const fundamentusData = await fetchFundamentusData(ticker);
+      if (fundamentusData) {
+        console.log(`✅ Dados do Fundamentus obtidos para ${ticker}`);
+        
+        // Processar oscilações de preço e dados trimestrais
+        await processPriceOscillations(company.id, ticker, fundamentusData);
+        await processQuarterlyFinancials(company.id, ticker, fundamentusData);
+        
+        // Converter dados do Fundamentus
+        fundamentusFinancialData = convertFundamentusToFinancialData(fundamentusData);
+        
+        console.log(`  📊 Dados do Fundamentus processados para ${ticker}`);
+      } else {
+        console.log(`  ⚠️  Dados do Fundamentus não disponíveis para ${ticker}`);
+      }
+    } catch (error: any) {
+      console.log(`  ⚠️  Erro ao buscar dados do Fundamentus para ${ticker}:`, error.message);
+    }
+    
     // Buscar dados completos da Brapi PRO (otimizado)
     let brapiProData = await fetchBrapiProData(ticker, forceFullUpdate);
     if (brapiProData) {
@@ -2810,8 +2838,8 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       }
     }
 
-    // Se não temos dados da Ward, usar dados complementares da Brapi e Yahoo Finance para atualizar o ano atual
-    if (!wardData || !wardData.historicalStocks) {
+    // Se não temos dados da Ward, usar dados complementares (Fundamentus > Brapi > Yahoo) para atualizar o ano atual
+    if (!wardData) {
       const currentYear = new Date().getFullYear();
       
       // Buscar dados do Yahoo Finance como complemento
@@ -2828,9 +2856,13 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
         console.log(`  ⚠️  Erro ao buscar dados do Yahoo Finance para ${ticker}:`, error.message);
       }
       
-      if (brapiData || yahooTTMData) {
-        // Usar dados complementares da Brapi e Yahoo Finance para atualizar o ano atual
-        console.log(`🔄 Usando dados complementares da Brapi${yahooTTMData ? ' + Yahoo Finance' : ''} para atualizar ${ticker} (${currentYear})...`);
+      if (fundamentusFinancialData || brapiData || yahooTTMData) {
+        // Usar dados complementares com prioridade Fundamentus > Brapi > Yahoo
+        const sources = [];
+        if (fundamentusFinancialData) sources.push('Fundamentus');
+        if (brapiData) sources.push('Brapi');
+        if (yahooTTMData) sources.push('Yahoo Finance');
+        console.log(`🔄 Usando dados complementares (${sources.join(' + ')}) para atualizar ${ticker} (${currentYear})...`);
         
         // Buscar dados existentes para o ano atual
         const existingFinancialData = await prisma.financialData.findUnique({
@@ -2854,15 +2886,15 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
         
         // Mesclar dados com prioridade: Fundamentus > Brapi > Yahoo
         let finalFinancialData = mergeFinancialDataWithPriority(
-          null, // Fundamentus
+          fundamentusFinancialData, // Fundamentus (prioridade máxima)
           brapiData, // Brapi complementar
           yahooFormattedData, // Yahoo Finance
           currentYear
         );
         
         // Debug: verificar marketCap após mesclagem
-        if (yahooFormattedData || brapiData) {
-          console.log(`  🔍 [MERGE DEBUG] marketCap final: ${finalFinancialData.marketCap} (Brapi: ${brapiData?.marketCap}, Yahoo: ${yahooFormattedData?.marketCap})`);
+        if (fundamentusFinancialData || yahooFormattedData || brapiData) {
+          console.log(`  🔍 [MERGE DEBUG] marketCap final: ${finalFinancialData.marketCap} (Fundamentus: N/A, Brapi: ${brapiData?.marketCap}, Yahoo: ${yahooFormattedData?.marketCap})`);
         }
         
         // Calcular ROIC se não disponível
@@ -4270,38 +4302,58 @@ async function processCompanyTTMOnly(
         }
       }
       
-      // Mesclar dados com prioridade
-      let finalFinancialData;
+      // Mesclar dados com prioridade: Yahoo > Fundamentus > Brapi
+      let finalFinancialData: FinancialDataComplete;
       if (existingFinancialData) {
-        // Se já existe, usar função de mesclagem do Fundamentus se temos dados do Fundamentus
-        if (fundamentusFinancialData) {
-          finalFinancialData = mergeFundamentusWithExistingData(fundamentusFinancialData, existingFinancialData);
-          console.log(`  🔄 Dados mesclados: Fundamentus + existentes`);
-        } else {
-          // Senão, usar nova função de prioridade
-          finalFinancialData = mergeFinancialDataWithPriority(
-            fundamentusFinancialData,
-            brapiFormattedData,
-            yahooFormattedData,
-            currentYear
-          );
-          const sources = [];
-          if (brapiFormattedData) sources.push('Brapi');
-          if (yahooFormattedData) sources.push('Yahoo');
-          console.log(`  🔄 Dados mesclados: ${sources.join(' + ')} + existentes`);
-        }
+        // Se temos Yahoo, sempre priorizar (dados mais recentes)
+        // Mesclar primeiro com prioridade Yahoo > Fundamentus > Brapi
+        const mergedNewData = mergeFinancialDataWithPriority(
+          fundamentusFinancialData,
+          brapiFormattedData,
+          yahooFormattedData,
+          currentYear
+        );
+        
+        // Depois mesclar com dados existentes, preservando valores existentes quando novo valor é NULL
+        finalFinancialData = { ...existingFinancialData } as FinancialDataComplete;
+        Object.keys(mergedNewData).forEach(key => {
+          if (key !== 'year' && key !== 'dataSource') {
+            const newValue = (mergedNewData as any)[key];
+            // Atualizar apenas se novo valor não for NULL
+            if (newValue !== null && newValue !== undefined) {
+              (finalFinancialData as any)[key] = newValue;
+            }
+          }
+        });
+        
+        // Atualizar dataSource para refletir todas as fontes
+        const sources: string[] = [];
+        if (yahooFormattedData) sources.push('yahoo');
+        if (fundamentusFinancialData) sources.push('fundamentus');
+        if (brapiFormattedData) sources.push('brapi');
+        const existingSources = existingFinancialData.dataSource ? existingFinancialData.dataSource.split('+') : [];
+        existingSources.forEach((s: string) => {
+          if (!sources.includes(s)) sources.push(s);
+        });
+        finalFinancialData.dataSource = sources.join('+');
+        
+        const newSources: string[] = [];
+        if (yahooFormattedData) newSources.push('Yahoo');
+        if (fundamentusFinancialData) newSources.push('Fundamentus');
+        if (brapiFormattedData) newSources.push('Brapi');
+        console.log(`  🔄 Dados mesclados: ${newSources.join(' + ')} + existentes`);
       } else {
-        // Criar novo registro
+        // Criar novo registro com prioridade Yahoo > Fundamentus > Brapi
         finalFinancialData = mergeFinancialDataWithPriority(
           fundamentusFinancialData,
           brapiFormattedData,
           yahooFormattedData,
           currentYear
         );
-        const sources = [];
+        const sources: string[] = [];
+        if (yahooFormattedData) sources.push('Yahoo');
         if (fundamentusFinancialData) sources.push('Fundamentus');
         if (brapiFormattedData) sources.push('Brapi');
-        if (yahooFormattedData) sources.push('Yahoo');
         console.log(`  🆕 Novos dados TTM criados (${sources.join(' + ')})`);
       }
       
@@ -4360,6 +4412,7 @@ async function processCompanyTTMOnly(
       }
       
       // Upsert dos dados financeiros
+      const { year, ...finalDataWithoutYear } = finalFinancialData;
       await prisma.financialData.upsert({
         where: {
           companyId_year: {
@@ -4371,17 +4424,17 @@ async function processCompanyTTMOnly(
         create: {
           companyId: company.id,
           year: currentYear,
-          ...finalFinancialData
+          ...finalDataWithoutYear
         }
       });
       
       // Log dos principais indicadores atualizados
-      const indicators = [];
+      const indicators: string[] = [];
       if (finalFinancialData.pl) indicators.push(`P/L=${finalFinancialData.pl}`);
-      if (finalFinancialData.roe) indicators.push(`ROE=${(finalFinancialData.roe * 100).toFixed(2)}%`);
-      if (finalFinancialData.dy) indicators.push(`DY=${(finalFinancialData.dy * 100).toFixed(2)}%`);
-      if (finalFinancialData.cagrLucros5a) indicators.push(`CAGR-L=${(finalFinancialData.cagrLucros5a * 100).toFixed(1)}%`);
-      if (finalFinancialData.cagrReceitas5a) indicators.push(`CAGR-R=${(finalFinancialData.cagrReceitas5a * 100).toFixed(1)}%`);
+      if (finalFinancialData.roe) indicators.push(`ROE=${(Number(finalFinancialData.roe) * 100).toFixed(2)}%`);
+      if (finalFinancialData.dy) indicators.push(`DY=${(Number(finalFinancialData.dy) * 100).toFixed(2)}%`);
+      if (finalFinancialData.cagrLucros5a) indicators.push(`CAGR-L=${(Number(finalFinancialData.cagrLucros5a) * 100).toFixed(1)}%`);
+      if (finalFinancialData.cagrReceitas5a) indicators.push(`CAGR-R=${(Number(finalFinancialData.cagrReceitas5a) * 100).toFixed(1)}%`);
       
       console.log(`  📊 TTM atualizado: ${indicators.join(', ')}`);
       console.log(`✅ Dados TTM processados para ${ticker} (fonte: ${finalFinancialData.dataSource})`);

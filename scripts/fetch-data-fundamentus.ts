@@ -374,8 +374,26 @@ async function calculateAndUpdateAllGrowthMetrics(companyId: number): Promise<vo
       const currentYearData = allFinancialData[i];
       const currentYear = currentYearData.year;
       
+      // Buscar dados completos do registro para preservar valores do Yahoo quando cálculo resultar em zero
+      const fullYearData = await prisma.financialData.findUnique({
+        where: { id: currentYearData.id },
+        select: {
+          crescimentoLucros: true,
+          crescimentoReceitas: true
+        }
+      });
+      
       // Calcular métricas para este ano específico
       const metrics = await calculateGrowthMetricsForYear(allFinancialData, i);
+      
+      // Se o cálculo resultar em zero ou null, usar valores do Yahoo se disponíveis
+      const finalCrescimentoLucros = (metrics.crescimentoLucros === null || metrics.crescimentoLucros === 0) 
+        ? (fullYearData?.crescimentoLucros || metrics.crescimentoLucros)
+        : metrics.crescimentoLucros;
+      
+      const finalCrescimentoReceitas = (metrics.crescimentoReceitas === null || metrics.crescimentoReceitas === 0)
+        ? (fullYearData?.crescimentoReceitas || metrics.crescimentoReceitas)
+        : metrics.crescimentoReceitas;
       
       // Atualizar o registro no banco
       await prisma.financialData.update({
@@ -383,17 +401,23 @@ async function calculateAndUpdateAllGrowthMetrics(companyId: number): Promise<vo
         data: {
           cagrLucros5a: metrics.cagrLucros5a,
           cagrReceitas5a: metrics.cagrReceitas5a,
-          crescimentoLucros: metrics.crescimentoLucros,
-          crescimentoReceitas: metrics.crescimentoReceitas
+          crescimentoLucros: finalCrescimentoLucros,
+          crescimentoReceitas: finalCrescimentoReceitas
         }
       });
       
-      // Log das métricas calculadas
+      // Log das métricas calculadas (usar valores finais que podem incluir dados do Yahoo)
       const metricsLog = [];
       if (metrics.cagrLucros5a !== null) metricsLog.push(`CAGR-L(5a): ${(metrics.cagrLucros5a * 100).toFixed(1)}%`);
       if (metrics.cagrReceitas5a !== null) metricsLog.push(`CAGR-R(5a): ${(metrics.cagrReceitas5a * 100).toFixed(1)}%`);
-      if (metrics.crescimentoLucros !== null) metricsLog.push(`Cresc Lucros: ${(metrics.crescimentoLucros * 100).toFixed(1)}%`);
-      if (metrics.crescimentoReceitas !== null) metricsLog.push(`Cresc Receitas: ${(metrics.crescimentoReceitas * 100).toFixed(1)}%`);
+      if (finalCrescimentoLucros !== null) {
+        const source = (metrics.crescimentoLucros === null || metrics.crescimentoLucros === 0) && fullYearData?.crescimentoLucros ? ' (Yahoo)' : '';
+        metricsLog.push(`Cresc Lucros: ${(finalCrescimentoLucros * 100).toFixed(1)}%${source}`);
+      }
+      if (finalCrescimentoReceitas !== null) {
+        const source = (metrics.crescimentoReceitas === null || metrics.crescimentoReceitas === 0) && fullYearData?.crescimentoReceitas ? ' (Yahoo)' : '';
+        metricsLog.push(`Cresc Receitas: ${(finalCrescimentoReceitas * 100).toFixed(1)}%${source}`);
+      }
       
       if (metricsLog.length > 0) {
         console.log(`  📊 ${currentYear}: ${metricsLog.join(', ')}`);

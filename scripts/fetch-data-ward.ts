@@ -2980,12 +2980,14 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       return;
     }
 
-    let processedYears = 0;
-    let updatedYears = 0;
-    let createdYears = 0;
-    let complementedYears = 0;
+    // CÓDIGO DA WARD COMENTADO - Ward API não está mais disponível
+    // let processedYears = 0;
+    // let updatedYears = 0;
+    // let createdYears = 0;
+    // let complementedYears = 0;
 
     // Função para processar um ano específico (dados da Ward)
+    /*
     const processYear = async (wardStock: WardHistoricalStock) => {
       try {
         const wardFinancialData = await convertWardDataToFinancialData(wardStock, company.id);
@@ -3315,49 +3317,52 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
         return { success: false, year: wardStock.ano, error: error.message };
       }
     };
+    */
 
+    // CÓDIGO DA WARD COMENTADO - Ward API não está mais disponível
     // Processar anos em lotes paralelos (5 por vez)
-    const PARALLEL_YEARS_BATCH_SIZE = 5;
-    console.log(`📦 Processando ${wardData.historicalStocks.length} anos em lotes paralelos de ${PARALLEL_YEARS_BATCH_SIZE}`);
+    // const PARALLEL_YEARS_BATCH_SIZE = 5;
+    // console.log(`📦 Processando ${wardData.historicalStocks.length} anos em lotes paralelos de ${PARALLEL_YEARS_BATCH_SIZE}`);
 
-    const results = [];
-    for (let i = 0; i < wardData.historicalStocks.length; i += PARALLEL_YEARS_BATCH_SIZE) {
-      const batch = wardData.historicalStocks.slice(i, i + PARALLEL_YEARS_BATCH_SIZE);
-      
-      // Processar lote em paralelo
-      const batchPromises = batch.map(async (wardStock) => {
-        try {
-          return await processYear(wardStock);
-        } catch (error: any) {
-          console.error(`❌ Erro ao processar ano ${wardStock.ano}:`, error.message);
-          return { success: false, year: wardStock.ano, error: error.message };
-        }
-      });
+    // const results = [];
+    // for (let i = 0; i < wardData.historicalStocks.length; i += PARALLEL_YEARS_BATCH_SIZE) {
+    //   const batch = wardData.historicalStocks.slice(i, i + PARALLEL_YEARS_BATCH_SIZE);
+    //   
+    //   // Processar lote em paralelo
+    //   const batchPromises = batch.map(async (wardStock) => {
+    //     try {
+    //       return await processYear(wardStock);
+    //     } catch (error: any) {
+    //       console.error(`❌ Erro ao processar ano ${wardStock.ano}:`, error.message);
+    //       return { success: false, year: wardStock.ano, error: error.message };
+    //     }
+    //   });
 
-      const batchResults = await Promise.allSettled(batchPromises);
-      
-      // Processar resultados do batch
-      for (const result of batchResults) {
-        if (result.status === 'fulfilled') {
-          results.push(result.value);
-        } else {
-          results.push({ success: false, year: 'unknown', error: result.reason });
-        }
-      }
-      
-      // Log de progresso a cada batch ou no final
-      const processedCount = i + batch.length;
-      if (processedCount % 5 === 0 || processedCount >= wardData.historicalStocks.length) {
-        const successful = results.filter(r => r.success).length;
-        const failed = results.filter(r => !r.success).length;
-        console.log(`  📊 Progresso: ${processedCount}/${wardData.historicalStocks.length} anos processados (${successful} sucessos, ${failed} falhas)`);
-      }
-    }
+    //   const batchResults = await Promise.allSettled(batchPromises);
+    //   
+    //   // Processar resultados do batch
+    //   for (const result of batchResults) {
+    //     if (result.status === 'fulfilled') {
+    //       results.push(result.value);
+    //     } else {
+    //       results.push({ success: false, year: 'unknown', error: result.reason });
+    //     }
+    //   }
+    //   
+    //   // Log de progresso a cada batch ou no final
+    //   const processedCount = i + batch.length;
+    //   if (processedCount % 5 === 0 || processedCount >= wardData.historicalStocks.length) {
+    //     const successful = results.filter(r => r.success).length;
+    //     const failed = results.filter(r => !r.success).length;
+    //     console.log(`  📊 Progresso: ${processedCount}/${wardData.historicalStocks.length} anos processados (${successful} sucessos, ${failed} falhas)`);
+    //   }
+    // }
 
     // Verificar se há anos faltantes que não estão na Ward mas podem ser obtidos da Brapi PRO
     const currentYear = new Date().getFullYear();
     const previousYear = currentYear - 1; // 2024 se currentYear é 2025
-    const processedYearsSet = new Set(wardData.historicalStocks.map(s => parseInt(s.ano)));
+    // const processedYearsSet = new Set(wardData.historicalStocks.map(s => parseInt(s.ano)));
+    const processedYearsSet = new Set<number>(); // Ward não está mais disponível
     const missingYears: number[] = [];
     
     // Verificar se 2024 e 2025 não estão na Ward
@@ -3539,12 +3544,12 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
                 });
                 
                 console.log(`  ✅ ${year}: Dados criados/atualizados da Brapi PRO`);
-                processedYears++;
-                if (!existingFinancialData) {
-                  createdYears++;
-                } else {
-                  updatedYears++;
-                }
+                // processedYears++;
+                // if (!existingFinancialData) {
+                //   createdYears++;
+                // } else {
+                //   updatedYears++;
+                // }
               }
             }
           }
@@ -3554,18 +3559,19 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       }
     }
     
-    const summary = [`${processedYears} anos processados`];
-    if (complementedYears > 0) {
-      summary.push(`${complementedYears} complementados com Brapi`);
-    }
-    if (missingYears.length > 0) {
-      summary.push(`${missingYears.length} ano(s) adicionado(s) da Brapi PRO`);
-    }
-    
-    console.log(`✅ ${ticker}: ${summary.join(', ')}`);
+    // CÓDIGO DA WARD COMENTADO - Ward API não está mais disponível
+    // const summary = [`${processedYears} anos processados`];
+    // if (complementedYears > 0) {
+    //   summary.push(`${complementedYears} complementados com Brapi`);
+    // }
+    // if (missingYears.length > 0) {
+    //   summary.push(`${missingYears.length} ano(s) adicionado(s) da Brapi PRO`);
+    // }
+    // 
+    // console.log(`✅ ${ticker}: ${summary.join(', ')}`);
     
   } catch (error: any) {
-    console.error(`❌ 1 Erro ao processar empresa ${ticker}:`, error.message);
+    console.error(`❌ Erro ao processar empresa ${ticker}:`, error.message);
   }
 }
 

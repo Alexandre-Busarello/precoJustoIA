@@ -4684,8 +4684,12 @@ export function calculateOverallScore(
     }
   }
 
-  // Calcular score final normalizado
-  let finalScore = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
+  // Calcular score final
+  // IMPORTANTE: O score geral deve ser igual à soma das contribuições (totalScore)
+  // Não fazer normalização por totalWeight - a soma das contribuições JÁ É o score
+  // O rawScore e o finalScore inicial devem ser iguais à soma das contribuições
+  const rawScoreBeforePenalties = totalScore; // Soma das contribuições individuais
+  let finalScore = Math.round(rawScoreBeforePenalties);
 
   // Obter dados financeiros para análise de penalizações
   const roe = toNumber(financialData.roe);
@@ -5005,9 +5009,16 @@ export function calculateOverallScore(
     // Ordenar contribuições por pontos (maior primeiro)
     contributions.sort((a, b) => b.points - a.points);
     
-    // rawScore deve ser a soma das contribuições (não a média ponderada)
+    // rawScore deve ser a soma das contribuições individuais (totalScore)
     // Isso garante que a soma exibida na tela corresponda ao rawScore
-    const rawScore = contributions.reduce((sum, c) => sum + c.points, 0);
+    // O finalScore inicial agora também é calculado como totalScore (não mais totalScore / totalWeight)
+    const rawScore = rawScoreBeforePenalties;
+    
+    // Debug: verificar se a soma das contribuições bate com o rawScore
+    const contributionsSum = contributions.reduce((sum, c) => sum + c.points, 0);
+    if (Math.abs(contributionsSum - rawScore) > 0.01) {
+      console.warn(`[SCORE DEBUG] Discrepância detectada: rawScore=${rawScore}, contributionsSum=${contributionsSum}, totalWeight=${totalWeight}`);
+    }
     
     return {
       ...result,

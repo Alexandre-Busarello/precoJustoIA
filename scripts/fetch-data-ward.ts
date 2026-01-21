@@ -15,6 +15,8 @@ import {
   processPriceOscillations,
   processQuarterlyFinancials
 } from './fetch-data-fundamentus';
+// Importar serviço do Yahoo Finance
+import { getQuoteSummary } from '../src/lib/yahooFinance2-service';
 
 // Função para traduzir texto usando Gemini AI
 async function translateToPortuguese(text: string, fieldType: 'description' | 'sector' | 'industry' = 'description'): Promise<string> {
@@ -639,6 +641,33 @@ async function fetchBrapiTTMData(ticker: string): Promise<BrapiProResponse['resu
   }
 }
 
+// Função para buscar dados TTM do Yahoo Finance
+async function fetchYahooFinanceTTMData(ticker: string): Promise<any | null> {
+  try {
+    console.log(`🔍 Buscando dados TTM do Yahoo Finance para ${ticker}...`);
+    
+    // Converter ticker para formato Yahoo Finance (ex: PETR4 -> PETR4.SA)
+    const yahooSymbol = `${ticker}.SA`;
+    
+    // Buscar dados usando getQuoteSummary com os módulos necessários
+    const quoteSummary = await getQuoteSummary(yahooSymbol, {
+      modules: ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics']
+    });
+    
+    if (quoteSummary && (quoteSummary.price || quoteSummary.summaryDetail || quoteSummary.financialData || quoteSummary.defaultKeyStatistics)) {
+      console.log(`✅ Dados TTM do Yahoo Finance obtidos para ${ticker}`);
+      return quoteSummary;
+    } else {
+      console.log(`⚠️  Nenhum dado TTM encontrado no Yahoo Finance para ${ticker}`);
+      return null;
+    }
+  } catch (error: any) {
+    // Não logar erro completo para evitar poluir logs, apenas mensagem
+    console.log(`⚠️  Erro ao buscar dados TTM do Yahoo Finance para ${ticker}:`, error.message);
+    return null;
+  }
+}
+
 // Função para buscar dados básicos da empresa na Brapi API (gratuito)
 async function fetchBrapiBasicData(ticker: string): Promise<BrapiBasicResponse['results'][0] | null> {
   try {
@@ -844,113 +873,296 @@ interface FinancialDataComplete {
   dataSource?: string;
 }
 
-// Função para mesclar dados com prioridade: Fundamentus > Ward > Brapi
+// Função para converter dados do Yahoo Finance para formato FinancialDataComplete
+function convertYahooFinanceToFinancialData(yahooData: any, year: number): FinancialDataComplete {
+  if (!yahooData) {
+    return {
+      year: year,
+      dataSource: 'yahoo'
+    } as FinancialDataComplete;
+  }
+
+  const price = yahooData.price || {};
+  const summaryDetail = yahooData.summaryDetail || {};
+  const financialData = yahooData.financialData || {};
+  const defaultKeyStatistics = yahooData.defaultKeyStatistics || {};
+
+  // Calcular earningsYield a partir de trailingPE
+  let earningsYield = null;
+  if (summaryDetail.trailingPE && summaryDetail.trailingPE > 0) {
+    earningsYield = 1 / summaryDetail.trailingPE;
+  }
+
+  // Calcular P/L a partir de trailingPE
+  const pl = summaryDetail.trailingPE || null;
+
+  // Extrair marketCap - pode estar em summaryDetail ou price (priorizar summaryDetail)
+  let marketCap = null;
+  // Verificar summaryDetail primeiro
+  if (summaryDetail && 'marketCap' in summaryDetail) {
+    const summaryMarketCap = summaryDetail.marketCap;
+    if (summaryMarketCap !== null && summaryMarketCap !== undefined && typeof summaryMarketCap === 'number' && summaryMarketCap > 0) {
+      marketCap = summaryMarketCap;
+    }
+  }
+  // Se não encontrou em summaryDetail, verificar price
+  if (!marketCap && price && 'marketCap' in price) {
+    const priceMarketCap = price.marketCap;
+    if (priceMarketCap !== null && priceMarketCap !== undefined && typeof priceMarketCap === 'number' && priceMarketCap > 0) {
+      marketCap = priceMarketCap;
+    }
+  }
+  
+  // Debug: log para verificar extração
+  if (yahooData && (summaryDetail?.marketCap || price?.marketCap)) {
+    console.log(`  🔍 [YAHOO DEBUG] marketCap extraído: ${marketCap} (summaryDetail: ${summaryDetail?.marketCap}, price: ${price?.marketCap})`);
+  }
+
+  return {
+    year: year,
+    
+    // === INDICADORES DE VALUATION ===
+    pl: pl,
+    forwardPE: summaryDetail.forwardPE || defaultKeyStatistics.forwardPE || null,
+    earningsYield: earningsYield,
+    pvp: defaultKeyStatistics.priceToBook || null,
+    dy: summaryDetail.dividendYield || null, // Já vem em decimal
+    evEbitda: defaultKeyStatistics.enterpriseToEbitda || null,
+    evEbit: null, // Não disponível diretamente
+    evRevenue: defaultKeyStatistics.enterpriseToRevenue || null,
+    psr: summaryDetail.priceToSalesTrailing12Months || null,
+    pAtivos: null, // Não disponível diretamente
+    pCapGiro: null, // Não disponível diretamente
+    pEbit: null, // Não disponível diretamente
+    lpa: defaultKeyStatistics.trailingEps || null,
+    trailingEps: defaultKeyStatistics.trailingEps || null,
+    vpa: defaultKeyStatistics.bookValue || null,
+    
+    // === DADOS DE MERCADO E AÇÕES ===
+    marketCap: marketCap,
+    enterpriseValue: (defaultKeyStatistics.enterpriseValue && defaultKeyStatistics.enterpriseValue > 0) 
+      ? defaultKeyStatistics.enterpriseValue 
+      : null,
+    sharesOutstanding: (defaultKeyStatistics.sharesOutstanding && defaultKeyStatistics.sharesOutstanding > 0) 
+      ? defaultKeyStatistics.sharesOutstanding 
+      : null,
+    totalAssets: null, // Não disponível diretamente
+    
+    // === INDICADORES DE ENDIVIDAMENTO E LIQUIDEZ ===
+    dividaLiquidaPl: null, // Não disponível diretamente
+    dividaLiquidaEbitda: null, // Não disponível diretamente
+    liquidezCorrente: financialData.currentRatio || null,
+    liquidezRapida: financialData.quickRatio || null,
+    passivoAtivos: null, // Não disponível diretamente
+    debtToEquity: financialData.debtToEquity || null,
+    
+    // === INDICADORES DE RENTABILIDADE ===
+    roe: financialData.returnOnEquity || null,
+    roic: null, // Não disponível diretamente
+    roa: financialData.returnOnAssets || null,
+    margemBruta: financialData.grossMargins || null,
+    margemEbitda: financialData.ebitdaMargins || null,
+    margemLiquida: financialData.profitMargins || null,
+    giroAtivos: null, // Não disponível diretamente
+    
+    // === INDICADORES DE CRESCIMENTO ===
+    cagrLucros5a: null, // Não disponível diretamente
+    cagrReceitas5a: null, // Não disponível diretamente
+    crescimentoLucros: financialData.earningsGrowth || null,
+    crescimentoReceitas: financialData.revenueGrowth || null,
+    
+    // === DADOS DE DIVIDENDOS ===
+    dividendYield12m: summaryDetail.dividendYield || null, // Já vem em decimal
+    ultimoDividendo: summaryDetail.dividendRate || defaultKeyStatistics.lastDividendValue || null,
+    dataUltimoDividendo: summaryDetail.exDividendDate ? new Date(summaryDetail.exDividendDate) : (defaultKeyStatistics.lastDividendDate ? new Date(defaultKeyStatistics.lastDividendDate) : null),
+    payout: summaryDetail.payoutRatio || null, // Já vem em decimal
+    
+    // === PERFORMANCE E VARIAÇÕES ===
+    variacao52Semanas: defaultKeyStatistics["52WeekChange"] || null,
+    retornoAnoAtual: null, // Não disponível diretamente
+    
+    // === DADOS FINANCEIROS OPERACIONAIS ===
+    ebitda: financialData.ebitda || null,
+    receitaTotal: financialData.totalRevenue || null,
+    lucroLiquido: financialData.grossProfits || null,
+    fluxoCaixaOperacional: financialData.operatingCashflow || null,
+    fluxoCaixaInvestimento: null, // Não disponível diretamente
+    fluxoCaixaFinanciamento: null, // Não disponível diretamente
+    fluxoCaixaLivre: financialData.freeCashflow || null,
+    totalCaixa: financialData.totalCash || null,
+    totalDivida: financialData.totalDebt || null,
+    receitaPorAcao: financialData.revenuePerShare || null,
+    caixaPorAcao: financialData.totalCashPerShare || null,
+    
+    // === DADOS DO BALANÇO PATRIMONIAL ===
+    ativoCirculante: null, // Não disponível diretamente
+    ativoTotal: null, // Não disponível diretamente
+    passivoCirculante: null, // Não disponível diretamente
+    passivoTotal: null, // Não disponível diretamente
+    patrimonioLiquido: null, // Não disponível diretamente
+    caixa: null, // Não disponível diretamente
+    estoques: null, // Não disponível diretamente
+    contasReceber: null, // Não disponível diretamente
+    imobilizado: null, // Não disponível diretamente
+    intangivel: null, // Não disponível diretamente
+    dividaCirculante: null, // Não disponível diretamente
+    dividaLongoPrazo: null, // Não disponível diretamente
+    
+    // === DADOS DE DIVIDENDOS DETALHADOS ===
+    dividendoMaisRecente: summaryDetail.dividendRate || defaultKeyStatistics.lastDividendValue || null,
+    dataDividendoMaisRecente: summaryDetail.exDividendDate ? new Date(summaryDetail.exDividendDate) : (defaultKeyStatistics.lastDividendDate ? new Date(defaultKeyStatistics.lastDividendDate) : null),
+    historicoUltimosDividendos: null, // Não disponível diretamente
+    
+    // === METADADOS ===
+    dataSource: 'yahoo'
+  };
+}
+
+// Função helper para verificar se um valor é válido (não null, undefined ou 0)
+// Para marketCap e valores grandes, também verifica se é um número válido e positivo
+function isValidValue(value: any, isLargeValue: boolean = false): boolean {
+  if (value === null || value === undefined) return false;
+  
+  // Converter para número se for string
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  // Verificar se é um número válido
+  if (typeof numValue !== 'number' || isNaN(numValue) || !isFinite(numValue)) return false;
+  
+  // Para valores grandes como marketCap, enterpriseValue, etc.
+  if (isLargeValue || Math.abs(numValue) > 1000000) {
+    // Valores muito grandes devem ser positivos e maiores que um threshold mínimo
+    // Para marketCap, valores menores que 1 milhão são suspeitos (empresas muito pequenas ou erros)
+    return numValue > 1000000; // Aceitar apenas valores > 1 milhão
+  }
+  
+  // Para outros valores, aceitar qualquer número diferente de 0
+  return numValue !== 0;
+}
+
+// Função para mesclar dados com prioridade: Fundamentus > Brapi > Yahoo
 function mergeFinancialDataWithPriority(
   fundamentusData: any | null, 
-  wardData: any | null, 
-  brapiData: any | null, 
+  brapiData: any | null,
+  yahooData: any | null,
   year: number
 ): FinancialDataComplete {
-  // Prioridade: Fundamentus > Ward > Brapi
+  // Prioridade: Fundamentus > Brapi > Yahoo
+  // Usar Yahoo apenas quando Fundamentus e Brapi forem null/undefined/0
   // Seguir exatamente o schema do Prisma para garantir compatibilidade
   
   // Determinar fonte de dados para metadados
   const sources = [];
   if (fundamentusData) sources.push('fundamentus');
-  if (wardData) sources.push('ward');
   if (brapiData) sources.push('brapi');
+  if (yahooData) sources.push('yahoo');
   const dataSource = sources.join('+');
+  
+  // Helper para escolher valor com prioridade Fundamentus > Brapi > Yahoo
+  // Para marketCap e valores grandes, usar validação mais rigorosa
+  const chooseValue = (fundamentus: any, brapi: any, yahoo: any, isLargeValue: boolean = false) => {
+    if (isValidValue(fundamentus, isLargeValue)) return fundamentus;
+    if (isValidValue(brapi, isLargeValue)) return brapi;
+    if (isValidValue(yahoo, isLargeValue)) return yahoo;
+    return null;
+  };
+  
+  // Helper específico para marketCap e enterpriseValue (valores muito grandes)
+  const chooseLargeValue = (fundamentus: any, brapi: any, yahoo: any) => {
+    return chooseValue(fundamentus, brapi, yahoo, true);
+  };
   
   return {
     year: year,
     
     // === INDICADORES DE VALUATION ===
-    pl: fundamentusData?.pl || wardData?.pl || brapiData?.pl || null,
-    forwardPE: brapiData?.forwardPE || null, // Só na Brapi
-    earningsYield: fundamentusData?.earningsYield || wardData?.earningsYield || brapiData?.earningsYield || null,
-    pvp: fundamentusData?.pvp || wardData?.pvp || brapiData?.pvp || null,
-    dy: fundamentusData?.dy || wardData?.dy || brapiData?.dy || null,
-    evEbitda: fundamentusData?.evEbitda || wardData?.evEbitda || brapiData?.evEbitda || null,
-    evEbit: fundamentusData?.evEbit || wardData?.evEbit || brapiData?.evEbit || null,
-    evRevenue: brapiData?.evRevenue || null, // Só na Brapi
-    psr: fundamentusData?.psr || brapiData?.psr || null,
-    pAtivos: fundamentusData?.pAtivos || brapiData?.pAtivos || null,
-    pCapGiro: fundamentusData?.pCapGiro || brapiData?.pCapGiro || null,
-    pEbit: fundamentusData?.pEbit || wardData?.pEbit || brapiData?.pEbit || null,
-    lpa: fundamentusData?.lpa || wardData?.lpa || brapiData?.lpa || null,
-    trailingEps: brapiData?.trailingEps || null, // Só na Brapi
-    vpa: fundamentusData?.vpa || wardData?.vpa || brapiData?.vpa || null,
+    pl: chooseValue(fundamentusData?.pl, brapiData?.pl, yahooData?.pl),
+    forwardPE: chooseValue(null, brapiData?.forwardPE, yahooData?.forwardPE), // Fundamentus não tem
+    earningsYield: chooseValue(fundamentusData?.earningsYield, brapiData?.earningsYield, yahooData?.earningsYield),
+    pvp: chooseValue(fundamentusData?.pvp, brapiData?.pvp, yahooData?.pvp),
+    dy: chooseValue(fundamentusData?.dy, brapiData?.dy, yahooData?.dy),
+    evEbitda: chooseValue(fundamentusData?.evEbitda, brapiData?.evEbitda, yahooData?.evEbitda),
+    evEbit: chooseValue(fundamentusData?.evEbit, brapiData?.evEbit, yahooData?.evEbit),
+    evRevenue: chooseValue(null, brapiData?.evRevenue, yahooData?.evRevenue), // Fundamentus não tem
+    psr: chooseValue(fundamentusData?.psr, brapiData?.psr, yahooData?.psr),
+    pAtivos: chooseValue(fundamentusData?.pAtivos, brapiData?.pAtivos, yahooData?.pAtivos),
+    pCapGiro: chooseValue(fundamentusData?.pCapGiro, brapiData?.pCapGiro, yahooData?.pCapGiro),
+    pEbit: chooseValue(fundamentusData?.pEbit, brapiData?.pEbit, yahooData?.pEbit),
+    lpa: chooseValue(fundamentusData?.lpa, brapiData?.lpa, yahooData?.lpa),
+    trailingEps: chooseValue(null, brapiData?.trailingEps, yahooData?.trailingEps), // Fundamentus não tem
+    vpa: chooseValue(fundamentusData?.vpa, brapiData?.vpa, yahooData?.vpa),
     
     // === DADOS DE MERCADO E AÇÕES ===
-    marketCap: wardData?.marketCap || brapiData?.marketCap || null, // Ward tem cálculo mais preciso
-    enterpriseValue: brapiData?.enterpriseValue || null, // Só na Brapi
-    sharesOutstanding: wardData?.sharesOutstanding || brapiData?.sharesOutstanding || null,
-    totalAssets: fundamentusData?.ativoTotal || brapiData?.totalAssets || null,
+    // Usar validação mais rigorosa para valores grandes (marketCap, enterpriseValue)
+    marketCap: chooseLargeValue(null, brapiData?.marketCap, yahooData?.marketCap), // Fundamentus não tem
+    enterpriseValue: chooseLargeValue(null, brapiData?.enterpriseValue, yahooData?.enterpriseValue), // Fundamentus não tem
+    sharesOutstanding: chooseValue(null, brapiData?.sharesOutstanding, yahooData?.sharesOutstanding), // Fundamentus não tem
+    totalAssets: chooseValue(fundamentusData?.ativoTotal, brapiData?.totalAssets, yahooData?.totalAssets),
     
     // === INDICADORES DE ENDIVIDAMENTO E LIQUIDEZ ===
-    dividaLiquidaPl: fundamentusData?.dividaLiquidaPl || brapiData?.dividaLiquidaPl || null,
-    dividaLiquidaEbitda: fundamentusData?.dividaLiquidaEbitda || wardData?.dividaLiquidaEbitda || brapiData?.dividaLiquidaEbitda || null,
-    liquidezCorrente: fundamentusData?.liquidezCorrente || wardData?.liquidezCorrente || brapiData?.liquidezCorrente || null,
-    liquidezRapida: brapiData?.liquidezRapida || null, // Só na Brapi
-    passivoAtivos: brapiData?.passivoAtivos || null, // Só na Brapi
-    debtToEquity: brapiData?.debtToEquity || null, // Só na Brapi
+    dividaLiquidaPl: chooseValue(fundamentusData?.dividaLiquidaPl, brapiData?.dividaLiquidaPl, yahooData?.dividaLiquidaPl),
+    dividaLiquidaEbitda: chooseValue(fundamentusData?.dividaLiquidaEbitda, brapiData?.dividaLiquidaEbitda, yahooData?.dividaLiquidaEbitda),
+    liquidezCorrente: chooseValue(fundamentusData?.liquidezCorrente, brapiData?.liquidezCorrente, yahooData?.liquidezCorrente),
+    liquidezRapida: chooseValue(null, brapiData?.liquidezRapida, yahooData?.liquidezRapida), // Fundamentus não tem
+    passivoAtivos: chooseValue(null, brapiData?.passivoAtivos, yahooData?.passivoAtivos), // Fundamentus não tem
+    debtToEquity: chooseValue(null, brapiData?.debtToEquity, yahooData?.debtToEquity), // Fundamentus não tem
     
     // === INDICADORES DE RENTABILIDADE ===
-    roe: fundamentusData?.roe || wardData?.roe || brapiData?.roe || null,
-    roic: fundamentusData?.roic || wardData?.roic || brapiData?.roic || null,
-    roa: wardData?.roa || brapiData?.roa || null,
-    margemBruta: fundamentusData?.margemBruta || brapiData?.margemBruta || null,
-    margemEbitda: fundamentusData?.margemEbitda || wardData?.margemEbitda || brapiData?.margemEbitda || null,
-    margemLiquida: fundamentusData?.margemLiquida || wardData?.margemLiquida || brapiData?.margemLiquida || null,
-    giroAtivos: fundamentusData?.giroAtivos || brapiData?.giroAtivos || null,
+    roe: chooseValue(fundamentusData?.roe, brapiData?.roe, yahooData?.roe),
+    roic: chooseValue(fundamentusData?.roic, brapiData?.roic, yahooData?.roic),
+    roa: chooseValue(null, brapiData?.roa, yahooData?.roa), // Fundamentus não tem
+    margemBruta: chooseValue(fundamentusData?.margemBruta, brapiData?.margemBruta, yahooData?.margemBruta),
+    margemEbitda: chooseValue(fundamentusData?.margemEbitda, brapiData?.margemEbitda, yahooData?.margemEbitda),
+    margemLiquida: chooseValue(fundamentusData?.margemLiquida, brapiData?.margemLiquida, yahooData?.margemLiquida),
+    giroAtivos: chooseValue(fundamentusData?.giroAtivos, brapiData?.giroAtivos, yahooData?.giroAtivos),
     
     // === INDICADORES DE CRESCIMENTO (PRIORIDADE MÁXIMA FUNDAMENTUS - CALCULADOS) ===
-    cagrLucros5a: fundamentusData?.cagrLucros5a || wardData?.cagrLucros5a || brapiData?.cagrLucros5a || null,
+    cagrLucros5a: chooseValue(fundamentusData?.cagrLucros5a, brapiData?.cagrLucros5a, yahooData?.cagrLucros5a),
     cagrReceitas5a: fundamentusData?.cagrReceitas5a || null, // Só no Fundamentus (calculado)
-    crescimentoLucros: fundamentusData?.crescimentoLucros || brapiData?.crescimentoLucros || null,
-    crescimentoReceitas: fundamentusData?.crescimentoReceitas || wardData?.crescimentoReceitas || brapiData?.crescimentoReceitas || null,
+    crescimentoLucros: chooseValue(fundamentusData?.crescimentoLucros, brapiData?.crescimentoLucros, yahooData?.crescimentoLucros),
+    crescimentoReceitas: chooseValue(fundamentusData?.crescimentoReceitas, brapiData?.crescimentoReceitas, yahooData?.crescimentoReceitas),
     
     // === DADOS DE DIVIDENDOS ===
-    dividendYield12m: fundamentusData?.dividendYield12m || wardData?.dividendYield12m || brapiData?.dividendYield12m || null,
-    ultimoDividendo: brapiData?.ultimoDividendo || null, // Só na Brapi
-    dataUltimoDividendo: brapiData?.dataUltimoDividendo || null, // Só na Brapi
-    payout: wardData?.payout || brapiData?.payout || null, // Ward > Brapi
+    dividendYield12m: chooseValue(fundamentusData?.dividendYield12m, brapiData?.dividendYield12m, yahooData?.dividendYield12m),
+    ultimoDividendo: chooseValue(null, brapiData?.ultimoDividendo, yahooData?.ultimoDividendo), // Fundamentus não tem
+    dataUltimoDividendo: chooseValue(null, brapiData?.dataUltimoDividendo, yahooData?.dataUltimoDividendo), // Fundamentus não tem
+    payout: chooseValue(null, brapiData?.payout, yahooData?.payout), // Fundamentus não tem
     
     // === PERFORMANCE E VARIAÇÕES ===
-    variacao52Semanas: brapiData?.variacao52Semanas || null, // Só na Brapi
-    retornoAnoAtual: brapiData?.retornoAnoAtual || null, // Só na Brapi
+    variacao52Semanas: chooseValue(null, brapiData?.variacao52Semanas, yahooData?.variacao52Semanas), // Fundamentus não tem
+    retornoAnoAtual: chooseValue(null, brapiData?.retornoAnoAtual, yahooData?.retornoAnoAtual), // Fundamentus não tem
     
     // === DADOS FINANCEIROS OPERACIONAIS ===
-    ebitda: fundamentusData?.ebitda || wardData?.ebitda || brapiData?.ebitda || null,
-    receitaTotal: fundamentusData?.receitaTotal || wardData?.receitaTotal || brapiData?.receitaTotal || null,
-    lucroLiquido: fundamentusData?.lucroLiquido || wardData?.lucroLiquido || brapiData?.lucroLiquido || null,
-    fluxoCaixaOperacional: brapiData?.fluxoCaixaOperacional || null, // Só na Brapi
-    fluxoCaixaInvestimento: brapiData?.fluxoCaixaInvestimento || null, // Só na Brapi
-    fluxoCaixaFinanciamento: brapiData?.fluxoCaixaFinanciamento || null, // Só na Brapi
-    fluxoCaixaLivre: brapiData?.fluxoCaixaLivre || null, // Só na Brapi
-    totalCaixa: fundamentusData?.caixa || wardData?.totalCaixa || brapiData?.totalCaixa || null,
-    totalDivida: fundamentusData?.totalDivida || wardData?.totalDivida || brapiData?.totalDivida || null,
-    receitaPorAcao: brapiData?.receitaPorAcao || null, // Só na Brapi
-    caixaPorAcao: brapiData?.caixaPorAcao || null, // Só na Brapi
+    ebitda: chooseValue(fundamentusData?.ebitda, brapiData?.ebitda, yahooData?.ebitda),
+    receitaTotal: chooseValue(fundamentusData?.receitaTotal, brapiData?.receitaTotal, yahooData?.receitaTotal),
+    lucroLiquido: chooseValue(fundamentusData?.lucroLiquido, brapiData?.lucroLiquido, yahooData?.lucroLiquido),
+    fluxoCaixaOperacional: chooseValue(null, brapiData?.fluxoCaixaOperacional, yahooData?.fluxoCaixaOperacional), // Fundamentus não tem
+    fluxoCaixaInvestimento: chooseValue(null, brapiData?.fluxoCaixaInvestimento, yahooData?.fluxoCaixaInvestimento), // Fundamentus não tem
+    fluxoCaixaFinanciamento: chooseValue(null, brapiData?.fluxoCaixaFinanciamento, yahooData?.fluxoCaixaFinanciamento), // Fundamentus não tem
+    fluxoCaixaLivre: chooseValue(null, brapiData?.fluxoCaixaLivre, yahooData?.fluxoCaixaLivre), // Fundamentus não tem
+    totalCaixa: chooseValue(fundamentusData?.caixa, brapiData?.totalCaixa, yahooData?.totalCaixa),
+    totalDivida: chooseValue(fundamentusData?.totalDivida, brapiData?.totalDivida, yahooData?.totalDivida),
+    receitaPorAcao: chooseValue(null, brapiData?.receitaPorAcao, yahooData?.receitaPorAcao), // Fundamentus não tem
+    caixaPorAcao: chooseValue(null, brapiData?.caixaPorAcao, yahooData?.caixaPorAcao), // Fundamentus não tem
     
     // === DADOS DO BALANÇO PATRIMONIAL ===
-    ativoCirculante: fundamentusData?.ativoCirculante || brapiData?.ativoCirculante || null,
-    ativoTotal: fundamentusData?.ativoTotal || brapiData?.ativoTotal || null,
-    passivoCirculante: brapiData?.passivoCirculante || null, // Só na Brapi
-    passivoTotal: brapiData?.passivoTotal || null, // Só na Brapi
-    patrimonioLiquido: fundamentusData?.patrimonioLiquido || brapiData?.patrimonioLiquido || null,
-    caixa: fundamentusData?.caixa || brapiData?.caixa || null,
-    estoques: brapiData?.estoques || null, // Só na Brapi
-    contasReceber: brapiData?.contasReceber || null, // Só na Brapi
-    imobilizado: brapiData?.imobilizado || null, // Só na Brapi
-    intangivel: brapiData?.intangivel || null, // Só na Brapi
-    dividaCirculante: brapiData?.dividaCirculante || null, // Só na Brapi
-    dividaLongoPrazo: brapiData?.dividaLongoPrazo || null, // Só na Brapi
+    ativoCirculante: chooseValue(fundamentusData?.ativoCirculante, brapiData?.ativoCirculante, yahooData?.ativoCirculante),
+    ativoTotal: chooseValue(fundamentusData?.ativoTotal, brapiData?.ativoTotal, yahooData?.ativoTotal),
+    passivoCirculante: chooseValue(null, brapiData?.passivoCirculante, yahooData?.passivoCirculante), // Fundamentus não tem
+    passivoTotal: chooseValue(null, brapiData?.passivoTotal, yahooData?.passivoTotal), // Fundamentus não tem
+    patrimonioLiquido: chooseValue(fundamentusData?.patrimonioLiquido, brapiData?.patrimonioLiquido, yahooData?.patrimonioLiquido),
+    caixa: chooseValue(fundamentusData?.caixa, brapiData?.caixa, yahooData?.caixa),
+    estoques: chooseValue(null, brapiData?.estoques, yahooData?.estoques), // Fundamentus não tem
+    contasReceber: chooseValue(null, brapiData?.contasReceber, yahooData?.contasReceber), // Fundamentus não tem
+    imobilizado: chooseValue(null, brapiData?.imobilizado, yahooData?.imobilizado), // Fundamentus não tem
+    intangivel: chooseValue(null, brapiData?.intangivel, yahooData?.intangivel), // Fundamentus não tem
+    dividaCirculante: chooseValue(null, brapiData?.dividaCirculante, yahooData?.dividaCirculante), // Fundamentus não tem
+    dividaLongoPrazo: chooseValue(null, brapiData?.dividaLongoPrazo, yahooData?.dividaLongoPrazo), // Fundamentus não tem
     
     // === DADOS DE DIVIDENDOS DETALHADOS ===
-    dividendoMaisRecente: brapiData?.dividendoMaisRecente || null, // Só na Brapi
-    dataDividendoMaisRecente: brapiData?.dataDividendoMaisRecente || null, // Só na Brapi
-    historicoUltimosDividendos: brapiData?.historicoUltimosDividendos || null, // Só na Brapi
+    dividendoMaisRecente: chooseValue(null, brapiData?.dividendoMaisRecente, yahooData?.dividendoMaisRecente), // Fundamentus não tem
+    dataDividendoMaisRecente: chooseValue(null, brapiData?.dataDividendoMaisRecente, yahooData?.dataDividendoMaisRecente), // Fundamentus não tem
+    historicoUltimosDividendos: chooseValue(null, brapiData?.historicoUltimosDividendos, yahooData?.historicoUltimosDividendos), // Fundamentus não tem
     
     // === METADADOS ===
     dataSource: dataSource
@@ -958,8 +1170,11 @@ function mergeFinancialDataWithPriority(
 }
 
 // Função para mesclar dados da Ward com dados da Brapi (complementar) - MANTIDA PARA COMPATIBILIDADE
+// DEPRECATED: Esta função mantém compatibilidade com código antigo que ainda usa Ward
 function mergeWardWithBrapiData(wardData: any, brapiData: any, year: number): FinancialDataComplete {
-  return mergeFinancialDataWithPriority(null, wardData, brapiData, year);
+  // Converter wardData para formato esperado se necessário
+  // Por enquanto, passar null para wardData pois não é mais usado em TTM
+  return mergeFinancialDataWithPriority(null, brapiData, null, year);
 }
 
 // Função helper para calcular payout quando não disponível
@@ -2330,15 +2545,15 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
     // Buscar dados da Ward (mantém compatibilidade com dados existentes)
     // Não interromper processamento se Ward falhar
     let wardData = null;
-    try {
-      wardData = await fetchWardData(ticker);
-      if (!wardData || !wardData.historicalStocks) {
-        console.log(`⚠️  Nenhum dado histórico encontrado na Ward para ${ticker}`);
-      }
-    } catch (error: any) {
-      // Erro já tratado dentro de fetchWardData, apenas logar e continuar
-      console.log(`⚠️  Continuando processamento sem dados da Ward para ${ticker}`);
-    }
+    // try {
+    //   wardData = await fetchWardData(ticker);
+    //   if (!wardData || !wardData.historicalStocks) {
+    //     console.log(`⚠️  Nenhum dado histórico encontrado na Ward para ${ticker}`);
+    //   }
+    // } catch (error: any) {
+    //   // Erro já tratado dentro de fetchWardData, apenas logar e continuar
+    //   console.log(`⚠️  Continuando processamento sem dados da Ward para ${ticker}`);
+    // }
     
     // Verificar se temos pelo menos uma fonte de dados
     if (!wardData && !brapiProData) {
@@ -2595,12 +2810,27 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
       }
     }
 
-    // Se não temos dados da Ward, usar dados complementares da Brapi para atualizar o ano atual
+    // Se não temos dados da Ward, usar dados complementares da Brapi e Yahoo Finance para atualizar o ano atual
     if (!wardData || !wardData.historicalStocks) {
-      if (brapiData) {
-        // Usar dados complementares da Brapi para atualizar o ano atual
-        const currentYear = new Date().getFullYear();
-        console.log(`🔄 Usando dados complementares da Brapi para atualizar ${ticker} (${currentYear})...`);
+      const currentYear = new Date().getFullYear();
+      
+      // Buscar dados do Yahoo Finance como complemento
+      let yahooTTMData = null;
+      try {
+        console.log(`🔄 Buscando dados TTM do Yahoo Finance para ${ticker}...`);
+        yahooTTMData = await fetchYahooFinanceTTMData(ticker);
+        if (yahooTTMData) {
+          console.log(`  ✅ Dados TTM do Yahoo Finance obtidos para ${ticker}`);
+        } else {
+          console.log(`  ⚠️  Dados TTM do Yahoo Finance não disponíveis para ${ticker}`);
+        }
+      } catch (error: any) {
+        console.log(`  ⚠️  Erro ao buscar dados do Yahoo Finance para ${ticker}:`, error.message);
+      }
+      
+      if (brapiData || yahooTTMData) {
+        // Usar dados complementares da Brapi e Yahoo Finance para atualizar o ano atual
+        console.log(`🔄 Usando dados complementares da Brapi${yahooTTMData ? ' + Yahoo Finance' : ''} para atualizar ${ticker} (${currentYear})...`);
         
         // Buscar dados existentes para o ano atual
         const existingFinancialData = await prisma.financialData.findUnique({
@@ -2612,13 +2842,28 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
           }
         });
         
-        // Mesclar dados com prioridade (só Brapi neste caso)
+        // Converter dados do Yahoo para formato esperado
+        let yahooFormattedData = null;
+        if (yahooTTMData) {
+          yahooFormattedData = convertYahooFinanceToFinancialData(yahooTTMData, currentYear);
+          // Debug: verificar se conversão foi bem-sucedida
+          if (yahooFormattedData && (yahooTTMData.summaryDetail?.marketCap || yahooTTMData.price?.marketCap)) {
+            console.log(`  🔍 [YAHOO CONVERSION] marketCap convertido: ${yahooFormattedData.marketCap} (raw: summaryDetail=${yahooTTMData.summaryDetail?.marketCap}, price=${yahooTTMData.price?.marketCap})`);
+          }
+        }
+        
+        // Mesclar dados com prioridade: Fundamentus > Brapi > Yahoo
         let finalFinancialData = mergeFinancialDataWithPriority(
           null, // Fundamentus
-          null, // Ward
           brapiData, // Brapi complementar
+          yahooFormattedData, // Yahoo Finance
           currentYear
         );
+        
+        // Debug: verificar marketCap após mesclagem
+        if (yahooFormattedData || brapiData) {
+          console.log(`  🔍 [MERGE DEBUG] marketCap final: ${finalFinancialData.marketCap} (Brapi: ${brapiData?.marketCap}, Yahoo: ${yahooFormattedData?.marketCap})`);
+        }
         
         // Calcular ROIC se não disponível
         if (!finalFinancialData.roic || finalFinancialData.roic === null) {
@@ -2687,13 +2932,19 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
             }
           });
           
-          console.log(`✅ Dados complementares da Brapi atualizados para ${ticker} (${currentYear})`);
+          const sources = [];
+          if (brapiData) sources.push('Brapi');
+          if (yahooFormattedData) sources.push('Yahoo');
+          console.log(`✅ Dados complementares atualizados para ${ticker} (${currentYear}) - fontes: ${sources.join(' + ')}`);
         } else {
-          console.log(`⏭️  Nenhum campo novo para atualizar com dados complementares da Brapi para ${ticker}`);
+          console.log(`⏭️  Nenhum campo novo para atualizar com dados complementares para ${ticker}`);
         }
       }
       
-      console.log(`✅ ${ticker}: Processamento concluído apenas com dados da Brapi PRO`);
+      const sources = [];
+      if (brapiProData) sources.push('Brapi PRO');
+      if (yahooTTMData) sources.push('Yahoo Finance');
+      console.log(`✅ ${ticker}: Processamento concluído com dados de ${sources.join(' + ')}`);
       return;
     }
 
@@ -2709,7 +2960,7 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
         const currentYear = new Date().getFullYear();
         
         // Se for o ano atual, buscar dados do Fundamentus e mesclar com prioridade
-        let finalFinancialData;
+        let finalFinancialData: FinancialDataComplete;
         if (wardFinancialData.year === currentYear) {
           // Buscar dados do Fundamentus para o ano atual
           let fundamentusCurrentYearData = null;
@@ -2723,19 +2974,35 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
             console.log(`  ⚠️  Erro ao buscar dados do Fundamentus para ${ticker}:`, error.message);
           }
           
-          // Mesclar com prioridade: Fundamentus > Ward > Brapi
+          // Mesclar com prioridade: Fundamentus > Brapi > Yahoo (Ward mantido para compatibilidade histórica)
           if (fundamentusCurrentYearData || brapiData) {
             finalFinancialData = mergeFinancialDataWithPriority(
               fundamentusCurrentYearData,
-              wardFinancialData,
               brapiData,
+              null, // Yahoo não usado em dados históricos da Ward
               wardFinancialData.year
             );
+            // Mesclar dados da Ward manualmente após prioridade Fundamentus/Brapi/Yahoo
+            // Isso mantém compatibilidade com dados históricos existentes
+            if (wardFinancialData) {
+              Object.keys(wardFinancialData).forEach(key => {
+                if (key !== 'year' && key !== 'dataSource') {
+                  const wardValue = (wardFinancialData as any)[key];
+                  const currentValue = (finalFinancialData as any)[key];
+                  // Para marketCap e enterpriseValue, usar validação mais rigorosa
+                  const isLargeValue = key === 'marketCap' || key === 'enterpriseValue';
+                  // Usar Ward apenas se valor atual é null/undefined/0 e Ward tem valor válido
+                  if (!isValidValue(currentValue, isLargeValue) && isValidValue(wardValue, isLargeValue)) {
+                    (finalFinancialData as any)[key] = wardValue;
+                  }
+                }
+              });
+            }
             complementedYears++;
             const sources = [];
             if (fundamentusCurrentYearData) sources.push('Fundamentus');
-            if (wardFinancialData) sources.push('Ward');
             if (brapiData) sources.push('Brapi');
+            if (wardFinancialData) sources.push('Ward');
             console.log(`  🔄 ${wardFinancialData.year}: Dados mesclados ${sources.join(' + ')}`);
           } else {
             finalFinancialData = wardFinancialData as FinancialDataComplete;
@@ -3770,7 +4037,7 @@ async function processSpecificTickersNew(
   }
 }
 
-// Função para processar apenas dados TTM de uma empresa (com prioridade Fundamentus > Ward > Brapi)
+// Função para processar apenas dados TTM de uma empresa (com prioridade Fundamentus > Brapi > Yahoo)
 async function processCompanyTTMOnly(
   ticker: string,
   tickerManager: TickerProcessingManager
@@ -3792,8 +4059,8 @@ async function processCompanyTTMOnly(
 
     const currentYear = new Date().getFullYear();
     let fundamentusFinancialData = null;
-    let wardCurrentYearData = null;
     let brapiTTMData = null;
+    let yahooTTMData = null;
 
     // 1. BUSCAR DADOS DO FUNDAMENTUS (PRIORIDADE MÁXIMA)
     console.log(`🔄 Buscando dados TTM do Fundamentus para ${ticker}...`);
@@ -3817,30 +4084,7 @@ async function processCompanyTTMOnly(
       console.log(`  ⚠️  Erro ao buscar dados do Fundamentus para ${ticker}:`, error.message);
     }
 
-    // 2. BUSCAR DADOS DA WARD (SEGUNDA PRIORIDADE)
-    console.log(`🔄 Buscando dados TTM da Ward para ${ticker}...`);
-    try {
-      const wardData = await fetchWardData(ticker);
-      if (wardData && wardData.historicalStocks) {
-        // Buscar dados do ano atual na Ward
-        const currentYearStock = wardData.historicalStocks.find(stock => 
-          parseInt(stock.ano) === currentYear
-        );
-        
-        if (currentYearStock) {
-          wardCurrentYearData = await convertWardDataToFinancialData(currentYearStock, company.id);
-          console.log(`  ✅ Dados da Ward obtidos para ${ticker} (${currentYear})`);
-        } else {
-          console.log(`  ⚠️  Dados da Ward não disponíveis para o ano atual (${currentYear})`);
-        }
-      } else {
-        console.log(`  ⚠️  Dados da Ward não disponíveis para ${ticker}`);
-      }
-    } catch (error: any) {
-      console.log(`  ⚠️  Erro ao buscar dados da Ward para ${ticker}:`, error.message);
-    }
-
-    // 3. BUSCAR DADOS DA BRAPI PRO (TERCEIRA PRIORIDADE)
+    // 2. BUSCAR DADOS DA BRAPI PRO (SEGUNDA PRIORIDADE)
     console.log(`🔄 Buscando dados TTM da Brapi PRO para ${ticker}...`);
     brapiTTMData = await fetchBrapiTTMData(ticker);
     
@@ -3890,8 +4134,46 @@ async function processCompanyTTMOnly(
       console.log(`  ⚠️  Dados TTM da Brapi PRO não disponíveis para ${ticker}`);
     }
 
-    // 4. MESCLAR DADOS COM PRIORIDADE: FUNDAMENTUS > WARD > BRAPI
-    if (fundamentusFinancialData || wardCurrentYearData || brapiTTMData) {
+    // 3. BUSCAR DADOS DO YAHOO FINANCE (COMPLEMENTAR)
+    console.log(`🔄 Buscando dados TTM do Yahoo Finance para ${ticker}...`);
+    try {
+      yahooTTMData = await fetchYahooFinanceTTMData(ticker);
+      if (yahooTTMData) {
+        console.log(`  ✅ Dados TTM do Yahoo Finance obtidos para ${ticker}`);
+        
+        // 3.1. ATUALIZAR COTAÇÃO ATUAL (regularMarketPrice) se Brapi não tiver
+        if (yahooTTMData.price?.regularMarketPrice && !brapiTTMData?.regularMarketPrice) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          await prisma.dailyQuote.upsert({
+            where: {
+              companyId_date: {
+                companyId: company.id,
+                date: today
+              }
+            },
+            update: {
+              price: yahooTTMData.price.regularMarketPrice
+            },
+            create: {
+              companyId: company.id,
+              date: today,
+              price: yahooTTMData.price.regularMarketPrice
+            }
+          });
+
+          console.log(`  💰 Cotação TTM atualizada do Yahoo: ${ticker} - R$ ${yahooTTMData.price.regularMarketPrice}`);
+        }
+      } else {
+        console.log(`  ⚠️  Dados TTM do Yahoo Finance não disponíveis para ${ticker}`);
+      }
+    } catch (error: any) {
+      console.log(`  ⚠️  Erro ao buscar dados do Yahoo Finance para ${ticker}:`, error.message);
+    }
+
+    // 4. MESCLAR DADOS COM PRIORIDADE: FUNDAMENTUS > BRAPI > YAHOO
+    if (fundamentusFinancialData || brapiTTMData || yahooTTMData) {
       console.log(`🔄 Mesclando dados TTM com prioridade para ${ticker}...`);
       
       // Buscar dados existentes para o ano atual
@@ -3978,6 +4260,16 @@ async function processCompanyTTMOnly(
         };
       }
       
+      // Converter dados do Yahoo para formato esperado
+      let yahooFormattedData = null;
+      if (yahooTTMData) {
+        yahooFormattedData = convertYahooFinanceToFinancialData(yahooTTMData, currentYear);
+        // Debug: verificar se conversão foi bem-sucedida
+        if (yahooFormattedData && (yahooTTMData.summaryDetail?.marketCap || yahooTTMData.price?.marketCap)) {
+          console.log(`  🔍 [YAHOO CONVERSION] marketCap convertido: ${yahooFormattedData.marketCap} (raw: summaryDetail=${yahooTTMData.summaryDetail?.marketCap}, price=${yahooTTMData.price?.marketCap})`);
+        }
+      }
+      
       // Mesclar dados com prioridade
       let finalFinancialData;
       if (existingFinancialData) {
@@ -3989,21 +4281,28 @@ async function processCompanyTTMOnly(
           // Senão, usar nova função de prioridade
           finalFinancialData = mergeFinancialDataWithPriority(
             fundamentusFinancialData,
-            wardCurrentYearData,
             brapiFormattedData,
+            yahooFormattedData,
             currentYear
           );
-          console.log(`  🔄 Dados mesclados: Ward + Brapi + existentes`);
+          const sources = [];
+          if (brapiFormattedData) sources.push('Brapi');
+          if (yahooFormattedData) sources.push('Yahoo');
+          console.log(`  🔄 Dados mesclados: ${sources.join(' + ')} + existentes`);
         }
       } else {
         // Criar novo registro
         finalFinancialData = mergeFinancialDataWithPriority(
           fundamentusFinancialData,
-          wardCurrentYearData,
           brapiFormattedData,
+          yahooFormattedData,
           currentYear
         );
-        console.log(`  🆕 Novos dados TTM criados`);
+        const sources = [];
+        if (fundamentusFinancialData) sources.push('Fundamentus');
+        if (brapiFormattedData) sources.push('Brapi');
+        if (yahooFormattedData) sources.push('Yahoo');
+        console.log(`  🆕 Novos dados TTM criados (${sources.join(' + ')})`);
       }
       
       // Calcular ROIC se não disponível após mesclagem

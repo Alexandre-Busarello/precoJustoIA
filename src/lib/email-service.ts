@@ -4892,3 +4892,351 @@ export async function sendCustomTriggerConversionEmail(params: {
     text: template.text
   });
 }
+
+/**
+ * Template de email de boas-vindas para usuários do Kiwify
+ * Inclui link para configurar senha no primeiro acesso
+ */
+export function generateKiwifyWelcomeEmailTemplate(resetUrl: string, userName?: string) {
+  const baseUrl = getEmailBaseUrl()
+  const logoUrl = getEmailLogoUrl()
+  
+  return {
+    subject: 'Bem-vindo ao Preço Justo AI Premium! Configure sua senha',
+    html: `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Bem-vindo ao Preço Justo AI Premium</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+          }
+          
+          .email-wrapper {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          
+          .container {
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e2e8f0;
+          }
+          
+          .header {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            padding: 40px 30px;
+            text-align: center;
+          }
+          
+          .logo-container {
+            margin-bottom: 20px;
+            text-align: center;
+          }
+          
+          .logo {
+            max-width: 180px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+          }
+          
+          .header-title {
+            color: #ffffff;
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          }
+          
+          .header-subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 18px;
+            font-weight: 400;
+          }
+          
+          .content {
+            padding: 40px 30px;
+          }
+          
+          .greeting {
+            font-size: 20px;
+            color: #0f172a;
+            margin-bottom: 20px;
+            font-weight: 600;
+          }
+          
+          .main-text {
+            font-size: 16px;
+            color: #475569;
+            margin-bottom: 30px;
+            line-height: 1.8;
+          }
+          
+          .premium-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 20px;
+          }
+          
+          .button-container {
+            text-align: center;
+            margin: 32px 0;
+          }
+          
+          .button {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: #ffffff;
+            padding: 16px 40px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            display: inline-block;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+          }
+          
+          .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          }
+          
+          .info-box {
+            background-color: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+          }
+          
+          .info-title {
+            color: #1e40af;
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 16px;
+          }
+          
+          .info-text {
+            color: #475569;
+            font-size: 14px;
+            line-height: 1.6;
+          }
+          
+          .features-list {
+            list-style: none;
+            margin: 20px 0;
+            padding: 0;
+          }
+          
+          .features-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+            color: #475569;
+            font-size: 15px;
+          }
+          
+          .features-list li:last-child {
+            border-bottom: none;
+          }
+          
+          .features-list li::before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+          }
+          
+          .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .footer-text {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 10px;
+          }
+          
+          .footer-link {
+            color: #3b82f6;
+            text-decoration: none;
+          }
+          
+          .footer-link:hover {
+            text-decoration: underline;
+          }
+          
+          @media only screen and (max-width: 600px) {
+            .email-wrapper {
+              padding: 10px;
+            }
+            
+            .header {
+              padding: 30px 20px;
+            }
+            
+            .content {
+              padding: 30px 20px;
+            }
+            
+            .header-title {
+              font-size: 28px;
+            }
+            
+            .button {
+              padding: 14px 32px;
+              font-size: 15px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="container">
+            <div class="header">
+              <div class="logo-container">
+                <img src="${logoUrl}" alt="Preço Justo AI" class="logo" />
+              </div>
+              <h1 class="header-title">🎉 Bem-vindo!</h1>
+              <p class="header-subtitle">Sua assinatura Premium foi ativada</p>
+            </div>
+            
+            <div class="content">
+              <p class="greeting">
+                ${userName ? `Olá, <strong>${userName}</strong>!` : 'Olá!'}
+              </p>
+              
+              <div class="premium-badge">✨ Premium Ativo</div>
+              
+              <p class="main-text">
+                Parabéns! Sua assinatura <strong>Premium</strong> foi ativada com sucesso. 
+                Agora você tem acesso completo a todas as ferramentas profissionais de análise fundamentalista.
+              </p>
+              
+              <div class="info-box">
+                <div class="info-title">🔐 Primeiro acesso</div>
+                <div class="info-text">
+                  Para começar a usar a plataforma, você precisa configurar sua senha. 
+                  Clique no botão abaixo para criar sua senha de acesso.
+                </div>
+              </div>
+              
+              <div class="button-container">
+                <a href="${resetUrl}" class="button">Configurar Minha Senha</a>
+              </div>
+              
+              <p class="main-text" style="margin-top: 30px;">
+                <strong>O que você tem acesso agora:</strong>
+              </p>
+              
+              <ul class="features-list">
+                <li>8 Modelos de Valuation Premium (Graham, Fórmula Mágica, DCF, etc.)</li>
+                <li>Análise com Inteligência Artificial</li>
+                <li>Comparador Avançado (até 10 ações lado a lado)</li>
+                <li>Backtesting de estratégias</li>
+                <li>Relatórios mensais automatizados</li>
+                <li>Suporte VIP prioritário</li>
+              </ul>
+              
+              <div class="info-box" style="border-left-color: #10b981; margin-top: 30px;">
+                <div class="info-title" style="color: #059669;">💡 Dica</div>
+                <div class="info-text">
+                  O link de configuração de senha expira em 7 dias. 
+                  Se você não configurar agora, pode solicitar um novo link a qualquer momento.
+                </div>
+              </div>
+            </div>
+            
+            <div class="footer">
+              <p class="footer-text">
+                Precisa de ajuda? Nossa equipe está sempre disponível!
+              </p>
+              <p class="footer-text">
+                Entre em contato conosco em 
+                <a href="mailto:suporte@precojusto.ai" class="footer-link">suporte@precojusto.ai</a>
+              </p>
+              <p class="footer-text" style="margin-top: 20px;">
+                <a href="${baseUrl}" class="footer-link">Preço Justo AI</a> - Análise fundamentalista inteligente
+              </p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+🎉 Bem-vindo ao Preço Justo AI Premium!
+
+${userName ? `Olá, ${userName}!` : 'Olá!'}
+
+Parabéns! Sua assinatura Premium foi ativada com sucesso. 
+Agora você tem acesso completo a todas as ferramentas profissionais de análise fundamentalista.
+
+🔐 PRIMEIRO ACESSO
+Para começar a usar a plataforma, você precisa configurar sua senha. 
+Acesse o link abaixo para criar sua senha de acesso:
+
+${resetUrl}
+
+O link expira em 7 dias. Se você não configurar agora, pode solicitar um novo link a qualquer momento.
+
+✨ O QUE VOCÊ TEM ACESSO AGORA:
+✓ 8 Modelos de Valuation Premium (Graham, Fórmula Mágica, DCF, etc.)
+✓ Análise com Inteligência Artificial
+✓ Comparador Avançado (até 10 ações lado a lado)
+✓ Backtesting de estratégias
+✓ Relatórios mensais automatizados
+✓ Suporte VIP prioritário
+
+Precisa de ajuda? Entre em contato conosco em suporte@precojusto.ai
+
+Preço Justo AI - Análise fundamentalista inteligente
+${baseUrl}
+    `
+  }
+}
+
+/**
+ * Envia email de boas-vindas para usuários do Kiwify
+ */
+export async function sendKiwifyWelcomeEmail(
+  email: string,
+  resetUrl: string,
+  userName?: string
+) {
+  const template = generateKiwifyWelcomeEmailTemplate(resetUrl, userName)
+  
+  return await sendEmail({
+    to: email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  })
+}

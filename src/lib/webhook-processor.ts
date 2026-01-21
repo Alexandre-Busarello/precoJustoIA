@@ -10,6 +10,7 @@ import { safeWrite } from '@/lib/prisma-wrapper'
 import { EmailQueueService } from '@/lib/email-queue-service'
 import { stripe } from '@/lib/stripe'
 import { payment as mercadoPagoPayment } from '@/lib/mercadopago'
+import { createOrUpdateKiwifyUser, sendWelcomeEmailWithPasswordReset } from '@/lib/kiwify-user-service'
 
 export class WebhookProcessor {
   /**
@@ -699,6 +700,303 @@ export class WebhookProcessor {
     }
 
     return true
+  }
+
+  /**
+   * Processa um evento de webhook do Kiwify
+   */
+  static async processKiwifyEvent(webhookEvent: any): Promise<boolean> {
+    const eventType = webhookEvent.eventType
+    const eventData = webhookEvent.rawData
+
+    console.log(`🔄 Processing Kiwify event: ${eventType}`)
+
+    try {
+      switch (eventType) {
+        case 'order_approved':
+          return await this.handleKiwifyOrderApproved(eventData)
+        
+        case 'order_refunded':
+          return await this.handleKiwifyOrderRefunded(eventData)
+        
+        case 'chargeback':
+          return await this.handleKiwifyChargeback(eventData)
+        
+        case 'subscription_canceled':
+          return await this.handleKiwifySubscriptionCanceled(eventData)
+        
+        case 'subscription_renewed':
+          return await this.handleKiwifySubscriptionRenewed(eventData)
+        
+        case 'subscription_late':
+          return await this.handleKiwifySubscriptionLate(eventData)
+        
+        default:
+          console.log(`⚠️ Unhandled Kiwify event type: ${eventType}`)
+          return true // Eventos não tratados são considerados sucesso
+      }
+    } catch (error) {
+      console.error(`❌ Error processing Kiwify event ${eventType}:`, error)
+      throw error
+    }
+  }
+
+  // ===== HANDLERS KIWIFY =====
+
+  /**
+   * Handler para order_approved do Kiwify
+   * Cria ou atualiza usuário e ativa Premium
+   */
+  private static async handleKiwifyOrderApproved(eventData: any): Promise<boolean> {
+    try {
+      // Validar que o pedido está realmente pago
+      if (eventData.order_status !== 'paid') {
+        console.log('⚠️ Order approved but status is not paid:', eventData.order_status)
+        return true // Não é erro, apenas aguardar pagamento
+      }
+
+      const customer = eventData.Customer
+      const kiwifySubscription = eventData.Subscription
+
+      if (!customer) {
+        console.error('❌ No Customer found in webhook data')
+        return false
+      }
+
+      const email = customer.email
+      const name = customer.full_name || customer.first_name
+      const kiwifyOrderId = eventData.order_id
+      const kiwifyId = eventData.subscription_id || kiwifySubscription?.id
+
+      if (!email) {
+        console.error('❌ No email found in webhook data')
+        return false
+      }
+
+      // Calcular data de expiração
+      let expirationDate: Date | undefined
+      if (kiwifySubscription?.next_payment) {
+        expirationDate = new Date(kiwifySubscription.next_payment)
+      }
+
+      // Criar ou atualizar usuário
+      const { user, isNewUser } = await createOrUpdateKiwifyUser(
+        email,
+        name,
+        kiwifyId,
+        kiwifyOrderId,
+        expirationDate
+      )
+
+      // Enviar email de boas-vindas apenas se for novo usuário
+      if (isNewUser) {
+        try {
+          await sendWelcomeEmailWithPasswordReset(email, name)
+          console.log(`✅ Welcome email sent to new user: ${email}`)
+        } catch (emailError) {
+          console.error('❌ Failed to send welcome email:', emailError)
+          // Não falhar o webhook se não conseguir enviar email
+        }
+      }
+
+      console.log(`✅ Kiwify order approved processed: ${email} (new: ${isNewUser})`)
+      return true
+    } catch (error) {
+      console.error('❌ Error handling Kiwify order approved:', error)
+      return false
+    }
+  }
+
+  /**
+   * Handler para order_refunded do Kiwify
+   * Remove Premium do usuário
+   */
+  private static async handleKiwifyOrderRefunded(eventData: any): Promise<boolean> {
+    try {
+      const customer = eventData.Customer
+      const email = customer?.email || eventData.email
+
+      if (!email) {
+        console.error('❌ No email found in refund event')
+        return false
+      }
+
+      return await this.removePremiumFromUser(email)
+    } catch (error) {
+      console.error('❌ Error handling Kiwify order refunded:', error)
+      return false
+    }
+  }
+
+  /**
+   * Handler para chargeback do Kiwify
+   * Remove Premium do usuário
+   */
+  private static async handleKiwifyChargeback(eventData: any): Promise<boolean> {
+    try {
+      const customer = eventData.Customer
+      const email = customer?.email || eventData.email
+
+      if (!email) {
+        console.error('❌ No email found in chargeback event')
+        return false
+      }
+
+      return await this.removePremiumFromUser(email)
+    } catch (error) {
+      console.error('❌ Error handling Kiwify chargeback:', error)
+      return false
+    }
+  }
+
+  /**
+   * Handler para subscription_canceled do Kiwify
+   * Remove Premium do usuário
+   */
+  private static async handleKiwifySubscriptionCanceled(eventData: any): Promise<boolean> {
+    try {
+      const customer = eventData.Customer
+      const email = customer?.email || eventData.email
+
+      if (!email) {
+        console.error('❌ No email found in subscription canceled event')
+        return false
+      }
+
+      return await this.removePremiumFromUser(email)
+    } catch (error) {
+      console.error('❌ Error handling Kiwify subscription canceled:', error)
+      return false
+    }
+  }
+
+  /**
+   * Handler para subscription_renewed do Kiwify
+   * Renova/extende Premium do usuário
+   */
+  private static async handleKiwifySubscriptionRenewed(eventData: any): Promise<boolean> {
+    try {
+      const customer = eventData.Customer
+      const kiwifySubscription = eventData.Subscription
+
+      if (!customer?.email) {
+        console.error('❌ No Customer email found in subscription_renewed webhook')
+        return false
+      }
+
+      const email = customer.email.toLowerCase().trim()
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          subscriptionTier: true,
+          premiumExpiresAt: true,
+        },
+      })
+
+      if (!user) {
+        console.log(`⚠️ User not found for subscription renewal: ${email}`)
+        return true // Não é erro crítico
+      }
+
+      // Calcular nova data de expiração
+      let expirationDate: Date
+      if (kiwifySubscription?.next_payment) {
+        expirationDate = new Date(kiwifySubscription.next_payment)
+      } else {
+        // Fallback: adicionar 12 meses
+        const now = new Date()
+        expirationDate = new Date(now)
+        expirationDate.setMonth(expirationDate.getMonth() + 12)
+      }
+
+      // Se usuário já é Premium, estender assinatura (não substituir)
+      if (user.subscriptionTier === 'PREMIUM' && user.premiumExpiresAt) {
+        const currentExpiration = new Date(user.premiumExpiresAt)
+        // Usar a data mais distante
+        expirationDate = currentExpiration > expirationDate ? currentExpiration : expirationDate
+      }
+
+      await safeWrite(
+        'update-kiwify-subscription-renewed',
+        () => prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscriptionTier: 'PREMIUM',
+            premiumExpiresAt: expirationDate,
+            lastPremiumAt: new Date(),
+          },
+        }),
+        ['users']
+      )
+
+      console.log(`✅ Kiwify subscription renewed: ${email}`)
+      return true
+    } catch (error) {
+      console.error('❌ Error handling Kiwify subscription renewed:', error)
+      return false
+    }
+  }
+
+  /**
+   * Handler para subscription_late do Kiwify
+   * Apenas loga, sem ação específica
+   */
+  private static async handleKiwifySubscriptionLate(eventData: any): Promise<boolean> {
+    try {
+      const customer = eventData.Customer
+      const email = customer?.email
+
+      if (email) {
+        console.log(`⚠️ Kiwify subscription late for: ${email}`)
+      } else {
+        console.log('⚠️ Kiwify subscription late (no email found)')
+      }
+
+      // Por enquanto, apenas logamos
+      // Pode implementar lógica específica depois (ex: notificar usuário)
+      return true
+    } catch (error) {
+      console.error('❌ Error handling Kiwify subscription late:', error)
+      return false
+    }
+  }
+
+  /**
+   * Remove Premium de um usuário (helper compartilhado)
+   */
+  private static async removePremiumFromUser(email: string): Promise<boolean> {
+    try {
+      const emailLower = email.toLowerCase().trim()
+
+      const user = await prisma.user.findUnique({
+        where: { email: emailLower },
+        select: { id: true, subscriptionTier: true },
+      })
+
+      if (!user) {
+        console.log(`⚠️ User not found for premium removal: ${emailLower}`)
+        return true // Não é erro crítico
+      }
+
+      await safeWrite(
+        'remove-kiwify-premium',
+        () => prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscriptionTier: 'FREE',
+            premiumExpiresAt: null,
+          },
+        }),
+        ['users']
+      )
+
+      console.log(`✅ Premium removed from user: ${emailLower}`)
+      return true
+    } catch (error) {
+      console.error('❌ Error removing premium from user:', error)
+      return false
+    }
   }
 }
 

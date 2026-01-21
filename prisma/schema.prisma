@@ -51,6 +51,8 @@ model User {
   stripeCustomerId            String?                      @unique @map("stripe_customer_id")
   stripePriceId               String?                      @map("stripe_price_id")
   stripeSubscriptionId        String?                      @unique @map("stripe_subscription_id")
+  kiwifyId                    String?                      @unique @map("kiwify_id")
+  kiwifyOrderId               String?                      @map("kiwify_order_id")
   isAdmin                     Boolean                      @default(false) @map("is_admin")
   earlyAdopterDate            DateTime?                    @map("early_adopter_date")
   inactivatedAt               DateTime?                    @map("inactivated_at")
@@ -1663,6 +1665,7 @@ enum EmailType {
   PRICE_VARIATION_REPORT
   CUSTOM_TRIGGER_REPORT
   PREMIUM_EXPIRED
+  KIWIFY_WELCOME
 }
 
 enum EmailStatus {
@@ -1691,6 +1694,7 @@ enum EventType {
 enum WebhookProvider {
   STRIPE
   MERCADOPAGO
+  KIWIFY
 }
 
 enum WebhookEventStatus {

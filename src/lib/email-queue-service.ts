@@ -13,6 +13,7 @@ import {
   sendPriceVariationReportEmail,
   sendCustomTriggerReportEmail,
   sendPremiumExpirationEmail,
+  sendKiwifyWelcomeEmail,
   generateEmailVerificationTemplate,
   generateNotificationEmailTemplate
 } from './email-service'
@@ -399,6 +400,14 @@ export class EmailQueueService {
       case 'PREMIUM_EXPIRED':
         await sendPremiumExpirationEmail(
           email,
+          recipientName || emailData.userName
+        )
+        break
+
+      case 'KIWIFY_WELCOME':
+        await sendKiwifyWelcomeEmail(
+          email,
+          emailData.resetUrl,
           recipientName || emailData.userName
         )
         break

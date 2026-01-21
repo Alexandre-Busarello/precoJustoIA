@@ -132,6 +132,11 @@ export async function GET(request: NextRequest) {
             eventType: event.eventType,
             rawData: event.rawData,
           })
+        } else if (event.provider === 'KIWIFY') {
+          success = await WebhookProcessor.processKiwifyEvent({
+            eventType: event.eventType,
+            rawData: event.rawData,
+          })
         } else {
           console.error(`❌ Provider desconhecido: ${event.provider}`)
           success = false

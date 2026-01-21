@@ -387,12 +387,21 @@ async function calculateAndUpdateAllGrowthMetrics(companyId: number): Promise<vo
       const metrics = await calculateGrowthMetricsForYear(allFinancialData, i);
       
       // Se o cálculo resultar em zero ou null, usar valores do Yahoo se disponíveis
+      // Converter valores do Prisma Decimal para número se necessário
+      const getNumericValue = (value: any): number | null => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'number') return value;
+        if (typeof value === 'object' && 'toNumber' in value) return value.toNumber();
+        const num = Number(value);
+        return isNaN(num) ? null : num;
+      };
+      
       const finalCrescimentoLucros = (metrics.crescimentoLucros === null || metrics.crescimentoLucros === 0) 
-        ? (fullYearData?.crescimentoLucros || metrics.crescimentoLucros)
+        ? (getNumericValue(fullYearData?.crescimentoLucros) || metrics.crescimentoLucros)
         : metrics.crescimentoLucros;
       
       const finalCrescimentoReceitas = (metrics.crescimentoReceitas === null || metrics.crescimentoReceitas === 0)
-        ? (fullYearData?.crescimentoReceitas || metrics.crescimentoReceitas)
+        ? (getNumericValue(fullYearData?.crescimentoReceitas) || metrics.crescimentoReceitas)
         : metrics.crescimentoReceitas;
       
       // Atualizar o registro no banco
@@ -408,15 +417,21 @@ async function calculateAndUpdateAllGrowthMetrics(companyId: number): Promise<vo
       
       // Log das métricas calculadas (usar valores finais que podem incluir dados do Yahoo)
       const metricsLog = [];
-      if (metrics.cagrLucros5a !== null) metricsLog.push(`CAGR-L(5a): ${(metrics.cagrLucros5a * 100).toFixed(1)}%`);
-      if (metrics.cagrReceitas5a !== null) metricsLog.push(`CAGR-R(5a): ${(metrics.cagrReceitas5a * 100).toFixed(1)}%`);
+      if (metrics.cagrLucros5a !== null) metricsLog.push(`CAGR-L(5a): ${(Number(metrics.cagrLucros5a) * 100).toFixed(1)}%`);
+      if (metrics.cagrReceitas5a !== null) metricsLog.push(`CAGR-R(5a): ${(Number(metrics.cagrReceitas5a) * 100).toFixed(1)}%`);
       if (finalCrescimentoLucros !== null) {
         const source = (metrics.crescimentoLucros === null || metrics.crescimentoLucros === 0) && fullYearData?.crescimentoLucros ? ' (Yahoo)' : '';
-        metricsLog.push(`Cresc Lucros: ${(finalCrescimentoLucros * 100).toFixed(1)}%${source}`);
+        const numValue = getNumericValue(finalCrescimentoLucros);
+        if (numValue !== null) {
+          metricsLog.push(`Cresc Lucros: ${(numValue * 100).toFixed(1)}%${source}`);
+        }
       }
       if (finalCrescimentoReceitas !== null) {
         const source = (metrics.crescimentoReceitas === null || metrics.crescimentoReceitas === 0) && fullYearData?.crescimentoReceitas ? ' (Yahoo)' : '';
-        metricsLog.push(`Cresc Receitas: ${(finalCrescimentoReceitas * 100).toFixed(1)}%${source}`);
+        const numValue = getNumericValue(finalCrescimentoReceitas);
+        if (numValue !== null) {
+          metricsLog.push(`Cresc Receitas: ${(numValue * 100).toFixed(1)}%${source}`);
+        }
       }
       
       if (metricsLog.length > 0) {

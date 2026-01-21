@@ -3895,12 +3895,31 @@ if (require.main === module) {
 // Função para ler tickers do CSV da B3
 function readTickersFromCSV(): string[] {
   try {
-    const csvPath = path.join(__dirname, 'acoes-listadas-b3.csv');
+    // Tentar múltiplos caminhos possíveis para o CSV
+    const possiblePaths = [
+      // Caminho relativo ao diretório do script (quando executado diretamente)
+      path.join(__dirname, 'acoes-listadas-b3.csv'),
+      // Caminho relativo ao diretório de trabalho atual (quando executado via npm/tsx)
+      path.join(process.cwd(), 'scripts', 'acoes-listadas-b3.csv'),
+      // Caminho absoluto alternativo (para produção)
+      path.join(process.cwd(), 'acoes-listadas-b3.csv'),
+    ];
     
-    if (!fs.existsSync(csvPath)) {
-      console.log(`⚠️  Arquivo CSV não encontrado em: ${csvPath}`);
+    let csvPath: string | null = null;
+    for (const possiblePath of possiblePaths) {
+      if (fs.existsSync(possiblePath)) {
+        csvPath = possiblePath;
+        break;
+      }
+    }
+    
+    if (!csvPath) {
+      console.log(`⚠️  Arquivo CSV não encontrado. Tentou os seguintes caminhos:`);
+      possiblePaths.forEach(p => console.log(`   - ${p}`));
       return [];
     }
+    
+    console.log(`📄 CSV encontrado em: ${csvPath}`);
     
     const csvContent = fs.readFileSync(csvPath, 'utf-8');
     const lines = csvContent.split('\n').filter(line => line.trim().length > 0);
@@ -3980,13 +3999,33 @@ async function discoverAndInitializeTickers(tickerManager: TickerProcessingManag
     console.error(`⚠️  Erro ao ler CSV:`, error.message);
   }
   
-  // 3. Combinar e inicializar todos os tickers únicos
-  const uniqueTickers = Array.from(allTickers);
-  
-  if (uniqueTickers.length === 0) {
-    console.log('❌ Nenhum ticker encontrado em nenhuma fonte');
-    return;
+  // 3. Se não encontrou tickers de fontes externas, buscar do banco de dados como fallback
+  if (allTickers.size === 0) {
+    console.log('⚠️  Nenhum ticker encontrado em fontes externas, buscando do banco de dados...');
+    try {
+      const companies = await backgroundPrisma.company.findMany({
+        select: { ticker: true },
+        orderBy: { ticker: 'asc' }
+      });
+      
+      if (companies.length > 0) {
+        companies.forEach(company => {
+          allTickers.add(company.ticker.toUpperCase());
+        });
+        console.log(`✅ ${companies.length} tickers encontrados no banco de dados`);
+      } else {
+        console.log('❌ Nenhum ticker encontrado em nenhuma fonte (incluindo banco de dados)');
+        return;
+      }
+    } catch (error: any) {
+      console.error(`❌ Erro ao buscar tickers do banco de dados:`, error.message);
+      console.log('❌ Nenhum ticker encontrado em nenhuma fonte');
+      return;
+    }
   }
+  
+  // 4. Combinar e inicializar todos os tickers únicos
+  const uniqueTickers = Array.from(allTickers);
   
   console.log(`📋 Total de ${uniqueTickers.length} tickers únicos encontrados`);
   console.log(`📋 Inicializando ${uniqueTickers.length} tickers no sistema...`);

@@ -33,6 +33,11 @@ export default function Header() {
     }
   }
 
+  // Não mostrar Header na rota /oferta - layout específico cuida disso
+  if (pathname === '/oferta') {
+    return null
+  }
+
   return (
     <>
       <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">

@@ -24,12 +24,12 @@ import {
 } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "Oferta Especial: Acesso Anual Completo ao Preço Justo AI com 45% OFF",
-  description: "Aproveite esta oferta por tempo limitado! Acesso completo a todas as funcionalidades Premium: Análise com IA, Radar de Oportunidades, Relatórios automáticos, Rankings personalizados e muito mais. Garantia de 7 dias.",
-  keywords: "oferta preço justo ai, desconto análise ações, plano premium anual, análise fundamentalista com desconto",
+  title: "Fim do Achismo: Descubra o Preço Justo das Ações em Segundos | 45% OFF",
+  description: "Fim do achismo na hora de investir! Descubra o preço justo das ações em segundos com análise fundamentalista automatizada. Garanta seu Acesso Anual com 45% OFF por tempo limitado. Análise com IA, Radar de Oportunidades, Relatórios automáticos e muito mais. Garantia de 7 dias.",
+  keywords: "preço justo ações, fim do achismo investimentos, análise fundamentalista automatizada, descobrir preço justo ações, oferta preço justo ai, desconto análise ações, plano premium anual",
   openGraph: {
-    title: "Oferta Especial: Acesso Anual Completo ao Preço Justo AI com 45% OFF",
-    description: "Aproveite esta oferta por tempo limitado! Acesso completo a todas as funcionalidades Premium.",
+    title: "Fim do Achismo: Descubra o Preço Justo das Ações em Segundos | 45% OFF",
+    description: "Fim do achismo na hora de investir! Descubra o preço justo das ações em segundos. Garanta seu Acesso Anual com 45% OFF por tempo limitado.",
     type: "website",
     url: "https://precojusto.ai/oferta",
   },
@@ -57,24 +57,21 @@ export default function OfertaPage() {
               <span className="text-sm sm:text-base font-bold">OFERTA POR TEMPO LIMITADO</span>
             </div>
 
-            {/* Headline Principal */}
+            {/* Headline Principal - Focada na Dor */}
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 sm:mb-6 leading-tight">
-              <span className="block mb-2">Acesso Anual Completo ao</span>
+              <span className="block mb-2">Fim do Achismo:</span>
               <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-                Preço Justo AI
-              </span>
-              <span className="block mt-2 text-red-600 text-4xl sm:text-5xl md:text-6xl lg:text-7xl">
-                45% OFF
+                Descubra o Preço Justo das Ações em Segundos
               </span>
             </h1>
 
             {/* Subheadline */}
-            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-8 sm:mb-10 max-w-3xl mx-auto leading-relaxed">
-              <strong>Todas as funcionalidades Premium</strong> em um único plano anual. 
-              Análise com IA, Radar de Oportunidades, Relatórios automáticos e muito mais.
+            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-6 sm:mb-8 max-w-3xl mx-auto leading-relaxed">
+              <strong>Garanta seu Acesso Anual com 45% OFF</strong> por tempo limitado. 
+              Todas as funcionalidades Premium em um único plano anual.
             </p>
 
-            {/* CTA Principal */}
+            {/* CTA Principal - Abaixo do texto (visível sempre) */}
             <div className="mb-8 sm:mb-10">
               <Button 
                 size="lg" 
@@ -87,12 +84,47 @@ export default function OfertaPage() {
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-3"
                 >
-                  <span>Garantir Minha Oferta Agora</span>
+                  <span>Quero Acabar com o Achismo Agora</span>
                   <ArrowRight className="w-5 h-5" />
                 </a>
               </Button>
               <p className="text-sm text-muted-foreground mt-4">
                 ✅ Pagamento seguro • ✅ Acesso imediato • ✅ Garantia de 7 dias
+              </p>
+            </div>
+
+            {/* Vídeo do YouTube */}
+            <div className="mb-8 sm:mb-10 max-w-4xl mx-auto">
+              <div className="relative aspect-video rounded-lg overflow-hidden shadow-2xl border-4 border-blue-200 dark:border-blue-800">
+                <iframe
+                  src="https://www.youtube.com/embed/oXuNY_Yc2kc?rel=0&modestbranding=1&iv_load_policy=3&fs=1&cc_load_policy=0&playsinline=1&controls=1"
+                  title="Preço Justo AI - Como Funciona"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="absolute top-0 left-0 w-full h-full"
+                />
+              </div>
+            </div>
+
+            {/* CTA Secundário - Aparece depois do vídeo no desktop */}
+            <div className="mb-8 sm:mb-10 hidden md:block">
+              <Button 
+                size="lg" 
+                className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white text-lg sm:text-xl px-8 sm:px-12 py-6 sm:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
+                asChild
+              >
+                <a 
+                  href={KIWIFY_CHECKOUT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-3"
+                >
+                  <span>Garantir Acesso Anual com 45% OFF</span>
+                  <ArrowRight className="w-5 h-5" />
+                </a>
+              </Button>
+              <p className="text-sm text-muted-foreground mt-4">
+                ✅ Oferta por tempo limitado • ✅ Sem fidelidade • ✅ Cancele quando quiser
               </p>
             </div>
 

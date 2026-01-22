@@ -166,6 +166,7 @@ export default function RootLayout({
                   <GoogleAdsConversionPixel />
                 </Suspense>
                 <div className="min-h-screen bg-background">
+                  {/* Header não será exibido na rota /oferta - layout específico cuida disso */}
                   <Header />
                   <main>
                     {children}

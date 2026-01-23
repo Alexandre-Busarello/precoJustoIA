@@ -44,6 +44,79 @@ function serializePrismaData(data: unknown): unknown {
   return data;
 }
 
+// Função helper para converter valores para número
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return isNaN(value) ? null : value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? null : parsed;
+  }
+  if (value && typeof value === 'object' && 'toNumber' in value) {
+    try {
+      return (value as { toNumber: () => number }).toNumber();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Função para calcular média histórica dos últimos 5 anos
+function calculateHistoricalAverages(
+  historicalData: Array<Record<string, unknown>>
+): Record<string, number | null> {
+  const currentYear = new Date().getFullYear();
+  const startYear = currentYear - 5;
+  
+  // Filtrar dados dos últimos 5 anos (excluindo ano atual)
+  const validHistoricalData = historicalData.filter((item: any) => {
+    const year = item.year;
+    return year && year >= startYear && year < currentYear;
+  });
+
+  if (validHistoricalData.length === 0) {
+    return {};
+  }
+
+  // Indicadores para calcular média
+  const indicators = [
+    'dy',                    // Dividend Yield
+    'dividendYield12m',      // Dividend Yield 12 meses
+    'roe',                   // Retorno sobre Patrimônio
+    'roic',                  // Retorno sobre Capital Investido
+    'roa',                   // Retorno sobre Ativos
+    'margemBruta',           // Margem Bruta
+    'margemEbitda',          // Margem EBITDA
+    'margemLiquida',         // Margem Líquida
+    'payout',                // Payout Ratio
+    'pl',                    // Preço/Lucro
+    'pvp',                   // Preço/Valor Patrimonial
+    'crescimentoLucros',     // Crescimento de Lucros
+    'crescimentoReceitas',   // Crescimento de Receitas
+    'liquidezCorrente',      // Liquidez Corrente
+    'debtToEquity',          // Dívida/Patrimônio
+    'evEbitda',              // EV/EBITDA
+  ];
+
+  const averages: Record<string, number | null> = {};
+
+  for (const indicator of indicators) {
+    const values = validHistoricalData
+      .map(item => toNumber(item[indicator]))
+      .filter(val => val !== null && !isNaN(val as number)) as number[];
+
+    if (values.length > 0) {
+      const sum = values.reduce((acc, val) => acc + val, 0);
+      averages[indicator] = sum / values.length;
+    } else {
+      averages[indicator] = null;
+    }
+  }
+
+  return averages;
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Validar API key
@@ -110,8 +183,9 @@ export async function GET(request: NextRequest) {
     }
 
     const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 5;
 
-    // Buscar empresas e dados financeiros TTM em batch
+    // Buscar empresas e dados financeiros TTM + histórico dos últimos 5 anos em batch
     const companies = await safeQueryWithParams(
       'third-party-api-multiple-financial-data',
       () => prisma.company.findMany({
@@ -125,12 +199,17 @@ export async function GET(request: NextRequest) {
           sector: true,
           industry: true,
           financialData: {
-            where: { year: currentYear },
-            take: 1
+            where: { 
+              year: { 
+                gte: startYear,
+                lte: currentYear
+              }
+            },
+            orderBy: { year: 'desc' }
           }
         }
       }),
-      { tickers, year: currentYear }
+      { tickers, startYear, currentYear }
     ) as Array<{
       id: number;
       ticker: string;
@@ -146,15 +225,31 @@ export async function GET(request: NextRequest) {
 
     // Processar dados de cada empresa
     const results = companies
-      .filter(company => company.financialData.length > 0) // Apenas empresas com dados TTM
+      .filter(company => {
+        // Verificar se há dados TTM (ano atual)
+        return company.financialData.some((fd: any) => fd.year === currentYear);
+      })
       .map(company => {
-        const financialDataTTM = company.financialData[0];
+        // Buscar dados TTM (ano atual)
+        const financialDataTTM = company.financialData.find((fd: any) => fd.year === currentYear);
         
-        // Serializar dados financeiros
+        if (!financialDataTTM) {
+          return null;
+        }
+        
+        // Serializar dados financeiros TTM
         const serializedFinancialData = serializePrismaData(financialDataTTM) as Record<string, unknown>;
         
         // Remover campos internos
         const { id, companyId, ...financialData } = serializedFinancialData;
+
+        // Serializar dados históricos para cálculo de médias
+        const serializedHistoricalData = company.financialData
+          .map(fd => serializePrismaData(fd))
+          .filter((fd: any) => fd.year !== currentYear) as Array<Record<string, unknown>>;
+
+        // Calcular médias históricas dos últimos 5 anos
+        const historicalAverages = calculateHistoricalAverages(serializedHistoricalData);
 
         return {
           ticker: company.ticker,
@@ -164,10 +259,12 @@ export async function GET(request: NextRequest) {
             industry: company.industry
           },
           financialData,
+          historicalAverages: Object.keys(historicalAverages).length > 0 ? historicalAverages : null,
           year: currentYear,
           updatedAt: financialDataTTM.updatedAt ? new Date(financialDataTTM.updatedAt).toISOString() : null
         };
-      });
+      })
+      .filter((result): result is NonNullable<typeof result> => result !== null);
 
     // Identificar tickers sem dados TTM disponíveis
     const companiesWithoutTTM = companies

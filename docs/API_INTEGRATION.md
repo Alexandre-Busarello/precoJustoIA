@@ -141,6 +141,24 @@ Authorization: Bearer sua-api-key-aqui
       "cagrReceitas5a": 0.10,
       "dataSource": "brapi"
     },
+    "historicalAverages": {
+      "dy": 0.14,
+      "dividendYield12m": 0.13,
+      "roe": 0.22,
+      "roic": 0.18,
+      "roa": 0.11,
+      "margemBruta": 0.33,
+      "margemEbitda": 0.26,
+      "margemLiquida": 0.14,
+      "payout": 0.42,
+      "pl": 5.45,
+      "pvp": 0.92,
+      "crescimentoLucros": 0.10,
+      "crescimentoReceitas": 0.12,
+      "liquidezCorrente": 1.38,
+      "debtToEquity": 0.48,
+      "evEbitda": 3.52
+    },
     "year": 2025,
     "updatedAt": "2025-01-15T10:30:00.000Z"
   }
@@ -181,15 +199,21 @@ Authorization: Bearer sua-api-key-aqui
         "sector": "Energy",
         "industry": "Oil & Gas Integrated"
       },
-      "financialData": {
-        "pl": 5.23,
-        "dy": 0.15,
-        "roe": 0.25
-        // ... todos os outros campos
-      },
-      "year": 2025,
-      "updatedAt": "2025-01-15T10:30:00.000Z"
-    },
+          "financialData": {
+            "pl": 5.23,
+            "dy": 0.15,
+            "roe": 0.25
+            // ... todos os outros campos
+          },
+          "historicalAverages": {
+            "dy": 0.14,
+            "roe": 0.22,
+            "roic": 0.18
+            // ... outras médias históricas
+          },
+          "year": 2025,
+          "updatedAt": "2025-01-15T10:30:00.000Z"
+        },
     {
       "ticker": "VALE3",
       "company": {
@@ -379,6 +403,31 @@ A API retorna mais de 70 campos financeiros organizados nas seguintes categorias
 | year      | number | Ano de referência dos dados TTM    |
 | updatedAt | string | Data/hora da última atualização    |
 | dataSource| string | Fonte dos dados (ex: "brapi")      |
+
+### Médias Históricas (historicalAverages)
+
+A API retorna também uma seção `historicalAverages` contendo as médias dos últimos 5 anos (excluindo o ano atual) para os seguintes indicadores:
+
+| Campo              | Tipo   | Descrição                                    |
+|--------------------|--------|----------------------------------------------|
+| dy                 | number | Média do Dividend Yield (últimos 5 anos)     |
+| dividendYield12m   | number | Média do Dividend Yield 12 meses            |
+| roe                | number | Média do Retorno sobre Patrimônio            |
+| roic               | number | Média do Retorno sobre Capital Investido     |
+| roa                | number | Média do Retorno sobre Ativos                |
+| margemBruta        | number | Média da Margem Bruta                        |
+| margemEbitda       | number | Média da Margem EBITDA                       |
+| margemLiquida      | number | Média da Margem Líquida                      |
+| payout             | number | Média do Payout Ratio                        |
+| pl                 | number | Média do Preço/Lucro                         |
+| pvp                | number | Média do Preço/Valor Patrimonial              |
+| crescimentoLucros  | number | Média do Crescimento de Lucros               |
+| crescimentoReceitas| number | Média do Crescimento de Receitas             |
+| liquidezCorrente   | number | Média da Liquidez Corrente                   |
+| debtToEquity       | number | Média da Dívida/Patrimônio                   |
+| evEbitda           | number | Média do EV/EBITDA                           |
+
+**Nota:** Se não houver dados históricos suficientes, `historicalAverages` será `null`. Os valores são calculados apenas com anos completos (excluindo o ano atual).
 
 ---
 
@@ -820,4 +869,5 @@ Para dúvidas, problemas ou solicitação de API keys, entre em contato:
 - [Glossário de Indicadores Financeiros](https://docs.seu-dominio.com/glossary)
 - [Guia de Boas Práticas](https://docs.seu-dominio.com/best-practices)
 - [FAQ](https://docs.seu-dominio.com/faq)
+
 

@@ -332,6 +332,98 @@ export class PortfolioMetricsService {
   }
 
   /**
+   * Calculate adjusted dividends by ticker, considering partial sales
+   * 
+   * When you sell part of a position, the dividends received while holding those shares
+   * should not be counted in the return calculation for the remaining shares.
+   * 
+   * This method calculates dividends proportionally to shares still held.
+   * 
+   * Example:
+   * - You had 100 shares, received R$ 1000 in dividends (R$ 10/share)
+   * - You sold 80 shares, leaving 20 shares
+   * - Adjusted dividends = R$ 1000 * (20/100) = R$ 200
+   * 
+   * This ensures the return calculation is correct:
+   * - Return with dividends = (current value - invested) + adjusted dividends
+   * - Where invested is also reduced proportionally (already handled in holdings calculation)
+   */
+  private static async getAdjustedDividendsByTicker(
+    portfolioId: string,
+    currentHoldings: Map<string, { quantity: number; totalInvested: number }>
+  ): Promise<Map<string, number>> {
+    // Get all transactions in chronological order
+    const transactions = await prisma.portfolioTransaction.findMany({
+      where: {
+        portfolioId,
+        status: {
+          in: ['CONFIRMED', 'EXECUTED']
+        },
+        ticker: {
+          not: null
+        }
+      },
+      orderBy: {
+        date: 'asc'
+      }
+    });
+
+    // Calculate adjusted dividends for each ticker
+    const adjustedDividends = new Map<string, number>();
+    
+    for (const [ticker, holding] of currentHoldings) {
+      const currentQuantity = holding.quantity;
+      
+      if (currentQuantity <= 0) {
+        adjustedDividends.set(ticker, 0);
+        continue;
+      }
+
+      // Process transactions chronologically to calculate shares held at each dividend date
+      let cumulativeSharesBought = 0;
+      let cumulativeSharesSold = 0;
+      let totalAdjustedDividends = 0;
+      
+      for (const tx of transactions) {
+        if (tx.ticker !== ticker) continue;
+        
+        if (tx.type === 'BUY' || tx.type === 'BUY_REBALANCE') {
+          cumulativeSharesBought += Number(tx.quantity || 0);
+        } else if (tx.type === 'SELL_REBALANCE' || tx.type === 'SELL_WITHDRAWAL') {
+          cumulativeSharesSold += Number(tx.quantity || 0);
+        } else if (tx.type === 'DIVIDEND') {
+          // Calculate shares held at dividend date
+          const sharesHeldAtDividend = cumulativeSharesBought - cumulativeSharesSold;
+          
+          if (sharesHeldAtDividend > 0) {
+            // Calculate proportion: current shares / shares held when dividend was received
+            // This proportion represents how much of the dividend should be counted
+            // If you had 100 shares when dividend was paid and now have 20, count 20% of the dividend
+            const proportion = Math.min(currentQuantity / sharesHeldAtDividend, 1.0);
+            
+            const dividendAmount = Number(tx.amount);
+            const adjustedDividend = dividendAmount * proportion;
+            totalAdjustedDividends += adjustedDividend;
+            
+            console.log(`💰 [ADJUSTED DIVIDENDS] ${ticker}:`, {
+              dividendDate: tx.date.toISOString().split('T')[0],
+              sharesHeldAtDividend,
+              currentShares: currentQuantity,
+              dividendAmount: dividendAmount.toFixed(2),
+              proportion: (proportion * 100).toFixed(2) + '%',
+              adjustedDividend: adjustedDividend.toFixed(2)
+            });
+          }
+        }
+      }
+
+      adjustedDividends.set(ticker, totalAdjustedDividends);
+    }
+
+    return adjustedDividends;
+  }
+
+  /**
    * Calculate current holdings with prices
    */
   static async getCurrentHoldings(portfolioId: string): Promise<PortfolioHolding[]> {
@@ -354,9 +446,6 @@ export class PortfolioMetricsService {
     for (const asset of portfolio.assets) {
       targetAllocations.set(asset.ticker, Number(asset.targetAllocation));
     }
-
-    // Get dividends by ticker
-    const dividendsByTicker = await this.getDividendsByTicker(portfolioId);
 
     const transactions = await prisma.portfolioTransaction.findMany({
       where: {
@@ -412,6 +501,9 @@ export class PortfolioMetricsService {
       
       holdingsMap.set(tx.ticker, current);
     }
+
+    // Get adjusted dividends by ticker (considering partial sales)
+    const dividendsByTicker = await this.getAdjustedDividendsByTicker(portfolioId, holdingsMap);
 
     // Get current prices
     const tickers = Array.from(holdingsMap.keys());

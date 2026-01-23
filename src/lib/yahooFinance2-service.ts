@@ -5,7 +5,7 @@
  * com cache inteligente e proteção contra erros consecutivos.
  * 
  * Características:
- * - Cache Redis com TTL de 24 horas baseado em parâmetros + data atual
+ * - Cache Redis com TTL de 15 minutos baseado em parâmetros + data atual
  * - Proteção contra erros consecutivos (marca indisponível por 1h após 3 erros)
  * - Logs detalhados para debugging
  * - Interface unificada para todos os métodos do yahoo-finance2
@@ -25,7 +25,7 @@ let yahooFinanceInstance: any = null;
 const cacheService = CacheService.getInstance();
 
 // Constantes
-const CACHE_TTL = 86400; // 24 horas em segundos
+const CACHE_TTL = 900; // 15 minutos em segundos
 const UNAVAILABLE_TTL = 3600; // 1 hora em segundos
 const MAX_CONSECUTIVE_ERRORS = 3;
 const CACHE_PREFIX = 'yahoo';

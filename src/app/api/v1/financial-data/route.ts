@@ -219,13 +219,19 @@ export async function GET(request: NextRequest) {
       financialData: any[];
     }>;
 
-    // Buscar dividendos para todas as empresas em batch
+    // Buscar dividendos dos últimos 5 anos para todas as empresas em batch
     const companyIds = companies.map(c => c.id);
+    const fiveYearsAgo = new Date();
+    fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+    
     const allDividends = companyIds.length > 0 ? await safeQueryWithParams(
       'third-party-api-multiple-dividend-history',
       () => prisma.dividendHistory.findMany({
         where: {
-          companyId: { in: companyIds }
+          companyId: { in: companyIds },
+          exDate: {
+            gte: fiveYearsAgo
+          }
         },
         orderBy: {
           exDate: 'desc'
@@ -236,19 +242,16 @@ export async function GET(request: NextRequest) {
           exDate: true
         }
       }),
-      { companyIds }
+      { companyIds, fiveYearsAgo }
     ) as Array<{ companyId: number; amount: any; exDate: Date }> : [];
 
-    // Agrupar dividendos por companyId
+    // Agrupar dividendos por companyId (já filtrados por data dos últimos 5 anos)
     const dividendsByCompany = new Map<number, Array<{ amount: any; exDate: Date }>>();
     for (const div of allDividends) {
       if (!dividendsByCompany.has(div.companyId)) {
         dividendsByCompany.set(div.companyId, []);
       }
-      const companyDividends = dividendsByCompany.get(div.companyId)!;
-      if (companyDividends.length < 10) { // Limitar a 10 dividendos por empresa
-        companyDividends.push({ amount: div.amount, exDate: div.exDate });
-      }
+      dividendsByCompany.get(div.companyId)!.push({ amount: div.amount, exDate: div.exDate });
     }
 
     // Identificar tickers encontrados e não encontrados

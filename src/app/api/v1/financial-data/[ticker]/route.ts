@@ -178,25 +178,30 @@ export async function GET(
       financialData: any[];
     } | null;
 
-    // Buscar últimos dividendos da tabela DividendHistory (após verificar se company existe)
+    // Buscar dividendos dos últimos 5 anos da tabela DividendHistory (após verificar se company existe)
     let recentDividends: Array<{ amount: any; exDate: Date }> = [];
     if (company) {
+      const fiveYearsAgo = new Date();
+      fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+      
       recentDividends = await safeQueryWithParams(
         'third-party-api-dividend-history',
         () => prisma.dividendHistory.findMany({
           where: {
-            companyId: company.id
+            companyId: company.id,
+            exDate: {
+              gte: fiveYearsAgo
+            }
           },
           orderBy: {
             exDate: 'desc'
           },
-          take: 10, // Últimos 10 dividendos
           select: {
             amount: true,
             exDate: true
           }
         }),
-        { companyId: company.id }
+        { companyId: company.id, fiveYearsAgo }
       ) as Array<{ amount: any; exDate: Date }>;
     }
 

@@ -178,6 +178,28 @@ export async function GET(
       financialData: any[];
     } | null;
 
+    // Buscar últimos dividendos da tabela DividendHistory (após verificar se company existe)
+    let recentDividends: Array<{ amount: any; exDate: Date }> = [];
+    if (company) {
+      recentDividends = await safeQueryWithParams(
+        'third-party-api-dividend-history',
+        () => prisma.dividendHistory.findMany({
+          where: {
+            companyId: company.id
+          },
+          orderBy: {
+            exDate: 'desc'
+          },
+          take: 10, // Últimos 10 dividendos
+          select: {
+            amount: true,
+            exDate: true
+          }
+        }),
+        { companyId: company.id }
+      ) as Array<{ amount: any; exDate: Date }>;
+    }
+
     if (!company) {
       return NextResponse.json(
         {
@@ -208,6 +230,18 @@ export async function GET(
 
     // Remover campos internos que não devem ser expostos
     const { id, companyId, ...financialData } = serializedFinancialData;
+
+    // Substituir historicoUltimosDividendos com dados reais da tabela DividendHistory
+    if (recentDividends.length > 0) {
+      const dividendAmounts = recentDividends.map(div => {
+        const amount = toNumber(div.amount);
+        return amount !== null ? amount.toFixed(6) : null;
+      }).filter(amt => amt !== null);
+      
+      if (dividendAmounts.length > 0) {
+        financialData.historicoUltimosDividendos = dividendAmounts.join(',');
+      }
+    }
 
     // Serializar dados históricos para cálculo de médias
     const serializedHistoricalData = company.financialData

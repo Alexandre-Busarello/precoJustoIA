@@ -219,6 +219,38 @@ export async function GET(request: NextRequest) {
       financialData: any[];
     }>;
 
+    // Buscar dividendos para todas as empresas em batch
+    const companyIds = companies.map(c => c.id);
+    const allDividends = companyIds.length > 0 ? await safeQueryWithParams(
+      'third-party-api-multiple-dividend-history',
+      () => prisma.dividendHistory.findMany({
+        where: {
+          companyId: { in: companyIds }
+        },
+        orderBy: {
+          exDate: 'desc'
+        },
+        select: {
+          companyId: true,
+          amount: true,
+          exDate: true
+        }
+      }),
+      { companyIds }
+    ) as Array<{ companyId: number; amount: any; exDate: Date }> : [];
+
+    // Agrupar dividendos por companyId
+    const dividendsByCompany = new Map<number, Array<{ amount: any; exDate: Date }>>();
+    for (const div of allDividends) {
+      if (!dividendsByCompany.has(div.companyId)) {
+        dividendsByCompany.set(div.companyId, []);
+      }
+      const companyDividends = dividendsByCompany.get(div.companyId)!;
+      if (companyDividends.length < 10) { // Limitar a 10 dividendos por empresa
+        companyDividends.push({ amount: div.amount, exDate: div.exDate });
+      }
+    }
+
     // Identificar tickers encontrados e não encontrados
     const foundTickers = new Set(companies.map(c => c.ticker));
     const notFoundTickers = tickers.filter(t => !foundTickers.has(t));
@@ -242,6 +274,19 @@ export async function GET(request: NextRequest) {
         
         // Remover campos internos
         const { id, companyId, ...financialData } = serializedFinancialData;
+
+        // Substituir historicoUltimosDividendos com dados reais da tabela DividendHistory
+        const companyDividends = dividendsByCompany.get(company.id) || [];
+        if (companyDividends.length > 0) {
+          const dividendAmounts = companyDividends.map(div => {
+            const amount = toNumber(div.amount);
+            return amount !== null ? amount.toFixed(6) : null;
+          }).filter(amt => amt !== null);
+          
+          if (dividendAmounts.length > 0) {
+            financialData.historicoUltimosDividendos = dividendAmounts.join(',');
+          }
+        }
 
         // Serializar dados históricos para cálculo de médias
         const serializedHistoricalData = company.financialData

@@ -20,16 +20,17 @@ import {
   Zap,
   Users,
   Star,
-  AlertCircle
+  AlertCircle,
+  Smartphone
 } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "Fim do Achismo: Descubra o Preço Justo das Ações em Segundos | 45% OFF",
-  description: "Fim do achismo na hora de investir! Descubra o preço justo das ações em segundos com análise fundamentalista automatizada. Garanta seu Acesso Anual com 45% OFF por tempo limitado. Análise com IA, Radar de Oportunidades, Relatórios automáticos e muito mais. Garantia de 7 dias.",
-  keywords: "preço justo ações, fim do achismo investimentos, análise fundamentalista automatizada, descobrir preço justo ações, oferta preço justo ai, desconto análise ações, plano premium anual",
+  title: "Radar Inteligente: Evite o Giro Excessivo | R$ 17,99/mês",
+  description: "Radar inteligente que monitora suas ações. Escolha o ativo, salve o radar e a IA cruza score de fundamentos, análise técnica e sentimento de mercado. Tudo em uma única tela. 5 minutos por mês ao invés de horas analisando balanços. Acesso anual promocional por R$ 17,99/mês.",
+  keywords: "radar inteligente ações, evitar giro excessivo carteira, monitoramento ações IA, score fundamentos análise técnica sentimento, radar ações B3, oferta anual promocional",
   openGraph: {
-    title: "Fim do Achismo: Descubra o Preço Justo das Ações em Segundos | 45% OFF",
-    description: "Fim do achismo na hora de investir! Descubra o preço justo das ações em segundos. Garanta seu Acesso Anual com 45% OFF por tempo limitado.",
+    title: "Radar Inteligente: Evite o Giro Excessivo | R$ 17,99/mês",
+    description: "Radar inteligente que monitora suas ações. Escolha o ativo, salve o radar e a IA faz o resto. 5 minutos por mês. Acesso anual promocional por R$ 17,99/mês.",
     type: "website",
     url: "https://precojusto.ai/oferta",
   },
@@ -54,93 +55,89 @@ export default function OfertaPage() {
             {/* Badge de Urgência */}
             <div className="inline-flex items-center gap-2 bg-red-500 text-white rounded-full px-4 sm:px-6 py-2 sm:py-3 mb-6 shadow-lg animate-pulse">
               <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="text-sm sm:text-base font-bold">OFERTA POR TEMPO LIMITADO</span>
+              <span className="text-sm sm:text-base font-bold">CONDIÇÃO ENCERRA EM BREVE</span>
             </div>
 
-            {/* Headline Principal - Focada na Dor */}
+            {/* Headline Principal - Focada no Radar Inteligente */}
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 sm:mb-6 leading-tight">
-              <span className="block mb-2">Fim do Achismo:</span>
+              <span className="block mb-2">Evite o Giro Excessivo:</span>
               <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-                Descubra o Preço Justo das Ações em Segundos
+                Radar Inteligente que Monitora suas Ações
               </span>
             </h1>
 
             {/* Subheadline */}
-            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-6 sm:mb-8 max-w-3xl mx-auto leading-relaxed">
-              <strong>Garanta seu Acesso Anual com 45% OFF</strong> por tempo limitado. 
-              Todas as funcionalidades Premium em um único plano anual.
+            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-4 sm:mb-6 max-w-3xl mx-auto leading-relaxed">
+              Escolha o ativo que quer monitorar, salve o radar e pronto. A <strong>IA cruza três dados vitais</strong>: 
+              <strong> score de fundamentos</strong>, <strong>análise técnica</strong> e <strong>sentimento de mercado</strong>. 
+              Tudo em uma única tela. <strong>5 minutos por mês</strong> ao invés de horas analisando balanços.
             </p>
+
+            {/* Indicador Mobile - Compacto */}
+            <div className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-green-600 dark:text-green-500 mb-4 sm:mb-6 md:hidden">
+              <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="font-semibold">100% funcional no mobile</span>
+            </div>
+
+            {/* Preço em Destaque */}
+            <div className="mb-6 sm:mb-8">
+              <div className="inline-flex flex-col items-center gap-2 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-blue-200 dark:border-blue-800">
+                <div className="text-sm sm:text-base text-muted-foreground">Acesso Anual Promocional</div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+                    R$ 17,99
+                  </span>
+                  <span className="text-lg sm:text-xl text-muted-foreground">/mês</span>
+                </div>
+                <div className="text-xs sm:text-sm text-muted-foreground">
+                  No cartão ou com desconto ainda maior à vista
+                </div>
+              </div>
+            </div>
 
             {/* CTA Principal - Abaixo do texto (visível sempre) */}
             <div className="mb-8 sm:mb-10">
               <Button 
                 size="lg" 
-                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-lg sm:text-xl px-8 sm:px-12 py-6 sm:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
+                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-base sm:text-lg md:text-xl px-6 sm:px-8 md:px-12 py-5 sm:py-6 md:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
                 asChild
               >
                 <a 
                   href={KIWIFY_CHECKOUT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-3"
+                  className="flex items-center justify-center gap-2 sm:gap-3"
                 >
-                  <span>Quero Acabar com o Achismo Agora</span>
-                  <ArrowRight className="w-5 h-5" />
+                  <span className="whitespace-nowrap">
+                    <span className="sm:hidden">Garantir Acesso Agora</span>
+                    <span className="hidden sm:inline">Garantir Meu Acesso Anual Agora</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                 </a>
               </Button>
-              <p className="text-sm text-muted-foreground mt-4">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-4 px-4">
                 ✅ Pagamento seguro • ✅ Acesso imediato • ✅ Garantia de 7 dias
-              </p>
-            </div>
-
-            {/* Vídeo do YouTube */}
-            <div className="mb-8 sm:mb-10 max-w-4xl mx-auto">
-              <div className="relative aspect-video rounded-lg overflow-hidden shadow-2xl border-4 border-blue-200 dark:border-blue-800">
-                <iframe
-                  src="https://www.youtube.com/embed/oXuNY_Yc2kc?rel=0&modestbranding=1&iv_load_policy=3&fs=1&cc_load_policy=0&playsinline=1&controls=1"
-                  title="Preço Justo AI - Como Funciona"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="absolute top-0 left-0 w-full h-full"
-                />
-              </div>
-            </div>
-
-            {/* CTA Secundário - Aparece depois do vídeo no desktop */}
-            <div className="mb-8 sm:mb-10 hidden md:block">
-              <Button 
-                size="lg" 
-                className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white text-lg sm:text-xl px-8 sm:px-12 py-6 sm:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
-                asChild
-              >
-                <a 
-                  href={KIWIFY_CHECKOUT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-3"
-                >
-                  <span>Garantir Acesso Anual com 45% OFF</span>
-                  <ArrowRight className="w-5 h-5" />
-                </a>
-              </Button>
-              <p className="text-sm text-muted-foreground mt-4">
-                ✅ Oferta por tempo limitado • ✅ Sem fidelidade • ✅ Cancele quando quiser
               </p>
             </div>
 
             {/* Social Proof */}
             <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 text-sm sm:text-base text-muted-foreground">
               <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-blue-600" />
-                <span>+500 empresas B3</span>
+                <Smartphone className="w-5 h-5 text-green-600" />
+                <span className="font-semibold">100% Mobile</span>
               </div>
               <div className="flex items-center gap-2">
-                <Brain className="w-5 h-5 text-violet-600" />
-                <span>Análise com IA</span>
+                <Target className="w-5 h-5 text-blue-600" />
+                <span>Radar Inteligente</span>
               </div>
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-green-600" />
-                <span>Garantia de 7 dias</span>
+                <BarChart3 className="w-5 h-5 text-violet-600" />
+                <span className="hidden sm:inline">Fundamentos + Técnica + Sentimento</span>
+                <span className="sm:hidden">3 Dados Vitais</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-green-600" />
+                <span>5 minutos por mês</span>
               </div>
             </div>
           </div>
@@ -151,12 +148,15 @@ export default function OfertaPage() {
       <section className="py-12 sm:py-16 lg:py-20 bg-white dark:bg-background">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center mb-8 sm:mb-12">
-              O que você vai receber:
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center mb-4 sm:mb-6">
+              O Radar Inteligente que Você Viu no Vídeo:
             </h2>
+            <p className="text-center text-muted-foreground mb-8 sm:mb-12 text-lg max-w-3xl mx-auto">
+              Escolha o ativo que quer monitorar, salve o radar e a IA faz o resto. Tudo em uma única tela.
+            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-8 sm:mb-12">
-              {/* Benefício 1 */}
+              {/* Benefício 1 - Radar Inteligente */}
               <Card className="border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -164,17 +164,17 @@ export default function OfertaPage() {
                       <Target className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg sm:text-xl font-bold mb-2">Radar de Oportunidades</h3>
+                      <h3 className="text-lg sm:text-xl font-bold mb-2">Radar Inteligente</h3>
                       <p className="text-muted-foreground text-sm sm:text-base">
-                        Receba alertas automáticos quando ações subvalorizadas aparecem no mercado, 
-                        baseado em análise fundamentalista avançada.
+                        Escolha o ativo que quer monitorar, salve o radar e pronto. Bata o olho na empresa 
+                        e veja se está tudo verdinho. A empresa segue saudável ou precisa atenção?
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Benefício 2 */}
+              {/* Benefício 2 - Três Dados Vitais */}
               <Card className="border-2 border-violet-200 dark:border-violet-800 hover:border-violet-400 dark:hover:border-violet-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -182,17 +182,36 @@ export default function OfertaPage() {
                       <Brain className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg sm:text-xl font-bold mb-2">Análise de Sentimento de Mercado</h3>
+                      <h3 className="text-lg sm:text-xl font-bold mb-2">Três Dados Vitais em Uma Tela</h3>
                       <p className="text-muted-foreground text-sm sm:text-base">
-                        Descubra o que está se falando na mídia e internet sobre a empresa e se 
-                        a perspectiva é positiva ou negativa.
+                        A IA cruza <strong>score de fundamentos</strong>, <strong>análise técnica</strong> e 
+                        <strong> sentimento de mercado</strong> (busca na internet o que estão falando da empresa). 
+                        Tudo em uma única tela.
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Benefício 3 */}
+              {/* Benefício 3 - 5 Minutos por Mês */}
+              <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
+                <CardContent className="p-6 sm:p-8">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg sm:text-xl font-bold mb-2">5 Minutos por Mês</h3>
+                      <p className="text-muted-foreground text-sm sm:text-base">
+                        Ao invés de perder horas analisando balanços, você gasta apenas <strong>5 minutos por mês</strong>. 
+                        O radar mostra tudo que precisa saber em uma única tela.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Benefício 4 - Análise Técnica */}
               <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -210,7 +229,7 @@ export default function OfertaPage() {
                 </CardContent>
               </Card>
 
-              {/* Benefício 4 */}
+              {/* Benefício 5 - Relatórios da IA */}
               <Card className="border-2 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -218,17 +237,17 @@ export default function OfertaPage() {
                       <Calendar className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg sm:text-xl font-bold mb-2">Relatórios Automáticos</h3>
+                      <h3 className="text-lg sm:text-xl font-bold mb-2">Relatórios da IA no Seu E-mail</h3>
                       <p className="text-muted-foreground text-sm sm:text-base">
-                        Relatórios mensais, de variação de preço em grandes quedas e de perda de 
-                        fundamento diretamente no seu email.
+                        Relatórios da nossa IA chegam diretamente no seu e-mail se algo mudar no fundamento 
+                        da empresa. Você não precisa ficar checando, a plataforma te avisa.
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Benefício 5 */}
+              {/* Benefício 6 - Rankings Inteligentes */}
               <Card className="border-2 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -236,17 +255,17 @@ export default function OfertaPage() {
                       <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg sm:text-xl font-bold mb-2">Rankings Personalizados</h3>
+                      <h3 className="text-lg sm:text-xl font-bold mb-2">Rankings Inteligentes</h3>
                       <p className="text-muted-foreground text-sm sm:text-base">
-                        Crie rankings de empresas usando estratégias da plataforma ou Inteligência 
-                        Artificial para encontrar as melhores oportunidades.
+                        Rankings inteligentes para encontrar as melhores oportunidades usando estratégias 
+                        consagradas ou Inteligência Artificial.
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Benefício 6 */}
+              {/* Benefício 7 */}
               <Card className="border-2 border-teal-200 dark:border-teal-800 hover:border-teal-400 dark:hover:border-teal-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -264,7 +283,7 @@ export default function OfertaPage() {
                 </CardContent>
               </Card>
 
-              {/* Benefício 7 */}
+              {/* Benefício 8 */}
               <Card className="border-2 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -282,7 +301,7 @@ export default function OfertaPage() {
                 </CardContent>
               </Card>
 
-              {/* Benefício 8 */}
+              {/* Benefício 9 */}
               <Card className="border-2 border-pink-200 dark:border-pink-800 hover:border-pink-400 dark:hover:border-pink-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -300,7 +319,7 @@ export default function OfertaPage() {
                 </CardContent>
               </Card>
 
-              {/* Benefício 9 */}
+              {/* Benefício 10 - Radar de Dividendos */}
               <Card className="border-2 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -310,7 +329,7 @@ export default function OfertaPage() {
                     <div>
                       <h3 className="text-lg sm:text-xl font-bold mb-2">Radar de Dividendos</h3>
                       <p className="text-muted-foreground text-sm sm:text-base">
-                        Projeções de dividendos feitas por IA para identificar as melhores 
+                        Radar de dividendos com projeções feitas por IA para identificar as melhores 
                         oportunidades de renda passiva.
                       </p>
                     </div>
@@ -318,7 +337,7 @@ export default function OfertaPage() {
                 </CardContent>
               </Card>
 
-              {/* Benefício 10 */}
+              {/* Benefício 11 */}
               <Card className="border-2 border-cyan-200 dark:border-cyan-800 hover:border-cyan-400 dark:hover:border-cyan-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -336,7 +355,7 @@ export default function OfertaPage() {
                 </CardContent>
               </Card>
 
-              {/* Benefício 11 */}
+              {/* Benefício 12 */}
               <Card className="border-2 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600 transition-all">
                 <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -359,19 +378,25 @@ export default function OfertaPage() {
             <div className="text-center">
               <Button 
                 size="lg" 
-                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-lg sm:text-xl px-8 sm:px-12 py-6 sm:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
+                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-base sm:text-lg md:text-xl px-6 sm:px-8 md:px-12 py-5 sm:py-6 md:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
                 asChild
               >
                 <a 
                   href={KIWIFY_CHECKOUT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-3"
+                  className="flex items-center justify-center gap-2 sm:gap-3"
                 >
-                  <span>Quero Aproveitar Esta Oferta</span>
-                  <ArrowRight className="w-5 h-5" />
+                  <span className="whitespace-nowrap">
+                    <span className="sm:hidden">Garantir por R$ 17,99/mês</span>
+                    <span className="hidden sm:inline">Garantir Acesso Anual por R$ 17,99/mês</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                 </a>
               </Button>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-4 px-4">
+                ✅ Condição encerra em breve • ✅ Desconto maior à vista • ✅ Sem fidelidade
+              </p>
             </div>
           </div>
         </div>
@@ -454,29 +479,44 @@ export default function OfertaPage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
-              Não perca esta oportunidade única!
+              Clique no link e garanta sua condição antes que encerre!
             </h2>
-            <p className="text-lg sm:text-xl mb-8 sm:mb-10 opacity-90 max-w-2xl mx-auto">
-              Esta oferta é por tempo limitado. Garanta seu acesso anual completo com 45% de desconto 
-              e comece a investir de forma mais inteligente hoje mesmo.
+            <p className="text-lg sm:text-xl mb-6 sm:mb-8 opacity-90 max-w-2xl mx-auto">
+              Acesso anual promocional por apenas <strong>R$ 17,99 mensais</strong> no cartão ou com 
+              desconto ainda maior se for à vista. Evite o giro excessivo e monitore suas ações com 
+              inteligência artificial.
             </p>
+            <div className="mb-6 sm:mb-8">
+              <div className="inline-flex flex-col items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-white/20">
+                <div className="text-sm sm:text-base opacity-90">Acesso Anual Promocional</div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
+                    R$ 17,99
+                  </span>
+                  <span className="text-lg sm:text-xl opacity-90">/mês</span>
+                </div>
+              </div>
+            </div>
             <Button 
               size="lg" 
-              className="bg-white text-blue-600 hover:bg-gray-100 text-lg sm:text-xl px-8 sm:px-12 py-6 sm:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto font-bold"
+              className="bg-white text-blue-600 hover:bg-gray-100 text-base sm:text-lg md:text-xl px-6 sm:px-8 md:px-12 py-5 sm:py-6 md:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto font-bold"
               asChild
             >
               <a 
                 href={KIWIFY_CHECKOUT_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-3"
+                className="flex items-center justify-center gap-2 sm:gap-3"
               >
-                <span>Garantir Minha Oferta Agora</span>
-                <ArrowRight className="w-5 h-5" />
+                <span className="whitespace-nowrap">
+                  <span className="sm:hidden">Garantir Condição Agora</span>
+                  <span className="hidden sm:inline">Garantir Minha Condição Agora</span>
+                </span>
+                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
               </a>
             </Button>
-            <p className="text-sm sm:text-base mt-6 opacity-80">
-              ✅ Pagamento 100% seguro • ✅ Acesso imediato após pagamento • ✅ Garantia de 7 dias
+            <p className="text-xs sm:text-sm md:text-base mt-6 opacity-80 px-4">
+              ✅ Pagamento 100% seguro • ✅ Acesso imediato • ✅ Garantia de 7 dias • ✅ Condição encerra em breve
             </p>
           </div>
         </div>

@@ -46,60 +46,60 @@ export default function OfertaPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20">
       {/* Hero Section - Oferta em Destaque */}
-      <section className="relative overflow-hidden pt-8 sm:pt-12 lg:pt-16 pb-12 sm:pb-16 lg:pb-20">
+      <section className="relative overflow-hidden pt-4 sm:pt-8 md:pt-12 lg:pt-16 pb-8 sm:pb-12 lg:pb-16">
         {/* Background Pattern */}
         <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))]"></div>
         
         <div className="relative container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
             {/* Badge de Urgência */}
-            <div className="inline-flex items-center gap-2 bg-red-500 text-white rounded-full px-4 sm:px-6 py-2 sm:py-3 mb-6 shadow-lg animate-pulse">
-              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="text-sm sm:text-base font-bold">CONDIÇÃO ENCERRA EM BREVE</span>
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-red-500 text-white rounded-full px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 md:py-3 mb-3 sm:mb-4 md:mb-6 shadow-lg animate-pulse">
+              <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
+              <span className="text-xs sm:text-sm md:text-base font-bold">CONDIÇÃO ENCERRA EM BREVE</span>
             </div>
 
             {/* Headline Principal - Focada no Radar Inteligente */}
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 sm:mb-6 leading-tight">
-              <span className="block mb-2">Evite o Giro Excessivo:</span>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-3 sm:mb-4 md:mb-5 leading-tight">
+              <span className="block mb-1.5 sm:mb-2">Evite o Giro Excessivo:</span>
               <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
                 Radar Inteligente que Monitora suas Ações
               </span>
             </h1>
 
             {/* Subheadline */}
-            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-4 sm:mb-6 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground mb-3 sm:mb-4 md:mb-5 max-w-3xl mx-auto leading-relaxed">
               Escolha o ativo que quer monitorar, salve o radar e pronto. A <strong>IA cruza três dados vitais</strong>: 
               <strong> score de fundamentos</strong>, <strong>análise técnica</strong> e <strong>sentimento de mercado</strong>. 
               Tudo em uma única tela. <strong>5 minutos por mês</strong> ao invés de horas analisando balanços.
             </p>
 
             {/* Indicador Mobile - Compacto */}
-            <div className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-green-600 dark:text-green-500 mb-4 sm:mb-6 md:hidden">
-              <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <div className="inline-flex items-center gap-1.5 text-xs text-green-600 dark:text-green-500 mb-2 sm:mb-3 md:hidden">
+              <Smartphone className="w-3.5 h-3.5" />
               <span className="font-semibold">100% funcional no mobile</span>
             </div>
 
             {/* Preço em Destaque */}
-            <div className="mb-6 sm:mb-8">
-              <div className="inline-flex flex-col items-center gap-2 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-blue-200 dark:border-blue-800">
-                <div className="text-sm sm:text-base text-muted-foreground">Acesso Anual Promocional</div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+            <div className="mb-3 sm:mb-4 md:mb-6">
+              <div className="inline-flex flex-col items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 rounded-xl sm:rounded-2xl px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 border-2 border-blue-200 dark:border-blue-800">
+                <div className="text-xs sm:text-sm md:text-base text-muted-foreground">Acesso Anual Promocional</div>
+                <div className="flex items-baseline gap-1.5 sm:gap-2">
+                  <span className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
                     R$ 17,99
                   </span>
-                  <span className="text-lg sm:text-xl text-muted-foreground">/mês</span>
+                  <span className="text-base sm:text-lg md:text-xl text-muted-foreground">/mês</span>
                 </div>
-                <div className="text-xs sm:text-sm text-muted-foreground">
+                <div className="text-xs sm:text-sm text-muted-foreground text-center">
                   No cartão ou com desconto ainda maior à vista
                 </div>
               </div>
             </div>
 
             {/* CTA Principal - Abaixo do texto (visível sempre) */}
-            <div className="mb-8 sm:mb-10">
+            <div className="mb-4 sm:mb-6 md:mb-8">
               <Button 
                 size="lg" 
-                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-base sm:text-lg md:text-xl px-6 sm:px-8 md:px-12 py-5 sm:py-6 md:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
+                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-sm sm:text-base md:text-lg lg:text-xl px-5 sm:px-6 md:px-8 lg:px-12 py-3.5 sm:py-4 md:py-5 lg:py-6 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto"
                 asChild
               >
                 <a 
@@ -115,28 +115,28 @@ export default function OfertaPage() {
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                 </a>
               </Button>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-4 px-4">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-2 sm:mt-3 md:mt-4 px-4">
                 ✅ Pagamento seguro • ✅ Acesso imediato • ✅ Garantia de 7 dias
               </p>
             </div>
 
             {/* Social Proof */}
-            <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 text-sm sm:text-base text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-green-600" />
+            <div className="flex flex-wrap justify-center items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm md:text-base text-muted-foreground">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Smartphone className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
                 <span className="font-semibold">100% Mobile</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-blue-600" />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Target className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                 <span>Radar Inteligente</span>
               </div>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-violet-600" />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-violet-600" />
                 <span className="hidden sm:inline">Fundamentos + Técnica + Sentimento</span>
                 <span className="sm:hidden">3 Dados Vitais</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-green-600" />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
                 <span>5 minutos por mês</span>
               </div>
             </div>

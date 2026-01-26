@@ -60,7 +60,7 @@ export default function OfertaPage() {
 
             {/* Headline Principal - Focada no Radar Inteligente */}
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-3 sm:mb-4 md:mb-5 leading-tight">
-              <span className="block mb-1.5 sm:mb-2">Evite o Giro Excessivo:</span>
+              <span className="block mb-1.5 sm:mb-2">Pare de Rasgar Dinheiro</span>
               <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
                 Radar Inteligente que Monitora suas Ações
               </span>

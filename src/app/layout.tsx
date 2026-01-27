@@ -16,6 +16,7 @@ import { OnboardingProvider } from "@/components/onboarding-provider";
 import { ExitIntentProvider } from "@/components/exit-intent-provider";
 import { CacheCleanupOnLogin } from "@/components/cache-cleanup-on-login";
 import { GoogleAdsConversionPixel } from "@/components/google-ads-conversion-pixel";
+import { MicrosoftClarity } from "@/components/microsoft-clarity";
 import { OAuthNewUserHandler } from "@/components/oauth-new-user-handler";
 import { Suspense } from "react";
 
@@ -152,6 +153,8 @@ export default function RootLayout({
             gtag('config', 'AW-17611977676');
           `}
         </Script>
+        {/* Microsoft Clarity - Mapa de Calor Gratuito */}
+        <MicrosoftClarity />
         <QueryProvider>
           <AuthProvider>
             <SessionRefreshProvider>

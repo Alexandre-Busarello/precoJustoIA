@@ -75,6 +75,7 @@ export class PortfolioService {
     }
 
     // Create portfolio with assets
+    // Start tracking automatically when portfolio is created
     const portfolio = await safeWrite(
       'create-portfolio-config',
       () => prisma.portfolioConfig.create({
@@ -86,6 +87,8 @@ export class PortfolioService {
           monthlyContribution: input.monthlyContribution,
           rebalanceFrequency: input.rebalanceFrequency,
           sourceBacktestId: input.sourceBacktestId,
+          trackingStarted: true, // Start tracking automatically
+          lastTransactionDate: new Date(), // Set to now to start suggestions from next month
           assets: {
             create: normalizedAssets.map(asset => ({
               ticker: asset.ticker.toUpperCase(),

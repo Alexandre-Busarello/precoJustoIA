@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Settings, Sparkles, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Settings, Sparkles, ArrowRight, Play } from 'lucide-react';
 import { PortfolioSmartInput } from '@/components/portfolio-smart-input';
 import { PortfolioMetricsCard } from '@/components/portfolio-metrics-card';
 import { PortfolioHoldingsTable } from '@/components/portfolio-holdings-table';
@@ -13,6 +13,7 @@ import { PortfolioAnalytics } from '@/components/portfolio-analytics';
 import { usePortfolioSuggestionsAvailable } from '@/hooks/use-portfolio-suggestions-available';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart3, Briefcase } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface PortfolioDetailPageProps {
   portfolioId: string;
@@ -41,6 +42,7 @@ const fetchMetrics = async (portfolioId: string) => {
 export function PortfolioDetailPage({ portfolioId }: PortfolioDetailPageProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const {
     data: portfolio,
@@ -67,6 +69,36 @@ export function PortfolioDetailPage({ portfolioId }: PortfolioDetailPageProps) {
     portfolio?.trackingStarted || false,
     metrics?.cashBalance
   );
+
+  // Mutation to start tracking
+  const startTrackingMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/start-tracking`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao iniciar acompanhamento');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Sucesso!',
+        description: 'Acompanhamento iniciado. Sugestões automáticas serão geradas a partir de agora.',
+      });
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-metrics', portfolioId] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao iniciar acompanhamento',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleTransactionsApplied = () => {
     // Invalidate queries to refresh data
@@ -235,8 +267,13 @@ export function PortfolioDetailPage({ portfolioId }: PortfolioDetailPageProps) {
                     <p className="text-muted-foreground mb-4">
                       Para ver as análises da carteira, você precisa iniciar o acompanhamento primeiro.
                     </p>
-                    <Button onClick={() => router.push(`/carteira/${portfolioId}/config`)} variant="outline">
-                      Ir para Configurações
+                    <Button 
+                      onClick={() => startTrackingMutation.mutate()} 
+                      variant="default"
+                      disabled={startTrackingMutation.isPending}
+                    >
+                      <Play className="h-4 w-4 mr-2" />
+                      {startTrackingMutation.isPending ? 'Iniciando...' : 'Iniciar Acompanhamento'}
                     </Button>
                   </CardContent>
                 </Card>

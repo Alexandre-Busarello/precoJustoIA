@@ -1,8 +1,10 @@
 import { Metadata } from "next"
+import Image from "next/image"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Footer } from "@/components/footer"
+import { Badge } from "@/components/ui/badge"
+import { SlimFooter } from "@/components/slim-footer"
 import { 
   CheckCircle, 
   Shield, 
@@ -21,7 +23,9 @@ import {
   Users,
   Star,
   AlertCircle,
-  Smartphone
+  Smartphone,
+  Rocket,
+  MapPin
 } from "lucide-react"
 
 export const metadata: Metadata = {
@@ -81,7 +85,12 @@ export default function OfertaPage() {
 
             {/* Preço em Destaque */}
             <div className="mb-3 sm:mb-4 md:mb-6">
-              <div className="inline-flex flex-col items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 rounded-xl sm:rounded-2xl px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 border-2 border-blue-200 dark:border-blue-800">
+              <a 
+                href={KIWIFY_CHECKOUT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex flex-col items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 rounded-xl sm:rounded-2xl px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:shadow-lg transform hover:scale-105 cursor-pointer"
+              >
                 <div className="text-xs sm:text-sm md:text-base text-muted-foreground">Acesso Anual Promocional</div>
                 <div className="flex items-baseline gap-1.5 sm:gap-2">
                   <span className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
@@ -92,7 +101,7 @@ export default function OfertaPage() {
                 <div className="text-xs sm:text-sm text-muted-foreground text-center">
                   No cartão ou com desconto ainda maior à vista
                 </div>
-              </div>
+              </a>
             </div>
 
             {/* CTA Principal - Abaixo do texto (visível sempre) */}
@@ -157,8 +166,9 @@ export default function OfertaPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-8 sm:mb-12">
               {/* Benefício 1 - Radar Inteligente */}
-              <Card className="border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Target className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -173,10 +183,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 2 - Três Dados Vitais */}
-              <Card className="border-2 border-violet-200 dark:border-violet-800 hover:border-violet-400 dark:hover:border-violet-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-violet-200 dark:border-violet-800 hover:border-violet-400 dark:hover:border-violet-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Brain className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -192,10 +204,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 3 - 5 Minutos por Mês */}
-              <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all hover:shadow-lg transform hover:scale-[1.02] bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -210,10 +224,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 4 - Análise Técnica */}
-              <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <LineChart className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -228,10 +244,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 5 - Relatórios da IA */}
-              <Card className="border-2 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Calendar className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -246,10 +264,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 6 - Rankings Inteligentes */}
-              <Card className="border-2 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -264,10 +284,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 7 */}
-              <Card className="border-2 border-teal-200 dark:border-teal-800 hover:border-teal-400 dark:hover:border-teal-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-teal-200 dark:border-teal-800 hover:border-teal-400 dark:hover:border-teal-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Search className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -282,10 +304,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 8 */}
-              <Card className="border-2 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Building2 className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -300,10 +324,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 9 */}
-              <Card className="border-2 border-pink-200 dark:border-pink-800 hover:border-pink-400 dark:hover:border-pink-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-pink-200 dark:border-pink-800 hover:border-pink-400 dark:hover:border-pink-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Activity className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -318,10 +344,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 10 - Radar de Dividendos */}
-              <Card className="border-2 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <DollarSign className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -336,10 +364,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 11 */}
-              <Card className="border-2 border-cyan-200 dark:border-cyan-800 hover:border-cyan-400 dark:hover:border-cyan-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-cyan-200 dark:border-cyan-800 hover:border-cyan-400 dark:hover:border-cyan-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <TrendingUp className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -354,10 +384,12 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
 
               {/* Benefício 12 */}
-              <Card className="border-2 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600 transition-all">
-                <CardContent className="p-6 sm:p-8">
+              <a href="#checkout" className="block cursor-pointer">
+                <Card className="border-2 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
+                  <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
@@ -372,6 +404,7 @@ export default function OfertaPage() {
                   </div>
                 </CardContent>
               </Card>
+              </a>
             </div>
 
             {/* CTA Intermediário */}
@@ -474,8 +507,80 @@ export default function OfertaPage() {
         </div>
       </section>
 
+      {/* Sobre o Fundador - Seção de Confiança */}
+      <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-gray-50 to-blue-50 dark:from-background dark:to-blue-950/20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-4xl mx-auto">
+            <Card className="border-2 border-blue-200 dark:border-blue-800 shadow-xl">
+              <CardContent className="p-6 sm:p-8 lg:p-10">
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
+                  {/* Foto do Fundador */}
+                  <div className="flex-shrink-0">
+                    <div className="relative">
+                      <div className="w-32 h-32 sm:w-40 sm:h-40 bg-gradient-to-br from-blue-600 to-violet-600 rounded-full p-2">
+                        <div className="w-full h-full rounded-full overflow-hidden bg-white">
+                          <Image
+                            src="/eu.png"
+                            alt="Alexandre Busarello - Fundador & CEO do Preço Justo AI"
+                            width={160}
+                            height={160}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      </div>
+                      <div className="absolute -bottom-2 -right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-lg">
+                        <CheckCircle className="w-3 h-3 inline mr-1" />
+                        CEO
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Informações */}
+                  <div className="flex-1 text-center sm:text-left">
+                    <div className="flex flex-wrap justify-center sm:justify-start gap-2 mb-3">
+                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                        <Building2 className="w-3 h-3 mr-1" />
+                        Gerente Técnico - Descomplica
+                      </Badge>
+                      <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        15+ anos experiência
+                      </Badge>
+                    </div>
+                    
+                    <h3 className="text-xl sm:text-2xl font-bold mb-2">
+                      <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+                        Alexandre Busarello
+                      </span>
+                    </h3>
+                    <p className="text-sm sm:text-base text-muted-foreground mb-4">
+                      Fundador & CEO do Preço Justo AI
+                    </p>
+                    
+                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-4">
+                      Lidero times técnicos responsáveis por plataformas com <strong>+70k usuários</strong>. 
+                      Criei o Preço Justo AI para democratizar a análise fundamentalista, combinando minha 
+                      experiência em tecnologia com conhecimento em mercado financeiro.
+                    </p>
+                    
+                    <div className="flex items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm text-muted-foreground">
+                      <MapPin className="w-4 h-4" />
+                      <span>Blumenau, SC</span>
+                      <span>•</span>
+                      <Rocket className="w-4 h-4" />
+                      <span>Plataforma com +500 empresas analisadas</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Final */}
-      <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-blue-600 to-violet-600 text-white">
+      <section id="checkout" className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-blue-600 to-violet-600 text-white scroll-mt-20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
@@ -487,7 +592,12 @@ export default function OfertaPage() {
               inteligência artificial.
             </p>
             <div className="mb-6 sm:mb-8">
-              <div className="inline-flex flex-col items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-white/20">
+              <a 
+                href={KIWIFY_CHECKOUT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex flex-col items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all hover:shadow-xl transform hover:scale-105 cursor-pointer"
+              >
                 <div className="text-sm sm:text-base opacity-90">Acesso Anual Promocional</div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
@@ -495,7 +605,7 @@ export default function OfertaPage() {
                   </span>
                   <span className="text-lg sm:text-xl opacity-90">/mês</span>
                 </div>
-              </div>
+              </a>
             </div>
             <Button 
               size="lg" 
@@ -523,7 +633,7 @@ export default function OfertaPage() {
       </section>
 
       {/* Footer */}
-      <Footer />
+      <SlimFooter />
     </div>
   )
 }

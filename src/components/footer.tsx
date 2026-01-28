@@ -27,7 +27,7 @@ export function Footer() {
             <div className="flex items-center gap-4">
               <Badge variant="outline" className="text-green-400 border-green-400">
                 <CheckCircle className="w-3 h-3 mr-1" />
-                +300 empresas
+                +500 empresas
               </Badge>
               <Badge variant="outline" className="text-blue-400 border-blue-400">
                 <Brain className="w-3 h-3 mr-1" />

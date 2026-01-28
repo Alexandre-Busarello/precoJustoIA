@@ -4,8 +4,7 @@ import { useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
-
-const KIWIFY_CHECKOUT_URL = "https://pay.kiwify.com.br/kV1DuGv"
+import { useCheckoutUrl } from '@/components/kiwify-checkout-link'
 
 // Mapeamento de features para copies personalizados
 const FEATURE_COPIES: Record<string, {
@@ -141,6 +140,7 @@ const DEFAULT_COPY = {
 export function DynamicCTASection() {
   const searchParams = useSearchParams()
   const feature = searchParams.get('feature')
+  const checkoutUrl = useCheckoutUrl()
   
   // Scroll para o checkout quando há feature na URL
   useEffect(() => {
@@ -170,7 +170,7 @@ export function DynamicCTASection() {
           </p>
           <div className="mb-6 sm:mb-8">
             <a 
-              href={KIWIFY_CHECKOUT_URL}
+              href={checkoutUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex flex-col items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all hover:shadow-xl transform hover:scale-105 cursor-pointer"
@@ -190,7 +190,7 @@ export function DynamicCTASection() {
             asChild
           >
             <a 
-              href={KIWIFY_CHECKOUT_URL}
+              href={checkoutUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 sm:gap-3"

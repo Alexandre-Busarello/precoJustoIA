@@ -518,7 +518,7 @@ function ScreeningAcoesContent() {
                 {/* Generate Button */}
                 <div className="flex justify-center pt-6">
                   <Button
-                    onClick={handleGenerateScreening} 
+                    onClick={() => handleGenerateScreening()} 
                     disabled={loading}
                     size="lg"
                     className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 px-8 py-6 text-lg font-semibold shadow-lg"
@@ -1109,7 +1109,7 @@ function ScreeningAcoesContent() {
               {/* Generate Button */}
               <div className="flex justify-center pt-6">
                 <Button 
-                  onClick={handleGenerateScreening} 
+                  onClick={() => handleGenerateScreening()} 
                   disabled={loading}
                   size="lg"
                   className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 px-8 py-6 text-lg font-semibold shadow-lg"

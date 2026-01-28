@@ -23,14 +23,14 @@ import {
   CheckCircle,
   Star,
   Rocket,
-  BarChart3
+  BarChart3,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 
 export const metadata: Metadata = {
   title: "Fundador & CEO - Especialista em Tecnologia e Análise Fundamentalista | Preço Justo AI",
-  description: "Conheça Alexandre Busarello, fundador do Preço Justo AI: Gerente Técnico na Descomplica, especialista em AWS, DevOps e análise fundamentalista. Mais de 15 anos de experiência em tecnologia e mercado financeiro. Líder técnico responsável por plataforma com +70k alunos.",
+  description: "Conheça Alexandre Busarello, fundador do Preço Justo AI: Gerente Técnico na Descomplica, especialista em AWS, DevOps e análise fundamentalista. Mais de 15 anos de experiência em tecnologia e mais de 10 anos investindo e fazendo análises quantitativas e qualitativas em mercado financeiro. Líder técnico responsável por plataforma com +70k alunos.",
   keywords: "fundador preço justo ai, alexandre busarello, CEO análise fundamentalista, gerente técnico descomplica, especialista AWS DevOps, fundador plataforma investimentos, quem criou preço justo ai, liderança técnica Brasil",
   openGraph: {
     title: "Fundador & CEO - Especialista em Tecnologia e Investimentos | Preço Justo AI",
@@ -76,7 +76,7 @@ export default function FundadorPage() {
       "https://www.linkedin.com/in/alexandre-busarello-26a6b422/"
     ],
     "image": "https://precojusto.ai/eu.png",
-    "description": "Gerente Técnico na Descomplica, especialista em AWS, DevOps e análise fundamentalista. Mais de 15 anos de experiência em tecnologia.",
+    "description": "Gerente Técnico na Descomplica, especialista em AWS, DevOps e análise fundamentalista. Mais de 15 anos de experiência em tecnologia e mais de 10 anos investindo e fazendo análises quantitativas e qualitativas em mercado financeiro.",
     "address": {
       "@type": "PostalAddress",
       "addressLocality": "Blumenau",
@@ -148,6 +148,10 @@ export default function FundadorPage() {
                       <Calendar className="w-3 h-3 mr-1" />
                       15+ anos exp.
                     </Badge>
+                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      <TrendingUp className="w-3 h-3 mr-1" />
+                      10+ anos mercado financeiro
+                    </Badge>
                   </div>
 
                   <div className="flex flex-wrap justify-center lg:justify-start gap-4">
@@ -213,9 +217,10 @@ export default function FundadorPage() {
                             <BarChart3 className="w-6 h-6 text-purple-600" />
                           </div>
                           <div>
-                            <h3 className="font-semibold mb-2">Análise Fundamentalista</h3>
+                            <h3 className="font-semibold mb-2">Mercado Financeiro & Análise</h3>
                             <p className="text-sm text-muted-foreground">
-                              Combina expertise técnica com conhecimento em mercado financeiro 
+                              <strong>Mais de 10 anos investindo</strong> e fazendo análises quantitativas e qualitativas 
+                              em mercado financeiro. Combina expertise técnica com experiência prática como investidor 
                               para criar <strong>soluções inovadoras de investimento</strong>.
                             </p>
                           </div>
@@ -480,6 +485,13 @@ export default function FundadorPage() {
                   badge={{ text: "Node.js • React • TypeScript" }}
                 />
                 <FeatureCard
+                  title="Mercado Financeiro"
+                  description="Mais de 10 anos investindo e fazendo análises quantitativas e qualitativas"
+                  iconName="TrendingUp"
+                  iconBgClass="bg-gradient-to-br from-emerald-500 to-emerald-600"
+                  badge={{ text: "Análise Fundamentalista • Valuation • Investimentos" }}
+                />
+                <FeatureCard
                   title="Liderança"
                   description="Liderança técnica com foco em crescimento de pessoas e resultados"
                   iconName="Users"
@@ -504,26 +516,30 @@ export default function FundadorPage() {
                   <div className="text-left space-y-6">
                     <p className="text-lg text-muted-foreground leading-relaxed">
                       Após anos liderando transformações tecnológicas em grandes plataformas educacionais, 
-                      percebi uma oportunidade única de aplicar minha expertise técnica ao mercado financeiro.
+                      percebi uma oportunidade única de aplicar minha expertise técnica ao mercado financeiro, 
+                      onde <strong>investo e faço análises quantitativas e qualitativas há mais de 10 anos</strong>.
                     </p>
                     
                     <p className="text-lg text-muted-foreground leading-relaxed">
                       <strong>A democratização da análise fundamentalista</strong> sempre foi meu objetivo. 
-                      Combinando conhecimento em engenharia de software, cloud computing e inteligência artificial, 
-                      desenvolvi uma plataforma que torna acessível o que antes era privilégio de poucos.
+                      Combinando conhecimento em engenharia de software, cloud computing, inteligência artificial 
+                      e minha experiência prática como investidor, desenvolvi uma plataforma que torna acessível 
+                      o que antes era privilégio de poucos.
                     </p>
                     
                     <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-6 border-l-4 border-blue-600">
                       <p className="text-lg font-medium text-blue-900 dark:text-blue-100">
                         &quot;Minha missão é empoderar investidores brasileiros com ferramentas de análise 
                         de nível institucional, usando tecnologia de ponta para democratizar o acesso 
-                        a informações de qualidade sobre o mercado de ações.&quot;
+                        a informações de qualidade sobre o mercado de ações. Minha experiência de mais de 10 anos 
+                        investindo e analisando empresas me permite criar ferramentas que realmente funcionam na prática.&quot;
                       </p>
                     </div>
                     
                     <p className="text-lg text-muted-foreground leading-relaxed">
-                      O Preço Justo AI representa a convergência entre minha paixão por tecnologia e 
-                      o desejo de contribuir para um mercado financeiro mais transparente e acessível no Brasil.
+                      O Preço Justo AI representa a convergência entre minha paixão por tecnologia, 
+                      minha expertise em mercado financeiro e o desejo de contribuir para um mercado 
+                      financeiro mais transparente e acessível no Brasil.
                     </p>
                   </div>
                 </CardContent>
@@ -544,7 +560,7 @@ export default function FundadorPage() {
             },
             {
               question: "Por que o fundador criou o Preço Justo AI?",
-              answer: "A democratização da análise fundamentalista sempre foi o objetivo. Combinando expertise técnica com conhecimento em mercado financeiro, desenvolveu uma plataforma que torna acessível o que antes era privilégio de poucos, usando tecnologia de ponta para empoderar investidores brasileiros.",
+              answer: "A democratização da análise fundamentalista sempre foi o objetivo. Combinando expertise técnica com mais de 10 anos de experiência prática investindo e fazendo análises quantitativas e qualitativas em mercado financeiro, desenvolveu uma plataforma que torna acessível o que antes era privilégio de poucos, usando tecnologia de ponta para empoderar investidores brasileiros.",
               iconName: "Rocket"
             },
             {

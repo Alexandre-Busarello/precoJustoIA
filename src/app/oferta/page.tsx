@@ -549,6 +549,10 @@ export default function OfertaPage() {
                         <Calendar className="w-3 h-3 mr-1" />
                         15+ anos experiência
                       </Badge>
+                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                        <TrendingUp className="w-3 h-3 mr-1" />
+                        10+ anos mercado financeiro
+                      </Badge>
                     </div>
                     
                     <h3 className="text-xl sm:text-2xl font-bold mb-2">
@@ -563,7 +567,8 @@ export default function OfertaPage() {
                     <p className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-4">
                       Lidero times técnicos responsáveis por plataformas com <strong>+70k usuários</strong>. 
                       Criei o Preço Justo AI para democratizar a análise fundamentalista, combinando minha 
-                      experiência em tecnologia com conhecimento em mercado financeiro.
+                      experiência em tecnologia com <strong>mais de 10 anos de expertise em mercado financeiro</strong>, 
+                      onde invisto e faço análises quantitativas e qualitativas regularmente.
                     </p>
                     
                     <div className="flex items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm text-muted-foreground">

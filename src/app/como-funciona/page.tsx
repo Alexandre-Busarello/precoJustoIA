@@ -59,7 +59,7 @@ export default function ComoFuncionaPage() {
               </Badge>
               <Badge variant="outline" className="text-purple-600 border-purple-600 px-4 py-2">
                 <Building2 className="w-4 h-4 mr-2" />
-                +300 Empresas
+                +500 Empresas
               </Badge>
             </div>
           </div>

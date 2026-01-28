@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { SlimFooter } from "@/components/slim-footer"
+import { DynamicCTASection } from "@/components/dynamic-cta-section"
 import { 
   CheckCircle, 
   Shield, 
@@ -166,7 +167,7 @@ export default function OfertaPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-8 sm:mb-12">
               {/* Benefício 1 - Radar Inteligente */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=radar-inteligente#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -186,7 +187,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 2 - Três Dados Vitais */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=tres-dados-vitais#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-violet-200 dark:border-violet-800 hover:border-violet-400 dark:hover:border-violet-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -207,7 +208,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 3 - 5 Minutos por Mês */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=5-minutos#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all hover:shadow-lg transform hover:scale-[1.02] bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -227,7 +228,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 4 - Análise Técnica */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=analise-tecnica#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -247,7 +248,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 5 - Relatórios da IA */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=relatorios-ia#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -267,7 +268,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 6 - Rankings Inteligentes */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=rankings#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -287,7 +288,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 7 */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=screening#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-teal-200 dark:border-teal-800 hover:border-teal-400 dark:hover:border-teal-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -307,7 +308,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 8 */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=analise-b3#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -327,7 +328,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 9 */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=comparador#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-pink-200 dark:border-pink-800 hover:border-pink-400 dark:hover:border-pink-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -347,7 +348,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 10 - Radar de Dividendos */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=dividendos#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -367,7 +368,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 11 */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=analise-setorial#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-cyan-200 dark:border-cyan-800 hover:border-cyan-400 dark:hover:border-cyan-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -387,7 +388,7 @@ export default function OfertaPage() {
               </a>
 
               {/* Benefício 12 */}
-              <a href="#checkout" className="block cursor-pointer">
+              <a href="/oferta?feature=calculadora-renda#checkout" className="block cursor-pointer">
                 <Card className="border-2 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600 transition-all hover:shadow-lg transform hover:scale-[1.02]">
                   <CardContent className="p-6 sm:p-8">
                   <div className="flex items-start gap-4">
@@ -579,58 +580,8 @@ export default function OfertaPage() {
         </div>
       </section>
 
-      {/* CTA Final */}
-      <section id="checkout" className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-blue-600 to-violet-600 text-white scroll-mt-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
-              Clique no link e garanta sua condição antes que encerre!
-            </h2>
-            <p className="text-lg sm:text-xl mb-6 sm:mb-8 opacity-90 max-w-2xl mx-auto">
-              Acesso anual promocional por apenas <strong>R$ 17,99 mensais</strong> no cartão ou com 
-              desconto ainda maior se for à vista. Evite o giro excessivo e monitore suas ações com 
-              inteligência artificial.
-            </p>
-            <div className="mb-6 sm:mb-8">
-              <a 
-                href={KIWIFY_CHECKOUT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex flex-col items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all hover:shadow-xl transform hover:scale-105 cursor-pointer"
-              >
-                <div className="text-sm sm:text-base opacity-90">Acesso Anual Promocional</div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
-                    R$ 17,99
-                  </span>
-                  <span className="text-lg sm:text-xl opacity-90">/mês</span>
-                </div>
-              </a>
-            </div>
-            <Button 
-              size="lg" 
-              className="bg-white text-blue-600 hover:bg-gray-100 text-base sm:text-lg md:text-xl px-6 sm:px-8 md:px-12 py-5 sm:py-6 md:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto font-bold"
-              asChild
-            >
-              <a 
-                href={KIWIFY_CHECKOUT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 sm:gap-3"
-              >
-                <span className="whitespace-nowrap">
-                  <span className="sm:hidden">Garantir Condição Agora</span>
-                  <span className="hidden sm:inline">Garantir Minha Condição Agora</span>
-                </span>
-                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-              </a>
-            </Button>
-            <p className="text-xs sm:text-sm md:text-base mt-6 opacity-80 px-4">
-              ✅ Pagamento 100% seguro • ✅ Acesso imediato • ✅ Garantia de 7 dias • ✅ Condição encerra em breve
-            </p>
-          </div>
-        </div>
-      </section>
+      {/* CTA Final - Dinâmico baseado no card clicado */}
+      <DynamicCTASection />
 
       {/* Footer */}
       <SlimFooter />

@@ -1,5 +1,6 @@
 import { Metadata } from "next"
 import Image from "next/image"
+import { Suspense } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
@@ -581,7 +582,24 @@ export default function OfertaPage() {
       </section>
 
       {/* CTA Final - Dinâmico baseado no card clicado */}
-      <DynamicCTASection />
+      <Suspense fallback={
+        <section id="checkout" className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-blue-600 to-violet-600 text-white scroll-mt-20">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-4xl mx-auto text-center">
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
+                Clique no link e garanta sua condição antes que encerre!
+              </h2>
+              <p className="text-lg sm:text-xl mb-6 sm:mb-8 opacity-90 max-w-2xl mx-auto">
+                Acesso anual promocional por apenas <strong>R$ 17,99 mensais</strong> no cartão ou com 
+                desconto ainda maior se for à vista. Evite o giro excessivo e monitore suas ações com 
+                inteligência artificial.
+              </p>
+            </div>
+          </div>
+        </section>
+      }>
+        <DynamicCTASection />
+      </Suspense>
 
       {/* Footer */}
       <SlimFooter />

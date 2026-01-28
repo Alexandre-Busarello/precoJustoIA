@@ -162,11 +162,14 @@ function ScreeningAcoesContent() {
     fetchSectors()
   }, [])
 
-  const handleAIParametersGenerated = (generatedParams: ScreeningParams) => {
+  const handleAIParametersGenerated = async (generatedParams: ScreeningParams) => {
     setParams(generatedParams)
+    
+    // Executar screening automaticamente com os parâmetros gerados pela IA
+    await handleGenerateScreening(generatedParams)
   }
 
-  const handleGenerateScreening = async () => {
+  const handleGenerateScreening = async (customParams?: ScreeningParams) => {
     // Verificar se usuário anônimo já atingiu o limite
     if (!isLoggedIn && anonymousScreeningsCount >= MAX_ANONYMOUS_SCREENINGS) {
       // Usar setTimeout para garantir que o estado seja atualizado antes de mostrar o modal
@@ -180,11 +183,14 @@ function ScreeningAcoesContent() {
     setError(null)
 
     try {
+      // Usar parâmetros customizados (da IA) ou do estado
+      const paramsToUse = customParams || params;
+      
       // Remover limit do params - backend sempre controla o limite baseado no status Premium
-      const { limit, ...paramsWithoutLimit } = params;
+      const { limit, ...paramsWithoutLimit } = paramsToUse;
       
       // Usar assetTypeFilter do params (atualizado pela interface) ou fallback para searchParams
-      const finalAssetTypeFilter = params.assetTypeFilter || assetType || 'both';
+      const finalAssetTypeFilter = paramsToUse.assetTypeFilter || assetType || 'both';
       
       const response = await fetch("/api/rank-builder", {
         method: "POST",
@@ -225,6 +231,8 @@ function ScreeningAcoesContent() {
       }
       
       // Scroll até a tabela de resultados após um pequeno delay para garantir que foi renderizada
+      // Aumentar delay quando executado automaticamente pela IA para garantir renderização completa
+      const scrollDelay = customParams ? 500 : 300
       setTimeout(() => {
         const resultsSection = document.getElementById('results-section')
         if (resultsSection) {
@@ -239,7 +247,7 @@ function ScreeningAcoesContent() {
             }
           }, 500)
         }
-      }, 300)
+      }, scrollDelay)
       
       setCurrentPage(1) // Resetar página ao gerar novos resultados
     } catch (err) {

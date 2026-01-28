@@ -108,9 +108,9 @@ export function ScreeningAIAssistant({
         setShowPrompt(false)
         setPrompt('')
         
-        // Exibir toast de sucesso
+        // Exibir toast de sucesso indicando que está executando automaticamente
         toast.success('Parâmetros configurados com IA!', {
-          description: data.message || 'Os filtros foram configurados automaticamente. Revise e ajuste se necessário.'
+          description: 'Os filtros foram configurados e o screening está sendo executado automaticamente...'
         })
       } else {
         throw new Error('Resposta inválida da IA')

@@ -344,7 +344,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
     // Retry com verificação de duplicatas e orientação de erros
     let results: RankBuilderResult[] = [];
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 2; // Reduzido de 3 para 2 para evitar timeouts
     const previousErrors: string[] = [];
     
     while (attempts < maxAttempts) {
@@ -370,27 +370,22 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
         console.log(`✅ [AI-STRATEGY] Resposta da análise batch recebida (${response.length} chars)`);
         
         results = this.parseBatchAnalysisResponse(response, companiesWithStrategies);
-        console.log(`🎯 [AI-STRATEGY] ${results.length} resultados processados da análise batch`);
+        console.log(`🎯 [AI-STRATEGY] ${results.length} resultados processados da análise batch (deduplicação automática já aplicada durante parse)`);
         
-        // Verificar duplicatas nos resultados
-        const tickers = results.map(r => r.ticker);
-        const uniqueTickers = new Set(tickers);
-        
-        if (tickers.length !== uniqueTickers.size) {
-          const duplicates = tickers.filter((ticker, index) => tickers.indexOf(ticker) !== index);
-          const errorMsg = `NÃO repita tickers. Duplicatas encontradas: ${duplicates.join(', ')}. Cada ticker deve aparecer APENAS UMA VEZ.`;
-          previousErrors.push(errorMsg);
-          console.warn(`⚠️ [AI-STRATEGY] ${errorMsg}`);
-          continue;
-        }
-        
-        // Verificar se temos resultados para todas as empresas
+        // Verificar se temos resultados para todas as empresas (após deduplicação automática)
         if (results.length !== companiesWithStrategies.length) {
           const expectedTickers = companiesWithStrategies.map(c => c.company.ticker);
           const receivedTickers = results.map(r => r.ticker);
           const missing = expectedTickers.filter(t => !receivedTickers.includes(t));
           const extra = receivedTickers.filter(t => !expectedTickers.includes(t));
           
+          // Se faltam muitas empresas (>30%), usar fallback imediatamente para evitar timeout
+          if (missing.length > companiesWithStrategies.length * 0.3) {
+            console.warn(`⚠️ [AI-STRATEGY] Muitas empresas faltando (${missing.length}/${companiesWithStrategies.length}). Usando fallback.`);
+            return this.generateFallbackRanking(companiesWithStrategies, params);
+          }
+          
+          // Se faltam poucas empresas, tentar novamente com orientação específica
           let errorMsg = `Inclua EXATAMENTE ${companiesWithStrategies.length} empresas no resultado.`;
           if (missing.length > 0) errorMsg += ` Faltando: ${missing.join(', ')}.`;
           if (extra.length > 0) errorMsg += ` Extras inválidos: ${extra.join(', ')}.`;
@@ -421,7 +416,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
         const isTimeout = errorMsg.includes('Timeout') || errorMsg.includes('timeout');
         const isCriticalError = errorMsg.includes('Falha na comunicação') || errorMsg.includes('API');
         
-        if (isTimeout || (isCriticalError && attempts === maxAttempts)) {
+        if (isTimeout || (isCriticalError && attempts >= maxAttempts)) {
           console.warn(`⚠️ [AI-STRATEGY] Timeout ou erro crítico detectado. Usando fallback baseado em estratégias.`);
           // Usar fallback baseado nas estratégias
           return this.generateFallbackRanking(companiesWithStrategies, params);
@@ -434,7 +429,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
           previousErrors.push(`Erro técnico: ${errorMsg}. Simplifique a resposta e foque apenas no JSON solicitado.`);
         }
         
-        if (attempts === maxAttempts) {
+        if (attempts >= maxAttempts) {
           console.warn(`⚠️ [AI-STRATEGY] Todas as tentativas falharam. Usando fallback baseado em estratégias.`);
           // Usar fallback baseado nas estratégias
           return this.generateFallbackRanking(companiesWithStrategies, params);
@@ -551,6 +546,8 @@ Estratégias Elegíveis: ${eligibleStrategies}/7
 - Método Barsi: ${strategies.barsi.isEligible ? '✅' : '❌'} (Score: ${strategies.barsi.score}) - ${strategies.barsi.reasoning}`;
     }).join('\n\n');
 
+    const tickersList = companiesWithStrategies.map(c => c.company.ticker).join(', ');
+
     return `# ANÁLISE PREDITIVA BATCH - INTELIGÊNCIA ARTIFICIAL
 
 ## PERFIL DO INVESTIDOR
@@ -579,6 +576,9 @@ ${companiesAnalysis}
 ## RESPOSTA REQUERIDA
 **ATENÇÃO**: Responda EXCLUSIVAMENTE em PORTUGUÊS BRASILEIRO.
 
+**TICKERS ESPERADOS (EXATAMENTE ${companiesWithStrategies.length} empresas)**:
+${tickersList}
+
 Retorne um JSON com o ranking de TODAS as empresas analisadas:
 
 {
@@ -594,21 +594,19 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
   ]
 }
 
-**REGRAS CRÍTICAS ANTI-LOOP**: 
+**REGRAS CRÍTICAS**: 
 - Seja DIRETO e OBJETIVO, evite repetições
-- NÃO analise a mesma empresa múltiplas vezes
-- NÃO repita explicações ou conceitos
 - Ordene por score (0-100) decrescente
-- Inclua TODAS as empresas analisadas APENAS UMA VEZ
+- Inclua TODAS as ${companiesWithStrategies.length} empresas da lista acima
 - TODO o campo "reasoning" deve estar em PORTUGUÊS BRASILEIRO
 - Use termos financeiros em português (ex: "potencial de valorização", "fundamentos sólidos", "perspectivas positivas")
 
 **FORMATO DE RESPOSTA OBRIGATÓRIO**:
-- Responda APENAS com o JSON, sem texto adicional
-- NÃO use markdown (\`\`\`json)
+- Responda APENAS com o JSON válido, sem texto adicional antes ou depois
+- NÃO use markdown (\`\`\`json ou \`\`\`)
 - NÃO adicione explicações antes ou depois do JSON
 - PARE imediatamente após fechar a chave final }
-- Formato exato: {"results": [...]}
+- Formato exato: {"results": [{"ticker": "...", "score": ..., ...}]}
 - NÃO continue escrevendo após o JSON`;
   }
 
@@ -637,123 +635,210 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
     }
   }
 
-  // Parse robusto da resposta de análise batch
+  // Parse robusto da resposta de análise batch (otimizado e mais eficiente)
   private parseBatchAnalysisResponse(response: string, companiesWithStrategies: Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>): RankBuilderResult[] {
     console.log(`🔍 [AI-STRATEGY] Iniciando parse da resposta (${response.length} chars)`);
     
-    // Múltiplas estratégias de parsing (otimizadas para texto extra após JSON)
-    const parseStrategies = [
-      // Estratégia 1: Buscar JSON entre marcadores específicos
-      () => {
-        const jsonStart = response.indexOf('{"results"');
-        if (jsonStart === -1) throw new Error('Início do JSON não encontrado');
+    // Função auxiliar para encontrar JSON válido com contagem balanceada de chaves
+    const findValidJSON = (text: string, startPattern: string): string | null => {
+      // Tentar múltiplas variações do padrão inicial
+      const patterns = [
+        startPattern,
+        startPattern.replace(/"/g, '\\"'),
+        startPattern.replace(/"/g, '"'),
+        startPattern.replace(/\s+/g, '\\s*')
+      ];
+      
+      let startPos = -1;
+      for (const pattern of patterns) {
+        const regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        const match = text.match(regex);
+        if (match && match.index !== undefined) {
+          startPos = match.index;
+          break;
+        }
+      }
+      
+      if (startPos === -1) return null;
+      
+      let braceCount = 0;
+      let bracketCount = 0;
+      let jsonEnd = startPos;
+      let inString = false;
+      let escapeNext = false;
+      
+      for (let i = startPos; i < text.length; i++) {
+        const char = text[i];
         
-        let braceCount = 0;
-        let jsonEnd = jsonStart;
-        
-        for (let i = jsonStart; i < response.length; i++) {
-          const char = response[i];
-          if (char === '{') braceCount++;
-          if (char === '}') braceCount--;
-          
-          if (braceCount === 0 && i > jsonStart) {
-            jsonEnd = i + 1;
-            break;
+        if (!escapeNext) {
+          if (char === '"') {
+            inString = !inString;
+          } else if (!inString) {
+            if (char === '{') braceCount++;
+            if (char === '}') braceCount--;
+            if (char === '[') bracketCount++;
+            if (char === ']') bracketCount--;
           }
+          escapeNext = char === '\\' && inString;
+        } else {
+          escapeNext = false;
         }
         
-        const jsonStr = response.substring(jsonStart, jsonEnd);
+        // JSON completo quando todas as chaves e colchetes estão balanceados
+        if (braceCount === 0 && bracketCount === 0 && i > startPos && !inString) {
+          jsonEnd = i + 1;
+          break;
+        }
+      }
+      
+      return text.substring(startPos, jsonEnd);
+    };
+    
+    // Múltiplas estratégias de parsing (reordenadas por eficiência - mais rápidas primeiro)
+    const parseStrategies = [
+      // Estratégia 1: Buscar JSON completo com contagem balanceada (mais rápida e precisa)
+      () => {
+        const jsonStr = findValidJSON(response, '{"results"');
+        if (!jsonStr) throw new Error('JSON com "results" não encontrado');
         return JSON.parse(jsonStr);
       },
       
-      // Estratégia 2: Regex mais específica para capturar JSON completo
-      () => {
-        const jsonMatch = response.match(/\{"results":\s*\[[\s\S]*?\]\s*\}/);
-        if (!jsonMatch) throw new Error('JSON com results não encontrado');
-        return JSON.parse(jsonMatch[0]);
-      },
-      
-      // Estratégia 3: Limpeza agressiva e busca por JSON
+      // Estratégia 2: Limpeza agressiva e busca por JSON (segunda mais rápida)
       () => {
         const cleanResponse = response
           .replace(/```json/gi, '')
           .replace(/```/g, '')
-          .replace(/^[^{]*/g, '') // Remove tudo antes do primeiro {
-          .replace(/\}[^}]*$/g, '}'); // Remove tudo após o último }
+          .replace(/^[\s\S]*?(\{[\s\S]*?"results"[\s\S]*?\})[\s\S]*$/i, '$1') // Extrair JSON entre markdown
+          .trim();
         
-        // Encontrar o JSON válido
-        const jsonMatch = cleanResponse.match(/\{[\s\S]*?\}(?=\s*$|$)/);
-        if (!jsonMatch) throw new Error('JSON não encontrado após limpeza agressiva');
-        return JSON.parse(jsonMatch[0]);
+        const jsonStr = findValidJSON(cleanResponse, '{');
+        if (!jsonStr) throw new Error('Nenhum JSON válido encontrado após limpeza');
+        return JSON.parse(jsonStr);
       },
       
-      // Estratégia 4: Parse incremental com validação
+      // Estratégia 3: Buscar por padrão mais flexível
       () => {
-        const lines = response.split('\n');
+        // Tentar encontrar qualquer objeto que contenha "results"
+        const resultsIndex = response.toLowerCase().indexOf('"results"');
+        if (resultsIndex === -1) throw new Error('Campo "results" não encontrado');
+        
+        // Voltar para encontrar o início do objeto
+        let startPos = resultsIndex;
+        while (startPos > 0 && response[startPos] !== '{') {
+          startPos--;
+        }
+        
+        if (startPos === -1 || response[startPos] !== '{') {
+          throw new Error('Início do objeto JSON não encontrado');
+        }
+        
+        const jsonStr = findValidJSON(response.substring(startPos), '{');
+        if (!jsonStr) throw new Error('JSON não encontrado após busca por "results"');
+        return JSON.parse(jsonStr);
+      },
+      
+      // Estratégia 4: Regex para capturar JSON completo (fallback)
+      () => {
+        // Tentar múltiplos padrões regex (não-greedy para pegar o primeiro JSON completo)
+        const patterns = [
+          /\{"results"\s*:\s*\[[\s\S]*?\]\s*\}/,
+          /\{\s*"results"\s*:\s*\[[\s\S]*?\]\s*\}/,
+          /\{[\s\S]*?"results"[\s\S]*?:[\s\S]*?\[[\s\S]*?\][\s\S]*?\}/
+        ];
+        
+        for (const pattern of patterns) {
+          const matches = response.match(pattern);
+          if (matches && matches[0]) {
+            try {
+              return JSON.parse(matches[0]);
+            } catch (e) {
+              // Continuar para próximo padrão
+            }
+          }
+        }
+        
+        throw new Error('JSON com results não encontrado por regex');
+      },
+      
+      // Estratégia 5: Parse incremental caractere por caractere (mais lento, mas mais robusto)
+      () => {
         let jsonStr = '';
         let braceCount = 0;
+        let bracketCount = 0;
         let started = false;
         let inString = false;
         let escapeNext = false;
         
-        for (const line of lines) {
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
+        for (let i = 0; i < response.length; i++) {
+          const char = response[i];
+          
+          if (!started && char === '{') {
+            started = true;
+            braceCount = 0;
+            bracketCount = 0;
+          }
+          
+          if (started) {
+            jsonStr += char;
             
-            if (!started && char === '{') {
-              started = true;
-              braceCount = 0;
+            if (!escapeNext) {
+              if (char === '"') {
+                inString = !inString;
+              } else if (!inString) {
+                if (char === '{') braceCount++;
+                if (char === '}') braceCount--;
+                if (char === '[') bracketCount++;
+                if (char === ']') bracketCount--;
+              }
+              escapeNext = char === '\\' && inString;
+            } else {
+              escapeNext = false;
             }
             
-            if (started) {
-              jsonStr += char;
-              
-              if (!escapeNext) {
-                if (char === '"') inString = !inString;
-                if (!inString) {
-                  if (char === '{') braceCount++;
-                  if (char === '}') braceCount--;
-                }
-                escapeNext = char === '\\' && inString;
-              } else {
-                escapeNext = false;
-              }
-              
-              // JSON completo encontrado
-              if (braceCount === 0 && started && !inString) {
+            // JSON completo encontrado quando todas as chaves estão balanceadas
+            if (braceCount === 0 && bracketCount === 0 && started && !inString && i > 0) {
+              try {
                 return JSON.parse(jsonStr);
+              } catch (e) {
+                // Se parse falhar, continuar procurando
+                started = false;
+                jsonStr = '';
               }
             }
           }
-          
-          if (started) jsonStr += '\n';
         }
         
         throw new Error('JSON válido não encontrado por parsing incremental');
       },
       
-      // Estratégia 5: Fallback - tentar extrair apenas o array de results
+      // Estratégia 6: Fallback - tentar extrair apenas o array de results
       () => {
-        const resultsMatch = response.match(/\[[\s\S]*?\{[\s\S]*?"ticker"[\s\S]*?\}[\s\S]*?\]/);
-        if (!resultsMatch) throw new Error('Array de results não encontrado');
-        return { results: JSON.parse(resultsMatch[0]) };
+        // Buscar array que contém objetos com "ticker"
+        const arrayMatch = response.match(/\[[\s\S]*?\{[\s\S]*?"ticker"[\s\S]*?\}[\s\S]*?\]/);
+        if (!arrayMatch) throw new Error('Array de results não encontrado');
+        
+        try {
+          const resultsArray = JSON.parse(arrayMatch[0]);
+          return { results: resultsArray };
+        } catch (e) {
+          throw new Error('Array encontrado mas não é JSON válido');
+        }
       }
     ];
     
     let parsed: Record<string, unknown> | null = null;
     let parseError: string = '';
     
-    // Tentar cada estratégia de parsing
+    // Tentar cada estratégia de parsing (parar na primeira que funcionar)
     for (let i = 0; i < parseStrategies.length; i++) {
       try {
-        console.log(`🔄 [AI-STRATEGY] Tentativa de parse ${i + 1}/${parseStrategies.length}`);
         parsed = parseStrategies[i]();
         console.log(`✅ [AI-STRATEGY] Parse bem-sucedido com estratégia ${i + 1}`);
         break;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         parseError += `Estratégia ${i + 1}: ${errorMsg}; `;
-        console.warn(`⚠️ [AI-STRATEGY] Estratégia ${i + 1} falhou: ${errorMsg}`);
+        // Não logar warning para todas as tentativas, apenas se todas falharem
       }
     }
     
@@ -763,9 +848,23 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
     }
     
     const results: RankBuilderResult[] = [];
+    const seenTickers = new Set<string>(); // Para deduplicação durante parsing
       
     if (parsed.results && Array.isArray(parsed.results)) {
       for (const result of parsed.results) {
+        // Validar estrutura básica
+        if (!result || typeof result !== 'object' || !result.ticker) {
+          console.warn(`⚠️ [AI-STRATEGY] Resultado inválido ignorado: ${JSON.stringify(result)}`);
+          continue;
+        }
+        
+        // DEDUPLICAÇÃO AUTOMÁTICA: pular se já vimos este ticker (mantém apenas a primeira ocorrência)
+        if (seenTickers.has(result.ticker)) {
+          console.warn(`⚠️ [AI-STRATEGY] Ticker duplicado ignorado durante parse: ${result.ticker}`);
+          continue;
+        }
+        seenTickers.add(result.ticker);
+        
         const companyData = companiesWithStrategies.find(c => c.company.ticker === result.ticker);
         if (companyData) {
           const eligibleStrategies = Object.values(companyData.strategies).filter((s: StrategyAnalysis) => s.isEligible).length;
@@ -810,18 +909,21 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
               crescimentoReceitas: toNumber(financials.crescimentoReceitas)
             }
           });
+        } else {
+          console.warn(`⚠️ [AI-STRATEGY] Ticker não encontrado na lista de empresas: ${result.ticker}`);
         }
       }
     }
     
+    console.log(`✅ [AI-STRATEGY] Parse concluído: ${results.length} resultados válidos (${seenTickers.size} tickers únicos após deduplicação automática)`);
     return results;
   }
 
   // Chamada para Gemini API (reutilizada) com timeout otimizado
   private async callGeminiAPI(prompt: string, retryCount = 0, useGoogleSearch = true): Promise<string> {
-    const maxRetries = 3;
-    // Timeout reduzido para Vercel (45s para deixar margem de segurança)
-    const TIMEOUT_MS = 45000;
+    const maxRetries = 2; // Reduzido de 3 para 2 para evitar timeouts
+    // Timeout reduzido para Vercel (35s para deixar margem de segurança com múltiplas tentativas)
+    const TIMEOUT_MS = 35000;
     
     // Validar se a API key do Gemini está configurada
     if (!process.env.GEMINI_API_KEY) {

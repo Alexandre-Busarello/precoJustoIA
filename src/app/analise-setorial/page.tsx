@@ -99,7 +99,7 @@ export default async function AnaliseSetorialPage() {
   // Buscar dados iniciais server-side
   const initialData = await fetchInitialSectorData();
   
-  // Se usuário está logado, mostrar apenas Hero + ferramenta
+  // Se usuário está logado, mostrar apenas funcionalidade
   if (isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
@@ -111,28 +111,11 @@ export default async function AnaliseSetorialPage() {
           ]} />
         </div>
 
-        {/* Hero Section Compacto */}
-        <LandingHero
-          headline={
-            <>
-              Análise{" "}
-              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                Setorial da B3
-              </span>
-            </>
-          }
-          subheadline={
-            <>
-              Compare as <strong>melhores empresas de cada setor</strong> da Bovespa em um só lugar.
-            </>
-          }
-          showQuickAccess={false}
-          primaryCTA={{
-            text: "Ver Análise Setorial",
-            href: "#analise-tool",
-            iconName: "BarChart3"
-          }}
-        />
+        {/* Título simples */}
+        <div className="container mx-auto px-4 pt-4 pb-8">
+          <h1 className="text-3xl font-bold mb-2">Análise Setorial da B3</h1>
+          <p className="text-muted-foreground">Compare as melhores empresas de cada setor da Bovespa em um só lugar</p>
+        </div>
 
         {/* Ferramenta */}
         <section id="analise-tool" className="py-8 bg-white dark:bg-background">

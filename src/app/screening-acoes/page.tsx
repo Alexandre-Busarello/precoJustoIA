@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScreeningConfigurator } from "@/components/screening-configurator"
@@ -121,6 +122,7 @@ function ScreeningAcoesContent() {
   const [anonymousScreeningsCount, setAnonymousScreeningsCount] = useState(0)
 
   const isLoggedIn = !!session
+  const isMobile = useIsMobile()
   const MAX_ANONYMOUS_SCREENINGS = 2
 
   // Carregar contador de screenings anônimos do localStorage
@@ -414,7 +416,7 @@ function ScreeningAcoesContent() {
       : <ArrowDown className="w-4 h-4 ml-1 inline" />
   }
 
-  // Se usuário está logado, mostrar Hero + ferramenta diretamente
+  // Se usuário está logado, mostrar apenas funcionalidade
   if (isLoggedIn) {
   return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
@@ -424,45 +426,12 @@ function ScreeningAcoesContent() {
             { label: "Ferramentas", href: "/ranking" },
             { label: "Screening de Ações" }
           ]} />
-          </div>
-          
-        {/* Hero Section Compacto para usuários logados */}
-        <div className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-6 pb-8">
-          {/* Background Pattern */}
-          <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))]"></div>
-          
-          <div className="relative text-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Headline */}
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 leading-tight">
-              Screening de{" "}
-              <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-                Ações B3
-              </span>
-            </h1>
-            
-            {/* Subheadline */}
-            <div className="text-base sm:text-lg md:text-xl text-muted-foreground mb-6 max-w-3xl mx-auto leading-relaxed">
-              Use <strong>filtros customizáveis</strong> para encontrar ações que atendem seus critérios exatos.
-            </div>
+        </div>
 
-            {/* CTA Button - Scroll to Configurator */}
-            <div className="flex justify-center">
-              <Button 
-                size="lg" 
-                onClick={() => {
-                  const configurator = document.getElementById('screening-configurator')
-                  if (configurator) {
-                    configurator.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  }
-                }}
-                className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-base px-6 py-3 shadow-xl hover:shadow-2xl transition-all"
-              >
-                <Search className="w-5 h-5 mr-2" />
-                Configurar Filtros
-                <ArrowDown className="w-5 h-5 ml-2" />
-              </Button>
-            </div>
-          </div>
+        {/* Título simples */}
+        <div className="container mx-auto px-4 pt-4 pb-8">
+          <h1 className="text-3xl font-bold mb-2">Screening de Ações B3</h1>
+          <p className="text-muted-foreground">Use filtros customizáveis para encontrar ações que atendem seus critérios exatos</p>
         </div>
 
         {/* Atalhos Rápidos para Presets - Versão Discreta para Logados */}
@@ -562,9 +531,10 @@ function ScreeningAcoesContent() {
                 )}
         </div>
 
-              {/* Results Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
+              {/* Results Table - Desktop */}
+              {!isMobile && (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-100 dark:bg-gray-800">
                       <th 
@@ -653,7 +623,61 @@ function ScreeningAcoesContent() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              )}
+
+              {/* Results Cards - Mobile */}
+              {isMobile && (
+                <div className="grid gap-4">
+                  {getPaginatedResults().map((result, index) => (
+                    <Card key={index} className="border-0 shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3 mb-3">
+                          <CompanyLogo ticker={result.ticker} logoUrl={result.logoUrl} size={48} companyName={result.name} />
+                          <div className="flex-1 min-w-0">
+                            <Link href={`/acao/${result.ticker}`} className="hover:text-blue-600 transition-colors">
+                              <div className="font-bold text-lg">{result.ticker}</div>
+                              <div className="text-sm text-muted-foreground truncate">{result.name}</div>
+                            </Link>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Preço</p>
+                            <p className="font-semibold">{formatCurrency(result.currentPrice)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Preço Justo</p>
+                            <p className="font-semibold">{formatCurrency(result.fairValue)}</p>
+                            {result.fairValueModel && (
+                              <p className="text-xs text-muted-foreground">({result.fairValueModel})</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mb-3">
+                          <p className="text-xs text-muted-foreground mb-1">Potencial</p>
+                          <p className={`font-bold text-lg ${result.upside && result.upside > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {result.upside ? `${result.upside.toFixed(1)}%` : 'N/A'}
+                          </p>
+                        </div>
+
+                        {result.key_metrics && (
+                          <div className="grid grid-cols-2 gap-2 pt-3 border-t">
+                            {Object.entries(result.key_metrics).slice(0, 4).map(([key, value]) => (
+                              <div key={key}>
+                                <p className="text-xs text-muted-foreground">{translateMetricName(key)}</p>
+                                <p className="font-semibold text-sm">{formatMetricValue(key, value as number)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
 
               {/* Pagination Controls */}
               {isPremium && totalPages > 1 && (

@@ -12,8 +12,10 @@ import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { CompanyLogo } from "@/components/company-logo"
 import { AddToBacktestButton } from "@/components/add-to-backtest-button"
@@ -260,10 +262,35 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
   const [filterROIC, setFilterROIC] = useState<number | null>(null) // Filtro mínimo de ROIC
   const [filterDY, setFilterDY] = useState<number | null>(null) // Filtro mínimo de DY
   const [showFilters, setShowFilters] = useState(false) // Mostrar/ocultar painel de filtros
+  const [showFiltersSheet, setShowFiltersSheet] = useState(false) // Sheet mobile para filtros
+  const [selectedCardForSheet, setSelectedCardForSheet] = useState<RankingResult | null>(null) // Card selecionado para Sheet mobile
   
+  // Estados do wizard mobile
+  const [wizardStep, setWizardStep] = useState<number>(0) // 0: Modelo, 1: Parâmetros, 2: Resultados, 3: Detalhes
+  const [showModelSheet, setShowModelSheet] = useState(false) // Sheet para seleção de modelo no mobile
+  const [showParamsSheet, setShowParamsSheet] = useState(false) // Sheet para parâmetros no mobile
+  
+  const isMobile = useIsMobile()
+  
+  // Definir steps do wizard
+  const wizardSteps = ['Modelo', 'Parâmetros', 'Resultados', 'Detalhes']
   const resultsRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLDivElement>(null)
+
+  // Abrir Sheet de parâmetros automaticamente quando um modelo é selecionado no mobile
+  useEffect(() => {
+    if (isMobile && selectedModel && !isViewingCached) {
+      setShowParamsSheet(true)
+    }
+  }, [isMobile, selectedModel, isViewingCached])
+
+  // Abrir Sheet de parâmetros automaticamente quando um modelo é selecionado no mobile
+  useEffect(() => {
+    if (isMobile && selectedModel && !isViewingCached) {
+      setShowParamsSheet(true)
+    }
+  }, [isMobile, selectedModel, isViewingCached])
 
   // Expor métodos para o componente pai via ref
   useImperativeHandle(ref, () => ({
@@ -458,6 +485,16 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     }
     
     setSelectedModel(model)
+    
+    // No mobile: abrir Sheet de parâmetros automaticamente
+    if (isMobile) {
+      setWizardStep(1)
+      setShowModelSheet(false)
+      // Pequeno delay para garantir que o estado seja atualizado antes de abrir o Sheet
+      setTimeout(() => {
+        setShowParamsSheet(true)
+      }, 100)
+    }
     setResults(null)
     setError(null)
     setIsResultsExpanded(false)
@@ -688,6 +725,12 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       setResults(data)
       setIsResultsExpanded(true) // Expandir automaticamente quando novos resultados são gerados
       
+      // No mobile: avançar para etapa de resultados
+      if (isMobile) {
+        setWizardStep(2)
+        setShowParamsSheet(false)
+      }
+      
       // Track evento de criação de ranking
       trackEvent(EventType.RANKING_CREATED, undefined, {
         model: selectedModel,
@@ -796,6 +839,205 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       maximumFractionDigits: 2
     });
   }
+
+  // Componente de conteúdo dos filtros (reutilizável)
+  const FiltersContent = ({
+    sortBy,
+    setSortBy,
+    filterROE,
+    setFilterROE,
+    filterROIC,
+    setFilterROIC,
+    filterMargemLiquida,
+    setFilterMargemLiquida,
+    filterDY,
+    setFilterDY,
+    translateMetricName
+  }: {
+    sortBy: string
+    setSortBy: (value: string) => void
+    filterROE: number | null
+    setFilterROE: (value: number | null) => void
+    filterROIC: number | null
+    setFilterROIC: (value: number | null) => void
+    filterMargemLiquida: number | null
+    setFilterMargemLiquida: (value: number | null) => void
+    filterDY: number | null
+    setFilterDY: (value: number | null) => void
+    translateMetricName: (key: string) => string
+  }) => (
+    <div className="space-y-4 pt-2">
+      {/* Ordenação */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <ArrowUpDown className="w-4 h-4 text-blue-600" />
+          Ordenar por
+        </Label>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecione..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Padrão (Ranking Original)</SelectItem>
+            <SelectItem value="upside">Maior Upside</SelectItem>
+            <SelectItem value="upside_graham">Maior Upside Graham</SelectItem>
+            <SelectItem value="upside_fcd">Maior Upside FCD</SelectItem>
+            <SelectItem value="upside_gordon">Maior Upside Gordon</SelectItem>
+            <SelectItem value="roe">Maior ROE</SelectItem>
+            <SelectItem value="roic">Maior ROIC</SelectItem>
+            <SelectItem value="margem_liquida">Maior Margem Líquida</SelectItem>
+            <SelectItem value="dy">Maior Dividend Yield</SelectItem>
+            <SelectItem value="price_desc">Maior Preço</SelectItem>
+            <SelectItem value="price_asc">Menor Preço</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Filtros */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
+        {/* Filtro ROE */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">ROE Mínimo (%)</Label>
+            {filterROE !== null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFilterROE(null)}
+                className="h-6 px-2 text-xs"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Slider
+              value={[filterROE ?? 0]}
+              onValueChange={(v) => setFilterROE(v[0] === 0 ? null : v[0])}
+              min={0}
+              max={50}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-sm font-medium min-w-[3rem] text-right">
+              {filterROE ?? 0}%
+            </span>
+          </div>
+        </div>
+
+        {/* Filtro ROIC */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">ROIC Mínimo (%)</Label>
+            {filterROIC !== null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFilterROIC(null)}
+                className="h-6 px-2 text-xs"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Slider
+              value={[filterROIC ?? 0]}
+              onValueChange={(v) => setFilterROIC(v[0] === 0 ? null : v[0])}
+              min={0}
+              max={50}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-sm font-medium min-w-[3rem] text-right">
+              {filterROIC ?? 0}%
+            </span>
+          </div>
+        </div>
+
+        {/* Filtro Margem Líquida */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Margem Líquida Mín. (%)</Label>
+            {filterMargemLiquida !== null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFilterMargemLiquida(null)}
+                className="h-6 px-2 text-xs"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Slider
+              value={[filterMargemLiquida ?? 0]}
+              onValueChange={(v) => setFilterMargemLiquida(v[0] === 0 ? null : v[0])}
+              min={0}
+              max={50}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-sm font-medium min-w-[3rem] text-right">
+              {filterMargemLiquida ?? 0}%
+            </span>
+          </div>
+        </div>
+
+        {/* Filtro DY */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Dividend Yield Mín. (%)</Label>
+            {filterDY !== null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFilterDY(null)}
+                className="h-6 px-2 text-xs"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Slider
+              value={[filterDY ?? 0]}
+              onValueChange={(v) => setFilterDY(v[0] === 0 ? null : v[0])}
+              min={0}
+              max={20}
+              step={0.5}
+              className="flex-1"
+            />
+            <span className="text-sm font-medium min-w-[3rem] text-right">
+              {filterDY ?? 0}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Botão Limpar Filtros */}
+      {(filterROE !== null || filterMargemLiquida !== null || filterROIC !== null || filterDY !== null || sortBy !== "default") && (
+        <div className="flex justify-end pt-2 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSortBy("default");
+              setFilterROE(null);
+              setFilterMargemLiquida(null);
+              setFilterROIC(null);
+              setFilterDY(null);
+            }}
+            className="gap-2"
+          >
+            <X className="w-4 h-4" />
+            Limpar Filtros
+          </Button>
+        </div>
+      )}
+    </div>
+  )
 
   // Função para traduzir nomes de métricas
   const translateMetricName = (key: string) => {
@@ -1000,6 +1242,785 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       </p>
     </div>
   );
+
+  // Conteúdo dos parâmetros (reutilizável para desktop e mobile)
+  // Esta função contém toda a lógica de renderização dos parâmetros
+  // e será usada tanto no desktop quanto no mobile Sheet
+  const ParametersContent = () => {
+    if (!selectedModel) return null;
+    
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        {/* Nota sobre médias históricas */}
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+          <div className="flex items-start space-x-2">
+            <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-green-900 dark:text-green-100 mb-1">
+                📊 Análise com Médias Históricas
+              </p>
+              <p className="text-xs text-green-800 dark:text-green-200">
+                Todas as estratégias utilizam <strong>médias históricas de até 7 anos</strong> dos indicadores financeiros, 
+                proporcionando análises mais estáveis e confiáveis. Se não houver dados suficientes, 
+                usa-se o máximo de anos disponíveis.
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Renderizar parâmetros específicos do modelo selecionado - mesma lógica do desktop */}
+        {/* O conteúdo completo será renderizado aqui usando a mesma lógica condicional do desktop */}
+        {/* Por enquanto, vamos usar um componente que renderiza baseado no modelo */}
+        {selectedModel === "graham" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Filtre empresas por valor de mercado para focar em segmentos específicos
+              </p>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Margem de Segurança Mínima</Label>
+                <Badge variant="outline" className="font-mono">
+                  {formatPercentage((params.marginOfSafety || 0) * 100)}
+                </Badge>
+              </div>
+              <Slider
+                value={[params.marginOfSafety ? params.marginOfSafety * 100 : 20]}
+                onValueChange={(value) => setParams({ ...params, marginOfSafety: value[0] / 100 })}
+                max={50}
+                min={5}
+                step={5}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Conservador (5%)</span>
+                <span>Agressivo (50%)</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Margem mínima entre o preço justo calculado e o preço atual da ação
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Renderizar todos os outros modelos - mesma lógica do desktop */}
+        {selectedModel === "dividendYield" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Dividend Yield Mínimo</Label>
+                <Badge variant="outline" className="font-mono">
+                  {formatPercentage((params.minYield || 0) * 100)}
+                </Badge>
+              </div>
+              <Slider
+                value={[params.minYield ? params.minYield * 100 : 4]}
+                onValueChange={(value) => setParams({ ...params, minYield: value[0] / 100 })}
+                max={12}
+                min={2}
+                step={0.5}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Baixo (2%)</span>
+                <span>Alto (12%)</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedModel === "lowPE" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">P/L Máximo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {params.maxPE || 12}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[params.maxPE || 12]}
+                  onValueChange={(value) => setParams({ ...params, maxPE: value[0] })}
+                  max={20}
+                  min={5}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>5</span>
+                  <span>20</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">ROE Mínimo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.minROE || 0) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[params.minROE ? params.minROE * 100 : 12]}
+                  onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
+                  max={25}
+                  min={5}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>5%</span>
+                  <span>25%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Magic Formula */}
+        {selectedModel === "magicFormula" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Número de Resultados</Label>
+                <Badge variant="outline" className="font-mono">
+                  {params.limit || 10}
+                </Badge>
+              </div>
+              <Slider
+                value={[params.limit || 10]}
+                onValueChange={(value) => setParams({ ...params, limit: value[0] })}
+                max={30}
+                min={5}
+                step={5}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>5</span>
+                <span>30</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Quantidade de empresas a serem ranqueadas pela Fórmula Mágica
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Fluxo de Caixa Descontado (FCD) */}
+        {selectedModel === "fcd" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Taxa de Crescimento</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.growthRate || 0.025) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.growthRate || 0.025) * 100]}
+                  onValueChange={(value) => setParams({ ...params, growthRate: value[0] / 100 })}
+                  max={10}
+                  min={0}
+                  step={0.5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0%</span>
+                  <span>10%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Taxa de Desconto (WACC)</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.discountRate || 0.10) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.discountRate || 0.10) * 100]}
+                  onValueChange={(value) => setParams({ ...params, discountRate: value[0] / 100 })}
+                  max={20}
+                  min={5}
+                  step={0.5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>5%</span>
+                  <span>20%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Anos de Projeção</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {params.yearsProjection || 5}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[params.yearsProjection || 5]}
+                  onValueChange={(value) => setParams({ ...params, yearsProjection: value[0] })}
+                  max={10}
+                  min={3}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>3</span>
+                  <span>10</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Margem de Segurança Mínima</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.minMarginOfSafety || 0.20) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.minMarginOfSafety || 0.20) * 100]}
+                  onValueChange={(value) => setParams({ ...params, minMarginOfSafety: value[0] / 100 })}
+                  max={50}
+                  min={10}
+                  step={5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>10%</span>
+                  <span>50%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fórmula de Gordon */}
+        {selectedModel === "gordon" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Taxa de Desconto</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.discountRate || 0.11) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.discountRate || 0.11) * 100]}
+                  onValueChange={(value) => setParams({ ...params, discountRate: value[0] / 100 })}
+                  max={20}
+                  min={5}
+                  step={0.5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>5%</span>
+                  <span>20%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Taxa de Crescimento dos Dividendos</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.dividendGrowthRate || 0.04) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.dividendGrowthRate || 0.04) * 100]}
+                  onValueChange={(value) => setParams({ ...params, dividendGrowthRate: value[0] / 100 })}
+                  max={10}
+                  min={0}
+                  step={0.5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0%</span>
+                  <span>10%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="useSectoralAdjustment"
+                    checked={params.useSectoralAdjustment !== false}
+                    onChange={(e) => setParams({ ...params, useSectoralAdjustment: e.target.checked })}
+                    className="rounded"
+                  />
+                  <Label htmlFor="useSectoralAdjustment" className="text-sm font-medium cursor-pointer">
+                    Usar Ajuste Setorial Automático
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ajusta automaticamente a taxa de desconto baseado no setor da empresa
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fundamentalista 3+1 */}
+        {selectedModel === "fundamentalist" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">ROE Mínimo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.minROE || 0.15) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.minROE || 0.15) * 100]}
+                  onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
+                  max={30}
+                  min={10}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>10%</span>
+                  <span>30%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">ROIC Mínimo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.minROIC || 0.15) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.minROIC || 0.15) * 100]}
+                  onValueChange={(value) => setParams({ ...params, minROIC: value[0] / 100 })}
+                  max={30}
+                  min={10}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>10%</span>
+                  <span>30%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Dívida/EBITDA Máximo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {params.maxDebtToEbitda || 3.0}x
+                  </Badge>
+                </div>
+                <Slider
+                  value={[params.maxDebtToEbitda || 3.0]}
+                  onValueChange={(value) => setParams({ ...params, maxDebtToEbitda: value[0] })}
+                  max={6}
+                  min={1}
+                  step={0.5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>1x</span>
+                  <span>6x</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Payout Mínimo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.minPayout || 0.40) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.minPayout || 0.40) * 100]}
+                  onValueChange={(value) => setParams({ ...params, minPayout: value[0] / 100 })}
+                  max={80}
+                  min={20}
+                  step={5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>20%</span>
+                  <span>80%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Payout Máximo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.maxPayout || 0.80) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.maxPayout || 0.80) * 100]}
+                  onValueChange={(value) => setParams({ ...params, maxPayout: value[0] / 100 })}
+                  max={100}
+                  min={40}
+                  step={5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>40%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Método Barsi */}
+        {selectedModel === "barsi" && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Dividend Yield Meta</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.targetDividendYield || 0.05) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.targetDividendYield || 0.05) * 100]}
+                  onValueChange={(value) => setParams({ ...params, targetDividendYield: value[0] / 100 })}
+                  max={10}
+                  min={3}
+                  step={0.5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>3%</span>
+                  <span>10%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Multiplicador do Preço Teto</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {params.maxPriceToPayMultiplier || 1.0}x
+                  </Badge>
+                </div>
+                <Slider
+                  value={[params.maxPriceToPayMultiplier || 1.0]}
+                  onValueChange={(value) => setParams({ ...params, maxPriceToPayMultiplier: value[0] })}
+                  max={1.5}
+                  min={0.8}
+                  step={0.1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0.8x</span>
+                  <span>1.5x</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Anos Consecutivos de Dividendos</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {params.minConsecutiveDividends || 3}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[params.minConsecutiveDividends || 3]}
+                  onValueChange={(value) => setParams({ ...params, minConsecutiveDividends: value[0] })}
+                  max={10}
+                  min={1}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>1</span>
+                  <span>10</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Dívida/PL Máximo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.maxDebtToEquity || 1.0) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.maxDebtToEquity || 1.0) * 100]}
+                  onValueChange={(value) => setParams({ ...params, maxDebtToEquity: value[0] / 100 })}
+                  max={200}
+                  min={50}
+                  step={10}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>50%</span>
+                  <span>200%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">ROE Mínimo</Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatPercentage((params.minROE || 0.10) * 100)}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[(params.minROE || 0.10) * 100]}
+                  onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
+                  max={25}
+                  min={5}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>5%</span>
+                  <span>25%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="focusOnBEST"
+                    checked={params.focusOnBEST !== false}
+                    onChange={(e) => setParams({ ...params, focusOnBEST: e.target.checked })}
+                    className="rounded"
+                  />
+                  <Label htmlFor="focusOnBEST" className="text-sm font-medium cursor-pointer">
+                    Focar em Setores B.E.S.T. (Bancos, Energia, Saneamento, Telecomunicações)
+                  </Label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Análise Preditiva com IA */}
+        {selectedModel === "ai" && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+              <div className="flex items-start space-x-2">
+                <Brain className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-purple-900 dark:text-purple-100 mb-1">
+                    🤖 Análise Preditiva com IA
+                  </p>
+                  <p className="text-xs text-purple-800 dark:text-purple-200">
+                    A IA analisa todas as estratégias disponíveis e cria um ranking preditivo combinando múltiplos modelos.
+                    Este processo pode levar alguns minutos.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+          </div>
+        )}
+
+        {/* Screening */}
+        {selectedModel === "screening" && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start space-x-2">
+                <Search className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                    🔍 Screening de Ações
+                  </p>
+                  <p className="text-xs text-blue-800 dark:text-blue-200">
+                    Configure filtros customizáveis por categoria. Para editar os filtros avançados, clique no botão abaixo.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
+              <Select 
+                value={params.companySize || 'all'} 
+                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tamanho das empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
+                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
+                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
+                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TechnicalAnalysisControl />
+            <div className="pt-4 border-t">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  sessionStorage.setItem('screeningParams', JSON.stringify(params));
+                  window.location.href = '/screening-acoes';
+                }}
+              >
+                <Search className="w-4 h-4 mr-2" />
+                Configurar Filtros Avançados
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Função para gerar rational baseado no modelo e parâmetros (similar ao backend)
   const generateRational = (model: string, params: RankingParams): string => {
@@ -1609,6 +2630,9 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
           {/* Filtros e Ordenação */}
           {results.results.length > 0 && (
+            <>
+              {/* Desktop: Card inline */}
+              {!isMobile && (
             <Card className="border-0 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-900/50 dark:to-gray-900/50">
               <CardContent className="p-4 sm:p-6">
                 <div className="space-y-4">
@@ -1643,181 +2667,62 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                   </div>
 
                   {showFilters && (
-                    <div className="space-y-4 pt-2">
-                      {/* Ordenação */}
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium flex items-center gap-2">
-                          <ArrowUpDown className="w-4 h-4 text-blue-600" />
-                          Ordenar por
-                        </Label>
-                        <Select value={sortBy} onValueChange={setSortBy}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="default">Padrão (Ranking Original)</SelectItem>
-                            <SelectItem value="upside">Maior Upside</SelectItem>
-                            <SelectItem value="upside_graham">Maior Upside Graham</SelectItem>
-                            <SelectItem value="upside_fcd">Maior Upside FCD</SelectItem>
-                            <SelectItem value="upside_gordon">Maior Upside Gordon</SelectItem>
-                            <SelectItem value="roe">Maior ROE</SelectItem>
-                            <SelectItem value="roic">Maior ROIC</SelectItem>
-                            <SelectItem value="margem_liquida">Maior Margem Líquida</SelectItem>
-                            <SelectItem value="dy">Maior Dividend Yield</SelectItem>
-                            <SelectItem value="price_desc">Maior Preço</SelectItem>
-                            <SelectItem value="price_asc">Menor Preço</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                        <FiltersContent
+                          sortBy={sortBy}
+                          setSortBy={setSortBy}
+                          filterROE={filterROE}
+                          setFilterROE={setFilterROE}
+                          filterROIC={filterROIC}
+                          setFilterROIC={setFilterROIC}
+                          filterMargemLiquida={filterMargemLiquida}
+                          setFilterMargemLiquida={setFilterMargemLiquida}
+                          filterDY={filterDY}
+                          setFilterDY={setFilterDY}
+                          translateMetricName={translateMetricName}
+                        />
+                      )}
 
-                      {/* Filtros */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
-                        {/* Filtro ROE */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">ROE Mínimo (%)</Label>
-                            {filterROE !== null && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setFilterROE(null)}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
+                      {/* Contador de resultados filtrados */}
+                      <div className="flex items-center justify-between pt-2 border-t text-sm text-muted-foreground">
+                        <span>
+                          Exibindo {filteredAndSortedResults.length} de {results.results.length} empresas
+                            </span>
+                        {filteredAndSortedResults.length < results.results.length && (
+                          <Badge variant="outline" className="text-xs">
+                            {results.results.length - filteredAndSortedResults.length} filtradas
+                          </Badge>
                             )}
                           </div>
-                          <div className="flex items-center gap-3">
-                            <Slider
-                              value={[filterROE ?? 0]}
-                              onValueChange={(v) => setFilterROE(v[0] === 0 ? null : v[0])}
-                              min={0}
-                              max={50}
-                              step={1}
-                              className="flex-1"
-                            />
-                            <span className="text-sm font-medium min-w-[3rem] text-right">
-                              {filterROE ?? 0}%
-                            </span>
                           </div>
-                        </div>
+                  </CardContent>
+                </Card>
+              )}
 
-                        {/* Filtro ROIC */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">ROIC Mínimo (%)</Label>
-                            {filterROIC !== null && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setFilterROIC(null)}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Slider
-                              value={[filterROIC ?? 0]}
-                              onValueChange={(v) => setFilterROIC(v[0] === 0 ? null : v[0])}
-                              min={0}
-                              max={50}
-                              step={1}
-                              className="flex-1"
-                            />
-                            <span className="text-sm font-medium min-w-[3rem] text-right">
-                              {filterROIC ?? 0}%
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Filtro Margem Líquida */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">Margem Líquida Mín. (%)</Label>
-                            {filterMargemLiquida !== null && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setFilterMargemLiquida(null)}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Slider
-                              value={[filterMargemLiquida ?? 0]}
-                              onValueChange={(v) => setFilterMargemLiquida(v[0] === 0 ? null : v[0])}
-                              min={0}
-                              max={50}
-                              step={1}
-                              className="flex-1"
-                            />
-                            <span className="text-sm font-medium min-w-[3rem] text-right">
-                              {filterMargemLiquida ?? 0}%
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Filtro DY */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">Dividend Yield Mín. (%)</Label>
-                            {filterDY !== null && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setFilterDY(null)}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Slider
-                              value={[filterDY ?? 0]}
-                              onValueChange={(v) => setFilterDY(v[0] === 0 ? null : v[0])}
-                              min={0}
-                              max={20}
-                              step={0.5}
-                              className="flex-1"
-                            />
-                            <span className="text-sm font-medium min-w-[3rem] text-right">
-                              {filterDY ?? 0}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Botão Limpar Filtros */}
+              {/* Mobile: Botão flutuante para abrir Sheet */}
+              {isMobile && (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-5 h-5 text-blue-600" />
+                      <h3 className="font-semibold text-lg">Filtros e Ordenação</h3>
                       {(filterROE !== null || filterMargemLiquida !== null || filterROIC !== null || filterDY !== null || sortBy !== "default") && (
-                        <div className="flex justify-end pt-2 border-t">
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                          {[filterROE, filterMargemLiquida, filterROIC, filterDY].filter(f => f !== null).length + (sortBy !== "default" ? 1 : 0)} ativos
+                        </Badge>
+                      )}
+                    </div>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                              setSortBy("default");
-                              setFilterROE(null);
-                              setFilterMargemLiquida(null);
-                              setFilterROIC(null);
-                              setFilterDY(null);
-                            }}
-                            className="gap-2"
-                          >
-                            <X className="w-4 h-4" />
-                            Limpar Filtros
+                      onClick={() => setShowFiltersSheet(true)}
+                    >
+                      <Filter className="w-4 h-4 mr-2" />
+                      Filtros
                           </Button>
                         </div>
-                      )}
-                    </div>
-                  )}
 
                   {/* Contador de resultados filtrados */}
-                  <div className="flex items-center justify-between pt-2 border-t text-sm text-muted-foreground">
+                  <div className="flex items-center justify-between mb-4 text-sm text-muted-foreground">
                     <span>
                       Exibindo {filteredAndSortedResults.length} de {results.results.length} empresas
                     </span>
@@ -1827,9 +2732,39 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </Badge>
                     )}
                   </div>
+
+                  {/* Sheet Mobile para Filtros */}
+                  <Sheet open={showFiltersSheet} onOpenChange={setShowFiltersSheet}>
+                    <SheetContent side="bottom" className="h-[85vh] max-h-[85vh] overflow-y-auto">
+                      <SheetHeader>
+                        <SheetTitle className="flex items-center gap-2">
+                          <Filter className="w-5 h-5" />
+                          Filtros e Ordenação
+                        </SheetTitle>
+                        <SheetDescription>
+                          Ajuste os filtros e ordenação para refinar os resultados
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div className="mt-6">
+                        <FiltersContent
+                          sortBy={sortBy}
+                          setSortBy={setSortBy}
+                          filterROE={filterROE}
+                          setFilterROE={setFilterROE}
+                          filterROIC={filterROIC}
+                          setFilterROIC={setFilterROIC}
+                          filterMargemLiquida={filterMargemLiquida}
+                          setFilterMargemLiquida={setFilterMargemLiquida}
+                          filterDY={filterDY}
+                          setFilterDY={setFilterDY}
+                          translateMetricName={translateMetricName}
+                        />
                 </div>
-              </CardContent>
-            </Card>
+                    </SheetContent>
+                  </Sheet>
+                </>
+              )}
+            </>
           )}
 
           {filteredAndSortedResults.length > 0 ? (
@@ -1837,7 +2772,14 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
               {filteredAndSortedResults.map((result, index) => (
                 <Card 
                   key={result.ticker} 
-                  className="border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80"
+                  className={`border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-white to-gray-50 dark:from-background dark:to-background/80 ${
+                    isMobile ? 'cursor-pointer' : ''
+                  }`}
+                  onClick={() => {
+                    if (isMobile) {
+                      setSelectedCardForSheet(result)
+                    }
+                  }}
                 >
                   <CardContent className="p-3 sm:p-6">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
@@ -1976,7 +2918,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex flex-wrap gap-2 pt-3 border-t">
+                      <div className="flex flex-wrap gap-2 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
                         <Button asChild variant="default" size="sm" className="flex-1">
                           <Link href={`/acao/${result.ticker}`} prefetch={false}>
                             <Building2 className="w-4 h-4 mr-2" />
@@ -2236,1129 +3178,69 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
             {/* Parameters Section - só mostrar quando não estiver visualizando cache */}
             {selectedModel && !isViewingCached && (
+              <>
+                {/* Desktop: mostrar inline */}
+                {!isMobile && (
               <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-xl border">
                 <div className="flex items-center gap-2">
                   <Target className="w-5 h-5 text-blue-600" />
                   <h4 className="font-semibold text-lg">Configure os parâmetros</h4>
                 </div>
-                
-                {/* Nota sobre médias históricas */}
-                <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                  <div className="flex items-start space-x-2">
-                    <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-green-900 dark:text-green-100 mb-1">
-                        📊 Análise com Médias Históricas
-                      </p>
-                      <p className="text-xs text-green-800 dark:text-green-200">
-                        Todas as estratégias utilizam <strong>médias históricas de até 7 anos</strong> dos indicadores financeiros, 
-                        proporcionando análises mais estáveis e confiáveis. Se não houver dados suficientes, 
-                        usa-se o máximo de anos disponíveis.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                {selectedModel === "graham" && (
-                  <div className="space-y-4">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
-
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Margem de Segurança Mínima</Label>
-                        <Badge variant="outline" className="font-mono">
-                          {formatPercentage((params.marginOfSafety || 0) * 100)}
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[params.marginOfSafety ? params.marginOfSafety * 100 : 20]}
-                        onValueChange={(value) => setParams({ ...params, marginOfSafety: value[0] / 100 })}
-                        max={50}
-                        min={5}
-                        step={5}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Conservador (5%)</span>
-                        <span>Agressivo (50%)</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Margem mínima entre o preço justo calculado e o preço atual da ação
-                      </p>
-                    </div>
+                    <ParametersContent />
                   </div>
                 )}
 
-                {selectedModel === "dividendYield" && (
-                  <div className="space-y-4">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
+                {/* Mobile: Sheet para parâmetros */}
+                {isMobile && (
+                  <Sheet open={showParamsSheet} onOpenChange={setShowParamsSheet}>
+                    <SheetContent side="bottom" className="h-[90vh] max-h-[90vh] overflow-hidden flex flex-col p-0">
+                      <SheetHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
+                        <SheetTitle className="flex items-center gap-2">
+                          <Target className="w-5 h-5 text-blue-600" />
+                          Configure os parâmetros
+                        </SheetTitle>
+                        <SheetDescription>
+                          Ajuste os parâmetros da estratégia {selectedModel}
+                        </SheetDescription>
+                      </SheetHeader>
 
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Dividend Yield Mínimo</Label>
-                        <Badge variant="outline" className="font-mono">
-                          {formatPercentage((params.minYield || 0) * 100)}
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[params.minYield ? params.minYield * 100 : 4]}
-                        onValueChange={(value) => setParams({ ...params, minYield: value[0] / 100 })}
-                        max={12}
-                        min={2}
-                        step={0.5}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Baixo (2%)</span>
-                        <span>Alto (12%)</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Rendimento mínimo esperado em dividendos com filtros anti-armadilha
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedModel === "lowPE" && (
-                  <div className="space-y-4">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
-
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">P/L Máximo</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {params.maxPE || 12}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.maxPE || 12]}
-                          onValueChange={(value) => setParams({ ...params, maxPE: value[0] })}
-                          max={20}
-                          min={5}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>5</span>
-                          <span>20</span>
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">ROE Mínimo</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.minROE || 0) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.minROE ? params.minROE * 100 : 12]}
-                          onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
-                          max={25}
-                          min={5}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>5%</span>
-                          <span>25%</span>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Combine múltiplos baixos com qualidade comprovada através do ROE
-                    </p>
-                  </div>
-                )}
-
-                {selectedModel === "magicFormula" && (
-                  <div className="space-y-4">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
-
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Número de Resultados</Label>
-                        <Badge variant="outline" className="font-mono">
-                          {params.limit || 10} empresas
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[params.limit || 10]}
-                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
-                        max={20}
-                        min={5}
-                        step={1}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Top 5</span>
-                        <span>Top 20</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Estratégia de Joel Greenblatt: combina earnings yield alto com ROIC elevado
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedModel === "fcd" && (
-                  <div className="space-y-6">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
-
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    {/* Primeira linha - Taxa de Crescimento e Taxa de Desconto */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Taxa de Crescimento Perpétuo</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.growthRate || 0.025) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.growthRate ? params.growthRate * 100 : 2.5]}
-                          onValueChange={(value) => setParams({ ...params, growthRate: value[0] / 100 })}
-                          max={5}
-                          min={1}
-                          step={0.1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>1.0%</span>
-                          <span>5.0%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Taxa de crescimento esperada para sempre após período de projeção
-                        </p>
+                      <div className="flex-1 overflow-y-auto px-4 py-4">
+                        {/* Usar o mesmo conteúdo do desktop */}
+                        <ParametersContent />
                       </div>
 
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Taxa de Desconto (WACC)</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.discountRate || 0.10) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.discountRate ? params.discountRate * 100 : 10]}
-                          onValueChange={(value) => setParams({ ...params, discountRate: value[0] / 100 })}
-                          max={18}
-                          min={6}
-                          step={0.5}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>6.0%</span>
-                          <span>18.0%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Custo médio ponderado de capital para descontar fluxos futuros
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Segunda linha - Anos de Projeção e Margem de Segurança */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Anos de Projeção</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {params.yearsProjection || 5} anos
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.yearsProjection || 5]}
-                          onValueChange={(value) => setParams({ ...params, yearsProjection: value[0] })}
-                          max={10}
-                          min={3}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>3 anos</span>
-                          <span>10 anos</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Período de projeção explícita dos fluxos de caixa
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Margem de Segurança Mínima</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.minMarginOfSafety || 0.20) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.minMarginOfSafety ? params.minMarginOfSafety * 100 : 20]}
-                          onValueChange={(value) => setParams({ ...params, minMarginOfSafety: value[0] / 100 })}
-                          max={50}
-                          min={5}
-                          step={5}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>5%</span>
-                          <span>50%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Desconto mínimo exigido entre preço justo calculado e preço atual
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Terceira linha - Número de Resultados */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Número de Resultados</Label>
-                        <Badge variant="outline" className="font-mono">
-                          {params.limit || 10} empresas
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[params.limit || 10]}
-                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
-                        max={20}
-                        min={5}
-                        step={1}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Top 5</span>
-                        <span>Top 20</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Método sofisticado de DCF: projeta fluxos de caixa e calcula valor intrínseco
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedModel === "gordon" && (
-                  <div className="space-y-6">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
-
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    {/* Primeira linha - Taxa de Desconto e Taxa de Crescimento */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Taxa de Desconto</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.discountRate || 0.12) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.discountRate ? params.discountRate * 100 : 12]}
-                          onValueChange={(value) => setParams({ ...params, discountRate: value[0] / 100 })}
-                          max={20}
-                          min={8}
-                          step={0.5}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>8.0%</span>
-                          <span>20.0%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Retorno esperado pelo investidor (taxa de desconto)
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Taxa de Crescimento dos Dividendos</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.dividendGrowthRate || 0.05) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.dividendGrowthRate ? params.dividendGrowthRate * 100 : 5]}
-                          onValueChange={(value) => setParams({ ...params, dividendGrowthRate: value[0] / 100 })}
-                          max={10}
-                          min={0}
-                          step={0.5}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>0.0%</span>
-                          <span>10.0%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Crescimento esperado dos dividendos ao longo do tempo
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Segunda linha - Controles de Ajuste Setorial */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Ajuste Setorial Automático</Label>
-                          <Badge variant={params.useSectoralAdjustment !== false ? "default" : "outline"} className="text-xs">
-                            {params.useSectoralAdjustment !== false ? "Ativado" : "Desativado"}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="sectoralAdjustment"
-                            checked={params.useSectoralAdjustment !== false}
-                            onChange={(e) => setParams({ ...params, useSectoralAdjustment: e.target.checked })}
-                            className="rounded border-gray-300"
-                          />
-                          <label htmlFor="sectoralAdjustment" className="text-sm text-muted-foreground">
-                            Calibrar WACC e crescimento por setor
-                          </label>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Ajusta automaticamente os parâmetros baseado no setor da empresa (Utilities: WACC menor, Tech: WACC maior)
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Ajuste Manual WACC</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {params.sectoralWaccAdjustment ? 
-                              `${params.sectoralWaccAdjustment > 0 ? '+' : ''}${formatPercentage(params.sectoralWaccAdjustment * 100)}` : 
-                              '0.0%'
-                            }
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.sectoralWaccAdjustment ? params.sectoralWaccAdjustment * 100 : 0]}
-                          onValueChange={(value) => setParams({ ...params, sectoralWaccAdjustment: value[0] / 100 })}
-                          max={5}
-                          min={-2}
-                          step={0.5}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>-2.0%</span>
-                          <span>+5.0%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Ajuste adicional manual sobre o WACC setorial (positivo = mais conservador)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Terceira linha - Número de Resultados */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Número de Resultados</Label>
-                        <Badge variant="outline" className="font-mono">
-                          {params.limit || 10} empresas
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[params.limit || 10]}
-                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
-                        max={20}
-                        min={5}
-                        step={1}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Top 5</span>
-                        <span>Top 20</span>
-                      </div>
-                        <p className="text-xs text-muted-foreground">
-                          Fórmula de Gordon calibrada: avalia empresas com parâmetros ajustados por setor baseado em dados de mercado
-                        </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Configuração Fundamentalista 3+1 */}
-        {selectedModel === "fundamentalist" && (
-          <div className="space-y-6">
-            {/* Filtro de Tamanho */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-              <Select 
-                value={params.companySize || 'all'} 
-                onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione o tamanho das empresas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                  <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                  <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                  <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Filtre empresas por valor de mercado para focar em segmentos específicos
-              </p>
-            </div>
-
-            {/* Análise Técnica */}
-            <TechnicalAnalysisControl />
-
-            {/* Primeira linha - ROE e ROIC */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">ROE Mínimo (empresas sem dívida)</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.minROE || 0.15) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.minROE ? params.minROE * 100 : 15]}
-                          onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
-                          max={25}
-                          min={5}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>5%</span>
-                          <span>25%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Retorno sobre patrimônio líquido mínimo para empresas sem dívida relevante
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">ROIC Mínimo (empresas com dívida)</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.minROIC || 0.15) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.minROIC ? params.minROIC * 100 : 15]}
-                          onValueChange={(value) => setParams({ ...params, minROIC: value[0] / 100 })}
-                          max={25}
-                          min={5}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>5%</span>
-                          <span>25%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Retorno sobre capital investido mínimo para empresas com dívida relevante
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Segunda linha - Endividamento e Payout */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Dívida Líquida/EBITDA Máximo</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {(params.maxDebtToEbitda || 3.0).toFixed(1)}x
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.maxDebtToEbitda ? params.maxDebtToEbitda * 10 : 30]}
-                          onValueChange={(value) => setParams({ ...params, maxDebtToEbitda: value[0] / 10 })}
-                          max={50}
-                          min={10}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>1.0x</span>
-                          <span>5.0x</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Nível máximo de endividamento aceitável (anos para pagar dívida com EBITDA)
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Payout Mínimo (Dividendos)</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.minPayout || 0.40) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.minPayout ? params.minPayout * 100 : 40]}
-                          onValueChange={(value) => setParams({ ...params, minPayout: value[0] / 100 })}
-                          max={80}
-                          min={20}
-                          step={5}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>20%</span>
-                          <span>80%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Percentual mínimo do lucro distribuído como dividendos (análise bônus)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Terceira linha - Número de Resultados */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Número de Resultados</Label>
-                        <Badge variant="outline" className="font-mono">
-                          {params.limit || 10} empresas
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[params.limit || 10]}
-                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
-                        max={20}
-                        min={5}
-                        step={1}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Top 5</span>
-                        <span>Top 20</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Estratégia 3+1: análise simplificada com indicadores essenciais adaptados ao perfil da empresa
-                      </p>
-                    </div>
-
-                    {/* Explicação da Metodologia */}
-                    <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/20 dark:to-green-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-start space-x-3">
-                        <BarChart3 className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <div className="space-y-2">
-                          <h4 className="font-medium text-blue-900 dark:text-blue-100">
-                            📊 Metodologia Fundamentalista 3+1
-                          </h4>
-                          <p className="text-sm text-blue-800 dark:text-blue-200">
-                            Esta estratégia <strong>adapta automaticamente</strong> a análise baseada no perfil da empresa:
-                          </p>
-                          <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                            <p>• <strong>Sem dívida</strong>: ROE + P/L vs Crescimento + Endividamento</p>
-                            <p>• <strong>Com dívida</strong>: ROIC + EV/EBITDA + Endividamento</p>
-                            <p>• <strong>Bancos/Seguradoras</strong>: ROE + P/L (endividamento não aplicável)</p>
-                            <p>• <strong>Bônus</strong>: Análise de dividendos (Payout + DY)</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Configuração AI */}
-                {selectedModel === "ai" && (
-                  <div className="space-y-6">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
-
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    {/* Primeira linha - Tolerância ao Risco e Horizonte */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-3">
-                        <Label className="text-sm font-medium">Tolerância ao Risco</Label>
-                        <select 
-                          value={params.riskTolerance || "Moderado"}
-                          onChange={(e) => setParams({ ...params, riskTolerance: e.target.value })}
-                          className="w-full p-2 border rounded-md bg-background"
+                      {/* Botão Gerar fixo no bottom */}
+                      <div className="border-t p-4 flex-shrink-0 bg-background">
+                        <Button 
+                          onClick={() => {
+                            handleGenerateRanking()
+                            setShowParamsSheet(false)
+                          }}
+                          disabled={!selectedModel || loading}
+                          size="lg"
+                          className="w-full bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
                         >
-                          <option value="Conservador">Conservador</option>
-                          <option value="Moderado">Moderado</option>
-                          <option value="Agressivo">Agressivo</option>
-                        </select>
-                        <p className="text-xs text-muted-foreground">
-                          Define o nível de risco aceitável para os investimentos
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <Label className="text-sm font-medium">Horizonte de Investimento</Label>
-                        <select 
-                          value={params.timeHorizon || "Longo Prazo"}
-                          onChange={(e) => setParams({ ...params, timeHorizon: e.target.value })}
-                          className="w-full p-2 border rounded-md bg-background"
-                        >
-                          <option value="Curto Prazo">Curto Prazo (1-2 anos)</option>
-                          <option value="Médio Prazo">Médio Prazo (3-5 anos)</option>
-                          <option value="Longo Prazo">Longo Prazo (5+ anos)</option>
-                        </select>
-                        <p className="text-xs text-muted-foreground">
-                          Período esperado para manter o investimento
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Segunda linha - Foco da Análise */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Foco da Análise</Label>
-                      <select 
-                        value={params.focus || "Crescimento e Valor"}
-                        onChange={(e) => setParams({ ...params, focus: e.target.value })}
-                        className="w-full p-2 border rounded-md bg-background"
-                      >
-                        <option value="Valor">Valor (Value Investing)</option>
-                        <option value="Crescimento">Crescimento (Growth)</option>
-                        <option value="Dividendos">Dividendos (Income)</option>
-                        <option value="Crescimento e Valor">Crescimento e Valor (GARP)</option>
-                      </select>
-                      <p className="text-xs text-muted-foreground">
-                        Estratégia de investimento preferida para a análise
-                      </p>
-                    </div>
-
-                    {/* Terceira linha - Número de Resultados */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Número de Resultados</Label>
-                        <Badge variant="outline" className="font-mono">
-                          {params.limit || 10} empresas
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[params.limit || 10]}
-                        onValueChange={(value) => setParams({ ...params, limit: value[0] })}
-                        max={20}
-                        min={5}
-                        step={1}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Top 5</span>
-                        <span>Top 20</span>
-                      </div>
-                    </div>
-
-                    {/* Disclaimer da IA */}
-                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-start space-x-3">
-                        <Sparkles className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <div className="space-y-2">
-                          <h4 className="font-medium text-blue-900 dark:text-blue-100">
-                            🤖 Análise com Inteligência Artificial
-                          </h4>
-                          <p className="text-sm text-blue-800 dark:text-blue-200">
-                            Esta estratégia utiliza IA (Gemini) para analisar <strong>TODAS as 6 estratégias disponíveis</strong> 
-                             e criar uma síntese preditiva inteligente. Os resultados podem variar ligeiramente entre execuções 
-                            devido à natureza adaptativa do modelo de IA.
-                          </p>
-                          <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                            <p>• Analisa: Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD e Gordon</p>
-                            <p>• Considera: Consistência entre estratégias, contexto macroeconômico</p>
-                            <p>• Gera: Score preditivo, análise de riscos e oportunidades</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Configuração Barsi */}
-                {selectedModel === "barsi" && (
-                  <div className="space-y-6">
-                    {/* Filtro de Tamanho */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filtro por Tamanho de Empresa</Label>
-                      <Select 
-                        value={params.companySize || 'all'} 
-                        onValueChange={(value) => setParams({ ...params, companySize: value as 'all' | 'small_caps' | 'mid_caps' | 'blue_chips' })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o tamanho das empresas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">🏢 Todas as Empresas</SelectItem>
-                          <SelectItem value="small_caps">🔹 Small Caps (&lt; R$ 2 bi)</SelectItem>
-                          <SelectItem value="mid_caps">🔸 Empresas Médias (R$ 2-10 bi)</SelectItem>
-                          <SelectItem value="blue_chips">🔷 Large Caps (&gt; R$ 10 bi)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Filtre empresas por valor de mercado para focar em segmentos específicos
-                      </p>
-                    </div>
-
-                    {/* Análise Técnica */}
-                    <TechnicalAnalysisControl />
-
-                    {/* Primeira linha - Meta de DY e Multiplicador */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Meta de Dividend Yield</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.targetDividendYield || 0.06) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.targetDividendYield ? params.targetDividendYield * 100 : 6]}
-                          onValueChange={(value) => setParams({ ...params, targetDividendYield: value[0] / 100 })}
-                          max={12}
-                          min={3}
-                          step={0.5}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>3%</span>
-                          <span>12%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Meta de dividend yield para calcular o preço teto (conceito central do Barsi)
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Multiplicador do Preço Teto</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {(params.maxPriceToPayMultiplier || 1.0).toFixed(1)}x
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.maxPriceToPayMultiplier ? params.maxPriceToPayMultiplier * 10 : 10]}
-                          onValueChange={(value) => setParams({ ...params, maxPriceToPayMultiplier: value[0] / 10 })}
-                          max={15}
-                          min={8}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>0.8x</span>
-                          <span>1.5x</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Ajuste fino do preço teto (1.0x = exato, &lt;1.0x = mais conservador)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Segunda linha - Critérios de Qualidade */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Anos Consecutivos Dividendos</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {params.minConsecutiveDividends || 5} anos
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.minConsecutiveDividends || 5]}
-                          onValueChange={(value) => setParams({ ...params, minConsecutiveDividends: value[0] })}
-                          max={10}
-                          min={3}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>3 anos</span>
-                          <span>10 anos</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Histórico mínimo de pagamento consistente de dividendos
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Dívida/PL Máxima</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.maxDebtToEquity || 1.0) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.maxDebtToEquity ? params.maxDebtToEquity * 100 : 100]}
-                          onValueChange={(value) => setParams({ ...params, maxDebtToEquity: value[0] / 100 })}
-                          max={200}
-                          min={50}
-                          step={10}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>50%</span>
-                          <span>200%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Nível máximo de endividamento aceitável (baixo endividamento é essencial)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Terceira linha - ROE e Setores B.E.S.T. */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">ROE Mínimo</Label>
-                          <Badge variant="outline" className="font-mono">
-                            {formatPercentage((params.minROE || 0.10) * 100)}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[params.minROE ? params.minROE * 100 : 10]}
-                          onValueChange={(value) => setParams({ ...params, minROE: value[0] / 100 })}
-                          max={20}
-                          min={5}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>5%</span>
-                          <span>20%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Rentabilidade mínima sobre patrimônio líquido (lucro consistente)
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Focar Setores B.E.S.T.</Label>
-                          <Badge variant={params.focusOnBEST !== false ? "default" : "outline"} className="text-xs">
-                            {params.focusOnBEST !== false ? "Ativado" : "Desativado"}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="focusOnBEST"
-                            checked={params.focusOnBEST !== false}
-                            onChange={(e) => setParams({ ...params, focusOnBEST: e.target.checked })}
-                            className="rounded border-gray-300 w-4 h-4"
-                          />
-                          <label htmlFor="focusOnBEST" className="text-sm text-muted-foreground cursor-pointer">
-                            Apenas setores &quot;perenes&quot; (Bancos, Energia, Saneamento, Seguros, Telecom)
-                          </label>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Setores essenciais que as pessoas sempre precisarão (filosofia Barsi)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Explicação da Metodologia */}
-                    <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                      <div className="flex items-start space-x-3">
-                        <DollarSign className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                        <div className="space-y-2">
-                          <h4 className="font-medium text-green-900 dark:text-green-100">
-                            💰 Os 5 Passos do Método Barsi
-                          </h4>
-                          <div className="text-xs text-green-700 dark:text-green-300 space-y-1">
-                            <p><strong>1. Setores Perenes:</strong> B.E.S.T. (Bancos, Energia, Saneamento, Seguros, Telecom)</p>
-                            <p><strong>2. Qualidade:</strong> ROE alto, baixo endividamento, dividendos consistentes</p>
-                            <p><strong>3. Preço Teto:</strong> Dividendo ÷ DY Meta = Preço máximo a pagar</p>
-                            <p><strong>4. Disciplina:</strong> Aporte mensal, aproveitar crises</p>
-                            <p><strong>5. Reinvestimento:</strong> 100% dos dividendos em mais ações (bola de neve)</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Configuração Screening */}
-                {selectedModel === "screening" && (
-                  <div className="space-y-6">
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-start space-x-3">
-                        <Search className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1 text-sm">
-                            🎯 Screening Customizável
-                          </h4>
-                          <p className="text-xs text-blue-800 dark:text-blue-200">
-                            Configure filtros personalizados por categoria. Apenas empresas que atendem <strong>TODOS</strong> os 
-                            critérios selecionados serão exibidas. Deixe filtros desativados para não aplicar restrições.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Importar e usar o ScreeningConfigurator */}
-                    <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg border-2 border-dashed border-blue-300 dark:border-blue-700">
-                      <Search className="w-12 h-12 mx-auto mb-3 text-blue-600" />
-                      <h4 className="font-semibold text-lg mb-2">Screening Avançado Disponível!</h4>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Para uma experiência completa de screening com todos os filtros organizados por categoria, 
-                        acesse nossa página dedicada.
-                      </p>
-                      <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                        <Link href="/screening-acoes" className="flex items-center gap-2">
-                          <Search className="w-5 h-5" />
-                          Ir para Screening Completo
-                          <ArrowRight className="w-4 h-4" />
-                        </Link>
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                              Analisando empresas...
+                            </>
+                          ) : (
+                            <>
+                              <TrendingUp className="w-5 h-5 mr-2" />
+                              Gerar Ranking Inteligente
+                            </>
+                          )}
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-3">
-                        💡 Dica: A página de screening oferece interface otimizada com 17 filtros customizáveis
-                      </p>
                     </div>
-                  </div>
+                    </SheetContent>
+                  </Sheet>
                 )}
-              </div>
+              </>
             )}
 
-            {/* Generate Button - só mostrar quando não estiver visualizando cache E não for screening */}
-            {!isViewingCached && selectedModel !== "screening" && (
+            {/* Generate Button Desktop - só mostrar quando não estiver visualizando cache E não for screening */}
+            {!isViewingCached && selectedModel !== "screening" && !isMobile && (
               <div className="flex justify-center">
                 <Button 
                   onClick={handleGenerateRanking} 
@@ -3522,6 +3404,105 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
           rankingResults={results.results}
           onConfigSelected={handleBatchBacktestConfigSelected}
         />
+      )}
+
+      {/* Sheet Mobile para Detalhes do Card */}
+      {isMobile && selectedCardForSheet && (
+        <Sheet open={!!selectedCardForSheet} onOpenChange={(open) => !open && setSelectedCardForSheet(null)}>
+          <SheetContent side="bottom" className="h-[90vh] max-h-[90vh] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-3">
+                <CompanyLogo
+                  logoUrl={selectedCardForSheet.logoUrl}
+                  companyName={selectedCardForSheet.name}
+                  ticker={selectedCardForSheet.ticker}
+                  size={40}
+                />
+                <div>
+                  <div className="text-xl font-bold">{selectedCardForSheet.ticker}</div>
+                  <div className="text-sm text-muted-foreground font-normal">{selectedCardForSheet.name}</div>
+                </div>
+              </SheetTitle>
+              <SheetDescription>
+                {selectedCardForSheet.sector && (
+                  <Badge variant="outline" className="mt-2">{selectedCardForSheet.sector}</Badge>
+                )}
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="mt-6 space-y-6">
+              {/* Preço e Upside */}
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Preço Atual</p>
+                  <p className="text-2xl font-bold">{formatCurrency(selectedCardForSheet.currentPrice)}</p>
+                </div>
+                {(() => {
+                  let mainUpside = selectedCardForSheet.upside;
+                  if (results?.model === 'barsi' && selectedCardForSheet.key_metrics?.discountFromCeiling !== null && selectedCardForSheet.key_metrics?.discountFromCeiling !== undefined) {
+                    mainUpside = selectedCardForSheet.key_metrics.discountFromCeiling;
+                  }
+                  return typeof mainUpside === 'number' ? (
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground mb-1">Upside</p>
+                      <p className={`text-2xl font-bold ${mainUpside >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {mainUpside >= 0 ? '+' : ''}{formatPercentage(mainUpside)}
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+
+              {/* Key Metrics */}
+              {selectedCardForSheet.key_metrics && (
+                <div>
+                  <h4 className="font-semibold mb-3">Indicadores Principais</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {Object.entries(selectedCardForSheet.key_metrics)
+                      .filter(([, value]) => value !== null && value !== undefined)
+                      .map(([key, value]) => (
+                        <div key={key} className="p-3 bg-muted rounded-lg">
+                          <p className="text-xs text-muted-foreground mb-1">{translateMetricName(key)}</p>
+                          <p className="font-semibold">{formatMetricValue(key, value as number)}</p>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Análise Individual */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Target className="w-4 h-4 text-blue-600" />
+                  <h4 className="font-semibold">Análise Individual</h4>
+                </div>
+                <MarkdownRenderer content={selectedCardForSheet.rational} className="text-sm leading-relaxed" />
+              </div>
+
+              {/* Ações */}
+              <div className="flex flex-col gap-2 pt-4 border-t">
+                <Button asChild variant="default" size="lg" className="w-full">
+                  <Link href={`/acao/${selectedCardForSheet.ticker}`} prefetch={false}>
+                    <Building2 className="w-4 h-4 mr-2" />
+                    Ver Análise Completa
+                  </Link>
+                </Button>
+                <AddToBacktestButton
+                  asset={{
+                    ticker: selectedCardForSheet.ticker,
+                    companyName: selectedCardForSheet.name,
+                    sector: selectedCardForSheet.sector || undefined,
+                    currentPrice: selectedCardForSheet.currentPrice
+                  }}
+                  variant="outline"
+                  size="lg"
+                  showLabel={true}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
       )}
     </div>
     </>

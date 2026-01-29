@@ -28,6 +28,7 @@ import {
 import Link from "next/link"
 import Head from "next/head"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 
 // FAQs para SEO
 const faqs = [
@@ -181,6 +182,7 @@ function RankingContent() {
   const { data: session } = useSession()
   const { isPremium } = usePremiumStatus()
   const { trackEngagement } = useEngagementPixel()
+  const isMobile = useIsMobile()
   const searchParams = useSearchParams()
   const rankingId = searchParams.get('id')
   const assetTypeParam = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
@@ -270,22 +272,24 @@ function RankingContent() {
         <meta name="robots" content="index, follow" />
       </Head>
       
-      {/* Hero Section - Compacto para Premium */}
+      {/* Hero Section - Ultra compacto no mobile */}
       <section className={`bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 ${
-        isPremium ? 'py-3 md:py-6 lg:py-8' : 'py-4 md:py-12 lg:py-20'
+        isMobile ? 'py-3' : isPremium ? 'py-3 md:py-6 lg:py-8' : 'py-4 md:py-12 lg:py-20'
       }`}>
         <div className="container mx-auto max-w-7xl">
-          {/* Breadcrumb */}
-          <div className="mb-2 md:mb-6">
-            <Link href={isLoggedIn ? "/dashboard" : "/"} className="text-blue-100 hover:text-white text-xs md:text-sm">
-              {isLoggedIn ? "Dashboard" : "Início"}
-            </Link>
-            <span className="text-blue-200 mx-2">/</span>
-            <span className="text-white text-xs md:text-sm font-medium">Rankings de Ações</span>
-          </div>
+          {/* Breadcrumb - Oculto no mobile */}
+          {!isMobile && (
+            <div className="mb-2 md:mb-6">
+              <Link href={isLoggedIn ? "/dashboard" : "/"} className="text-blue-100 hover:text-white text-xs md:text-sm">
+                {isLoggedIn ? "Dashboard" : "Início"}
+              </Link>
+              <span className="text-blue-200 mx-2">/</span>
+              <span className="text-white text-xs md:text-sm font-medium">Rankings de Ações</span>
+            </div>
+          )}
 
           <div className="text-center">
-            {!isPremium && (
+            {!isPremium && !isMobile && (
               <div className="hidden md:flex items-center justify-center mb-4 md:mb-6">
                 <div className="p-4 bg-white/10 backdrop-blur-sm rounded-2xl">
                   <BarChart3 className="w-12 h-12 md:w-16 md:h-16" />
@@ -294,12 +298,12 @@ function RankingContent() {
             )}
             
             <h1 className={`font-bold ${
-              isPremium ? 'text-xl md:text-2xl lg:text-3xl mb-1 md:mb-2' : 'text-xl md:text-3xl lg:text-5xl mb-2 md:mb-4'
+              isMobile ? 'text-lg mb-1' : isPremium ? 'text-xl md:text-2xl lg:text-3xl mb-1 md:mb-2' : 'text-xl md:text-3xl lg:text-5xl mb-2 md:mb-4'
             }`}>
               Rankings de Ações B3
             </h1>
             
-            {!isPremium && (
+            {!isPremium && !isMobile && (
               <>
                 <p className="hidden md:block text-lg md:text-xl text-blue-100 mb-3 max-w-3xl mx-auto">
                   Encontre as melhores oportunidades de investimento com 8 modelos de análise fundamentalista
@@ -311,8 +315,8 @@ function RankingContent() {
               </>
             )}
 
-            {/* CTA para usuários anônimos */}
-            {!isLoggedIn && (
+            {/* CTA para usuários anônimos - Simplificado no mobile */}
+            {!isLoggedIn && !isMobile && (
               <div className="mt-4 md:mt-6 mb-4 md:mb-6">
                 <Button
                   onClick={scrollToRankingGenerator}
@@ -326,56 +330,67 @@ function RankingContent() {
               </div>
             )}
 
-            <div className={`flex flex-wrap justify-center gap-2 md:gap-3 ${isPremium ? 'mt-2 md:mt-3' : 'mt-2 md:mt-0'}`}>
-              <Badge variant="secondary" className="px-2 py-1 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white text-xs md:text-sm">
-                <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                {isLoggedIn ? 'Histórico Salvo' : 'Modelo Gratuito'}
+            {/* Badges - Compactos no mobile */}
+            <div className={`flex flex-wrap justify-center gap-1.5 md:gap-3 ${isMobile ? 'mt-1' : isPremium ? 'mt-2 md:mt-3' : 'mt-2 md:mt-0'}`}>
+              <Badge variant="secondary" className={`px-1.5 py-0.5 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white ${isMobile ? 'text-xs' : 'text-xs md:text-sm'}`}>
+                <CheckCircle2 className={`${isMobile ? 'w-2.5 h-2.5 mr-0.5' : 'w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2'}`} />
+                {isMobile ? (isLoggedIn ? 'Salvo' : 'Grátis') : (isLoggedIn ? 'Histórico Salvo' : 'Modelo Gratuito')}
               </Badge>
               {isPremium && (
-                <Badge variant="secondary" className="px-2 py-1 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white text-xs md:text-sm">
-                  <Crown className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                  <span className="hidden sm:inline">8 Modelos Premium</span>
-                  <span className="sm:hidden">8 Premium</span>
+                <Badge variant="secondary" className={`px-1.5 py-0.5 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white ${isMobile ? 'text-xs' : 'text-xs md:text-sm'}`}>
+                  <Crown className={`${isMobile ? 'w-2.5 h-2.5 mr-0.5' : 'w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2'}`} />
+                  {isMobile ? 'Premium' : <><span className="hidden sm:inline">8 Modelos Premium</span><span className="sm:hidden">8 Premium</span></>}
                 </Badge>
               )}
-              <Badge variant="secondary" className="px-2 py-1 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white text-xs md:text-sm">
-                <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                <span className="hidden sm:inline">Análise com IA</span>
-                <span className="sm:hidden">IA</span>
-              </Badge>
+              {!isMobile && (
+                <Badge variant="secondary" className="px-2 py-1 md:px-4 md:py-2 bg-white/20 backdrop-blur-sm border-white/30 text-white text-xs md:text-sm">
+                  <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                  <span className="hidden sm:inline">Análise com IA</span>
+                  <span className="sm:hidden">IA</span>
+                </Badge>
+              )}
             </div>
           </div>
         </div>
       </section>
 
       {/* Main Content */}
-      <div className="container mx-auto max-w-7xl px-4 py-8">
-        {/* Botão Novo Ranking - Destaque */}
+      <div className={`container mx-auto max-w-7xl px-4 ${isMobile ? 'py-4' : 'py-8'}`}>
+        {/* Botão Novo Ranking - Compacto no mobile, completo no desktop */}
         {isLoggedIn && (
-          <div className="mb-8">
+          <div className={isMobile ? "mb-4" : "mb-8"}>
             <Card className="border-0 bg-gradient-to-r from-green-50 via-blue-50 to-purple-50 dark:from-green-950/20 dark:via-blue-950/20 dark:to-purple-950/20 shadow-lg">
-              <CardContent className="p-6">
+              <CardContent className={isMobile ? "p-4" : "p-6"}>
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
-                      <Sparkles className="w-6 h-6 text-white" />
+                  {!isMobile && (
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+                        <Sparkles className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                          Criar Novo Ranking
+                        </h3>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Analise empresas com 8 modelos fundamentalistas
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                        Criar Novo Ranking
+                  )}
+                  {isMobile && (
+                    <div className="w-full text-center mb-2">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
+                        Clique no Botão Abaixo para Criar Novo Ranking
                       </h3>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Analise empresas com 8 modelos fundamentalistas
-                      </p>
                     </div>
-                  </div>
+                  )}
                   <Button
                     onClick={scrollToQuickRanker}
-                    size="lg"
-                    className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-lg w-full sm:w-auto"
+                    size={isMobile ? "default" : "lg"}
+                    className={`bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-lg ${isMobile ? 'w-full' : 'w-full sm:w-auto'}`}
                   >
-                    <TrendingUp className="w-5 h-5 mr-2" />
-                    Novo Ranking
+                    <TrendingUp className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} mr-2`} />
+                    Criar Novo Ranking
                   </Button>
                 </div>
               </CardContent>
@@ -383,8 +398,8 @@ function RankingContent() {
           </div>
         )}
 
-        {/* CTA Cards */}
-        {!isLoggedIn && (
+        {/* CTA Cards - Ocultos no mobile */}
+        {!isLoggedIn && !isMobile && (
           <div className="mb-8">
             <Card className="border-2 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20">
               <CardContent className="p-6">
@@ -412,7 +427,7 @@ function RankingContent() {
           </div>
         )}
 
-        {isLoggedIn && !isPremium && (
+        {isLoggedIn && !isPremium && !isMobile && (
           <div className="mb-8">
             <Card className="border-2 bg-gradient-to-r from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20 border-violet-200">
               <CardContent className="p-6">
@@ -440,15 +455,15 @@ function RankingContent() {
           </div>
         )}
 
-        {/* Histórico para Usuários Logados */}
+        {/* Histórico para Usuários Logados - Colapsado no mobile */}
         {isLoggedIn && showHistory && (
-          <div className="mb-8">
+          <div className={isMobile ? "mb-4" : "mb-8"}>
             <RankingHistorySection refreshTrigger={historyRefreshTrigger} />
           </div>
         )}
 
-        {/* Gerador de Ranking */}
-        <div id="ranking-generator" className="mb-12">
+        {/* Gerador de Ranking - Prioridade no mobile */}
+        <div id="ranking-generator" className={isMobile ? "mb-6" : "mb-12"}>
           <QuickRanker 
             ref={quickRankerRef} 
             rankingId={rankingId} 
@@ -457,8 +472,8 @@ function RankingContent() {
           />
         </div>
 
-        {/* Modelos Disponíveis - Oculto para Premium */}
-        {!isPremium && (
+        {/* Modelos Disponíveis - Oculto para Premium e Mobile */}
+        {!isPremium && !isMobile && (
         <div className="mb-12">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
@@ -534,8 +549,8 @@ function RankingContent() {
         </div>
         )}
 
-        {/* Como Funciona - Oculto para Premium */}
-        {!isPremium && (
+        {/* Como Funciona - Oculto para Premium e Mobile */}
+        {!isPremium && !isMobile && (
         <div className="mb-12">
           <Card className="border-2">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950/30">
@@ -582,8 +597,8 @@ function RankingContent() {
         )}
 
 
-        {/* FAQs - Oculto para Premium */}
-        {!isPremium && (
+        {/* FAQs - Oculto para Premium e Mobile */}
+        {!isPremium && !isMobile && (
         <div className="mb-12">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">

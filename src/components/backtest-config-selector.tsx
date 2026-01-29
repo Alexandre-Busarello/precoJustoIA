@@ -8,10 +8,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { 
   Plus, 
   Settings, 
@@ -78,6 +80,7 @@ export function BacktestConfigSelector({
 }: BacktestConfigSelectorProps) {
   const { data: session } = useSession();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [configs, setConfigs] = useState<BacktestConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -256,30 +259,8 @@ export function BacktestConfigSelector({
     }).format(value);
   };
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full h-full sm:w-[95vw] sm:h-auto sm:max-h-[90vh] overflow-hidden p-4 sm:p-6 sm:rounded-lg rounded-none">
-        <DialogHeader className="pb-4 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl flex-1 min-w-0">
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-              <span className="truncate">Adicionar {asset.ticker} ao Backtest</span>
-            </DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="sm:hidden flex-shrink-0 ml-2"
-            >
-              ✕
-            </Button>
-          </div>
-          <DialogDescription className="text-sm sm:text-base">
-            Escolha uma configuração existente ou crie uma nova para adicionar {asset.companyName || asset.ticker}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-col h-full min-h-0">
+  const content = (
+    <div className="flex flex-col h-full min-h-0">
           {/* Botões de ação */}
           <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <Button
@@ -530,6 +511,44 @@ export function BacktestConfigSelector({
             )}
           </div>
         </div>
+  );
+
+  // Mobile: usar Sheet bottom
+  if (isMobile) {
+    return (
+      <Sheet open={isOpen} onOpenChange={onClose}>
+        <SheetContent side="bottom" className="h-[90vh] max-h-[90vh] overflow-hidden p-0">
+          <SheetHeader className="px-4 pt-4 pb-2">
+            <SheetTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Adicionar {asset.ticker} ao Backtest
+            </SheetTitle>
+            <SheetDescription>
+              Escolha uma configuração existente ou crie uma nova para adicionar {asset.companyName || asset.ticker}
+            </SheetDescription>
+          </SheetHeader>
+          {content}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Desktop: usar Dialog
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl w-full h-full sm:w-[95vw] sm:h-auto sm:max-h-[90vh] overflow-hidden p-4 sm:p-6 sm:rounded-lg rounded-none">
+        <DialogHeader className="pb-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl flex-1 min-w-0">
+              <Settings className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+              <span className="truncate">Adicionar {asset.ticker} ao Backtest</span>
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-sm sm:text-base">
+            Escolha uma configuração existente ou crie uma nova para adicionar {asset.companyName || asset.ticker}
+          </DialogDescription>
+        </DialogHeader>
+        {content}
       </DialogContent>
     </Dialog>
   );

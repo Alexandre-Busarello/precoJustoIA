@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 import { EnhancedStockComparisonSelector } from '@/components/enhanced-stock-comparison-selector'
 import { SEOSectionWrapper } from '@/components/seo-section-wrapper'
-import { ComparadorHero } from '@/components/comparador-hero'
+import { Breadcrumbs } from '@/components/landing/breadcrumbs'
 import { Footer } from '@/components/footer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -201,11 +201,22 @@ const faqs = [
 export default function ComparadorPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
-      {/* Hero Section - Compacto para Premium */}
-      <ComparadorHero />
+      {/* Breadcrumb simples */}
+      <div className="container mx-auto max-w-7xl px-4 pt-6">
+        <Breadcrumbs items={[
+          { label: "Ferramentas", href: "/ranking" },
+          { label: "Comparador de Ações" }
+        ]} />
+      </div>
+
+      {/* Título simples */}
+      <div className="container mx-auto max-w-7xl px-4 pt-4 pb-8">
+        <h1 className="text-3xl font-bold mb-2">Comparador de Ações B3</h1>
+        <p className="text-muted-foreground">Compare até 6 ações lado a lado com análise fundamentalista completa</p>
+      </div>
 
       {/* Main Content */}
-      <div className="container mx-auto max-w-7xl px-4 py-12">
+      <div className="container mx-auto max-w-7xl px-4 pb-12">
         {/* Comparator Tool */}
         <div className="mb-16">
           <EnhancedStockComparisonSelector />

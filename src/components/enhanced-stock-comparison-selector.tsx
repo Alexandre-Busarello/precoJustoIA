@@ -172,7 +172,7 @@ export function EnhancedStockComparisonSelector({ initialTickers = [] }: Enhance
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <span>Selecione as Ações para Comparar</span>
+            <span>Selecione Abaixo as Ações para Comparar</span>
           </div>
           <Badge variant={canCompare ? "default" : "secondary"}>
             {selectedCompanies.length}/6

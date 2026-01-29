@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useIsMobile } from '@/hooks/use-is-mobile'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -87,6 +88,7 @@ const modelOptions = [
 ]
 
 export function RankingHistorySection({ onLoadRanking, refreshTrigger }: RankingHistorySectionProps) {
+  const isMobile = useIsMobile()
   const [history, setHistory] = useState<RankingHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -246,12 +248,12 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
       <CardHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle className="flex items-center gap-2 flex-wrap">
-              <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              <span>Histórico de Rankings</span>
+            <CardTitle className={`flex items-center gap-2 flex-wrap ${isMobile ? 'text-base' : ''}`}>
+              <Clock className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-blue-600 dark:text-blue-400`} />
+              <span>{isMobile ? 'Histórico' : 'Histórico de Rankings'}</span>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="secondary" className="text-xs">{totalCount}</Badge>
-                {totalCount > MAX_ITEMS && (
+                {totalCount > MAX_ITEMS && !isMobile && (
                   <Badge variant="outline" className="text-xs">
                     {MAX_ITEMS}+ resultados
                   </Badge>
@@ -383,14 +385,14 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
                 return (
                   <div
                     key={item.id}
-                    className="group relative flex flex-col sm:flex-row sm:items-center gap-3 p-3 border rounded-lg hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all cursor-pointer bg-white dark:bg-slate-900"
+                    className={`group relative flex flex-col sm:flex-row sm:items-center gap-3 ${isMobile ? 'p-2' : 'p-3'} border rounded-lg hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all cursor-pointer bg-white dark:bg-slate-900`}
                     onClick={() => handleLoadRanking(item.id)}
                   >
                     {/* Container do ícone e título - horizontal no mobile */}
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {/* Ícone do Modelo */}
-                      <div className={`w-12 h-12 sm:w-12 sm:h-12 bg-gradient-to-br ${colorGradient} rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
-                        <Icon className="w-6 h-6 text-white" />
+                      <div className={`${isMobile ? 'w-10 h-10' : 'w-12 h-12'} bg-gradient-to-br ${colorGradient} rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
+                        <Icon className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'} text-white`} />
                       </div>
 
                       {/* Informações */}
@@ -489,7 +491,6 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
                     <div className="flex items-center gap-1">
                       {Array.from({ length: displayTotalPages }, (_, i) => i + 1).map(page => {
                         // No mobile, mostrar apenas página atual e adjacentes
-                        const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
                         const showInMobile = !isMobile || Math.abs(page - currentPage) <= 1 || page === 1 || page === displayTotalPages
                         
                         if (!showInMobile) {

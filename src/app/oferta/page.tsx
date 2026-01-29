@@ -160,7 +160,7 @@ export default function OfertaPage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-6xl mx-auto">
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center mb-4 sm:mb-6">
-              O Radar Inteligente que Você Viu no Vídeo:
+              O Radar Inteligente que Você Viu:
             </h2>
             <p className="text-center text-muted-foreground mb-8 sm:mb-12 text-lg max-w-3xl mx-auto">
               Escolha o ativo que quer monitorar, salve o radar e a IA faz o resto. Tudo em uma única tela.

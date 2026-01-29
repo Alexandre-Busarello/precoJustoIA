@@ -52,7 +52,7 @@ export default async function BacktestPage() {
   const session = await getServerSession(authOptions)
   const isLoggedIn = !!session
 
-  // Se usuário está logado, mostrar apenas Hero + ferramenta
+  // Se usuário está logado, mostrar apenas funcionalidade
   if (isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
@@ -64,22 +64,10 @@ export default async function BacktestPage() {
           ]} />
         </div>
 
-        {/* Hero Section Compacto para usuários logados */}
-        <div className="relative overflow-hidden w-full bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-blue-950/20 dark:via-background dark:to-violet-950/20 pt-4 pb-8">
-          <div className="relative text-center max-w-4xl mx-auto px-4">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight mb-3 leading-tight">
-              Backtest de{" "}
-              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                Carteira de Ações
-              </span>
-            </h1>
-            <p className="text-sm sm:text-base text-muted-foreground mb-6 max-w-2xl mx-auto">
-              Teste suas <strong>estratégias de investimento</strong> antes de aplicar com dados históricos reais da B3.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <BacktestCTALink />
-            </div>
-          </div>
+        {/* Título simples */}
+        <div className="container mx-auto px-4 pt-4 pb-8">
+          <h1 className="text-3xl font-bold mb-2">Backtest de Carteira de Ações</h1>
+          <p className="text-muted-foreground">Teste suas estratégias de investimento antes de aplicar com dados históricos reais da B3</p>
         </div>
 
         {/* Ferramenta */}

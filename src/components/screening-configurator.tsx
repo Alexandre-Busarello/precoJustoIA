@@ -4,6 +4,9 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 import { 
   Search, 
   X, 
@@ -69,10 +72,31 @@ export function ScreeningConfigurator({
   isPremium = false,
   isLoggedIn = false
 }: ScreeningConfiguratorProps) {
+  const isMobile = useIsMobile()
+  const [showConfigSheet, setShowConfigSheet] = useState(false)
   
   const setParams = (newParams: ScreeningParams) => {
     onParamsChange(newParams);
   };
+  
+  // Contar filtros ativos
+  const countActiveFilters = () => {
+    let count = 0
+    const filters = [
+      params.plFilter, params.pvpFilter, params.evEbitdaFilter, params.psrFilter,
+      params.roeFilter, params.roicFilter, params.roaFilter, params.margemLiquidaFilter, params.margemEbitdaFilter,
+      params.cagrLucros5aFilter, params.cagrReceitas5aFilter,
+      params.dyFilter, params.payoutFilter,
+      params.dividaLiquidaPlFilter, params.liquidezCorrenteFilter, params.dividaLiquidaEbitdaFilter,
+      params.marketCapFilter, params.overallScoreFilter, params.grahamUpsideFilter
+    ]
+    filters.forEach(filter => {
+      if (filter?.enabled) count++
+    })
+    if (params.selectedSectors && params.selectedSectors.length > 0) count++
+    if (params.selectedIndustries && params.selectedIndustries.length > 0) count++
+    return count
+  }
 
   // Verificar se o usuário pode usar filtros premium
   const canUsePremiumFilters = isLoggedIn && isPremium;
@@ -200,7 +224,8 @@ export function ScreeningConfigurator({
     );
   };
 
-  return (
+  // Conteúdo do configurador (reutilizável)
+  const ConfiguratorContent = () => (
     <div className="space-y-6">
       {/* Filtro de Tamanho */}
       <div className="space-y-3">
@@ -1541,5 +1566,52 @@ export function ScreeningConfigurator({
       </div>
       {/* </PremiumCategoryLock> */}
     </div>
-  );
+  )
+
+  // Mobile: Botão para abrir Sheet
+  if (isMobile) {
+    return (
+      <>
+        <Button
+          onClick={() => setShowConfigSheet(true)}
+          variant="outline"
+          size="lg"
+          className="w-full"
+        >
+          <Search className="w-4 h-4 mr-2" />
+          Configurar Filtros
+          {countActiveFilters() > 0 && (
+            <Badge variant="secondary" className="ml-2">
+              {countActiveFilters()} ativos
+            </Badge>
+          )}
+        </Button>
+
+        <Sheet open={showConfigSheet} onOpenChange={setShowConfigSheet}>
+          <SheetContent side="bottom" className="h-[90vh] max-h-[90vh] overflow-hidden flex flex-col p-0">
+            <SheetHeader className="px-4 pt-4 pb-2 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                <Search className="w-5 h-5" />
+                Configurar Filtros
+              </SheetTitle>
+              <SheetDescription>
+                {countActiveFilters() > 0 && (
+                  <Badge variant="secondary" className="mt-2">
+                    {countActiveFilters()} filtros ativos
+                  </Badge>
+                )}
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <ConfiguratorContent />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </>
+    )
+  }
+
+  // Desktop: layout tradicional
+  return <ConfiguratorContent />
 }

@@ -15,6 +15,7 @@ import { DividendRadarService } from './dividend-radar-service'
 import { getLatestPrices } from './quote-service'
 import { getRadarStatusColor, getTechnicalEntryStatus, getSentimentStatus, getValuationStatus } from './radar-service'
 import { calculateUpside } from './index-strategy-integration'
+import { getUserMemory } from './ben-memory-service'
 
 /**
  * Obtém métricas completas de uma empresa
@@ -332,6 +333,201 @@ export async function webSearch(query: string) {
     success: true,
     message: 'Busca na web será realizada pelo Gemini',
     query
+  }
+}
+
+/**
+ * Consulta empresas de interesse do usuário com fallback inteligente
+ * PRIORIDADE 1: Busca empresas no radar de oportunidades (com todos os dados disponíveis)
+ * PRIORIDADE 2: Se não houver radar, busca empresas de interesse na memória
+ * Retorna lista de empresas com dados consolidados completos
+ */
+export async function getUserRadarWithFallback(userId: string) {
+  try {
+    // PRIORIDADE 1: Buscar radar de oportunidades primeiro
+    const radarResult = await getUserRadar(userId)
+    
+    // Se o radar tem empresas, retornar com flag indicando origem
+    if (radarResult.success && radarResult.data && radarResult.data.count > 0) {
+      return {
+        success: true,
+        source: 'radar',
+        data: {
+          ...radarResult.data,
+          message: 'Empresas do seu radar de oportunidades'
+        }
+      }
+    }
+
+    // PRIORIDADE 2: Se não houver radar, buscar empresas de interesse na memória
+    console.log('[Ben] Radar vazio, buscando empresas de interesse na memória...')
+    const memories = await getUserMemory(userId)
+    
+    // Filtrar apenas memórias de empresas (COMPANIES ou COMPANY_INTEREST)
+    const companyMemories = memories.filter(m => 
+      m.category === 'COMPANIES' || m.category === 'COMPANY_INTEREST'
+    )
+
+    if (companyMemories.length === 0) {
+      return {
+        success: true,
+        source: 'none',
+        data: {
+          tickers: [],
+          count: 0,
+          data: [],
+          message: 'Você não possui empresas no radar nem empresas de interesse registradas na memória'
+        }
+      }
+    }
+
+    // Extrair tickers únicos das memórias
+    const tickerSet = new Set<string>()
+    companyMemories.forEach(memory => {
+      const metadata = memory.metadata as any
+      if (metadata?.ticker) {
+        tickerSet.add(metadata.ticker.toUpperCase())
+      }
+      // Também verificar se o próprio key é um ticker (formato: 4 letras + 1 dígito)
+      if (memory.key) {
+        const normalizedKey = memory.key.toUpperCase()
+        if (/^[A-Z]{4}\d$/.test(normalizedKey)) {
+          tickerSet.add(normalizedKey)
+        }
+      }
+    })
+
+    const tickers = Array.from(tickerSet)
+    
+    if (tickers.length === 0) {
+      return {
+        success: true,
+        source: 'memory',
+        data: {
+          tickers: [],
+          count: 0,
+          data: [],
+          message: 'Encontradas empresas de interesse na memória, mas não foi possível extrair tickers válidos'
+        }
+      }
+    }
+
+    console.log(`[Ben] Encontradas ${tickers.length} empresas de interesse na memória: ${tickers.join(', ')}`)
+
+    // Buscar dados completos para cada empresa (mesmo processo do radar)
+    const isPremium = true
+    const isLoggedIn = true
+    const updatedPrices = await getLatestPrices(tickers)
+
+    const dataPromises = tickers.map(async (ticker: string) => {
+      try {
+        const analysisResult = await calculateCompanyOverallScore(ticker, {
+          isPremium,
+          isLoggedIn,
+          includeStatements: isPremium,
+          includeStrategies: true
+        })
+
+        if (!analysisResult) {
+          return null
+        }
+
+        const { ticker: companyTicker, companyName, sector, currentPrice: analysisPrice, logoUrl, overallScore, strategies } = analysisResult
+        
+        const updatedPrice = updatedPrices.get(ticker.toUpperCase())
+        const currentPrice = updatedPrice?.price ?? analysisPrice
+
+        const technicalAnalysis = await getOrCalculateTechnicalAnalysis(ticker, false, false)
+
+        const company = await prisma.company.findUnique({
+          where: { ticker: ticker.toUpperCase() },
+          select: { id: true }
+        })
+
+        let youtubeScore: number | null = null
+        if (company) {
+          const youtubeAnalysis = await (prisma as any).youTubeAnalysis.findFirst({
+            where: {
+              companyId: company.id,
+              isActive: true
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { score: true }
+          })
+
+          if (youtubeAnalysis) {
+            youtubeScore = Number(youtubeAnalysis.score)
+          }
+        }
+
+        const upsides: number[] = []
+        if (strategies?.graham?.upside !== null && strategies?.graham?.upside !== undefined) {
+          upsides.push(strategies.graham.upside)
+        }
+        if (strategies?.fcd?.upside !== null && strategies?.fcd?.upside !== undefined) {
+          upsides.push(strategies.fcd.upside)
+        }
+        if (strategies?.gordon?.upside !== null && strategies?.gordon?.upside !== undefined) {
+          upsides.push(strategies.gordon.upside)
+        }
+        const bestUpside = upsides.length > 0 ? Math.max(...upsides) : null
+
+        const technicalStatus = getTechnicalEntryStatus(technicalAnalysis, currentPrice, overallScore?.score)
+        const sentimentStatus = getSentimentStatus(youtubeScore)
+        const valuationStatus = getValuationStatus(bestUpside)
+        const overallStatus = overallScore 
+          ? getRadarStatusColor(overallScore.score)
+          : 'gray'
+
+        return {
+          ticker: companyTicker,
+          companyName,
+          sector,
+          currentPrice,
+          logoUrl,
+          score: overallScore?.score || null,
+          technicalStatus,
+          sentimentStatus,
+          valuationStatus,
+          overallStatus,
+          technicalAnalysis: technicalAnalysis ? {
+            rsi: technicalAnalysis.rsi,
+            sma20: technicalAnalysis.sma20,
+            sma50: technicalAnalysis.sma50,
+            sma200: technicalAnalysis.sma200,
+            supportLevels: technicalAnalysis.supportLevels,
+            resistanceLevels: technicalAnalysis.resistanceLevels,
+            aiFairEntryPrice: technicalAnalysis.aiFairEntryPrice,
+            aiAnalysis: technicalAnalysis.aiAnalysis
+          } : null,
+          youtubeScore,
+          bestUpside
+        }
+      } catch (error) {
+        console.error(`[Ben] Erro ao buscar dados da memória para ${ticker}:`, error)
+        return null
+      }
+    })
+
+    const memoryData = (await Promise.all(dataPromises)).filter(item => item !== null)
+
+    return {
+      success: true,
+      source: 'memory',
+      data: {
+        tickers,
+        count: memoryData.length,
+        data: memoryData,
+        message: 'Empresas de interesse encontradas na memória'
+      }
+    }
+  } catch (error) {
+    console.error('[Ben] Erro ao buscar radar com fallback:', error)
+    return {
+      success: false,
+      source: 'error',
+      error: `Erro ao buscar empresas de interesse: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+    }
   }
 }
 
@@ -1435,7 +1631,16 @@ export const benToolsSchema = [
   },
   {
     name: 'getUserRadar',
-    description: 'Consulta o radar de investimentos do usuário atual. Retorna lista de tickers monitorados com dados consolidados (score, preço, análise técnica, sentimento). Use quando o usuário perguntar sobre seu radar ou ações que está monitorando.',
+    description: 'Consulta o radar de investimentos do usuário atual. Retorna lista de tickers monitorados com dados consolidados (score, preço, análise técnica, sentimento). Use quando o usuário perguntar especificamente sobre seu radar de oportunidades configurado.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'getUserRadarWithFallback',
+    description: 'Consulta as empresas de interesse do usuário com fallback inteligente. PRIMEIRO busca empresas no radar de oportunidades (com todos os dados disponíveis). SE não houver nada no radar, busca empresas de interesse na memória. Retorna lista completa de empresas com dados consolidados (score, preço, análise técnica, sentimento, upside). Use SEMPRE quando o usuário perguntar sobre "quais empresas estão em seu radar", "empresas de interesse", "empresas que você acompanha", "empresas no seu radar" ou qualquer variação similar. Esta ferramenta garante que o usuário sempre receba informações sobre suas empresas de interesse, seja do radar ou da memória.',
     parameters: {
       type: 'object',
       properties: {},

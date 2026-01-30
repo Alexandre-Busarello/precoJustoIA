@@ -8,7 +8,7 @@ import { GoogleGenAI, Type, FunctionCallingConfigMode } from '@google/genai'
 // @ts-ignore - Prisma Client ainda não foi regenerado após migração
 import { prisma } from './prisma'
 import { buildMemoryContext } from './ben-memory-service'
-import { getCompanyMetrics, getMarketSentiment, getIbovData, getUserRadar, getTechnicalAnalysis, getFairValue, getDividendProjections, getPlatformFeatures, benToolsSchema } from './ben-tools'
+import { getCompanyMetrics, getMarketSentiment, getIbovData, getUserRadar, getUserRadarWithFallback, getTechnicalAnalysis, getFairValue, getDividendProjections, getPlatformFeatures, benToolsSchema } from './ben-tools'
 import type { PageContext } from './ben-page-context'
 
 /**
@@ -243,6 +243,9 @@ function createFunctionMap(userId: string): Record<string, (...args: any[]) => P
     },
     getUserRadar: async () => {
       return await getUserRadar(userId)
+    },
+    getUserRadarWithFallback: async () => {
+      return await getUserRadarWithFallback(userId)
     },
     getTechnicalAnalysis: async (args: { ticker: string }) => {
       return await getTechnicalAnalysis(args.ticker)

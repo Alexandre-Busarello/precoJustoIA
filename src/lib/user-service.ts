@@ -180,6 +180,7 @@ export async function isUserPremium(identifier: string, skipCache: boolean = fal
     }
 
     if (!user) {
+      console.log(`[isUserPremium] Usuário não encontrado: ${identifier}`)
       return false
     }
 
@@ -193,11 +194,27 @@ export async function isUserPremium(identifier: string, skipCache: boolean = fal
                      new Date(user.trialEndsAt) > new Date(user.trialStartedAt) &&
                      new Date(user.trialEndsAt) > now
     
+    const isPremium = hasValidPremium || hasTrial
+    
+    // Log detalhado para debug
+    console.log(`[isUserPremium] User ${identifier}:`, {
+      subscriptionTier: user.subscriptionTier,
+      premiumExpiresAt: user.premiumExpiresAt,
+      trialStartedAt: user.trialStartedAt,
+      trialEndsAt: user.trialEndsAt,
+      now: now.toISOString(),
+      hasValidPremium,
+      hasTrial,
+      isPremium,
+      skipCache
+    })
+    
     // Durante a fase Alfa, todos os usuários têm acesso Premium
     // Trial também dá acesso Premium
-    return hasValidPremium || hasTrial
+    return isPremium
   } catch (error) {
-    console.error('Erro ao verificar status Premium:', error)
+    console.error('[isUserPremium] Erro ao verificar status Premium:', error)
+    console.error('[isUserPremium] Stack trace:', error instanceof Error ? error.stack : 'N/A')
     return false
   }
 }

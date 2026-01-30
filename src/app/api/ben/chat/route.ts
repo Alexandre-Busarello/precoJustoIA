@@ -40,7 +40,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar limite de mensagens antes de processar
+    console.log(`[Ben Chat API] Verificando limite para user ${user.id} (email: ${user.email}, isPremium: ${user.isPremium})`)
     const limitCheck = await checkBenMessageLimit(user.id)
+    console.log(`[Ben Chat API] Resultado da verificação:`, {
+      allowed: limitCheck.allowed,
+      remaining: limitCheck.remaining,
+      limit: limitCheck.limit,
+      currentUsage: limitCheck.currentUsage
+    })
     if (!limitCheck.allowed) {
       // Salvar mensagem do usuário primeiro
       // @ts-ignore - Prisma Client ainda não foi regenerado após migração

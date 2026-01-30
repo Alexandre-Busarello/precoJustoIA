@@ -21,11 +21,15 @@ export interface BenMessageLimitResult {
  */
 export async function checkBenMessageLimit(userId: string): Promise<BenMessageLimitResult> {
   try {
-    // Verificar se usuário é premium
-    const isPremium = await isUserPremium(userId)
+    // Verificar se usuário é premium (pular cache para garantir dados atualizados)
+    const isPremium = await isUserPremium(userId, true) // skipCache = true
+    
+    // Log para debug em produção
+    console.log(`[Ben Message Limit] User ${userId} - Premium: ${isPremium}`)
     
     // Premium: sem limite
     if (isPremium) {
+      console.log(`[Ben Message Limit] User ${userId} é premium - acesso ilimitado`)
       return {
         allowed: true,
         remaining: -1, // -1 indica ilimitado
@@ -65,6 +69,8 @@ export async function checkBenMessageLimit(userId: string): Promise<BenMessageLi
     const remaining = Math.max(0, limit - currentUsage)
     const allowed = currentUsage < limit
 
+    console.log(`[Ben Message Limit] User ${userId} - Usage: ${currentUsage}/${limit}, Allowed: ${allowed}, Remaining: ${remaining}`)
+
     return {
       allowed,
       remaining,
@@ -73,6 +79,7 @@ export async function checkBenMessageLimit(userId: string): Promise<BenMessageLi
     }
   } catch (error) {
     console.error('[Ben Message Limit] Erro ao verificar limite:', error)
+    console.error('[Ben Message Limit] Stack trace:', error instanceof Error ? error.stack : 'N/A')
     // Em caso de erro, permitir (fail open)
     return {
       allowed: true,

@@ -8,7 +8,7 @@ import { GoogleGenAI, Type, FunctionCallingConfigMode } from '@google/genai'
 // @ts-ignore - Prisma Client ainda não foi regenerado após migração
 import { prisma } from './prisma'
 import { buildMemoryContext } from './ben-memory-service'
-import { getCompanyMetrics, getMarketSentiment, getIbovData, getUserRadar, getUserRadarWithFallback, getTechnicalAnalysis, getFairValue, getDividendProjections, getPlatformFeatures, benToolsSchema } from './ben-tools'
+import { getCompanyMetrics, getMarketSentiment, getIbovData, getUserRadar, getUserRadarWithFallback, getTechnicalAnalysis, getFairValue, getDividendProjections, getPlatformFeatures, getUserPortfolios, listCompanyAIReports, getCompanyAIReportContent, getCompanyFlags, benToolsSchema } from './ben-tools'
 import type { PageContext } from './ben-page-context'
 
 /**
@@ -199,11 +199,20 @@ function buildFunctionDeclarations(): any[] {
           'array': Type.ARRAY
         }
         
-        const propTyped = prop as { type: string; description?: string }
-        properties[key] = {
+        const propTyped = prop as { type: string; description?: string; items?: { type: string } }
+        const propertyDef: any = {
           type: typeMap[propTyped.type] || Type.STRING,
           description: propTyped.description || ''
         }
+        
+        // Se for array, adicionar items
+        if (propTyped.type === 'array' && propTyped.items) {
+          propertyDef.items = {
+            type: typeMap[propTyped.items.type] || Type.STRING
+          }
+        }
+        
+        properties[key] = propertyDef
       }
     }
 
@@ -258,6 +267,18 @@ function createFunctionMap(userId: string): Record<string, (...args: any[]) => P
     },
     getPlatformFeatures: async (args: { query?: string; category?: string }) => {
       return await getPlatformFeatures(args.query, args.category)
+    },
+    getUserPortfolios: async () => {
+      return await getUserPortfolios(userId)
+    },
+    listCompanyAIReports: async (args: { ticker: string; reportType?: string; limit?: number }) => {
+      return await listCompanyAIReports(args.ticker, args.reportType, args.limit)
+    },
+    getCompanyAIReportContent: async (args: { ticker: string; reportType?: string; reportIds?: string[] }) => {
+      return await getCompanyAIReportContent(args.ticker, args.reportType, args.reportIds)
+    },
+    getCompanyFlags: async (args?: { flagType?: string; limit?: number; orderBy?: 'recent' | 'oldest' | 'company'; includeInactive?: boolean }) => {
+      return await getCompanyFlags(args as { flagType?: string; limit?: number; orderBy?: 'recent' | 'oldest' | 'company'; includeInactive?: boolean } | undefined)
     }
   }
 }

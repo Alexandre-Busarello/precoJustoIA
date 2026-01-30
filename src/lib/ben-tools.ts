@@ -16,6 +16,7 @@ import { getLatestPrices } from './quote-service'
 import { getRadarStatusColor, getTechnicalEntryStatus, getSentimentStatus, getValuationStatus } from './radar-service'
 import { calculateUpside } from './index-strategy-integration'
 import { getUserMemory } from './ben-memory-service'
+import { PortfolioMetricsService } from './portfolio-metrics-service'
 
 /**
  * Obtém métricas completas de uma empresa
@@ -970,6 +971,672 @@ O modelo ${bestStrategy.model} indica um valor justo de R$ ${bestStrategy.fairVa
 }
 
 /**
+ * Consulta todas as carteiras do usuário com métricas completas
+ * Retorna informações detalhadas sobre cada carteira incluindo:
+ * - Informações básicas (nome, descrição, data de início)
+ * - Métricas de performance (retorno total, retorno anualizado, volatilidade, Sharpe ratio, max drawdown)
+ * - Holdings (ativos e suas posições com retornos individuais)
+ * - Alocação por setor e indústria
+ * - Evolução temporal mensal
+ * - Comparação com benchmark (quando disponível)
+ */
+export async function getUserPortfolios(userId: string) {
+  try {
+    // Buscar todas as carteiras ativas do usuário
+    const portfolios = await prisma.portfolioConfig.findMany({
+      where: {
+        userId,
+        isActive: true
+      },
+      include: {
+        assets: {
+          where: { isActive: true },
+          select: {
+            ticker: true,
+            targetAllocation: true
+          }
+        },
+        metrics: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+
+    if (portfolios.length === 0) {
+      return {
+        success: true,
+        data: {
+          portfolios: [],
+          count: 0,
+          message: 'Usuário não possui carteiras cadastradas'
+        }
+      }
+    }
+
+    // Buscar métricas completas para cada carteira
+    const portfoliosWithMetrics = await Promise.all(
+      portfolios.map(async (portfolio) => {
+        try {
+          // Verificar se as métricas estão atualizadas (últimas 5 minutos)
+          const metrics = portfolio.metrics
+          const needsRefresh = !metrics || 
+            !metrics.lastCalculatedAt || 
+            (Date.now() - new Date(metrics.lastCalculatedAt).getTime() > 5 * 60 * 1000)
+
+          if (needsRefresh) {
+            console.log(`[Ben] Atualizando métricas da carteira ${portfolio.id}...`)
+            await PortfolioMetricsService.updateMetrics(portfolio.id, userId)
+          }
+
+          // Buscar métricas atualizadas
+          const updatedMetrics = await PortfolioMetricsService.getMetrics(portfolio.id, userId)
+
+          // Extrair holdings do JSON
+          const holdings = (updatedMetrics.assetHoldings as any[]) || []
+          const monthlyReturns = (updatedMetrics.monthlyReturns as any[]) || []
+          const evolutionData = (updatedMetrics.evolutionData as any[]) || []
+          const sectorAllocation = (updatedMetrics.sectorAllocation as any[]) || []
+          const industryAllocation = (updatedMetrics.industryAllocation as any[]) || []
+
+          // Calcular estatísticas resumidas
+          const totalHoldings = holdings.length
+          const totalPositions = holdings.reduce((sum, h) => sum + (h.quantity || 0), 0)
+          const topHoldings = holdings
+            .sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0))
+            .slice(0, 5)
+            .map(h => ({
+              ticker: h.ticker,
+              quantity: h.quantity || 0,
+              currentValue: h.currentValue || 0,
+              returnPercentage: h.returnPercentage || 0,
+              allocation: h.actualAllocation || 0
+            }))
+
+          // Calcular top setores
+          const topSectors = sectorAllocation
+            .sort((a, b) => (b.percentage || 0) - (a.percentage || 0))
+            .slice(0, 5)
+            .map(s => ({
+              sector: s.sector,
+              value: s.value || 0,
+              percentage: s.percentage || 0
+            }))
+
+          // Calcular estatísticas de retorno mensal
+          const positiveMonths = monthlyReturns.filter((r: any) => (r.return || 0) > 0).length
+          const negativeMonths = monthlyReturns.filter((r: any) => (r.return || 0) < 0).length
+          const bestMonth = monthlyReturns.length > 0
+            ? monthlyReturns.reduce((best: any, current: any) => 
+                (current.return || 0) > (best.return || 0) ? current : best
+              )
+            : null
+          const worstMonth = monthlyReturns.length > 0
+            ? monthlyReturns.reduce((worst: any, current: any) => 
+                (current.return || 0) < (worst.return || 0) ? current : worst
+              )
+            : null
+
+          return {
+            id: portfolio.id,
+            name: portfolio.name,
+            description: portfolio.description || null,
+            startDate: portfolio.startDate,
+            monthlyContribution: Number(portfolio.monthlyContribution) || 0,
+            rebalanceFrequency: portfolio.rebalanceFrequency,
+            createdAt: portfolio.createdAt,
+            updatedAt: portfolio.updatedAt,
+            // Métricas de valor
+            currentValue: updatedMetrics.currentValue || 0,
+            cashBalance: updatedMetrics.cashBalance || 0,
+            totalInvested: updatedMetrics.totalInvested || 0,
+            totalWithdrawn: updatedMetrics.totalWithdrawn || 0,
+            netInvested: updatedMetrics.netInvested || 0,
+            totalDividends: updatedMetrics.totalDividends || 0,
+            // Métricas de performance
+            totalReturn: updatedMetrics.totalReturn || 0,
+            totalReturnPercentage: (updatedMetrics.totalReturn || 0) * 100,
+            annualizedReturn: updatedMetrics.annualizedReturn || null,
+            annualizedReturnPercentage: updatedMetrics.annualizedReturn ? updatedMetrics.annualizedReturn * 100 : null,
+            volatility: updatedMetrics.volatility || null,
+            volatilityPercentage: updatedMetrics.volatility ? updatedMetrics.volatility * 100 : null,
+            sharpeRatio: updatedMetrics.sharpeRatio || null,
+            maxDrawdown: updatedMetrics.maxDrawdown || null,
+            maxDrawdownPercentage: updatedMetrics.maxDrawdown ? updatedMetrics.maxDrawdown * 100 : null,
+            // Holdings e alocação
+            totalHoldings,
+            totalPositions,
+            topHoldings,
+            sectorAllocation: topSectors,
+            industryAllocation: industryAllocation.slice(0, 5),
+            // Estatísticas de retorno mensal
+            monthlyReturnsCount: monthlyReturns.length,
+            positiveMonths,
+            negativeMonths,
+            bestMonth: bestMonth ? {
+              date: bestMonth.date,
+              return: bestMonth.return || 0,
+              returnPercentage: (bestMonth.return || 0) * 100,
+              portfolioValue: bestMonth.portfolioValue || 0
+            } : null,
+            worstMonth: worstMonth ? {
+              date: worstMonth.date,
+              return: worstMonth.return || 0,
+              returnPercentage: (worstMonth.return || 0) * 100,
+              portfolioValue: worstMonth.portfolioValue || 0
+            } : null,
+            // Evolução temporal (últimos 6 meses)
+            recentEvolution: evolutionData.slice(-6),
+            // Ativos configurados
+            configuredAssets: portfolio.assets.map(a => ({
+              ticker: a.ticker,
+              targetAllocation: Number(a.targetAllocation) * 100
+            })),
+            // Data da última atualização das métricas
+            metricsLastUpdated: updatedMetrics.lastCalculatedAt || null
+          }
+        } catch (error) {
+          console.error(`[Ben] Erro ao buscar métricas da carteira ${portfolio.id}:`, error)
+          // Retornar informações básicas mesmo se houver erro nas métricas
+          return {
+            id: portfolio.id,
+            name: portfolio.name,
+            description: portfolio.description || null,
+            startDate: portfolio.startDate,
+            createdAt: portfolio.createdAt,
+            error: `Erro ao calcular métricas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+          }
+        }
+      })
+    )
+
+    // Filtrar carteiras com erro (opcional - pode manter para mostrar que existem mas têm problemas)
+    const validPortfolios = portfoliosWithMetrics.filter(p => !p.error)
+    const portfoliosWithErrors = portfoliosWithMetrics.filter(p => p.error)
+
+    return {
+      success: true,
+      data: {
+        portfolios: validPortfolios,
+        portfoliosWithErrors: portfoliosWithErrors.length > 0 ? portfoliosWithErrors : undefined,
+        count: validPortfolios.length,
+        totalCount: portfolios.length,
+        summary: {
+          totalValue: validPortfolios.reduce((sum, p) => sum + (p.currentValue || 0), 0),
+          totalInvested: validPortfolios.reduce((sum, p) => sum + (p.totalInvested || 0), 0),
+          totalReturn: validPortfolios.length > 0
+            ? validPortfolios.reduce((sum, p) => sum + (p.totalReturn || 0), 0) / validPortfolios.length
+            : 0,
+          averageSharpeRatio: validPortfolios
+            .filter(p => p.sharpeRatio !== null)
+            .length > 0
+            ? validPortfolios
+                .filter(p => p.sharpeRatio !== null)
+                .reduce((sum, p) => sum + (p.sharpeRatio || 0), 0) /
+              validPortfolios.filter(p => p.sharpeRatio !== null).length
+            : null
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Ben] Erro ao buscar carteiras do usuário:', error)
+    return {
+      success: false,
+      error: `Erro ao buscar carteiras: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+    }
+  }
+}
+
+/**
+ * Lista relatórios de IA disponíveis para uma empresa (apenas metadados e links)
+ * Retorna apenas informações básicas: tipo, data, link - SEM conteúdo completo
+ * Use quando o usuário pedir para LISTAR relatórios disponíveis
+ */
+export async function listCompanyAIReports(ticker: string, reportType?: string, limit?: number) {
+  try {
+    const normalizedTicker = ticker.toUpperCase()
+    
+    // Buscar empresa com assetType para determinar a rota correta
+    const company = await prisma.company.findUnique({
+      where: { ticker: normalizedTicker },
+      select: { id: true, name: true, ticker: true, assetType: true }
+    })
+
+    if (!company) {
+      return {
+        success: false,
+        error: `Empresa ${normalizedTicker} não encontrada`
+      }
+    }
+
+    // Determinar o prefixo da rota baseado no tipo de ativo
+    const getRoutePrefix = (assetType: string) => {
+      switch (assetType) {
+        case 'BDR':
+          return 'bdr'
+        case 'ETF':
+          return 'etf'
+        case 'FII':
+          return 'fii'
+        case 'STOCK':
+        default:
+          return 'acao'
+      }
+    }
+
+    const routePrefix = getRoutePrefix(company.assetType || 'STOCK')
+    const tickerLower = normalizedTicker.toLowerCase()
+
+    // Construir filtro de tipo
+    const typeFilter = reportType 
+      ? (reportType.toUpperCase() as 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE' | 'PRICE_VARIATION' | 'CUSTOM_TRIGGER')
+      : undefined
+
+    // Buscar TODOS os relatórios (sem limite padrão e sem filtro isActive para listar todos)
+    const reports = await prisma.aIReport.findMany({
+      where: {
+        companyId: company.id,
+        status: 'COMPLETED',
+        // Remover filtro isActive para retornar TODOS os relatórios, não apenas os ativos
+        ...(typeFilter && { type: typeFilter })
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      // Aplicar limite apenas se especificado explicitamente
+      ...(limit && limit > 0 ? { take: limit } : {}),
+      include: {
+        flags: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            flagType: true,
+            reason: true,
+            createdAt: true
+          }
+        }
+      }
+    })
+
+    if (reports.length === 0) {
+      return {
+        success: true,
+        data: {
+          ticker: normalizedTicker,
+          companyName: company.name,
+          reports: [],
+          count: 0,
+          message: `Nenhum relatório de IA encontrado para ${normalizedTicker}${typeFilter ? ` do tipo ${typeFilter}` : ''}`
+        }
+      }
+    }
+
+    // Processar relatórios - APENAS METADADOS (sem conteúdo completo)
+    const processedReports = reports.map(report => {
+      // Determinar tipo de relatório em português
+      const getReportTypeLabel = (type: string) => {
+        switch (type) {
+          case 'MONTHLY_OVERVIEW':
+            return 'Relatório Mensal'
+          case 'FUNDAMENTAL_CHANGE':
+            return 'Mudança Fundamental'
+          case 'PRICE_VARIATION':
+            return 'Variação de Preço'
+          case 'CUSTOM_TRIGGER':
+            return 'Gatilho Customizado'
+          default:
+            return type
+        }
+      }
+
+      return {
+        id: report.id,
+        type: report.type,
+        typeLabel: getReportTypeLabel(report.type),
+        // Metadados básicos apenas
+        currentScore: report.currentScore ? Number(report.currentScore) : null,
+        previousScore: report.previousScore ? Number(report.previousScore) : null,
+        changeDirection: report.changeDirection || null,
+        windowDays: report.windowDays || null,
+        createdAt: report.createdAt,
+        hasActiveFlags: report.flags.length > 0,
+        // Links diretos para a plataforma
+        url: `/${routePrefix}/${tickerLower}/relatorios/${report.id}`,
+        listUrl: `/${routePrefix}/${tickerLower}/relatorios`
+      }
+    })
+
+    // Calcular estatísticas
+    const stats = {
+      totalReports: reports.length,
+      byType: reports.reduce((acc, r) => {
+        acc[r.type] = (acc[r.type] || 0) + 1
+        return acc
+      }, {} as Record<string, number>),
+      withFlags: reports.filter(r => r.flags.length > 0).length,
+      averageScore: reports
+        .filter(r => r.currentScore !== null)
+        .length > 0
+        ? reports
+            .filter(r => r.currentScore !== null)
+            .reduce((sum, r) => sum + Number(r.currentScore || 0), 0) /
+          reports.filter(r => r.currentScore !== null).length
+        : null,
+      latestReportDate: reports[0]?.createdAt || null
+    }
+
+    return {
+      success: true,
+      data: {
+        ticker: normalizedTicker,
+        companyName: company.name,
+        reports: processedReports,
+        count: processedReports.length,
+        statistics: stats,
+        listUrl: `/${routePrefix}/${tickerLower}/relatorios`,
+        message: `Encontrados ${processedReports.length} relatório(s) de IA para ${normalizedTicker}`,
+        instruction: `Esta ferramenta retorna APENAS metadados (tipo, data, link) dos relatórios. Para ver o CONTEÚDO completo dos relatórios, use a ferramenta getCompanyAIReportContent. Apresente lista numerada. Formato: "1. **[typeLabel]** - [data pt-BR]\n   [Link do Relatório]([url])". Máximo 1 linha de introdução.`
+      }
+    }
+  } catch (error) {
+    console.error(`[Ben] Erro ao buscar relatórios de IA de ${ticker}:`, error)
+    return {
+      success: false,
+      error: `Erro ao buscar relatórios: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+    }
+  }
+}
+
+/**
+ * Busca o CONTEÚDO COMPLETO de relatórios de IA específicos de uma empresa
+ * Retorna conteúdo completo (content), conclusão (conclusion), análises estratégicas, scores, etc.
+ * Use quando o usuário pedir para RESUMAR, ANALISAR, ou fazer perguntas sobre o CONTEÚDO dos relatórios
+ */
+export async function getCompanyAIReportContent(ticker: string, reportType?: string, reportIds?: string[]) {
+  try {
+    const normalizedTicker = ticker.toUpperCase()
+    
+    // Buscar empresa com assetType para determinar a rota correta
+    const company = await prisma.company.findUnique({
+      where: { ticker: normalizedTicker },
+      select: { id: true, name: true, ticker: true, assetType: true }
+    })
+
+    if (!company) {
+      return {
+        success: false,
+        error: `Empresa ${normalizedTicker} não encontrada`
+      }
+    }
+
+    // Determinar o prefixo da rota baseado no tipo de ativo
+    const getRoutePrefix = (assetType: string) => {
+      switch (assetType) {
+        case 'BDR':
+          return 'bdr'
+        case 'ETF':
+          return 'etf'
+        case 'FII':
+          return 'fii'
+        case 'STOCK':
+        default:
+          return 'acao'
+      }
+    }
+
+    const routePrefix = getRoutePrefix(company.assetType || 'STOCK')
+    const tickerLower = normalizedTicker.toLowerCase()
+
+    // Construir filtro de tipo
+    const typeFilter = reportType 
+      ? (reportType.toUpperCase() as 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE' | 'PRICE_VARIATION' | 'CUSTOM_TRIGGER')
+      : undefined
+
+    // Buscar relatórios com CONTEÚDO COMPLETO
+    const whereClause: any = {
+      companyId: company.id,
+      status: 'COMPLETED',
+      ...(typeFilter && { type: typeFilter }),
+      ...(reportIds && reportIds.length > 0 ? { id: { in: reportIds } } : {})
+    }
+
+    const reports = await prisma.aIReport.findMany({
+      where: whereClause,
+      orderBy: {
+        createdAt: 'desc'
+      },
+      include: {
+        flags: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            flagType: true,
+            reason: true,
+            createdAt: true
+          }
+        }
+      }
+    })
+
+    if (reports.length === 0) {
+      return {
+        success: true,
+        data: {
+          ticker: normalizedTicker,
+          companyName: company.name,
+          reports: [],
+          count: 0,
+          message: `Nenhum relatório de IA encontrado para ${normalizedTicker}${typeFilter ? ` do tipo ${typeFilter}` : ''}`
+        }
+      }
+    }
+
+    // Processar relatórios com CONTEÚDO COMPLETO
+    const processedReports = reports.map(report => {
+      const getReportTypeLabel = (type: string) => {
+        switch (type) {
+          case 'MONTHLY_OVERVIEW':
+            return 'Relatório Mensal'
+          case 'FUNDAMENTAL_CHANGE':
+            return 'Mudança Fundamental'
+          case 'PRICE_VARIATION':
+            return 'Variação de Preço'
+          case 'CUSTOM_TRIGGER':
+            return 'Gatilho Customizado'
+          default:
+            return type
+        }
+      }
+
+      return {
+        id: report.id,
+        type: report.type,
+        typeLabel: getReportTypeLabel(report.type),
+        // CONTEÚDO COMPLETO para análise
+        content: report.content,
+        conclusion: report.conclusion || null,
+        strategicAnalyses: report.strategicAnalyses || null,
+        metadata: report.metadata || null,
+        currentScore: report.currentScore ? Number(report.currentScore) : null,
+        previousScore: report.previousScore ? Number(report.previousScore) : null,
+        changeDirection: report.changeDirection || null,
+        windowDays: report.windowDays || null,
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt,
+        hasActiveFlags: report.flags.length > 0,
+        flags: report.flags.map(flag => ({
+          id: flag.id,
+          flagType: flag.flagType,
+          reason: flag.reason,
+          createdAt: flag.createdAt
+        })),
+        url: `/${routePrefix}/${tickerLower}/relatorios/${report.id}`,
+        listUrl: `/${routePrefix}/${tickerLower}/relatorios`
+      }
+    })
+
+    return {
+      success: true,
+      data: {
+        ticker: normalizedTicker,
+        companyName: company.name,
+        reports: processedReports,
+        count: processedReports.length,
+        message: `Conteúdo completo de ${processedReports.length} relatório(s) de IA para ${normalizedTicker}`,
+        instruction: `CRÍTICO: Use APENAS o conteúdo real dos campos "content" e "conclusion" de cada relatório para responder. NÃO invente informações genéricas. Cite diretamente do conteúdo quando perguntar "o que concluiu" ou "o que diz". Se o campo "conclusion" existir, use-o primeiro. Se não existir, extraia do campo "content". NUNCA generalize - sempre cite informações específicas dos relatórios.`
+      }
+    }
+  } catch (error) {
+    console.error(`[Ben] Erro ao buscar conteúdo dos relatórios de IA de ${ticker}:`, error)
+    return {
+      success: false,
+      error: `Erro ao buscar conteúdo dos relatórios: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+    }
+  }
+}
+
+/**
+ * Busca empresas com flags ativos (problemas fundamentais, riscos, etc.)
+ * Permite filtrar e ordenar para responder perguntas sobre empresas problemáticas
+ * Use quando o usuário perguntar sobre empresas que perderam fundamentos,
+ * piores empresas da bolsa, empresas de risco, ou qualquer variação similar
+ */
+export async function getCompanyFlags(options?: {
+  flagType?: string
+  limit?: number
+  orderBy?: 'recent' | 'oldest' | 'company'
+  includeInactive?: boolean
+}): Promise<any> {
+  try {
+    const {
+      flagType,
+      limit = 50,
+      orderBy = 'recent',
+      includeInactive = false
+    } = options || {}
+
+    // Construir filtro
+    const whereClause: any = {
+      ...(includeInactive ? {} : { isActive: true })
+    }
+
+    if (flagType) {
+      whereClause.flagType = flagType.toUpperCase()
+    }
+
+    // Buscar flags com informações da empresa
+    const flags = await prisma.companyFlag.findMany({
+      where: whereClause,
+      include: {
+        company: {
+          select: {
+            id: true,
+            ticker: true,
+            name: true,
+            sector: true,
+            industry: true
+          }
+        },
+        report: {
+          select: {
+            id: true,
+            type: true,
+            currentScore: true,
+            previousScore: true,
+            createdAt: true
+          }
+        }
+      },
+      orderBy: orderBy === 'recent' 
+        ? { createdAt: 'desc' }
+        : orderBy === 'oldest'
+        ? { createdAt: 'asc' }
+        : { company: { ticker: 'asc' } },
+      take: limit
+    })
+
+    if (flags.length === 0) {
+      return {
+        success: true,
+        data: {
+          flags: [],
+          count: 0,
+          message: includeInactive 
+            ? 'Nenhuma flag encontrada no sistema'
+            : 'Nenhuma flag ativa encontrada no sistema'
+        }
+      }
+    }
+
+    // Processar flags com informações completas
+    const processedFlags = flags.map(flag => ({
+      id: flag.id,
+      flagType: flag.flagType,
+      reason: flag.reason,
+      isActive: flag.isActive,
+      createdAt: flag.createdAt,
+      lastReevaluatedAt: flag.lastReevaluatedAt || null,
+      reevaluationCount: flag.reevaluationCount,
+      company: {
+        ticker: flag.company.ticker,
+        name: flag.company.name,
+        sector: flag.company.sector,
+        industry: flag.company.industry
+      },
+      report: {
+        id: flag.report.id,
+        type: flag.report.type,
+        currentScore: flag.report.currentScore ? Number(flag.report.currentScore) : null,
+        previousScore: flag.report.previousScore ? Number(flag.report.previousScore) : null,
+        createdAt: flag.report.createdAt
+      }
+    }))
+
+    // Calcular estatísticas
+    const stats = {
+      totalFlags: flags.length,
+      activeFlags: flags.filter(f => f.isActive).length,
+      inactiveFlags: flags.filter(f => !f.isActive).length,
+      byType: flags.reduce((acc, f) => {
+        acc[f.flagType] = (acc[f.flagType] || 0) + 1
+        return acc
+      }, {} as Record<string, number>),
+      bySector: flags.reduce((acc, f) => {
+        const sector = f.company.sector || 'Não informado'
+        acc[sector] = (acc[sector] || 0) + 1
+        return acc
+      }, {} as Record<string, number>),
+      averageScore: flags
+        .filter(f => f.report.currentScore !== null)
+        .length > 0
+        ? flags
+            .filter(f => f.report.currentScore !== null)
+            .reduce((sum, f) => sum + Number(f.report.currentScore || 0), 0) /
+          flags.filter(f => f.report.currentScore !== null).length
+        : null,
+      oldestFlag: flags.length > 0 ? flags[flags.length - 1]?.createdAt : null,
+      newestFlag: flags.length > 0 ? flags[0]?.createdAt : null
+    }
+
+    return {
+      success: true,
+      data: {
+        flags: processedFlags,
+        count: processedFlags.length,
+        statistics: stats,
+        message: `Encontradas ${processedFlags.length} flag(s)${flagType ? ` do tipo ${flagType}` : ''}`
+      }
+    }
+  } catch (error) {
+    console.error('[Ben] Erro ao buscar flags de empresas:', error)
+    return {
+      success: false,
+      error: `Erro ao buscar flags: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+    }
+  }
+}
+
+/**
  * Obtém projeções de dividendos para uma ação
  */
 export async function getDividendProjections(ticker: string) {
@@ -1702,6 +2369,88 @@ export const benToolsSchema = [
         category: {
           type: 'string',
           description: 'Categoria opcional para filtrar (ex: "valuation", "análise", "carteiras", "backtest", "conteúdo", "outros"). Use "backtest" ou "carteiras" quando o usuário mencionar simulação de carteira.'
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'getUserPortfolios',
+    description: 'Consulta todas as carteiras de investimento do usuário com métricas completas e detalhadas. Retorna informações sobre cada carteira incluindo: valor atual, total investido, retorno total e anualizado, volatilidade, Sharpe ratio, max drawdown, holdings (posições atuais), alocação por setor/indústria, evolução temporal mensal, melhores e piores meses, e estatísticas de performance. Use SEMPRE quando o usuário perguntar sobre suas carteiras, portfólios, performance de investimentos, retorno das carteiras, composição das carteiras, ou qualquer informação relacionada às suas carteiras de investimento.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'listCompanyAIReports',
+    description: 'LISTA relatórios de IA disponíveis para uma empresa retornando APENAS metadados (tipo, data, link). NÃO retorna conteúdo completo. Use quando o usuário pedir para LISTAR relatórios disponíveis. Formato de resposta: lista numerada "1. **[typeLabel]** - [data pt-BR]\n   [Link do Relatório]([url])". Máximo 1 linha de introdução. Para ver o CONTEÚDO completo dos relatórios, use getCompanyAIReportContent.',
+    parameters: {
+      type: 'object',
+      properties: {
+        ticker: {
+          type: 'string',
+          description: 'Ticker da empresa (ex: PETR4, VALE3)'
+        },
+        reportType: {
+          type: 'string',
+          description: 'Tipo de relatório opcional para filtrar: MONTHLY_OVERVIEW, FUNDAMENTAL_CHANGE, PRICE_VARIATION, CUSTOM_TRIGGER'
+        },
+        limit: {
+          type: 'number',
+          description: 'Número máximo de relatórios a retornar (padrão: 10)'
+        }
+      },
+      required: ['ticker']
+    }
+  },
+  {
+    name: 'getCompanyAIReportContent',
+    description: 'Busca o CONTEÚDO COMPLETO de relatórios de IA de uma empresa. Retorna conteúdo completo (content), conclusão (conclusion), análises estratégicas (strategicAnalyses), scores, flags e todos os dados detalhados. Use quando o usuário pedir para RESUMAR, ANALISAR, fazer perguntas sobre CONTEÚDO/CONCLUSÕES dos relatórios, ou quando perguntar "o que concluiu", "o que diz", "me resuma". CRÍTICO: Você DEVE usar APENAS o campo "content" e "conclusion" de cada relatório retornado. NÃO invente informações genéricas. Cite diretamente do conteúdo quando perguntar "o que concluiu" ou "o que diz". Se o campo "conclusion" existir, use-o primeiro. Se não existir, extraia do campo "content". NUNCA generalize - sempre cite informações específicas dos relatórios.',
+    parameters: {
+      type: 'object',
+      properties: {
+        ticker: {
+          type: 'string',
+          description: 'Ticker da empresa (ex: PETR4, VALE3)'
+        },
+        reportType: {
+          type: 'string',
+          description: 'Tipo de relatório opcional para filtrar: MONTHLY_OVERVIEW, FUNDAMENTAL_CHANGE, PRICE_VARIATION, CUSTOM_TRIGGER'
+        },
+        reportIds: {
+          type: 'array',
+          items: {
+            type: 'string'
+          },
+          description: 'IDs específicos de relatórios para buscar conteúdo (opcional). Se não fornecido, retorna todos os relatórios do tipo especificado.'
+        }
+      },
+      required: ['ticker']
+    }
+  },
+  {
+    name: 'getCompanyFlags',
+    description: 'Busca empresas com flags ativos (problemas fundamentais, riscos, perda de fundamentos). Retorna lista de empresas com flags incluindo motivo, tipo de flag, informações da empresa e relatório associado. Permite filtrar por tipo de flag, ordenar por data ou empresa, e incluir flags inativas. Use SEMPRE quando o usuário perguntar sobre: "empresas que perderam fundamentos", "piores empresas da bolsa", "empresas de risco", "empresas com problemas fundamentais", "empresas com flags", "quais empresas têm problemas", "empresas problemáticas", "empresas com risco", ou qualquer variação similar sobre empresas problemáticas ou com flags.',
+    parameters: {
+      type: 'object',
+      properties: {
+        flagType: {
+          type: 'string',
+          description: 'Tipo de flag para filtrar (ex: FUNDAMENTAL_LOSS). Se não especificado, retorna todos os tipos.'
+        },
+        limit: {
+          type: 'number',
+          description: 'Número máximo de flags a retornar (padrão: 50)'
+        },
+        orderBy: {
+          type: 'string',
+          description: 'Ordenação: "recent" (mais recentes primeiro), "oldest" (mais antigas primeiro), ou "company" (por ticker)'
+        },
+        includeInactive: {
+          type: 'boolean',
+          description: 'Se deve incluir flags inativas (padrão: false, apenas ativas)'
         }
       },
       required: []

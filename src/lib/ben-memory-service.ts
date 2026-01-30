@@ -166,6 +166,11 @@ export async function extractImportantInfo(conversationId: string) {
    - NÃO extraia empresas que aparecem apenas em exemplos genéricos ou comparações sem contexto de interesse
    - NÃO invente empresas baseado em setores mencionados (ex: se mencionar "tech", não liste TSLA, NVDA a menos que tenham sido mencionados)
 
+2.1. **REMOÇÃO DE INTERESSE EM EMPRESAS:**
+   - Se o usuário mencionar explicitamente que NÃO tem interesse em uma empresa (ex: "não tenho interesse em GNDI3", "não me interesso por X", "remova Y da minha lista", "não quero mais acompanhar Z"), extraia como remoção
+   - Identifique o ticker ou nome da empresa mencionada
+   - Marque confiança como "ALTA" se explícito (ex: "não tenho interesse"), "MEDIA" se inferido de forma clara
+
 3. **OBJETIVOS DE INVESTIMENTO:**
    - Extraia se o usuário mencionou objetivos (ex: "meu objetivo é longo prazo", "investo para aposentadoria")
    - Extraia se o usuário demonstrou horizonte temporal através de comentários
@@ -207,6 +212,14 @@ ${conversationHistory}
       "context": "usuário mencionou interesse em investir na Cemig"
     }
   ],
+  "removedCompanies": [
+    {
+      "ticker": "GNDI3",
+      "name": "NotreDame Intermédica",
+      "context": "usuário mencionou que não tem interesse",
+      "confidence": "ALTA"
+    }
+  ],
   "goals": {
     "time_horizon": "longo prazo" // se mencionado
   },
@@ -232,10 +245,12 @@ ${conversationHistory}
 }
 
 **REGRAS IMPORTANTES:**
-- Se o usuário mencionou uma empresa (nome ou ticker), extraia como interesse
+- Se o usuário mencionou uma empresa (nome ou ticker) com interesse, extraia como interesse
+- Se o usuário mencionou explicitamente que NÃO tem interesse em uma empresa, extraia em "removedCompanies"
 - Se o usuário apenas fez uma pergunta sobre uma empresa, NÃO extraia como interesse permanente
 - Se não houver informações em uma categoria, retorne objeto vazio {} ou array vazio []
 - Seja conservador: quando em dúvida, não extraia
+- IMPORTANTE: Se o usuário diz "não tenho interesse em X", isso deve aparecer em "removedCompanies", não em "companies"
 
 Retorne APENAS o JSON válido, sem nenhum texto adicional antes ou depois.`
 
@@ -316,6 +331,113 @@ function truncateMetadata(metadata: any, maxSize: number): any {
   }
 
   return truncated
+}
+
+/**
+ * Remove uma empresa da memória quando o usuário expressa falta de interesse
+ * @param userId ID do usuário
+ * @param ticker Ticker ou nome da empresa
+ * @param removedCompany Dados da empresa removida
+ * @param conversationId ID da conversa de origem
+ */
+async function removeCompanyFromMemory(
+  userId: string,
+  ticker: string,
+  removedCompany: any,
+  conversationId?: string
+) {
+  try {
+    // Normalizar ticker para maiúsculas
+    const normalizedTicker = ticker.toUpperCase().trim()
+    
+    // Buscar memória existente da empresa na categoria COMPANIES
+    // Pode estar armazenada com o ticker como key
+    const existingMemory = await prisma.benMemory.findUnique({
+      where: {
+        userId_category_key: {
+          userId,
+          category: 'COMPANIES',
+          key: normalizedTicker
+        }
+      }
+    })
+
+    if (existingMemory) {
+      // Arquivar a memória (soft delete) marcando como removida
+      const updatedMetadata = existingMemory.metadata as any || {}
+      updatedMetadata.removed = true
+      updatedMetadata.removedAt = new Date().toISOString()
+      updatedMetadata.removedReason = removedCompany.context || 'Usuário expressou falta de interesse'
+      updatedMetadata.removedConfidence = removedCompany.confidence || 'ALTA'
+      updatedMetadata.removedInConversation = conversationId
+
+      const validatedMetadata = truncateMetadata(updatedMetadata, MAX_METADATA_SIZE)
+
+      // Atualizar memória para baixa importância e marcar como removida
+      await prisma.benMemory.update({
+        where: { id: existingMemory.id },
+        data: {
+          importance: 10, // Importância muito baixa para não aparecer nas buscas
+          metadata: validatedMetadata,
+          updatedAt: new Date()
+        }
+      })
+
+      console.log(`[Memória] Empresa ${normalizedTicker} removida da memória do usuário ${userId}`)
+    } else {
+      // Se não encontrou pelo ticker, tentar buscar por nome no metadata
+      const memoriesByCategory = await prisma.benMemory.findMany({
+        where: {
+          userId,
+          category: 'COMPANIES'
+        }
+      })
+
+      // Procurar por ticker ou nome no metadata
+      for (const memory of memoriesByCategory) {
+        const metadata = memory.metadata as any
+        if (metadata) {
+          const memoryTicker = metadata.ticker?.toUpperCase().trim()
+          const memoryName = metadata.name?.toLowerCase().trim()
+          const searchTicker = normalizedTicker
+          const searchName = removedCompany.name?.toLowerCase().trim()
+
+          // Verificar se há match por ticker ou nome
+          if (
+            (memoryTicker && memoryTicker === searchTicker) ||
+            (memoryName && searchName && memoryName.includes(searchName)) ||
+            (memoryName && searchName && searchName.includes(memoryName))
+          ) {
+            // Arquivar esta memória
+            const updatedMetadata = metadata
+            updatedMetadata.removed = true
+            updatedMetadata.removedAt = new Date().toISOString()
+            updatedMetadata.removedReason = removedCompany.context || 'Usuário expressou falta de interesse'
+            updatedMetadata.removedConfidence = removedCompany.confidence || 'ALTA'
+            updatedMetadata.removedInConversation = conversationId
+
+            const validatedMetadata = truncateMetadata(updatedMetadata, MAX_METADATA_SIZE)
+
+            await prisma.benMemory.update({
+              where: { id: memory.id },
+              data: {
+                importance: 10,
+                metadata: validatedMetadata,
+                updatedAt: new Date()
+              }
+            })
+
+            console.log(`[Memória] Empresa ${normalizedTicker} removida da memória do usuário ${userId} (encontrada por nome/metadata)`)
+            return
+          }
+        }
+      }
+
+      console.log(`[Memória] Empresa ${normalizedTicker} não encontrada na memória do usuário ${userId} para remoção`)
+    }
+  } catch (error) {
+    console.error(`Erro ao remover empresa ${ticker} da memória do usuário ${userId}:`, error)
+  }
 }
 
 /**
@@ -429,6 +551,16 @@ export async function consolidateMemory(userId: string, extractedInfo: any, conv
               }
             }
           })
+        }
+      }
+    }
+
+    // Processar remoções de empresas primeiro (antes de adicionar novas)
+    if (extractedInfo.removedCompanies && Array.isArray(extractedInfo.removedCompanies)) {
+      for (const removedCompany of extractedInfo.removedCompanies) {
+        const ticker = removedCompany.ticker || removedCompany.name
+        if (ticker) {
+          await removeCompanyFromMemory(userId, ticker, removedCompany, conversationId)
         }
       }
     }
@@ -613,9 +745,16 @@ export function calculateRelevanceScore(
 export async function getUserMemory(userId: string, contextUrl?: string) {
   try {
     // Buscar todas as memórias do usuário
-    const memories = await prisma.benMemory.findMany({
+    const allMemories = await prisma.benMemory.findMany({
       where: { userId },
       orderBy: { importance: 'desc' }
+    })
+
+    // Filtrar memórias removidas manualmente (Prisma não suporta bem filtros JSON complexos)
+    const memories = allMemories.filter(memory => {
+      const metadata = memory.metadata as any
+      // Excluir memórias marcadas como removidas
+      return !metadata || metadata.removed !== true
     })
 
     // Calcular relevanceScore para cada memória

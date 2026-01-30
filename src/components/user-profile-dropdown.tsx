@@ -12,7 +12,8 @@ import {
   ChevronDown,
   Clock,
   Gift,
-  Settings
+  Settings,
+  MessageSquare
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -227,6 +228,13 @@ export function UserProfileDropdown({
           <Link href="/perfil" className="cursor-pointer">
             <User className="mr-2 h-4 w-4" />
             Perfil
+          </Link>
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem asChild>
+          <Link href="/conversas-ben" className="cursor-pointer">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Minhas Conversas com Ben
           </Link>
         </DropdownMenuItem>
         

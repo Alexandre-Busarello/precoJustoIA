@@ -29,6 +29,8 @@ import { DashboardPortfolios } from "@/components/dashboard-portfolios";
 import { DashboardRadarSection } from "@/components/dashboard-radar-section";
 import { DashboardNotificationBanner } from "@/components/dashboard-notification-banner";
 import { NotificationModalsWrapper } from "@/components/notification-modals-wrapper";
+import { DashboardIbovBanner } from "@/components/dashboard-ibov-banner";
+import { BenChatFAB } from "@/components/ben-chat-fab";
 import {
   BarChart3,
   TrendingUp,
@@ -202,6 +204,19 @@ export default function Dashboard() {
         {/* Email Verification Banner - Discreto */}
         <EmailVerificationBanner />
 
+        {/* IBOV Projection Banner */}
+        <div className="mb-6">
+          <div className="mb-4 flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/projecoes-ibov" className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                Ver todas as projeções
+              </Link>
+            </Button>
+          </div>
+          <DashboardIbovBanner />
+        </div>
+
         {/* Trial Premium Banner - Discreto */}
         {isTrialActive && subscriptionTier === 'FREE' && (
           <Card className="mb-6 border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
@@ -251,7 +266,7 @@ export default function Dashboard() {
         <DashboardNotificationBanner />
 
         {/* MONITORAMENTOS CUSTOMIZADOS */}
-        <Link href="/dashboard/monitoramentos-customizados">
+        {/* <Link href="/dashboard/monitoramentos-customizados">
           <Card className="group cursor-pointer border-2 border-dashed border-blue-300 dark:border-blue-700 hover:border-blue-500 dark:hover:border-blue-600 hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -273,7 +288,7 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-        </Link>
+        </Link> */}
 
         {/* RADAR DE OPORTUNIDADES */}
         <DashboardRadarSection />
@@ -833,6 +848,9 @@ export default function Dashboard() {
 
       {/* Footer */}
       <Footer />
+
+      {/* Ben Chat FAB */}
+      <BenChatFAB />
     </div>
   );
 }

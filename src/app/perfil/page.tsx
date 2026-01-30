@@ -30,6 +30,7 @@ import {
   CreditCard,
   Bell,
   BarChart3,
+  MessageSquare,
 } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
@@ -471,6 +472,27 @@ export default function PerfilPage() {
               Alterar Senha
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Conversas com Ben */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5" />
+            Conversas com Ben
+          </CardTitle>
+          <CardDescription>
+            Gerencie suas conversas com o assistente de IA
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline" className="w-full">
+            <Link href="/conversas-ben" className="flex items-center justify-center gap-2">
+              <MessageSquare className="w-4 h-4" />
+              Ver Minhas Conversas com Ben
+            </Link>
+          </Button>
         </CardContent>
       </Card>
 

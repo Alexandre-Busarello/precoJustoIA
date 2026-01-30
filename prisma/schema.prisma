@@ -90,6 +90,8 @@ model User {
   userEvents                  UserEvent[]
   notificationPreferences     UserNotificationPreferences?
   userSecurity                UserSecurity?
+  benConversations            BenConversation[]
+  benMemories                 BenMemory[]
 
   @@map("users")
 }
@@ -1833,4 +1835,84 @@ enum FlagReevaluationStep {
   RESEARCH
   ANALYSIS
   EVALUATION
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+model BenConversation {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  title       String?
+  contextUrl  String?   @map("context_url")
+  shareToken  String?   @unique @map("share_token")
+  sharedAt    DateTime? @map("shared_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    BenMessage[]
+  
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@index([shareToken])
+  @@map("ben_conversations")
+}
+
+model BenMessage {
+  id             String          @id @default(cuid())
+  conversationId String          @map("conversation_id")
+  role           MessageRole
+  content        String
+  toolCalls      Json?           @map("tool_calls")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  
+  conversation   BenConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+  @@map("ben_messages")
+}
+
+model BenMemory {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  category    String
+  key         String
+  content     String
+  metadata    Json?
+  importance  Int      @default(50)
+  relevanceScore Float? @map("relevance_score")
+  sourceConversationIds String[] @map("source_conversation_ids")
+  lastAccessed DateTime? @map("last_accessed")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, category, key])
+  @@index([userId])
+  @@index([userId, category])
+  @@index([userId, importance])
+  @@index([userId, lastAccessed])
+  @@index([userId, relevanceScore])
+  @@map("ben_memories")
+}
+
+model IbovProjection {
+  id            String   @id @default(cuid())
+  period        String
+  projectedValue Decimal  @map("projected_value") @db.Decimal(10, 2)
+  confidence    Int
+  reasoning     String   @db.Text
+  keyIndicators Json?    @map("key_indicators")
+  validUntil    DateTime @map("valid_until")
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  @@unique([period, validUntil])
+  @@index([period, validUntil])
+  @@index([createdAt])
+  @@map("ibov_projections")
 }

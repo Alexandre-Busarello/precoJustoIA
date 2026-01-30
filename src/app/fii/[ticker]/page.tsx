@@ -20,6 +20,7 @@ import { Footer } from '@/components/footer'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import Link from 'next/link'
+import { BenChatFAB } from '@/components/ben-chat-fab'
 
 // Shadcn UI Components
 import { Card, CardContent } from '@/components/ui/card'
@@ -631,6 +632,9 @@ export default async function FiiPage({ params }: PageProps) {
       {!session && (
         <Footer />
       )}
+
+      {/* Ben Chat FAB */}
+      <BenChatFAB />
 
       {/* Schema Structured Data para SEO */}
       {latestFinancials && (

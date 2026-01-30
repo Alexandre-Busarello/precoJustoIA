@@ -35,7 +35,8 @@ import {
   Rocket,
   History,
   ArrowLeftRight,
-  LineChart
+  LineChart,
+  MessageSquare
 } from "lucide-react"
 import {
   Collapsible,
@@ -722,6 +723,21 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                 >
                   <Settings className="w-4 h-4" />
                   Monitoramentos Customizados
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                asChild
+              >
+                <Link 
+                  href="/conversas-ben" 
+                  className="flex items-center gap-3"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Minhas Conversas com Ben
                 </Link>
               </Button>
               <Button

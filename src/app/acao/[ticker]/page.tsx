@@ -35,6 +35,7 @@ import Link from 'next/link'
 import { EmailCaptureModal } from '@/components/email-capture-modal'
 import { CompanyFlagBanner } from '@/components/company-flag-banner'
 import { isCurrentUserPremium } from '@/lib/user-service'
+import { BenChatFAB } from '@/components/ben-chat-fab'
 
 // Shadcn UI Components
 import { Card, CardContent } from '@/components/ui/card'
@@ -1085,6 +1086,9 @@ export default async function TickerPage({ params }: PageProps) {
           companyName={companyData.name}
         />
       )}
+
+      {/* Ben Chat FAB */}
+      {session && <BenChatFAB />}
     </>
   )
 }

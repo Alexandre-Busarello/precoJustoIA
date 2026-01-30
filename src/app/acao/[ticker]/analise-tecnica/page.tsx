@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ArrowLeft, Crown, Lock } from 'lucide-react'
+import { BenChatFAB } from '@/components/ben-chat-fab'
 
 interface PageProps {
   params: {
@@ -191,6 +192,9 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
             currentPrice={currentPrice}
           />
         </div>
+
+        {/* Ben Chat FAB */}
+        <BenChatFAB />
       </div>
     )
   }
@@ -265,6 +269,9 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
             </CardContent>
           </Card>
         </div>
+
+        {/* Ben Chat FAB */}
+        <BenChatFAB />
       </div>
     )
   }
@@ -307,6 +314,9 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
           currentPrice={currentPrice}
         />
       </div>
+
+      {/* Ben Chat FAB */}
+      <BenChatFAB />
     </div>
   )
 }

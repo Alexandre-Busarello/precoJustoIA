@@ -28,6 +28,7 @@ import { StrategyFactory } from '@/lib/strategies/strategy-factory'
 import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config'
 import type { CompanyData } from '@/lib/strategies/types'
 import Link from 'next/link'
+import { BenChatFAB } from '@/components/ben-chat-fab'
 
 // Shadcn UI Components
 import { Card, CardContent } from '@/components/ui/card'
@@ -911,6 +912,9 @@ export default async function BdrPage({ params }: PageProps) {
           }}
         />
       )}
+
+      {/* Ben Chat FAB */}
+      {session && <BenChatFAB />}
     </>
   )
 }

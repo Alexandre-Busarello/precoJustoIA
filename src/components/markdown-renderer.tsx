@@ -153,10 +153,11 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           ),
 
           // Links minimalistas
+          // Garantir que links dentro de parênteses sejam renderizados corretamente
           a: ({ children, href, ...props }) => (
             <a 
               href={href}
-              className="text-[#1a1a1a] dark:text-gray-200 underline decoration-[#1a1a1a]/30 dark:decoration-gray-400/30 underline-offset-2 hover:decoration-[#1a1a1a] dark:hover:decoration-gray-200 transition-colors duration-150" 
+              className="text-[#1a1a1a] dark:text-gray-200 underline decoration-[#1a1a1a]/30 dark:decoration-gray-400/30 underline-offset-2 hover:decoration-[#1a1a1a] dark:hover:decoration-gray-200 transition-colors duration-150 inline" 
               target={href?.startsWith('http') ? '_blank' : undefined}
               rel={href?.startsWith('http') ? 'noopener noreferrer' : undefined}
               {...props}

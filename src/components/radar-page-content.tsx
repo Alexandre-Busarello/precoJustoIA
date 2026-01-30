@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import Link from 'next/link'
+import { BenChatFAB } from '@/components/ben-chat-fab'
 
 export function RadarPageContent() {
   const [activeTab, setActiveTab] = useState<'meu-radar' | 'explorar'>('meu-radar')
@@ -440,6 +441,9 @@ export function RadarPageContent() {
           </CollapsibleContent>
         </Collapsible>
       </Card>
+
+      {/* Ben Chat FAB */}
+      <BenChatFAB />
     </div>
   )
 }

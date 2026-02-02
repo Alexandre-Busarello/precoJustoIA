@@ -736,6 +736,7 @@ interface AverageMetrics {
   // Endividamento e Cobertura
   debtToEquity: number;
   debtToAssets: number;
+  dividaLiquidaPl: number; // Dívida Líquida / Patrimônio Líquido
   interestCoverage: number;
 
   // Crescimento
@@ -1003,6 +1004,7 @@ function calculateAverageMetrics(
     inventoryTurnover: 0,
     debtToEquity: 0,
     debtToAssets: 0,
+    dividaLiquidaPl: 0,
     interestCoverage: 0,
     revenueGrowth: 0,
     netIncomeGrowth: 0,
@@ -1294,11 +1296,33 @@ function calculateAverageMetrics(
           // );
           metrics.debtToAssets += 2; // Valor alto mas não extremo
         }
+
+        // Calcular Dívida Líquida/PL = (Dívida Total - Caixa) / Patrimônio Líquido
+        // Tentar usar campos específicos de dívida se disponíveis, caso contrário usar totalLiab como aproximação
+        const shortLongTermDebt = toNumber(balanceStmt.shortLongTermDebt) || 0;
+        const longTermDebt = toNumber(balanceStmt.longTermDebt) || 0;
+        const actualDebt = (shortLongTermDebt + longTermDebt) > 0 
+          ? (shortLongTermDebt + longTermDebt) 
+          : totalDebt; // Fallback para totalLiab se não temos campos específicos
+        
+        const dividaLiquida = actualDebt - cash;
+        const dividaLiquidaPl = dividaLiquida / totalEquity;
+
+        // Validar e adicionar dividaLiquidaPl (pode ser negativo se empresa tem mais caixa que dívida)
+        if (Math.abs(dividaLiquidaPl) <= 100) {
+          // DividaLiquidaPl não deve exceder 100x em valor absoluto
+          metrics.dividaLiquidaPl += dividaLiquidaPl;
+        } else {
+          // Valor extremo - usar valor conservador baseado em debtToEquity
+          metrics.dividaLiquidaPl += Math.max(Math.min(debtToEquity - 0.5, 10), -10);
+        }
       } else {
         // PL inválido - usar valores conservadores baseados apenas em dívida/ativos
         const debtToAssets = totalDebt / totalAssets;
         metrics.debtToEquity += Math.min(debtToAssets * 3, 5); // Estimativa conservadora
         metrics.debtToAssets += Math.min(debtToAssets, 2);
+        // Para dividaLiquidaPl, usar estimativa conservadora
+        metrics.dividaLiquidaPl += Math.min(debtToAssets * 2, 5);
       }
 
       // Cobertura de juros - tratamento especial para bancos
@@ -2658,21 +2682,33 @@ function analyzeLiquidityMetrics(
     }
   } else {
     // Análise tradicional para outros setores
-    if (metrics.debtToEquity > benchmarks.maxDebtToEquity) {
+    // Usar dividaLiquidaPl (Dívida Líquida/PL) ao invés de debtToEquity para consistência com o indicador exibido
+    const dividaLiquidaPl = metrics.dividaLiquidaPl;
+    const maxDividaLiquidaPl = benchmarks.maxDebtToEquity; // Usar mesmo benchmark (ajustar se necessário)
+    
+    if (dividaLiquidaPl > maxDividaLiquidaPl) {
       result.scoreAdjustment -= 20;
       result.redFlags.push(
-        `Endividamento muito alto: A empresa deve ${metrics.debtToEquity.toFixed(
+        `Endividamento muito alto: A empresa deve ${dividaLiquidaPl.toFixed(
           2
-        )}x mais do que vale seu patrimônio (máximo recomendado: ${benchmarks.maxDebtToEquity.toFixed(
+        )}x mais do que vale seu patrimônio líquido (máximo recomendado: ${maxDividaLiquidaPl.toFixed(
           1
         )}x). Isso pode comprometer a saúde financeira e os dividendos.`
       );
-    } else if (metrics.debtToEquity < benchmarks.maxDebtToEquity * 0.5) {
+    } else if (dividaLiquidaPl < 0) {
+      // Empresa tem mais caixa que dívida (dívida líquida negativa)
       result.scoreAdjustment += 5;
       result.positiveSignals.push(
-        `Endividamento controlado: A empresa deve apenas ${metrics.debtToEquity.toFixed(
+        `Posição de caixa forte: A empresa tem mais caixa que dívida (dívida líquida/PL: ${dividaLiquidaPl.toFixed(
           2
-        )}x do valor do seu patrimônio. Isso dá segurança e espaço para crescer.`
+        )}x). Isso indica segurança financeira e capacidade de investimento.`
+      );
+    } else if (dividaLiquidaPl < maxDividaLiquidaPl * 0.5) {
+      result.scoreAdjustment += 5;
+      result.positiveSignals.push(
+        `Endividamento controlado: A empresa deve apenas ${dividaLiquidaPl.toFixed(
+          2
+        )}x do valor do seu patrimônio líquido. Isso dá segurança e espaço para crescer.`
       );
     }
   }

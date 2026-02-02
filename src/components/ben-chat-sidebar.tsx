@@ -9,6 +9,7 @@ import { flushSync } from 'react-dom'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { 
   useBenConversations, 
@@ -833,7 +834,7 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
 
           {/* Área de mensagens */}
           <ScrollArea className="flex-1 px-4 py-4">
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0 w-full">
               {/* Mostrar mensagem inicial e mensagens apenas se há conversa selecionada */}
               {selectedConversationId && (
                 <>
@@ -886,7 +887,7 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
                         </div>
                       )}
                       <div className={cn(
-                        'flex-1',
+                        'flex-1 min-w-0',
                         msg.role === 'USER' && 'text-right'
                       )}>
                         <div className={cn(
@@ -928,7 +929,7 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
                           className="rounded-full w-full h-full object-cover"
                         />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="bg-muted rounded-lg p-3">
                           <div className="prose prose-sm max-w-none dark:prose-invert">
                             {/* Renderizar markdown com key estável baseada no hash do conteúdo */}
@@ -979,8 +980,8 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
 
           {/* Input de mensagem */}
           <div className="border-t p-4">
-            <div className="flex gap-2">
-              <Input
+            <div className="flex gap-2 items-end">
+              <Textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
@@ -991,12 +992,14 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
                 }}
                 placeholder="Digite sua mensagem..."
                 disabled={!selectedConversationId || sendMessage.isPending || isStreaming}
-                className="flex-1"
+                className="flex-1 min-h-[60px] max-h-[120px] resize-none text-sm sm:min-h-[80px] sm:max-h-[160px]"
+                rows={2}
               />
               <Button
                 onClick={handleSendMessage}
                 disabled={!message.trim() || !selectedConversationId || sendMessage.isPending || isStreaming}
                 size="icon"
+                className="flex-shrink-0 h-[60px] sm:h-[80px]"
               >
                 {sendMessage.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

@@ -19,7 +19,7 @@ import {
   getIndicatorExpectations
 } from '@/lib/ibov-projection-helpers'
 
-export const maxDuration = 300 // 5 minutos para processar todos os períodos
+export const maxDuration = 60 // Máximo permitido no plano hobby (60 segundos)
 
 type ProjectionPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
 

@@ -976,6 +976,7 @@ function calculateAverageMetrics(
       inventoryTurnover: 4,
       debtToEquity: 0.5,
       debtToAssets: 0.3,
+      dividaLiquidaPl: 0.3,
       interestCoverage: 5,
       revenueGrowth: 0,
       netIncomeGrowth: 0,

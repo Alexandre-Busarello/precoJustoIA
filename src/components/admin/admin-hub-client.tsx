@@ -187,6 +187,14 @@ export function AdminHubClient({ userEmail, userName }: AdminHubClientProps) {
       href: '/admin/ticker-migration',
       color: 'bg-teal-500',
     },
+    {
+      id: 'ibov-projections',
+      title: 'Projeções IBOV',
+      description: 'Gerenciar e recriar projeções do IBOVESPA',
+      icon: TrendingUp,
+      href: '/admin/ibov-projections',
+      color: 'bg-amber-500',
+    },
   ];
 
   const analyticsFeatures = [

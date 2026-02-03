@@ -5,6 +5,18 @@
 
 import { getTechnicalAnalysis } from './ben-tools'
 import { GoogleGenAI } from '@google/genai'
+import { 
+  fetchMultipleIndicators, 
+  EconomicIndicator, 
+  IndicatorName,
+  persistIndicatorExpectations
+} from './economic-indicators-service'
+import { 
+  calculateMultipleIndicatorsTechnicalAnalysis,
+  crossIndicatorAnalysis,
+  CrossIndicatorAnalysis,
+  IndicatorTechnicalAnalysis
+} from './indicator-technical-analysis'
 
 export interface ElectionPeriod {
   isElectionPeriod: boolean
@@ -247,6 +259,346 @@ export async function getMacroEconomicEvents(period: 'MONTHLY' | 'ANNUAL'): Prom
       summary: 'Não foi possível buscar eventos macroeconômicos no momento.'
     }
   }
+}
+
+/**
+ * Converte string de data em português para Date (função local para evitar problemas de cache)
+ */
+function parsePortugueseDateLocal(dateString: string): Date | null {
+  if (!dateString || typeof dateString !== 'string') {
+    return null
+  }
+
+  const monthMap: Record<string, number> = {
+    'janeiro': 0, 'fevereiro': 1, 'março': 2, 'marco': 2,
+    'abril': 3, 'maio': 4, 'junho': 5,
+    'julho': 6, 'agosto': 7, 'setembro': 8,
+    'outubro': 9, 'novembro': 10, 'dezembro': 11
+  }
+
+  try {
+    let cleaned = dateString
+      .replace(/^(segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)[- ]feira[,]?\s*/i, '')
+      .replace(/,/g, '')
+      .trim()
+
+    const simpleMatch = cleaned.match(/(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})/i)
+    if (simpleMatch) {
+      const day = parseInt(simpleMatch[1], 10)
+      const monthName = simpleMatch[2].toLowerCase()
+      const year = parseInt(simpleMatch[3], 10)
+      
+      const month = monthMap[monthName]
+      if (month !== undefined && day >= 1 && day <= 31 && year >= 2000 && year <= 2100) {
+        const date = new Date(year, month, day)
+        if (date instanceof Date && !isNaN(date.getTime())) {
+          return date
+        }
+      }
+    }
+
+    // Tentar formato com range: "27 e 28 de janeiro de 2026" ou "27-28 de janeiro de 2026" (pegar a primeira data)
+    const rangeMatchE = cleaned.match(/(\d{1,2})\s+e\s+\d{1,2}\s+de\s+(\w+)\s+de\s+(\d{4})/i)
+    const rangeMatchHifen = cleaned.match(/(\d{1,2})[-–]\d{1,2}\s+de\s+(\w+)\s+de\s+(\d{4})/i)
+    const rangeMatch = rangeMatchE || rangeMatchHifen
+    
+    if (rangeMatch) {
+      const day = parseInt(rangeMatch[1], 10)
+      const monthName = rangeMatch[2].toLowerCase()
+      const year = parseInt(rangeMatch[3], 10)
+      
+      const month = monthMap[monthName]
+      if (month !== undefined && day >= 1 && day <= 31 && year >= 2000 && year <= 2100) {
+        const date = new Date(year, month, day)
+        if (date instanceof Date && !isNaN(date.getTime())) {
+          return date
+        }
+      }
+    }
+
+    // Tentar múltiplas datas separadas por ponto e vírgula ou vírgula
+    // Ex: "27-28 de janeiro; 17-18 de março" - pegar a próxima data que ainda não passou
+    const multipleDatesMatch = cleaned.match(/(\d{1,2})[-–]\d{1,2}\s+de\s+(\w+)\s+de\s+(\d{4})/gi)
+    if (multipleDatesMatch && multipleDatesMatch.length > 0) {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      // Tentar encontrar a próxima data que ainda não passou
+      for (const dateStr of multipleDatesMatch) {
+        const singleMatch = dateStr.match(/(\d{1,2})[-–]\d{1,2}\s+de\s+(\w+)\s+de\s+(\d{4})/i)
+        if (singleMatch) {
+          const day = parseInt(singleMatch[1], 10)
+          const monthName = singleMatch[2].toLowerCase()
+          const year = parseInt(singleMatch[3], 10)
+          
+          const month = monthMap[monthName]
+          if (month !== undefined && day >= 1 && day <= 31 && year >= 2000 && year <= 2100) {
+            const date = new Date(year, month, day)
+            if (date instanceof Date && !isNaN(date.getTime()) && date >= today) {
+              return date // Retornar a primeira data futura encontrada
+            }
+          }
+        }
+      }
+      
+      // Se não encontrou data futura, retornar a primeira data encontrada
+      const firstMatch = multipleDatesMatch[0].match(/(\d{1,2})[-–]\d{1,2}\s+de\s+(\w+)\s+de\s+(\d{4})/i)
+      if (firstMatch) {
+        const day = parseInt(firstMatch[1], 10)
+        const monthName = firstMatch[2].toLowerCase()
+        const year = parseInt(firstMatch[3], 10)
+        
+        const month = monthMap[monthName]
+        if (month !== undefined && day >= 1 && day <= 31 && year >= 2000 && year <= 2100) {
+          const date = new Date(year, month, day)
+          if (date instanceof Date && !isNaN(date.getTime())) {
+            return date
+          }
+        }
+      }
+    }
+
+    const isoDate = new Date(dateString)
+    if (isoDate instanceof Date && !isNaN(isoDate.getTime())) {
+      return isoDate
+    }
+
+    return null
+  } catch (error) {
+    return null
+  }
+}
+
+/**
+ * Busca indicadores econômicos com análise técnica para projeções IBOV
+ */
+export async function getEconomicIndicatorsWithTechnicalAnalysis(
+  period: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+): Promise<{
+  indicators: Map<IndicatorName, Omit<EconomicIndicator, 'technicalAnalysis'> & { technicalAnalysis: IndicatorTechnicalAnalysis | null }>
+  crossAnalysis: CrossIndicatorAnalysis | null
+}> {
+  try {
+    // Indicadores principais e complementares para projeções IBOV
+    const indicatorNames: IndicatorName[] = [
+      // Principais
+      'VIX',
+      'DI_FUTURO',
+      'PETROLEO_WTI',
+      'PETROLEO_BRENT',
+      'MINERIO_FERRO',
+      'DOLAR',
+      'SP500',
+      // Complementares
+      'CDI',
+      'SELIC',
+      'IPCA',
+      'CRB_INDEX',
+      'COBRE',
+      'SOJA',
+      'BOND_YIELD_BR_10Y',
+      'CONFIANCA_CONSUMIDOR'
+    ]
+
+    // Buscar indicadores atualizados (sem cache)
+    const indicators = await fetchMultipleIndicators(indicatorNames, true)
+
+    // Calcular análise técnica para cada indicador
+    const technicalAnalyses = await calculateMultipleIndicatorsTechnicalAnalysis(
+      indicatorNames,
+      period
+    )
+
+    // Combinar indicadores com análise técnica
+    const indicatorsWithTA = new Map<
+      IndicatorName,
+      Omit<EconomicIndicator, 'technicalAnalysis'> & { technicalAnalysis: IndicatorTechnicalAnalysis | null }
+    >()
+
+    indicators.forEach((indicator, name) => {
+      const ta = technicalAnalyses.get(name) || null
+      const { technicalAnalysis: _, ...indicatorWithoutTA } = indicator
+      indicatorsWithTA.set(name, {
+        ...indicatorWithoutTA,
+        technicalAnalysis: ta
+      })
+    })
+
+    // Fazer cruzamento de indicadores
+    const crossAnalysis = technicalAnalyses.size > 0 
+      ? crossIndicatorAnalysis(technicalAnalyses)
+      : null
+
+    // Buscar e salvar expectativas
+    const expectations = await getIndicatorExpectations()
+    if (expectations.size > 0) {
+      const today = new Date()
+      for (const [indicatorName, exp] of expectations.entries()) {
+        try {
+          await persistIndicatorExpectations(indicatorName, today, exp)
+        } catch (error) {
+          console.warn(`⚠️ [IBOV Projection] Erro ao salvar expectativas de ${indicatorName}:`, error)
+        }
+      }
+    }
+
+    return {
+      indicators: indicatorsWithTA,
+      crossAnalysis
+    }
+  } catch (error) {
+    console.error('[IBOV Projection] Erro ao buscar indicadores econômicos:', error)
+    return {
+      indicators: new Map(),
+      crossAnalysis: null
+    }
+  }
+}
+
+/**
+ * Busca expectativas/forecasts do dia para indicadores econômicos
+ */
+export async function getIndicatorExpectations(): Promise<Map<IndicatorName, {
+  forecast: number | string | null
+  consensus: string | null
+  nextEvent: string | null
+  eventDate: Date | string | null
+}>> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      return new Map()
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY
+    })
+
+    const response = await ai.models.generateContentStream({
+      model: 'gemini-2.5-flash-lite',
+      config: {
+        tools: [{ googleSearch: {} }],
+        thinkingConfig: {
+          thinkingBudget: 0
+        }
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{
+            text: `Busque expectativas e forecasts do dia para os seguintes indicadores econômicos brasileiros:
+            - DI Futuro (taxa de juros futura)
+            - Selic (taxa básica de juros)
+            - IPCA (inflação)
+            - Dólar (USD/BRL)
+            
+            Retorne informações sobre:
+            - Forecasts/expectativas de mercado
+            - Consenso de analistas
+            - Próximos eventos agendados (COPOM, divulgação de dados, etc.)
+            
+            Formato JSON:
+            {
+              "DI_FUTURO": { "forecast": null, "consensus": "...", "nextEvent": "...", "eventDate": null },
+              "SELIC": { ... },
+              "IPCA": { ... },
+              "DOLAR": { ... }
+            }`
+          }]
+        }
+      ]
+    })
+
+    let fullResponse = ''
+    for await (const chunk of response) {
+      if (chunk.text) {
+        fullResponse += chunk.text
+      }
+    }
+
+    // Tentar extrair JSON da resposta
+    const jsonMatch = fullResponse.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        const expectations = JSON.parse(jsonMatch[0])
+        const map = new Map()
+        
+        Object.entries(expectations).forEach(([key, value]: [string, any]) => {
+          // Extrair número do forecast se for string
+          let forecast: number | string | null = value.forecast || null
+          if (forecast && typeof forecast === 'string') {
+            // Tentar extrair número da string
+            const numberMatch = forecast.match(/(\d+[,.]?\d*)/)
+            if (numberMatch) {
+              const numberStr = numberMatch[1].replace(',', '.')
+              const parsed = parseFloat(numberStr)
+              // Ignorar anos (4 dígitos entre 1900-2100)
+              if (!isNaN(parsed) && !(parsed >= 1900 && parsed <= 2100 && numberStr.length === 4)) {
+                forecast = parsed
+              }
+            }
+          }
+
+          // Validar eventDate
+          let eventDate: Date | string | null = null
+          if (value.eventDate) {
+            try {
+              // Se já for uma Date válida, usar diretamente
+              if (value.eventDate instanceof Date && !isNaN(value.eventDate.getTime())) {
+                eventDate = value.eventDate
+              } else if (typeof value.eventDate === 'string') {
+                // Tentar parsear como data em português primeiro
+                const parsedPtDate = parsePortugueseDateLocal(value.eventDate)
+                
+                if (parsedPtDate) {
+                  eventDate = parsedPtDate
+                } else {
+                  // Tentar formato padrão
+                  const standardDate = new Date(value.eventDate)
+                  if (!isNaN(standardDate.getTime())) {
+                    eventDate = standardDate
+                  } else {
+                    // Manter como string para tentar parsear depois
+                    eventDate = value.eventDate
+                  }
+                }
+              } else {
+                const stringDate = new Date(String(value.eventDate))
+                eventDate = !isNaN(stringDate.getTime()) ? stringDate : null
+              }
+            } catch (error) {
+              // Ignorar datas inválidas
+              eventDate = null
+            }
+          }
+
+          map.set(key as IndicatorName, {
+            forecast: forecast,
+            consensus: value.consensus || null,
+            nextEvent: value.nextEvent || null,
+            eventDate: eventDate
+          })
+        })
+
+        return map
+      } catch (parseError) {
+        console.warn('[IBOV Projection] Erro ao parsear expectativas:', parseError)
+      }
+    }
+
+    return new Map()
+  } catch (error) {
+    console.error('[IBOV Projection] Erro ao buscar expectativas:', error)
+    return new Map()
+  }
+}
+
+/**
+ * Calcula correlações entre indicadores e IBOV
+ */
+export async function getIndicatorCorrelation(): Promise<Map<string, number>> {
+  // TODO: Implementar cálculo de correlação histórica
+  // Por enquanto retorna mapa vazio
+  return new Map()
 }
 
 

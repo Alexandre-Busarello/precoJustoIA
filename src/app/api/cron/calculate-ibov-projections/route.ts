@@ -19,7 +19,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { GoogleGenAI } from '@google/genai'
 import { getIbovData } from '@/lib/ben-tools'
-import { getElectionPeriod, getTechnicalAnalysisForIbov, getMacroEconomicEvents } from '@/lib/ibov-projection-helpers'
+import { 
+  getElectionPeriod, 
+  getTechnicalAnalysisForIbov, 
+  getMacroEconomicEvents,
+  getEconomicIndicatorsWithTechnicalAnalysis,
+  getIndicatorExpectations
+} from '@/lib/ibov-projection-helpers'
 import { getTodayInBrazil } from '@/lib/market-status'
 
 export const maxDuration = 60 // Limite da Vercel
@@ -343,6 +349,95 @@ async function calculateProjection(period: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANN
       apiKey: process.env.GEMINI_API_KEY!
     })
 
+    // Buscar indicadores econômicos com análise técnica (para todos os períodos)
+    const economicIndicators = await getEconomicIndicatorsWithTechnicalAnalysis(period)
+    const expectations = await getIndicatorExpectations()
+
+    // Construir seção de indicadores econômicos
+    let economicIndicatorsSection = ''
+    if (economicIndicators.indicators.size > 0) {
+      const indicatorsList: string[] = []
+      
+      economicIndicators.indicators.forEach((indicator, name) => {
+        const ta = indicator.technicalAnalysis
+        const exp = expectations.get(name)
+        
+        let indicatorText = `\n**${name}**:`
+        indicatorText += `\n- Valor Atual: ${indicator.currentValue.toFixed(2)}`
+        if (indicator.changePercent !== null) {
+          indicatorText += ` (${indicator.changePercent >= 0 ? '+' : ''}${indicator.changePercent.toFixed(2)}%)`
+        }
+        
+        if (ta) {
+          indicatorText += `\n- Análise Técnica:`
+          if (ta.rsi !== null) indicatorText += `\n  * RSI: ${ta.rsi.toFixed(2)}`
+          if (ta.macd !== null) indicatorText += `\n  * MACD: ${ta.macd.toFixed(4)}`
+          if (ta.macdSignal !== null) indicatorText += ` (Sinal: ${ta.macdSignal.toFixed(4)})`
+          if (ta.sma20 !== null) indicatorText += `\n  * SMA 20: ${ta.sma20.toFixed(2)}`
+          if (ta.sma50 !== null) indicatorText += `\n  * SMA 50: ${ta.sma50.toFixed(2)}`
+          if (ta.sma200 !== null) indicatorText += `\n  * SMA 200: ${ta.sma200.toFixed(2)}`
+          if (ta.trend) indicatorText += `\n  * Tendência: ${ta.trend}`
+          if (ta.signal) indicatorText += `\n  * Sinal: ${ta.signal}`
+        }
+        
+        if (exp) {
+          indicatorText += `\n- Expectativas:`
+          if (exp.forecast !== null) {
+            const forecastValue = typeof exp.forecast === 'number' 
+              ? exp.forecast.toFixed(2) 
+              : String(exp.forecast)
+            indicatorText += `\n  * Forecast: ${forecastValue}`
+          }
+          if (exp.consensus) indicatorText += `\n  * Consenso: ${exp.consensus}`
+          if (exp.nextEvent) indicatorText += `\n  * Próximo Evento: ${exp.nextEvent}`
+        }
+        
+        indicatorsList.push(indicatorText)
+      })
+      
+      // Separar indicadores principais e complementares
+      const mainIndicators = ['VIX', 'DI_FUTURO', 'PETROLEO_WTI', 'PETROLEO_BRENT', 'MINERIO_FERRO', 'DOLAR', 'SP500']
+      const complementaryIndicators = ['CDI', 'SELIC', 'IPCA', 'CRB_INDEX', 'COBRE', 'SOJA', 'BOND_YIELD_BR_10Y', 'CONFIANCA_CONSUMIDOR']
+      
+      const mainList: string[] = []
+      const complementaryList: string[] = []
+      
+      indicatorsList.forEach(indicatorText => {
+        const isMain = mainIndicators.some(name => indicatorText.includes(`**${name}**`))
+        if (isMain) {
+          mainList.push(indicatorText)
+        } else {
+          complementaryList.push(indicatorText)
+        }
+      })
+      
+      economicIndicatorsSection = `
+**INDICADORES ECONÔMICOS PRINCIPAIS COM ANÁLISE TÉCNICA**:
+${mainList.join('\n')}
+
+${complementaryList.length > 0 ? `
+**INDICADORES COMPLEMENTARES** (considere quando relevantes):
+${complementaryList.join('\n')}
+` : ''}
+
+${economicIndicators.crossAnalysis ? `
+**CRUZAMENTO DE INDICADORES**:
+${economicIndicators.crossAnalysis.summary}
+${economicIndicators.crossAnalysis.divergences.length > 0 ? `
+Divergências Detectadas:
+${economicIndicators.crossAnalysis.divergences.map(d => `- ${d.description}`).join('\n')}
+` : ''}
+Nível de Risco: ${economicIndicators.crossAnalysis.riskLevel}
+` : ''}
+
+IMPORTANTE: 
+- **Indicadores Principais**: Analise TODOS considerando valor atual, variação percentual, análise técnica, expectativas e impacto no IBOVESPA
+- **Indicadores Complementares**: Considere quando relevantes para o contexto (ex: CDI/Selic para contexto de juros, IPCA para inflação, commodities para setores específicos)
+- **VIX**: Especialmente importante - mede volatilidade/medo do mercado. VIX alto geralmente indica maior risco e pode impactar negativamente o IBOV
+- **Consenso/Divergência**: Avalie se indicadores convergem ou divergem na mesma direção
+`
+    }
+
     // Para projeções mensal e anual, buscar contexto adicional
     let technicalAnalysisSection = ''
     let electionSection = ''
@@ -419,11 +514,25 @@ IMPORTANTE: Considere o impacto desses eventos na sua projeção. Decisões do C
 
 **TAREFA**: Use a ferramenta de busca do Google para coletar dados ATUAIS e RELEVANTES sobre os seguintes indicadores:
 
-1. **DI Futuro** (taxa de juros futura) - Busque a cotação atual e tendências
-2. **Petróleo** (WTI/Brent) - Busque preços atuais e tendências
-3. **Minério de Ferro** - Busque preços atuais e tendências
-4. **Dólar** (USD/BRL) - Busque cotação atual e tendências
-5. **S&P500** - Busque valor atual e tendências
+**INDICADORES PRINCIPAIS**:
+1. **VIX** (índice de volatilidade) - CRÍTICO: Mede medo/volatilidade do mercado. Busque valor atual e tendências
+2. **DI Futuro** (taxa de juros futura) - Busque a cotação atual e tendências
+3. **Petróleo** (WTI/Brent) - Busque preços atuais e tendências
+4. **Minério de Ferro** - Busque preços atuais e tendências
+5. **Dólar** (USD/BRL) - Busque cotação atual e tendências
+6. **S&P500** - Busque valor atual e tendências
+
+**INDICADORES COMPLEMENTARES** (considere também):
+7. **CDI** (taxa de juros brasileira de referência) - Complementa DI Futuro
+8. **Selic** (taxa básica de juros do Brasil) - Definida pelo COPOM
+9. **IPCA** (índice de inflação brasileiro) - Impacta decisões do COPOM
+10. **CRB Index** (índice agregado de commodities) - Visão macro de commodities
+11. **Cobre** - Indicador de crescimento econômico global
+12. **Soja** - Impacto no agronegócio brasileiro
+13. **Bond Yield Brasil 10Y** - Mede risco país e expectativas
+14. **Índice de Confiança do Consumidor** - Sentimento econômico doméstico
+
+${economicIndicatorsSection}
 
 ${technicalAnalysisSection}
 ${electionSection}
@@ -586,44 +695,50 @@ ${JSON.stringify(step2Data, null, 2)}
 {
   "projectedValue": 125000.50,
   "confidence": 75,
-  "reasoning": "[ANÁLISE DIDÁTICA DETALHADA - siga exatamente esta estrutura]:\n\n**PROJEÇÃO: [ALTA/QUEDA/ESTABILIDADE]**\n\n**MOTIVOS PRINCIPAIS DA PROJEÇÃO:**\n\n1. **[Nome do Indicador Principal] (Peso: X%)**: [Explicação direta e clara do motivo que levou à projeção de alta/queda. Exemplo: 'O DI Futuro está em [valor]%, indicando [tendência de alta/queda de juros]. Isso [impacto direto no IBOV - explique o motivo específico].'\n\n2. **[Segundo Indicador] (Peso: Y%)**: [Explicação direta do motivo e impacto]\n\n3. **[Terceiro Indicador] (Peso: Z%)**: [Explicação direta do motivo e impacto]\n\n[Continue para TODOS os indicadores avaliados]\n\n**RESUMO**: [Síntese clara explicando por que a projeção é de alta/queda, conectando todos os indicadores de forma didática]",
-  "keyIndicators": {
-    "primary": "DI Futuro",
-    "all": {
-      "DI Futuro": {
-        "weight": 0.35,
-        "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
-        "reason": "Breve explicação do impacto deste indicador"
+  "reasoning": "[ANÁLISE DIDÁTICA DETALHADA - siga EXATAMENTE esta estrutura OBRIGATÓRIA]:\n\n**PROJEÇÃO: [ALTA/QUEDA/ESTABILIDADE]**\n\n**MOTIVOS PRINCIPAIS DA PROJEÇÃO:**\n\n1. **[Nome do Indicador Principal] (Peso: X%)**: [Explicação direta e clara do motivo que levou à projeção de alta/queda. Exemplo: 'O DI Futuro está em [valor]%, indicando [tendência de alta/queda de juros]. Isso [impacto direto no IBOV - explique o motivo específico].'\n\n2. **[Segundo Indicador] (Peso: Y%)**: [Explicação direta do motivo e impacto]\n\n3. **[Terceiro Indicador] (Peso: Z%)**: [Explicação direta do motivo e impacto]\n\n[Continue para TODOS os indicadores avaliados]\n\n**RESUMO**: [Síntese clara explicando por que a projeção é de alta/queda, conectando todos os indicadores de forma didática]\n\n⚠️ CRÍTICO: O reasoning DEVE começar com **PROJEÇÃO: [ALTA/QUEDA/ESTABILIDADE]** seguido imediatamente por **MOTIVOS PRINCIPAIS DA PROJEÇÃO:**. Esta estrutura é OBRIGATÓRIA.",
+      "keyIndicators": {
+        "primary": "VIX" ou "DI Futuro",
+        "all": {
+          "VIX": {
+            "weight": 0.20,
+            "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
+            "reason": "Breve explicação do impacto deste indicador (volatilidade/medo do mercado)"
+          },
+          "DI Futuro": {
+            "weight": 0.25,
+            "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
+            "reason": "Breve explicação do impacto deste indicador"
+          },
+          "Petróleo": {
+            "weight": 0.20,
+            "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
+            "reason": "Breve explicação do impacto deste indicador"
+          },
+          "Minério de Ferro": {
+            "weight": 0.15,
+            "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
+            "reason": "Breve explicação do impacto deste indicador"
+          },
+          "Dólar": {
+            "weight": 0.12,
+            "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
+            "reason": "Breve explicação do impacto deste indicador"
+          },
+          "S&P500": {
+            "weight": 0.08,
+            "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
+            "reason": "Breve explicação do impacto deste indicador"
+          }
+        },
+        "weights": {
+          "VIX": 0.20,
+          "DI Futuro": 0.25,
+          "Petróleo": 0.20,
+          "Minério de Ferro": 0.15,
+          "Dólar": 0.12,
+          "S&P500": 0.08
+        }
       },
-      "Petróleo": {
-        "weight": 0.25,
-        "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
-        "reason": "Breve explicação do impacto deste indicador"
-      },
-      "Minério de Ferro": {
-        "weight": 0.15,
-        "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
-        "reason": "Breve explicação do impacto deste indicador"
-      },
-      "Dólar": {
-        "weight": 0.15,
-        "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
-        "reason": "Breve explicação do impacto deste indicador"
-      },
-      "S&P500": {
-        "weight": 0.10,
-        "impact": "ALTA" ou "BAIXA" ou "NEUTRO",
-        "reason": "Breve explicação do impacto deste indicador"
-      }
-    },
-    "weights": {
-      "DI Futuro": 0.35,
-      "Petróleo": 0.25,
-      "Minério de Ferro": 0.15,
-      "Dólar": 0.15,
-      "S&P500": 0.10
-    }
-  },
   "review": {
     "makesSense": true,
     "validationNotes": "Notas sobre a validação da projeção",
@@ -646,11 +761,16 @@ ${JSON.stringify(step2Data, null, 2)}
    - Com divergência moderada: 50-70
    - Com alta divergência: 40-60
 
-4. **REASONING**: 
+4. **REASONING - ESTRUTURA OBRIGATÓRIA**: 
+   - **ESTRUTURA OBRIGATÓRIA** (DEVE ser seguida EXATAMENTE):
+     O reasoning DEVE começar com: **PROJEÇÃO: [ALTA/QUEDA/ESTABILIDADE]**
+     Seguido imediatamente por: **MOTIVOS PRINCIPAIS DA PROJEÇÃO:**
+     Depois listar cada indicador numerado: 1. [Indicador] (Peso: X%): [Explicação]
+     E terminar com: **RESUMO**: [Síntese]
+   - O reasoning DEVE começar EXATAMENTE com "**PROJEÇÃO: [ALTA/QUEDA/ESTABILIDADE]**" seguido imediatamente por "**MOTIVOS PRINCIPAIS DA PROJEÇÃO:**"
    - Deve ter pelo menos 300 caracteres
    - Deve explicar TODOS os indicadores de forma didática
-   - Deve começar claramente indicando se a projeção é de ALTA, QUEDA ou ESTABILIDADE
-   - Use markdown para formatação
+   - Use markdown para formatação (negrito, listas, etc.)
 
 5. **VALIDAÇÃO**: 
    - Verifique se a variação calculada está dentro dos limites

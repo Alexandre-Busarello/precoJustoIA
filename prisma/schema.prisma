@@ -1916,3 +1916,45 @@ model IbovProjection {
   @@index([createdAt])
   @@map("ibov_projections")
 }
+
+model EconomicIndicatorHistory {
+  id                String   @id @default(cuid())
+  indicatorName     String   @map("indicator_name")
+  symbol            String
+  date              DateTime @db.Date
+  interval          String   @default("1d")
+  value             Decimal  @db.Decimal(15, 6)
+  changePercent     Decimal? @map("change_percent") @db.Decimal(10, 4)
+  open              Decimal? @db.Decimal(15, 6)
+  high              Decimal? @db.Decimal(15, 6)
+  low               Decimal? @db.Decimal(15, 6)
+  close             Decimal? @db.Decimal(15, 6)
+  volume            Decimal? @db.Decimal(20, 2)
+  
+  // Análise técnica calculada (opcional, pode ser null para dados antigos)
+  rsi               Decimal? @db.Decimal(5, 2)
+  macd              Decimal? @db.Decimal(10, 4)
+  macdSignal        Decimal? @map("macd_signal") @db.Decimal(10, 4)
+  macdHistogram     Decimal? @map("macd_histogram") @db.Decimal(10, 4)
+  sma20             Decimal? @map("sma_20") @db.Decimal(15, 6)
+  sma50             Decimal? @map("sma_50") @db.Decimal(15, 6)
+  sma200            Decimal? @map("sma_200") @db.Decimal(15, 6)
+  trend             String?
+  signal            String?
+  
+  // Expectativas (quando disponíveis)
+  forecast          Decimal? @db.Decimal(15, 6)
+  consensus         String?
+  nextEvent         String?  @map("next_event")
+  eventDate         DateTime? @map("event_date") @db.Date
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([indicatorName, date, interval])
+  @@index([indicatorName, interval, date])
+  @@index([indicatorName, date])
+  @@index([interval, date])
+  @@index([date])
+  @@map("economic_indicator_history")
+}

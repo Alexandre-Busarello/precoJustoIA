@@ -11,7 +11,8 @@ import {
   getTechnicalAnalysisForIbov, 
   getMacroEconomicEvents,
   getEconomicIndicatorsWithTechnicalAnalysis,
-  getIndicatorExpectations
+  getIndicatorExpectations,
+  analyzeConsecutiveSequences
 } from '@/lib/ibov-projection-helpers'
 import { isCurrentUserPremium } from '@/lib/user-service'
 
@@ -159,8 +160,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Buscar dados reais do IBOV
-    const ibovData = await getIbovData()
+    // Determinar quantos dias de histórico precisamos para análise de sequências
+    let historicalDays: number
+    switch (period) {
+      case 'DAILY':
+        historicalDays = 5
+        break
+      case 'WEEKLY':
+        historicalDays = 10
+        break
+      case 'MONTHLY':
+        historicalDays = 20
+        break
+      case 'ANNUAL':
+        historicalDays = 20
+        break
+      default:
+        historicalDays = 10
+    }
+
+    // Buscar dados reais do IBOV com histórico suficiente
+    const ibovData = await getIbovData(historicalDays)
     if (!ibovData.success || !ibovData.data) {
       return NextResponse.json(
         { 
@@ -174,6 +194,11 @@ export async function POST(request: NextRequest) {
     }
 
     const currentValue = ibovData.data.currentValue
+
+    // Analisar sequências consecutivas
+    const sequenceAnalysis = ibovData.data.historicalData && ibovData.data.historicalData.length > 0
+      ? analyzeConsecutiveSequences(ibovData.data.historicalData, period)
+      : null
 
     // Verificar se já existe projeção válida
     const now = new Date()
@@ -422,6 +447,55 @@ IMPORTANTE: Considere o impacto desses eventos na sua projeção. Decisões do C
 
 ${economicIndicatorsSection}
 
+${sequenceAnalysis ? `
+**ANÁLISE DE SEQUÊNCIAS CONSECUTIVAS** (PESO: 30% DA ANÁLISE):
+${sequenceAnalysis.analysis}
+
+**TIPO DE SEQUÊNCIA**: ${sequenceAnalysis.sequenceType === 'HIGH' ? 'SEQUÊNCIA FORTE DE ALTA' : sequenceAnalysis.sequenceType === 'LOW' ? 'SEQUÊNCIA FORTE DE QUEDA' : sequenceAnalysis.sequenceType === 'BROKEN' ? 'SEQUÊNCIA QUEBRADA' : 'SEM SEQUÊNCIA FORTE'}
+**DIAS CONSECUTIVOS**: ${sequenceAnalysis.consecutiveDays}
+**VARIAÇÃO ACUMULADA**: ${sequenceAnalysis.accumulatedChange >= 0 ? '+' : ''}${sequenceAnalysis.accumulatedChange.toFixed(2)}%
+**PROBABILIDADE DE CORREÇÃO**: ${(sequenceAnalysis.correctionProbability * 100).toFixed(0)}%
+
+**REGRAS CRÍTICAS PARA ANÁLISE DE SEQUÊNCIAS** (PESO: 30% DA ANÁLISE TOTAL):
+
+⚠️ **ANÁLISE COMBINADA**: Você deve interpretar e combinar tanto a análise de sequências quanto os indicadores macroeconômicos para determinar a projeção final. Não há precedência absoluta - ambos os fatores devem ser considerados em conjunto.
+
+1. **SEQUÊNCIA FORTE DE ALTA** (${sequenceAnalysis.sequenceType === 'HIGH' ? 'DETECTADA' : 'NÃO DETECTADA'}):
+   - Se detectada: O mercado vem de ${sequenceAnalysis.consecutiveDays} dias consecutivos de alta com variação acumulada de ${sequenceAnalysis.accumulatedChange.toFixed(2)}%
+   - **SINAL DE CORREÇÃO**: Alta probabilidade de correção (${(sequenceAnalysis.correctionProbability * 100).toFixed(0)}%)
+   - O mercado está sobrecomprado após ${sequenceAnalysis.consecutiveDays} dias consecutivos de alta - uma correção é altamente provável
+   - **INTERPRETAÇÃO**: Considere este sinal de correção (tendência para QUEDA) em conjunto com os indicadores macro
+   - Se os indicadores macro também apontam para queda → projeção de queda mais forte
+   - Se os indicadores macro apontam para alta → avalie se a correção da sequência é mais forte que o impulso dos indicadores macro
+
+2. **SEQUÊNCIA FORTE DE QUEDA** (${sequenceAnalysis.sequenceType === 'LOW' ? 'DETECTADA' : 'NÃO DETECTADA'}):
+   - Se detectada: O mercado vem de ${sequenceAnalysis.consecutiveDays} dias consecutivos de queda com variação acumulada de ${sequenceAnalysis.accumulatedChange.toFixed(2)}%
+   - **SINAL DE CORREÇÃO**: Probabilidade moderada de correção para alta (${(sequenceAnalysis.correctionProbability * 100).toFixed(0)}%)
+   - O mercado está sobrevendido após ${sequenceAnalysis.consecutiveDays} dias consecutivos de queda - uma correção para alta é provável
+   - **INTERPRETAÇÃO**: Considere este sinal de correção (tendência para ALTA) em conjunto com os indicadores macro
+   - Se os indicadores macro também apontam para alta → projeção de alta mais forte
+   - Se os indicadores macro apontam para queda → avalie se a correção da sequência é mais forte que o impulso dos indicadores macro
+
+3. **SEQUÊNCIA QUEBRADA** (${sequenceAnalysis.sequenceType === 'BROKEN' ? 'DETECTADA' : 'NÃO DETECTADA'}):
+   - Se detectada: O mercado interrompeu a sequência anterior
+   - **AÇÃO**: ZERAR o peso deste critério (0%). Focar APENAS nos indicadores macroeconômicos (100% do peso)
+   - Não considerar análise de sequências na projeção final
+
+4. **SEM SEQUÊNCIA FORTE** (${sequenceAnalysis.sequenceType === 'NONE' ? 'DETECTADO' : 'NÃO DETECTADO'}):
+   - Se não há sequência forte detectada
+   - **AÇÃO**: ZERAR o peso deste critério (0%). Focar APENAS nos indicadores macroeconômicos (100% do peso)
+   - Não considerar análise de sequências na projeção final
+
+**IMPORTANTE - ANÁLISE COMBINADA**: 
+- ⚠️ **CRÍTICO**: Quando há sequência forte detectada, você deve INTERPRETAR e COMBINAR ambos os fatores (sequências + indicadores macro) para determinar a projeção final
+- Não há precedência absoluta - avalie qual fator é mais forte no contexto atual
+- Se a sequência indica correção e os indicadores macro concordam → projeção mais forte nessa direção
+- Se a sequência indica correção mas os indicadores macro apontam na direção oposta → avalie qual sinal é mais forte e faça uma projeção balanceada considerando ambos
+- A análise de sequências representa 30% do peso e os indicadores macro 70%, mas você deve fazer uma interpretação inteligente combinando ambos
+- Quando sequência é quebrada ou não há sequência forte, ignore completamente este critério e use apenas indicadores macro (100% do peso)
+- Inclua no reasoning como você combinou e interpretou ambos os fatores para chegar à projeção final
+` : ''}
+
 ${technicalAnalysisSection}
 ${electionSection}
 ${macroEventsSection}
@@ -483,8 +557,9 @@ ${macroEventsSection}
    - Por que isso impacta o IBOV
    - Como isso leva à projeção de alta/queda
 3. **INCLUA TODOS OS INDICADORES**: Priorize os 6 indicadores principais (VIX, DI Futuro, Petróleo, Minério de Ferro, Dólar, S&P500) no reasoning e keyIndicators, mas também considere os indicadores complementares (CDI, Selic, IPCA, CRB Index, Cobre, Soja, Bond Yield Brasil 10Y, Confiança do Consumidor) quando relevantes para a análise
-4. **ESTRUTURA CLARA**: Use a estrutura sugerida acima com títulos e numeração para facilitar a leitura
-5. **CONECTE OS INDICADORES**: No resumo final, explique como todos os indicadores juntos levam à projeção
+4. **INCLUA ANÁLISE DE SEQUÊNCIAS**: ${sequenceAnalysis && sequenceAnalysis.shouldConsiderCorrection ? `Se há sequência forte detectada (${sequenceAnalysis.sequenceType === 'HIGH' ? 'alta' : 'queda'}), você DEVE mencionar isso no reasoning explicando como você INTERPRETOU e COMBINOU a análise de sequências (probabilidade de correção de ${(sequenceAnalysis.correctionProbability * 100).toFixed(0)}%) com os indicadores macroeconômicos para chegar à projeção final. Explique qual fator foi mais forte e como você balanceou ambos na sua decisão. Não há precedência absoluta - explique como você combinou ambos os sinais.` : sequenceAnalysis && sequenceAnalysis.sequenceType === 'BROKEN' ? 'Se a sequência foi quebrada, mencione brevemente que este critério não foi considerado (peso zerado) e a análise focou apenas nos indicadores macroeconômicos.' : sequenceAnalysis && sequenceAnalysis.sequenceType === 'NONE' ? 'Se não há sequência forte, mencione brevemente que este critério não foi considerado e a análise focou apenas nos indicadores macroeconômicos.' : 'Se análise de sequências estiver disponível, inclua no reasoning conforme as regras acima.'}
+5. **ESTRUTURA CLARA**: Use a estrutura sugerida acima com títulos e numeração para facilitar a leitura
+6. **CONECTE OS INDICADORES**: No resumo final, explique como você COMBINOU e INTERPRETOU todos os fatores (indicadores macro + análise de sequências) para chegar à projeção final${sequenceAnalysis && sequenceAnalysis.shouldConsiderCorrection ? `. Explique como você balanceou o sinal de correção da sequência (${sequenceAnalysis.sequenceType === 'HIGH' ? 'tendência para queda' : 'tendência para alta'}) com os sinais dos indicadores macro para determinar a direção e magnitude da projeção` : ''}
 
 **REGRAS PARA KEYINDICATORS**:
 

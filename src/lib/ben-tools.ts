@@ -225,8 +225,11 @@ export async function getMarketSentiment() {
  * Obtém dados do IBOVESPA
  * SEMPRE busca valor atual do Yahoo Finance sem cache para garantir dados atualizados
  */
-export async function getIbovData() {
+export async function getIbovData(days?: number) {
   try {
+    // Se days for fornecido, precisamos buscar dados históricos diários
+    const needsHistoricalData = days !== undefined && days > 0
+    
     // PRIORIDADE: Buscar valor atual do Yahoo Finance SEM CACHE
     try {
       const { YahooFinance2Service } = await import('./yahooFinance2-service')
@@ -242,13 +245,65 @@ export async function getIbovData() {
 
         console.log(`✅ [IBOV] Valor atual do Yahoo Finance: ${currentValue.toFixed(2)} (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%)`)
         
+        // Se precisar de dados históricos, buscar via BRAPI
+        if (needsHistoricalData) {
+          try {
+            const brapiToken = process.env.BRAPI_TOKEN
+            // Buscar dados diários para análise de sequências
+            const brapiUrl = `https://brapi.dev/api/quote/%5EBVSP?range=${Math.min(days || 30, 90)}d&interval=1d${brapiToken ? `&token=${brapiToken}` : ''}`
+            
+            const histResponse = await fetch(brapiUrl, {
+              next: { revalidate: 3600 }
+            })
+            
+            if (histResponse.ok) {
+              const histData = await histResponse.json()
+              const histPrices = histData.results?.[0]?.historicalDataPrice || []
+              
+              if (histPrices.length > 0) {
+                const historicalData = histPrices
+                  .map((item: any) => ({
+                    date: item.date,
+                    value: item.close || item.adjClose || 0
+                  }))
+                  .filter((item: any) => item.value > 0)
+                  .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                
+                // Garantir que temos o valor atual no histórico
+                const latestHist = historicalData[historicalData.length - 1]
+                if (!latestHist || Math.abs(latestHist.value - currentValue) / currentValue > 0.01) {
+                  historicalData.push({
+                    date: new Date().toISOString().split('T')[0],
+                    value: currentValue
+                  })
+                }
+                
+                return {
+                  success: true,
+                  data: {
+                    currentValue,
+                    date: new Date().toISOString().split('T')[0],
+                    changePercent,
+                    historicalData: historicalData.slice(-(days || 30)).map((d: any) => ({
+                      date: d.date,
+                      value: Number(d.value)
+                    }))
+                  }
+                }
+              }
+            }
+          } catch (histError) {
+            console.warn('⚠️ [IBOV] Erro ao buscar histórico via BRAPI:', histError)
+          }
+        }
+        
         return {
           success: true,
           data: {
             currentValue,
             date: new Date().toISOString().split('T')[0],
             changePercent,
-            historicalData: [] // Não necessário para projeções, apenas histórico se precisar
+            historicalData: needsHistoricalData ? [] : [] // Se precisar histórico mas não conseguiu, retornar vazio
           }
         }
       }
@@ -259,12 +314,27 @@ export async function getIbovData() {
     // Fallback: Buscar dados do IBOV via BRAPI (com cache para histórico)
     const endDate = new Date()
     const startDate = new Date()
-    startDate.setFullYear(startDate.getFullYear() - 1) // Último ano
+    
+    // Se precisar de dados históricos específicos, ajustar período
+    if (needsHistoricalData && days) {
+      startDate.setDate(startDate.getDate() - Math.min(days, 90)) // Máximo 90 dias para intervalo diário
+    } else {
+      startDate.setFullYear(startDate.getFullYear() - 1) // Último ano
+    }
 
     const brapiToken = process.env.BRAPI_TOKEN
-    const diffYears = (endDate.getFullYear() - startDate.getFullYear())
-    const range = diffYears >= 5 ? '10y' : diffYears >= 2 ? '5y' : diffYears >= 1 ? '2y' : '1y'
-    const brapiUrl = `https://brapi.dev/api/quote/%5EBVSP?range=${range}&interval=1mo${brapiToken ? `&token=${brapiToken}` : ''}`
+    
+    // Se precisar dados diários, usar intervalo 1d, senão usar 1mo
+    const interval = needsHistoricalData ? '1d' : '1mo'
+    const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+    const range = needsHistoricalData 
+      ? `${Math.min(diffDays, 90)}d` // Máximo 90 dias para dados diários
+      : diffDays >= 365 * 5 ? '10y' 
+      : diffDays >= 365 * 2 ? '5y' 
+      : diffDays >= 365 ? '2y' 
+      : '1y'
+    
+    const brapiUrl = `https://brapi.dev/api/quote/%5EBVSP?range=${range}&interval=${interval}${brapiToken ? `&token=${brapiToken}` : ''}`
 
     const response = await fetch(brapiUrl, {
       next: { revalidate: 3600 }
@@ -302,13 +372,16 @@ export async function getIbovData() {
 
     console.log(`⚠️ [IBOV] Usando BRAPI (fallback): ${Number(latest.value).toFixed(2)}`)
 
+    // Retornar histórico conforme solicitado
+    const historicalDaysToReturn = needsHistoricalData && days ? days : 30
+
     return {
       success: true,
       data: {
         currentValue: Number(latest.value),
         date: latest.date,
         changePercent: change,
-        historicalData: ibovData.slice(-30).map((d: any) => ({
+        historicalData: ibovData.slice(-historicalDaysToReturn).map((d: any) => ({
           date: d.date,
           value: Number(d.value)
         }))

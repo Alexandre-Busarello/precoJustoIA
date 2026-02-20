@@ -39,7 +39,11 @@ import {
   Sparkles,
   Activity,
   BarChart3,
-  GitCompare
+  GitCompare,
+  Zap,
+  FileText,
+  AlertTriangle,
+  Crosshair
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
@@ -53,6 +57,30 @@ interface BenChatSidebarProps {
   forceNewConversation?: boolean // Flag para forçar criação de nova conversa
 }
 
+const ANALISE_FLASH_TEMPLATE = `Faça uma análise "Flash" de [TICKER] em formato de Tweet/Lista.
+Quero apenas os dados crus e diretos:
+1. 💰 Preço Atual vs. Preço Justo (Mostre o % de Upside)
+2. 📉 Status da Análise Técnica (Ex: Sobrecompra/Venda ou Neutro)
+3. 💸 Dividend Yield Projetado (12m)
+4. 🎯 Veredito Final: [COMPRA / AGUARDAR / VENDA]
+Sem textos longos. Use emojis e seja direto.`
+
+const RESUMO_EXECUTIVO_TEMPLATE = `Resumo executivo de [TICKER] em 5 bullet points: preço justo, upside, dividend yield, riscos principais, veredito. Seja direto.`
+
+const RISCOS_OPORTUNIDADES_TEMPLATE = `Liste os 3 principais riscos e 3 principais oportunidades de [TICKER] de forma objetiva.`
+
+const SETUP_COMPRA_TEMPLATE = `Analise [TICKER] e indique: melhor ponto de entrada, alvos de preço e stop loss sugerido.`
+
+const DIVIDENDOS_1MIN_TEMPLATE = `Resumo rápido dos dividendos de [TICKER]: yield projetado 12m, próximos pagamentos, sustentabilidade (1 parágrafo).`
+
+interface QuickAction {
+  label: string
+  prompt: string
+  icon: any
+  requiresTicker?: boolean
+  promptTemplate?: string
+}
+
 /**
  * Gera Quick Actions baseadas na memória, mensagens da conversa e contexto da página
  */
@@ -60,196 +88,101 @@ function generateQuickActions(
   memories: any[], 
   messages: any[] = [],
   pageContext?: { pageType: string; ticker?: string; companyName?: string }
-) {
-  const actions: Array<{ label: string; prompt: string; icon: any }> = []
+): QuickAction[] {
+  const actions: QuickAction[] = []
+  const tickerContext = pageContext?.ticker
+  const displayName = tickerContext ? (pageContext.companyName || tickerContext) : ''
 
-  // AÇÕES CONTEXTUALIZADAS BASEADAS NA PÁGINA ATUAL
-  if (pageContext) {
-    const { pageType, ticker, companyName } = pageContext
+  // AÇÕES QUE PRECISAM DE TICKER - Prompts inteligentes (prioridade alta)
+  const tickerDependentActions = (ticker?: string): QuickAction[] => [
+    { label: 'Análise Flash', prompt: (ticker ? ANALISE_FLASH_TEMPLATE.replace(/\[TICKER\]/g, ticker) : ANALISE_FLASH_TEMPLATE), icon: Zap, requiresTicker: true, promptTemplate: ANALISE_FLASH_TEMPLATE },
+    { label: 'Resumo Executivo', prompt: (ticker ? RESUMO_EXECUTIVO_TEMPLATE.replace(/\[TICKER\]/g, ticker) : RESUMO_EXECUTIVO_TEMPLATE), icon: FileText, requiresTicker: true, promptTemplate: RESUMO_EXECUTIVO_TEMPLATE },
+    { label: 'Riscos e Oportunidades', prompt: (ticker ? RISCOS_OPORTUNIDADES_TEMPLATE.replace(/\[TICKER\]/g, ticker) : RISCOS_OPORTUNIDADES_TEMPLATE), icon: AlertTriangle, requiresTicker: true, promptTemplate: RISCOS_OPORTUNIDADES_TEMPLATE },
+    { label: 'Setup de Compra', prompt: (ticker ? SETUP_COMPRA_TEMPLATE.replace(/\[TICKER\]/g, ticker) : SETUP_COMPRA_TEMPLATE), icon: Crosshair, requiresTicker: true, promptTemplate: SETUP_COMPRA_TEMPLATE },
+    { label: 'Dividendos em 1 min', prompt: (ticker ? DIVIDENDOS_1MIN_TEMPLATE.replace(/\[TICKER\]/g, ticker) : DIVIDENDOS_1MIN_TEMPLATE), icon: DollarSign, requiresTicker: true, promptTemplate: DIVIDENDOS_1MIN_TEMPLATE },
+  ]
 
-    // Se estiver na página de uma ação/BDR específica
-    if ((pageType === 'action' || pageType === 'bdr') && ticker) {
-      const displayName = companyName || ticker
-      
-      // Análise técnica da empresa atual
-      actions.push({
-        label: `Análise Técnica ${ticker}`,
-        prompt: `Faça uma análise técnica completa da ${displayName} (${ticker})`,
-        icon: TrendingUp
-      })
+  // Páginas com ticker: action, bdr, fii, etf, technical_analysis, dividend_radar
+  const hasTickerContext = (pageContext?.pageType === 'action' || pageContext?.pageType === 'bdr' || 
+    pageContext?.pageType === 'fii' || pageContext?.pageType === 'etf' || 
+    pageContext?.pageType === 'technical_analysis' || pageContext?.pageType === 'dividend_radar') && tickerContext
 
-      // Projeções de dividendos
-      actions.push({
-        label: `Dividendos ${ticker}`,
-        prompt: `Quais são as projeções de dividendos da ${displayName} (${ticker}) para os próximos meses?`,
-        icon: DollarSign
-      })
+  if (hasTickerContext && tickerContext) {
+    actions.push(...tickerDependentActions(tickerContext))
+    actions.push(
+      { label: `Análise Técnica ${tickerContext}`, prompt: `Faça uma análise técnica completa da ${displayName} (${tickerContext})`, icon: TrendingUp },
+      { label: `Score ${tickerContext}`, prompt: `Qual é o score atual e os principais fundamentos da ${displayName} (${tickerContext})?`, icon: BarChart3 },
+      { label: `Comparar ${tickerContext}`, prompt: `Compare a ${displayName} (${tickerContext}) com seus principais concorrentes do setor`, icon: GitCompare }
+    )
+  }
 
-      // Score e fundamentos
-      actions.push({
-        label: `Score ${ticker}`,
-        prompt: `Qual é o score atual e os principais fundamentos da ${displayName} (${ticker})?`,
-        icon: BarChart3
-      })
+  // Radar (sem ticker)
+  if (pageContext?.pageType === 'radar') {
+    actions.push(
+      { label: 'Meu Radar', prompt: 'Mostre uma análise consolidada das ações que estou monitorando no meu radar', icon: Radar },
+      { label: 'Oportunidades no Radar', prompt: 'Quais são as melhores oportunidades de investimento entre as ações do meu radar?', icon: Sparkles },
+      { label: 'Status do Radar', prompt: 'Como está o desempenho geral das ações do meu radar hoje?', icon: Activity }
+    )
+  }
 
-      // Comparação com concorrentes
-      actions.push({
-        label: `Comparar ${ticker}`,
-        prompt: `Compare a ${displayName} (${ticker}) com seus principais concorrentes do setor`,
-        icon: GitCompare
-      })
-    }
-
-    // Se estiver na página de análise técnica
-    if (pageType === 'technical_analysis' && ticker) {
-      const displayName = companyName || ticker
-      
-      actions.push({
-        label: `Análise Técnica ${ticker}`,
-        prompt: `Faça uma análise técnica completa da ${displayName} (${ticker})`,
-        icon: TrendingUp
-      })
-
-      actions.push({
-        label: `Fundamentos ${ticker}`,
-        prompt: `Quais são os principais fundamentos e o score da ${displayName} (${ticker})?`,
-        icon: BarChart3
-      })
-
-      actions.push({
-        label: `Dividendos ${ticker}`,
-        prompt: `Quais são as projeções de dividendos da ${displayName} (${ticker})?`,
-        icon: DollarSign
-      })
-    }
-
-    // Se estiver na página de radar de dividendos
-    if (pageType === 'dividend_radar' && ticker) {
-      const displayName = companyName || ticker
-      
-      actions.push({
-        label: `Dividendos ${ticker}`,
-        prompt: `Analise as projeções de dividendos da ${displayName} (${ticker}) e me dê uma visão sobre a sustentabilidade dos pagamentos`,
-        icon: DollarSign
-      })
-
-      actions.push({
-        label: `Análise Técnica ${ticker}`,
-        prompt: `Faça uma análise técnica completa da ${displayName} (${ticker})`,
-        icon: TrendingUp
-      })
-
-      actions.push({
-        label: `Score ${ticker}`,
-        prompt: `Qual é o score atual e os principais fundamentos da ${displayName} (${ticker})?`,
-        icon: BarChart3
-      })
-    }
-
-    // Se estiver na página do radar
-    if (pageType === 'radar') {
-      actions.push({
-        label: 'Meu Radar',
-        prompt: 'Mostre uma análise consolidada das ações que estou monitorando no meu radar',
-        icon: Radar
-      })
-
-      actions.push({
-        label: 'Oportunidades no Radar',
-        prompt: 'Quais são as melhores oportunidades de investimento entre as ações do meu radar?',
-        icon: Sparkles
-      })
-
-      actions.push({
-        label: 'Status do Radar',
-        prompt: 'Como está o desempenho geral das ações do meu radar hoje?',
-        icon: Activity
-      })
-    }
-
-    // Se estiver no dashboard
-    if (pageType === 'dashboard') {
-      actions.push({
-        label: 'Projeção IBOV',
-        prompt: 'Qual é a projeção do IBOVESPA para hoje e esta semana?',
-        icon: TrendingUp
-      })
-
-      actions.push({
-        label: 'Sentimento de Mercado',
-        prompt: 'Como está o sentimento geral do mercado brasileiro hoje?',
-        icon: BarChart3
-      })
-    }
+  // Dashboard - pool de ações (IBOV, Sentimento + todas as tickerDependentActions)
+  if (pageContext?.pageType === 'dashboard') {
+    const dashboardPool: QuickAction[] = [
+      { label: 'Projeção IBOV', prompt: 'Qual é a projeção do IBOVESPA para esta semana e este mês?', icon: TrendingUp },
+      { label: 'Sentimento de Mercado', prompt: 'Como está o sentimento geral do mercado brasileiro hoje?', icon: BarChart3 },
+      ...tickerDependentActions()
+    ]
+    actions.push(...dashboardPool)
   }
 
   // Extrair tickers mencionados nas últimas mensagens
   const mentionedTickers = new Set<string>()
   messages.slice(-10).forEach(msg => {
     if (msg.role === 'USER') {
-      // Buscar padrões de ticker (ex: PETR4, VALE3, etc)
       const tickerMatches = msg.content.match(/\b([A-Z]{4}\d{1,2})\b/g)
-      if (tickerMatches) {
-        tickerMatches.forEach((ticker: string) => mentionedTickers.add(ticker))
+      if (tickerMatches) tickerMatches.forEach((t: string) => mentionedTickers.add(t))
+    }
+  })
+
+  // Tickers mencionados (se não for página com ticker)
+  if (!hasTickerContext) {
+    Array.from(mentionedTickers).slice(0, 2).forEach((ticker: string) => {
+      if (!pageContext?.ticker || ticker !== pageContext.ticker) {
+        actions.push({ label: `Análise ${ticker}`, prompt: `Faça uma análise detalhada da ${ticker}`, icon: TrendingUp })
       }
-    }
-  })
+    })
+  }
 
-  // Adicionar ações para tickers mencionados recentemente (se não for a página atual)
-  Array.from(mentionedTickers).slice(0, 2).forEach((ticker: string) => {
-    // Não adicionar se já temos ações da página atual para este ticker
-    if (!pageContext?.ticker || ticker !== pageContext.ticker) {
-      actions.push({
-        label: `Análise ${ticker}`,
-        prompt: `Faça uma análise detalhada da ${ticker}`,
-        icon: TrendingUp
-      })
-    }
-  })
-
-  // Empresas favoritas da memória (se não for a página atual)
-  const favoriteCompanies = memories.filter(m => 
-    m.category === 'COMPANY_INTEREST' && m.importance > 70
-  )
-  favoriteCompanies.forEach(mem => {
+  // Empresas favoritas da memória
+  memories.filter(m => m.category === 'COMPANY_INTEREST' && m.importance > 70).forEach(mem => {
     const ticker = mem.metadata?.ticker
     if (ticker && !mentionedTickers.has(ticker) && ticker !== pageContext?.ticker) {
-      actions.push({
-        label: `Score da ${ticker}`,
-        prompt: `Qual é o score atual da ${ticker}?`,
-        icon: TrendingUp
-      })
+      actions.push({ label: `Score da ${ticker}`, prompt: `Qual é o score atual da ${ticker}?`, icon: TrendingUp })
     }
   })
 
   // Setores estudados
-  const sectors = memories.filter(m => 
-    m.category === 'LEARNING' && m.metadata?.sector
-  )
-  sectors.slice(0, 2).forEach(mem => {
+  memories.filter(m => m.category === 'LEARNING' && m.metadata?.sector).slice(0, 2).forEach(mem => {
     const sector = mem.metadata?.sector
-    if (sector) {
-      actions.push({
-        label: `Resumo sobre ${sector}`,
-        prompt: `Resuma meu último estudo sobre o setor ${sector}`,
-        icon: BookOpen
-      })
-    }
+    if (sector) actions.push({ label: `Resumo sobre ${sector}`, prompt: `Resuma meu último estudo sobre o setor ${sector}`, icon: BookOpen })
   })
 
   // Objetivos
-  const goals = memories.filter(m => 
-    m.category === 'INVESTMENT_GOAL' && m.importance > 60
-  )
-  goals.slice(0, 1).forEach(mem => {
-    actions.push({
-      label: `Estratégia de ${mem.key}`,
-      prompt: `Relembre minha estratégia de ${mem.content}`,
-      icon: Target
-    })
-  })
+  const goal = memories.find(m => m.category === 'INVESTMENT_GOAL' && m.importance > 60)
+  if (goal) actions.push({ label: `Estratégia de ${goal.key}`, prompt: `Relembre minha estratégia de ${goal.content}`, icon: Target })
 
-  return actions.slice(0, 8) // Aumentar limite para incluir ações contextualizadas
+  // Ações padrão quando poucas ações
+  if (actions.length < 2 && (!pageContext || !['action', 'bdr', 'fii', 'etf', 'radar'].includes(pageContext.pageType))) {
+    return [
+      { label: 'Projeção IBOV', prompt: 'Qual é a projeção atual do IBOVESPA para esta semana e este mês?', icon: TrendingUp },
+      { label: 'Sentimento de Mercado', prompt: 'Como está o sentimento geral do mercado brasileiro?', icon: BarChart3 },
+      { label: 'Análise Flash', prompt: ANALISE_FLASH_TEMPLATE, icon: Zap, requiresTicker: true, promptTemplate: ANALISE_FLASH_TEMPLATE },
+      { label: 'Resumo Executivo', prompt: RESUMO_EXECUTIVO_TEMPLATE, icon: FileText, requiresTicker: true, promptTemplate: RESUMO_EXECUTIVO_TEMPLATE },
+      ...actions
+    ]
+  }
+
+  return actions.slice(0, 8)
 }
 
 /**
@@ -344,8 +277,19 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [showShareModal, setShowShareModal] = useState(false)
 
+  // Input de ticker para ações que precisam (inline na seção de quick actions)
+  const [tickerInput, setTickerInput] = useState('')
+  const tickerInputRef = useRef<HTMLInputElement>(null)
+
   // Extrair contexto básico da página
   const pageContext = extractBasicPageContext(pathname)
+
+  // Sincronizar tickerInput quando pageContext.ticker mudar
+  useEffect(() => {
+    if (pageContext?.ticker) {
+      setTickerInput(pageContext.ticker)
+    }
+  }, [pageContext?.ticker])
 
   // Atualizar conversa selecionada quando initialConversationId mudar
   useEffect(() => {
@@ -549,8 +493,24 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     )
   }
 
-  const handleQuickAction = (prompt: string) => {
+  const handleQuickAction = (action: QuickAction) => {
     if (!selectedConversationId || sendMessage.isPending || isStreaming) return
+
+    let promptToSend = action.prompt
+    if (action.requiresTicker && action.promptTemplate) {
+      const ticker = resolveTicker()
+      if (!ticker) {
+        tickerInputRef.current?.focus()
+        tickerInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        toast({
+          title: 'Ticker necessário',
+          description: 'Informe o ticker acima (ex: PETR4, VALE3) para usar esta ação.',
+          variant: 'destructive'
+        })
+        return
+      }
+      promptToSend = action.promptTemplate.replace(/\[TICKER\]/g, ticker)
+    }
     
     // Limpar input antes de enviar
     setMessage('')
@@ -562,7 +522,7 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     sendMessage.mutate(
       { 
         conversationId: selectedConversationId, 
-        message: prompt,
+        message: promptToSend,
         pageContext,
         onChunk: (chunk) => {
           if (chunk.type === 'text' && chunk.data) {
@@ -654,30 +614,34 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
   }
 
   // Gerar Quick Actions baseadas na memória, mensagens da conversa e contexto da página
+  const baseQuickActions = memoryData?.memories && memoryData.memories.length > 0
+    ? generateQuickActions(memoryData.memories, messages || [], pageContext)
+    : generateQuickActions([], messages || [], pageContext)
+
+  // Dashboard: mostrar apenas 3 ações aleatórias para não poluir a tela
+  const dashboardActionsRef = useRef<QuickAction[] | null>(null)
   const quickActions = (() => {
-    const baseActions = memoryData?.memories && memoryData.memories.length > 0
-      ? generateQuickActions(memoryData.memories, messages || [], pageContext)
-      : generateQuickActions([], messages || [], pageContext)
-    
-    // Se não houver ações suficientes e não estivermos em uma página específica, adicionar ações padrão
-    if (baseActions.length < 2 && (!pageContext || (pageContext.pageType !== 'action' && pageContext.pageType !== 'bdr' && pageContext.pageType !== 'radar'))) {
-      return [
-        {
-          label: 'Projeção IBOV',
-          prompt: 'Qual é a projeção atual do IBOVESPA?',
-          icon: TrendingUp
-        },
-        {
-          label: 'Sentimento de Mercado',
-          prompt: 'Como está o sentimento geral do mercado brasileiro?',
-          icon: BarChart3
-        },
-        ...baseActions
-      ]
+    if (pageContext?.pageType === 'dashboard' && baseQuickActions.length > 3) {
+      if (dashboardActionsRef.current === null) {
+        const shuffled = [...baseQuickActions].sort(() => Math.random() - 0.5)
+        dashboardActionsRef.current = shuffled.slice(0, 3)
+      }
+      return dashboardActionsRef.current
     }
-    
-    return baseActions
+    dashboardActionsRef.current = null
+    return baseQuickActions
   })()
+
+  // Resolver ticker para ações que precisam (input > pageContext > mensagens)
+  const resolveTicker = (): string | null => {
+    const fromInput = tickerInput?.trim().toUpperCase()
+    if (fromInput) return fromInput
+    if (pageContext?.ticker) return pageContext.ticker
+    const mentioned = (messages || []).filter(m => m.role === 'USER').flatMap(m => 
+      (m.content?.match(/\b([A-Z]{4}\d{1,2})\b/g) || [])
+    )
+    return mentioned[mentioned.length - 1] || null
+  }
 
   const selectedConversation = conversations?.find(c => c.id === selectedConversationId)
   
@@ -812,6 +776,20 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
           {/* Quick Actions - sempre mostrar */}
           <div className="px-4 py-2 border-b bg-muted/30">
             <p className="text-xs text-muted-foreground mb-2 font-medium">Ações Rápidas</p>
+            {/* Input de ticker inline - para ações que precisam (Análise Flash, Resumo Executivo, etc) */}
+            <div className="flex items-center gap-2 mb-2">
+              <label htmlFor="quick-action-ticker" className="text-xs text-muted-foreground whitespace-nowrap">
+                Ticker:
+              </label>
+              <Input
+                ref={tickerInputRef}
+                id="quick-action-ticker"
+                placeholder="Ex: PETR4, VALE3"
+                value={tickerInput}
+                onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
+                className="h-7 text-xs max-w-[120px]"
+              />
+            </div>
             <div className="flex flex-wrap gap-2">
               {quickActions.map((action, idx) => {
                 const Icon = action.icon
@@ -820,7 +798,7 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
                     key={idx}
                     variant="outline"
                     size="sm"
-                    onClick={() => handleQuickAction(action.prompt)}
+                    onClick={() => handleQuickAction(action)}
                     className="text-xs"
                     disabled={!selectedConversationId || sendMessage.isPending || isStreaming}
                   >

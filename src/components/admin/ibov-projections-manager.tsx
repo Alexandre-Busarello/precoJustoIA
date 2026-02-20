@@ -31,17 +31,19 @@ interface Projection {
   hasData?: boolean
 }
 
-type ProjectionPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+type ProjectionPeriod = 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+// API pode retornar DAILY de dados antigos - não exibimos mas precisamos do tipo para compatibilidade
+type ProjectionPeriodFromApi = ProjectionPeriod | 'DAILY'
 
-const PERIOD_LABELS: Record<ProjectionPeriod, string> = {
+const PERIOD_LABELS: Record<ProjectionPeriodFromApi, string> = {
   DAILY: 'Diária',
   WEEKLY: 'Semanal',
   MONTHLY: 'Mensal',
   ANNUAL: 'Anual'
 }
 
-const PERIOD_COLORS: Record<ProjectionPeriod, string> = {
-  DAILY: 'bg-blue-500',
+const PERIOD_COLORS: Record<ProjectionPeriodFromApi, string> = {
+  DAILY: 'bg-gray-400',
   WEEKLY: 'bg-green-500',
   MONTHLY: 'bg-orange-500',
   ANNUAL: 'bg-purple-500'
@@ -80,7 +82,7 @@ export function IbovProjectionsManager() {
   }
 
   const recreateProjections = async (periods?: ProjectionPeriod[]) => {
-    const periodsToRecreate = periods || ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL']
+    const periodsToRecreate = periods || ['WEEKLY', 'MONTHLY', 'ANNUAL']
     
     setRecreating(new Set(periodsToRecreate))
 
@@ -134,9 +136,14 @@ export function IbovProjectionsManager() {
     )
   }
 
-  const validProjections = projections.filter(p => p.hasData && p.isValid)
-  const expiredProjections = projections.filter(p => p.hasData && !p.isValid)
-  const missingProjections = projections.filter(p => !p.hasData)
+  const supportedPeriods: ProjectionPeriod[] = ['WEEKLY', 'MONTHLY', 'ANNUAL']
+  const validProjections = projections.filter(p => 
+    p.hasData && p.isValid && supportedPeriods.includes(p.period as ProjectionPeriod)
+  ) as Array<Projection & { period: ProjectionPeriod }>
+  const expiredProjections = projections.filter(p => 
+    p.hasData && !p.isValid && supportedPeriods.includes(p.period as ProjectionPeriod)
+  ) as Array<Projection & { period: ProjectionPeriod }>
+  const missingProjections = supportedPeriods.filter(period => !projections.some(p => p.period === period && p.hasData))
 
   return (
     <div className="space-y-6">
@@ -310,13 +317,13 @@ export function IbovProjectionsManager() {
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Períodos sem Projeção</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {missingProjections.map((projection) => (
-              <Card key={projection.period} className="relative border-dashed border-2 border-gray-300">
+            {missingProjections.map((period) => (
+              <Card key={period} className="relative border-dashed border-2 border-gray-300">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${PERIOD_COLORS[projection.period]}`} />
-                      <CardTitle className="text-lg">{PERIOD_LABELS[projection.period]}</CardTitle>
+                      <div className={`w-3 h-3 rounded-full ${PERIOD_COLORS[period]}`} />
+                      <CardTitle className="text-lg">{PERIOD_LABELS[period]}</CardTitle>
                     </div>
                     <Badge variant="outline" className="border-gray-400 text-gray-600">
                       <AlertCircle className="w-3 h-3 mr-1" />
@@ -332,13 +339,13 @@ export function IbovProjectionsManager() {
                       </p>
                     </div>
                     <Button
-                      onClick={() => recreateSingle(projection.period)}
-                      disabled={recreating.has(projection.period)}
+                      onClick={() => recreateSingle(period)}
+                      disabled={recreating.has(period)}
                       variant="default"
                       size="sm"
                       className="w-full"
                     >
-                      {recreating.has(projection.period) ? (
+                      {recreating.has(period) ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin mr-2" />
                           Criando...
@@ -346,7 +353,7 @@ export function IbovProjectionsManager() {
                       ) : (
                         <>
                           <RefreshCw className="w-4 h-4 mr-2" />
-                          Criar {PERIOD_LABELS[projection.period]}
+                          Criar {PERIOD_LABELS[period]}
                         </>
                       )}
                     </Button>

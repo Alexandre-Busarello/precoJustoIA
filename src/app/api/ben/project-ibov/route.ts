@@ -151,11 +151,11 @@ function correctReasoningDirection(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { period } = body // DAILY, WEEKLY, MONTHLY, ANNUAL
+    const { period } = body // WEEKLY, MONTHLY, ANNUAL
 
-    if (!period || !['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].includes(period)) {
+    if (!period || !['WEEKLY', 'MONTHLY', 'ANNUAL'].includes(period)) {
       return NextResponse.json(
-        { error: 'Período inválido. Use: DAILY, WEEKLY, MONTHLY ou ANNUAL' },
+        { error: 'Período inválido. Use: WEEKLY, MONTHLY ou ANNUAL' },
         { status: 400 }
       )
     }
@@ -163,9 +163,6 @@ export async function POST(request: NextRequest) {
     // Determinar quantos dias de histórico precisamos para análise de sequências
     let historicalDays: number
     switch (period) {
-      case 'DAILY':
-        historicalDays = 5
-        break
       case 'WEEKLY':
         historicalDays = 10
         break

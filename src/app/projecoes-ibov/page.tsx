@@ -98,23 +98,20 @@ export default function ProjecoesIbovPage() {
   const projections = data?.projections || []
   const currentValue = data?.currentValue || 0
 
-  // Agrupar projeções por período
+  // Agrupar projeções por período (sem diária)
   const groupedProjections = {
-    DAILY: projections.filter((p: any) => p.period === 'DAILY'),
     WEEKLY: projections.filter((p: any) => p.period === 'WEEKLY'),
     MONTHLY: projections.filter((p: any) => p.period === 'MONTHLY'),
     ANNUAL: projections.filter((p: any) => p.period === 'ANNUAL')
   }
 
   const periodLabels = {
-    DAILY: 'Diária',
     WEEKLY: 'Semanal',
     MONTHLY: 'Mensal',
     ANNUAL: 'Anual'
   }
 
   const periodColors = {
-    DAILY: 'from-blue-500 to-blue-600',
     WEEKLY: 'from-violet-500 to-violet-600',
     MONTHLY: 'from-purple-500 to-purple-600',
     ANNUAL: 'from-pink-500 to-pink-600'
@@ -178,7 +175,7 @@ export default function ProjecoesIbovPage() {
 
         {/* Projeções por Período */}
         <div className="space-y-8">
-          {(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const).map((period) => {
+          {(['WEEKLY', 'MONTHLY', 'ANNUAL'] as const).map((period) => {
             const periodProjections = groupedProjections[period]
             if (periodProjections.length === 0) {
               return (

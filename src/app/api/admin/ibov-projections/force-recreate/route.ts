@@ -389,10 +389,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { periods, skipValidation } = body
 
-    // Determinar períodos para recriar
+    // Determinar períodos para recriar (sem diária)
     const periodsToRecreate: ProjectionPeriod[] = periods && Array.isArray(periods)
-      ? periods.filter((p: string) => ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].includes(p))
-      : ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL']
+      ? periods.filter((p: string) => ['WEEKLY', 'MONTHLY', 'ANNUAL'].includes(p))
+      : ['WEEKLY', 'MONTHLY', 'ANNUAL']
 
     const results: Record<string, RecreateResult> = {}
     const errors: string[] = []

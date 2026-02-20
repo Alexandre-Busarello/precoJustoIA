@@ -1216,7 +1216,10 @@ export async function GET(request: NextRequest) {
 
     // Verificar se há parâmetro de período específico para forçar cálculo
     const { searchParams } = new URL(request.url)
-    const forcePeriod = searchParams.get('period') as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | null
+    const forcePeriodParam = searchParams.get('period')
+    const forcePeriod = ['WEEKLY', 'MONTHLY', 'ANNUAL'].includes(forcePeriodParam || '')
+      ? (forcePeriodParam as 'WEEKLY' | 'MONTHLY' | 'ANNUAL')
+      : null
     const forceAll = searchParams.get('force') === 'true'
 
     // Se forçar período específico ou todos, calcular independente do horário
@@ -1225,7 +1228,7 @@ export async function GET(request: NextRequest) {
       const results: any[] = []
       
       const periodsToCalculate = forceAll 
-        ? ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const
+        ? (['WEEKLY', 'MONTHLY', 'ANNUAL'] as const)
         : [forcePeriod!] as const
 
       // Verificar se estamos no fim do mês (últimos 3 dias) para calcular mês seguinte
@@ -1349,24 +1352,6 @@ export async function GET(request: NextRequest) {
 
     // Coletar todas as projeções que precisam ser calculadas para processar em paralelo
     const projectionPromises: Promise<any>[] = []
-
-    // Diário: Todo dia às 08:00 ou após se ainda não foi calculado (horário de Brasília)
-    // O cron está configurado para rodar às 11:00 UTC (08:00 BRT em horário padrão)
-    if (hour >= 8) {
-      const hasDailyProjection = await checkExistingProjection('DAILY')
-      if (!hasDailyProjection) {
-        console.log('📅 Agendando cálculo paralelo da projeção DIÁRIA...')
-        projectionPromises.push(
-          calculateProjection('DAILY').catch(error => ({
-            success: false,
-            error: error instanceof Error ? error.message : 'Erro desconhecido',
-            period: 'DAILY' as const
-          }))
-        )
-      } else {
-        console.log('ℹ️ Projeção DIÁRIA já existe e está válida')
-      }
-    }
 
     // Semanal: Toda segunda-feira às 08:00 ou após se ainda não foi calculado (horário de Brasília)
     // Se estamos próximo do fim do mês, calcular mesmo que não seja segunda-feira (considerar próxima semana)

@@ -9,71 +9,21 @@ import { getIbovData } from '@/lib/ben-tools'
 import { isCurrentUserPremium } from '@/lib/user-service'
 
 /**
- * Determina a data de referência para projeção diária baseada no horário de 08:00 (Brasil)
- * Se for antes das 08:00, usa o dia anterior. Se for depois, usa o dia atual.
+ * Obtém ou cria projeção IBOV para um período (WEEKLY, MONTHLY, ANNUAL)
  */
-function getProjectionReferenceDate(): Date {
-  const now = new Date()
-  // Converter para horário do Brasil (UTC-3)
-  const brazilTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-  const hour = brazilTime.getHours()
-  
-  // Criar data de referência (início do dia)
-  const referenceDate = new Date(brazilTime)
-  referenceDate.setHours(0, 0, 0, 0)
-  
-  // Se for antes das 08:00, usar dia anterior
-  if (hour < 8) {
-    referenceDate.setDate(referenceDate.getDate() - 1)
-  }
-  
-  return referenceDate
-}
-
-/**
- * Verifica se já passou das 08:00 (horário do Brasil)
- */
-function isAfterUpdateTime(): boolean {
-  const now = new Date()
-  const brazilTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-  return brazilTime.getHours() >= 8
-}
-
-/**
- * Obtém ou cria projeção IBOV para um período
- */
-export async function getOrCreateIbovProjection(period: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL') {
+export async function getOrCreateIbovProjection(period: 'WEEKLY' | 'MONTHLY' | 'ANNUAL') {
   try {
     const now = new Date()
-    const referenceDate = period === 'DAILY' ? getProjectionReferenceDate() : now
-    const isAfterUpdate = period === 'DAILY' ? isAfterUpdateTime() : true
-
-    // Para projeção diária, buscar projeção criada no dia de referência
-    // Para outros períodos, usar validUntil como antes
-    const startOfDay = new Date(referenceDate)
-    startOfDay.setHours(0, 0, 0, 0)
-    const endOfDay = new Date(referenceDate)
-    endOfDay.setHours(23, 59, 59, 999)
-    
-    const whereClause = period === 'DAILY' 
-      ? {
-          period,
-          createdAt: {
-            gte: startOfDay,
-            lte: endOfDay
-          }
-        }
-      : {
-          period,
-          validUntil: {
-            gt: now
-          }
-        }
 
     // Verificar se existe projeção válida
     // @ts-ignore - Prisma Client será gerado após migração
     const existingProjection = await prisma.ibovProjection.findFirst({
-      where: whereClause,
+      where: {
+        period,
+        validUntil: {
+          gt: now
+        }
+      },
       orderBy: { createdAt: 'desc' }
     })
 
@@ -91,12 +41,6 @@ export async function getOrCreateIbovProjection(period: 'DAILY' | 'WEEKLY' | 'MO
     if (existingProjection) {
       // Verificar se usuário é premium
       const isPremium = await isCurrentUserPremium()
-      
-      // Determinar se é projeção do dia anterior ou atual
-      const projectionDate = new Date(existingProjection.createdAt)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const isPreviousDay = projectionDate < today
 
       // Ofuscar dados para usuários gratuitos
       if (!isPremium) {
@@ -110,7 +54,6 @@ export async function getOrCreateIbovProjection(period: 'DAILY' | 'WEEKLY' | 'MO
             keyIndicators: null, // Ofuscado
             validUntil: existingProjection.validUntil,
             createdAt: existingProjection.createdAt,
-            isPreviousDay: period === 'DAILY' ? isPreviousDay : false,
             updateTime: '08:00'
           },
           currentValue,
@@ -129,7 +72,6 @@ export async function getOrCreateIbovProjection(period: 'DAILY' | 'WEEKLY' | 'MO
           keyIndicators: existingProjection.keyIndicators,
           validUntil: existingProjection.validUntil,
           createdAt: existingProjection.createdAt,
-          isPreviousDay: period === 'DAILY' ? isPreviousDay : false,
           updateTime: '08:00'
         },
         currentValue,
@@ -138,18 +80,7 @@ export async function getOrCreateIbovProjection(period: 'DAILY' | 'WEEKLY' | 'MO
       }
     }
 
-    // Se não existe e já passou das 08:00 (para diária), indicar que precisa calcular on-demand
-    // Se for antes das 08:00, não calcular automaticamente (mostrar mensagem)
-    if (period === 'DAILY' && !isAfterUpdate) {
-      return {
-        success: false,
-        needsCalculation: false, // Não calcular automaticamente antes das 08:00
-        currentValue,
-        message: 'A projeção será atualizada às 08:00'
-      }
-    }
-
-    // Se não existe e já passou das 08:00 (ou não é diária), calcular on-demand
+    // Se não existe, calcular on-demand
     return {
       success: false,
       needsCalculation: true,
@@ -180,7 +111,7 @@ export async function getOrCreateIbovProjection(period: 'DAILY' | 'WEEKLY' | 'MO
 /**
  * Calcula nova projeção IBOV (chama API interna)
  */
-export async function calculateIbovProjection(period: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL') {
+export async function calculateIbovProjection(period: 'WEEKLY' | 'MONTHLY' | 'ANNUAL') {
   try {
     const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ben/project-ibov`
     

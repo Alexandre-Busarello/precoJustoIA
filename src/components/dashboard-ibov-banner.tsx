@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Dashboard IBOV Banner - Exibe projeções diária e semanal do IBOVESPA
+ * Dashboard IBOV Banner - Exibe projeções semanal e mensal do IBOVESPA
  * Com botão "Ver mais" para expandir detalhamento completo da IA
  */
 
@@ -120,7 +120,7 @@ function getReasoningSummary(reasoning: string, maxLength: number = 150): string
 }
 
 interface ProjectionDisplayProps {
-  period: 'DAILY' | 'WEEKLY'
+  period: 'WEEKLY' | 'MONTHLY'
   projection: any
   currentValue: number
   isExpanded: boolean
@@ -144,14 +144,6 @@ function ProjectionDisplay({
   const visuals = getProjectionVisuals(direction)
   const DirectionIcon = visuals.icon
   
-  // Determinar texto da data da projeção
-  const projectionDate = new Date(projection.createdAt)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const isPreviousDay = period === 'DAILY' && projectionDate < today
-  const dateText = isPreviousDay ? 'Projeção do dia anterior' : 'Projeção do dia atual'
-  const updateTime = projection.updateTime || '08:00'
-
   return (
     <div className={`relative p-0.5 rounded-lg bg-gradient-to-br ${visuals.borderGradient} h-full`}>
       {/* Avatar do Ben no canto superior esquerdo - fora do Card para não ser cortado */}
@@ -178,28 +170,14 @@ function ProjectionDisplay({
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <span className="font-bold text-lg">IBOVESPA</span>
                 <Badge variant="outline" className="text-xs">
-                  {period === 'DAILY' ? 'Projeção Diária' : 'Projeção Semanal'}
+                  {period === 'WEEKLY' ? 'Projeção Semanal' : 'Projeção Mensal'}
                 </Badge>
-                {period === 'DAILY' && (
-                  <Badge variant="secondary" className="text-xs">
-                    {dateText}
-                  </Badge>
-                )}
                 <Badge className={visuals.badgeClassName}>
                   <DirectionIcon className="w-3 h-3 mr-1" />
                   {changePercent > 0 ? '+' : ''}
                   {changePercent.toFixed(2)}%
                 </Badge>
               </div>
-              {period === 'DAILY' && (
-                <p className="text-xs text-muted-foreground mb-2">
-                  Atualizada às {updateTime} • {projectionDate.toLocaleDateString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric'
-                  })}
-                </p>
-              )}
 
               {/* Valor Atual vs Projeção */}
               <div className="space-y-2">
@@ -403,23 +381,16 @@ function ProjectionDisplay({
 export function DashboardIbovBanner() {
   const queryClient = useQueryClient()
   const { isPremium } = usePremiumStatus()
-  const [isCalculatingDaily, setIsCalculatingDaily] = useState(false)
   const [isCalculatingWeekly, setIsCalculatingWeekly] = useState(false)
-  const [hasTriedCalculateDaily, setHasTriedCalculateDaily] = useState(false)
+  const [isCalculatingMonthly, setIsCalculatingMonthly] = useState(false)
   const [hasTriedCalculateWeekly, setHasTriedCalculateWeekly] = useState(false)
-  const [expandedDaily, setExpandedDaily] = useState(false)
+  const [hasTriedCalculateMonthly, setHasTriedCalculateMonthly] = useState(false)
   const [expandedWeekly, setExpandedWeekly] = useState(false)
+  const [expandedMonthly, setExpandedMonthly] = useState(false)
   const weeklyTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const monthlyTimerRef = useRef<NodeJS.Timeout | null>(null)
   const isCalculatingWeeklyRef = useRef(false)
-  const dailyTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  const { data: dailyData, isLoading: dailyLoading, refetch: refetchDaily } = useQuery({
-    queryKey: ['ibov-projection', 'DAILY'],
-    queryFn: () => getOrCreateIbovProjection('DAILY'),
-    refetchOnWindowFocus: false,
-    staleTime: 1000 * 60 * 60, // 1 hora
-    retry: false // Não retry automático para evitar loops
-  })
+  const isCalculatingMonthlyRef = useRef(false)
 
   const { data: weeklyData, isLoading: weeklyLoading, refetch: refetchWeekly } = useQuery({
     queryKey: ['ibov-projection', 'WEEKLY'],
@@ -431,50 +402,75 @@ export function DashboardIbovBanner() {
     enabled: true // Sempre habilitado
   })
 
-  // Calcular automaticamente se não existe projeção diária
+  const { data: monthlyData, isLoading: monthlyLoading, refetch: refetchMonthly } = useQuery({
+    queryKey: ['ibov-projection', 'MONTHLY'],
+    queryFn: () => getOrCreateIbovProjection('MONTHLY'),
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 60, // 1 hora
+    retry: false // Não retry automático para evitar loops
+  })
+
+  // Calcular automaticamente se não existe projeção mensal (on-demand)
   useEffect(() => {
-    // Não fazer nada se já está calculando ou já tentou calcular
-    if (isCalculatingDaily || hasTriedCalculateDaily || dailyTimerRef.current) {
-      return
-    }
-    
-    if (!dailyLoading && dailyData && !dailyData.success && (dailyData as any).needsCalculation) {
-      setHasTriedCalculateDaily(true)
-      setIsCalculatingDaily(true)
-      
-      dailyTimerRef.current = setTimeout(() => {
-        dailyTimerRef.current = null // Limpar ref após executar
-        
-        calculateIbovProjection('DAILY')
-          .then((result) => {
+    const shouldCalculate =
+      !monthlyLoading &&
+      monthlyData !== undefined &&
+      monthlyData !== null &&
+      !monthlyData.success &&
+      ((monthlyData as any).needsCalculation === true || !(monthlyData as any).error) &&
+      !hasTriedCalculateMonthly &&
+      !isCalculatingMonthly &&
+      !isCalculatingMonthlyRef.current
+
+    if (shouldCalculate) {
+      isCalculatingMonthlyRef.current = true
+      setHasTriedCalculateMonthly(true)
+      setIsCalculatingMonthly(true)
+
+      if (monthlyTimerRef.current) {
+        clearTimeout(monthlyTimerRef.current)
+      }
+
+      monthlyTimerRef.current = setTimeout(() => {
+        calculateIbovProjection('MONTHLY')
+          .then(async (result) => {
+            monthlyTimerRef.current = null
             if (result?.retryable && !result?.success) {
-              setTimeout(() => {
-                setHasTriedCalculateDaily(false)
-              }, 30000)
+              isCalculatingMonthlyRef.current = false
+              setIsCalculatingMonthly(false)
+              setTimeout(() => setHasTriedCalculateMonthly(false), 30000)
+            } else if (result?.success) {
+              isCalculatingMonthlyRef.current = false
+              queryClient.invalidateQueries({ queryKey: ['ibov-projection', 'MONTHLY'] })
+              await new Promise(resolve => setTimeout(resolve, 500))
+              await refetchMonthly()
+              setIsCalculatingMonthly(false)
             } else {
-              refetchDaily()
+              isCalculatingMonthlyRef.current = false
+              queryClient.invalidateQueries({ queryKey: ['ibov-projection', 'MONTHLY'] })
+              await refetchMonthly()
+              setIsCalculatingMonthly(false)
             }
           })
-          .catch((error) => {
-            console.error('Erro ao calcular projeção diária:', error)
-            setTimeout(() => {
-              setHasTriedCalculateDaily(false)
-            }, 60000)
+          .catch(async (error) => {
+            console.error('Erro ao calcular projeção mensal:', error)
+            monthlyTimerRef.current = null
+            isCalculatingMonthlyRef.current = false
+            queryClient.invalidateQueries({ queryKey: ['ibov-projection', 'MONTHLY'] })
+            await refetchMonthly()
+            setIsCalculatingMonthly(false)
+            setTimeout(() => setHasTriedCalculateMonthly(false), 60000)
           })
-          .finally(() => {
-            setIsCalculatingDaily(false)
-          })
-      }, 1000)
+      }, 1500)
     }
-    
-    // Cleanup apenas quando componente desmontar
+
     return () => {
-      if (dailyTimerRef.current) {
-        clearTimeout(dailyTimerRef.current)
-        dailyTimerRef.current = null
+      if (monthlyTimerRef.current) {
+        clearTimeout(monthlyTimerRef.current)
+        monthlyTimerRef.current = null
       }
     }
-  }, [dailyData, dailyLoading, refetchDaily])
+  }, [monthlyData, monthlyLoading, hasTriedCalculateMonthly, isCalculatingMonthly, refetchMonthly, queryClient])
 
   // Calcular automaticamente se não existe projeção semanal (on-demand)
   useEffect(() => {
@@ -558,19 +554,6 @@ export function DashboardIbovBanner() {
     }
   }, [weeklyData, weeklyLoading, hasTriedCalculateWeekly, isCalculatingWeekly, refetchWeekly, queryClient])
 
-  const handleRecalculateDaily = async () => {
-    setIsCalculatingDaily(true)
-    setHasTriedCalculateDaily(false)
-    try {
-      await calculateIbovProjection('DAILY')
-      await refetchDaily()
-    } catch (error) {
-      console.error('Erro ao recalcular projeção diária:', error)
-    } finally {
-      setIsCalculatingDaily(false)
-    }
-  }
-
   const handleRecalculateWeekly = async () => {
     setIsCalculatingWeekly(true)
     setHasTriedCalculateWeekly(false)
@@ -596,11 +579,28 @@ export function DashboardIbovBanner() {
     }
   }
 
-  // Buscar valor atual do IBOV (usar do dailyData ou weeklyData se disponível)
-  const currentValue = dailyData?.currentValue || weeklyData?.currentValue || 0
+  const handleRecalculateMonthly = async () => {
+    setIsCalculatingMonthly(true)
+    setHasTriedCalculateMonthly(false)
+    try {
+      const result = await calculateIbovProjection('MONTHLY')
+      queryClient.invalidateQueries({ queryKey: ['ibov-projection', 'MONTHLY'] })
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      await refetchMonthly()
+    } catch (error) {
+      console.error('Erro ao recalcular projeção mensal:', error)
+      queryClient.invalidateQueries({ queryKey: ['ibov-projection', 'MONTHLY'] })
+      await refetchMonthly()
+    } finally {
+      setIsCalculatingMonthly(false)
+    }
+  }
+
+  // Buscar valor atual do IBOV (usar do weeklyData ou monthlyData se disponível)
+  const currentValue = weeklyData?.currentValue || monthlyData?.currentValue || 0
 
   // Loading apenas se ambas estiverem carregando pela primeira vez
-  const isInitialLoading = dailyLoading && weeklyLoading
+  const isInitialLoading = weeklyLoading && monthlyLoading
 
   if (isInitialLoading) {
     return (
@@ -617,77 +617,6 @@ export function DashboardIbovBanner() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-      {/* Projeção Diária */}
-      <div>
-        {dailyLoading && !dailyData ? (
-          <Card className="border-blue-200 dark:border-blue-800">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Carregando projeção diária...</span>
-              </div>
-            </CardContent>
-          </Card>
-        ) : dailyData?.success && (dailyData as any).projection ? (
-          <ProjectionDisplay
-            period="DAILY"
-            projection={(dailyData as any).projection}
-            currentValue={currentValue}
-            isExpanded={expandedDaily}
-            onToggleExpand={() => setExpandedDaily(!expandedDaily)}
-            isPremium={isPremium ?? false}
-          />
-        ) : (
-          <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">IBOVESPA - Projeção Diária</span>
-                      {currentValue > 0 && (
-                        <Badge variant="secondary">
-                          {currentValue.toLocaleString('pt-BR', { 
-                            minimumFractionDigits: 2, 
-                            maximumFractionDigits: 2 
-                          })}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {(dailyData as any)?.error || (dailyData as any)?.message || 'Dados em tempo real'}
-                    </p>
-                    {(dailyData as any)?.message && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        A projeção é atualizada automaticamente às 08:00
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRecalculateDaily}
-                  disabled={isCalculatingDaily}
-                >
-                  {isCalculatingDaily ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-1" />
-                      Calcular
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
       {/* Projeção Semanal */}
       <div>
         {(weeklyLoading && !weeklyData) || (isCalculatingWeekly && !weeklyData?.success) ? (
@@ -766,6 +695,98 @@ export function DashboardIbovBanner() {
                   disabled={isCalculatingWeekly}
                 >
                   {isCalculatingWeekly ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-1" />
+                      Calcular
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Projeção Mensal */}
+      <div>
+        {(monthlyLoading && !monthlyData) || (isCalculatingMonthly && !monthlyData?.success) ? (
+          <Card className="border-blue-200 dark:border-blue-800">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                    <RefreshCw className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">IBOVESPA - Projeção Mensal</span>
+                      {currentValue > 0 && (
+                        <Badge variant="secondary">
+                          {currentValue.toLocaleString('pt-BR', { 
+                            minimumFractionDigits: 2, 
+                            maximumFractionDigits: 2 
+                          })}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Calculando...
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                >
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : monthlyData?.success && (monthlyData as any).projection ? (
+          <ProjectionDisplay
+            period="MONTHLY"
+            projection={(monthlyData as any).projection}
+            currentValue={currentValue}
+            isExpanded={expandedMonthly}
+            onToggleExpand={() => setExpandedMonthly(!expandedMonthly)}
+            isPremium={isPremium ?? false}
+          />
+        ) : (
+          <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">IBOVESPA - Projeção Mensal</span>
+                      {currentValue > 0 && (
+                        <Badge variant="secondary">
+                          {currentValue.toLocaleString('pt-BR', { 
+                            minimumFractionDigits: 2, 
+                            maximumFractionDigits: 2 
+                          })}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {(monthlyData as any)?.error || 'Dados em tempo real'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRecalculateMonthly}
+                  disabled={isCalculatingMonthly}
+                >
+                  {isCalculatingMonthly ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <>

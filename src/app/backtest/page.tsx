@@ -55,9 +55,9 @@ export default async function BacktestPage() {
   // Se usuário está logado, mostrar apenas funcionalidade
   if (isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background overflow-x-hidden">
         {/* Breadcrumbs */}
-        <div className="container mx-auto px-4 pt-6">
+        <div className="container mx-auto px-3 sm:px-4 pt-6">
           <Breadcrumbs items={[
             { label: "Ferramentas", href: "/ranking" },
             { label: "Backtest" }
@@ -65,14 +65,14 @@ export default async function BacktestPage() {
         </div>
 
         {/* Título simples */}
-        <div className="container mx-auto px-4 pt-4 pb-8">
-          <h1 className="text-3xl font-bold mb-2">Backtest de Carteira de Ações</h1>
+        <div className="container mx-auto px-3 sm:px-4 pt-4 pb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Backtest de Carteira de Ações</h1>
           <p className="text-muted-foreground">Teste suas estratégias de investimento antes de aplicar com dados históricos reais da B3</p>
         </div>
 
         {/* Ferramenta */}
-        <section id="backtest-tool" className="py-8 bg-white dark:bg-background">
-          <div className="container mx-auto max-w-7xl px-4">
+        <section id="backtest-tool" className="py-8 bg-white dark:bg-background overflow-x-hidden">
+          <div className="container mx-auto max-w-7xl px-3 sm:px-4">
             <BacktestPageClient />
           </div>
         </section>

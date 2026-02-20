@@ -606,7 +606,7 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
     {/* Dialog de Confirmação de Deleção */}
     {deleteConfirmId && (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
               <Trash2 className="w-5 h-5" />

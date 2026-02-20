@@ -107,27 +107,27 @@ export function BacktestDataQualityPanel({
   );
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col my-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold flex items-center gap-2">
-                <Shield className="w-6 h-6 text-blue-600" />
-                Validação de Dados Históricos
+        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b p-4 sm:p-6 flex-shrink-0">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg sm:text-2xl font-bold flex items-center gap-2">
+                <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 flex-shrink-0" />
+                <span className="truncate">Validação de Dados Históricos</span>
               </h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
                 Análise da qualidade dos dados antes da execução
               </p>
             </div>
-            <Button variant="ghost" size="sm" onClick={onCancel}>
+            <Button variant="ghost" size="sm" onClick={onCancel} className="flex-shrink-0">
               <X className="w-5 h-5" />
             </Button>
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
           {/* Status Geral */}
           <Card className={`border-2 ${validation.isValid ? 'border-green-200 bg-green-50 dark:bg-green-950/20' : 'border-red-200 bg-red-50 dark:bg-red-950/20'}`}>
             <CardHeader>
@@ -141,7 +141,7 @@ export function BacktestDataQualityPanel({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <p className="text-gray-600 dark:text-gray-400">Período Ajustado</p>
                   <p className="font-semibold">
@@ -205,7 +205,7 @@ export function BacktestDataQualityPanel({
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-3">
                       <div>
                         <p className="text-gray-600 dark:text-gray-400">Meses Disponíveis</p>
                         <p className="font-semibold">{asset.totalMonths}</p>
@@ -297,7 +297,7 @@ export function BacktestDataQualityPanel({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                 <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
                   <p className="text-2xl font-bold text-green-600">{excellentQuality}</p>
                   <p className="text-sm text-green-700 dark:text-green-300">Excelente</p>
@@ -320,30 +320,30 @@ export function BacktestDataQualityPanel({
         </div>
 
         {/* Footer com Ações */}
-        <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t p-6">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t p-4 sm:p-6 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="text-sm text-gray-600 dark:text-gray-400 order-2 sm:order-1">
               {validation.isValid ? (
                 <span className="flex items-center gap-2 text-green-600">
-                  <CheckCircle className="w-4 h-4" />
-                  Dados suficientes para executar o backtesting
+                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>Dados suficientes para executar o backtesting</span>
                 </span>
               ) : (
                 <span className="flex items-center gap-2 text-red-600">
-                  <XCircle className="w-4 h-4" />
-                  Dados insuficientes - ajuste a configuração
+                  <XCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>Dados insuficientes - ajuste a configuração</span>
                 </span>
               )}
             </div>
             
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={onCancel}>
+            <div className="flex flex-col-reverse sm:flex-row gap-3 order-1 sm:order-2 w-full sm:w-auto">
+              <Button variant="outline" onClick={onCancel} className="w-full sm:w-auto min-h-[44px]">
                 Cancelar
               </Button>
               <Button 
                 onClick={onAccept} 
                 disabled={!validation.isValid}
-                className={validation.isValid ? 'bg-green-600 hover:bg-green-700' : ''}
+                className={`w-full sm:w-auto min-h-[44px] ${validation.isValid ? 'bg-green-600 hover:bg-green-700' : ''}`}
               >
                 {validation.isValid ? (
                   <>

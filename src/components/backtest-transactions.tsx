@@ -179,35 +179,110 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
       <CardContent>
         <Tabs defaultValue="transactions" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="transactions">Transações Detalhadas</TabsTrigger>
-            <TabsTrigger value="summary">Resumo por Mês</TabsTrigger>
+            <TabsTrigger value="transactions" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Transações Detalhadas</span>
+              <span className="sm:hidden">Detalhes</span>
+            </TabsTrigger>
+            <TabsTrigger value="summary" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Resumo por Mês</span>
+              <span className="sm:hidden">Resumo</span>
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="transactions" className="space-y-4">
-            {/* Filtros */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              <Button
-                variant={selectedMonth === null ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleMonthFilter(null)}
-              >
-                Todos os Meses
-              </Button>
-              {months.map(month => (
+            {/* Filtros - scroll horizontal no mobile */}
+            <div className="overflow-x-auto pb-2 -mx-1 px-1">
+              <div className="flex gap-2 min-w-max">
                 <Button
-                  key={month}
-                  variant={selectedMonth === month ? "default" : "outline"}
+                  variant={selectedMonth === null ? "default" : "outline"}
                   size="sm"
-                  onClick={() => handleMonthFilter(month)}
+                  onClick={() => handleMonthFilter(null)}
+                  className="flex-shrink-0"
                 >
-                  Mês {month === 0 ? month + 1 : month}
+                  Todos os Meses
                 </Button>
-              ))}
+                {months.map(month => (
+                  <Button
+                    key={month}
+                    variant={selectedMonth === month ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleMonthFilter(month)}
+                    className="flex-shrink-0"
+                  >
+                    Mês {month === 0 ? month + 1 : month}
+                  </Button>
+                ))}
+              </div>
             </div>
 
-            {/* Tabela de Transações */}
-            <div ref={transactionsTableRef} className="overflow-x-auto">
-              <table className="w-full text-sm">
+            {/* Wrapper para scroll - ref visível em mobile e desktop */}
+            <div ref={transactionsTableRef}>
+            {/* Layout Mobile: Cards */}
+            <div className="md:hidden space-y-3">
+              {paginatedTransactions.map((transaction) => {
+                const typeInfo = getTransactionTypeInfo(transaction.transactionType, transaction.ticker)
+                const debitValue = transaction.ticker === 'CASH'
+                  ? (transaction.transactionType === 'CASH_DEBIT' ? Math.abs(transaction.contribution) : null)
+                  : (transaction.transactionType !== 'DIVIDEND_PAYMENT' && transaction.contribution > 0 ? transaction.contribution : null)
+                const creditValue = transaction.ticker === 'CASH'
+                  ? (transaction.transactionType === 'CASH_CREDIT' ? transaction.contribution : null)
+                  : (transaction.transactionType === 'DIVIDEND_PAYMENT' ? transaction.contribution : (transaction.contribution < 0 ? Math.abs(transaction.contribution) : null))
+                return (
+                  <Card key={transaction.id} className="overflow-hidden">
+                    <CardContent className="p-3 sm:p-4 space-y-3">
+                      {/* Data em linha própria para evitar sobreposição */}
+                      <div className="text-xs text-gray-500">
+                        {formatDate(transaction.date)}
+                      </div>
+                      {/* Tipo e ativo - podem quebrar linha sem sobrepor */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-lg flex-shrink-0">{typeInfo.icon}</span>
+                        <Badge className={`${typeInfo.color} text-xs flex-shrink-0`}>
+                          {typeInfo.label}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">{transaction.ticker}</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm pt-1">
+                        {(debitValue !== null && debitValue > 0) && (
+                          <div>
+                            <span className="text-gray-500">Débito:</span>
+                            <span className="font-mono text-red-600 ml-1">{formatCurrency(debitValue)}</span>
+                          </div>
+                        )}
+                        {(creditValue !== null && creditValue > 0) && (
+                          <div>
+                            <span className="text-gray-500">Crédito:</span>
+                            <span className="font-mono text-green-600 ml-1">{formatCurrency(creditValue)}</span>
+                          </div>
+                        )}
+                        {transaction.ticker !== 'CASH' && transaction.price > 0 && (
+                          <div>
+                            <span className="text-gray-500">Preço:</span>
+                            <span className="font-mono ml-1">{formatCurrency(transaction.price)}</span>
+                          </div>
+                        )}
+                        {transaction.ticker !== 'CASH' && transaction.sharesAdded !== 0 && (
+                          <div>
+                            <span className="text-gray-500">Ações:</span>
+                            <span className={`font-mono ml-1 ${transaction.sharesAdded >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {transaction.sharesAdded >= 0 ? '+' : ''}{Math.floor(transaction.sharesAdded)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="col-span-2">
+                          <span className="text-gray-500">Saldo Caixa:</span>
+                          <span className="font-semibold text-blue-600 ml-1">{formatCurrency(transaction.cashBalance)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+
+            {/* Layout Desktop: Tabela */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-3">Data</th>
@@ -297,6 +372,7 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                 </tbody>
               </table>
             </div>
+            </div>
 
             {/* Controles de Paginação */}
             {totalPages > 1 && (
@@ -307,7 +383,7 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                   <span className="block sm:inline">Mostrando {startIndex + 1}-{Math.min(endIndex, filteredTransactions.length)} de {filteredTransactions.length} transações</span>
                 </div>
                 
-                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2">
                   {/* Primeira página */}
                   <Button
                     variant="outline"
@@ -411,7 +487,7 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
                         <div>
                           <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                             <DollarSign className="w-4 h-4" />

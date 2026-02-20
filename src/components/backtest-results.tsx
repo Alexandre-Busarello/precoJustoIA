@@ -865,7 +865,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
               <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Valor Final</p>
               <p className="text-lg sm:text-2xl font-bold text-green-600 truncate">
@@ -894,8 +894,8 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
         </CardContent>
       </Card>
 
-      {/* Métricas Principais */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+      {/* Métricas Principais - máx 3 colunas para evitar truncamento em telas grandes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <MetricCard
           title="Volatilidade"
           value={formatPercentage(result.volatility)}
@@ -1393,8 +1393,50 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
               <CardContent>
                 {paginatedData.length > 0 ? (
                   <>
-                    <div ref={evolutionTableRef} className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                    {/* Layout Mobile: Cards */}
+                    <div ref={evolutionTableRef} className="md:hidden space-y-3">
+                      {paginatedData.map((month, index) => {
+                        const actualIndex = startIndex + index;
+                        const previousMonth = actualIndex < sortedMonthlyReturns.length - 1 ? sortedMonthlyReturns[actualIndex + 1] : null;
+                        const variation = previousMonth ? ((month.portfolioValue - previousMonth.portfolioValue) / previousMonth.portfolioValue) * 100 : 0;
+                        return (
+                          <Card key={actualIndex}>
+                            <CardContent className="p-3 sm:p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium">
+                                  {new Date(month.date).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
+                                </span>
+                                <span className="font-mono font-semibold text-green-600">
+                                  {formatCurrency(month.portfolioValue || 0)}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <span className="text-gray-500">Retorno:</span>
+                                  <span className={`font-mono ml-1 ${(month.return || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {formatPercentage(month.return || 0)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Aporte:</span>
+                                  <span className="font-mono text-blue-600 ml-1">{formatCurrency(month.contribution || 0)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Variação:</span>
+                                  <span className={`font-mono ml-1 ${variation >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {variation.toFixed(2)}%
+                                  </span>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+
+                    {/* Layout Desktop: Tabela */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-sm min-w-[400px]">
                         <thead>
                           <tr className="border-b">
                             <th className="text-left p-3">Mês</th>
@@ -1407,17 +1449,12 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                         <tbody>
                           {paginatedData.map((month, index) => {
                             const actualIndex = startIndex + index;
-                            // CORREÇÃO: Para dados ordenados por data decrescente, o mês anterior é o próximo no array
                             const previousMonth = actualIndex < sortedMonthlyReturns.length - 1 ? sortedMonthlyReturns[actualIndex + 1] : null;
                             const variation = previousMonth ? ((month.portfolioValue - previousMonth.portfolioValue) / previousMonth.portfolioValue) * 100 : 0;
-                            
                             return (
                               <tr key={actualIndex} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                 <td className="p-3 font-medium">
-                                  {new Date(month.date).toLocaleDateString('pt-BR', { 
-                                    month: 'short', 
-                                    year: 'numeric' 
-                                  })}
+                                  {new Date(month.date).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
                                 </td>
                                 <td className="text-right p-3 font-mono font-semibold">
                                   {formatCurrency(month.portfolioValue || 0)}
@@ -1447,7 +1484,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                           <span className="block sm:inline">Mostrando {startIndex + 1}-{Math.min(endIndex, sortedMonthlyReturns.length)} de {sortedMonthlyReturns.length} meses</span>
                         </div>
                         
-                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                        <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2">
                           {/* Primeira página */}
                           <Button
                             variant="outline"
@@ -1587,7 +1624,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                           </Badge>
                         </div>
                         
-                        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 text-sm">
                           <div>
                             <p className="text-gray-600 dark:text-gray-400">Valor Final</p>
                             <p className="font-semibold">{formatCurrency(asset.finalValue || 0)}</p>
@@ -1957,9 +1994,9 @@ function MetricCard({ title, value, icon, color, description }: MetricCardProps)
   };
 
   return (
-    <Card className={colorClasses[color]}>
+    <Card className={`${colorClasses[color]} min-w-0`}>
       <CardContent className="p-3 sm:p-4">
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-start gap-2 sm:gap-3 min-w-0">
           <div className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 flex items-center justify-center ${color === 'blue' ? 'bg-blue-500' : 
                                           color === 'green' ? 'bg-green-500' :
                                           color === 'red' ? 'bg-red-500' :
@@ -1969,11 +2006,11 @@ function MetricCard({ title, value, icon, color, description }: MetricCardProps)
               {icon}
             </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs sm:text-sm font-medium opacity-80 truncate">{title}</p>
-            <p className="text-lg sm:text-2xl font-bold truncate">{value}</p>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <p className="text-xs sm:text-sm font-medium opacity-80 break-words">{title}</p>
+            <p className="text-lg sm:text-2xl font-bold break-all">{value}</p>
             {description && (
-              <p className="text-xs opacity-70 mt-1 line-clamp-2">{description}</p>
+              <p className="text-xs opacity-70 mt-1 break-words line-clamp-2">{description}</p>
             )}
           </div>
         </div>

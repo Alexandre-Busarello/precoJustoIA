@@ -565,10 +565,10 @@ export function BacktestConfigForm({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="space-y-2 min-w-0">
               <Label htmlFor="startDate">Data de Início</Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 min-w-0">
                 <Select
                   value={String(config.startDate.getMonth() + 1).padStart(2, '0')}
                   onValueChange={(month) => {
@@ -576,7 +576,7 @@ export function BacktestConfigForm({
                     setConfig(prev => ({ ...prev, startDate: newDate }));
                   }}
                 >
-                  <SelectTrigger className="flex-1">
+                  <SelectTrigger className="flex-1 min-w-0">
                     <SelectValue placeholder="Mês" />
                   </SelectTrigger>
                   <SelectContent>
@@ -609,14 +609,14 @@ export function BacktestConfigForm({
                       setConfig(prev => ({ ...prev, startDate: newDate }));
                     }
                   }}
-                  className={`w-24 ${errors.dates ? 'border-red-500' : ''}`}
+                  className={`w-20 sm:w-24 min-w-0 flex-shrink-0 ${errors.dates ? 'border-red-500' : ''}`}
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label htmlFor="endDate">Data de Fim</Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 min-w-0">
                 <Select
                   value={String(config.endDate.getMonth() + 1).padStart(2, '0')}
                   onValueChange={(month) => {
@@ -624,7 +624,7 @@ export function BacktestConfigForm({
                     setConfig(prev => ({ ...prev, endDate: newDate }));
                   }}
                 >
-                  <SelectTrigger className="flex-1">
+                  <SelectTrigger className="flex-1 min-w-0">
                     <SelectValue placeholder="Mês" />
                   </SelectTrigger>
                   <SelectContent>
@@ -657,7 +657,7 @@ export function BacktestConfigForm({
                       setConfig(prev => ({ ...prev, endDate: newDate }));
                     }
                   }}
-                  className={`w-24 ${errors.dates ? 'border-red-500' : ''}`}
+                  className={`w-20 sm:w-24 min-w-0 flex-shrink-0 ${errors.dates ? 'border-red-500' : ''}`}
                 />
               </div>
             </div>
@@ -767,7 +767,7 @@ export function BacktestConfigForm({
                             }
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Input
                             type="text"
                             value={dividendYieldInputs[asset.ticker] || ''}
@@ -800,9 +800,9 @@ export function BacktestConfigForm({
                               }));
                             }}
                             placeholder="0,00"
-                            className="w-20 text-sm"
+                            className="w-20 min-w-0 text-sm flex-shrink-0"
                           />
-                          <span className="text-sm text-gray-500">%</span>
+                          <span className="text-sm text-gray-500 flex-shrink-0">%</span>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -867,14 +867,14 @@ export function BacktestConfigForm({
 
       {/* Botões de Ação */}
       <Card>
-        <CardContent className="p-6 space-y-3">
+        <CardContent className="p-4 sm:p-6 space-y-3">
           {/* Botão Salvar Configuração */}
           {onSaveConfig && (
             <Button
               onClick={handleSaveConfig}
               disabled={isSaving || isRunning || (config.assets.length > 0 && !isValidAllocation)}
               variant="outline"
-              className="w-full"
+              className="w-full max-w-full min-w-0 min-h-[44px]"
               size="lg"
             >
               {isSaving ? (
@@ -895,7 +895,7 @@ export function BacktestConfigForm({
           <Button
             onClick={handleRunBacktest}
             disabled={isRunning || isSaving || config.assets.length === 0 || !isValidAllocation}
-            className="w-full"
+            className="w-full max-w-full min-w-0 min-h-[44px]"
             size="lg"
           >
             {isRunning ? (

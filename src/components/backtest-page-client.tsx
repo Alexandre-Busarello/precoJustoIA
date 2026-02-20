@@ -859,7 +859,7 @@ export function BacktestPageClient() {
       
     <div className="space-y-6">
       {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -929,49 +929,50 @@ export function BacktestPageClient() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <TabsList className="grid grid-cols-4 w-full sm:w-auto">
-            <TabsTrigger 
-              value="lista" 
-              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
-              onClick={() => updateUrl('lista')}
-            >
-              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Minhas Configs</span>
-              <span className="xs:hidden">Lista</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="configure" 
-              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
-              onClick={() => updateUrl('configure', (currentConfig as any)?.id)}
-            >
-              <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Configurar</span>
-              <span className="xs:hidden">Config</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="results" 
-              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" 
-              disabled={!currentResult}
-              onClick={() => updateUrl('results', (currentConfig as any)?.id)}
-            >
-              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Resultados</span>
-              <span className="xs:hidden">Result</span>
-            </TabsTrigger>
-          <TabsTrigger 
-            value="history" 
-            className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
-            onClick={() => updateUrl('history', (currentConfig as any)?.id)}
-          >
-            <History className="w-3 h-3 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">
-              {currentConfig && (currentConfig as any).id ? 'Histórico da Config' : 'Histórico Geral'}
-            </span>
-            <span className="sm:hidden">Histórico</span>
-          </TabsTrigger>
-          </TabsList>
-          
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
+          <div className="overflow-x-auto pb-2 -mx-4 sm:mx-0 px-4 sm:px-0">
+            <TabsList className="inline-flex h-10 min-w-max w-full sm:w-auto items-center justify-start rounded-md bg-muted p-1 text-muted-foreground">
+              <TabsTrigger 
+                value="lista" 
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0"
+                onClick={() => updateUrl('lista')}
+              >
+                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Minhas Configs</span>
+                <span className="sm:hidden">Lista</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="configure" 
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0"
+                onClick={() => updateUrl('configure', (currentConfig as any)?.id)}
+              >
+                <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Configurar</span>
+                <span className="sm:hidden">Config</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="results" 
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0" 
+                disabled={!currentResult}
+                onClick={() => updateUrl('results', (currentConfig as any)?.id)}
+              >
+                <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Resultados</span>
+                <span className="sm:hidden">Result</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="history" 
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0"
+                onClick={() => updateUrl('history', (currentConfig as any)?.id)}
+              >
+                <History className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">
+                  {currentConfig && (currentConfig as any).id ? 'Histórico da Config' : 'Histórico Geral'}
+                </span>
+                <span className="sm:hidden">Histórico</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
         </div>
 
         {/* Lista de Configurações */}

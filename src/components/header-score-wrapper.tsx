@@ -8,6 +8,8 @@ import { useCompanyAnalysis } from '@/hooks/use-company-data';
 
 interface HeaderScoreWrapperProps {
   ticker: string;
+  /** Quando true (ex: anônimo com 2 usos restantes), mostra score completo sem paywall */
+  canViewFullContent?: boolean;
 }
 
 interface OverallScore {
@@ -28,10 +30,11 @@ interface CompanyAnalysisResponse {
   strategies: unknown;
 }
 
-export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) {
+export default function HeaderScoreWrapper({ ticker, canViewFullContent }: HeaderScoreWrapperProps) {
   const { data: session } = useSession();
   const { isPremium } = usePremiumStatus();
-  const { data: analysisData, isLoading } = useCompanyAnalysis(ticker);
+  const effectiveIsPremium = canViewFullContent ?? isPremium ?? false;
+  const { data: analysisData, isLoading } = useCompanyAnalysis(ticker, effectiveIsPremium);
   
   const isLoggedIn = !!session?.user;
   const overallScore = (analysisData as CompanyAnalysisResponse | undefined)?.overallScore ?? null;
@@ -53,7 +56,7 @@ export default function HeaderScoreWrapper({ ticker }: HeaderScoreWrapperProps) 
       <CardContent className="p-4 lg:p-4">
         <CompactScore 
           overallScore={overallScore}
-          isPremium={isPremium ?? false}
+          isPremium={effectiveIsPremium}
           isLoggedIn={isLoggedIn}
           ticker={ticker}
         />

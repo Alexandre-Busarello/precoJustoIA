@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
@@ -29,6 +30,9 @@ import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config'
 import type { CompanyData } from '@/lib/strategies/types'
 import Link from 'next/link'
 import { BenChatFAB } from '@/components/ben-chat-fab'
+import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
+import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
+import { AnonLimitCTA } from '@/components/anon-limit-cta'
 
 // Shadcn UI Components
 import { Card, CardContent } from '@/components/ui/card'
@@ -334,10 +338,26 @@ export default async function BdrPage({ params }: PageProps) {
   // Verificar sessão do usuário para recursos premium
   const session = await getServerSession(authOptions)
   let userIsPremium = false
+  let canViewFullContent = false
+  let shouldShowAnonLimitCTA = false
 
   if (session?.user?.id) {
     const user = await getCurrentUser()
     userIsPremium = user?.isPremium || false
+    canViewFullContent = userIsPremium
+  } else {
+    // Anônimo: verificar limite de 2 visualizações completas por IP
+    const headersList = await headers()
+    const ip = RateLimitMiddleware.getClientIPFromHeaders(headersList)
+    const usageResult = await checkAndRecordUsage({
+      userId: null,
+      ip,
+      feature: 'anon_full_view',
+      resourceId: `bdr:${ticker}`,
+      recordUsage: true,
+    })
+    canViewFullContent = usageResult.allowed
+    shouldShowAnonLimitCTA = !usageResult.allowed && usageResult.shouldConvertLead
   }
 
   // Atualizar preço do dia atual ANTES de buscar dados (com timeout para não bloquear muito)
@@ -746,7 +766,7 @@ export default async function BdrPage({ params }: PageProps) {
             {/* Card do Score - Separado */}
             <div className="lg:flex-shrink-0">
               <PageCacheIndicator ticker={ticker} />
-              <HeaderScoreWrapper ticker={ticker} />
+              <HeaderScoreWrapper ticker={ticker} canViewFullContent={canViewFullContent} />
               
               {/* Card de Notificações - Destacado (apenas quando cards estão lado a lado, >= 1024px) */}
               <div className="hidden lg:block mt-4 lg:w-80">
@@ -765,13 +785,18 @@ export default async function BdrPage({ params }: PageProps) {
 
         {latestFinancials && (
           <>
+            {shouldShowAnonLimitCTA && (
+              <div className="mb-8">
+                <AnonLimitCTA />
+              </div>
+            )}
             {/* Análises Estratégicas - Usando componente cliente */}
             {latestFinancials && (
               <StrategicAnalysisClient 
                 ticker={ticker}
                 currentPrice={currentPrice}
                 latestFinancials={serializedFinancials}
-                userIsPremium={userIsPremium}
+                userIsPremium={canViewFullContent}
               />
             )}
 
@@ -779,13 +804,13 @@ export default async function BdrPage({ params }: PageProps) {
             <MarketSentimentSection
               ticker={ticker}
               youtubeAnalysis={serializedYoutubeAnalysis}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
             />
 
             {/* Análise Técnica */}
             <TechnicalAnalysisLink 
               ticker={ticker} 
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               currentPrice={currentPrice}
               assetType="BDR"
             />
@@ -812,7 +837,7 @@ export default async function BdrPage({ params }: PageProps) {
               sector={companyData.sector}
               currentPrice={currentPrice}
               financials={serializedFinancials}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               companyId={companyData.id}
             />
 

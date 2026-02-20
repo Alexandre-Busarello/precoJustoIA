@@ -1,15 +1,31 @@
 import { useSession } from 'next-auth/react'
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+
+async function fetchAnonCanViewFull(): Promise<{ canViewFullContent: boolean }> {
+  const res = await fetch('/api/anon-can-view-full', { credentials: 'include' })
+  if (!res.ok) return { canViewFullContent: false }
+  return res.json()
+}
 
 /**
  * Hook centralizado para verificação de status Premium no frontend
  * ÚNICA FONTE DA VERDADE para componentes React
- * 
+ *
+ * Para anônimos: retorna isPremium=true quando usos não excedem limite (2 por IP).
+ * Após exceder, volta à regra padrão (isPremium=false).
+ *
  * @returns {object} Status Premium do usuário atual
  */
 export function usePremiumStatus() {
   const { data: session, status } = useSession()
-  
+  const { data: anonAccess, isLoading: anonLoading } = useQuery({
+    queryKey: ['anon-can-view-full'],
+    queryFn: fetchAnonCanViewFull,
+    enabled: status !== 'loading' && !session?.user,
+    staleTime: 60 * 1000,
+  })
+
   const premiumStatus = useMemo(() => {
     if (status === 'loading') {
       return {
@@ -26,10 +42,11 @@ export function usePremiumStatus() {
     }
 
     if (!session?.user) {
+      const canViewFull = anonAccess?.canViewFullContent ?? false
       return {
-        isPremium: false,
+        isPremium: canViewFull,
         isVip: false,
-        isLoading: false,
+        isLoading: anonLoading,
         subscriptionTier: 'FREE' as const,
         premiumExpiresAt: null,
         trialStartedAt: null,
@@ -78,7 +95,7 @@ export function usePremiumStatus() {
       isTrialActive,
       trialDaysRemaining
     }
-  }, [session, status])
+  }, [session, status, anonAccess?.canViewFullContent, anonLoading])
 
   return premiumStatus
 }

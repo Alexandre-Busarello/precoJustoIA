@@ -3,6 +3,7 @@ import { safeQueryWithParams } from '@/lib/prisma-wrapper'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import type { Session } from 'next-auth'
+import { checkUsage } from '@/lib/usage-based-pricing-service'
 
 /**
  * ÚNICA FONTE DA VERDADE PARA VERIFICAÇÕES DE USUÁRIO E PREMIUM
@@ -132,12 +133,46 @@ export async function getCurrentUser(): Promise<UserData | null> {
 }
 
 /**
+ * Verifica se anônimo tem acesso completo (2 usos por IP não excedidos).
+ * Usado quando não há sessão mas temos IP (ex: API routes, Server Components).
+ */
+export async function checkAnonCanViewFull(ip: string): Promise<boolean> {
+  const result = await checkUsage({
+    userId: null,
+    ip,
+    feature: 'anon_full_view',
+    resourceId: 'check',
+  })
+  return result.allowed
+}
+
+/**
  * Verifica se o usuário atual é Premium
  * ÚNICA FONTE DA VERDADE para verificação Premium
+ *
+ * Para anônimos: retorna true quando usos não excedem limite (2 por IP).
+ * Passe `ip` ou `request` no contexto para habilitar a verificação.
  */
-export async function isCurrentUserPremium(): Promise<boolean> {
+export async function isCurrentUserPremium(context?: {
+  ip?: string
+  headers?: { get: (name: string) => string | null }
+  request?: { headers: { get: (name: string) => string | null } }
+}): Promise<boolean> {
   const user = await getCurrentUser()
-  return user?.isPremium || false
+  if (user) return user.isPremium
+
+  if (!context) return false
+
+  const headers = context.headers ?? context.request?.headers
+  let ip: string | undefined = context.ip
+  if (!ip && headers) {
+    const { RateLimitMiddleware } = await import('@/lib/rate-limit-middleware')
+    ip = RateLimitMiddleware.getClientIPFromHeaders(headers)
+  }
+  if (!ip) return false
+  // ip 'unknown' em dev: checkUsage trata (hashIP retorna null → allowed: true)
+
+  return checkAnonCanViewFull(ip)
 }
 
 /**

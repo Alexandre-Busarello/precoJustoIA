@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/user-service';
+import { getCurrentUser, isCurrentUserPremium } from '@/lib/user-service';
 import { StrategyAnalysis } from '@/lib/strategies';
 import { OverallScore } from '@/lib/strategies/overall-score';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
@@ -37,13 +37,14 @@ export async function GET(
     const resolvedParams = await params;
     const ticker = resolvedParams.ticker.toUpperCase();
     
-    // Verificar usuário atual - ÚNICA FONTE DA VERDADE
+    // Verificar usuário atual - ÚNICA FONTE DA VERDADE (inclui anônimos dentro do limite)
     const user = await getCurrentUser();
     const isLoggedIn = !!user;
-    const isPremium = user?.isPremium || false;
+    const isPremium = await isCurrentUserPremium({ request });
 
     // Criar chave de cache considerando ticker e status do usuário
-    const cacheKey = `company-analysis:${ticker}:${isLoggedIn ? 'logged' : 'anon'}:${isPremium ? 'premium' : 'free'}`;
+    // v2: Graham agora calculado para anônimos com acesso (isPremium)
+    const cacheKey = `company-analysis:v2:${ticker}:${isLoggedIn ? 'logged' : 'anon'}:${isPremium ? 'premium' : 'free'}`;
 
     // Verificar cache
     const cachedData = await cache.get<CompanyAnalysisResponse>(cacheKey);
@@ -77,13 +78,13 @@ export async function GET(
       currentPrice,
       overallScore: isPremium ? overallScore : null, // ← Overall Score apenas para Premium
       strategies: {
-        // ✅ GRAHAM: Gratuita para usuários logados
-        graham: (isLoggedIn && resultStrategies?.graham) ? resultStrategies.graham : {
+        // ✅ GRAHAM: Gratuita para logados ou anônimos com acesso (2 usos por IP)
+        graham: ((isLoggedIn || isPremium) && resultStrategies?.graham) ? resultStrategies.graham : {
           isEligible: false,
           score: 0,
           fairValue: null,
           upside: null,
-          reasoning: isLoggedIn ? 'Dados insuficientes para análise Graham' : 'Login necessário para acessar análise Graham',
+          reasoning: (isLoggedIn || isPremium) ? 'Dados insuficientes para análise Graham' : 'Login necessário para acessar análise Graham',
           criteria: [],
         },
         // ✅ PREMIUM: Apenas para assinantes Premium

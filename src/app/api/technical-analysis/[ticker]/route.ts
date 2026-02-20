@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser, requirePremiumUser } from '@/lib/user-service'
+import { getCurrentUser, requirePremiumUser, isCurrentUserPremium } from '@/lib/user-service'
 import { 
   getOrCalculateTechnicalAnalysis, 
   getTechnicalAnalysisByDate,
@@ -14,9 +14,11 @@ export async function GET(
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   try {
-    // Verificar se usuário está logado (não apenas Premium)
     const user = await getCurrentUser()
-    if (!user) {
+    const isPremium = await isCurrentUserPremium({ request })
+
+    // Permitir: logado OU anônimo com acesso (2 usos por IP)
+    if (!user && !isPremium) {
       return NextResponse.json(
         { error: 'Você precisa estar logado para visualizar análise técnica.' },
         { status: 401 }
@@ -29,8 +31,8 @@ export async function GET(
     const dateParam = searchParams.get('date')
     const idParam = searchParams.get('id')
 
-    // Se for usuário gratuito, verificar limite antes de continuar
-    if (!user.isPremium) {
+    // Se for usuário gratuito (logado), verificar limite antes de continuar. Anônimo com acesso não precisa.
+    if (user && !user.isPremium) {
       const usageCheck = await checkFeatureUsage(user.id, 'technical_analysis', ticker)
       if (!usageCheck.allowed) {
         return NextResponse.json(
@@ -86,8 +88,8 @@ export async function GET(
       )
     }
 
-    // Registrar uso para usuários gratuitos
-    if (!user.isPremium) {
+    // Registrar uso para usuários gratuitos (logados). Anônimo com acesso não registra.
+    if (user && !user.isPremium) {
       await recordFeatureUsage(user.id, 'technical_analysis', ticker, { ticker })
     }
 
@@ -237,9 +239,9 @@ export async function GET(
     
     console.log(`[DEBUG] Total final de pontos no gráfico: ${historicalData.length}`)
 
-    // Buscar informações de uso para usuários gratuitos
+    // Buscar informações de uso para usuários gratuitos (logados). Anônimo com acesso não precisa.
     let usageInfo = null
-    if (!user.isPremium) {
+    if (user && !user.isPremium) {
       const usageCheck = await checkFeatureUsage(user.id, 'technical_analysis', ticker)
       usageInfo = {
         remaining: usageCheck.remaining,

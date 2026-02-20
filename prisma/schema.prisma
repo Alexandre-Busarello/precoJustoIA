@@ -68,6 +68,7 @@ model User {
   trialEndsAt                 DateTime?                    @map("trial_ends_at")
   trialStartedAt              DateTime?                    @map("trial_started_at")
   reportPreferences           Json?                        @map("report_preferences")
+  bonusUsageCredits           Int                          @default(0) @map("bonus_usage_credits")
   accounts                    Account[]
   sessions                    Session[]
   aiReportFeedbacks           AIReportFeedback[]
@@ -1238,6 +1239,18 @@ model FeatureUsage {
   @@index([userId, feature, year, month])
   @@index([feature, year, month])
   @@map("feature_usage")
+}
+
+model AnonymousFeatureUsage {
+  id         String   @id @default(cuid())
+  ipHash     String   @map("ip_hash")
+  feature    String
+  resourceId String?  @map("resource_id")
+  usedAt     DateTime @default(now()) @map("used_at")
+
+  @@unique([ipHash, feature, resourceId], name: "anonymous_feature_usage_unique")
+  @@index([ipHash, feature])
+  @@map("anonymous_feature_usage")
 }
 
 model RadarConfig {

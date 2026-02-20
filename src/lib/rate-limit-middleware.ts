@@ -420,6 +420,23 @@ export class RateLimitMiddleware {
     // Normalizar IPs de localhost antes de retornar
     return this.normalizeLocalhostIP(ip)
   }
+
+  /**
+   * Obter IP do cliente a partir de headers (para Server Components).
+   * Usa headers() de next/headers.
+   */
+  static getClientIPFromHeaders(headers: { get(name: string): string | null }): string {
+    const forwardedFor = headers.get('x-forwarded-for')
+    let ip: string | null = null
+    if (forwardedFor) {
+      const ips = forwardedFor.split(',').map((i) => i.trim())
+      ip = ips[0] || null
+    }
+    if (!ip) ip = headers.get('x-real-ip')
+    if (!ip) ip = headers.get('cf-connecting-ip')
+    if (!ip) return 'unknown'
+    return this.normalizeLocalhostIP(ip)
+  }
   
   /**
    * Verificar padrões suspeitos na requisição

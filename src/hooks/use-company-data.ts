@@ -23,7 +23,9 @@ interface CompanyAnalysisResponse {
 }
 
 async function fetchCompanyAnalysis(ticker: string): Promise<CompanyAnalysisResponse> {
-  const response = await fetch(`/api/company-analysis/${ticker}`);
+  const response = await fetch(`/api/company-analysis/${ticker}`, {
+    credentials: 'include', // Envia cookies para API identificar sessão/anônimo corretamente
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch company analysis for ${ticker}`);
   }
@@ -33,9 +35,10 @@ async function fetchCompanyAnalysis(ticker: string): Promise<CompanyAnalysisResp
 /**
  * Hook para buscar análise completa da empresa (score geral e estratégias)
  * Cache: 24 horas (dados mudam 1x ao dia)
+ * @param isPremium - Quando informado, inclui na chave de cache para evitar servir dados limitados a usuários com acesso
  */
-export function useCompanyAnalysis(ticker: string) {
-  const queryKey = ['company-analysis', ticker.toUpperCase()];
+export function useCompanyAnalysis(ticker: string, isPremium?: boolean) {
+  const queryKey = ['company-analysis', ticker.toUpperCase(), isPremium];
   const staleTime = 24 * 60 * 60 * 1000; // 24 horas
   const gcTime = 7 * 24 * 60 * 60 * 1000; // 7 dias
 

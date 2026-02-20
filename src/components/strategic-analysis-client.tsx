@@ -421,21 +421,13 @@ function StatementsAnalysisContent({ analysis }: { analysis: StatementsAnalysis 
 
 export default function StrategicAnalysisClient({ ticker, currentPrice, latestFinancials, userIsPremium: serverIsPremium }: Props) {
   const { data: session } = useSession();
-  const { data: analysisData, isLoading: loading, error: queryError } = useCompanyAnalysis(ticker);
+  const { isPremium: clientIsPremium } = usePremiumStatus();
+  // Usar status Premium do servidor como fonte da verdade, fallback para cliente
+  const isPremium = serverIsPremium !== undefined ? serverIsPremium : (clientIsPremium ?? false);
+  // Incluir isPremium na query key para evitar cache incorreto (ex: anônimo com acesso recebendo dados limitados)
+  const { data: analysisData, isLoading: loading, error: queryError } = useCompanyAnalysis(ticker, isPremium);
 
   const isLoggedIn = !!session?.user;
-  const { isPremium: clientIsPremium } = usePremiumStatus();
-  
-  // Usar status Premium do servidor como fonte da verdade, fallback para cliente
-  const isPremium = serverIsPremium !== undefined ? serverIsPremium : clientIsPremium;
-  
-  // Debug temporário
-  console.log('🔍 Premium Status Debug:', {
-    serverIsPremium,
-    clientIsPremium,
-    finalIsPremium: isPremium,
-    ticker
-  });
 
   const error = queryError ? (queryError instanceof Error ? queryError.message : 'Erro desconhecido') : null;
 
@@ -550,13 +542,13 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
           <TabsTrigger value="fair-value" className="flex items-center space-x-1">
             <Calculator className="w-4 h-4" />
             <span className="hidden sm:inline">Preço Justo</span>
-            {!isLoggedIn && <Badge variant="outline" className="ml-1 text-xs">Login</Badge>}
+            {!isPremium && !isLoggedIn && <Badge variant="outline" className="ml-1 text-xs">Login</Badge>}
           </TabsTrigger>
           
           <TabsTrigger value="strategies" className="flex items-center space-x-1">
             <Target className="w-4 h-4" />
             <span className="hidden sm:inline">Estratégias</span>
-            {!isLoggedIn ? (
+            {!isPremium && !isLoggedIn ? (
               <Badge variant="outline" className="ml-1 text-xs">Login</Badge>
             ) : !isPremium ? (
               <Badge variant="secondary" className="ml-1 text-xs bg-orange-100 text-orange-800">Premium</Badge>
@@ -580,12 +572,12 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
         {/* Preço Justo Tab */}
         <TabsContent value="fair-value" className="mt-6">
           <div className="space-y-6">
-            {/* Graham Analysis - SEMPRE VISÍVEL */}
-            {!isLoggedIn ? (
+            {/* Graham Analysis - visível para premium ou logado (inclui anônimo com canViewFullContent) */}
+            {!(isPremium || isLoggedIn) ? (
               <RegisterPrompt strategy="Benjamin Graham" />
             ) : (
               <Card className={
-                isLoggedIn && strategies.graham?.score
+                (isPremium || isLoggedIn) && strategies.graham?.score
                   ? !strategies.graham?.isEligible
                     ? "bg-red-100 border-red-200 dark:bg-red-950/30 dark:border-red-800"
                     : strategies.graham.score >= 80 
@@ -600,7 +592,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <Calculator className={`w-5 h-5 ${
-                          isLoggedIn && strategies.graham?.score
+                          (isPremium || isLoggedIn) && strategies.graham?.score
                             ? !strategies.graham?.isEligible
                               ? "text-yellow-700 dark:text-yellow-400"
                               : strategies.graham.score >= 80
@@ -611,7 +603,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                             : ""
                         }`} />
                         <span className={`text-lg font-semibold ${
-                          isLoggedIn && strategies.graham?.score
+                          (isPremium || isLoggedIn) && strategies.graham?.score
                             ? !strategies.graham?.isEligible
                               ? "text-yellow-900 dark:text-yellow-100"
                               : strategies.graham.score >= 80
@@ -1336,7 +1328,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
 
         {/* Strategies Tab */}
         <TabsContent value="strategies" className="mt-6">
-          {!isLoggedIn ? (
+          {!isPremium && !isLoggedIn ? (
             <RegisterPrompt strategy="Estratégias de Investimento" />
           ) : !isPremium ? (
             <div className="space-y-6">
@@ -2234,9 +2226,9 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       )}
                     </div>
                     <span className="text-lg font-bold text-blue-600">
-                      {isLoggedIn && strategies.graham?.fairValue 
+                      {(isPremium || isLoggedIn) && strategies.graham?.fairValue 
                         ? formatCurrency(strategies.graham.fairValue)
-                        : !isLoggedIn ? '🔒 Login' : 'N/A'
+                        : !isPremium && !isLoggedIn ? '🔒 Login' : 'N/A'
                       }
                     </span>
                   </div>

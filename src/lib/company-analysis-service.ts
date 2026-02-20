@@ -270,8 +270,9 @@ export async function executeCompanyAnalysis(
   const { isLoggedIn, isPremium, includeStatements = true, companyId, industry } = options;
 
   // Executar análises estratégicas usando StrategyFactory com configuração centralizada
+  // Graham: logados OU anônimos com acesso (2 usos por IP)
   const strategies = {
-    graham: isLoggedIn ? StrategyFactory.runGrahamAnalysis(companyData, STRATEGY_CONFIG.graham) : null,
+    graham: (isLoggedIn || isPremium) ? StrategyFactory.runGrahamAnalysis(companyData, STRATEGY_CONFIG.graham) : null,
     dividendYield: isPremium ? StrategyFactory.runDividendYieldAnalysis(companyData, STRATEGY_CONFIG.dividendYield) : null,
     lowPE: isPremium ? StrategyFactory.runLowPEAnalysis(companyData, STRATEGY_CONFIG.lowPE) : null,
     magicFormula: isPremium ? StrategyFactory.runMagicFormulaAnalysis(companyData, STRATEGY_CONFIG.magicFormula) : null,

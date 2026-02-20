@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import React from 'react'
+import { headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
@@ -11,6 +12,9 @@ import { analyzeFinancialStatements } from '@/lib/strategies/overall-score'
 import { executeMultipleCompanyAnalysis, getStatementsData } from '@/lib/company-analysis-service'
 import { cache } from '@/lib/cache-service'
 import Link from 'next/link'
+import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
+import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
+import { AnonLimitCTA } from '@/components/anon-limit-cta'
 
 // Shadcn UI Components
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -913,11 +917,28 @@ export default async function CompareStocksPage({ params }: PageProps) {
   // Verificar sessão do usuário para recursos premium e SEO
   const session = await getServerSession(authOptions)
   let userIsPremium = false
+  let canViewFullContent = false
+  let shouldShowAnonLimitCTA = false
 
   // Verificar se é Premium - ÚNICA FONTE DA VERDADE
   if (session?.user?.id) {
     const user = await getCurrentUser()
     userIsPremium = user?.isPremium || false
+    canViewFullContent = userIsPremium
+  } else {
+    // Anônimo: verificar limite de 2 visualizações completas por IP
+    const headersList = await headers()
+    const ip = RateLimitMiddleware.getClientIPFromHeaders(headersList)
+    const resourceId = `compare:${[...tickers].sort().join('-')}`
+    const usageResult = await checkAndRecordUsage({
+      userId: null,
+      ip,
+      feature: 'anon_full_view',
+      resourceId,
+      recordUsage: true,
+    })
+    canViewFullContent = usageResult.allowed
+    shouldShowAnonLimitCTA = !usageResult.allowed && usageResult.shouldConvertLead
   }
 
   // Buscar dados das empresas com consulta otimizada (incluindo dados históricos)
@@ -1042,6 +1063,12 @@ export default async function CompareStocksPage({ params }: PageProps) {
         </p>
       </div>
 
+      {shouldShowAnonLimitCTA && (
+        <div className="mb-8">
+          <AnonLimitCTA />
+        </div>
+      )}
+
       {/* Cards das Empresas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {orderedCompanies.map((company, companyIndex) => {
@@ -1049,10 +1076,10 @@ export default async function CompareStocksPage({ params }: PageProps) {
             const latestQuote = company.dailyQuotes[0]
             const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
             
-            // Determinar medalha baseada na posição e empates - APENAS para usuários premium
+            // Determinar medalha baseada na posição e empates - APENAS para usuários com acesso completo
             const getMedal = (index: number) => {
               // Medalhas são um recurso exclusivo premium
-              if (!userIsPremium) {
+              if (!canViewFullContent) {
                 return null
               }
 
@@ -1101,7 +1128,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
             const medal = getMedal(companyIndex)
 
             // Determinar se é a empresa campeã (empatadas na primeira posição ou primeira única)
-            const isBestCompany = userIsPremium && tiedCompaniesIndices.includes(companyIndex)
+            const isBestCompany = canViewFullContent && tiedCompaniesIndices.includes(companyIndex)
 
           return (
             <Card key={company.ticker} className={`relative transition-all duration-300 hover:scale-105 ${medal ? `ring-2 ${medal.border} shadow-xl ${medal.bg} ${medal.ringStyle}` : 'hover:shadow-lg'}`}>
@@ -1233,7 +1260,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={DollarSign}
               description="Quanto o mercado paga por cada R$ 1 de lucro"
               higherIsBetter={false}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               companies={orderedCompanies}
               fieldName="pl"
             />
@@ -1248,7 +1275,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Building2}
               description="Relação entre preço da ação e valor patrimonial"
               higherIsBetter={false}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               companies={orderedCompanies}
               fieldName="pvp"
             />
@@ -1263,7 +1290,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={TrendingUp}
               description="Capacidade de gerar lucro com o patrimônio"
               higherIsBetter={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               companies={orderedCompanies}
               fieldName="roe"
             />
@@ -1278,7 +1305,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Percent}
               description="Rendimento anual em dividendos"
               higherIsBetter={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               companies={orderedCompanies}
               fieldName="dy"
             />
@@ -1293,7 +1320,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Activity}
               description="Percentual de lucro sobre a receita"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="margemLiquida"
@@ -1309,7 +1336,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Target}
               description="Eficiência no uso do capital investido"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="roic"
@@ -1335,7 +1362,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={DollarSign}
               description="Valor total da empresa no mercado"
               higherIsBetter={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               companies={orderedCompanies}
               fieldName="marketCap"
             />
@@ -1350,7 +1377,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={TrendingUp}
               description="Faturamento anual da empresa"
               higherIsBetter={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               companies={orderedCompanies}
               fieldName="receitaTotal"
             />
@@ -1365,7 +1392,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Activity}
               description="Lucro após todos os custos e impostos"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="lucroLiquido"
@@ -1392,7 +1419,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={TrendingUp}
               description="Crescimento lucros (5 anos)"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="cagrLucros5a"
@@ -1408,7 +1435,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={BarChart3}
               description="Crescimento receitas (5 anos)"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="cagrReceitas5a"
@@ -1424,7 +1451,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Activity}
               description="Variação anual dos lucros"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="crescimentoLucros"
@@ -1440,7 +1467,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={LineChart}
               description="Variação anual das receitas"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="crescimentoReceitas"
@@ -1467,7 +1494,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={TrendingDown}
               description="Capacidade de pagamento da dívida"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={false}
               companies={orderedCompanies}
               fieldName="dividaLiquidaEbitda"
@@ -1483,7 +1510,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Building2}
               description="Endividamento em relação ao patrimônio"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={false}
               companies={orderedCompanies}
               fieldName="dividaLiquidaPl"
@@ -1499,7 +1526,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               icon={Activity}
               description="Capacidade de honrar compromissos de curto prazo"
               isPremium={true}
-              userIsPremium={userIsPremium}
+              userIsPremium={canViewFullContent}
               higherIsBetter={true}
               companies={orderedCompanies}
               fieldName="liquidezCorrente"
@@ -1576,7 +1603,7 @@ export default async function CompareStocksPage({ params }: PageProps) {
               overallScore
             }
           })}
-          userIsPremium={userIsPremium}
+          userIsPremium={canViewFullContent}
         />
       </div>
 

@@ -28,7 +28,8 @@ import {
   Trash2,
   DollarSign,
   Edit,
-  MoreHorizontal
+  MoreHorizontal,
+  Calculator
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -65,6 +66,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { RecoveryCalculatorSheet } from '@/components/recovery-calculator-sheet';
+import { calculateRecovery } from '@/lib/recovery-calculator-utils';
 
 interface Transaction {
   id: string;
@@ -92,7 +95,8 @@ export function PortfolioTransactionList({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filterType, setFilterType] = useState<string>('all');
-  
+  const [filterRecovery, setFilterRecovery] = useState<'all' | 'recovery'>('all');
+
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -107,6 +111,26 @@ export function PortfolioTransactionList({
   // Delete confirmation state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
+
+  // Recovery sheet - transação selecionada para ver aporte
+  const [recoveryTransaction, setRecoveryTransaction] = useState<Transaction | null>(null);
+
+  // Fetch holdings para preços atuais (recuperação por transação)
+  const { data: holdingsData } = useQuery({
+    queryKey: ['portfolio-holdings', portfolioId],
+    queryFn: async () => {
+      const res = await fetch(`/api/portfolio/${portfolioId}/holdings`);
+      if (!res.ok) throw new Error('Erro ao carregar posições');
+      const data = await res.json();
+      return data.holdings || [];
+    },
+  });
+  const holdings = Array.isArray(holdingsData)
+    ? holdingsData
+    : (holdingsData as { holdings?: { ticker: string; currentPrice: number }[] } | null)?.holdings ?? [];
+  const priceByTicker = Object.fromEntries(
+    holdings.map((h: { ticker: string; currentPrice: number }) => [h.ticker, h.currentPrice])
+  );
 
   // Sort transactions by date (DESC) and type priority
   const sortAndGroupTransactions = (txs: Transaction[]): Transaction[] => {
@@ -137,13 +161,6 @@ export function PortfolioTransactionList({
       const priorityB = typePriority[b.type] || 999;
       return priorityA - priorityB;
     });
-
-    console.log('🔄 Transações ordenadas:', sorted.map(t => ({
-      date: t.date.split('T')[0],
-      type: t.type,
-      ticker: t.ticker,
-      priority: typePriority[t.type]
-    })));
 
     return sorted;
   };
@@ -370,6 +387,34 @@ export function PortfolioTransactionList({
     return labels[type] || type;
   };
 
+  const getRecoveryForTransaction = (
+    tx: Transaction
+  ): { qtyToBuy: number; investment: number; pricePaid: number; currentPrice: number } | null => {
+    if (!tx.ticker || !['BUY', 'BUY_REBALANCE'].includes(tx.type) || !tx.quantity) return null;
+    const pricePaid = tx.price ?? tx.amount / tx.quantity;
+    const currentPrice = priceByTicker[tx.ticker];
+    if (!currentPrice || currentPrice >= pricePaid) return null;
+    const drop = ((pricePaid - currentPrice) / pricePaid) * 100;
+    const result = calculateRecovery({
+      currentQty: tx.quantity,
+      avgPrice: pricePaid,
+      currentPrice,
+      targetRise: drop,
+      targetProfit: 0,
+    });
+    return result.success
+      ? { qtyToBuy: result.qtyToBuy, investment: result.investmentRequired, pricePaid, currentPrice }
+      : null;
+  };
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+  const displayedTransactions =
+    filterRecovery === 'recovery'
+      ? transactions.filter((tx) => getRecoveryForTransaction(tx) !== null)
+      : transactions;
+
   const getStatusBadge = (status: string) => {
     // CONFIRMED e EXECUTED aparecem como "Executada" na interface
     const variants: Record<string, any> = {
@@ -404,12 +449,25 @@ export function PortfolioTransactionList({
             <SelectItem value="DIVIDEND">Dividendos</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filterRecovery} onValueChange={(v) => setFilterRecovery(v as 'all' | 'recovery')}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Recuperação" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as transações</SelectItem>
+            <SelectItem value="recovery">Precisam de recuperação</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Transactions Table */}
-      {transactions.length === 0 ? (
+      {displayedTransactions.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
-          <p>Nenhuma transação encontrada</p>
+          <p>
+            {filterRecovery === 'recovery'
+              ? 'Nenhuma transação precisa de recuperação'
+              : 'Nenhuma transação encontrada'}
+          </p>
         </div>
       ) : (
         <div className="border rounded-lg overflow-x-auto max-w-full">
@@ -421,12 +479,13 @@ export function PortfolioTransactionList({
                 <TableHead>Ativo</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead className="text-right">Qtd.</TableHead>
+                <TableHead>Recuperação</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {transactions.map(tx => (
+              {displayedTransactions.map(tx => (
                 <TableRow key={tx.id}>
                   <TableCell>
                     {format(parseLocalDate(tx.date), 'dd/MM/yyyy', { locale: ptBR })}
@@ -454,6 +513,31 @@ export function PortfolioTransactionList({
                     ) : (
                       tx.quantity ? tx.quantity.toFixed(0) : '-'
                     )}
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const recovery = getRecoveryForTransaction(tx);
+                      if (!recovery) return <span className="text-muted-foreground text-xs">—</span>;
+                      return (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">
+                            Pago: {formatCurrency(recovery.pricePaid)} → Hoje: {formatCurrency(recovery.currentPrice)}
+                          </span>
+                          <span className="text-xs">
+                            Aporte: <strong>{recovery.qtyToBuy}</strong> ações ({formatCurrency(recovery.investment)})
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs p-0"
+                            onClick={() => setRecoveryTransaction(tx)}
+                          >
+                            <Calculator className="h-3 w-3 mr-1" />
+                            Ver calculadora
+                          </Button>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     {getStatusBadge(tx.status)}
@@ -579,6 +663,27 @@ export function PortfolioTransactionList({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Recovery Calculator Sheet - por transação */}
+      <RecoveryCalculatorSheet
+        holding={
+          recoveryTransaction && recoveryTransaction.ticker && recoveryTransaction.quantity
+            ? {
+                ticker: recoveryTransaction.ticker,
+                quantity: recoveryTransaction.quantity,
+                averagePrice: recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity,
+                currentPrice: priceByTicker[recoveryTransaction.ticker] ?? 0,
+                returnPercentage:
+                  (priceByTicker[recoveryTransaction.ticker] ?? 0) < (recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity)
+                    ? ((priceByTicker[recoveryTransaction.ticker] ?? 0) - (recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity)) /
+                      (recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity)
+                    : 0,
+              }
+            : null
+        }
+        open={!!recoveryTransaction}
+        onOpenChange={(open) => !open && setRecoveryTransaction(null)}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

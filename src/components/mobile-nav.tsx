@@ -28,6 +28,7 @@ import {
   Bell,
   Calculator,
   Clock,
+  TrendingDown,
   DollarSign,
   Radar,
   ChevronRight,
@@ -266,12 +267,25 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
           description: "Simule amortizar dívida vs investir em ativos",
           isNew: true
         },
+      ],
+    },
+    {
+      label: "Calculadoras",
+      items: [
         {
-          title: "Calculadoras",
+          title: "Dividend Yield",
           href: "/calculadoras/dividend-yield",
           icon: <Calculator className="w-5 h-5" />,
           show: true,
           description: "Calcule preço teto e rendimento de dividendos",
+          badge: "Grátis"
+        },
+        {
+          title: "Recuperação",
+          href: "/calculadoras/recuperacao",
+          icon: <TrendingDown className="w-5 h-5" />,
+          show: true,
+          description: "Calcule o aporte ideal para recuperar prejuízo ou lucrar",
           badge: "Grátis"
         },
       ],
@@ -603,6 +617,8 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                                     ? 'bg-gradient-to-br from-emerald-500 to-teal-500'
                                     : item.href === '/calculadoras/dividend-yield'
                                     ? 'bg-gradient-to-br from-green-500 to-emerald-500'
+                                    : item.href === '/calculadoras/recuperacao'
+                                    ? 'bg-gradient-to-br from-emerald-500 to-teal-500'
                                     : item.href === '/arbitragem-divida'
                                     ? 'bg-gradient-to-br from-purple-500 to-pink-500'
                                     : 'bg-gradient-to-br from-blue-500 to-purple-500'

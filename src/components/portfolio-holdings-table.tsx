@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,7 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { AlertTriangle, TrendingUp, TrendingDown, Scale } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, Scale, Calculator } from "lucide-react";
+import { RecoveryCalculatorSheet } from "@/components/recovery-calculator-sheet";
 
 interface Holding {
   ticker: string;
@@ -47,6 +48,7 @@ export function PortfolioHoldingsTable({
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [recoverySheetHolding, setRecoverySheetHolding] = useState<Holding | null>(null);
 
   // Query for loading holdings
   const fetchHoldings = async () => {
@@ -284,6 +286,7 @@ export function PortfolioHoldingsTable({
                 </TableHead>
                 <TableHead className="text-right">Alocação</TableHead>
                 <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-center">Recuperação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -384,6 +387,22 @@ export function PortfolioHoldingsTable({
                       </Badge>
                     )}
                   </TableCell>
+
+                  <TableCell className="text-center">
+                    {holding.returnPercentage < 0 ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => setRecoverySheetHolding(holding)}
+                      >
+                        <Calculator className="h-3 w-3 mr-1" />
+                        Ver aporte
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -434,6 +453,12 @@ export function PortfolioHoldingsTable({
             </div>
           </div>
         )}
+
+        <RecoveryCalculatorSheet
+          holding={recoverySheetHolding}
+          open={!!recoverySheetHolding}
+          onOpenChange={(open) => !open && setRecoverySheetHolding(null)}
+        />
       </CardContent>
     </Card>
   );

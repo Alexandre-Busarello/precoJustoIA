@@ -1,7 +1,7 @@
 "use client"
 
 import { NavDropdown, NavSection } from "./nav-dropdown"
-import { GitCompare, Building2, TrendingUp, History, Calculator, ArrowLeftRight, Bell } from "lucide-react"
+import { GitCompare, Building2, TrendingUp, History, Calculator, ArrowLeftRight, Bell, TrendingDown } from "lucide-react"
 
 const sections: NavSection[] = [
   {
@@ -60,13 +60,26 @@ const sections: NavSection[] = [
         isNew: true,
         iconGradient: "bg-gradient-to-br from-purple-500 to-pink-500",
       },
+    ],
+  },
+  {
+    label: "Calculadoras",
+    items: [
       {
-        title: "Calculadoras",
+        title: "Dividend Yield",
         href: "/calculadoras/dividend-yield",
         icon: Calculator,
         description: "Calcule preço teto e rendimento de dividendos.",
         badge: "Grátis",
         iconGradient: "bg-gradient-to-br from-green-500 to-emerald-500",
+      },
+      {
+        title: "Recuperação",
+        href: "/calculadoras/recuperacao",
+        icon: TrendingDown,
+        description: "Calcule o aporte ideal para recuperar prejuízo ou lucrar.",
+        badge: "Grátis",
+        iconGradient: "bg-gradient-to-br from-emerald-500 to-teal-500",
       },
     ],
   },

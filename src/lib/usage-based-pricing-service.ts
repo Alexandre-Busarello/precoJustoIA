@@ -33,7 +33,11 @@ const FEATURE_LIMITS: Record<string, { anonLimit: number; freeLimit: number }> =
   comparator_use: { anonLimit: 1, freeLimit: 3 },
   backtest_run: { anonLimit: 1, freeLimit: 1 },
   screening_run: { anonLimit: 1, freeLimit: 3 },
+  recovery_calculator: { anonLimit: 2, freeLimit: 3 },
 }
+
+// Features que limitam uso gratuito também por IP (evitar múltiplas contas)
+const FREE_LIMIT_BY_IP_FEATURES = new Set(['recovery_calculator'])
 
 const ANON_RESOURCE_PLACEHOLDER = ''
 
@@ -59,6 +63,7 @@ export async function checkAndRecordUsage(params: {
   recordUsage?: boolean
 }): Promise<UsageCheckResult> {
   const { userId, ip, feature, resourceId, recordUsage = true } = params
+  const ipHash = ip ? hashIP(ip) : null
 
   const limits = FEATURE_LIMITS[feature]
   if (!limits) {
@@ -141,20 +146,40 @@ export async function checkAndRecordUsage(params: {
         { userId, feature, month, year }
       )
 
+      // Para features com limite por IP: contar uso de contas gratuitas deste IP.
+      // Não inclui uso anônimo (resourceId: null) - ao criar conta, o usuário ganha 3 usos adicionais.
+      let ipUsageCount = 0
+      if (FREE_LIMIT_BY_IP_FEATURES.has(feature) && ipHash) {
+        const freeIpPrefix = `free_ip:${year}:${month}:`
+        ipUsageCount = await safeQueryWithParams(
+          'usage-count-free-by-ip',
+          () =>
+            prisma.anonymousFeatureUsage.count({
+              where: {
+                ipHash,
+                feature,
+                resourceId: { startsWith: freeIpPrefix },
+              },
+            }),
+          { ipHash, feature }
+        )
+      }
+
       const bonusCredits = user.bonusUsageCredits ?? 0
       const effectiveLimit = freeLimit + bonusCredits
-      const remaining = Math.max(0, effectiveLimit - usageCount)
-      const allowed = usageCount < effectiveLimit
+      const effectiveUsage = Math.max(usageCount, ipUsageCount)
+      const remaining = Math.max(0, effectiveLimit - effectiveUsage)
+      const allowed = usageCount < effectiveLimit && ipUsageCount < effectiveLimit
 
       if (allowed && recordUsage) {
-        await recordFreeUsage(userId!, feature, resourceId)
+        await recordFreeUsage(userId!, feature, resourceId, ipHash, FREE_LIMIT_BY_IP_FEATURES.has(feature))
       }
 
       return {
         allowed,
         remaining,
         limit: effectiveLimit,
-        currentUsage: usageCount,
+        currentUsage: effectiveUsage,
         shouldConvertLead: false,
         shouldConvertPremium: !allowed,
         tier: 'FREE',
@@ -163,7 +188,6 @@ export async function checkAndRecordUsage(params: {
   }
 
   // Anônimo: verificar AnonymousFeatureUsage por IP
-  const ipHash = ip ? hashIP(ip) : null
   if (!ipHash) {
     return {
       allowed: true,
@@ -180,10 +204,13 @@ export async function checkAndRecordUsage(params: {
   const anonLimit = limits.anonLimit
 
   // anon_full_view: contar total por IP (qualquer resourceId); demais features: por resourceId
+  // Quando resourceId é placeholder (''), no DB armazenamos null - contar por null
   const countWhere =
     feature === 'anon_full_view'
       ? { ipHash, feature }
-      : { ipHash, feature, resourceId: anonResourceId }
+      : anonResourceId === ANON_RESOURCE_PLACEHOLDER
+        ? { ipHash, feature, resourceId: null }
+        : { ipHash, feature, resourceId: anonResourceId }
 
   const existingCount = await safeQueryWithParams(
     'usage-count-anon',
@@ -228,7 +255,9 @@ export async function checkUsage(params: {
 async function recordFreeUsage(
   userId: string,
   feature: string,
-  resourceId?: string | null
+  resourceId?: string | null,
+  ipHash?: string | null,
+  recordFreeIpUsage?: boolean
 ): Promise<void> {
   const now = new Date()
   const month = now.getMonth() + 1
@@ -238,6 +267,23 @@ async function recordFreeUsage(
   // Para company_full_view: usar ticker com upsert (evitar duplicata por mesmo ticker). Para outras: id único.
   const resourceIdForRecord =
     normalizedResId ?? `usage_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
+  // Registrar uso por IP para limitar múltiplas contas gratuitas (ex: recovery_calculator)
+  if (recordFreeIpUsage && ipHash) {
+    const freeIpResourceId = `free_ip:${year}:${month}:${Date.now()}_${Math.random().toString(36).slice(2)}`
+    await safeWrite(
+      'record-free-ip-usage',
+      () =>
+        prisma.anonymousFeatureUsage.create({
+          data: {
+            ipHash,
+            feature,
+            resourceId: freeIpResourceId,
+          },
+        }),
+      ['anonymous_feature_usage']
+    )
+  }
 
   if (normalizedResId != null) {
     await safeWrite(

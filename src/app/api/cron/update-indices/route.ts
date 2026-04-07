@@ -2,7 +2,7 @@
  * Cron Job: Update Indices
  * 
  * Job 1: Mark-to-Market (19:00h) - Calcula pontos do índice
- * Job 2: Engine de Regras (Screening e Rebalanceamento) - Executa apenas no primeiro dia útil do mês
+ * Job 2: Engine de Regras (Screening e Rebalanceamento) - Executa em dia útil com pregão, no máximo uma vez por mês
  * 
  * IMPORTANTE: Tolerante a falhas e incremental
  * - Pode ser executado múltiplas vezes
@@ -10,9 +10,8 @@
  * - Processa índices um por vez para evitar timeout
  * 
  * REBALANCEAMENTO MENSAL:
- * - O screening/rebalanceamento executa apenas uma vez por mês no primeiro dia útil
- * - O cron pode ser configurado para rodar nos dias 1-5 do mês (ex: "0 20 1,2,3,4,5 * *")
- * - O código verifica se é o primeiro dia útil e se já foi executado neste mês
+ * - O screening/rebalanceamento pode rodar em qualquer dia útil com pregão
+ * - No máximo uma execução por mês (verifica log REBALANCE SYSTEM no mês corrente, timezone Brasília)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -62,63 +61,6 @@ function isTradingDay(date: Date = new Date()): boolean {
   // 0 = Domingo, 6 = Sábado
   // 1-5 = Segunda a Sexta
   return dayOfWeek >= 1 && dayOfWeek <= 5;
-}
-
-/**
- * Verifica se é o primeiro dia útil do mês (timezone de Brasília)
- * Considera que o primeiro dia útil pode ser dia 1, 2, 3, 4 ou 5 dependendo de feriados/fins de semana
- * Verifica se houve pregão nos dias anteriores do mês
- */
-async function isFirstTradingDayOfMonth(date: Date = new Date()): Promise<boolean> {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short',
-  });
-  
-  const parts = formatter.formatToParts(date);
-  const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
-  const weekday = parts.find(p => p.type === 'weekday')?.value || '';
-  
-  const dayMap: Record<string, number> = {
-    Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0,
-  };
-  const dayOfWeek = dayMap[weekday] ?? 0;
-  
-  // Se for sábado ou domingo, não é dia útil
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    return false;
-  }
-  
-  // Se for dia 1 e for dia útil, verificar se houve pregão
-  // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
-  if (day === 1) {
-    const marketWasOpen = await checkMarketWasOpen(date, true);
-    return marketWasOpen;
-  }
-  
-  // Se for dia 2-5, verificar se os dias anteriores do mês tiveram pregão
-  // Se algum dia anterior teve pregão, então hoje não é o primeiro dia útil
-  for (let checkDay = 1; checkDay < day; checkDay++) {
-    const checkDate = new Date(date);
-    checkDate.setDate(checkDate.getDate() - (day - checkDay));
-    
-    // Verificar se houve pregão neste dia
-    // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
-    const marketWasOpen = await checkMarketWasOpen(checkDate, true);
-    if (marketWasOpen) {
-      // Se houve pregão em algum dia anterior, hoje não é o primeiro dia útil
-      return false;
-    }
-  }
-  
-  // Se chegou aqui, nenhum dia anterior teve pregão, então hoje é o primeiro dia útil
-  // Mas ainda precisamos verificar se hoje teve pregão
-  // CRÍTICO: Não usar cache para verificação de pregão no cron do after market
-  const marketWasOpenToday = await checkMarketWasOpen(date, true);
-  return marketWasOpenToday;
 }
 
 /**
@@ -857,21 +799,7 @@ async function runScreeningJob(): Promise<{
     return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
   }
   
-  // Verificar se é o primeiro dia útil do mês
-  const isFirstDay = await isFirstTradingDayOfMonth(today);
-  if (!isFirstDay) {
-    const formatter = new Intl.DateTimeFormat('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-    const dateStr = formatter.format(today);
-    console.log(`⏸️ [CRON INDICES] Screening job skipped: não é o primeiro dia útil do mês (hoje: ${dateStr})`);
-    return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
-  }
-  
-  // Verificar se já foi executado neste mês (proteção adicional)
+  // No máximo um rebalanceamento por mês (independente do dia do mês)
   const alreadyExecuted = await wasScreeningExecutedThisMonth(today);
   if (alreadyExecuted) {
     const formatter = new Intl.DateTimeFormat('pt-BR', {

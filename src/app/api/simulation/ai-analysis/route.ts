@@ -114,7 +114,7 @@ Seja objetivo, use dados concretos e forneça insights práticos. Evite jargões
       apiKey: process.env.GEMINI_API_KEY!
     })
 
-    const model = 'gemini-3.1-flash-lite-preview'
+    const model = 'gemini-2.5-flash-lite'
     const contents = [
       {
         role: 'user',

@@ -94,7 +94,7 @@ Retorne APENAS um JSON array estrito com o seguinte schema, sem markdown:
 
 Se não houver mudanças recentes para sugerir, retorne um array vazio: [].`;
 
-    const model = 'gemini-3.1-flash-lite-preview';
+    const model = 'gemini-2.5-flash-lite';
     const tools = [{ googleSearch: {} }];
     
     const config = {

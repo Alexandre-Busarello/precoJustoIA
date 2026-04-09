@@ -176,7 +176,7 @@ export async function getMacroEconomicEvents(period: 'MONTHLY' | 'ANNUAL'): Prom
       : 'calendário econômico Brasil próximos 12 meses eventos macroeconômicos COPOM IPCA PIB decisões importantes'
 
     const response = await ai.models.generateContentStream({
-      model: 'gemini-3.1-flash-lite-preview',
+      model: 'gemini-2.5-flash-lite',
       config: {
         tools: [{ googleSearch: {} }],
         thinkingConfig: {
@@ -474,7 +474,7 @@ export async function getIndicatorExpectations(): Promise<Map<IndicatorName, {
     })
 
     const response = await ai.models.generateContentStream({
-      model: 'gemini-3.1-flash-lite-preview',
+      model: 'gemini-2.5-flash-lite',
       config: {
         tools: [{ googleSearch: {} }],
         thinkingConfig: {

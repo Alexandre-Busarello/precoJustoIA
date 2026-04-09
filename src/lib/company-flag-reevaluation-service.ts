@@ -328,7 +328,7 @@ Você precisa determinar se o motivo original que gerou a flag ainda é válido 
 Responda APENAS com o JSON, sem markdown ou texto adicional.`;
 
   try {
-    const model = 'gemini-3.1-flash-lite-preview';
+    const model = 'gemini-2.5-flash-lite';
     const contents = [
       {
         role: 'user' as const,

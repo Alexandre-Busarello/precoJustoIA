@@ -433,7 +433,7 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
         tools,
       };
 
-      const model = 'gemini-3.1-flash-lite-preview';
+      const model = 'gemini-2.5-flash-lite';
       
       // Construir parts com os vídeos
       const parts: any[] = [];
@@ -653,7 +653,7 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`;
         tools,
       };
 
-      const model = 'gemini-3.1-flash-lite-preview';
+      const model = 'gemini-2.5-flash-lite';
 
       const contents = [
         {

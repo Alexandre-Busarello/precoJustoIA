@@ -906,7 +906,7 @@ Retorne APENAS o JSON, sem markdown ou texto adicional.`
           
           if (useStream) {
             const response = await ai.models.generateContentStream({
-              model: 'gemini-2.5-flash-lite',
+              model: 'gemini-3.1-flash-lite-preview',
               config: {
                 tools: [{ googleSearch: {} }],
                 thinkingConfig: {
@@ -945,7 +945,7 @@ Retorne APENAS o JSON, sem markdown ou texto adicional.`
             // Para projeções anuais, usar generateContent (não-stream) para maior confiabilidade
             console.log(`[${period}] [${stepName}] Usando generateContent (não-stream) devido ao tamanho do prompt`)
             const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash-lite',
+              model: 'gemini-3.1-flash-lite-preview',
               config: {
                 tools: [{ googleSearch: {} }],
                 thinkingConfig: {

@@ -231,7 +231,7 @@ Exemplo 3: "Empresas sólidas mais descontadas"
 
 Agora, analise o prompt do usuário e retorne APENAS o JSON dos parâmetros, sem markdown, sem explicações:`;
 
-  const model = 'gemini-2.5-flash-lite';
+  const model = 'gemini-3.1-flash-lite-preview';
   const contents = [
     {
       role: 'user',

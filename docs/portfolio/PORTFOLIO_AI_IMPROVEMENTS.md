@@ -63,7 +63,7 @@ PETR4, VALE3, ITUB4, BBDC4, ABEV3, HGLG11, XPML11
 **Configuração:**
 - Dependência: `@google/genai`
 - Variável de ambiente: `GEMINI_API_KEY`
-- Modelo utilizado: `gemini-2.5-flash-lite`
+- Modelo utilizado: `gemini-3.1-flash-lite-preview`
 
 **Funcionalidades da IA:**
 - **Análise Inteligente de Prompts:** Determina automaticamente a melhor abordagem

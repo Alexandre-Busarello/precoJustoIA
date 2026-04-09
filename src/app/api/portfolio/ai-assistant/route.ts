@@ -171,7 +171,7 @@ Você deve retornar APENAS um objeto JSON válido (sem markdown, sem explicaçõ
 
 Analise a instrução e retorne APENAS o JSON:`;
 
-    const model = "gemini-2.5-flash-lite";
+    const model = "gemini-3.1-flash-lite-preview";
 
     const tools = [
       {

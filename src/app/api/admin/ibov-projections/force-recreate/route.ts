@@ -238,7 +238,7 @@ Retorne APENAS JSON válido:
           console.log(`🔄 [${period}] Tentativa ${attempt}/${maxRetries} de chamada ao Gemini`)
           
           const response = await ai.models.generateContentStream({
-            model: 'gemini-2.5-flash-lite',
+            model: 'gemini-3.1-flash-lite-preview',
             config: {
               tools: [{ googleSearch: {} }],
               thinkingConfig: {

@@ -207,7 +207,7 @@ Preço atual: R$ ${variation.currentPrice.toFixed(2)}
 - Se não encontrar informações específicas, indique isso claramente`;
 
   try {
-    const model = 'gemini-2.5-flash-lite';
+    const model = 'gemini-3.1-flash-lite-preview';
     const contents = [
       {
         role: 'user',
@@ -486,7 +486,7 @@ ${dividendsInfo.dividends.length > 0 ? '- Ajuste por pagamento de dividendos (qu
 Seja objetivo e baseie sua análise nos dados da pesquisa, informações sobre dividendos e contexto de lucratividade quando disponíveis.`;
 
   try {
-    const model = 'gemini-2.5-flash-lite';
+    const model = 'gemini-3.1-flash-lite-preview';
     const contents = [
       {
         role: 'user',

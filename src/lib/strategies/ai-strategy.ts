@@ -946,7 +946,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
         ...(tools.length > 0 && { tools }),
       };
 
-      const model = 'gemini-2.5-flash-lite';
+      const model = 'gemini-3.1-flash-lite-preview';
       const contents = [
         {
           role: 'user',

@@ -473,7 +473,7 @@ IMPORTANTE: Retorne pelo menos 3-5 trending_topics relevantes e bem estruturados
 
 INÍCIO DA RESPOSTA (comece aqui):`;
 
-  const model = 'gemini-2.5-flash-lite';
+  const model = 'gemini-3.1-flash-lite-preview';
   const tools = [{ googleSearch: {} }];
 
   const config = {
@@ -662,7 +662,7 @@ REGRAS ABSOLUTAS:
 
 INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
-  const model = 'gemini-2.5-flash-lite';
+  const model = 'gemini-3.1-flash-lite-preview';
   const tools = [{ googleSearch: {} }];
 
   const config = {
@@ -987,7 +987,7 @@ LINKS INTERNOS PARA TICKERS:
 
 INÍCIO DA RESPOSTA (comece diretamente com {):`;
 
-  const model = 'gemini-2.5-flash-lite';
+  const model = 'gemini-3.1-flash-lite-preview';
   // Não precisamos mais de ferramentas de busca aqui, pois já temos as fontes
   const config = {
     thinkingConfig: {

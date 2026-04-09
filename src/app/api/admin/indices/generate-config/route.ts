@@ -360,7 +360,7 @@ IMPORTANTE: Sempre inclua filtros básicos de qualidade além de marketCap quand
 
 Analise a instrução e retorne APENAS o JSON válido:`;
 
-    const model = 'gemini-2.5-flash-lite';
+    const model = 'gemini-3.1-flash-lite-preview';
     const contents = [
       {
         role: 'user',

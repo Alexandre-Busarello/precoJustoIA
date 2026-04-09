@@ -64,7 +64,7 @@ Explique de forma clara e educativa:
 - Máximo 300 palavras`;
 
   try {
-    const model = 'gemini-2.5-flash-lite';
+    const model = 'gemini-3.1-flash-lite-preview';
     const contents = [
       {
         role: 'user',

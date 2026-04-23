@@ -45,7 +45,7 @@ export function GoogleAdsPurchasePixel({ transactionId }: GoogleAdsPurchasePixel
 
       const conversionData = {
         send_to: "AW-17611977676/LsUpCM6Xws8bEMznhc5B",
-        value: 20.0,
+        value: 200.0,
         currency: "BRL",
         transaction_id: transactionId,
       };

@@ -96,7 +96,7 @@ export function fireEngagementPixel(isAnonymous: boolean): boolean {
 
   const conversionData = {
     send_to: "AW-17611977676/JYUICKSg49UbEMznhc5B",
-    value: 0.1,
+    value: 0.01,
     currency: "BRL",
     transaction_id: transactionId,
   };

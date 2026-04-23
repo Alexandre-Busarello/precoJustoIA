@@ -185,7 +185,7 @@ function RankingContent() {
   const isMobile = useIsMobile()
   const searchParams = useSearchParams()
   const rankingId = searchParams.get('id')
-  const assetTypeParam = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | null
+  const assetTypeParam = searchParams.get('assetType') as 'b3' | 'bdr' | 'both' | 'fii' | null
   // Se houver rankingId mas não houver assetType, usar 'both' como padrão para não mostrar o hub
   const assetType = assetTypeParam || (rankingId ? 'both' : null)
   const isLoggedIn = !!session

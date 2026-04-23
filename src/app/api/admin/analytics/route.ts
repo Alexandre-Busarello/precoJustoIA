@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Buscar informações de usuários Premium para agregação
-    // @ts-ignore - Prisma Client será regenerado após migration
+    // @ts-expect-error - Prisma Client será regenerado após migration
     const premiumUsers = await prisma.user.findMany({
       where: {
         subscriptionTier: 'PREMIUM',
@@ -75,13 +75,13 @@ export async function GET(request: NextRequest) {
       eventsByUserType,
     ] = await Promise.all([
       // Total de eventos no período
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.count({
         where: baseWhere,
       }),
 
       // Usuários únicos: usuários autenticados (por userId) + usuários anônimos (por sessionId)
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       Promise.all([
         // Usuários autenticados únicos
         prisma.userEvent.groupBy({
@@ -104,14 +104,14 @@ export async function GET(request: NextRequest) {
       ),
 
       // Sessões únicas
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.groupBy({
         by: ['sessionId'],
         where: baseWhere,
       }).then(results => results.length),
 
       // Total de page views
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.count({
         where: {
           ...baseWhere,
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Top 10 páginas mais visitadas
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.groupBy({
         by: ['page'],
         where: {
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
       ),
 
       // Top 10 tipos de eventos
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.groupBy({
         by: ['eventType'],
         where: baseWhere,
@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
       ),
 
       // Top 10 ativos mais visualizados
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.findMany({
         where: {
           ...baseWhere,
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // DAU (Daily Active Users) - últimos 7 dias (inclui anônimos)
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       Promise.all([
         // Usuários autenticados únicos
         prisma.userEvent.groupBy({
@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
       ),
 
       // MAU (Monthly Active Users) - últimos 30 dias (inclui anônimos)
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       Promise.all([
         // Usuários autenticados únicos
         prisma.userEvent.groupBy({
@@ -251,7 +251,7 @@ export async function GET(request: NextRequest) {
       ),
 
       // Agregação por tipo de usuário (Premium, Gratuito, Anônimo)
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       Promise.all([
         // Usuários autenticados únicos (Premium e Free)
         prisma.userEvent.groupBy({
@@ -289,7 +289,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Eventos por tipo de usuário
-      // @ts-ignore - Prisma Client será regenerado após migration
+      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.findMany({
         where: baseWhere,
         select: {

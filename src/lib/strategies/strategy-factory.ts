@@ -8,6 +8,9 @@ import { FundamentalistStrategy } from './fundamentalist-strategy';
 import { AIStrategy } from './ai-strategy';
 import { ScreeningStrategy } from './screening-strategy';
 import { BarsiStrategy } from './barsi-strategy';
+import { FiiScreeningStrategy } from './fii-screening-strategy';
+import { FiiDividendYieldStrategy } from './fii-dividend-yield-strategy';
+import { FiiRankingStrategy } from './fii-ranking-strategy';
 import { 
   StrategyParams, 
   StrategyAnalysis, 
@@ -21,11 +24,27 @@ import {
   GordonParams,
   AIParams,
   ScreeningParams,
-  BarsiParams
+  BarsiParams,
+  FiiScreeningParams,
+  FiiDividendYieldParams,
+  FiiRankingParams,
 } from './types';
 import { FundamentalistParams } from './fundamentalist-strategy';
 
-type StrategyType = 'graham' | 'fcd' | 'dividendYield' | 'lowPE' | 'magicFormula' | 'gordon' | 'fundamentalist' | 'ai' | 'screening' | 'barsi';
+type StrategyType =
+  | 'graham'
+  | 'fcd'
+  | 'dividendYield'
+  | 'lowPE'
+  | 'magicFormula'
+  | 'gordon'
+  | 'fundamentalist'
+  | 'ai'
+  | 'screening'
+  | 'barsi'
+  | 'fiiScreening'
+  | 'fiiDividendYield'
+  | 'fiiRanking';
 
 export class StrategyFactory {
   static createStrategy(type: StrategyType) {
@@ -50,6 +69,12 @@ export class StrategyFactory {
         return new ScreeningStrategy();
       case 'barsi':
         return new BarsiStrategy();
+      case 'fiiScreening':
+        return new FiiScreeningStrategy();
+      case 'fiiDividendYield':
+        return new FiiDividendYieldStrategy();
+      case 'fiiRanking':
+        return new FiiRankingStrategy();
       default:
         throw new Error(`Unknown strategy type: ${type}`);
     }
@@ -61,7 +86,20 @@ export class StrategyFactory {
     params: StrategyParams
   ): StrategyAnalysis | Promise<StrategyAnalysis> {
     const strategy = this.createStrategy(type);
-    return strategy.runAnalysis(companyData, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams & BarsiParams);
+    return strategy.runAnalysis(
+      companyData,
+      params as GrahamParams &
+        DividendYieldParams &
+        LowPEParams &
+        MagicFormulaParams &
+        FCDParams &
+        GordonParams &
+        FundamentalistParams &
+        BarsiParams &
+        FiiScreeningParams &
+        FiiDividendYieldParams &
+        FiiRankingParams
+    );
   }
 
   static runRanking(
@@ -70,7 +108,20 @@ export class StrategyFactory {
     params: StrategyParams
   ): RankBuilderResult[] | Promise<RankBuilderResult[]> {
     const strategy = this.createStrategy(type);
-    return strategy.runRanking(companies, params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & FundamentalistParams  & BarsiParams);
+    return strategy.runRanking(
+      companies,
+      params as GrahamParams &
+        DividendYieldParams &
+        LowPEParams &
+        MagicFormulaParams &
+        FCDParams &
+        GordonParams &
+        FundamentalistParams &
+        BarsiParams &
+        FiiScreeningParams &
+        FiiDividendYieldParams &
+        FiiRankingParams
+    );
   }
 
 
@@ -148,13 +199,60 @@ export class StrategyFactory {
     return await strategy.runRanking(companies, params);
   }
 
+  static runFiiScreeningRanking(
+    companies: CompanyData[],
+    params: FiiScreeningParams
+  ): RankBuilderResult[] {
+    return this.runRanking('fiiScreening', companies, params) as RankBuilderResult[];
+  }
+
+  static runFiiDividendYieldRanking(
+    companies: CompanyData[],
+    params: FiiDividendYieldParams
+  ): RankBuilderResult[] {
+    return this.runRanking('fiiDividendYield', companies, params) as RankBuilderResult[];
+  }
+
+  static runFiiRankingRanking(companies: CompanyData[], params: FiiRankingParams): RankBuilderResult[] {
+    return this.runRanking('fiiRanking', companies, params) as RankBuilderResult[];
+  }
+
   static async runAIRanking(companies: CompanyData[], params: AIParams): Promise<RankBuilderResult[]> {
     const strategy = new AIStrategy();
     return await strategy.runRanking(companies, params);
   }
 
-  static generateRational(type: StrategyType, params: GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | FundamentalistParams | AIParams | ScreeningParams | BarsiParams): string {
+  static generateRational(
+    type: StrategyType,
+    params:
+      | GrahamParams
+      | DividendYieldParams
+      | LowPEParams
+      | MagicFormulaParams
+      | FCDParams
+      | GordonParams
+      | FundamentalistParams
+      | AIParams
+      | ScreeningParams
+      | BarsiParams
+      | FiiScreeningParams
+      | FiiDividendYieldParams
+      | FiiRankingParams
+  ): string {
     const strategy = this.createStrategy(type);
-    return strategy.generateRational(params as GrahamParams & DividendYieldParams & LowPEParams & MagicFormulaParams & FCDParams & GordonParams & AIParams & ScreeningParams & BarsiParams);
+    return strategy.generateRational(
+      params as GrahamParams &
+        DividendYieldParams &
+        LowPEParams &
+        MagicFormulaParams &
+        FCDParams &
+        GordonParams &
+        AIParams &
+        ScreeningParams &
+        BarsiParams &
+        FiiScreeningParams &
+        FiiDividendYieldParams &
+        FiiRankingParams
+    );
   }
 }

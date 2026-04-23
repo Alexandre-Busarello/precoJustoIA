@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       case 'registration_to_ranking': {
         // Funnel: Primeiro Evento → Primeiro Ranking
         // Buscar usuários que tiveram primeiro evento no período e depois criaram ranking
-        // @ts-ignore - Prisma Client será regenerado após migration
+        // @ts-expect-error - Prisma Client será regenerado após migration
         const [firstEvents, rankingEvents] = await Promise.all([
           // Primeiro evento de cada usuário no período (aproximação de cadastro)
           prisma.userEvent.findMany({
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
             },
           }),
           // Usuários que criaram ranking no período
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
       case 'ranking_to_asset': {
         // Funnel: Ranking → Visualização de Ativo
         const [rankingEvents, assetViews] = await Promise.all([
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
               timestamp: true,
             },
           }),
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
       case 'asset_to_comparison': {
         // Funnel: Ativo → Comparação
         const [assetViews, comparisons] = await Promise.all([
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
             },
             distinct: ['userId'],
           }),
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
       case 'comparison_to_backtest': {
         // Funnel: Comparação → Backtest
         const [comparisons, backtests] = await Promise.all([
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
             },
             distinct: ['userId'],
           }),
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -310,7 +310,7 @@ export async function GET(request: NextRequest) {
       case 'portfolio_page_to_creation': {
         // Funnel: Acesso à página /carteira → Criação de carteira
         const [portfolioPageViews, portfolioCreations] = await Promise.all([
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -323,7 +323,7 @@ export async function GET(request: NextRequest) {
               timestamp: true,
             },
           }),
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -395,7 +395,7 @@ export async function GET(request: NextRequest) {
 
       case 'portfolio_view_to_update': {
         // Funnel: Acesso à página /carteira?id=... → Atualização de carteira
-        // @ts-ignore - Prisma Client será regenerado após migration
+        // @ts-expect-error - Prisma Client será regenerado após migration
         const allPortfolioPageViews = await prisma.userEvent.findMany({
           where: {
             ...where,
@@ -417,7 +417,7 @@ export async function GET(request: NextRequest) {
           e.page.includes('/carteira?id=')
         );
 
-        // @ts-ignore - Prisma Client será regenerado após migration
+        // @ts-expect-error - Prisma Client será regenerado após migration
         const portfolioUpdates = await prisma.userEvent.findMany({
           where: {
             ...where,
@@ -489,7 +489,7 @@ export async function GET(request: NextRequest) {
       case 'ranking_page_to_creation': {
         // Funnel: Acesso à página /ranking → Criação de ranking
         const [rankingPageViews, rankingCreations] = await Promise.all([
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,
@@ -502,7 +502,7 @@ export async function GET(request: NextRequest) {
               timestamp: true,
             },
           }),
-          // @ts-ignore - Prisma Client será regenerado após migration
+          // @ts-expect-error - Prisma Client será regenerado após migration
           prisma.userEvent.findMany({
             where: {
               ...where,

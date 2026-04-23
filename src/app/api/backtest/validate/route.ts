@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getCurrentUser } from '@/lib/user-service';
 import { BacktestDataValidator } from '@/lib/backtest-data-validator';
+import { prisma } from '@/lib/prisma-wrapper';
 
 // Interface para request de validação
 interface ValidateBacktestRequest {
@@ -77,6 +78,21 @@ export async function POST(request: NextRequest) {
 
     // Validar tickers
     const tickers = body.assets.map(a => a.ticker.toUpperCase());
+
+    const fiiInRequest = await prisma.company.findMany({
+      where: { ticker: { in: tickers }, assetType: 'FII' },
+      select: { ticker: true },
+    });
+    if (fiiInRequest.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Backtest indisponível para FIIs',
+          fiis: fiiInRequest.map((c) => c.ticker),
+        },
+        { status: 400 }
+      );
+    }
+
     const validator = new BacktestDataValidator();
     
     const { validTickers, invalidTickers } = await validator.validateTickers(tickers);

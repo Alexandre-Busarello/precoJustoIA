@@ -530,7 +530,7 @@ export async function calculateDailyReturn(
     console.log(`📊 [INDEX ENGINE] Previous points: ${previousPoints.toFixed(4)}`);
 
     for (const comp of composition) {
-      let priceToday = pricesToday.get(comp.assetTicker)?.price;
+      const priceToday = pricesToday.get(comp.assetTicker)?.price;
       let priceYesterday = pricesYesterday.get(comp.assetTicker);
       const priceTodaySource = pricesToday.get(comp.assetTicker)?.source || 'unknown';
 

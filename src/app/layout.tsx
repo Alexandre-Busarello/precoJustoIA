@@ -54,19 +54,13 @@ export const metadata: Metadata = {
       {
         url: '/favicon.ico',
         type: 'image/x-icon',
-        sizes: '16x16 32x32 48x48',
-      },
-      {
-        url: '/icon',
-        type: 'image/png',
-        sizes: '32x32',
+        sizes: 'any',
       },
     ],
     shortcut: '/favicon.ico',
     apple: [
       {
-        url: '/apple-icon',
-        type: 'image/png',
+        url: '/favicon.ico',
         sizes: '180x180',
       },
     ],
@@ -123,7 +117,7 @@ export default function RootLayout({
         {/* Favicon explícito para máxima compatibilidade com Google */}
         <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon" />
         <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-        <link rel="apple-touch-icon" href="/apple-icon" sizes="180x180" />
+        <link rel="apple-touch-icon" href="/favicon.ico" sizes="180x180" />
         <link rel="manifest" href="/site.webmanifest" />
         <meta name="theme-color" content="#2563eb" />
         <meta name="msapplication-TileColor" content="#2563eb" />

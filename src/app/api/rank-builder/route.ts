@@ -15,6 +15,9 @@ import {
   AIParams,
   ScreeningParams,
   BarsiParams,
+  FiiScreeningParams,
+  FiiDividendYieldParams,
+  FiiRankingParams,
   RankBuilderResult,
   CompanyData,
   toNumber,
@@ -26,6 +29,11 @@ import {
 } from "@/lib/technical-indicators";
 import { DividendService } from "@/lib/dividend-service";
 
+const FII_RANK_BUILDER_MODELS = new Set([
+  "fiiScreening",
+  "fiiDividendYield",
+  "fiiRanking",
+]);
 
 type ModelParams =
   | GrahamParams
@@ -37,7 +45,10 @@ type ModelParams =
   | FundamentalistParams
   | AIParams
   | ScreeningParams
-  | BarsiParams;
+  | BarsiParams
+  | FiiScreeningParams
+  | FiiDividendYieldParams
+  | FiiRankingParams;
 
 interface RankBuilderRequest {
   model:
@@ -50,8 +61,81 @@ interface RankBuilderRequest {
     | "fundamentalist"
     | "ai"
     | "screening"
-    | "barsi";
+    | "barsi"
+    | "fiiScreening"
+    | "fiiDividendYield"
+    | "fiiRanking";
   params: ModelParams;
+}
+
+/** FIIs para rank-builder (fiiData + cotação + dividendos recentes) */
+async function getCompaniesDataFii(): Promise<CompanyData[]> {
+  const companies = await safeQueryWithParams(
+    "all-fii-companies-data",
+    () =>
+      prisma.company.findMany({
+        where: {
+          assetType: "FII",
+          fiiData: { isNot: null },
+        },
+        include: {
+          fiiData: true,
+          dailyQuotes: {
+            orderBy: { date: "desc" },
+            take: 1,
+          },
+          dividendHistory: {
+            orderBy: { exDate: "desc" },
+            take: 12,
+          },
+        },
+      }),
+    { type: "fii-companies" }
+  );
+
+  return companies.map((company) => {
+    const fd = company.fiiData!;
+    const quotePx = toNumber(company.dailyQuotes[0]?.price);
+    const cot = toNumber(fd.cotacao);
+    const currentPrice = quotePx && quotePx > 0 ? quotePx : cot || 0;
+    const lastDivFromFii = toNumber(fd.lastDividendValue);
+
+    return {
+      ticker: company.ticker,
+      name: company.name,
+      sector: company.sector,
+      industry: company.industry,
+      assetType: "FII",
+      currentPrice,
+      logoUrl: company.logoUrl,
+      /** Alinha com a página do FII (`fiiData.lastDividendValue`), evitando usar só o 1º pagamento do histórico (mensal). */
+      ...(lastDivFromFii !== null && lastDivFromFii > 0 ? { ultimoDividendo: lastDivFromFii } : {}),
+      dividendHistory: company.dividendHistory.map((d) => ({
+        amount: d.amount,
+        exDate: d.exDate,
+      })),
+      financials: {
+        dy: fd.dividendYield,
+        pvp: fd.pvp,
+        vpa: fd.valorPatrimonial,
+        marketCap: fd.valorMercado,
+        fiiLiquidez: fd.liquidez,
+        fiiQtdImoveis: fd.qtdImoveis,
+        fiiVacanciaMedia: fd.vacanciaMedia,
+        fiiCapRate: fd.capRate,
+        fiiFfoYield: fd.ffoYield,
+        fiiSegment: fd.segment,
+        fiiIsPapel: fd.isPapel,
+        fiiCotacao: fd.cotacao,
+        precoM2: fd.precoM2,
+        aluguelM2: fd.aluguelM2,
+        patrimonioLiquido: fd.patrimonioLiquido,
+        ...(lastDivFromFii !== null && lastDivFromFii > 0
+          ? { fiiLastDividendValue: fd.lastDividendValue }
+          : {}),
+      },
+    };
+  });
 }
 
 // Função para buscar dados de todas as empresas
@@ -274,6 +358,7 @@ async function getCompaniesData(assetTypeFilter?: 'b3' | 'bdr' | 'both'): Promis
         name: company.name,
         sector: company.sector,
         industry: company.industry,
+        assetType: company.assetType,
         currentPrice: toNumber(company.dailyQuotes[0]?.price) || 0,
         logoUrl: company.logoUrl,
         financials: enrichedFinancials,
@@ -336,6 +421,18 @@ function generateRational(model: string, params: ModelParams): string {
       );
     case "barsi":
       return StrategyFactory.generateRational("barsi", params as BarsiParams);
+    case "fiiScreening":
+      return StrategyFactory.generateRational(
+        "fiiScreening",
+        params as FiiScreeningParams
+      );
+    case "fiiDividendYield":
+      return StrategyFactory.generateRational(
+        "fiiDividendYield",
+        params as FiiDividendYieldParams
+      );
+    case "fiiRanking":
+      return StrategyFactory.generateRational("fiiRanking", params as FiiRankingParams);
     default:
       return "Modelo não encontrado.";
   }
@@ -354,6 +451,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const pAssetEarly = (params as { assetTypeFilter?: string }).assetTypeFilter;
+    if (FII_RANK_BUILDER_MODELS.has(model) && pAssetEarly !== "fii") {
+      return NextResponse.json(
+        { error: 'Modelos FII exigem params.assetTypeFilter = "fii"' },
+        { status: 400 }
+      );
+    }
+    if (pAssetEarly === "fii" && !FII_RANK_BUILDER_MODELS.has(model)) {
+      return NextResponse.json(
+        { error: "Modelo incompatível com assetTypeFilter fii" },
+        { status: 400 }
+      );
+    }
+
     // Verificar se o usuário está autenticado para salvar histórico
     const session = await getServerSession(authOptions);
 
@@ -363,7 +474,8 @@ export async function POST(request: NextRequest) {
       model === "gordon" ||
       model === "fundamentalist" ||
       model === "ai" ||
-      model === "barsi"
+      model === "barsi" ||
+      model === "fiiRanking"
     ) {
       if (!session?.user?.id) {
         const modelName =
@@ -375,6 +487,8 @@ export async function POST(request: NextRequest) {
             ? "Fundamentalista 3+1"
             : model === "barsi"
             ? "Método Barsi"
+            : model === "fiiRanking"
+            ? "Ranking PJ-FII"
             : "Análise com IA";
         return NextResponse.json(
           {
@@ -397,6 +511,8 @@ export async function POST(request: NextRequest) {
             ? "Fundamentalista 3+1"
             : model === "barsi"
             ? "Método Barsi"
+            : model === "fiiRanking"
+            ? "Ranking PJ-FII"
             : "Análise com IA";
         return NextResponse.json(
           {
@@ -479,11 +595,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Screening de FIIs: limite para não-Premium (marketing / trial)
+    if (model === "fiiScreening") {
+      const fiiScrUser = session?.user?.id ? await getCurrentUser() : null;
+      const fiiScrPremium = fiiScrUser?.isPremium || false;
+      const fiiScrParams = params as FiiScreeningParams;
+      if (!fiiScrPremium) {
+        body.params = {
+          ...fiiScrParams,
+          limit: 3,
+          useTechnicalAnalysis: false,
+        };
+      } else {
+        body.params = {
+          ...fiiScrParams,
+          limit: undefined,
+        };
+      }
+    }
+
     // Buscar dados de todas as empresas (com filtro de tipo de ativo se fornecido)
     // Usar body.params se foi modificado, senão usar params original
     const finalParams = (body.params || params) as any;
-    const assetTypeFilter = finalParams.assetTypeFilter as 'b3' | 'bdr' | 'both' | undefined;
-    const companies = await getCompaniesData(assetTypeFilter);
+    const assetTypeFilter = finalParams.assetTypeFilter as
+      | "b3"
+      | "bdr"
+      | "both"
+      | "fii"
+      | undefined;
+    const companies =
+      assetTypeFilter === "fii"
+        ? await getCompaniesDataFii()
+        : await getCompaniesData(assetTypeFilter);
 
     // Debug: verificar quantas empresas têm dados técnicos
     const companiesWithTechnical = companies.filter((c) => c.technicalAnalysis);
@@ -658,7 +801,25 @@ export async function POST(request: NextRequest) {
       case "barsi":
         results = await StrategyFactory.runBarsiRanking(
           companies,
-          params as BarsiParams
+          executionParams as BarsiParams
+        );
+        break;
+      case "fiiScreening":
+        results = StrategyFactory.runFiiScreeningRanking(
+          companies,
+          executionParams as FiiScreeningParams
+        );
+        break;
+      case "fiiDividendYield":
+        results = StrategyFactory.runFiiDividendYieldRanking(
+          companies,
+          executionParams as FiiDividendYieldParams
+        );
+        break;
+      case "fiiRanking":
+        results = StrategyFactory.runFiiRankingRanking(
+          companies,
+          executionParams as FiiRankingParams
         );
         break;
       default:
@@ -671,7 +832,7 @@ export async function POST(request: NextRequest) {
     // Enriquecer resultados com múltiplos upsides (Graham, FCD, Gordon)
     // Isso permite que o usuário veja diferentes perspectivas de valor justo
     // Calcular preço justo para TODOS os usuários (Graham sempre disponível, mesmo deslogados)
-    if (results.length > 0) {
+    if (results.length > 0 && !FII_RANK_BUILDER_MODELS.has(model)) {
       try {
         // Buscar status Premium do usuário (pode ser null se deslogado)
         const currentUser = session?.user?.id ? await getCurrentUser() : null;

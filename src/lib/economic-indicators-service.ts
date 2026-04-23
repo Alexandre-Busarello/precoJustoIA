@@ -368,7 +368,7 @@ export function parsePortugueseDate(dateString: string): Date | null {
 
   try {
     // Remover dias da semana e vírgulas
-    let cleaned = dateString
+    const cleaned = dateString
       .replace(/^(segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)[- ]feira[,]?\s*/i, '')
       .replace(/,/g, '')
       .trim()

@@ -97,10 +97,10 @@ export function PortfolioTutorialPage() {
               </div>
               <div className="ml-10 space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Após fazer login, procure pela seção de <strong>"Extratos"</strong> no menu lateral esquerdo.
+                  Após fazer login, procure pela seção de <strong>&quot;Extratos&quot;</strong> no menu lateral esquerdo.
                 </p>
                 <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
-                  <li>Acesse a aba <strong>"Negociações"</strong></li>  
+                  <li>Acesse a aba <strong>&quot;Negociações&quot;</strong></li>  
                 </ul>
               </div>
             </div>
@@ -119,8 +119,8 @@ export function PortfolioTutorialPage() {
                 </p>
                 <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
                   <li>Selecione o período desejado (ex: últimos 12 meses ou desde o início)</li>
-                  <li>Clique em <strong>"Baixar"</strong> quando estiver satisfeito com o resultado</li>
-                  <li>Selecione a opção "Arquivo em Excel para ser importado em planilhas."</li>
+                  <li>Clique em <strong>&quot;Baixar&quot;</strong> quando estiver satisfeito com o resultado</li>
+                  <li>Selecione a opção &quot;Arquivo em Excel para ser importado em planilhas.&quot;</li>
                 </ul>
                 <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-3 mt-2">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
@@ -166,8 +166,8 @@ export function PortfolioTutorialPage() {
                   No PreçoJustoAI, vá até sua carteira e:
                 </p>
                 <ol className="list-decimal list-inside text-sm text-muted-foreground space-y-1 ml-2">
-                  <li>Clique em <strong>"Atualizar Custódia / Importar Transações"</strong></li>
-                  <li>Selecione a aba <strong>"Texto Inteligente"</strong></li>
+                  <li>Clique em <strong>&quot;Atualizar Custódia / Importar Transações&quot;</strong></li>
+                  <li>Selecione a aba <strong>&quot;Texto Inteligente&quot;</strong></li>
                   <li>Copie e cole o conteúdo copiado no campo de texto</li>
                   <li>A IA irá processar e identificar automaticamente todas as transações</li>
                 </ol>
@@ -199,7 +199,7 @@ export function PortfolioTutorialPage() {
                   <li>Revise a tabela de pré-visualização com todas as transações identificadas</li>
                   <li>Verifique se as datas, valores e quantidades estão corretos</li>
                   <li>Confirme se todas as transações foram identificadas (compras, vendas, dividendos, etc.)</li>
-                  <li>Clique em <strong>"Aplicar Transações"</strong> para salvar</li>
+                  <li>Clique em <strong>&quot;Aplicar Transações&quot;</strong> para salvar</li>
                 </ul>
               </div>
             </div>

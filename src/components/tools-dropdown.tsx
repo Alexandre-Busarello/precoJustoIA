@@ -46,7 +46,10 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
     setIsOpen(false)
   }, [pathname])
 
-  const isToolsActive = ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/calculadoras', '/pl-bolsa', '/radar', '/radar-dividendos'].includes(pathname)
+  const isToolsActive =
+    ['/ranking', '/comparador', '/backtest', '/analise-setorial', '/screening-acoes', '/screening-fiis', '/calculadoras', '/pl-bolsa', '/radar', '/radar-dividendos'].includes(pathname ?? '') ||
+    (pathname?.startsWith('/screening-acoes/') ?? false) ||
+    (pathname?.startsWith('/screening-fiis/') ?? false)
 
   // Agrupar ferramentas por categoria
   const analysisTools = [
@@ -80,6 +83,13 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       description: 'Filtros customizáveis por categoria',
       isPremium: false,
       isNew: true
+    },
+    {
+      href: '/screening-fiis',
+      icon: <Building2 className="w-4 h-4" />,
+      title: 'Screening de FIIs',
+      description: 'DY, P/VP, liquidez e segmento',
+      isPremium: false,
     },
     {
       href: '/analise-setorial',

@@ -94,7 +94,7 @@ export function PortfolioSmartInput({
                     Esta funcionalidade estará disponível em breve
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Por enquanto, use a aba "Texto Inteligente" para cadastrar suas transações
+                    Por enquanto, use a aba &quot;Texto Inteligente&quot; para cadastrar suas transações
                   </p>
                 </CardContent>
               </Card>

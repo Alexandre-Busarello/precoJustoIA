@@ -124,7 +124,7 @@ export default async function ArbitragemDividaPage() {
                 </div>
                 <p className="text-sm text-muted-foreground ml-6">
                   Mantém um valor fixo mensal para investir (Split), mantendo o hábito de investir mesmo enquanto paga a dívida.
-                  O restante da sobra vai para amortização extra. Ideal para quem quer "skin in the game".
+                  O restante da sobra vai para amortização extra. Ideal para quem quer &quot;skin in the game&quot;.
                 </p>
               </div>
               <div>
@@ -133,7 +133,7 @@ export default async function ArbitragemDividaPage() {
                   <h4 className="font-medium">Break-even Point</h4>
                 </div>
                 <p className="text-sm text-muted-foreground ml-6">
-                  É o mês exato em que seu patrimônio investido supera o saldo devedor. Neste ponto, você atingiu a "Liberdade Financeira Técnica":
+                  É o mês exato em que seu patrimônio investido supera o saldo devedor. Neste ponto, você atingiu a &quot;Liberdade Financeira Técnica&quot;:
                   poderia vender todos os investimentos e quitar a dívida à vista hoje.
                 </p>
               </div>

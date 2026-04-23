@@ -2572,7 +2572,7 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
 
     // Buscar dados da Ward (mantém compatibilidade com dados existentes)
     // Não interromper processamento se Ward falhar
-    let wardData = null;
+    const wardData = null;
     // try {
     //   wardData = await fetchWardData(ticker);
     //   if (!wardData || !wardData.historicalStocks) {
@@ -2635,7 +2635,7 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
           let dividaLiquidaPl = null;
           let dividaLiquidaEbitda = null;
           let pCapGiro = null;
-          let roic = null;
+          const roic = null;
           let pEbit = null;
 
           if (balance) {
@@ -2885,7 +2885,7 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
         }
         
         // Mesclar dados com prioridade: Fundamentus > Brapi > Yahoo
-        let finalFinancialData = mergeFinancialDataWithPriority(
+        const finalFinancialData = mergeFinancialDataWithPriority(
           fundamentusFinancialData, // Fundamentus (prioridade máxima)
           brapiData, // Brapi complementar
           yahooFormattedData, // Yahoo Finance
@@ -3453,7 +3453,7 @@ async function processCompany(ticker: string, enableBrapiComplement: boolean = t
               });
               
               // Mesclar com dados da Brapi complementar se disponível
-              let finalFinancialData = mergeFinancialDataWithPriority(
+              const finalFinancialData = mergeFinancialDataWithPriority(
                 null, // Fundamentus
                 null, // Ward (não temos)
                 brapiYearData, // Brapi

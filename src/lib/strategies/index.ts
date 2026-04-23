@@ -10,4 +10,8 @@ export * from './fundamentalist-strategy';
 export * from './ai-strategy';
 export * from './screening-strategy';
 export * from './barsi-strategy';
+export * from './fii-overall-score';
+export * from './fii-screening-strategy';
+export * from './fii-dividend-yield-strategy';
+export * from './fii-ranking-strategy';
 export * from './strategy-factory';

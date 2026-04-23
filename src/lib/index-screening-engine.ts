@@ -728,7 +728,7 @@ export async function runScreening(
     }
 
     // 5.5. Buscar análises técnicas em batch se necessário
-    let technicalAnalyses: Map<string, any> = new Map();
+    const technicalAnalyses: Map<string, any> = new Map();
     if (config.filters?.technicalFairValue?.enabled) {
       console.log(`🔍 [SCREENING ENGINE] Fetching technical analyses for ${finalCandidates.length} candidates...`);
       const { getOrCalculateTechnicalAnalysis } = await import('./technical-analysis-service');

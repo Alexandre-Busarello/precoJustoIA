@@ -16,7 +16,7 @@ export async function getOrCreateIbovProjection(period: 'WEEKLY' | 'MONTHLY' | '
     const now = new Date()
 
     // Verificar se existe projeção válida
-    // @ts-ignore - Prisma Client será gerado após migração
+    // @ts-expect-error - Prisma Client será gerado após migração
     const existingProjection = await prisma.ibovProjection.findFirst({
       where: {
         period,

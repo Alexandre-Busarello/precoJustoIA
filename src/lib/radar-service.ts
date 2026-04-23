@@ -281,3 +281,34 @@ export function getValuationStatus(upside: number | null | undefined): {
   }
 }
 
+/** Semáforo de valuation para FIIs com base em P/VP (e linha de detalhe com DY). */
+export function getFiiValuationStatus(
+  pvp: number | null | undefined,
+  dividendYieldRatio: number | null | undefined
+): {
+  status: 'green' | 'yellow' | 'red';
+  label: string;
+  detail: string;
+} {
+  const dyPct =
+    dividendYieldRatio != null && Number.isFinite(dividendYieldRatio)
+      ? dividendYieldRatio * 100
+      : null;
+
+  let status: 'green' | 'yellow' | 'red' = 'yellow';
+  if (pvp != null && Number.isFinite(pvp)) {
+    if (pvp < 0.97) status = 'green';
+    else if (pvp <= 1.08) status = 'yellow';
+    else status = 'red';
+  }
+
+  const pvpStr = pvp != null && Number.isFinite(pvp) ? pvp.toFixed(2) : '—';
+  const dyStr = dyPct != null ? `${dyPct.toFixed(1)}%` : '—';
+
+  return {
+    status,
+    label: 'P/VP · DY',
+    detail: `${pvpStr} · ${dyStr}`,
+  };
+}
+

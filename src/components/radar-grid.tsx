@@ -10,14 +10,22 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ExternalLink, Plus, Check, TrendingUp } from 'lucide-react'
 
+export type RadarAssetKind = 'STOCK' | 'FII' | 'BDR' | 'ETF'
+
 export interface RadarAssetData {
   ticker: string
   name: string
   sector: string | null
+  /** Quando omitido, trata-se como ação (STOCK) para links e colunas. */
+  assetType?: RadarAssetKind
   currentPrice: number
   logoUrl: string | null
   overallScore: number | null
   overallStatus: 'green' | 'yellow' | 'red'
+  fiiProfile?: {
+    segment: string | null
+    isPapel: boolean | null
+  }
   strategies: {
     approved: string[]
     all: any
@@ -26,6 +34,8 @@ export interface RadarAssetData {
     upside: number | null
     status: 'green' | 'yellow' | 'red'
     label: string
+    /** Linha de texto para valuation FII (ex.: P/VP e DY). */
+    detail?: string | null
   }
   technical: {
     status: 'green' | 'yellow' | 'red'
@@ -58,6 +68,14 @@ export function RadarGrid({
   showAddButton = false,
   isPremium = false,
 }: RadarGridProps) {
+  const assetHref = (asset: RadarAssetData) =>
+    asset.assetType === 'FII' ? `/fii/${asset.ticker.toLowerCase()}` : `/acao/${asset.ticker.toLowerCase()}`
+
+  const technicalHref = (asset: RadarAssetData) =>
+    asset.assetType === 'FII'
+      ? `/fii/${asset.ticker.toLowerCase()}`
+      : `/acao/${asset.ticker.toLowerCase()}/analise-tecnica`
+
   if (loading) {
     return (
       <div className={cn('space-y-4', className)}>
@@ -99,7 +117,7 @@ export function RadarGrid({
               </th>
               <th className="text-center p-3 text-xs font-medium text-muted-foreground">
                 <div className="flex flex-col items-center gap-1">
-                  <span>Estratégias</span>
+                  <span>Estratégias / Perfil</span>
                   {!isPremium && (
                     <Badge variant="outline" className="text-xs">
                       Apenas Graham
@@ -132,7 +150,7 @@ export function RadarGrid({
                 {/* Ticker */}
                 <td className="p-3">
                   <Link
-                    href={`/acao/${asset.ticker.toLowerCase()}`}
+                    href={assetHref(asset)}
                     className="flex items-center gap-3 group"
                   >
                     <CompanyLogo
@@ -162,25 +180,52 @@ export function RadarGrid({
                 <td className="p-3 text-center">
                   <RadarStatusIndicator
                     status={asset.overallStatus}
-                    label="Score"
+                    label={asset.assetType === 'FII' ? 'PJ-FII' : 'Score'}
                     value={asset.overallScore ?? undefined}
                   />
                 </td>
 
                 {/* Estratégias */}
                 <td className="p-3 text-center">
-                  <RadarStrategyBadges
-                    strategies={asset.strategies.all}
-                    compact={false}
-                  />
+                  {asset.assetType === 'FII' ? (
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                      <Badge variant="secondary" className="text-xs">
+                        FII
+                      </Badge>
+                      {asset.fiiProfile?.isPapel === true && (
+                        <Badge variant="outline" className="text-xs">
+                          Papel
+                        </Badge>
+                      )}
+                      {asset.fiiProfile?.isPapel === false && (
+                        <Badge variant="outline" className="text-xs">
+                          Tijolo
+                        </Badge>
+                      )}
+                      {asset.fiiProfile?.segment && (
+                        <Badge variant="outline" className="text-xs max-w-[140px] truncate" title={asset.fiiProfile.segment}>
+                          {asset.fiiProfile.segment}
+                        </Badge>
+                      )}
+                    </div>
+                  ) : (
+                    <RadarStrategyBadges
+                      strategies={asset.strategies.all}
+                      compact={false}
+                    />
+                  )}
                 </td>
 
                 {/* Valuation */}
                 <td className="p-3 text-center">
                   <RadarStatusIndicator
                     status={asset.valuation.status}
-                    label="Upside"
-                    value={asset.valuation.upside ?? undefined}
+                    label={asset.assetType === 'FII' ? (asset.valuation.label || 'P/VP · DY') : 'Upside'}
+                    value={
+                      asset.assetType === 'FII'
+                        ? (asset.valuation.detail ?? undefined)
+                        : (asset.valuation.upside ?? undefined)
+                    }
                   />
                 </td>
 
@@ -194,10 +239,14 @@ export function RadarGrid({
                         value={asset.technical.label}
                       />
                       <Link
-                        href={`/acao/${asset.ticker.toLowerCase()}/analise-tecnica`}
+                        href={technicalHref(asset)}
                         className="text-muted-foreground hover:text-primary transition-colors shrink-0"
                         onClick={(e) => e.stopPropagation()}
-                        title="Ver análise técnica completa"
+                        title={
+                          asset.assetType === 'FII'
+                            ? 'Ver análise técnica na página do FII'
+                            : 'Ver análise técnica completa'
+                        }
                       >
                         <TrendingUp className="w-3.5 h-3.5" />
                       </Link>
@@ -271,7 +320,7 @@ export function RadarGrid({
           <Card key={asset.ticker} className="overflow-hidden">
             <CardContent className="p-4 sm:p-5">
               <Link
-                href={`/acao/${asset.ticker.toLowerCase()}`}
+                href={assetHref(asset)}
                 className="block mb-4"
               >
                 <div className="flex items-start gap-3">
@@ -302,13 +351,17 @@ export function RadarGrid({
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <RadarStatusIndicator
                   status={asset.overallStatus}
-                  label="Score Geral"
+                  label={asset.assetType === 'FII' ? 'PJ-FII' : 'Score Geral'}
                   value={asset.overallScore ?? undefined}
                 />
                 <RadarStatusIndicator
                   status={asset.valuation.status}
-                  label="Upside"
-                  value={asset.valuation.upside ?? undefined}
+                  label={asset.assetType === 'FII' ? (asset.valuation.label || 'P/VP · DY') : 'Upside'}
+                  value={
+                    asset.assetType === 'FII'
+                      ? (asset.valuation.detail ?? undefined)
+                      : (asset.valuation.upside ?? undefined)
+                  }
                 />
                 <div className="col-span-2 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
@@ -318,10 +371,14 @@ export function RadarGrid({
                       value={asset.technical.label}
                     />
                     <Link
-                      href={`/acao/${asset.ticker.toLowerCase()}/analise-tecnica`}
+                      href={technicalHref(asset)}
                       className="text-muted-foreground hover:text-primary transition-colors shrink-0 ml-2"
                       onClick={(e) => e.stopPropagation()}
-                      title="Ver análise técnica completa"
+                      title={
+                        asset.assetType === 'FII'
+                          ? 'Ver análise técnica na página do FII'
+                          : 'Ver análise técnica completa'
+                      }
                     >
                       <TrendingUp className="w-4 h-4" />
                     </Link>
@@ -357,12 +414,35 @@ export function RadarGrid({
               {/* Estratégias */}
               <div className="pt-4 border-t">
                 <div className="text-xs font-semibold text-foreground mb-3">
-                  Estratégias Aprovadas
+                  {asset.assetType === 'FII' ? 'Perfil FII' : 'Estratégias Aprovadas'}
                 </div>
-                <RadarStrategyBadges
-                  strategies={asset.strategies.all}
-                  compact={false}
-                />
+                {asset.assetType === 'FII' ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="secondary" className="text-xs">
+                      FII
+                    </Badge>
+                    {asset.fiiProfile?.isPapel === true && (
+                      <Badge variant="outline" className="text-xs">
+                        Papel
+                      </Badge>
+                    )}
+                    {asset.fiiProfile?.isPapel === false && (
+                      <Badge variant="outline" className="text-xs">
+                        Tijolo
+                      </Badge>
+                    )}
+                    {asset.fiiProfile?.segment && (
+                      <Badge variant="outline" className="text-xs">
+                        {asset.fiiProfile.segment}
+                      </Badge>
+                    )}
+                  </div>
+                ) : (
+                  <RadarStrategyBadges
+                    strategies={asset.strategies.all}
+                    compact={false}
+                  />
+                )}
               </div>
 
               {/* Botão Adicionar ao Radar (Mobile) */}

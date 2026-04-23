@@ -159,6 +159,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const tickers = params.assets.map((a) => a.ticker);
+    const fiiCompanies = await safeQueryWithParams(
+      'backtest-reject-fii',
+      () =>
+        prisma.company.findMany({
+          where: { ticker: { in: tickers }, assetType: 'FII' },
+          select: { ticker: true },
+        }),
+      { tickers }
+    );
+    if (fiiCompanies.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Backtest indisponível para FIIs',
+          details: fiiCompanies.map((c) => c.ticker).join(', '),
+        },
+        { status: 400 }
+      );
+    }
+
     console.log('🚀 Iniciando backtesting para usuário:', currentUser.email);
 
     // Executar backtesting usando serviço base

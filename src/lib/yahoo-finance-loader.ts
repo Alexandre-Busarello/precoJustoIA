@@ -30,8 +30,8 @@ export async function loadYahooFinance(): Promise<any> {
   const loadModule = async () => {
     // Import dinâmico usando string literal para evitar análise estática
     const moduleName = 'yahoo-finance2';
-    const module = await import(moduleName);
-    const YahooFinance = module.default;
+    const yfModule = await import(moduleName);
+    const YahooFinance = yfModule.default;
     return new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
   };
   

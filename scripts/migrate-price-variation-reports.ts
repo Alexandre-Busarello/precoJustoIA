@@ -219,7 +219,7 @@ async function main() {
 
     console.log(`📊 Grupos duplicados encontrados: ${duplicates.length}`);
 
-    let duplicatesToDelete: string[] = [];
+    const duplicatesToDelete: string[] = [];
 
     for (const { key, reports } of duplicates) {
       // Ordenar por data de criação (mais recente primeiro)

@@ -1,7 +1,7 @@
 "use client"
 
 import { NavDropdown, NavSection } from "./nav-dropdown"
-import { Radar, Search, DollarSign, TrendingUp } from "lucide-react"
+import { Radar, Search, DollarSign, TrendingUp, Building2 } from "lucide-react"
 
 const sections: NavSection[] = [
   {
@@ -21,6 +21,13 @@ const sections: NavSection[] = [
         icon: Search,
         description: "Filtros customizáveis para encontrar a ação perfeita.",
         iconGradient: "bg-gradient-to-br from-amber-500 to-yellow-500",
+      },
+      {
+        title: "Screening de FIIs",
+        href: "/screening-fiis",
+        icon: Building2,
+        description: "Filtre fundos imobiliários por DY, P/VP, liquidez e segmento.",
+        iconGradient: "bg-gradient-to-br from-emerald-500 to-teal-600",
       },
     ],
   },

@@ -96,7 +96,8 @@ export function hashIP(ip: string | null | undefined): string | null {
   
   // Gera hash simples (server-side usa crypto, client-side usa string hash)
   if (typeof window === 'undefined') {
-    // Server-side: usa crypto do Node.js
+    // Server-side: usa crypto do Node.js (require evita puxar `crypto` no bundle do cliente)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- ramo só em Node
     const crypto = require('crypto');
     return crypto.createHash('sha256').update(cleanIP).digest('hex').substring(0, 16);
   } else {

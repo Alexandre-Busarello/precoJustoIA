@@ -68,7 +68,7 @@ export async function GET(
       lastDate.setHours(0, 0, 0, 0);
       
       // Calcular dias entre última atualização e hoje
-      let currentDate = new Date(lastDate);
+      const currentDate = new Date(lastDate);
       currentDate.setDate(currentDate.getDate() + 1); // Começar do dia seguinte
       
       // Buscar todos os pontos históricos de uma vez para otimizar
@@ -118,7 +118,7 @@ export async function GET(
       const createdAt = new Date(index.createdAt);
       createdAt.setHours(0, 0, 0, 0);
       
-      let currentDate = new Date(createdAt);
+      const currentDate = new Date(createdAt);
       while (currentDate <= today) {
         // Verificar se houve pregão neste dia (não apenas se é dia útil)
         const marketWasOpen = await checkMarketWasOpen(currentDate);

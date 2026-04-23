@@ -21,7 +21,7 @@ interface QueuedEvent {
 }
 
 // Fila em memória (fallback se não usar Redis)
-let eventQueue: QueuedEvent[] = [];
+const eventQueue: QueuedEvent[] = [];
 let processing = false;
 const BATCH_SIZE = 100; // Processa até 100 eventos por vez
 const PROCESS_INTERVAL = 10000; // Processa a cada 10 segundos

@@ -403,10 +403,10 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     const activeFiltersCount = this.countActiveFilters(params);
     
     // Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
-    let companiesFiltered = this.filterTickerEndingDigits(companies);
+    const companiesFiltered = this.filterTickerEndingDigits(companies);
     
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
-    let filteredCompaniesForEmptyFilters = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
+    const filteredCompaniesForEmptyFilters = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
     
     if (activeFiltersCount === 0) {
       // Se não há filtros ativos, retorna todas as empresas ordenadas por market cap

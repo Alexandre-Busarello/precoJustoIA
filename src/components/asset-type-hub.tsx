@@ -2,11 +2,11 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Building2, Globe, Layers, ArrowRight } from "lucide-react"
+import { Building2, Globe, Layers, Landmark, ArrowRight } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 
-type AssetType = 'b3' | 'bdr' | 'both'
+type AssetType = 'b3' | 'bdr' | 'both' | 'fii'
 
 interface AssetTypeHubProps {
   pageType: 'screening' | 'ranking'
@@ -44,6 +44,16 @@ const assetTypeOptions = [
     bgColor: 'bg-purple-50 dark:bg-purple-950/20',
     borderColor: 'border-purple-200 dark:border-purple-800',
     hoverColor: 'hover:border-purple-400 dark:hover:border-purple-600'
+  },
+  {
+    id: 'fii' as AssetType,
+    name: 'FIIs',
+    description: 'Fundos Imobiliários listados na B3',
+    icon: Landmark,
+    color: 'from-amber-500 to-orange-600',
+    bgColor: 'bg-amber-50 dark:bg-amber-950/20',
+    borderColor: 'border-amber-200 dark:border-amber-800',
+    hoverColor: 'hover:border-amber-400 dark:hover:border-amber-600'
   }
 ]
 
@@ -72,7 +82,7 @@ function AssetTypeHubContent({ pageType, title, description }: AssetTypeHubProps
         </div>
 
         {/* Options Grid */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {assetTypeOptions.map((option) => {
             const Icon = option.icon
             return (

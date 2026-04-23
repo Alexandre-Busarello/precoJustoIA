@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar eventos de clique com metadados
-    // @ts-ignore - Prisma Client será regenerado após migration
+    // @ts-expect-error - Prisma Client será regenerado após migration
     const clickEvents = await prisma.userEvent.findMany({
       where,
       select: {

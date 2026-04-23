@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar empresas
-    let companiesQuery: any = {
+    const companiesQuery: any = {
       where: {
         assetType: { in: ['STOCK', 'BDR'] }, // Apenas ações e BDRs (sem FIIs e ETFs)
       },

@@ -1,9 +1,23 @@
 import { MetadataRoute } from 'next'
+import { prisma } from '@/lib/prisma'
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://precojusto.ai'
-  
-  return [
+
+  const fiis = await prisma.company.findMany({
+    where: { assetType: 'FII', isActive: true },
+    select: { ticker: true, updatedAt: true },
+    orderBy: { ticker: 'asc' },
+  })
+
+  const fiiEntries: MetadataRoute.Sitemap = fiis.map((c) => ({
+    url: `${baseUrl}/fii/${c.ticker.toLowerCase()}`,
+    lastModified: c.updatedAt ?? new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.75,
+  }))
+
+  const staticEntries: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
       lastModified: new Date(),
@@ -24,6 +38,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${baseUrl}/screening-acoes`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/screening-fiis`,
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.9,
@@ -137,4 +157,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.3,
     },
   ]
+
+  return [...staticEntries, ...fiiEntries]
 }

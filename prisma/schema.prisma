@@ -1009,10 +1009,26 @@ model FiiData {
   lastDividendDate  DateTime? @map("last_dividend_date") @db.Date
   patrimonioLiquido Decimal?  @map("patrimonio_liquido") @db.Decimal(20, 2)
   valorPatrimonial  Decimal?  @map("valor_patrimonial") @db.Decimal(15, 6)
+  cotacao           Decimal?  @map("cotacao") @db.Decimal(15, 4)
+  ffoYield          Decimal?  @map("ffo_yield") @db.Decimal(10, 6)
+  pvp               Decimal?  @map("pvp") @db.Decimal(10, 4)
+  valorMercado      Decimal?  @map("valor_mercado") @db.Decimal(20, 2)
+  liquidez          Decimal?  @map("liquidez") @db.Decimal(20, 2)
+  qtdImoveis        Int?      @map("qtd_imoveis")
+  precoM2           Decimal?  @map("preco_m2") @db.Decimal(15, 4)
+  aluguelM2         Decimal?  @map("aluguel_m2") @db.Decimal(15, 4)
+  capRate           Decimal?  @map("cap_rate") @db.Decimal(10, 6)
+  vacanciaMedia     Decimal?  @map("vacancia_media") @db.Decimal(10, 6)
+  segment           String?   @map("segment")
+  isPapel           Boolean?  @default(false) @map("is_papel")
+  dataSource        String?   @default("fundamentus") @map("data_source")
+  lastFetchedAt     DateTime? @map("last_fetched_at")
   updatedAt         DateTime? @updatedAt
   company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+  @@index([segment])
+  @@index([isPapel])
   @@map("fii_data")
 }
 

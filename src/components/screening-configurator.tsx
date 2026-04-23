@@ -33,7 +33,7 @@ interface ScreeningParams {
   limit?: number;
   companySize?: 'all' | 'small_caps' | 'mid_caps' | 'blue_chips';
   useTechnicalAnalysis?: boolean;
-  assetTypeFilter?: 'b3' | 'bdr' | 'both';
+  assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii';
   plFilter?: ScreeningFilter;
   pvpFilter?: ScreeningFilter;
   evEbitdaFilter?: ScreeningFilter;
@@ -253,8 +253,17 @@ export function ScreeningConfigurator({
       <div className="space-y-3">
         <Label className="text-sm font-medium">Filtro por Tipo de Ativo</Label>
         <Select 
-          value={params.assetTypeFilter || 'both'} 
-          onValueChange={(value) => setParams({ ...params, assetTypeFilter: value as 'b3' | 'bdr' | 'both' })}
+          value={
+            params.assetTypeFilter === 'fii' || !params.assetTypeFilter
+              ? 'both'
+              : params.assetTypeFilter
+          } 
+          onValueChange={(value) =>
+            setParams({
+              ...params,
+              assetTypeFilter: value as 'b3' | 'bdr' | 'both' | 'fii',
+            })
+          }
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Selecione o tipo de ativo" />

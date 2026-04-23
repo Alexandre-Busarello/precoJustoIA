@@ -49,6 +49,18 @@ export async function POST(
       );
     }
 
+    const tickerUpper = body.ticker.toUpperCase();
+    const companyForAsset = await prisma.company.findUnique({
+      where: { ticker: tickerUpper },
+      select: { assetType: true },
+    });
+    if (companyForAsset?.assetType === 'FII') {
+      return NextResponse.json(
+        { error: 'Backtest indisponível para FIIs (sem histórico de preços diário adequado)' },
+        { status: 400 }
+      );
+    }
+
     // Verificar se a configuração existe e pertence ao usuário
     let config = await prisma.backtestConfig.findFirst({
       where: {
@@ -99,7 +111,7 @@ export async function POST(
     }
 
     // Verificar se o ativo já existe na configuração
-    const existingAsset = config.assets.find(asset => asset.ticker === body.ticker.toUpperCase());
+    const existingAsset = config.assets.find((asset) => asset.ticker === tickerUpper);
     if (existingAsset) {
       return NextResponse.json(
         { error: 'Ativo já existe nesta configuração' },

@@ -21,6 +21,8 @@ interface AssetData {
   companyName?: string;
   sector?: string;
   currentPrice?: number;
+  /** Quando FII, backtest fica indisponível */
+  assetType?: string;
 }
 
 interface AddToBacktestButtonProps {
@@ -91,6 +93,21 @@ export function AddToBacktestButton({
   useEffect(() => {
     setIsAdded(checkIfAdded());
   }, [checkIfAdded]);
+
+  if (asset.assetType === 'FII') {
+    return (
+      <Button
+        variant={variant}
+        size={size}
+        disabled
+        className={className}
+        title="Backtest indisponível para FIIs (sem histórico de preços diário adequado)"
+      >
+        <BarChart3 className="w-4 h-4 mr-2" />
+        {showLabel && 'Backtest (indisponível)'}
+      </Button>
+    );
+  }
 
   // Se não há sessão, mostrar botão de login
   if (!session?.user?.id) {

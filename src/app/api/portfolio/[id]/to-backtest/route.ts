@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     // Use monthlyContribution from portfolio if not provided
-    let monthlyContribution = body.monthlyContribution 
+    const monthlyContribution = body.monthlyContribution 
       ? Number(body.monthlyContribution) 
       : Number(portfolio.monthlyContribution);
 

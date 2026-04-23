@@ -19,24 +19,22 @@ export function TrialNotification() {
   const { isTrialActive, trialDaysRemaining, isPremium } = usePremiumStatus()
   const [dismissed, setDismissed] = useState(false)
 
-  // Não mostrar se não está em trial, foi dispensado ou já é Premium
+  useEffect(() => {
+    if (!isTrialActive || !trialDaysRemaining || (isPremium && !isTrialActive)) return
+    if (trialDaysRemaining > 3 || trialDaysRemaining < 1) return
+    const dismissedKey = `trial-notification-dismissed-${trialDaysRemaining}`
+    if (localStorage.getItem(dismissedKey)) {
+      setDismissed(true)
+    }
+  }, [isTrialActive, trialDaysRemaining, isPremium])
+
   if (!isTrialActive || dismissed || !trialDaysRemaining || (isPremium && !isTrialActive)) {
     return null
   }
 
-  // Mostrar apenas quando restam 3 dias ou 1 dia
   if (trialDaysRemaining > 3 || trialDaysRemaining < 1) {
     return null
   }
-
-  // Verificar se já foi dispensado no localStorage
-  useEffect(() => {
-    const dismissedKey = `trial-notification-dismissed-${trialDaysRemaining}`
-    const wasDismissed = localStorage.getItem(dismissedKey)
-    if (wasDismissed) {
-      setDismissed(true)
-    }
-  }, [trialDaysRemaining])
 
   const handleDismiss = () => {
     const dismissedKey = `trial-notification-dismissed-${trialDaysRemaining}`
@@ -81,4 +79,3 @@ export function TrialNotification() {
     </Alert>
   )
 }
-

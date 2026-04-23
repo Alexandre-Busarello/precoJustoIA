@@ -18,6 +18,10 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Legado / utilitários: CommonJS e regras de app não se aplicam da mesma forma
+      "scripts/**",
+      "examples/**",
+      ".exploration-results/**",
     ],
   },
   {

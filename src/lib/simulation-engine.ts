@@ -82,7 +82,7 @@ export function calculateSniperStrategy(params: SimulationParams): SimulationRes
   let totalInterestPaid = 0
   let totalInvestmentContribution = 0
   let totalInvestmentReturn = 0
-  let breakEvenMonth: number | null = null
+  const breakEvenMonth: number | null = null
   
   const monthlyInvestmentRate = investmentAnnualRate / 12
   const monthlyTR = params.monthlyTR ?? 0.001 // TR mensal padrão 0,1% (0.001)

@@ -23,7 +23,8 @@ import { BatchBacktestSelector } from "@/components/batch-backtest-selector"
 import { 
   Loader2, 
   TrendingUp, 
-  Building2, 
+  Building2,
+  Landmark,
   Target, 
   Zap, 
   Lock, 
@@ -63,6 +64,20 @@ interface RankingParams {
   maxPE?: number;
   minROE?: number;
   limit?: number;
+  /** B3 / BDR / ambos / FIIs (rank-builder) */
+  assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii';
+  /** FII — ranking PJ-FII */
+  minScore?: number;
+  tipoFii?: 'papel' | 'tijolo' | 'both';
+  minLiquidity?: number;
+  minQtdImoveis?: number;
+  maxVacancia?: number;
+  segmentos?: string[];
+  /** FII — DY máximo */
+  maxPvp?: number;
+  /** FII — screening */
+  minDY?: number;
+  maxPVP?: number;
   // Parâmetros FCD
   growthRate?: number;
   discountRate?: number;
@@ -119,6 +134,8 @@ interface RankingResult {
   fairValue: number | null;
   upside: number | null;
   marginOfSafety: number | null;
+  /** Ex.: teto DY 8% ou VP — usado em FIIs (screening/ranking). */
+  fairValueModel?: string | null;
   rational: string;
   key_metrics?: Record<string, number | null>;
   // Upsides específicos de cada estratégia (quando disponíveis)
@@ -222,11 +239,36 @@ const models = [
     free: false,
     badge: "Premium"
   },
+  {
+    id: "fiiRanking",
+    name: "Ranking PJ-FII",
+    description: "Score proprietário (5 pilares) para ranquear FIIs de tijolo e papel",
+    icon: <Landmark className="w-4 h-4" />,
+    free: false,
+    badge: "HOT",
+    hot: true,
+  },
+  {
+    id: "fiiScreening",
+    name: "Screening de FIIs",
+    description: "Filtros por DY, P/VP, liquidez, vacância, imóveis e segmento",
+    icon: <Search className="w-4 h-4" />,
+    free: true,
+    badge: "Novo",
+  },
+  {
+    id: "fiiDividendYield",
+    name: "DY máximo (FIIs)",
+    description: "Ordena por dividend yield com guard-rails de P/VP e liquidez",
+    icon: <DollarSign className="w-4 h-4" />,
+    free: true,
+    badge: "Gratuito",
+  },
 ]
 
 interface QuickRankerProps {
   rankingId?: string | null;
-  assetTypeFilter?: 'b3' | 'bdr' | 'both';
+  assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii';
   onRankingGenerated?: () => void; // Callback quando um novo ranking é gerado
 }
 
@@ -445,7 +487,13 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
   const { isPremium } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
   
   // Filtrar e ordenar modelos baseado no status do usuário
-  const availableModels = models.filter(model => {
+  const availableModels = models.filter((model) => {
+    const isFiiModel = ["fiiRanking", "fiiScreening", "fiiDividendYield"].includes(model.id);
+    if (assetTypeFilter === "fii") {
+      if (!isFiiModel) return false;
+    } else if (isFiiModel) {
+      return false;
+    }
     if (!isLoggedIn) {
       return model.free // Usuários não logados só veem modelos gratuitos
     }
@@ -481,6 +529,10 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     // Se usuário deslogado selecionar Screening, redirecionar para página de screening
     if (!session && model === "screening") {
       router.push('/screening-acoes')
+      return
+    }
+    if (!session && model === "fiiScreening") {
+      router.push('/screening-fiis')
       return
     }
     
@@ -605,6 +657,33 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
           useTechnicalAnalysis: true           // Análise técnica ativada por padrão
         })
         break
+      case "fiiRanking":
+        setParams({
+          minScore: 55,
+          tipoFii: "both",
+          minLiquidity: 1_000_000,
+          companySize: "all",
+          limit: 30,
+          assetTypeFilter: "fii",
+        });
+        break;
+      case "fiiScreening":
+        setParams({
+          tipoFii: "both",
+          assetTypeFilter: "fii",
+          limit: 50,
+        });
+        break;
+      case "fiiDividendYield":
+        setParams({
+          minYield: 0.08,
+          maxPvp: 1.1,
+          minLiquidity: 500_000,
+          tipoFii: "both",
+          assetTypeFilter: "fii",
+          limit: 50,
+        });
+        break;
       default:
         setParams({})
     }
@@ -711,8 +790,10 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
           model: selectedModel,
           params: {
             ...params,
-            includeBDRs: assetTypeFilter === 'both' || assetTypeFilter === 'bdr',
-            assetTypeFilter
+            includeBDRs:
+              assetTypeFilter !== "fii" &&
+              (assetTypeFilter === "both" || assetTypeFilter === "bdr"),
+            assetTypeFilter,
           },
         }),
       })
@@ -2466,6 +2547,29 @@ ${activeFilters.length > 0 ? activeFilters.join('\n') : '• Nenhum filtro ativo
 
 **Objetivo**: Encontrar empresas que atendem exatamente aos seus critérios personalizados, com total flexibilidade de configuração.`;
 
+      case "fiiRanking":
+        return `**RANKING PJ-FII**
+
+**Filosofia**: Score proprietário (0–100) com cinco pilares — Dividendos, Valuation, Qualidade do portfólio, Liquidez/porte e Gestão — com pesos distintos para tijolo e papel.
+
+**Filtros**: score mínimo, liquidez, tipo (tijolo/papel), vacância, quantidade de imóveis e segmentos opcionais.
+
+**Ordenação**: PJ-FII Score (desc), desempate por DY.`;
+
+      case "fiiScreening":
+        return `**SCREENING DE FIIs**
+
+**Filosofia**: Filtrar fundos imobiliários por DY, P/VP, liquidez média diária, diversificação (imóveis), vacância e segmento.
+
+**Resultado**: FIIs que passam em todos os filtros ativos, com métricas-chave no card.`;
+
+      case "fiiDividendYield":
+        return `**DY máximo (FIIs)**
+
+**Filosofia**: Priorizar renda (DY) com guard-rails de P/VP e liquidez para reduzir armadilhas.
+
+**Ordenação**: Dividend yield decrescente entre FIIs elegíveis.`;
+
       default:
         return `📊 **ESTRATÉGIA PERSONALIZADA**
 
@@ -2833,11 +2937,36 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                             }
                             
                             return typeof mainUpside === 'number' ? (
-                              <div className="flex items-center justify-end gap-1 mb-2">
-                                <TrendingUp className={`w-3 h-3 sm:w-4 sm:h-4 ${mainUpside >= 0 ? 'text-green-600' : 'text-red-600'}`} />
-                                <span className={`text-xs sm:text-sm font-semibold ${mainUpside >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                  {mainUpside >= 0 ? '+' : ''}{formatPercentage(mainUpside)} upside
-                                </span>
+                              <div className="flex flex-col items-end gap-0.5 mb-2">
+                                <div className="flex items-center justify-end gap-1">
+                                  <TrendingUp
+                                    className={`w-3 h-3 sm:w-4 sm:h-4 ${
+                                      mainUpside > 0
+                                        ? 'text-green-600'
+                                        : mainUpside < 0
+                                          ? 'text-red-600'
+                                          : 'text-muted-foreground'
+                                    }`}
+                                  />
+                                  <span
+                                    className={`text-xs sm:text-sm font-semibold ${
+                                      mainUpside > 0
+                                        ? 'text-green-600'
+                                        : mainUpside < 0
+                                          ? 'text-red-600'
+                                          : 'text-muted-foreground'
+                                    }`}
+                                  >
+                                    {mainUpside > 0 ? '+' : ''}
+                                    {formatPercentage(mainUpside)} upside
+                                  </span>
+                                </div>
+                                {['fiiScreening', 'fiiRanking'].includes(results?.model || '') &&
+                                  result.fairValueModel && (
+                                    <span className="text-[9px] text-muted-foreground text-right max-w-[180px] leading-tight">
+                                      Ref.: {result.fairValueModel}
+                                    </span>
+                                  )}
                               </div>
                             ) : (
                               <div className="flex items-center justify-end gap-1 mb-2">
@@ -3025,15 +3154,14 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
               </div>
               <div className="flex gap-2">
                 {/* Botão especial para Screening - abre página com parâmetros */}
-                {selectedModel === "screening" && (
+                {(selectedModel === "screening" || selectedModel === "fiiScreening") && (
                   <Button
                     variant="default"
                     size="sm"
                     onClick={() => {
-                      // Salvar parâmetros no sessionStorage para pre-preencher a página de screening
                       sessionStorage.setItem('screeningParams', JSON.stringify(params));
-                      // Redirecionar para página de screening
-                      window.location.href = '/screening-acoes';
+                      window.location.href =
+                        selectedModel === "fiiScreening" ? '/screening-fiis' : '/screening-acoes';
                     }}
                     className="text-xs bg-blue-600 hover:bg-blue-700"
                   >

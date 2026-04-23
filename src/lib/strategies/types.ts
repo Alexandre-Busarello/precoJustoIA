@@ -6,7 +6,7 @@ export interface StrategyParams {
   useTechnicalAnalysis?: boolean; // Priorizar ativos em sobrevenda (padrão: false)
   use7YearAverages?: boolean; // Usar médias de 7 anos dos indicadores quando disponível (padrão: false)
   includeBDRs?: boolean; // Incluir BDRs nas análises (padrão: true)
-  assetTypeFilter?: 'b3' | 'bdr' | 'both'; // Filtrar por tipo de ativo (padrão: 'both')
+  assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii'; // Filtrar por tipo de ativo (padrão: 'both')
 }
 
 export interface GrahamParams extends StrategyParams {
@@ -56,9 +56,35 @@ export interface ScreeningFilter {
   max?: number;
 }
 
+export interface FiiScreeningParams extends StrategyParams {
+  minDY?: number;
+  maxPVP?: number;
+  minLiquidity?: number;
+  minQtdImoveis?: number;
+  maxVacancia?: number;
+  tipoFii?: 'papel' | 'tijolo' | 'both';
+  segmentos?: string[];
+}
+
+export interface FiiDividendYieldParams extends StrategyParams {
+  minYield?: number;
+  maxPvp?: number;
+  minLiquidity?: number;
+  tipoFii?: 'papel' | 'tijolo' | 'both';
+}
+
+export interface FiiRankingParams extends StrategyParams {
+  minScore?: number;
+  tipoFii?: 'papel' | 'tijolo' | 'both';
+  minLiquidity?: number;
+  minQtdImoveis?: number;
+  maxVacancia?: number;
+  segmentos?: string[];
+}
+
 export interface ScreeningParams extends StrategyParams {
-  // Tipo de ativo (b3, bdr, both)
-  assetTypeFilter?: 'b3' | 'bdr' | 'both';
+  // Tipo de ativo (b3, bdr, both, fii)
+  assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii';
   
   // Valuation
   plFilter?: ScreeningFilter;
@@ -112,7 +138,19 @@ export interface BarsiParams extends StrategyParams {
   focusOnBEST?: boolean; // Focar apenas nos setores B.E.S.T. (padrão: true)
 }
 
-export type ModelParams = GrahamParams | DividendYieldParams | LowPEParams | MagicFormulaParams | FCDParams | GordonParams | AIParams | ScreeningParams | BarsiParams;
+export type ModelParams =
+  | GrahamParams
+  | DividendYieldParams
+  | LowPEParams
+  | MagicFormulaParams
+  | FCDParams
+  | GordonParams
+  | AIParams
+  | ScreeningParams
+  | BarsiParams
+  | FiiScreeningParams
+  | FiiDividendYieldParams
+  | FiiRankingParams;
 
 // Dados financeiros padronizados (aceita qualquer tipo que será convertido por toNumber)
 export interface CompanyFinancialData {
@@ -159,6 +197,16 @@ export interface CompanyFinancialData {
   // Outros campos do Prisma (aceita Decimal, number, etc.)
   earningsYield?: unknown;
   
+  // FII (quando assetType FII no rank-builder)
+  fiiLiquidez?: unknown;
+  fiiQtdImoveis?: unknown;
+  fiiVacanciaMedia?: unknown;
+  fiiCapRate?: unknown;
+  fiiFfoYield?: unknown;
+  fiiSegment?: unknown;
+  fiiIsPapel?: unknown;
+  fiiCotacao?: unknown;
+
   // Outros
   [key: string]: unknown;
 }
@@ -216,6 +264,10 @@ export interface CompanyData {
   cashflowStatements?: Record<string, unknown>[];
   // Overall Score do snapshot mais recente
   overallScore?: number | null;
+  /** Prisma AssetType em string, ex.: FII */
+  assetType?: string;
+  /** Últimos pagamentos para PJ-FII Score */
+  dividendHistory?: { amount: unknown; exDate: Date }[];
 }
 
 // Resultado de análise individual

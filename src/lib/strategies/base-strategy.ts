@@ -9,6 +9,11 @@ import {
 import { BDRDataService } from '../bdr-data-service';
 
 // Funções utilitárias
+export function isFIITicker(ticker: string | undefined | null): boolean {
+  if (!ticker) return false;
+  return /^[A-Z]{4}11$/.test(ticker.trim().toUpperCase());
+}
+
 export function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return value;
@@ -312,22 +317,29 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     return companies.filter(company => !this.isBDRTicker(company.ticker));
   }
 
-  // Filtrar empresas por tipo de ativo (b3, bdr, both)
-  protected filterByAssetType(companies: CompanyData[], assetTypeFilter?: 'b3' | 'bdr' | 'both'): CompanyData[] {
+  // Filtrar empresas por tipo de ativo (b3, bdr, both, fii)
+  protected filterByAssetType(
+    companies: CompanyData[],
+    assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii'
+  ): CompanyData[] {
+    if (assetTypeFilter === 'fii') {
+      return companies.filter((company) => company.assetType === 'FII');
+    }
+
     if (!assetTypeFilter || assetTypeFilter === 'both') {
       return companies; // Incluir todos
     }
-    
+
     if (assetTypeFilter === 'b3') {
       // Apenas ações B3 (excluir BDRs)
-      return companies.filter(company => !this.isBDRTicker(company.ticker));
+      return companies.filter((company) => !this.isBDRTicker(company.ticker));
     }
-    
+
     if (assetTypeFilter === 'bdr') {
       // Apenas BDRs
-      return companies.filter(company => this.isBDRTicker(company.ticker));
+      return companies.filter((company) => this.isBDRTicker(company.ticker));
     }
-    
+
     return companies;
   }
 

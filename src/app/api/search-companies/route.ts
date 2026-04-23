@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Criar chave de cache considerando o parâmetro de busca
-    const cacheKey = `search-companies:${query.toLowerCase()}`;
+    const cacheKey = `search-companies-v2:${query.toLowerCase()}`;
 
     // Verificar cache
     const cachedData = await cache.get(cacheKey);
@@ -23,11 +23,11 @@ export async function GET(request: NextRequest) {
     }
     
     // Buscar empresas por ticker ou nome (case insensitive)
-    // Incluir ações B3 (STOCK) e BDRs
+    // Incluir ações B3 (STOCK), BDRs e FIIs
     const companies = await safeQueryWithParams('search-companies', () =>
       prisma.company.findMany({
         where: {
-          assetType: { in: ['STOCK', 'BDR'] }, // Incluir ações B3 e BDRs
+          assetType: { in: ['STOCK', 'BDR', 'FII'] },
           OR: [
             {
               ticker: {

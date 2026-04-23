@@ -175,6 +175,13 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
           show: true,
           description: "Filtros customizáveis para encontrar a ação perfeita"
         },
+        {
+          title: "Screening de FIIs",
+          href: "/screening-fiis",
+          icon: <Building2 className="w-5 h-5" />,
+          show: true,
+          description: "Filtre FIIs por DY, P/VP, liquidez e segmento",
+        },
       ],
     },
     {
@@ -555,7 +562,9 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
                                 <div className={`p-1.5 rounded-md ${
                                   item.href === '/screening-acoes'
                                     ? 'bg-gradient-to-br from-amber-500 to-yellow-500'
-                                    : 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                    : item.href === '/screening-fiis'
+                                      ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                                      : 'bg-gradient-to-br from-blue-500 to-purple-500'
                                 }`}>
                                   <div className="text-white text-sm">
                                     {item.icon}

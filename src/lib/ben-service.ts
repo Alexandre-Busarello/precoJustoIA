@@ -5,7 +5,7 @@
  */
 
 import { GoogleGenAI, Type, FunctionCallingConfigMode } from '@google/genai'
-// @ts-ignore - Prisma Client ainda não foi regenerado após migração
+// @ts-expect-error - Prisma Client ainda não foi regenerado após migração
 import { prisma } from './prisma'
 import { buildMemoryContext } from './ben-memory-service'
 import { getCompanyMetrics, getMarketSentiment, getIbovData, getUserRadar, getUserRadarWithFallback, getTechnicalAnalysis, getFairValue, getDividendProjections, getPlatformFeatures, getUserPortfolios, listCompanyAIReports, getCompanyAIReportContent, getCompanyFlags, benToolsSchema } from './ben-tools'
@@ -560,7 +560,7 @@ async function extractDataStage(
   const toolCalls: any[] = []
   const toolResults: any[] = []
   const fullContents = [...contents]
-  let maxIterations = 5
+  const maxIterations = 5
   let iteration = 0
 
   while (iteration < maxIterations) {
@@ -1022,7 +1022,7 @@ Sua tarefa é:
   })
 
   // Obter texto completo da resposta
-  // @ts-ignore - response.text existe mas pode não estar tipado corretamente
+  // @ts-expect-error - response.text existe mas pode não estar tipado corretamente
   const fullText = response.text || ''
 
   if (!fullText || fullText.trim().length === 0) {
@@ -1079,7 +1079,7 @@ export async function* processBenMessageStream(
     const memoryContext = await buildMemoryContext(userId, contextUrl)
 
     // Carregar histórico da conversa
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     const conversation = await prisma.benConversation.findUnique({
       where: { id: conversationId },
       include: {
@@ -1139,8 +1139,8 @@ export async function* processBenMessageStream(
       functionDeclarations
     )
 
-    let allToolCalls = extractionResult.toolCalls
-    let allToolResults = extractionResult.toolResults
+    const allToolCalls = extractionResult.toolCalls
+    const allToolResults = extractionResult.toolResults
 
     // Emitir eventos de tool calls e results
     for (const toolCall of allToolCalls) {
@@ -1205,7 +1205,7 @@ export async function* processBenMessageStream(
     const filteredFinalResponse = filterInternalPrompt(finalResponse)
 
     // Salvar mensagens no banco (usar mensagem normalizada)
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     await prisma.benMessage.create({
       data: {
         conversationId,
@@ -1214,7 +1214,7 @@ export async function* processBenMessageStream(
       }
     })
 
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     await prisma.benMessage.create({
       data: {
         conversationId,
@@ -1225,7 +1225,7 @@ export async function* processBenMessageStream(
     })
 
     // Verificar se é a primeira mensagem da conversa para gerar título
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     const messageCount = await prisma.benMessage.count({
       where: { conversationId }
     })
@@ -1234,7 +1234,7 @@ export async function* processBenMessageStream(
     if (messageCount === 2) {
       try {
         const generatedTitle = await generateConversationTitle(finalMessage, filteredFinalResponse, contextUrl)
-        // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+        // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
         await prisma.benConversation.update({
           where: { id: conversationId },
           data: { 
@@ -1249,7 +1249,7 @@ export async function* processBenMessageStream(
       }
     } else {
       // Apenas atualizar updatedAt se não for a primeira mensagem
-      // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+      // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
       await prisma.benConversation.update({
         where: { id: conversationId },
         data: { updatedAt: new Date() }
@@ -1302,7 +1302,7 @@ export async function processBenMessage(
     const memoryContext = await buildMemoryContext(userId, contextUrl)
 
     // Carregar histórico da conversa
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     const conversation = await prisma.benConversation.findUnique({
       where: { id: conversationId },
       include: {
@@ -1631,7 +1631,7 @@ export async function processBenMessage(
     const filteredFinalResponse = filterInternalPrompt(finalResponse)
 
     // Salvar mensagens no banco (usar mensagem normalizada)
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     await prisma.benMessage.create({
       data: {
         conversationId,
@@ -1640,7 +1640,7 @@ export async function processBenMessage(
       }
     })
 
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     await prisma.benMessage.create({
       data: {
         conversationId,
@@ -1651,7 +1651,7 @@ export async function processBenMessage(
     })
 
     // Verificar se é a primeira mensagem da conversa para gerar título
-    // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     const messageCount = await prisma.benMessage.count({
       where: { conversationId }
     })
@@ -1660,7 +1660,7 @@ export async function processBenMessage(
     if (messageCount === 2) {
       try {
         const generatedTitle = await generateConversationTitle(finalMessage, filteredFinalResponse, contextUrl)
-        // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+        // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
         await prisma.benConversation.update({
           where: { id: conversationId },
           data: { 
@@ -1675,7 +1675,7 @@ export async function processBenMessage(
       }
     } else {
       // Apenas atualizar updatedAt se não for a primeira mensagem
-      // @ts-ignore - Prisma Client ainda não foi regenerado após migração
+      // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
       await prisma.benConversation.update({
         where: { id: conversationId },
         data: { updatedAt: new Date() }

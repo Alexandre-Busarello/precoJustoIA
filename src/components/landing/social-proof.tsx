@@ -119,7 +119,7 @@ export function SocialProof({
                     </div>
                   )}
                   <p className="text-muted-foreground mb-4 leading-relaxed">
-                    "{testimonial.content}"
+                    &ldquo;{testimonial.content}&rdquo;
                   </p>
                   <div>
                     <div className="font-semibold">{testimonial.name}</div>

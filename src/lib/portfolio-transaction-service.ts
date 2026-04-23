@@ -663,7 +663,7 @@ export class PortfolioTransactionService {
     console.log(`📊 [GENERATE_BUY] Holdings: ${holdings.size} tickers, Prices: ${prices.size} tickers`);
     
     const suggestions: SuggestedTransaction[] = [];
-    let cashBalance = availableCash;
+    const cashBalance = availableCash;
     const today = new Date();
 
     // Calculate current allocations

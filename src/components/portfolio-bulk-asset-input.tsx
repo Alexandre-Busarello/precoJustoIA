@@ -276,7 +276,7 @@ export function PortfolioBulkAssetInput({ onAssetsGenerated }: PortfolioBulkAsse
                       Próximos passos
                     </p>
                     <p className="text-green-700 dark:text-green-300">
-                      Após aplicar, você poderá ajustar as alocações individuais na aba "Configuração"
+                      Após aplicar, você poderá ajustar as alocações individuais na aba &quot;Configuração&quot;
                     </p>
                   </div>
                 </div>

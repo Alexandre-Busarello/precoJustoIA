@@ -960,7 +960,6 @@ Retorne APENAS o JSON, sem markdown ou texto adicional.`
               ]
             })
             
-            // @ts-expect-error - response.text pode não estar tipado
             fullResponse = response.text || ''
             chunkCount = 1
             hasTextChunks = !!fullResponse

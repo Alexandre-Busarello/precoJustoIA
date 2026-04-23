@@ -246,7 +246,11 @@ export default function SupportResistanceChart({
               tickFormatter={(value) => `R$ ${value.toFixed(2)}`}
             />
             <Tooltip
-              formatter={(value: number) => [`R$ ${value.toFixed(2)}`, 'Preço']}
+              formatter={(value) => {
+                const n =
+                  typeof value === 'number' ? value : Number(value ?? 0)
+                return [`R$ ${n.toFixed(2)}`, 'Preço']
+              }}
               labelFormatter={(label) => `Data: ${label}`}
             />
             <Legend />

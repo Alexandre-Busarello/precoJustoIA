@@ -290,7 +290,11 @@ export default function DividendYieldReportPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
                 <YAxis />
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip
+                  formatter={(value) =>
+                    formatCurrency(typeof value === 'number' ? value : Number(value ?? 0))
+                  }
+                />
                 <Legend />
                 <Bar dataKey="total" fill="#10b981" name="Dividendo por Ação" />
                 <Bar dataKey="projectedIncome" fill="#3b82f6" name="Renda Projetada" />

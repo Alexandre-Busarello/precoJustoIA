@@ -168,24 +168,29 @@ export function PLBolsaChart({ data, statistics, loading }: PLBolsaChartProps) {
                 }}
               />
               <Tooltip
-                formatter={(value: number, name: string) => {
-                  if (name === 'pl') {
-                    return [formatPL(value), 'P/L']
+                formatter={(value, name) => {
+                  const numValue =
+                    typeof value === 'number' ? value : Number(value ?? 0)
+                  const label = String(name ?? '')
+                  if (label === 'pl') {
+                    return [formatPL(numValue), 'P/L']
                   }
-                  if (name === 'averagePl') {
-                    return [formatPL(value), 'Média']
+                  if (label === 'averagePl') {
+                    return [formatPL(numValue), 'Média']
                   }
-                  if (name === 'companyCount') {
-                    return [`${value} empresas`, 'Empresas']
+                  if (label === 'companyCount') {
+                    return [`${numValue} empresas`, 'Empresas']
                   }
-                  return [value, name]
+                  return [numValue, label]
                 }}
-                labelFormatter={(label: string) => {
-                  const item = chartData.find((d) => d.dateFormatted === label)
+                labelFormatter={(label) => {
+                  const key =
+                    typeof label === 'string' ? label : String(label ?? '')
+                  const item = chartData.find((d) => d.dateFormatted === key)
                   if (item) {
                     return formatTooltipDate(item.date)
                   }
-                  return label
+                  return key
                 }}
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length > 0) {

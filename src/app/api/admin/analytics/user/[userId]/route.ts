@@ -48,7 +48,6 @@ export async function GET(
 
     // Buscar eventos do usuário
     const [events, userInfo] = await Promise.all([
-      // @ts-expect-error - Prisma Client será regenerado após migration
       prisma.userEvent.findMany({
         where,
         select: {

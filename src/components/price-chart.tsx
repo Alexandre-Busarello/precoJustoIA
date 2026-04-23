@@ -281,13 +281,16 @@ export default function PriceChart({ data, technicalAnalysis, ticker }: PriceCha
                     tickFormatter={formatVolume}
                   />
                   <Tooltip
-                    formatter={(value: any, name: string) => {
-                      if (name === 'volume') {
+                    formatter={(value: any, name) => {
+                      const label = String(name ?? '')
+                      if (label === 'volume') {
                         return [formatVolume(value), 'Volume']
                       }
-                      return [formatPrice(value), name === 'close' ? 'Preço de Fechamento' : name]
+                      return [formatPrice(value), label === 'close' ? 'Preço de Fechamento' : label]
                     }}
-                    labelFormatter={(label: string) => `Data: ${label}`}
+                    labelFormatter={(label) =>
+                      `Data: ${typeof label === 'string' ? label : String(label ?? '')}`
+                    }
                   />
                   <Line
                     yAxisId="price"
@@ -320,8 +323,10 @@ export default function PriceChart({ data, technicalAnalysis, ticker }: PriceCha
                     tickFormatter={formatPrice}
                   />
                   <Tooltip
-                    formatter={(value: any, name: string) => [formatPrice(value), name]}
-                    labelFormatter={(label: string) => `Data: ${label}`}
+                    formatter={(value: any, name) => [formatPrice(value), String(name ?? '')]}
+                    labelFormatter={(label) =>
+                      `Data: ${typeof label === 'string' ? label : String(label ?? '')}`
+                    }
                   />
                   <Bar
                     dataKey="high"
@@ -371,7 +376,9 @@ export default function PriceChart({ data, technicalAnalysis, ticker }: PriceCha
                     />
                     <Tooltip
                       formatter={(value: any) => [value.toFixed(1), 'RSI']}
-                      labelFormatter={(label: string) => `Data: ${label}`}
+                      labelFormatter={(label) =>
+                      `Data: ${typeof label === 'string' ? label : String(label ?? '')}`
+                    }
                     />
                     <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="2 2" />
                     <ReferenceLine y={30} stroke="#10b981" strokeDasharray="2 2" />
@@ -434,11 +441,13 @@ export default function PriceChart({ data, technicalAnalysis, ticker }: PriceCha
                       tick={{ fontSize: 12 }}
                     />
                     <Tooltip
-                      formatter={(value: any, name: string) => [
-                        value.toFixed(1), 
-                        name === 'k' ? '%K' : '%D'
-                      ]}
-                      labelFormatter={(label: string) => `Data: ${label}`}
+                      formatter={(value: any, name) => {
+                        const label = String(name ?? '')
+                        return [value.toFixed(1), label === 'k' ? '%K' : '%D']
+                      }}
+                      labelFormatter={(label) =>
+                      `Data: ${typeof label === 'string' ? label : String(label ?? '')}`
+                    }
                     />
                     <ReferenceLine y={80} stroke="#ef4444" strokeDasharray="2 2" />
                     <ReferenceLine y={20} stroke="#10b981" strokeDasharray="2 2" />

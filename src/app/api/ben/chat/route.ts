@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
     })
     if (!limitCheck.allowed) {
       // Salvar mensagem do usuário primeiro
-      // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
       await prisma.benMessage.create({
         data: {
           conversationId,
@@ -61,7 +60,6 @@ export async function POST(request: NextRequest) {
 
       // Criar mensagem do Ben informando sobre o limite
       const ctaMessage = generateBenCTAMessage(limitCheck.remaining)
-      // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
       await prisma.benMessage.create({
         data: {
           conversationId,
@@ -85,7 +83,6 @@ export async function POST(request: NextRequest) {
     const pageContext = await extractPageContext(contextUrl || '/', clientPageContext)
 
     // Verificar se a conversa pertence ao usuário
-    // @ts-expect-error - Prisma Client ainda não foi regenerado após migração
     const conversation = await prisma.benConversation.findUnique({
       where: { id: conversationId },
       select: { userId: true }

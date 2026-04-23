@@ -14,9 +14,9 @@ import { ArrowLeft, Crown, Lock } from 'lucide-react'
 import { BenChatFAB } from '@/components/ben-chat-fab'
 
 interface PageProps {
-  params: {
+  params: Promise<{
     ticker: string
-  }
+  }>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

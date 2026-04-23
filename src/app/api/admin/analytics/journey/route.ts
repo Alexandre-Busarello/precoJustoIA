@@ -43,7 +43,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar todas as visualizações de página ordenadas por sessão e timestamp
-    // @ts-expect-error - Prisma Client será regenerado após migration
     const pageViews = await prisma.userEvent.findMany({
       where,
       select: {

@@ -1199,21 +1199,22 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                             padding: '12px',
                             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                           }}
-                          formatter={(value: any, name: string) => {
+                          formatter={(value: any, name) => {
                             // Garantir que o valor é um número válido
                             const numValue = Number(value);
+                            const label = String(name ?? '');
                             if (isNaN(numValue) || numValue === null || numValue === undefined) {
-                              return ['N/A', name];
+                              return ['N/A', label];
                             }
                             
                             const formattedValue = formatCurrency(numValue);
                             
                             // Mapear nomes amigáveis
-                            if (name === 'carteira') return [formattedValue, '💼 Sua Carteira'];
-                            if (name === 'cdi') return [formattedValue, '🟢 CDI'];
-                            if (name === 'ibov') return [formattedValue, '🟠 IBOVESPA'];
+                            if (label === 'carteira') return [formattedValue, '💼 Sua Carteira'];
+                            if (label === 'cdi') return [formattedValue, '🟢 CDI'];
+                            if (label === 'ibov') return [formattedValue, '🟠 IBOVESPA'];
                             
-                            return [formattedValue, name];
+                            return [formattedValue, label];
                           }}
                           labelFormatter={(label) => `📅 ${label}`}
                         />

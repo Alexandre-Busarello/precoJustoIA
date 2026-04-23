@@ -447,7 +447,7 @@ export function AdminQuizDetailsPageClient({ campaignId }: { campaignId: string 
                               />
                               <YAxis tick={{ fontSize: 12 }} />
                               <Tooltip
-                                formatter={(value: any, name: string, props: any) => [
+                                formatter={(value: any, _name, props: any) => [
                                   `${value} (${props.payload.percentage}%)`,
                                   'Respostas'
                                 ]}
@@ -467,7 +467,13 @@ export function AdminQuizDetailsPageClient({ campaignId }: { campaignId: string 
                                 cx="50%"
                                 cy="50%"
                                 labelLine={false}
-                                label={({ name, percentage }) => `${name}: ${percentage}%`}
+                                label={(props) => {
+                                  const { name, percentage } = props as {
+                                    name?: string
+                                    percentage?: number
+                                  }
+                                  return `${name ?? ''}: ${percentage ?? 0}%`
+                                }}
                                 outerRadius={100}
                                 fill="#8884d8"
                                 dataKey="value"
@@ -477,7 +483,7 @@ export function AdminQuizDetailsPageClient({ campaignId }: { campaignId: string 
                                 ))}
                               </Pie>
                               <Tooltip
-                                formatter={(value: any, name: string, props: any) => [
+                                formatter={(value: any, _name, props: any) => [
                                   `${value} (${props.payload.percentage}%)`,
                                   'Respostas'
                                 ]}
@@ -525,7 +531,7 @@ export function AdminQuizDetailsPageClient({ campaignId }: { campaignId: string 
                             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                             <YAxis tick={{ fontSize: 12 }} />
                             <Tooltip
-                              formatter={(value: any, name: string, props: any) => [
+                              formatter={(value: any, _name, props: any) => [
                                 `${value} (${props.payload.percentage}%)`,
                                 'Respostas'
                               ]}

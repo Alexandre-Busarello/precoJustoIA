@@ -164,7 +164,11 @@ export function DividendYieldResults({
                     />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip
-                      formatter={(value: number) => formatCurrency(value)}
+                      formatter={(value) =>
+                        formatCurrency(
+                          typeof value === 'number' ? value : Number(value ?? 0)
+                        )
+                      }
                       labelStyle={{ color: "#000" }}
                     />
                     <Line

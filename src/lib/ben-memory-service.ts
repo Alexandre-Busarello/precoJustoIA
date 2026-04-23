@@ -96,7 +96,6 @@ Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois.`
       ]
     })
 
-    // @ts-expect-error - response.text pode não estar tipado
     const fullResponse = response.text || ''
 
     if (!fullResponse.trim()) {

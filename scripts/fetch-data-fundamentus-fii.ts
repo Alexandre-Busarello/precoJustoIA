@@ -11,6 +11,17 @@ dotenv.config();
 const prisma = new PrismaClient();
 
 const FUNDAMENTUS_FII_URL = 'https://www.fundamentus.com.br/fii_resultado.php';
+/** Fallback: Fundamentus retorna 403 a partir de IPs de cloud; o Jina lê a página de outro hop. */
+const FUNDAMENTUS_FII_VIA_JINA = `https://r.jina.ai/${FUNDAMENTUS_FII_URL}`;
+
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+  Referer: 'https://www.fundamentus.com.br/',
+  'Cache-Control': 'no-cache',
+} as const;
 
 const MIN_LIQUIDITY_TIJOLO = 1_000_000;
 const MIN_LIQUIDITY_PAPEL = 100_000;
@@ -72,18 +83,128 @@ function passesQuality(row: ParsedFiiRow): boolean {
   return true;
 }
 
-export async function fetchFundamentusFiiHtml(): Promise<string> {
-  const res = await fetch(FUNDAMENTUS_FII_URL, {
+function cellTickerFromJina(cell: string): string {
+  const m = cell.match(/\[([A-Z]{4}11)\]\(/i);
+  if (m) return m[1].toUpperCase();
+  return cell.replace(/\s/g, '').toUpperCase();
+}
+
+/**
+ * Tabela "Resultado da busca" devolvida pelo r.jina.ai (markdown) — mesmas colunas do HTML.
+ */
+export function parseFundamentusFiiJinaMarkdown(md: string): ParsedFiiRow[] {
+  const rows: ParsedFiiRow[] = [];
+  for (const line of md.split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('|') || t.includes('---|')) continue;
+    const cells = t
+      .split('|')
+      .map((s) => s.trim())
+      .filter((c, i, a) => !(c === '' && (i === 0 || i === a.length - 1)));
+    if (cells.length < 13) continue;
+    // Não usar /Papel/ na URL: ?papel=XXXX11 casa com a flag /i.
+    if (!/detalhes\.php\?papel=/i.test(cells[0])) continue;
+
+    const first = cells[0];
+    const ticker = cellTickerFromJina(first);
+    if (!/^[A-Z]{4}11$/.test(ticker)) continue;
+
+    const segment = cells[1];
+    const cotacao = parseBrDecimal(cells[2]);
+    if (cotacao === null || cotacao <= 0) continue;
+    const ffoYield = parsePercent(cells[3]);
+    const dividendYield = parsePercent(cells[4]);
+    const pvp = parseBrDecimal(cells[5]);
+    const valorMercado = parseBrDecimal(cells[6]);
+    const liquidez = parseBrDecimal(cells[7]);
+    const qtdImoveis = parseBrDecimal(cells[8]);
+    const precoM2 = parseBrDecimal(cells[9]);
+    const aluguelM2 = parseBrDecimal(cells[10]);
+    const capRate = parsePercent(cells[11]);
+    const vacanciaMedia = parsePercent(cells[12]);
+    const isPapel = detectIsPapel(segment);
+    rows.push({
+      ticker,
+      segment,
+      cotacao,
+      ffoYield,
+      dividendYield,
+      pvp,
+      valorMercado,
+      liquidez,
+      qtdImoveis: qtdImoveis !== null ? Math.round(qtdImoveis) : null,
+      precoM2,
+      aluguelM2,
+      capRate,
+      vacanciaMedia,
+      isPapel,
+    });
+  }
+  return rows;
+}
+
+type FiiTabelaSource = { raw: string; fromJina: boolean };
+
+/**
+ * Tenta o site diretamente; em 403/5xx/timeout, usa o Reader da Jina (bypass p/ datacenters).
+ */
+export async function loadFundamentusFiiTabela(
+  directTimeoutMs = 28_000
+): Promise<FiiTabelaSource> {
+  let directStatus = 0;
+  const directController = new AbortController();
+  const t = setTimeout(() => directController.abort(), directTimeoutMs);
+  try {
+    const res = await fetch(FUNDAMENTUS_FII_URL, {
+      headers: { ...BROWSER_HEADERS },
+      cache: 'no-store',
+      signal: directController.signal,
+    });
+    directStatus = res.status;
+    if (res.ok) {
+      const buf = new Uint8Array(await res.arrayBuffer());
+      return { raw: new TextDecoder('iso-8859-1').decode(buf), fromJina: false };
+    }
+  } catch (e) {
+    const isAbort = e instanceof Error && e.name === 'AbortError';
+    if (isAbort) {
+      // timeout — tentar Jina
+    } else {
+      // rede inválida — tentar Jina
+    }
+  } finally {
+    clearTimeout(t);
+  }
+
+  if (directStatus && directStatus !== 403) {
+    console.log(
+      `ℹ️ Fundamentus (direto) respondeu ${directStatus}; tentando r.jina.ai...`
+    );
+  } else if (!directStatus) {
+    console.log('ℹ️ Conexão direta ao Fundamentus falhou ou excedeu tempo; tentando r.jina.ai...');
+  } else {
+    console.log('ℹ️ 403 do Fundamentus a partir deste host (típico de cloud); usando r.jina.ai...');
+  }
+
+  const jres = await fetch(FUNDAMENTUS_FII_VIA_JINA, {
     headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml',
-      'Accept-Language': 'pt-BR,pt;q=0.9',
+      Accept: 'text/plain,application/json;q=0.9',
+      'User-Agent': BROWSER_HEADERS['User-Agent'],
     },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(55_000),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ao buscar Fundamentus FIIs`);
-  const buf = new Uint8Array(await res.arrayBuffer());
-  return new TextDecoder('iso-8859-1').decode(buf);
+  if (!jres.ok) {
+    const detail = directStatus
+      ? `direto HTTP ${directStatus}`
+      : 'direto indisponível/timeout';
+    throw new Error(`Fundamentus FIIs: ${detail}; r.jina.ai HTTP ${jres.status}`);
+  }
+  return { raw: await jres.text(), fromJina: true };
+}
+
+export async function fetchFundamentusFiiHtml(): Promise<string> {
+  return (await loadFundamentusFiiTabela()).raw;
 }
 
 export function parseFundamentusFiiTable(html: string): ParsedFiiRow[] {
@@ -198,9 +319,13 @@ export async function upsertFiiFromRow(row: ParsedFiiRow): Promise<void> {
 
 export async function main(): Promise<void> {
   console.log('📥 Baixando tabela de FIIs do Fundamentus...');
-  const html = await fetchFundamentusFiiHtml();
-  const parsed = parseFundamentusFiiTable(html);
-  console.log(`📊 Linhas parseadas: ${parsed.length}`);
+  const { raw, fromJina } = await loadFundamentusFiiTabela();
+  const parsed = fromJina
+    ? parseFundamentusFiiJinaMarkdown(raw)
+    : parseFundamentusFiiTable(raw);
+  console.log(
+    `📊 Linhas parseadas: ${parsed.length} (${fromJina ? 'via r.jina.ai' : 'direto'})`
+  );
 
   let ok = 0;
   for (const row of parsed) {

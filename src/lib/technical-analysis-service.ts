@@ -9,6 +9,8 @@ import { combineLevels, SupportResistanceResult } from './support-resistance'
 // Importação será feita dinamicamente para evitar erro de tipo
 // import { calculateAIPriceTargets } from './technical-ai-service'
 
+const RADAR_MARKET_TIME_ZONE = 'America/Sao_Paulo'
+
 export interface TechnicalAnalysisData {
   // Indicadores técnicos
   rsi: number | null;
@@ -53,6 +55,25 @@ export interface TechnicalAnalysisData {
   calculatedAt: Date;
   expiresAt: Date;
   currentPrice: number;
+}
+
+export function getBrazilMarketDayKey(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: RADAR_MARKET_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const day = parts.find((part) => part.type === 'day')?.value
+
+  return `${year}-${month}-${day}`
+}
+
+function isSameBrazilMarketDay(date: Date, reference = new Date()): boolean {
+  return getBrazilMarketDayKey(date) === getBrazilMarketDayKey(reference)
 }
 
 /**
@@ -373,6 +394,23 @@ export async function getOrCalculateTechnicalAnalysis(
   });
   
   return await convertToTechnicalAnalysisData(saved, tickerUpper);
+}
+
+/**
+ * Busca análise técnica atualizada para o dia de mercado brasileiro.
+ * Mantém o cache padrão de 30 dias para outros fluxos, mas força recálculo
+ * no Radar quando o snapshot ativo ainda é de um dia anterior.
+ */
+export async function getOrCalculateDailyTechnicalAnalysis(
+  ticker: string
+): Promise<TechnicalAnalysisData | null> {
+  const analysis = await getOrCalculateTechnicalAnalysis(ticker, false, false)
+
+  if (!analysis || isSameBrazilMarketDay(analysis.calculatedAt)) {
+    return analysis
+  }
+
+  return getOrCalculateTechnicalAnalysis(ticker, true, false)
 }
 
 /**

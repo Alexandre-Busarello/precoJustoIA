@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/user-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
-import { getOrCalculateTechnicalAnalysis } from '@/lib/technical-analysis-service';
+import { getOrCalculateDailyTechnicalAnalysis } from '@/lib/technical-analysis-service';
 import { prisma } from '@/lib/prisma';
 import {
   getRadarStatusColor,
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
           const analysisPrice = toNum(updatedPrice?.price) ?? 0;
           const currentPrice = analysisPrice;
 
-          const technicalAnalysis = await getOrCalculateTechnicalAnalysis(ticker, false, false);
+          const technicalAnalysis = await getOrCalculateDailyTechnicalAnalysis(ticker);
 
           let youtubeScore: number | null = null;
           const youtubeAnalysis = await (prisma as any).youTubeAnalysis.findFirst({
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
         const updatedPriceNum = updatedPrices.get(t);
         const currentPrice = updatedPriceNum?.price ?? analysisPrice;
 
-        const technicalAnalysis = await getOrCalculateTechnicalAnalysis(ticker, false, false);
+        const technicalAnalysis = await getOrCalculateDailyTechnicalAnalysis(ticker);
 
         let youtubeScore: number | null = null;
         const youtubeAnalysis = await (prisma as any).youTubeAnalysis.findFirst({

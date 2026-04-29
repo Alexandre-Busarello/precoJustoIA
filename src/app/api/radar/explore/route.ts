@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/user-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
-import { getOrCalculateTechnicalAnalysis } from '@/lib/technical-analysis-service';
+import { getBrazilMarketDayKey, getOrCalculateDailyTechnicalAnalysis } from '@/lib/technical-analysis-service';
 import { prisma } from '@/lib/prisma';
 import { calculateRadarScore, getTechnicalEntryStatus } from '@/lib/radar-service';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     // Usar o dia atual como parte da chave de cache para garantir mudança diária
     const currentDate = new Date();
-    const dayKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`;
+    const dayKey = getBrazilMarketDayKey(currentDate);
     const cacheKey = `radar-explore:${isPremium ? 'premium' : 'free'}:${dayKey}`;
 
     console.log(`🔍 [RADAR EXPLORE] Verificando cache: ${cacheKey}`);
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     // Buscar todas as empresas com dados financeiros válidos
     // Usar seed baseado no dia para garantir diversidade e mudança diária
-    const daySeed = Math.floor(Date.now() / (24 * 60 * 60 * 1000)); // Dias desde epoch
+    const daySeed = Number(dayKey.replace(/-/g, ''));
     
     // Buscar empresas com cache que varia por dia
     const allCompanies = await safeQueryWithParams(
@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
             }
 
             // Buscar análise técnica
-            const technicalAnalysis = await getOrCalculateTechnicalAnalysis(ticker, false, false);
+            const technicalAnalysis = await getOrCalculateDailyTechnicalAnalysis(ticker);
 
             // Buscar análise de sentimento (YouTube)
             let youtubeScore: number | null = null;

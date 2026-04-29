@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { RadarTickerInput } from '@/components/radar-ticker-input'
-import { RadarGrid, RadarAssetData } from '@/components/radar-grid'
+import type { RadarAssetData } from '@/components/radar-grid'
 import { useRadar } from '@/hooks/use-radar'
 import { useRadarExplore } from '@/hooks/use-radar-explore'
 import { useToast } from '@/hooks/use-toast'
@@ -16,6 +16,24 @@ import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import Link from 'next/link'
 import { BenChatFAB } from '@/components/ben-chat-fab'
+
+const RadarTickerInput = dynamic(
+  () => import('@/components/radar-ticker-input').then((mod) => mod.RadarTickerInput),
+  { loading: () => <RadarCardLoading /> }
+)
+
+const RadarGrid = dynamic(
+  () => import('@/components/radar-grid').then((mod) => mod.RadarGrid),
+  { loading: () => <RadarCardLoading /> }
+)
+
+function RadarCardLoading() {
+  return (
+    <div className="flex items-center justify-center rounded-lg border p-6">
+      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
 
 export function RadarPageContent() {
   const [activeTab, setActiveTab] = useState<'meu-radar' | 'explorar'>('meu-radar')

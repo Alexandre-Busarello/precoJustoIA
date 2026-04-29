@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,12 +19,36 @@ import {
   Calendar,
   RefreshCw,
 } from 'lucide-react';
-import { FunnelViewer } from './funnel-viewer';
-import { JourneyAnalyzer } from './journey-analyzer';
-import { HeatmapViewer } from './heatmap-viewer';
 import { UserEmailFilter } from './user-email-filter';
 import { UserTypeChart } from './user-type-chart';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+const FunnelViewer = dynamic(
+  () => import('./funnel-viewer').then((mod) => mod.FunnelViewer),
+  { loading: () => <AnalyticsTabLoading /> }
+);
+
+const JourneyAnalyzer = dynamic(
+  () => import('./journey-analyzer').then((mod) => mod.JourneyAnalyzer),
+  { loading: () => <AnalyticsTabLoading /> }
+);
+
+const HeatmapViewer = dynamic(
+  () => import('./heatmap-viewer').then((mod) => mod.HeatmapViewer),
+  { loading: () => <AnalyticsTabLoading /> }
+);
+
+function AnalyticsTabLoading() {
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-center min-h-[200px]">
+          <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 interface AnalyticsData {
   period: {

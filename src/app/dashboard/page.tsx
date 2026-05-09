@@ -205,27 +205,6 @@ export default function Dashboard() {
         {/* Email Verification Banner - Discreto */}
         <EmailVerificationBanner />
 
-        {/* IBOV Projection Banner */}
-        <div className="mb-6">
-          <div className="mb-4 flex items-center gap-1.5 sm:gap-2 sm:justify-end">
-            {/* Botão Radar de Oportunidades - Apenas Mobile */}
-            <Button variant="default" size="sm" asChild className="sm:hidden px-2.5 py-1.5 text-xs">
-              <Link href="/radar" className="flex items-center gap-1.5">
-                <Radar className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="whitespace-nowrap">Radar</span>
-              </Link>
-            </Button>
-            {/* Botão Ver todas as projeções */}
-            <Button variant="outline" size="sm" asChild className="px-2.5 py-1.5 text-xs sm:px-3 sm:py-2 sm:text-sm">
-              <Link href="/projecoes-ibov" className="flex items-center gap-1.5 sm:gap-2">
-                <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span className="whitespace-nowrap">Ver todas as projeções</span>
-              </Link>
-            </Button>
-          </div>
-          <DashboardIbovBanner />
-        </div>
-
         {/* Trial Premium Banner - Discreto */}
         {isTrialActive && subscriptionTier === 'FREE' && (
           <Card className="mb-6 border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">

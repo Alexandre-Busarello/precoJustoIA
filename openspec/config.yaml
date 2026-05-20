@@ -1,0 +1,70 @@
+schema: spec-driven
+
+context: |
+  # Preço Justo AI — Plataforma SaaS de Análise Fundamentalista de Ações B3
+  
+  ## Language
+  - The APP is for PT/BR. All feature for UX/UI must strictly follow Brazilian Portuguese grammar, cultural context, and regional formatting rules.
+
+  ## Stack
+  - Frontend/Backend: Next.js 14 (App Router), TypeScript
+  - Database: PostgreSQL via Prisma ORM (hosted on Supabase/Neon)
+  - Cache: Redis/Upstash (serverless Redis)
+  - Auth: NextAuth.js with Prisma adapter
+  - Payments: Stripe + Kiwify webhooks
+  - AI: Google Gemini (@google/genai)
+  - UI: Tailwind CSS + shadcn/ui + Radix UI
+  - Charts: Recharts
+  - Deployment: Vercel
+
+  ## Domain
+  Brazilian stock market (B3) analysis platform for retail investors.
+  Supports: ações (stocks), FIIs (real estate funds), BDRs, ETFs, índices.
+
+  ## Subscription Tiers
+  - FREE: Graham model, up to 10 results per ranking, basic comparisons
+  - PREMIUM: All 8 valuation models, unlimited results, screening, sector analysis,
+             portfolio management, backtesting, AI analysis, asset monitoring
+  - ADMIN: Internal panel, cache management, user management
+
+  ## Key Conventions
+  - API routes in src/app/api/**
+  - Page routes in src/app/**
+  - Shared lib in src/lib/
+  - React components in src/components/
+  - Use conventional commits (feat, fix, chore, docs, refactor)
+  - Write TypeScript — avoid `any`
+  - Use Prisma for all DB operations; never raw SQL unless necessary
+  - Cache keys follow pattern: `<entity>:<id>:<variant>`
+  - Brazilian Portuguese for UI copy; English for code identifiers
+  - Financial values in BRL (R$); percentages as decimals in DB (e.g. 0.15 = 15%)
+
+  ## Data Sources
+  - BRAPI (brapi.dev): market quotes, historical prices, fundamentals
+  - Fundamentus (fundamentus.com.br): scraped fundamentals for stocks + FIIs
+  - Yahoo Finance: BDR and international asset data
+  - Ward data: supplemental fundamentals
+
+  ## Important Context
+  - Platform is CVM-compliant: presents data/rankings as "quantitative benchmarks",
+    not investment recommendations
+  - Financial data refresh: quotes every ~1h, fundamentals daily via cron jobs
+  - Backtest uses actual historical prices from BRAPI
+
+rules:
+  proposal:
+    - Include a "Non-goals" section to keep scope tight
+    - Always mention which subscription tier is affected (FREE/PREMIUM)
+    - Keep under 600 words
+  design:
+    - Mention affected API routes and DB models
+    - Note cache invalidation strategy when relevant
+    - Include error handling approach for external API failures
+  tasks:
+    - Break tasks into chunks of max 2 hours each
+    - Group by layer: DB → API → UI
+    - Mark tasks that require env vars or external service setup
+  specs:
+    - Use SHALL for normative requirements, MUST for critical constraints
+    - Every requirement needs at least one scenario with WHEN/THEN format
+    - Note FREE vs PREMIUM access for each requirement

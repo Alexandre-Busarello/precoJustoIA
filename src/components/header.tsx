@@ -33,8 +33,8 @@ export default function Header() {
     }
   }
 
-  // Não mostrar Header na rota /oferta - layout específico cuida disso
-  if (pathname === '/oferta') {
+  // Não mostrar Header em rotas de LP de parceiros nem em /oferta
+  if (pathname === '/oferta' || pathname.startsWith('/parceiros/')) {
     return null
   }
 

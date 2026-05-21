@@ -270,7 +270,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
           </h1>
           <p className="text-gray-600 dark:text-gray-300">
             {showPayment && currentPlan
-              ? `${currentPlan.name} — ${formatPrice(pixPrice * 100)} com 5% OFF`
+              ? `${currentPlan.name} — ${formatPrice(pixPrice * 100)} com 15% OFF`
               : step === 'plan' 
                 ? 'Desbloqueie todo o potencial da análise de ações' 
                 : currentPlan 
@@ -414,7 +414,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                         <div className="text-sm text-gray-500">Aprovação instantânea</div>
                         <Badge variant="secondary" className="mt-1 bg-green-100 text-green-700 font-bold">
                           <Zap className="w-3 h-3 mr-1" />
-                          5% OFF
+                          15% OFF
                         </Badge>
                         <div className="text-xs text-green-600 font-semibold mt-1">
                           Economize {formatPrice(pixDiscountAmount)}
@@ -433,7 +433,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                         <div className="font-medium">Cartão de Crédito</div>
                         <Badge variant="secondary" className="mt-1">
                           <ArrowRight className="w-3 h-3 mr-1" />
-                          Checkout Kiwify
+                          Checkout Cakto
                         </Badge>
                       </div>
                     </Button>
@@ -467,59 +467,86 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                   ? Math.round(calculateDiscount(monthly.price_in_cents, annual.price_in_cents) * 100) 
                   : 20
 
-                const PlanCardContent = ({ planKey, plan }: { planKey: PlanType; plan: ReturnType<typeof getPlanData> }) => (
-                  <>
-                    <div className="text-center mb-4">
-                      <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
-                      <div className="mb-2">
-                        <span className={`font-bold ${planKey === 'annual' ? 'text-3xl text-blue-600' : 'text-2xl text-gray-700 dark:text-gray-300'}`}>
-                          {formatPrice(plan.price * 100)}
-                        </span>
-                        <span className="text-gray-500 ml-1">{plan.period}</span>
+                const PlanCardContent = ({ planKey, plan }: { planKey: PlanType; plan: ReturnType<typeof getPlanData> }) => {
+                  const planPixPrice = calculatePixDiscount(plan.price * 100) / 100
+                  return (
+                    <>
+                      <div className="text-center mb-4">
+                        <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
+
+                        {planKey === 'monthly' ? (
+                          <div className="mb-3">
+                            <div className="flex items-baseline justify-center gap-1 mb-0.5">
+                              <span className="text-sm text-gray-400 line-through">{formatPrice(plan.price * 100)}</span>
+                              <span className="text-gray-400 text-xs line-through">{plan.period}</span>
+                            </div>
+                            <div className="flex items-baseline justify-center gap-1">
+                              <span className="text-2xl font-bold text-green-600">{formatPrice(planPixPrice * 100)}</span>
+                              <span className="text-gray-500 ml-1">{plan.period}</span>
+                            </div>
+                            <Badge className="mt-1.5 bg-green-100 text-green-700 border-green-200 font-bold">
+                              <Zap className="w-3 h-3 mr-1" />
+                              15% OFF no PIX
+                            </Badge>
+                            <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 py-1.5 px-2 rounded mt-2">
+                              Somente via PIX
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            {plan.originalPrice && (
+                              <div className="flex flex-col items-center gap-1 mb-2">
+                                <span className="text-sm text-gray-500 line-through">
+                                  {formatPrice(plan.originalPrice * 100)}/ano (12x mensal)
+                                </span>
+                                <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 font-bold">
+                                  {plan.discount} — Economia garantida
+                                </Badge>
+                              </div>
+                            )}
+                            <div className="mb-2">
+                              <span className="text-3xl font-bold text-blue-600">{formatPrice(plan.price * 100)}</span>
+                              <span className="text-gray-500 ml-1">{plan.period}</span>
+                            </div>
+                            <div className="flex items-center justify-center gap-1.5 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 py-2 px-3 rounded-lg mb-2">
+                              <Smartphone className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                              <span className="text-sm text-green-700 dark:text-green-400 font-semibold">
+                                PIX: {formatPrice(planPixPrice * 100)}{plan.period}
+                              </span>
+                              <Badge className="bg-green-100 text-green-700 border-green-200 font-bold text-xs">
+                                <Zap className="w-3 h-3 mr-0.5" />
+                                15% OFF
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 py-2 px-3 rounded-lg">
+                              Tudo do plano mensal + {annualDiscount}% de desconto
+                            </p>
+                          </>
+                        )}
                       </div>
-                      {plan.originalPrice && (
-                        <div className="flex flex-col items-center gap-1 mb-2">
-                          <span className="text-sm text-gray-500 line-through">
-                            {formatPrice(plan.originalPrice * 100)}/ano (12x mensal)
-                          </span>
-                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 font-bold">
-                            {plan.discount} — Economia garantida
-                          </Badge>
-                        </div>
-                      )}
-                      {planKey === 'annual' && (
-                        <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 py-2 px-3 rounded-lg mt-2">
-                          Tudo do plano mensal + {annualDiscount}% de desconto
-                        </p>
-                      )}
-                      {planKey === 'monthly' && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 py-1.5 px-2 rounded mt-2">
-                          Pagamento apenas via PIX (5% OFF)
-                        </p>
-                      )}
-                    </div>
-                    <ul className="space-y-2 mb-4">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-center text-sm">
-                          <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                          {feature}
-                        </li>
-                      ))}
-                      {planKey === 'annual' && (
-                        <li className="flex items-center text-sm font-medium text-blue-600 dark:text-blue-400">
-                          <Check className="w-4 h-4 mr-2 flex-shrink-0" />
-                          PIX ou Cartão de Crédito
-                        </li>
-                      )}
-                    </ul>
-                    <div className={`mt-4 flex items-center justify-center font-medium text-sm ${
-                      planKey === 'annual' ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/30 py-2 rounded-lg' : 'text-gray-600'
-                    }`}>
-                      {planKey === 'monthly' ? 'Pagar com PIX' : 'Escolher forma de pagamento'}
-                      <ArrowRight className="w-4 h-4 ml-1" />
-                    </div>
-                  </>
-                )
+                      <ul className="space-y-2 mb-4">
+                        {plan.features.map((feature, index) => (
+                          <li key={index} className="flex items-center text-sm">
+                            <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
+                            {feature}
+                          </li>
+                        ))}
+                        {planKey === 'annual' && (
+                          <li className="flex items-center text-sm font-medium text-blue-600 dark:text-blue-400">
+                            <Check className="w-4 h-4 mr-2 flex-shrink-0" />
+                            PIX ou Cartão de Crédito
+                          </li>
+                        )}
+                      </ul>
+                      <div className={`mt-4 flex items-center justify-center font-medium text-sm ${
+                        planKey === 'annual' ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/30 py-2 rounded-lg' : 'text-green-600 bg-green-50 dark:bg-green-950/30 py-2 rounded-lg'
+                      }`}>
+                        {planKey === 'monthly' ? 'Pagar com PIX' : 'Escolher forma de pagamento'}
+                        <ArrowRight className="w-4 h-4 ml-1" />
+                      </div>
+                    </>
+                  )
+                }
 
                 return (
                   <>
@@ -556,16 +583,39 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="flex items-baseline gap-1">
-                                  <span className={`text-2xl font-bold ${key === 'annual' ? 'text-blue-600' : 'text-gray-900 dark:text-white'}`}>
-                                    {formatPrice(plan.price * 100)}
-                                  </span>
-                                  <span className="text-sm text-gray-500">{plan.period}</span>
-                                </div>
-                                {plan.originalPrice && (
-                                  <p className="text-xs text-gray-500 mt-0.5 line-through">
-                                    {formatPrice(plan.originalPrice * 100)}/ano
-                                  </p>
+                                {key === 'monthly' ? (
+                                  <div>
+                                    <div className="flex items-baseline gap-1">
+                                      <span className="text-sm text-gray-400 line-through">{formatPrice(plan.price * 100)}</span>
+                                      <span className="text-gray-400 text-xs line-through">{plan.period}</span>
+                                    </div>
+                                    <div className="flex items-baseline gap-1">
+                                      <span className="text-2xl font-bold text-green-600">
+                                        {formatPrice(calculatePixDiscount(plan.price * 100) / 100 * 100)}
+                                      </span>
+                                      <span className="text-sm text-gray-500">{plan.period}</span>
+                                      <Badge className="ml-1 bg-green-100 text-green-700 border-green-200 text-xs font-bold">15% OFF</Badge>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="flex items-baseline gap-1">
+                                      <span className="text-2xl font-bold text-blue-600">{formatPrice(plan.price * 100)}</span>
+                                      <span className="text-sm text-gray-500">{plan.period}</span>
+                                    </div>
+                                    {plan.originalPrice && (
+                                      <p className="text-xs text-gray-500 mt-0.5 line-through">
+                                        {formatPrice(plan.originalPrice * 100)}/ano
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <Smartphone className="w-3 h-3 text-green-600" />
+                                      <span className="text-xs text-green-700 dark:text-green-400 font-semibold">
+                                        PIX: {formatPrice(calculatePixDiscount(plan.price * 100) / 100 * 100)}{plan.period}
+                                      </span>
+                                      <Badge className="bg-green-100 text-green-700 border-green-200 text-xs font-bold">15% OFF</Badge>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                               <ArrowRight className="w-5 h-5 text-gray-400 flex-shrink-0 mt-1" />
@@ -576,7 +626,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                           <Collapsible>
                             <CollapsibleTrigger
                               onClick={(e) => e.stopPropagation()}
-                              className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-t"
+                              className="group flex w-full cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-t"
                             >
                               Ver benefícios
                               <ChevronDown className="w-4 h-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
@@ -647,7 +697,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
                 <div className="mb-6 p-4 rounded-lg bg-white/80 dark:bg-gray-800/80 border border-blue-200 dark:border-blue-800">
                   <p className="text-center text-sm text-gray-700 dark:text-gray-300">
                     <span className="font-semibold text-blue-600 dark:text-blue-400">Plano Anual:</span> inclui tudo do mensal com desconto + opção de pagar com PIX ou Cartão. 
-                    <span className="font-semibold text-green-600 dark:text-green-400"> Plano Mensal:</span> pagamento somente via PIX (com 5% OFF).
+                    <span className="font-semibold text-green-600 dark:text-green-400"> Plano Mensal:</span> pagamento somente via PIX (com 15% OFF).
                   </p>
                 </div>
               )}

@@ -53,12 +53,12 @@ export function formatDiscount(discount: number): string {
 }
 
 /**
- * Calcula o desconto de 5% para pagamento via PIX
+ * Calcula o desconto de 15% para pagamento via PIX
  * @param priceInCents Preço em centavos
  * @returns Preço com desconto PIX em centavos
  */
 export function calculatePixDiscount(priceInCents: number): number {
-  return Math.round(priceInCents * 0.95) // 5% de desconto
+  return Math.round(priceInCents * 0.85) // 15% de desconto
 }
 
 /**
@@ -67,6 +67,6 @@ export function calculatePixDiscount(priceInCents: number): number {
  * @returns Valor do desconto em centavos
  */
 export function getPixDiscountAmount(priceInCents: number): number {
-  return Math.round(priceInCents * 0.05) // 5% de desconto
+  return Math.round(priceInCents * 0.15) // 15% de desconto
 }
 

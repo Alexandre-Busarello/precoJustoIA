@@ -350,6 +350,31 @@ export async function getUserById(userId: string): Promise<UserData | null> {
 }
 
 /**
+ * Vincula um parceiro a um usuário apenas se o campo ainda for null.
+ * Se já estiver preenchido, emite warning e não altera nada.
+ */
+export async function setUserPartner(userId: string, partnerId: string): Promise<void> {
+  const current = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { partnerId: true },
+  })
+
+  if (!current) return
+
+  if (current.partnerId !== null) {
+    console.warn(
+      `[partner] Tentativa de sobrescrever partnerId ignorada — userId: ${userId}, tentativePartnerId: ${partnerId}, currentPartnerId: ${current.partnerId}`
+    )
+    return
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { partnerId },
+  })
+}
+
+/**
  * Hook para uso no frontend (client-side)
  * Retorna dados do usuário da sessão NextAuth
  */

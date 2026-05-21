@@ -8,6 +8,7 @@ declare module "next-auth" {
       premiumExpiresAt?: string
       trialStartedAt?: string
       trialEndsAt?: string
+      partnerId?: string | null
     } & DefaultSession["user"]
   }
 
@@ -26,6 +27,7 @@ declare module "next-auth/jwt" {
     trialStartedAt?: string
     trialEndsAt?: string
     userId?: string
+    partnerId?: string | null
     exp?: number  // Timestamp de expiração
     iat?: number // Timestamp de criação
   }

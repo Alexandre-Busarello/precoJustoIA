@@ -95,8 +95,23 @@ model User {
   userSecurity                UserSecurity?
   benConversations            BenConversation[]
   benMemories                 BenMemory[]
+  partner                     Partner?                     @relation(fields: [partnerId], references: [id])
+  partnerId                   String?                      @map("partner_id")
 
+  @@index([partnerId])
   @@map("users")
+}
+
+model Partner {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  lpUrl       String   @map("lp_url")
+  checkoutUrl String   @map("checkout_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  users       User[]
+
+  @@map("partners")
 }
 
 model VerificationToken {

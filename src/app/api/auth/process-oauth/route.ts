@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const body = await request.json().catch(() => ({}))
+    const { partnerId } = body
+
     // Capturar IP do request
     const ip = RateLimitMiddleware.getClientIP(request)
 
@@ -25,7 +28,8 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         createdAt: true,
-        emailVerified: true
+        emailVerified: true,
+        partnerId: true,
       }
     })
 
@@ -42,6 +46,19 @@ export async function POST(request: NextRequest) {
     if (isNewUser) {
       await recordIPRegistration(ip, user.id)
       console.log(`[OAUTH] IP de registro registrado para novo usuário ${user.id}: ${ip}`)
+
+      // Vincular parceiro se novo usuário ainda não tem vinculação e partnerId foi enviado
+      if (partnerId && typeof partnerId === 'string' && dbUser.partnerId === null) {
+        const partner = await prisma.partner.findUnique({
+          where: { id: partnerId },
+          select: { id: true },
+        })
+        if (partner) {
+          const { setUserPartner } = await import('@/lib/user-service')
+          await setUserPartner(user.id, partner.id)
+          console.log(`[OAUTH] Parceiro ${partner.id} vinculado ao novo usuário OAuth ${user.id}`)
+        }
+      }
     }
 
     // Sempre atualizar IP de login
@@ -49,7 +66,7 @@ export async function POST(request: NextRequest) {
     await updateLastLoginIP(user.id, ip)
     console.log(`[OAUTH] IP de login atualizado para usuário ${user.id}: ${ip}`)
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       isNewUser,
       registrationIpRecorded: isNewUser

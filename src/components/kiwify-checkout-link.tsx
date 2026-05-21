@@ -6,6 +6,8 @@ import { ReactNode, useEffect, useState } from 'react'
 export interface BuildCheckoutUrlOptions {
   /** Email do usuário logado para pré-preencher no checkout */
   email?: string | null
+  /** URL de checkout do parceiro (sobrescreve a oferta padrão se fornecida) */
+  partnerCheckoutUrl?: string | null
 }
 
 /**
@@ -40,7 +42,18 @@ export function buildCheckoutUrl(
   return `${baseUrl}?${params.toString()}`
 }
 
-async function fetchCheckoutUrl(): Promise<string | null> {
+async function fetchPartnerCheckoutUrl(partnerId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/v1/partners/${partnerId}/checkout-url`, { cache: 'no-store' })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.checkoutUrl ?? null
+  } catch {
+    return null
+  }
+}
+
+async function fetchDefaultCheckoutUrl(): Promise<string | null> {
   try {
     const res = await fetch('/api/v1/pricing/offers', { cache: 'no-store' })
     if (!res.ok) return null
@@ -58,8 +71,17 @@ async function fetchCheckoutUrl(): Promise<string | null> {
   }
 }
 
+function readPartnerIdFromStorage(): string | null {
+  try {
+    return localStorage.getItem('partner_id')
+  } catch {
+    return null
+  }
+}
+
 /**
  * Hook para obter a URL do checkout com parâmetros UTM.
+ * Prioridade: parceiro do usuário logado > parceiro do localStorage > oferta padrão > env var.
  * Retorna string vazia enquanto carrega ou quando indisponível.
  */
 export function useCheckoutUrl(options?: BuildCheckoutUrlOptions): string {
@@ -67,8 +89,65 @@ export function useCheckoutUrl(options?: BuildCheckoutUrlOptions): string {
   const [baseUrl, setBaseUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchCheckoutUrl().then(setBaseUrl)
-  }, [])
+    // Se o componente já recebeu a URL do parceiro diretamente (via LP), usar ela
+    if (options?.partnerCheckoutUrl) {
+      setBaseUrl(options.partnerCheckoutUrl)
+      return
+    }
+
+    async function resolve() {
+      // Prioridade 1: localStorage (visitante que acessou uma LP de parceiro)
+      const storedPartnerId = readPartnerIdFromStorage()
+      if (storedPartnerId) {
+        const url = await fetchPartnerCheckoutUrl(storedPartnerId)
+        if (url) {
+          setBaseUrl(url)
+          return
+        }
+      }
+
+      // Prioridade 2: oferta padrão do banco → env var
+      const url = await fetchDefaultCheckoutUrl()
+      setBaseUrl(url)
+    }
+
+    resolve()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options?.partnerCheckoutUrl])
+
+  return buildCheckoutUrl(baseUrl, searchParams, options)
+}
+
+/**
+ * Hook para uso dentro de páginas autenticadas (dashboard).
+ * Ignora localStorage e usa o partnerId da sessão NextAuth diretamente.
+ */
+export function useAuthenticatedCheckoutUrl(
+  sessionPartnerId: string | null | undefined,
+  options?: BuildCheckoutUrlOptions
+): string {
+  const searchParams = useSearchParams()
+  const [baseUrl, setBaseUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function resolve() {
+      // Prioridade 1: parceiro do usuário logado (BD via sessão)
+      if (sessionPartnerId) {
+        const url = await fetchPartnerCheckoutUrl(sessionPartnerId)
+        if (url) {
+          setBaseUrl(url)
+          return
+        }
+      }
+
+      // Prioridade 2: oferta padrão do banco → env var
+      const url = await fetchDefaultCheckoutUrl()
+      setBaseUrl(url)
+    }
+
+    resolve()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionPartnerId])
 
   return buildCheckoutUrl(baseUrl, searchParams, options)
 }

@@ -1,9 +1,6 @@
-# Spec: Dynamic Checkout URL
+# Spec: Dynamic Checkout URL (Delta)
 
-## Purpose
-Define the dynamic resolution of checkout URLs from the database, replacing hardcoded environment variables. This enables multi-provider checkout support (Cakto, Stripe, etc.) by storing checkout URLs per offer and exposing them via the pricing offers API.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Resolver URL de checkout a partir da oferta ativa no banco
 O sistema SHALL buscar a URL de checkout considerando a seguinte ordem de prioridade: (1) `Partner.checkoutUrl` vinculado ao usuário logado via `User.partnerId` na sessão, (2) `Partner.checkoutUrl` vinculado ao `partner_id` no `localStorage` (visitante), (3) `checkout_url` da oferta ativa em `GET /api/v1/pricing/offers`, (4) variável de ambiente `NEXT_PUBLIC_CAKTO_PRODUCT_URL`. A URL final preserva os parâmetros UTM e email do usuário logado.
@@ -38,19 +35,6 @@ O sistema SHALL buscar a URL de checkout considerando a seguinte ordem de priori
 
 ---
 
-### Requirement: `GET /api/v1/pricing/offers` inclui `checkout_url` na resposta
-O sistema SHALL retornar o campo `checkout_url` (string ou null) para cada oferta no endpoint de listagem de ofertas, permitindo que o frontend determine o provedor de checkout sem lógica adicional.
-
-#### Scenario: Oferta Cakto retorna checkout_url
-- **WHEN** uma oferta com `checkout_url` definido é retornada por `GET /api/v1/pricing/offers`
-- **THEN** a resposta JSON inclui `checkout_url: "https://pay.cakto.com.br/..."` para essa oferta
-
-#### Scenario: Oferta Stripe retorna checkout_url nulo
-- **WHEN** uma oferta com `stripe_price_id` e sem `checkout_url` é retornada
-- **THEN** a resposta JSON inclui `checkout_url: null` para essa oferta
-
----
-
 ### Requirement: Hook `useCheckoutUrl` retorna URL dinâmica com estado de loading
 O sistema SHALL expor `useCheckoutUrl()` que: (1) lê `session.user.partnerId` se o usuário estiver logado, (2) caso contrário lê `localStorage.getItem("partner_id")`, (3) resolve a `checkoutUrl` do parceiro se aplicável, (4) faz fallback para a oferta padrão via `GET /api/v1/pricing/offers`. Retorna `{ url, loading }`.
 
@@ -65,12 +49,3 @@ O sistema SHALL expor `useCheckoutUrl()` que: (1) lê `session.user.partnerId` s
 #### Scenario: URL resolvida via oferta padrão (sem parceiro)
 - **WHEN** a API responde, o usuário não tem `partnerId` e não há marcador no `localStorage`
 - **THEN** retorna `{ url: "https://pay.cakto.com.br/XXXXX?email=...", loading: false }`
-
----
-
-### Requirement: Componente `CheckoutLink` compatível com usos existentes
-O sistema SHALL manter a interface do componente `CheckoutLink` e da função `buildCheckoutUrl` para não quebrar os pontos de uso existentes (`oferta-checkout-buttons.tsx`, `dynamic-cta-section.tsx`).
-
-#### Scenario: Renderização sem quebras de importação
-- **WHEN** componentes que importam `CheckoutLink` de `kiwify-checkout-link` renderizam
-- **THEN** o checkout link funciona normalmente sem erros de importação (re-export ou renomeação transparente)

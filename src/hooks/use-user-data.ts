@@ -231,12 +231,21 @@ interface ProcessOAuthResponse {
   registrationIpRecorded?: boolean;
 }
 
+function readPartnerIdFromStorage(): string | null {
+  try {
+    return localStorage.getItem('partner_id')
+  } catch {
+    return null
+  }
+}
+
 async function processOAuth(): Promise<ProcessOAuthResponse> {
   const response = await fetch('/api/auth/process-oauth', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ partnerId: readPartnerIdFromStorage() }),
   });
   if (!response.ok) {
     throw new Error('Failed to process OAuth');

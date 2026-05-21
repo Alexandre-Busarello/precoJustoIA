@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         
         // 🔒 SEGURANÇA: Whitelist explícita de campos permitidos
         // Extrair apenas os campos permitidos e ignorar qualquer campo extra
-        const { name, email, password, website, acquisition, ...rest } = body
+        const { name, email, password, website, acquisition, partnerId, ...rest } = body
         
         // 🍯 HONEYPOT: Verificar se campo honeypot foi preenchido (indica bot)
         // Estratégia do "Sucesso Falso": Retornar 200 OK para não alertar o criador do bot
@@ -439,6 +439,16 @@ export async function POST(request: NextRequest) {
         // Hash da senha
         const hashedPassword = await bcrypt.hash(password, 12)
 
+        // Validar partnerId se fornecido — deve existir na tabela partners
+        let resolvedPartnerId: string | null = null
+        if (partnerId && typeof partnerId === 'string') {
+          const partner = await prisma.partner.findUnique({
+            where: { id: partnerId },
+            select: { id: true },
+          })
+          resolvedPartnerId = partner ? partner.id : null
+        }
+
         // 🔒 SEGURANÇA: Criar usuário com campos explícitos apenas
         // isEarlyAdopter sempre false no registro - será atualizado via webhook após pagamento
         // Campos sensíveis são definidos apenas pelo servidor/webhooks
@@ -453,6 +463,7 @@ export async function POST(request: NextRequest) {
             lastLoginAt: new Date(),
             acquisition: acquisition || null, // Rastrear origem do cadastro
             emailVerified: null, // Será verificado via email
+            partnerId: resolvedPartnerId,
           }
         })
 

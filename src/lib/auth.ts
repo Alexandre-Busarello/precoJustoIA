@@ -325,7 +325,8 @@ export const authOptions: NextAuthOptions = {
                   emailVerified: true,
                   trialStartedAt: true,
                   trialEndsAt: true,
-                  subscriptionTier: true
+                  subscriptionTier: true,
+                  partnerId: true,
                 }
               })
               
@@ -339,9 +340,10 @@ export const authOptions: NextAuthOptions = {
 
             if (dbUser) {
               console.log(`[TRIAL] [JWT] Usuário encontrado no banco: ${dbUser.id} (${user.email}), emailVerified: ${dbUser.emailVerified}, trialStartedAt: ${dbUser.trialStartedAt}, subscriptionTier: ${dbUser.subscriptionTier}`)
-              
+
               // Usar o ID real do banco
               token.userId = dbUser.id
+              token.partnerId = dbUser.partnerId ?? null
               
               // Para OAuth (Google), marcar email como verificado se ainda não estiver
               if (isOAuth && !dbUser.emailVerified) {
@@ -458,14 +460,16 @@ export const authOptions: NextAuthOptions = {
               premiumExpiresAt: true,
               trialStartedAt: true,
               trialEndsAt: true,
+              partnerId: true,
             }
           })
-          
+
           if (updatedUser) {
             token.subscriptionTier = updatedUser.subscriptionTier
             token.premiumExpiresAt = updatedUser.premiumExpiresAt?.toISOString()
             token.trialStartedAt = updatedUser.trialStartedAt?.toISOString()
             token.trialEndsAt = updatedUser.trialEndsAt?.toISOString()
+            token.partnerId = updatedUser.partnerId ?? null
           }
         } catch (error) {
           console.error('Erro ao atualizar token JWT:', error)
@@ -502,7 +506,8 @@ export const authOptions: NextAuthOptions = {
       session.user.premiumExpiresAt = token.premiumExpiresAt as string
       session.user.trialStartedAt = token.trialStartedAt as string
       session.user.trialEndsAt = token.trialEndsAt as string
-      
+      session.user.partnerId = token.partnerId as string | null | undefined
+
       return session
     },
     async redirect({ url, baseUrl }) {

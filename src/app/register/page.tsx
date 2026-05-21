@@ -32,6 +32,14 @@ function RegisterForm() {
   // 🔒 SEGURANÇA: Removido isEarlyAdopter da URL - não deve ser controlado pelo cliente
   // Early Adopters são marcados apenas via webhooks após pagamento confirmado
 
+  function readPartnerIdFromStorage(): string | null {
+    try {
+      return localStorage.getItem('partner_id')
+    } catch {
+      return null
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -66,6 +74,7 @@ function RegisterForm() {
           password,
           website, // 🍯 HONEYPOT: Campo para detectar bots no backend
           acquisition, // Rastrear origem do cadastro
+          partnerId: readPartnerIdFromStorage(), // Atribuição de parceiro (imutável após salvo)
           // name removido - será coletado no onboarding ou perfil
           // isEarlyAdopter removido - será definido apenas via webhooks após pagamento
         }),

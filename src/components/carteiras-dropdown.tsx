@@ -22,7 +22,7 @@ export function CarteirasDropdown() {
       title: "Carteiras",
       href: "/carteira",
       icon: BarChart3,
-      description: "Gerencie suas carteiras de investimentos com acompanhamento em tempo real.",
+      description: "Gerencie suas carteiras de investimentos.",
       iconGradient: "bg-gradient-to-br from-blue-500 to-indigo-500",
       badge: "Premium",
     })

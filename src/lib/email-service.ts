@@ -1963,7 +1963,7 @@ export function generatePremiumExpirationEmailTemplate(userName?: string) {
                     <span class="benefit-icon">🔍</span>
                     <div class="benefit-content">
                       <div class="benefit-title">Monitoramento avançado de ativos</div>
-                      <div class="benefit-desc">Alertas personalizados e acompanhamento em tempo real</div>
+                      <div class="benefit-desc">Alertas personalizados e acompanhamento de ativos</div>
                     </div>
                   </li>
                   <li class="benefit-item">
@@ -2024,7 +2024,7 @@ Sua assinatura Premium expirou e você foi movido para o plano gratuito. Para co
 O que você está perdendo:
 • Acesso a todos os modelos de análise - 8 modelos Premium incluindo Graham, Fórmula Mágica, DCF e mais
 • Relatórios completos de IA - Análises detalhadas e insights inteligentes sobre seus investimentos
-• Monitoramento avançado de ativos - Alertas personalizados e acompanhamento em tempo real
+• Monitoramento avançado de ativos - Alertas personalizados e acompanhamento de ativos
 • Backtests e simulações - Teste suas estratégias com dados históricos reais
 • Suporte VIP - Atendimento prioritário e especializado
 

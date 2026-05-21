@@ -1,63 +1,76 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { ReactNode } from 'react'
-
-const KIWIFY_CHECKOUT_URL = "https://pay.kiwify.com.br/kV1DuGv"
+import { ReactNode, useEffect, useState } from 'react'
 
 export interface BuildCheckoutUrlOptions {
-  /** Email do usuário logado para pré-preencher no checkout Kiwify */
+  /** Email do usuário logado para pré-preencher no checkout */
   email?: string | null
 }
 
 /**
- * Constrói a URL do checkout da Kiwify com os parâmetros UTM da query string
+ * Constrói a URL do checkout com os parâmetros UTM da query string
  * e opcionalmente o email do usuário para pré-preencher o formulário
  */
 export function buildCheckoutUrl(
+  baseUrl: string | null,
   searchParams: URLSearchParams | null,
   options?: BuildCheckoutUrlOptions
 ): string {
+  if (!baseUrl) return ''
+
   const params = new URLSearchParams()
-  
-  // Email do usuário logado (pré-preenche o checkout Kiwify)
+
   if (options?.email) {
     params.set('email', options.email)
   }
-  
+
   if (searchParams) {
-    // Parâmetros UTM padrão
-    const utmSource = searchParams.get('utm_source')
-    const utmMedium = searchParams.get('utm_medium')
-    const utmCampaign = searchParams.get('utm_campaign')
-    const utmContent = searchParams.get('utm_content')
-    const utmTerm = searchParams.get('utm_term')
-    
-    if (utmSource) params.set('utm_source', utmSource)
-    if (utmMedium) params.set('utm_medium', utmMedium)
-    if (utmCampaign) params.set('utm_campaign', utmCampaign)
-    if (utmContent) params.set('utm_content', utmContent)
-    if (utmTerm) params.set('utm_term', utmTerm)
-    
-    const ref = searchParams.get('ref')
-    const source = searchParams.get('source')
-    if (ref) params.set('ref', ref)
-    if (source) params.set('source', source)
+    const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ref', 'source']
+    for (const key of utmKeys) {
+      const val = searchParams.get(key)
+      if (val) params.set(key, val)
+    }
   }
-  
+
   if (params.toString() === '') {
-    return KIWIFY_CHECKOUT_URL
+    return baseUrl
   }
-  
-  return `${KIWIFY_CHECKOUT_URL}?${params.toString()}`
+
+  return `${baseUrl}?${params.toString()}`
+}
+
+async function fetchCheckoutUrl(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/v1/pricing/offers', { cache: 'no-store' })
+    if (!res.ok) return null
+    const data = await res.json()
+    // Preferir oferta mensal → anual → especial com checkout_url definido
+    const url =
+      data.monthly?.checkout_url ??
+      data.annual?.checkout_url ??
+      data.special?.checkout_url ??
+      null
+    if (url) return url
+    return process.env.NEXT_PUBLIC_CAKTO_PRODUCT_URL ?? null
+  } catch {
+    return process.env.NEXT_PUBLIC_CAKTO_PRODUCT_URL ?? null
+  }
 }
 
 /**
- * Hook para obter a URL do checkout com parâmetros UTM
+ * Hook para obter a URL do checkout com parâmetros UTM.
+ * Retorna string vazia enquanto carrega ou quando indisponível.
  */
-export function useCheckoutUrl(): string {
+export function useCheckoutUrl(options?: BuildCheckoutUrlOptions): string {
   const searchParams = useSearchParams()
-  return buildCheckoutUrl(searchParams)
+  const [baseUrl, setBaseUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchCheckoutUrl().then(setBaseUrl)
+  }, [])
+
+  return buildCheckoutUrl(baseUrl, searchParams, options)
 }
 
 /**
@@ -66,12 +79,20 @@ export function useCheckoutUrl(): string {
 interface CheckoutLinkProps {
   children: ReactNode
   className?: string
-  [key: string]: any // Permite passar outras props do elemento <a>
+  [key: string]: any
 }
 
 export function CheckoutLink({ children, className, ...props }: CheckoutLinkProps) {
   const checkoutUrl = useCheckoutUrl()
-  
+
+  if (!checkoutUrl) {
+    return (
+      <span className={className} aria-disabled="true" {...props}>
+        {children}
+      </span>
+    )
+  }
+
   return (
     <a
       href={checkoutUrl}
@@ -84,8 +105,3 @@ export function CheckoutLink({ children, className, ...props }: CheckoutLinkProp
     </a>
   )
 }
-
-
-
-
-

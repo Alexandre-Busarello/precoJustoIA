@@ -10,7 +10,6 @@ import { isOfferExpired } from '@/lib/offer-utils'
  */
 export async function GET() {
   try {
-    // Buscar apenas ofertas ativas
     const offers = await prisma.offer.findMany({
       where: {
         is_active: true,
@@ -27,35 +26,36 @@ export async function GET() {
       )
     }
 
-    // Separar ofertas por tipo
     const monthlyOffer = offers.find((offer) => offer.type === 'MONTHLY')
     const annualOffer = offers.find((offer) => offer.type === 'ANNUAL')
     const specialOffer = offers.find((offer) => offer.type === 'SPECIAL')
 
-    // Formatar resposta
     const response: {
       monthly?: {
         id: string
         type: string
-        price_in_cents: number
-        price_formatted: string
+        price_in_cents: number | null
+        price_formatted: string | null
         stripe_price_id: string | null
+        checkout_url: string | null
         currency: string
       }
       annual?: {
         id: string
         type: string
-        price_in_cents: number
-        price_formatted: string
+        price_in_cents: number | null
+        price_formatted: string | null
         stripe_price_id: string | null
+        checkout_url: string | null
         currency: string
       }
       special?: {
         id: string
         type: string
-        price_in_cents: number
-        price_formatted: string
+        price_in_cents: number | null
+        price_formatted: string | null
         stripe_price_id: string | null
+        checkout_url: string | null
         currency: string
         expires_at: string | null
         premium_duration_days: number | null
@@ -68,8 +68,9 @@ export async function GET() {
         id: monthlyOffer.id,
         type: monthlyOffer.type,
         price_in_cents: monthlyOffer.price_in_cents,
-        price_formatted: formatPrice(monthlyOffer.price_in_cents),
+        price_formatted: monthlyOffer.price_in_cents != null ? formatPrice(monthlyOffer.price_in_cents) : null,
         stripe_price_id: monthlyOffer.stripe_price_id,
+        checkout_url: monthlyOffer.checkout_url,
         currency: monthlyOffer.currency,
       }
     }
@@ -79,8 +80,9 @@ export async function GET() {
         id: annualOffer.id,
         type: annualOffer.type,
         price_in_cents: annualOffer.price_in_cents,
-        price_formatted: formatPrice(annualOffer.price_in_cents),
+        price_formatted: annualOffer.price_in_cents != null ? formatPrice(annualOffer.price_in_cents) : null,
         stripe_price_id: annualOffer.stripe_price_id,
+        checkout_url: annualOffer.checkout_url,
         currency: annualOffer.currency,
       }
     }
@@ -91,8 +93,9 @@ export async function GET() {
         id: specialOffer.id,
         type: specialOffer.type,
         price_in_cents: specialOffer.price_in_cents,
-        price_formatted: formatPrice(specialOffer.price_in_cents),
+        price_formatted: specialOffer.price_in_cents != null ? formatPrice(specialOffer.price_in_cents) : null,
         stripe_price_id: specialOffer.stripe_price_id,
+        checkout_url: specialOffer.checkout_url,
         currency: specialOffer.currency,
         expires_at: specialOffer.expires_at?.toISOString() || null,
         premium_duration_days: specialOffer.premium_duration_days,
@@ -109,4 +112,3 @@ export async function GET() {
     )
   }
 }
-

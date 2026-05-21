@@ -605,15 +605,15 @@ export class WebhookProcessor {
     
     // Comparar com tolerância de 2 centavos (para arredondamentos)
     // O valor recebido já tem desconto PIX aplicado (95% do preço original)
-    if (specialOffer && Math.abs(amountInCents - Math.round(specialOffer.price_in_cents * 0.95)) <= 2) {
+    if (specialOffer?.price_in_cents != null && Math.abs(amountInCents - Math.round(specialOffer.price_in_cents * 0.95)) <= 2) {
       planDuration = specialOffer.premium_duration_days || 365
       planType = 'special'
       isSpecialOffer = true
       console.log(`✅ Oferta especial identificada: ${planDuration} dias`)
-    } else if (monthlyOffer && Math.abs(amountInCents - Math.round(monthlyOffer.price_in_cents * 0.95)) <= 2) {
+    } else if (monthlyOffer?.price_in_cents != null && Math.abs(amountInCents - Math.round(monthlyOffer.price_in_cents * 0.95)) <= 2) {
       planDuration = 30
       planType = 'monthly'
-    } else if (annualOffer && Math.abs(amountInCents - Math.round(annualOffer.price_in_cents * 0.95)) <= 2) {
+    } else if (annualOffer?.price_in_cents != null && Math.abs(amountInCents - Math.round(annualOffer.price_in_cents * 0.95)) <= 2) {
       planDuration = 365
       planType = 'annual'
     } else {
@@ -995,6 +995,54 @@ export class WebhookProcessor {
       return true
     } catch (error) {
       console.error('❌ Error removing premium from user:', error)
+      return false
+    }
+  }
+
+  static async processCaktoEvent(webhookEvent: { eventType: string; rawData: any }): Promise<boolean> {
+    const { eventType, rawData } = webhookEvent
+    const {
+      calcCaktoExpiration,
+      createOrUpdateCaktoUser,
+      removePremiumFromUser: caktoRemovePremium,
+      sendCaktoWelcomeEmail,
+    } = await import('@/lib/cakto-user-service')
+
+    try {
+      const data = rawData?.data || {}
+      const email: string | undefined = data.customer?.email
+
+      switch (eventType) {
+        case 'purchase_approved': {
+          if (data.status !== 'paid') return true
+          if (!email) throw new Error('Email ausente em purchase_approved')
+          const expirationDate = calcCaktoExpiration({ customer: data.customer, subscription: data.subscription, subscription_period: data.subscription_period })
+          const { isNewUser, user } = await createOrUpdateCaktoUser(email, data.customer?.name, data.subscription?.id, data.id, expirationDate)
+          const wasFreeBefore = !isNewUser && user.subscriptionTier !== 'PREMIUM'
+          if (isNewUser || wasFreeBefore) await sendCaktoWelcomeEmail(email, data.customer?.name)
+          break
+        }
+        case 'refund':
+        case 'chargeback':
+        case 'subscription_canceled':
+          if (email) await caktoRemovePremium(email)
+          break
+        case 'subscription_renewed': {
+          if (!email) throw new Error('Email ausente em subscription_renewed')
+          const expirationDate = calcCaktoExpiration({ customer: data.customer, subscription: data.subscription, subscription_period: data.subscription_period })
+          await createOrUpdateCaktoUser(email, undefined, undefined, undefined, expirationDate)
+          break
+        }
+        case 'subscription_renewal_refused':
+          console.log('ℹ️ Cakto subscription_renewal_refused — sem ação')
+          break
+        default:
+          console.log(`⚠️ Evento Cakto desconhecido: ${eventType}`)
+      }
+
+      return true
+    } catch (error) {
+      console.error(`❌ Erro ao processar evento Cakto (${eventType}):`, error)
       return false
     }
   }

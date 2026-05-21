@@ -137,6 +137,11 @@ export async function GET(request: NextRequest) {
             eventType: event.eventType,
             rawData: event.rawData,
           })
+        } else if (event.provider === 'CAKTO') {
+          success = await WebhookProcessor.processCaktoEvent({
+            eventType: event.eventType,
+            rawData: event.rawData,
+          })
         } else {
           console.error(`❌ Provider desconhecido: ${event.provider}`)
           success = false

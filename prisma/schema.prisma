@@ -53,6 +53,8 @@ model User {
   stripeSubscriptionId        String?                      @unique @map("stripe_subscription_id")
   kiwifyId                    String?                      @unique @map("kiwify_id")
   kiwifyOrderId               String?                      @map("kiwify_order_id")
+  caktoId                     String?                      @unique @map("cakto_id")
+  caktoOrderId                String?                      @map("cakto_order_id")
   isAdmin                     Boolean                      @default(false) @map("is_admin")
   earlyAdopterDate            DateTime?                    @map("early_adopter_date")
   inactivatedAt               DateTime?                    @map("inactivated_at")
@@ -1128,8 +1130,9 @@ model PlBolsaHistory {
 model Offer {
   id                    String    @id
   type                  OfferType
-  price_in_cents        Int       @map("price_in_cents")
+  price_in_cents        Int?      @map("price_in_cents")
   stripe_price_id       String?   @map("stripe_price_id")
+  checkout_url          String?   @map("checkout_url")
   is_active             Boolean   @default(true) @map("is_active")
   currency              String    @default("BRL")
   created_at            DateTime  @default(now()) @map("created_at")
@@ -1697,6 +1700,7 @@ enum EmailType {
   CUSTOM_TRIGGER_REPORT
   PREMIUM_EXPIRED
   KIWIFY_WELCOME
+  CAKTO_WELCOME
 }
 
 enum EmailStatus {
@@ -1726,6 +1730,7 @@ enum WebhookProvider {
   STRIPE
   MERCADOPAGO
   KIWIFY
+  CAKTO
 }
 
 enum WebhookEventStatus {

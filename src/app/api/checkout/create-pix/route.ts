@@ -53,6 +53,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (offer.price_in_cents == null) {
+      return NextResponse.json(
+        { error: 'Esta oferta não está disponível para pagamento via PIX' },
+        { status: 400 }
+      )
+    }
+
     // Validar se oferta especial não está expirada
     if (planType === 'special' && isOfferExpired(offer)) {
       return NextResponse.json(
@@ -60,10 +67,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    
+
     // Para ofertas especiais, não aplicar desconto PIX (já é uma oferta com desconto)
     // Para outras ofertas, aplicar desconto de 5% para PIX
-    const amount = planType === 'special' 
+    const amount = planType === 'special'
       ? offer.price_in_cents / 100
       : Math.round(offer.price_in_cents * 0.95) / 100
 

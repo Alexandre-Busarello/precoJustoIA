@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { OptimizedPixPayment } from './optimized-pix-payment'
-import { buildCheckoutUrl } from './kiwify-checkout-link'
+import { useCheckoutUrl } from './kiwify-checkout-link'
 import { usePricing } from '@/hooks/use-pricing'
 import { formatPrice, calculateDiscount, calculatePixDiscount, getPixDiscountAmount } from '@/lib/price-utils'
 import { isOfferActiveForPurchase } from '@/lib/offer-utils'
@@ -39,6 +39,7 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   const { status, data: session } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const checkoutUrl = useCheckoutUrl({ email: session?.user?.email })
   const { monthly, annual, special, isLoading: isLoadingPricing } = usePricing()
   
   const [step, setStep] = useState<'plan' | 'payment'>('plan')
@@ -155,11 +156,9 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   }
 
   const handleMethodSelect = (method: PaymentMethod) => {
-    // Cartão: apenas para plano anual - redireciona para Kiwify
+    // Cartão: redireciona para o checkout externo (Cakto)
     if (method === 'card' && selectedPlan === 'annual') {
-      const userEmail = session?.user?.email ?? null
-      const kiwifyUrl = buildCheckoutUrl(searchParams, { email: userEmail })
-      window.location.href = kiwifyUrl
+      if (checkoutUrl) window.location.href = checkoutUrl
       return
     }
     setSelectedMethod(method)

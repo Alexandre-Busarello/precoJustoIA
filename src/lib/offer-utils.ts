@@ -3,9 +3,10 @@ import { prisma } from '@/lib/prisma'
 export interface SpecialOffer {
   id: string
   type: 'SPECIAL'
-  price_in_cents: number
+  price_in_cents: number | null
   price_formatted: string
   stripe_price_id: string | null
+  checkout_url: string | null
   currency: string
   expires_at: Date | null
   premium_duration_days: number | null
@@ -37,6 +38,7 @@ export async function getActiveSpecialOffer(): Promise<SpecialOffer | null> {
       price_in_cents: offer.price_in_cents,
       price_formatted: '', // Será formatado no frontend
       stripe_price_id: offer.stripe_price_id,
+      checkout_url: offer.checkout_url,
       currency: offer.currency,
       expires_at: offer.expires_at,
       premium_duration_days: offer.premium_duration_days,

@@ -616,7 +616,7 @@ ${period === 'MONTHLY' || period === 'ANNUAL' ? '- Para projeções de médio/lo
 
 Retorne APENAS o JSON, sem markdown ou texto adicional.`
 
-    const model = 'gemini-2.5-flash-lite'
+    const model = 'gemini-flash-lite-latest'
     const tools = [{ googleSearch: {} }]
 
     // Função helper para chamar Gemini com retry

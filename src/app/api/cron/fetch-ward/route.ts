@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { main as fetchWardData } from '../../../../../scripts/fetch-data-ward';
 
 // Configurar timeout para 60 segundos (máximo do plano hobby da Vercel)
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {

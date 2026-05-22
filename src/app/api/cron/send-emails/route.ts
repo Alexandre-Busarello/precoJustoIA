@@ -17,7 +17,7 @@ import {
 } from '@/lib/email-service'
 
 // Configurar timeout para 60 segundos (máximo do plano hobby da Vercel)
-export const maxDuration = 60
+export const maxDuration = 300
 
 /**
  * Cron Job para Envio de Emails

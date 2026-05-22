@@ -273,7 +273,7 @@ export class HistoricalDataService {
       return result.quotes
         .filter((q: any) => q.close !== null && q.close > 0)
         .map((q: any) => ({
-          date: q.date,
+          date: q.date instanceof Date ? q.date : new Date(q.date),
           open: q.open || q.close,
           high: q.high || q.close,
           low: q.low || q.close,
@@ -449,7 +449,8 @@ export class HistoricalDataService {
 
       // Verificar se excede o limite realista
       if (Math.abs(field.value) > MAX_REALISTIC_PRICE) {
-        console.warn(`⚠️ [ANOMALY] ${ticker || 'Unknown'} - ${field.name} anômalo em ${point.date.toISOString().split('T')[0]}: ${field.value.toFixed(4)} (ignorando registro)`);
+        const dateStr = (point.date instanceof Date ? point.date : new Date(point.date as unknown as string)).toISOString().split('T')[0];
+        console.warn(`⚠️ [ANOMALY] ${ticker || 'Unknown'} - ${field.name} anômalo em ${dateStr}: ${field.value.toFixed(4)} (ignorando registro)`);
         return true; // Registro tem anomalia
       }
     }
@@ -500,10 +501,16 @@ export class HistoricalDataService {
         }
       });
 
-      const existingDateSet = new Set(existingDates.map(d => d.date.getTime()));
-      
+      const existingDateSet = new Set(existingDates.map(d => {
+        const dt = d.date instanceof Date ? d.date : new Date(d.date as unknown as string);
+        return dt.getTime();
+      }));
+
       // Filtrar apenas dados que não existem
-      const newData = data.filter(point => !existingDateSet.has(point.date.getTime()));
+      const newData = data.filter(point => {
+        const dt = point.date instanceof Date ? point.date : new Date(point.date as unknown as string);
+        return !existingDateSet.has(dt.getTime());
+      });
 
       if (newData.length === 0) {
         console.log(`ℹ️ [DB] Todos os ${data.length} pontos já existem, nada a salvar`);

@@ -29,7 +29,7 @@ import {
 } from '@/lib/ibov-projection-helpers'
 import { getTodayInBrazil } from '@/lib/market-status'
 
-export const maxDuration = 60 // Limite da Vercel
+export const maxDuration = 300 // Limite da Vercel
 
 /**
  * Verifica se é feriado nacional do Brasil
@@ -906,7 +906,7 @@ Retorne APENAS o JSON, sem markdown ou texto adicional.`
           
           if (useStream) {
             const response = await ai.models.generateContentStream({
-              model: 'gemini-2.5-flash-lite',
+              model: 'gemini-flash-lite-latest',
               config: {
                 tools: [{ googleSearch: {} }],
                 thinkingConfig: {
@@ -945,7 +945,7 @@ Retorne APENAS o JSON, sem markdown ou texto adicional.`
             // Para projeções anuais, usar generateContent (não-stream) para maior confiabilidade
             console.log(`[${period}] [${stepName}] Usando generateContent (não-stream) devido ao tamanho do prompt`)
             const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash-lite',
+              model: 'gemini-flash-lite-latest',
               config: {
                 tools: [{ googleSearch: {} }],
                 thinkingConfig: {

@@ -343,7 +343,7 @@ Saída: {
 
 Processe a entrada do usuário e retorne o JSON:`;
 
-    const model = "gemini-2.5-flash-lite";
+    const model = "gemini-flash-lite-latest";
     const contents = [
       {
         role: "user",

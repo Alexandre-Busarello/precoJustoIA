@@ -4,17 +4,31 @@ import { prisma } from '@/lib/prisma'
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://precojusto.ai'
 
-  const fiis = await prisma.company.findMany({
-    where: { assetType: 'FII', isActive: true },
-    select: { ticker: true, updatedAt: true },
-    orderBy: { ticker: 'asc' },
-  })
+  const [fiis, etfs] = await Promise.all([
+    prisma.company.findMany({
+      where: { assetType: 'FII', isActive: true },
+      select: { ticker: true, updatedAt: true },
+      orderBy: { ticker: 'asc' },
+    }),
+    prisma.company.findMany({
+      where: { assetType: 'ETF', isActive: true },
+      select: { ticker: true, updatedAt: true },
+      orderBy: { ticker: 'asc' },
+    }),
+  ])
 
   const fiiEntries: MetadataRoute.Sitemap = fiis.map((c) => ({
     url: `${baseUrl}/fii/${c.ticker.toLowerCase()}`,
     lastModified: c.updatedAt ?? new Date(),
     changeFrequency: 'weekly' as const,
     priority: 0.75,
+  }))
+
+  const etfEntries: MetadataRoute.Sitemap = etfs.map((c) => ({
+    url: `${baseUrl}/etf/${c.ticker.toLowerCase()}`,
+    lastModified: c.updatedAt ?? new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.70,
   }))
 
   const staticEntries: MetadataRoute.Sitemap = [
@@ -164,5 +178,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ]
 
-  return [...staticEntries, ...fiiEntries]
+  return [...staticEntries, ...fiiEntries, ...etfEntries]
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { main as fetchFiiData } from "../../../../../scripts/fetch-data-fundamentus-fii";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {

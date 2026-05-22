@@ -194,7 +194,7 @@ async function fetchWebSearchIndicator(
     })
 
     const response = await ai.models.generateContentStream({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-flash-lite-latest',
       config: {
         tools: [{ googleSearch: {} }],
         thinkingConfig: {

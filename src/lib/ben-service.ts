@@ -20,7 +20,7 @@ async function webSearch(query: string): Promise<any> {
     })
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-flash-lite-latest',
       config: {
         tools: [{ googleSearch: {} }],
         thinkingConfig: {
@@ -314,7 +314,7 @@ Mensagem do usuário: "${message}"
 IMPORTANTE: Retorne APENAS o JSON, sem markdown ou texto adicional.`
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-flash-lite-latest',
       config: {
         thinkingConfig: {
           thinkingBudget: 0
@@ -424,7 +424,7 @@ ${assistantResponse.substring(0, 500)}${assistantResponse.length > 500 ? '...' :
 Retorne APENAS o título, sem aspas, sem markdown, sem texto adicional.`
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-flash-lite-latest',
       config: {
         thinkingConfig: {
           thinkingBudget: 0
@@ -1119,7 +1119,7 @@ export async function* processBenMessageStream(
       apiKey: process.env.GEMINI_API_KEY!
     })
 
-    const model = 'gemini-2.5-flash-lite'
+    const model = 'gemini-flash-lite-latest'
 
     // Construir function declarations a partir do schema
     const functionDeclarations = buildFunctionDeclarations()
@@ -1335,7 +1335,7 @@ export async function processBenMessage(
       apiKey: process.env.GEMINI_API_KEY!
     })
 
-    const model = 'gemini-2.5-flash-lite'
+    const model = 'gemini-flash-lite-latest'
 
     // Definir function declarations (mesmas do streaming)
     const functionDeclarations = [

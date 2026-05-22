@@ -24,7 +24,7 @@ import {
 } from '@/lib/company-flag-reevaluation-service';
 import { FlagReevaluationStep } from '@prisma/client';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();

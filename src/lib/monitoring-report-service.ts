@@ -428,7 +428,7 @@ ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
         apiKey: process.env.GEMINI_API_KEY,
       });
 
-      const model = 'gemini-2.5-flash-lite';
+      const model = 'gemini-flash-lite-latest';
       const contents = [
         {
           role: 'user',

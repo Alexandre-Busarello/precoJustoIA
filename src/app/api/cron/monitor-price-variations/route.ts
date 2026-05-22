@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { checkPriceVariations } from '@/lib/price-variation-service';
 import { addToQueue } from '@/lib/ai-report-queue-service';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();

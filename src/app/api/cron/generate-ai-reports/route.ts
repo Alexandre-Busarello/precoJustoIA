@@ -27,7 +27,7 @@ import { AssetMonitoringService } from '@/lib/asset-monitoring-service';
 import { shouldSendReportType } from '@/lib/report-preferences-service';
 import { getUserById } from '@/lib/user-service';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();

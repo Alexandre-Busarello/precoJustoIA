@@ -21,7 +21,7 @@ import { runScreening, compareComposition, shouldRebalance, updateComposition, e
 import { cache } from '@/lib/cache-service';
 import { getTodayInBrazil } from '@/lib/market-status';
 
-export const maxDuration = 60; // Limite da Vercel
+export const maxDuration = 300; // Limite da Vercel
 
 // Checkpoint para rastrear progresso
 interface Checkpoint {

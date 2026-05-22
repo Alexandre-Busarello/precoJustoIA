@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getMonitorsByPriority, evaluateTrigger, createQueueEntry } from '@/lib/custom-trigger-service';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();

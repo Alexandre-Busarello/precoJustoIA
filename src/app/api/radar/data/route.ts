@@ -62,6 +62,17 @@ export async function POST(request: NextRequest) {
                 isPapel: true,
               },
             },
+            etfData: {
+              select: {
+                etfScore: true,
+                netExpenseRatio: true,
+                return1y: true,
+                return3y: true,
+                netAssets: true,
+                aiAnalysisScore: true,
+                etfClass: true,
+              },
+            },
           },
         });
 
@@ -80,6 +91,67 @@ export async function POST(request: NextRequest) {
           const n = Number(v);
           return Number.isFinite(n) ? n : null;
         };
+
+        if (companyRow.assetType === 'ETF') {
+          const etf = companyRow.etfData;
+          const currentPrice = toNum(updatedPrice?.price) ?? 0;
+          const etfScore = toNum(etf?.etfScore);
+          const overallStatus: 'green' | 'yellow' | 'red' =
+            etfScore !== null ? getRadarStatusColor(etfScore) : 'yellow';
+
+          const technicalAnalysis = await getOrCalculateDailyTechnicalAnalysis(ticker);
+
+          // ETFs usam o score de análise IA (não YouTube)
+          const aiAnalysisScore = toNum(etf?.aiAnalysisScore);
+
+          const fairEntryPrice = technicalAnalysis?.aiFairEntryPrice ?? null;
+          const upside =
+            fairEntryPrice !== null && currentPrice > 0
+              ? ((fairEntryPrice - currentPrice) / currentPrice) * 100
+              : null;
+
+          const naStatus = { status: 'yellow' as const, label: 'N/A' };
+          const technicalStatus = technicalAnalysis
+            ? getTechnicalEntryStatus(technicalAnalysis, currentPrice, etfScore)
+            : naStatus;
+          const aiScoreStatus: 'green' | 'yellow' | 'red' =
+            aiAnalysisScore === null ? 'yellow' : aiAnalysisScore >= 70 ? 'green' : aiAnalysisScore >= 50 ? 'yellow' : 'red';
+          const valuationStatus = technicalAnalysis ? getValuationStatus(upside) : naStatus;
+
+          return {
+            ticker: companyRow.ticker,
+            name: companyRow.name,
+            assetType: 'ETF' as const,
+            sector: companyRow.sector,
+            currentPrice,
+            logoUrl: companyRow.logoUrl,
+            overallScore: etfScore,
+            overallStatus,
+            etfProfile: {
+              etfClass: etf?.etfClass ?? null,
+              netExpenseRatio: toNum(etf?.netExpenseRatio),
+            },
+            strategies: {
+              approved: [],
+              all: { kind: 'etf' as const },
+            },
+            valuation: {
+              upside,
+              status: valuationStatus.status,
+              label: valuationStatus.label,
+            },
+            technical: {
+              status: technicalStatus.status,
+              label: technicalStatus.label,
+              fairEntryPrice,
+            },
+            sentiment: {
+              score: aiAnalysisScore,
+              status: aiScoreStatus,
+              label: aiAnalysisScore !== null ? `${aiAnalysisScore.toFixed(0)}/100` : 'N/A',
+            },
+          };
+        }
 
         if (companyRow.assetType === 'FII') {
           const fiiScore = await getCachedFiiOverallScore(t);

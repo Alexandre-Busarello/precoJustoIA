@@ -5,366 +5,279 @@ import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
-import { CompanySizeBadge } from '@/components/company-size-badge'
-import StrategicAnalysisClient from '@/components/strategic-analysis-client'
-import HeaderScoreWrapper from '@/components/header-score-wrapper'
-import AIAnalysisDual from '@/components/ai-analysis-dual'
-import FinancialIndicators from '@/components/financial-indicators'
-import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
-import TechnicalAnalysisSection from '@/components/technical-analysis-section'
-import MarketSentimentSection from '@/components/market-sentiment-section'
-import { AddToBacktestButton } from '@/components/add-to-backtest-button'
-import AssetSubscriptionButton from '@/components/asset-subscription-button'
-import { RelatedCompanies } from '@/components/related-companies'
+import { EtfHeaderScore } from '@/components/etf-header-score'
+import { InfoTooltip } from '@/components/info-tooltip'
 import { Footer } from '@/components/footer'
-import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
-import { cache } from '@/lib/cache-service'
-import Link from 'next/link'
 import { BenChatFAB } from '@/components/ben-chat-fab'
+import { cache } from '@/lib/cache-service'
+import { ensureTodayPrice } from '@/lib/quote-service'
+import { getOrCalculateDailyTechnicalAnalysis } from '@/lib/technical-analysis-service'
+import Link from 'next/link'
 
-// Shadcn UI Components
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-
-// Lucide Icons
-import {
-  Building2,
-  PieChart,
-  Eye,
-  User,
-  GitCompare,
-  ChevronDown,
-  Info,
-  FileText,
-  TrendingUp
-} from 'lucide-react'
+import { Crown, Eye, TrendingUp, Info, AlertTriangle, Sparkles, BarChart3 } from 'lucide-react'
 
 interface PageProps {
-  params: {
-    ticker: string
-  }
+  params: { ticker: string }
 }
 
-interface CompetitorData {
-  ticker: string;
-  name: string;
-  sector: string | null;
-  logoUrl?: string | null;
-  marketCap?: any;
-}
-
-// Tipo para valores do Prisma que podem ser Decimal
 type PrismaDecimal = { toNumber: () => number } | number | string | null | undefined
 
-// Função para converter Decimal para number
-function toNumber(value: PrismaDecimal | Date | string | null): number | null {
+function toNumber(value: PrismaDecimal | Date | null): number | null {
   if (value === null || value === undefined) return null
   if (typeof value === 'number') return value
   if (typeof value === 'string') return parseFloat(value)
   if (value instanceof Date) return value.getTime()
-  if (value && typeof value === 'object' && 'toNumber' in value) {
-    return value.toNumber()
-  }
+  if (typeof value === 'object' && 'toNumber' in value) return value.toNumber()
   return parseFloat(String(value))
 }
 
-// Funções de formatação
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return 'N/A'
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(value)
+function fmtPct(v: number | null | undefined, decimals = 1): string {
+  if (v === null || v === undefined) return '—'
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}${(v * 100).toFixed(decimals)}%`
 }
 
-// Cache
-const METADATA_CACHE_TTL = 60 * 60 // 60 minutos em segundos
+function fmtBrl(v: number | null | undefined): string {
+  if (v === null || v === undefined) return '—'
+  if (v >= 1e9) return `R$ ${(v / 1e9).toFixed(1)}B`
+  if (v >= 1e6) return `R$ ${(v / 1e6).toFixed(0)}M`
+  return `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+}
 
-// Gerar metadata dinâmico para SEO
+function fmtPrice(v: number | null): string {
+  if (v === null) return '—'
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+}
+
+const METADATA_TTL = 60 * 60
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const resolvedParams = await params
-  const tickerParam = resolvedParams.ticker
+  const { ticker: tickerParam } = await params
   const ticker = tickerParam.toUpperCase()
-  
-  // Verificar cache primeiro
   const cacheKey = `metadata-etf-${ticker}`
-  const cached = await cache.get<any>(cacheKey, {
-    prefix: 'companies',
-    ttl: METADATA_CACHE_TTL
-  })
-  
-  if (cached) {
-    return cached
-  }
-  
+  const cached = await cache.get<Metadata>(cacheKey, { prefix: 'companies', ttl: METADATA_TTL })
+  if (cached) return cached
+
   try {
     const company = await prisma.company.findUnique({
       where: { ticker },
       select: {
         name: true,
         assetType: true,
-        sector: true,
-        description: true,
         logoUrl: true,
-        website: true,
-        city: true,
-        state: true,
-        fullTimeEmployees: true,
-        industry: true,
-        address: true,
-        financialData: {
-          select: {
-            pl: true,
-            roe: true,
-            marketCap: true,
-            receitaTotal: true,
-            updatedAt: true,
-            dy: true
-          },
-          orderBy: { year: 'desc' },
-          take: 1
-        },
-        dailyQuotes: {
-          select: {
-            price: true
-          },
-          orderBy: { date: 'desc' },
-          take: 1
-        },
         etfData: {
           select: {
-            netAssets: true,
             netExpenseRatio: true,
-            dividendYield: true,
-            ytdReturn: true,
-            category: true,
-            totalAssets: true
-          }
-        }
-      }
+            benchmarkIndex: true,
+            return1y: true,
+            etfScore: true,
+          },
+        },
+      },
     })
 
-    if (!company) {
-      return {
-        title: `${ticker} - ETF Não Encontrado | Análise Fácil`,
-        description: `O ETF ${ticker} não foi encontrado em nossa base de dados de análise de Exchange Traded Funds.`
-      }
+    if (!company || company.assetType !== 'ETF') {
+      return { title: `${ticker} — ETF | Preço Justo AI` }
     }
 
-    // Verificar se é realmente um ETF, senão redirecionar
-    if (company.assetType !== 'ETF') {
-      return {
-        title: `${ticker} - Redirecionando...`,
-        description: `Redirecionando para a página correta do ativo ${ticker}.`
-      }
-    }
+    const taxa = company.etfData?.netExpenseRatio
+      ? `${(toNumber(company.etfData.netExpenseRatio)! * 100).toFixed(2)}% a.a.`
+      : null
+    const bench = company.etfData?.benchmarkIndex ?? null
+    const score = company.etfData?.etfScore ?? null
 
-    const latestFinancials = company.financialData?.[0]
-    const currentPrice = toNumber(company.dailyQuotes?.[0]?.price) ?? 0
-    const expenseRatio = company.etfData?.netExpenseRatio ? (toNumber(company.etfData.netExpenseRatio) ?? 0) * 100 : null
-    const ytdReturn = company.etfData?.ytdReturn ? (toNumber(company.etfData.ytdReturn) ?? 0) * 100 : null
-    
-    const title = `${ticker} - ${company.name} | Análise Completa de ETF - Preço Justo AI`
-    
-    const baseDescription = `Análise completa do ETF ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}, Taxa de Administração: ${expenseRatio ? expenseRatio.toFixed(2) + '%' : 'N/A'}, Retorno YTD: ${ytdReturn ? ytdReturn.toFixed(2) + '%' : 'N/A'}. Categoria ${company.etfData?.category || 'ETF'}.`
-    
-    const companyInfo = company.description 
-      ? ` ${company.description.substring(0, 100)}...` 
-      : ''
-    
-    const description = `${baseDescription}${companyInfo} Análise com IA, indicadores financeiros e estratégias de investimento em ETFs.`
+    const title = `${ticker} — ${company.name} | ETF | Preço Justo AI`
+    const description = [
+      `Análise completa do ETF ${company.name} (${ticker}).`,
+      taxa ? `Taxa ${taxa}.` : null,
+      bench ? `Benchmark: ${bench}.` : null,
+      score ? `Score Preço Justo: ${score}/100.` : null,
+      'Retornos históricos, holdings e análise quantitativa na plataforma.',
+    ]
+      .filter(Boolean)
+      .join(' ')
 
-    const metadata = {
+    const metadata: Metadata = {
       title,
       description,
-      keywords: `${ticker}, ${company.name}, ETF, Exchange Traded Fund, análise ETF, ${ticker} ETF, fundos de índice, B3, bovespa, investimentos, ${company.etfData?.category}, análise de ETFs, valuation ETF`,
+      keywords: `${ticker}, ${company.name}, ETF, fundo de índice, B3, ${bench ?? ''}, análise ETF`,
       openGraph: {
         title,
         description,
         type: 'article',
         url: `/etf/${tickerParam.toLowerCase()}`,
         siteName: 'Preço Justo AI',
-        images: company.logoUrl ? [{ 
-          url: company.logoUrl, 
-          alt: `Logo ${company.name}`,
-          width: 400,
-          height: 400
-        }] : undefined,
+        images: company.logoUrl ? [{ url: company.logoUrl, alt: `Logo ${company.name}` }] : undefined,
       },
-      twitter: {
-        card: 'summary_large_image',
-        title,
-        description,
-        images: company.logoUrl ? [company.logoUrl] : undefined,
-        creator: '@PrecoJustoAI',
-        site: '@PrecoJustoAI'
-      },
-      alternates: {
-        canonical: `/etf/${tickerParam.toLowerCase()}`,
-      },
-      robots: {
-        index: true,
-        follow: true,
-        googleBot: {
-          index: true,
-          follow: true,
-          'max-video-preview': -1,
-          'max-image-preview': 'large' as const,
-          'max-snippet': -1,
-        },
-      },
-      other: {
-        'article:section': 'Análise de ETFs',
-        'article:tag': `${ticker}, ${company.name}, ETF, Exchange Traded Fund, análise ETF`,
-        'article:author': 'Preço Justo AI',
-        'article:publisher': 'Preço Justo AI',
-      }
+      alternates: { canonical: `/etf/${tickerParam.toLowerCase()}` },
+      robots: { index: true, follow: true },
     }
 
-    // Armazenar no cache
-    await cache.set(cacheKey, metadata, {
-      prefix: 'companies',
-      ttl: METADATA_CACHE_TTL
-    })
-
+    await cache.set(cacheKey, metadata, { prefix: 'companies', ttl: METADATA_TTL })
     return metadata
   } catch {
     return {
-      title: `${ticker} - Análise de ETF | Preço Justo AI`,
-      description: `Análise completa do ETF ${ticker} com indicadores financeiros, taxa de administração e estratégias de investimento em Exchange Traded Funds.`,
-      alternates: {
-        canonical: `/etf/${tickerParam.toLowerCase()}`,
-      }
+      title: `${ticker} — ETF | Preço Justo AI`,
+      alternates: { canonical: `/etf/${tickerParam.toLowerCase()}` },
     }
   }
 }
 
 export default async function EtfPage({ params }: PageProps) {
-  const resolvedParams = await params
-  const tickerParam = resolvedParams.ticker
+  const { ticker: tickerParam } = await params
   const ticker = tickerParam.toUpperCase()
 
-  // Verificar se ticker foi migrado e redirecionar
-  const company = await prisma.company.findUnique({
+  // Redirect if migrated ticker
+  const successor = await prisma.company.findUnique({
+    where: { ticker },
+    select: { isActive: true, assetType: true, successor: { select: { ticker: true } } },
+  })
+  if (successor && !successor.isActive && successor.successor) {
+    redirect(`/etf/${successor.successor.ticker.toLowerCase()}`)
+  }
+
+  const session = await getServerSession(authOptions)
+  let isPremium = false
+  const isLoggedIn = !!session?.user
+
+  if (isLoggedIn) {
+    const user = await getCurrentUser()
+    isPremium = user?.isPremium ?? false
+  }
+
+  // Atualiza preço do dia via Yahoo Finance antes de carregar os dados da página
+  try {
+    const priceUpdatePromise = ensureTodayPrice(ticker)
+    const timeoutPromise = new Promise<boolean>((resolve) =>
+      setTimeout(() => {
+        console.log(`[${ticker}] Timeout ao atualizar preço ETF, continuando...`)
+        resolve(false)
+      }, 5000)
+    )
+    await Promise.race([priceUpdatePromise, timeoutPromise])
+  } catch (error) {
+    console.error(`[${ticker}] Erro ao atualizar preço ETF:`, error)
+  }
+
+  const companyData = await prisma.company.findUnique({
     where: { ticker },
     select: {
-      isActive: true,
-      successor: {
-        select: {
-          ticker: true,
+      id: true,
+      ticker: true,
+      name: true,
+      logoUrl: true,
+      website: true,
+      description: true,
+      assetType: true,
+      dailyQuotes: {
+        orderBy: { date: 'desc' },
+        take: 1,
+        select: { price: true, date: true },
+      },
+      etfData: {
+        include: {
+          holdings: {
+            include: { company: { select: { ticker: true, name: true } } },
+            orderBy: { weight: 'desc' },
+            take: 50,
+          },
         },
       },
     },
-  });
+  })
 
-  if (company && !company.isActive && company.successor) {
-    redirect(`/etf/${company.successor.ticker.toLowerCase()}`);
-  }
+  if (!companyData) notFound()
 
-  // Verificar sessão do usuário para recursos premium
-  const session = await getServerSession(authOptions)
-  let userIsPremium = false
-
-  if (session?.user?.id) {
-    const user = await getCurrentUser()
-    userIsPremium = user?.isPremium || false
-  }
-
-  // Buscar dados da empresa
-  const [companyData, comprehensiveData, reportsCount, youtubeAnalysis] = await Promise.all([
-    prisma.company.findUnique({
-      where: { ticker },
-      include: {
-        financialData: {
-          orderBy: { year: 'desc' },
-          take: 8
-        },
-        dailyQuotes: {
-          orderBy: { date: 'desc' },
-          take: 1
-        },
-        etfData: true
-      }
-    }),
-    getComprehensiveFinancialData(ticker, 'YEARLY', 7),
-    prisma.aIReport.count({
-      where: {
-        company: {
-          ticker: ticker
-        },
-        type: 'FUNDAMENTAL_CHANGE'
-      }
-    }),
-    prisma.youTubeAnalysis.findFirst({
-      where: {
-        company: {
-          ticker: ticker
-        },
-        isActive: true
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      select: {
-        score: true,
-        summary: true,
-        positivePoints: true,
-        negativePoints: true,
-        updatedAt: true
-      }
-    })
-  ])
-
-  if (!companyData) {
-    notFound()
-  }
-
-  // Verificar se é realmente um ETF, senão redirecionar
   if (companyData.assetType !== 'ETF') {
-    const correctPath = companyData.assetType === 'STOCK' ? `/acao/${tickerParam.toLowerCase()}` :
-                       companyData.assetType === 'FII' ? `/fii/${tickerParam.toLowerCase()}` :
-                       companyData.assetType === 'BDR' ? `/bdr/${tickerParam.toLowerCase()}` :
-                       `/acao/${tickerParam.toLowerCase()}`
-    redirect(correctPath)
+    const map: Record<string, string> = { STOCK: 'acao', FII: 'fii', BDR: 'bdr' }
+    const path = map[companyData.assetType ?? ''] ?? 'acao'
+    redirect(`/${path}/${tickerParam.toLowerCase()}`)
   }
 
-  const latestFinancials = companyData.financialData?.[0]
-  const latestQuote = companyData.dailyQuotes?.[0]
-  const currentPrice = toNumber(latestQuote?.price) ?? toNumber(latestFinancials?.lpa) ?? 0
+  const etf = companyData.etfData
+  const holdings = etf?.holdings ?? []
+  const visibleHoldings = isPremium ? holdings : holdings.slice(0, 5)
 
-  // Converter dados financeiros para números
-  const serializedFinancials = latestFinancials ? Object.fromEntries(
-    Object.entries(latestFinancials).map(([key, value]) => [
-      key,
-      value && typeof value === 'object' && 'toNumber' in value 
-        ? value.toNumber() 
-        : value
-    ])
-  ) as any : null
+  const monthlyPricesCount = await prisma.historicalPrice.count({
+    where: { companyId: companyData.id, interval: '1mo' },
+  })
+  const hasTechnicalAnalysis = monthlyPricesCount >= 50
 
-  // Converter dados da análise do YouTube
-  const serializedYoutubeAnalysis = youtubeAnalysis ? {
-    score: toNumber(youtubeAnalysis.score) || 0,
-    summary: youtubeAnalysis.summary,
-    positivePoints: youtubeAnalysis.positivePoints as string[] | null,
-    negativePoints: youtubeAnalysis.negativePoints as string[] | null,
-    updatedAt: youtubeAnalysis.updatedAt
-  } : null
+  // Disparar cálculo de análise técnica em background apenas se houver dados suficientes
+  if (hasTechnicalAnalysis) {
+    getOrCalculateDailyTechnicalAnalysis(ticker).catch((err) => {
+      console.error(`[${ticker}] Erro ao calcular análise técnica ETF em background:`, err)
+    })
+  }
+
+  const peers = etf?.etfClass ? await prisma.etfData.findMany({
+    where: {
+      etfClass: etf.etfClass,
+      company: { isActive: true, ticker: { not: ticker } },
+    },
+    orderBy: { etfScore: 'desc' },
+    take: 5,
+    select: { company: { select: { ticker: true } } },
+  }) : []
+  const peerTickers = peers.map(p => p.company?.ticker).filter(Boolean) as string[]
+
+  const currentPrice = toNumber(companyData.dailyQuotes?.[0]?.price)
+  const priceDate = companyData.dailyQuotes?.[0]?.date
+
+  const r6m = toNumber(etf?.return6m)
+  const r1y = toNumber(etf?.return1y)
+  const r3y = toNumber(etf?.return3y)
+  const r5y = toNumber(etf?.return5y)
+  const effReturn = r1y ?? (r6m !== null ? (1 + r6m) ** 2 - 1 : null)
+  const isEstimated = r1y === null && r6m !== null
+
+  const returnsData = [
+    { label: '6 meses', value: r6m },
+    { label: isEstimated ? '1 ano (est.)' : '1 ano', value: effReturn },
+    { label: '3 anos', value: r3y },
+    { label: '5 anos', value: r5y },
+  ].filter((r) => r.value !== null)
 
   return (
     <>
-      <div className="container mx-auto py-8 px-4">
-        {/* Layout Responsivo: 2 Cards Separados */}
-        <div className="mb-8">
+      <div className="container mx-auto py-8 px-4 max-w-6xl">
+        {/* Breadcrumb */}
+        <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
+          <Link
+            href="/ranking?assetType=etf"
+            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+          >
+            ← Ranking de ETFs
+          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            {hasTechnicalAnalysis && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/etf/${tickerParam.toLowerCase()}/analise-tecnica`}>
+                  <TrendingUp className="w-4 h-4 mr-1.5 text-blue-600" />
+                  Análise Técnica
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/comparador-etfs`}>
+                <BarChart3 className="w-4 h-4 mr-1.5 text-teal-600" />
+                Comparar ETFs
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Header 2-column layout */}
+        <div className="mb-6">
           <div className="lg:flex lg:space-x-6 space-y-6 lg:space-y-0">
-            
-            {/* Card do Header da Empresa */}
+
+            {/* Left: company info card */}
             <Card className="flex-1">
               <CardContent className="p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-start space-y-4 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                  {/* Logo da empresa com fallback */}
+                <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6">
                   <div className="flex-shrink-0 self-center sm:self-start">
                     <CompanyLogo
                       logoUrl={companyData.logoUrl}
@@ -374,308 +287,277 @@ export default async function EtfPage({ params }: PageProps) {
                     />
                   </div>
 
-                  {/* Informações básicas */}
                   <div className="flex-1 min-w-0">
-                    {/* Header: Ticker + Preço (Responsivo) */}
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3">
-                      {/* Ticker e Setor */}
-                      <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-3 lg:mb-0">
-                        <h1 className="text-2xl sm:text-3xl font-bold truncate">{ticker}</h1>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary" className="text-sm w-fit">
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            ETF
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3 gap-2">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h1 className="text-2xl sm:text-3xl font-bold">{ticker}</h1>
+                        <Badge variant="secondary" className="text-sm">
+                          <TrendingUp className="w-3 h-3 mr-1" />
+                          ETF
+                        </Badge>
+                        {etf?.benchmarkIndex && (
+                          <Badge variant="outline" className="text-xs max-w-[200px] truncate">
+                            {etf.benchmarkIndex}
                           </Badge>
-                          <Badge variant="outline" className="text-sm w-fit">
-                            {companyData.etfData?.category || companyData.sector || 'Exchange Traded Fund'}
-                          </Badge>
-                        </div>
+                        )}
                       </div>
-                      
-                      {/* Preço */}
-                      <div className="lg:text-right lg:flex-shrink-0">
-                        <p className="text-sm text-muted-foreground">Preço Atual</p>
-                        <p className="text-xl sm:text-2xl font-bold text-green-600">
-                          {formatCurrency(currentPrice)}
+                      <div className="lg:text-right shrink-0">
+                        <p className="text-xs text-muted-foreground">Preço atual</p>
+                        <p className="text-xl sm:text-2xl font-bold">
+                          {fmtPrice(currentPrice)}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          Último dado disponível
-                        </p>
+                        {priceDate && (
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(priceDate).toLocaleDateString('pt-BR')}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    
-                    <h2 className="text-lg sm:text-xl text-muted-foreground mb-4 truncate">
-                      Análise do ETF {companyData.name}
+
+                    <h2 className="text-lg text-muted-foreground mb-4 truncate">
+                      {companyData.name}
                     </h2>
 
-                    {/* Informações específicas do ETF */}
-                    {companyData.etfData && (
-                      <div className="mb-4 p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                        <h3 className="font-semibold text-green-900 dark:text-green-100 mb-2">
-                          Dados do Exchange Traded Fund
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                          {companyData.etfData.netExpenseRatio && (
-                            <div>
-                              <span className="text-muted-foreground">Taxa de Administração:</span>
-                              <span className="ml-2 font-medium">
-                                {(toNumber(companyData.etfData.netExpenseRatio)! * 100).toFixed(2)}%
-                              </span>
-                            </div>
-                          )}
-                          {companyData.etfData.dividendYield && (
-                            <div>
-                              <span className="text-muted-foreground">Dividend Yield:</span>
-                              <span className="ml-2 font-medium">
-                                {(toNumber(companyData.etfData.dividendYield)! * 100).toFixed(2)}%
-                              </span>
-                            </div>
-                          )}
-                          {companyData.etfData.ytdReturn && (
-                            <div>
-                              <span className="text-muted-foreground">Retorno YTD:</span>
-                              <span className="ml-2 font-medium">
-                                {(toNumber(companyData.etfData.ytdReturn)! * 100).toFixed(2)}%
-                              </span>
-                            </div>
-                          )}
-                          {companyData.etfData.netAssets && (
-                            <div>
-                              <span className="text-muted-foreground">Patrimônio Líquido:</span>
-                              <span className="ml-2 font-medium">
-                                {formatCurrency(toNumber(companyData.etfData.netAssets))}
-                              </span>
-                            </div>
-                          )}
-                          {companyData.etfData.category && (
-                            <div className="sm:col-span-2">
-                              <span className="text-muted-foreground">Categoria:</span>
-                              <span className="ml-2 font-medium">
-                                {companyData.etfData.category}
-                              </span>
-                            </div>
-                          )}
+                    {/* Key ETF metrics row */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mb-4">
+                      {etf?.netExpenseRatio && (
+                        <div className="bg-muted/40 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-0.5">Taxa de Administração</p>
+                          <p className="font-bold">
+                            {(toNumber(etf.netExpenseRatio)! * 100).toFixed(2)}% a.a.
+                          </p>
                         </div>
-                      </div>
-                    )}
+                      )}
+                      {etf?.netAssets && (
+                        <div className="bg-muted/40 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-0.5">Patrimônio Líquido</p>
+                          <p className="font-bold">{fmtBrl(toNumber(etf.netAssets))}</p>
+                        </div>
+                      )}
+                      {etf?.holdingsConcentrationTop5 && (
+                        <div className="bg-muted/40 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-0.5 flex items-center gap-1">
+                            Concentração Top 5
+                            <InfoTooltip content="Soma do peso percentual das 5 maiores posições da carteira. Valores acima de 65% indicam alta concentração — ETFs muito concentrados recebem penalidade no PJ-ETF Score." />
+                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold">
+                              {(toNumber(etf.holdingsConcentrationTop5)! * 100).toFixed(1)}%
+                            </p>
+                            {etf.aiConcentracaoPenaltyOverride && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded px-1.5 py-0.5">
+                                Fundo espelho
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Descrição da Empresa - Collapsible para SEO */}
-                    {companyData.description && (
+                    {/* Comparador Inteligente */}
+                    {etf?.etfClass && peerTickers.length >= 1 && (
                       <div className="mb-4">
-                        <Collapsible>
-                          <CollapsibleTrigger className="flex items-center space-x-2 text-left p-0 hover:no-underline">
-                            <Info className="w-4 h-4 text-muted-foreground" />
-                            <span className="font-medium text-muted-foreground">
-                              Sobre o {companyData.name}
-                            </span>
-                            <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform duration-200" />
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="mt-3">
-                            <div className="p-4 bg-muted/50 rounded-lg border">
-                              <p className="text-sm leading-relaxed text-muted-foreground">
-                                {companyData.description}
-                              </p>
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </div>
-                    )}
-
-                    {/* Botões de Ação */}
-                    <div className="mb-4 flex flex-wrap gap-2">
-                      <AddToBacktestButton
-                        asset={{
-                          ticker: companyData.ticker,
-                          companyName: companyData.name,
-                          sector: companyData.sector || undefined,
-                          currentPrice: companyData.dailyQuotes?.[0]?.price ? Number(companyData.dailyQuotes[0].price) : undefined
-                        }}
-                        variant="outline"
-                        size="default"
-                        showLabel={true}
-                      />
-
-                      {/* <AssetSubscriptionButton
-                        ticker={ticker}
-                        companyId={companyData.id}
-                        variant="outline"
-                        size="default"
-                        showLabel={true}
-                      /> */}
-
-                      {reportsCount > 0 && (
-                        <Button asChild variant="outline" size="default">
-                          <Link href={`/etf/${ticker.toLowerCase()}/relatorios`}>
-                            <FileText className="w-4 h-4 mr-2" />
-                            Relatórios ({reportsCount})
+                        <Button asChild className="w-full bg-black hover:bg-zinc-900 text-white dark:bg-white dark:text-black dark:hover:bg-zinc-100 h-10 text-sm font-semibold">
+                          <Link href={`/compara-etfs/${[ticker, ...peerTickers].map(t => t.toLowerCase()).join('/')}`}>
+                            <BarChart3 className="w-4 h-4 mr-2" />
+                            Comparador Inteligente
+                            <span className="ml-2 opacity-60 font-normal text-xs">{etf.etfClass}</span>
+                            <span className="ml-1.5 opacity-40 text-xs">({peerTickers.length + 1})</span>
                           </Link>
                         </Button>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
-                      {companyData.industry && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <PieChart className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{companyData.industry}</span>
-                        </div>
-                      )}
-                      
-                      {companyData.website && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Eye className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <Link 
-                            href={companyData.website} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline truncate"
-                          >
-                            Site oficial
-                          </Link>
-                        </div>
-                      )}
-                      
-                      {(companyData.city || companyData.state) && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">
-                            {[companyData.city, companyData.state].filter(Boolean).join(', ')}
-                          </span>
-                        </div>
-                      )}
+                    {/* Website */}
+                    {companyData.website && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Eye className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <Link
+                          href={companyData.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline truncate"
+                        >
+                          Site oficial
+                        </Link>
+                      </div>
+                    )}
 
-                      {companyData.fullTimeEmployees && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{companyData.fullTimeEmployees.toLocaleString()} funcionários</span>
+                    {/* Disclaimer: histórico limitado */}
+                    {r5y === null && (
+                      <div className="mt-3 flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-0.5">
+                            Histórico limitado
+                          </p>
+                          <p className="text-xs text-amber-700 dark:text-amber-400 leading-snug">
+                            Este ETF possui{' '}
+                            {r3y !== null
+                              ? 'menos de 5 anos'
+                              : r1y !== null
+                              ? 'menos de 3 anos'
+                              : r6m !== null
+                              ? 'menos de 1 ano'
+                              : 'histórico muito reduzido'}{' '}
+                            de dados disponíveis. ETFs mais recentes têm menor previsibilidade de comportamento — recomendamos priorizar fundos com pelo menos 5 anos de track record consolidado.
+                          </p>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Card do Score - Separado */}
-            {/* <div className="lg:flex-shrink-0">
-              <HeaderScoreWrapper ticker={ticker} />
-            </div> */}
+            {/* Right: score panel */}
+            <div className="lg:flex-shrink-0 w-full lg:w-auto">
+              <EtfHeaderScore
+                ticker={ticker}
+                canViewFullContent={isPremium || isLoggedIn}
+                isLoggedIn={isLoggedIn}
+              />
+            </div>
+
           </div>
         </div>
 
-        {latestFinancials && (
-          <>
-            {/* Análises Estratégicas - Usando componente cliente */}
-            {latestFinancials && (
-              <StrategicAnalysisClient 
-                ticker={ticker}
-                currentPrice={currentPrice}
-                latestFinancials={serializedFinancials}
-                userIsPremium={userIsPremium}
-              />
-            )}
-
-            {/* Análise de Sentimento de Mercado - YouTube */}
-            <MarketSentimentSection
-              ticker={ticker}
-              youtubeAnalysis={serializedYoutubeAnalysis}
-              userIsPremium={userIsPremium}
-            />
-
-            {/* Análise Técnica */}
-            <TechnicalAnalysisSection 
-              ticker={ticker} 
-              userIsPremium={userIsPremium}
-            />
-
-            {/* Indicadores Financeiros com Gráficos */}
-            <FinancialIndicators 
-              ticker={ticker}
-              latestFinancials={serializedFinancials}
-              comprehensiveData={comprehensiveData}
-            />
-
-            {/* Análise com IA */}
-            <AIAnalysisDual
-              ticker={ticker}
-              name={companyData.name}
-              sector={companyData.sector}
-              currentPrice={currentPrice}
-              financials={serializedFinancials}
-              userIsPremium={userIsPremium}
-              companyId={companyData.id}
-            />
-
-            {/* Dados Financeiros Completos */}
-            {comprehensiveData && (
-              <div className="mt-8">
-                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                      Dados Financeiros Detalhados
-                    </h3>
+        {/* Retornos Históricos */}
+        {returnsData.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Retornos Históricos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-6">
+                {returnsData.map((r) => (
+                  <div key={r.label} className="text-center min-w-[70px]">
+                    <p className="text-xs text-muted-foreground mb-1">{r.label}</p>
+                    <p
+                      className={`text-lg font-bold ${
+                        r.value! >= 0
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }`}
+                    >
+                      {fmtPct(r.value)}
+                    </p>
                   </div>
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Esta seção apresenta <strong>dados anuais</strong> detalhados dos últimos 7 anos completos, 
-                    complementando os indicadores mostrados acima. Ideal para análise de tendências 
-                    e performance histórica do fundo.
-                  </p>
-                </div>
-                <ComprehensiveFinancialView data={comprehensiveData} />
+                ))}
               </div>
-            )}
+              {isEstimated && (
+                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                  <Info className="w-3 h-3" />
+                  Retorno de 1 ano estimado com base no retorno de 6 meses anualizado
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-            {/* Footer com data da atualização */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Dados financeiros atualizados em: {' '}
-                {latestFinancials.updatedAt 
-                  ? new Date(latestFinancials.updatedAt).toLocaleDateString('pt-BR')
-                  : 'N/A'
-                }
-              </p>
-            </div>
-          </>
+        {/* Holdings */}
+        {holdings.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">
+                  Principais Participações
+                  {!isPremium && holdings.length > 5 && (
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      (top 5 de {holdings.length})
+                    </span>
+                  )}
+                </CardTitle>
+                {!isPremium && holdings.length > 5 && (
+                  <Badge variant="outline" className="text-xs gap-1">
+                    <Crown className="w-3 h-3 text-yellow-500" />
+                    Premium vê todas
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                {visibleHoldings.map((h, idx) => {
+                  const holdingTicker = h.company?.ticker ?? h.ticker
+                  const holdingName = h.company?.name ?? h.name
+                  const weightPct = (toNumber(h.weight)! * 100).toFixed(2)
+                  const hasLink = !!h.company?.ticker
+
+                  const inner = (
+                    <div className="flex items-center justify-between px-5 py-3 hover:bg-muted/40 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-xs text-muted-foreground w-5 text-right shrink-0">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          {holdingTicker && (
+                            <span className="font-mono text-sm font-bold mr-2">{holdingTicker}</span>
+                          )}
+                          <span className="text-sm text-muted-foreground truncate">{holdingName}</span>
+                        </div>
+                      </div>
+                      <span className="font-bold text-sm shrink-0 ml-4">{weightPct}%</span>
+                    </div>
+                  )
+
+                  return hasLink ? (
+                    <Link key={h.id} href={`/acao/${h.company!.ticker.toLowerCase()}`}>
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div key={h.id}>{inner}</div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Description */}
+        {companyData.description && (
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Sobre o {ticker}</CardTitle>
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground border rounded px-1.5 py-0.5">
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Gerado por IA
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {companyData.description.split('\n\n').filter(Boolean).map((paragraph, i) => (
+                  <p key={i} className="text-sm text-muted-foreground leading-relaxed">
+                    {paragraph.trim()}
+                  </p>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
-      {/* Footer para usuários não logados - SEO */}
-      {!session && (
-        <Footer />
-      )}
-
-      {/* Ben Chat FAB */}
+      {!isLoggedIn && <Footer />}
       <BenChatFAB />
 
-      {/* Schema Structured Data para SEO */}
-      {latestFinancials && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "InvestmentFund",
-              "name": companyData.name,
-              "alternateName": ticker,
-              "description": companyData.description || `Análise completa do ETF ${companyData.name} (${ticker}) com indicadores financeiros, taxa de administração e estratégias de investimento em Exchange Traded Funds.`,
-              "url": `https://precojusto.ai/etf/${ticker.toLowerCase()}`,
-              "logo": companyData.logoUrl || undefined,
-              "sameAs": companyData.website ? [companyData.website] : undefined,
-              "category": companyData.etfData?.category || "Exchange Traded Fund",
-              "fundFamily": "ETF - Exchange Traded Fund",
-              "stockExchange": "B3 - Brasil Bolsa Balcão",
-              "tickerSymbol": ticker,
-              "priceRange": formatCurrency(currentPrice),
-              "dividendYield": companyData.etfData?.dividendYield ? toNumber(companyData.etfData.dividendYield) : undefined,
-              "netAssets": companyData.etfData?.netAssets ? toNumber(companyData.etfData.netAssets) : undefined,
-              "expenseRatio": companyData.etfData?.netExpenseRatio ? toNumber(companyData.etfData.netExpenseRatio) : undefined,
-              "ytdReturn": companyData.etfData?.ytdReturn ? toNumber(companyData.etfData.ytdReturn) : undefined,
-              "lastUpdated": latestFinancials.updatedAt?.toISOString()
-            })
-          }}
-        />
-      )}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'InvestmentFund',
+            name: companyData.name,
+            alternateName: ticker,
+            description: companyData.description || `ETF ${ticker} — ${companyData.name}`,
+            url: `https://precojusto.ai/etf/${ticker.toLowerCase()}`,
+            logo: companyData.logoUrl || undefined,
+            tickerSymbol: ticker,
+            stockExchange: 'B3',
+          }),
+        }}
+      />
     </>
   )
 }

@@ -51,10 +51,6 @@ model User {
   stripeCustomerId            String?                      @unique @map("stripe_customer_id")
   stripePriceId               String?                      @map("stripe_price_id")
   stripeSubscriptionId        String?                      @unique @map("stripe_subscription_id")
-  kiwifyId                    String?                      @unique @map("kiwify_id")
-  kiwifyOrderId               String?                      @map("kiwify_order_id")
-  caktoId                     String?                      @unique @map("cakto_id")
-  caktoOrderId                String?                      @map("cakto_order_id")
   isAdmin                     Boolean                      @default(false) @map("is_admin")
   earlyAdopterDate            DateTime?                    @map("early_adopter_date")
   inactivatedAt               DateTime?                    @map("inactivated_at")
@@ -70,12 +66,19 @@ model User {
   trialEndsAt                 DateTime?                    @map("trial_ends_at")
   trialStartedAt              DateTime?                    @map("trial_started_at")
   reportPreferences           Json?                        @map("report_preferences")
+  kiwifyId                    String?                      @unique @map("kiwify_id")
+  kiwifyOrderId               String?                      @map("kiwify_order_id")
   bonusUsageCredits           Int                          @default(0) @map("bonus_usage_credits")
+  caktoId                     String?                      @unique @map("cakto_id")
+  caktoOrderId                String?                      @map("cakto_order_id")
+  partnerId                   String?                      @map("partner_id")
   accounts                    Account[]
   sessions                    Session[]
   aiReportFeedbacks           AIReportFeedback[]
   customReports               AIReport[]                   @relation("CustomReports")
   backtestConfigs             BacktestConfig[]
+  benConversations            BenConversation[]
+  benMemories                 BenMemory[]
   debts                       Debt[]
   featureUsage                FeatureUsage[]
   notificationModalViews      NotificationModalView[]
@@ -93,10 +96,7 @@ model User {
   userEvents                  UserEvent[]
   notificationPreferences     UserNotificationPreferences?
   userSecurity                UserSecurity?
-  benConversations            BenConversation[]
-  benMemories                 BenMemory[]
   partner                     Partner?                     @relation(fields: [partnerId], references: [id])
-  partnerId                   String?                      @map("partner_id")
 
   @@index([partnerId])
   @@map("users")
@@ -194,18 +194,19 @@ model Company {
   priceVariationLastCheckedAt   DateTime?                @map("price_variation_last_checked_at")
   isActive                      Boolean                  @default(true) @map("is_active")
   successorId                   Int?                     @unique @map("successor_id")
-  successor                     Company?                 @relation("TickerHistory", fields: [successorId], references: [id])
-  predecessor                   Company?                 @relation("TickerHistory")
   aiReports                     AIReport[]
   aiReportsQueue                AIReportsQueue[]
   snapshots                     AssetSnapshot[]
   technicalAnalyses             AssetTechnicalAnalysis[]
   balanceSheets                 BalanceSheet[]
   cashflowStatements            CashflowStatement[]
+  successor                     Company?                 @relation("TickerHistory", fields: [successorId], references: [id])
+  predecessor                   Company?                 @relation("TickerHistory")
   flags                         CompanyFlag[]
   dailyQuotes                   DailyQuote[]
   dividendHistory               DividendHistory[]
   etfData                       EtfData?
+  etfHoldings                   EtfHolding[]
   fiiData                       FiiData?
   financialData                 FinancialData[]
   historicalPrices              HistoricalPrice[]
@@ -805,8 +806,8 @@ model AIReport {
   type              AIReportType       @default(MONTHLY_OVERVIEW)
   snapshotId        String?            @map("snapshot_id")
   userId            String?            @map("user_id")
+  conclusion        String?
   windowDays        Int?               @map("window_days")
-  conclusion        String?            @db.Text
   feedbacks         AIReportFeedback[]
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   snapshot          AssetSnapshot?     @relation("SnapshotReports", fields: [snapshotId], references: [id])
@@ -1002,19 +1003,70 @@ model YouTubeAnalysis {
 }
 
 model EtfData {
-  id              Int       @id @default(autoincrement())
-  companyId       Int       @unique @map("company_id")
-  netAssets       Decimal?  @map("net_assets") @db.Decimal(20, 2)
-  netExpenseRatio Decimal?  @map("net_expense_ratio") @db.Decimal(5, 4)
-  dividendYield   Decimal?  @map("dividend_yield") @db.Decimal(15, 6)
-  ytdReturn       Decimal?  @map("ytd_return") @db.Decimal(15, 6)
-  category        String?
-  totalAssets     Decimal?  @map("total_assets") @db.Decimal(20, 2)
-  updatedAt       DateTime? @updatedAt
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                         Int          @id @default(autoincrement())
+  companyId                  Int          @unique @map("company_id")
+  netAssets                  Decimal?     @map("net_assets") @db.Decimal(20, 2)
+  netExpenseRatio            Decimal?     @map("net_expense_ratio") @db.Decimal(5, 4)
+  dividendYield              Decimal?     @map("dividend_yield") @db.Decimal(15, 6)
+  ytdReturn                  Decimal?     @map("ytd_return") @db.Decimal(15, 6)
+  category                   String?
+  totalAssets                Decimal?     @map("total_assets") @db.Decimal(20, 2)
+  updatedAt                  DateTime?    @updatedAt
+  benchmarkIndex             String?      @map("benchmark_index")
+  return1m                   Decimal?     @map("return_1m") @db.Decimal(10, 6)
+  return3m                   Decimal?     @map("return_3m") @db.Decimal(10, 6)
+  return6m                   Decimal?     @map("return_6m") @db.Decimal(10, 6)
+  return1y                   Decimal?     @map("return_1y") @db.Decimal(10, 6)
+  return2y                   Decimal?     @map("return_2y") @db.Decimal(10, 6)
+  return3y                   Decimal?     @map("return_3y") @db.Decimal(10, 6)
+  return5y                   Decimal?     @map("return_5y") @db.Decimal(10, 6)
+  returnSinceInception       Decimal?     @map("return_since_inception") @db.Decimal(10, 6)
+  maxDrawdown                Decimal?     @map("max_drawdown") @db.Decimal(10, 6)
+  volatility12m              Decimal?     @map("volatility_12m") @db.Decimal(10, 6)
+  holdingsConcentrationTop5  Decimal?     @map("holdings_concentration_top5") @db.Decimal(5, 4)
+  holdingsUpdatedAt          DateTime?    @map("holdings_updated_at")
+  etfScore                   Int?         @map("etf_score")
+  scoreUpdatedAt             DateTime?    @map("score_updated_at")
+  aiAnalysisScore            Int?         @map("ai_analysis_score")
+  aiAnalysisSummary          String?      @map("ai_analysis_summary")
+  aiAnalysisUpdatedAt        DateTime?    @map("ai_analysis_updated_at")
+  aiConcentracaoPenaltyOverride Boolean?  @map("ai_concentracao_penalty_override")
+  etfClass                   String?      @map("etf_class")
+  lastScrapedAt              DateTime?    @map("last_scraped_at")
+  dataSource                 String?      @map("data_source")
+  company                    Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  holdings                   EtfHolding[]
 
   @@index([companyId])
   @@map("etf_data")
+}
+
+model EtfHolding {
+  id          Int      @id @default(autoincrement())
+  etfDataId   Int      @map("etf_data_id")
+  ticker      String?
+  name        String
+  weight      Decimal  @db.Decimal(8, 6)
+  companyId   Int?     @map("company_id")
+  updatedAt   DateTime @updatedAt
+  etfData     EtfData  @relation(fields: [etfDataId], references: [id], onDelete: Cascade)
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([etfDataId])
+  @@index([companyId])
+  @@map("etf_holdings")
+}
+
+model EtfIngestionLog {
+  id             Int      @id @default(autoincrement())
+  phase          Int
+  processedCount Int      @map("processed_count")
+  failedCount    Int      @map("failed_count")
+  durationMs     Int      @map("duration_ms")
+  status         String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("etf_ingestion_logs")
 }
 
 model FiiData {
@@ -1026,21 +1078,21 @@ model FiiData {
   lastDividendDate  DateTime? @map("last_dividend_date") @db.Date
   patrimonioLiquido Decimal?  @map("patrimonio_liquido") @db.Decimal(20, 2)
   valorPatrimonial  Decimal?  @map("valor_patrimonial") @db.Decimal(15, 6)
-  cotacao           Decimal?  @map("cotacao") @db.Decimal(15, 4)
-  ffoYield          Decimal?  @map("ffo_yield") @db.Decimal(10, 6)
-  pvp               Decimal?  @map("pvp") @db.Decimal(10, 4)
-  valorMercado      Decimal?  @map("valor_mercado") @db.Decimal(20, 2)
-  liquidez          Decimal?  @map("liquidez") @db.Decimal(20, 2)
-  qtdImoveis        Int?      @map("qtd_imoveis")
-  precoM2           Decimal?  @map("preco_m2") @db.Decimal(15, 4)
+  updatedAt         DateTime? @updatedAt
   aluguelM2         Decimal?  @map("aluguel_m2") @db.Decimal(15, 4)
   capRate           Decimal?  @map("cap_rate") @db.Decimal(10, 6)
-  vacanciaMedia     Decimal?  @map("vacancia_media") @db.Decimal(10, 6)
-  segment           String?   @map("segment")
-  isPapel           Boolean?  @default(false) @map("is_papel")
+  cotacao           Decimal?  @map("cotacao") @db.Decimal(15, 4)
   dataSource        String?   @default("fundamentus") @map("data_source")
+  ffoYield          Decimal?  @map("ffo_yield") @db.Decimal(10, 6)
+  isPapel           Boolean?  @default(false) @map("is_papel")
   lastFetchedAt     DateTime? @map("last_fetched_at")
-  updatedAt         DateTime? @updatedAt
+  liquidez          Decimal?  @map("liquidez") @db.Decimal(20, 2)
+  precoM2           Decimal?  @map("preco_m2") @db.Decimal(15, 4)
+  pvp               Decimal?  @map("pvp") @db.Decimal(10, 4)
+  qtdImoveis        Int?      @map("qtd_imoveis")
+  segment           String?   @map("segment")
+  vacanciaMedia     Decimal?  @map("vacancia_media") @db.Decimal(10, 6)
+  valorMercado      Decimal?  @map("valor_mercado") @db.Decimal(20, 2)
   company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
@@ -1147,13 +1199,13 @@ model Offer {
   type                  OfferType
   price_in_cents        Int?      @map("price_in_cents")
   stripe_price_id       String?   @map("stripe_price_id")
-  checkout_url          String?   @map("checkout_url")
   is_active             Boolean   @default(true) @map("is_active")
   currency              String    @default("BRL")
   created_at            DateTime  @default(now()) @map("created_at")
   updated_at            DateTime  @updatedAt @map("updated_at")
   expires_at            DateTime? @map("expires_at")
   premium_duration_days Int?      @map("premium_duration_days")
+  checkout_url          String?   @map("checkout_url")
 
   @@unique([type, is_active], name: "unique_active_offer_per_type")
   @@index([type])
@@ -1487,18 +1539,18 @@ model IndexComposition {
 }
 
 model IndexHistoryPoints {
-  id                        String          @id @default(uuid())
-  indexId                   String          @map("index_id")
-  date                      DateTime        @db.Date
-  points                    Float
-  dailyChange               Float           @map("daily_change")
-  currentYield              Float?          @map("current_yield")
-  createdAt                 DateTime        @default(now()) @map("created_at")
-  dividendsByTicker         Json?           @map("dividends_by_ticker")
-  dividendsReceived         Decimal?        @map("dividends_received") @db.Decimal(15, 6)
-  compositionSnapshot       Json?           @map("composition_snapshot")
-  dailyContributionsByTicker Json?          @map("daily_contributions_by_ticker")
-  definition                IndexDefinition @relation(fields: [indexId], references: [id], onDelete: Cascade)
+  id                         String          @id @default(uuid())
+  indexId                    String          @map("index_id")
+  date                       DateTime        @db.Date
+  points                     Float
+  dailyChange                Float           @map("daily_change")
+  currentYield               Float?          @map("current_yield")
+  createdAt                  DateTime        @default(now()) @map("created_at")
+  dividendsByTicker          Json?           @map("dividends_by_ticker")
+  dividendsReceived          Decimal?        @map("dividends_received") @db.Decimal(15, 6)
+  compositionSnapshot        Json?           @map("composition_snapshot")
+  dailyContributionsByTicker Json?           @map("daily_contributions_by_ticker")
+  definition                 IndexDefinition @relation(fields: [indexId], references: [id], onDelete: Cascade)
 
   @@unique([indexId, date])
   @@index([indexId, date])
@@ -1583,17 +1635,17 @@ model UserAssetMonitor {
 }
 
 model CompanyFlag {
-  id                String                  @id @default(cuid())
-  companyId         Int                      @map("company_id")
-  reportId          String                   @map("report_id")
-  flagType          FlagType                 @map("flag_type")
+  id                String              @id @default(cuid())
+  companyId         Int                 @map("company_id")
+  reportId          String              @map("report_id")
+  flagType          FlagType            @map("flag_type")
   reason            String
-  isActive          Boolean                  @default(true) @map("is_active")
-  createdAt         DateTime                 @default(now()) @map("created_at")
-  lastReevaluatedAt DateTime?                @map("last_reevaluated_at")
-  reevaluationCount Int                      @default(0) @map("reevaluation_count")
-  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  report            AIReport                 @relation("FlagReports", fields: [reportId], references: [id], onDelete: Cascade)
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  lastReevaluatedAt DateTime?           @map("last_reevaluated_at")
+  reevaluationCount Int                 @default(0) @map("reevaluation_count")
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  report            AIReport            @relation("FlagReports", fields: [reportId], references: [id], onDelete: Cascade)
   queueEntries      CompanyFlagsQueue[]
 
   @@index([companyId, isActive])
@@ -1602,6 +1654,147 @@ model CompanyFlag {
   @@index([createdAt])
   @@index([isActive, createdAt])
   @@map("company_flags")
+}
+
+model CompanyFlagsQueue {
+  id              String                        @id @default(cuid())
+  flagId          String                        @map("flag_id")
+  status          QueueStatus                   @default(PENDING)
+  priority        Int                           @default(0)
+  createdAt       DateTime                      @default(now()) @map("created_at")
+  processedAt     DateTime?                     @map("processed_at")
+  errorMessage    String?                       @map("error_message")
+  flag            CompanyFlag                   @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  processingSteps CompanyFlagsQueueProcessing[]
+
+  @@index([status, createdAt])
+  @@index([status, priority, createdAt])
+  @@index([flagId, status])
+  @@index([createdAt])
+  @@map("company_flags_queue")
+}
+
+model CompanyFlagsQueueProcessing {
+  id          String               @id @default(cuid())
+  queueId     String               @map("queue_id")
+  step        FlagReevaluationStep
+  stepData    Json                 @map("step_data")
+  completedAt DateTime             @default(now()) @map("completed_at")
+  queue       CompanyFlagsQueue    @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  @@unique([queueId, step])
+  @@index([queueId])
+  @@index([completedAt])
+  @@map("company_flags_queue_processing")
+}
+
+model BenConversation {
+  id         String       @id @default(cuid())
+  userId     String       @map("user_id")
+  title      String?
+  contextUrl String?      @map("context_url")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  shareToken String?      @unique @map("share_token")
+  sharedAt   DateTime?    @map("shared_at")
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   BenMessage[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@index([shareToken])
+  @@map("ben_conversations")
+}
+
+model BenMessage {
+  id             String          @id @default(cuid())
+  conversationId String          @map("conversation_id")
+  role           MessageRole
+  content        String
+  toolCalls      Json?           @map("tool_calls")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  conversation   BenConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+  @@map("ben_messages")
+}
+
+model BenMemory {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  category              String
+  key                   String
+  content               String
+  metadata              Json?
+  importance            Int       @default(50)
+  relevanceScore        Float?    @map("relevance_score")
+  sourceConversationIds String[]  @map("source_conversation_ids")
+  lastAccessed          DateTime? @map("last_accessed")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, key])
+  @@index([userId])
+  @@index([userId, category])
+  @@index([userId, importance])
+  @@index([userId, lastAccessed])
+  @@index([userId, relevanceScore])
+  @@map("ben_memories")
+}
+
+model IbovProjection {
+  id             String   @id @default(cuid())
+  period         String
+  projectedValue Decimal  @map("projected_value") @db.Decimal(10, 2)
+  confidence     Int
+  reasoning      String
+  keyIndicators  Json?    @map("key_indicators")
+  validUntil     DateTime @map("valid_until")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([period, validUntil])
+  @@index([period, validUntil])
+  @@index([createdAt])
+  @@map("ibov_projections")
+}
+
+model EconomicIndicatorHistory {
+  id            String    @id @default(cuid())
+  indicatorName String    @map("indicator_name")
+  symbol        String
+  date          DateTime  @db.Date
+  interval      String    @default("1d")
+  value         Decimal   @db.Decimal(15, 6)
+  changePercent Decimal?  @map("change_percent") @db.Decimal(10, 4)
+  open          Decimal?  @db.Decimal(15, 6)
+  high          Decimal?  @db.Decimal(15, 6)
+  low           Decimal?  @db.Decimal(15, 6)
+  close         Decimal?  @db.Decimal(15, 6)
+  volume        Decimal?  @db.Decimal(20, 2)
+  rsi           Decimal?  @db.Decimal(5, 2)
+  macd          Decimal?  @db.Decimal(10, 4)
+  macdSignal    Decimal?  @map("macd_signal") @db.Decimal(10, 4)
+  macdHistogram Decimal?  @map("macd_histogram") @db.Decimal(10, 4)
+  sma20         Decimal?  @map("sma_20") @db.Decimal(15, 6)
+  sma50         Decimal?  @map("sma_50") @db.Decimal(15, 6)
+  sma200        Decimal?  @map("sma_200") @db.Decimal(15, 6)
+  trend         String?
+  signal        String?
+  forecast      Decimal?  @db.Decimal(15, 6)
+  consensus     String?
+  nextEvent     String?   @map("next_event")
+  eventDate     DateTime? @map("event_date") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@unique([indicatorName, date, interval])
+  @@index([indicatorName, interval, date])
+  @@index([indicatorName, date])
+  @@index([interval, date])
+  @@index([date])
+  @@map("economic_indicator_history")
 }
 
 enum TransactionType {
@@ -1848,38 +2041,6 @@ enum FlagType {
   FUNDAMENTAL_LOSS
 }
 
-model CompanyFlagsQueue {
-  id              String                        @id @default(cuid())
-  flagId          String                        @map("flag_id")
-  status          QueueStatus                   @default(PENDING)
-  priority        Int                           @default(0)
-  createdAt       DateTime                      @default(now()) @map("created_at")
-  processedAt     DateTime?                     @map("processed_at")
-  errorMessage    String?                       @map("error_message")
-  flag            CompanyFlag                   @relation(fields: [flagId], references: [id], onDelete: Cascade)
-  processingSteps CompanyFlagsQueueProcessing[]
-
-  @@index([status, createdAt])
-  @@index([status, priority, createdAt])
-  @@index([flagId, status])
-  @@index([createdAt])
-  @@map("company_flags_queue")
-}
-
-model CompanyFlagsQueueProcessing {
-  id          String                  @id @default(cuid())
-  queueId     String                  @map("queue_id")
-  step        FlagReevaluationStep
-  stepData    Json                    @map("step_data")
-  completedAt DateTime                @default(now()) @map("completed_at")
-  queue       CompanyFlagsQueue       @relation(fields: [queueId], references: [id], onDelete: Cascade)
-
-  @@unique([queueId, step])
-  @@index([queueId])
-  @@index([completedAt])
-  @@map("company_flags_queue_processing")
-}
-
 enum FlagReevaluationStep {
   RESEARCH
   ANALYSIS
@@ -1889,121 +2050,4 @@ enum FlagReevaluationStep {
 enum MessageRole {
   USER
   ASSISTANT
-}
-
-model BenConversation {
-  id          String    @id @default(cuid())
-  userId      String    @map("user_id")
-  title       String?
-  contextUrl  String?   @map("context_url")
-  shareToken  String?   @unique @map("share_token")
-  sharedAt    DateTime? @map("shared_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages    BenMessage[]
-  
-  @@index([userId])
-  @@index([userId, updatedAt])
-  @@index([shareToken])
-  @@map("ben_conversations")
-}
-
-model BenMessage {
-  id             String          @id @default(cuid())
-  conversationId String          @map("conversation_id")
-  role           MessageRole
-  content        String
-  toolCalls      Json?           @map("tool_calls")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  
-  conversation   BenConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  
-  @@index([conversationId])
-  @@index([conversationId, createdAt])
-  @@map("ben_messages")
-}
-
-model BenMemory {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  category    String
-  key         String
-  content     String
-  metadata    Json?
-  importance  Int      @default(50)
-  relevanceScore Float? @map("relevance_score")
-  sourceConversationIds String[] @map("source_conversation_ids")
-  lastAccessed DateTime? @map("last_accessed")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, category, key])
-  @@index([userId])
-  @@index([userId, category])
-  @@index([userId, importance])
-  @@index([userId, lastAccessed])
-  @@index([userId, relevanceScore])
-  @@map("ben_memories")
-}
-
-model IbovProjection {
-  id            String   @id @default(cuid())
-  period        String
-  projectedValue Decimal  @map("projected_value") @db.Decimal(10, 2)
-  confidence    Int
-  reasoning     String   @db.Text
-  keyIndicators Json?    @map("key_indicators")
-  validUntil    DateTime @map("valid_until")
-  createdAt     DateTime @default(now()) @map("created_at")
-  
-  @@unique([period, validUntil])
-  @@index([period, validUntil])
-  @@index([createdAt])
-  @@map("ibov_projections")
-}
-
-model EconomicIndicatorHistory {
-  id                String   @id @default(cuid())
-  indicatorName     String   @map("indicator_name")
-  symbol            String
-  date              DateTime @db.Date
-  interval          String   @default("1d")
-  value             Decimal  @db.Decimal(15, 6)
-  changePercent     Decimal? @map("change_percent") @db.Decimal(10, 4)
-  open              Decimal? @db.Decimal(15, 6)
-  high              Decimal? @db.Decimal(15, 6)
-  low               Decimal? @db.Decimal(15, 6)
-  close             Decimal? @db.Decimal(15, 6)
-  volume            Decimal? @db.Decimal(20, 2)
-  
-  // Análise técnica calculada (opcional, pode ser null para dados antigos)
-  rsi               Decimal? @db.Decimal(5, 2)
-  macd              Decimal? @db.Decimal(10, 4)
-  macdSignal        Decimal? @map("macd_signal") @db.Decimal(10, 4)
-  macdHistogram     Decimal? @map("macd_histogram") @db.Decimal(10, 4)
-  sma20             Decimal? @map("sma_20") @db.Decimal(15, 6)
-  sma50             Decimal? @map("sma_50") @db.Decimal(15, 6)
-  sma200            Decimal? @map("sma_200") @db.Decimal(15, 6)
-  trend             String?
-  signal            String?
-  
-  // Expectativas (quando disponíveis)
-  forecast          Decimal? @db.Decimal(15, 6)
-  consensus         String?
-  nextEvent         String?  @map("next_event")
-  eventDate         DateTime? @map("event_date") @db.Date
-  
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  @@unique([indicatorName, date, interval])
-  @@index([indicatorName, interval, date])
-  @@index([indicatorName, date])
-  @@index([interval, date])
-  @@index([date])
-  @@map("economic_indicator_history")
 }

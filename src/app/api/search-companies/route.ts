@@ -14,32 +14,31 @@ export async function GET(request: NextRequest) {
     }
 
     // Criar chave de cache considerando o parâmetro de busca
-    const cacheKey = `search-companies-v2:${query.toLowerCase()}`;
+    const cacheKey = `search-companies-v3:${query.toLowerCase()}`;
 
     // Verificar cache
     const cachedData = await cache.get(cacheKey);
     if (cachedData) {
       return NextResponse.json(cachedData);
     }
-    
+
     // Buscar empresas por ticker ou nome (case insensitive)
-    // Incluir ações B3 (STOCK), BDRs e FIIs
+    // Incluir ações B3 (STOCK), BDRs, FIIs e ETFs ativos
     const companies = await safeQueryWithParams('search-companies', () =>
       prisma.company.findMany({
         where: {
-          assetType: { in: ['STOCK', 'BDR', 'FII'] },
-          OR: [
+          AND: [
             {
-              ticker: {
-                contains: query,
-                mode: 'insensitive'
-              }
+              OR: [
+                { assetType: { in: ['STOCK', 'BDR', 'FII'] } },
+                { assetType: 'ETF', isActive: true },
+              ]
             },
             {
-              name: {
-                contains: query,
-                mode: 'insensitive'
-              }
+              OR: [
+                { ticker: { contains: query, mode: 'insensitive' } },
+                { name: { contains: query, mode: 'insensitive' } },
+              ]
             }
           ]
         },

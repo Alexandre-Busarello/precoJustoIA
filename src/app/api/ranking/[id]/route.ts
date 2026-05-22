@@ -109,11 +109,15 @@ export async function GET(
 
     // Enriquecer resultados com múltiplos upsides se necessário
     let enrichedResults = ranking.results as unknown as RankBuilderResult[];
-    
+
+    // ETFs e FIIs têm estrutura própria — enriquecimento de ações não se aplica
+    const isEtfModel = ranking.model.startsWith('etfs-');
+    const isFiiModel = ranking.model === 'fiiDividendYield';
+
     // Verificar se os resultados precisam de enriquecimento
     // 1. Verificar se faltam upsides adicionais
     // 2. Verificar se faltam dados fundamentais básicos (para rankings antigos de IA)
-    const needsEnrichment = enrichedResults.length > 0 && enrichedResults.some(r => {
+    const needsEnrichment = !isEtfModel && !isFiiModel && enrichedResults.length > 0 && enrichedResults.some(r => {
       const hasGraham = r.key_metrics?.grahamUpside !== undefined && r.key_metrics?.grahamUpside !== null;
       const hasFcd = r.key_metrics?.fcdUpside !== undefined && r.key_metrics?.fcdUpside !== null;
       const hasGordon = r.key_metrics?.gordonUpside !== undefined && r.key_metrics?.gordonUpside !== null;

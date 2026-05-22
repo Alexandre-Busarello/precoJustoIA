@@ -922,6 +922,21 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         maximumFractionDigits: 1
       });
     }
+
+    // ETF-specific metrics
+    if (key === 'etfScore') {
+      return `${Math.round(value)}/100`;
+    }
+    if (key === 'retorno_1a') {
+      const sign = value >= 0 ? '+' : '';
+      return `${sign}${(value * 100).toFixed(1)}%`;
+    }
+    if (key === 'taxa_adm') {
+      return `${(value * 100).toFixed(2)}% a.a.`;
+    }
+    if (key === 'patrimonio_bi') {
+      return `R$ ${value.toFixed(1)} Bi`;
+    }
     
     // Para outros valores, formatar como número
     return value.toLocaleString('pt-BR', {
@@ -1168,7 +1183,11 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
       'earningsYield': 'Earnings Yield',
       'ceilingPrice': 'Preço Teto',
       'discountFromCeiling': 'Desconto do Teto',
-      'averageDividend': 'Média Dividendos (5-6 anos)'
+      'averageDividend': 'Média Dividendos (5-6 anos)',
+      'etfScore': 'PJ-ETF Score',
+      'retorno_1a': 'Retorno 1 Ano',
+      'taxa_adm': 'Taxa de Administração',
+      'patrimonio_bi': 'Patrimônio (R$ Bi)'
     };
     
     return translations[key] || key.replace(/([A-Z])/g, ' $1').trim();
@@ -3066,12 +3085,30 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                           
                           {/* Upside da estratégia principal */}
                           {(() => {
+                            const isEtfModel = (results?.model || '').startsWith('etfs-');
+                            const isFiiModel = results?.model === 'fiiDividendYield';
+
+                            // Para ETFs, mostrar score em vez de upside
+                            if (isEtfModel) {
+                              const etfScore = result.key_metrics?.etfScore as number | null | undefined;
+                              if (typeof etfScore === 'number') {
+                                return (
+                                  <div className="flex items-center justify-end gap-1 mb-2">
+                                    <span className="text-xs sm:text-sm font-semibold text-teal-600">
+                                      Score {Math.round(etfScore)}/100
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }
+
                             // Para método Barsi, sempre usar discountFromCeiling como upside principal
                             let mainUpside = result.upside;
                             if (results?.model === 'barsi' && result.key_metrics?.discountFromCeiling !== null && result.key_metrics?.discountFromCeiling !== undefined) {
                               mainUpside = result.key_metrics.discountFromCeiling;
                             }
-                            
+
                             return typeof mainUpside === 'number' ? (
                               <div className="flex flex-col items-end gap-0.5 mb-2">
                                 <div className="flex items-center justify-end gap-1">
@@ -3097,7 +3134,7 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                                     {formatPercentage(mainUpside)} upside
                                   </span>
                                 </div>
-                                {['fiiScreening', 'fiiRanking'].includes(results?.model || '') &&
+                                {(isFiiModel || ['fiiScreening', 'fiiRanking'].includes(results?.model || '')) &&
                                   result.fairValueModel && (
                                     <span className="text-[9px] text-muted-foreground text-right max-w-[180px] leading-tight">
                                       Ref.: {result.fairValueModel}
@@ -3184,24 +3221,37 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
                       {/* Action Buttons */}
                       <div className="flex flex-wrap gap-2 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
-                        <Button asChild variant="default" size="sm" className="flex-1">
-                          <Link href={`/acao/${result.ticker}`} prefetch={false}>
-                            <Building2 className="w-4 h-4 mr-2" />
-                            Ver Análise
-                          </Link>
-                        </Button>
-                        
-                        <AddToBacktestButton
-                          asset={{
-                            ticker: result.ticker,
-                            companyName: result.name,
-                            sector: result.sector || undefined,
-                            currentPrice: result.currentPrice
-                          }}
-                          variant="outline"
-                          size="sm"
-                          showLabel={false}
-                        />
+                        {(() => {
+                          const isEtfModel = (results?.model || '').startsWith('etfs-');
+                          const isFiiModel = results?.model === 'fiiDividendYield';
+                          const href = isEtfModel
+                            ? `/etf/${result.ticker}`
+                            : isFiiModel
+                            ? `/fii/${result.ticker}`
+                            : `/acao/${result.ticker}`;
+                          return (
+                            <Button asChild variant="default" size="sm" className="flex-1">
+                              <Link href={href} prefetch={false}>
+                                <Building2 className="w-4 h-4 mr-2" />
+                                Ver Análise
+                              </Link>
+                            </Button>
+                          );
+                        })()}
+
+                        {!(results?.model || '').startsWith('etfs-') && (
+                          <AddToBacktestButton
+                            asset={{
+                              ticker: result.ticker,
+                              companyName: result.name,
+                              sector: result.sector || undefined,
+                              currentPrice: result.currentPrice
+                            }}
+                            variant="outline"
+                            size="sm"
+                            showLabel={false}
+                          />
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -3702,6 +3752,16 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
                   <p className="text-2xl font-bold">{formatCurrency(selectedCardForSheet.currentPrice)}</p>
                 </div>
                 {(() => {
+                  const isEtfModel = (results?.model || '').startsWith('etfs-');
+                  if (isEtfModel) {
+                    const etfScore = selectedCardForSheet.key_metrics?.etfScore as number | null | undefined;
+                    return typeof etfScore === 'number' ? (
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground mb-1">PJ-ETF Score</p>
+                        <p className="text-2xl font-bold text-teal-600">{Math.round(etfScore)}/100</p>
+                      </div>
+                    ) : null;
+                  }
                   let mainUpside = selectedCardForSheet.upside;
                   if (results?.model === 'barsi' && selectedCardForSheet.key_metrics?.discountFromCeiling !== null && selectedCardForSheet.key_metrics?.discountFromCeiling !== undefined) {
                     mainUpside = selectedCardForSheet.key_metrics.discountFromCeiling;
@@ -3745,24 +3805,37 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
 
               {/* Ações */}
               <div className="flex flex-col gap-2 pt-4 border-t">
-                <Button asChild variant="default" size="lg" className="w-full">
-                  <Link href={`/acao/${selectedCardForSheet.ticker}`} prefetch={false}>
-                    <Building2 className="w-4 h-4 mr-2" />
-                    Ver Análise Completa
-                  </Link>
-                </Button>
-                <AddToBacktestButton
-                  asset={{
-                    ticker: selectedCardForSheet.ticker,
-                    companyName: selectedCardForSheet.name,
-                    sector: selectedCardForSheet.sector || undefined,
-                    currentPrice: selectedCardForSheet.currentPrice
-                  }}
-                  variant="outline"
-                  size="lg"
-                  showLabel={true}
-                  className="w-full"
-                />
+                {(() => {
+                  const isEtfModel = (results?.model || '').startsWith('etfs-');
+                  const isFiiModel = results?.model === 'fiiDividendYield';
+                  const href = isEtfModel
+                    ? `/etf/${selectedCardForSheet.ticker}`
+                    : isFiiModel
+                    ? `/fii/${selectedCardForSheet.ticker}`
+                    : `/acao/${selectedCardForSheet.ticker}`;
+                  return (
+                    <Button asChild variant="default" size="lg" className="w-full">
+                      <Link href={href} prefetch={false}>
+                        <Building2 className="w-4 h-4 mr-2" />
+                        Ver Análise Completa
+                      </Link>
+                    </Button>
+                  );
+                })()}
+                {!(results?.model || '').startsWith('etfs-') && (
+                  <AddToBacktestButton
+                    asset={{
+                      ticker: selectedCardForSheet.ticker,
+                      companyName: selectedCardForSheet.name,
+                      sector: selectedCardForSheet.sector || undefined,
+                      currentPrice: selectedCardForSheet.currentPrice
+                    }}
+                    variant="outline"
+                    size="lg"
+                    showLabel={true}
+                    className="w-full"
+                  />
+                )}
               </div>
             </div>
           </SheetContent>

@@ -1,4 +1,4 @@
-export type AssetType = 'b3' | 'bdr' | 'both' | 'fii'
+export type AssetType = 'b3' | 'bdr' | 'both' | 'fii' | 'etf'
 export type WizardFlow = 'new' | 'history'
 export type WizardStepId = 'destination' | 'history' | 'asset-type' | 'configure'
 
@@ -46,5 +46,12 @@ export const ASSET_TYPE_OPTIONS: AssetTypeOption[] = [
     description: 'Fundos de investimento imobiliário',
     emoji: '🏢',
     color: 'from-orange-500 to-amber-600',
+  },
+  {
+    id: 'etf',
+    label: 'ETFs',
+    description: 'Fundos de índice negociados em bolsa',
+    emoji: '📊',
+    color: 'from-teal-500 to-cyan-600',
   },
 ]

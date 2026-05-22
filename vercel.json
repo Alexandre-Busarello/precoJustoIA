@@ -1,8 +1,20 @@
 {
   "crons": [
     {
-      "path": "/api/cron/fetch-ward",
-      "schedule": "0 2 * * *"
+      "path": "/api/cron/fetch-etf?phase=1",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-etf?phase=2",
+      "schedule": "0 7 * * 0"
+    },
+    {
+      "path": "/api/cron/update-etf-historical",
+      "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-etf-technical",
+      "schedule": "0 10 1 * *"
     }
   ],
   "functions": {
@@ -11,22 +23,67 @@
       "maxDuration": 60
     },
     "src/app/api/fetch-ward-data/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/cron/fetch-ward/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "src/app/api/fetch-fii-data/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
+    },
+    "src/app/api/cron/fetch-ward/route.ts": {
+      "maxDuration": 300
     },
     "src/app/api/cron/fetch-fii/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
+    },
+    "src/app/api/cron/fetch-etf/route.ts": {
+      "maxDuration": 300
     },
     "src/app/api/cron/monitor-assets/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
+    },
+    "src/app/api/cron/monitor-custom-triggers/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/monitor-price-variations/route.ts": {
+      "maxDuration": 300
     },
     "src/app/api/cron/update-indices/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
+    },
+    "src/app/api/cron/generate-ai-reports/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/send-emails/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/calculate-ibov-projections/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/process-flag-reevaluations/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/youtube-analysis/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/dividend-radar-projections/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/update-portfolio-assets/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/expire-premium-subscriptions/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/process-payments/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/queue-flag-reevaluations/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/update-etf-historical/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/refresh-etf-technical/route.ts": {
+      "maxDuration": 300
     }
   },
   "env": {

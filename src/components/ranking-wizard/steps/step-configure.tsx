@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { QuickRanker, QuickRankerHandle } from '@/components/quick-ranker'
+import { EtfRanker } from '@/components/etf-ranker'
 import type { AssetType } from '../types'
 
 interface StepConfigureProps {
@@ -20,6 +21,10 @@ export function StepConfigure({
   onRankingGenerated,
 }: StepConfigureProps) {
   const quickRankerRef = useRef<QuickRankerHandle>(null)
+
+  if (assetType === 'etf') {
+    return <EtfRanker onBack={onBack} />
+  }
 
   return (
     <div className="w-full">

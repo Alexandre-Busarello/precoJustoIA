@@ -4,7 +4,7 @@ import { useMemo, useRef, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { WizardState, WizardStepId, AssetType, WizardFlow } from './types'
 
-const VALID_ASSET_TYPES: AssetType[] = ['b3', 'bdr', 'both', 'fii']
+const VALID_ASSET_TYPES: AssetType[] = ['b3', 'bdr', 'both', 'fii', 'etf']
 
 const STEP_ORDER: Record<WizardStepId, number> = {
   destination: 0,

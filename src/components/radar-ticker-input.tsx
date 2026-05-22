@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 interface Company {
   ticker: string
   name: string
+  assetType?: string
 }
 
 interface RadarTickerInputProps {
@@ -20,6 +21,7 @@ interface RadarTickerInputProps {
   onTickersChange: (tickers: string[]) => void
   onSave: (tickers: string[]) => Promise<void>
   className?: string
+  assetTypeFilter?: string
 }
 
 const FREE_TICKER_LIMIT = 3
@@ -29,6 +31,7 @@ export function RadarTickerInput({
   onTickersChange,
   onSave,
   className,
+  assetTypeFilter,
 }: RadarTickerInputProps) {
   const [query, setQuery] = useState('')
   const [companies, setCompanies] = useState<Company[]>([])
@@ -63,10 +66,11 @@ export function RadarTickerInput({
       
       if (response.ok) {
         const data = await response.json()
-        // Filtrar apenas tickers que ainda não foram adicionados
-        const filtered = data.companies.filter(
-          (c: Company) => !currentTickers.includes(c.ticker.toUpperCase())
-        )
+        // Filtrar por tipo de ativo e tickers já adicionados
+        const filtered = data.companies.filter((c: Company) => {
+          if (assetTypeFilter && c.assetType !== assetTypeFilter) return false
+          return !currentTickers.includes(c.ticker.toUpperCase())
+        })
         setCompanies(filtered)
         setShowResults(true)
       }
@@ -152,7 +156,7 @@ export function RadarTickerInput({
           <Input
             ref={inputRef}
             type="text"
-            placeholder="Buscar ticker (ex: PETR4, VALE3)..."
+            placeholder={assetTypeFilter === 'ETF' ? 'Buscar ETF (ex: BOVA11, IVVB11)...' : 'Buscar ticker (ex: PETR4, VALE3)...'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => {

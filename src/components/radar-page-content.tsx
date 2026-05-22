@@ -9,7 +9,7 @@ import { useRadar } from '@/hooks/use-radar'
 import { useRadarExplore } from '@/hooks/use-radar-explore'
 import { useToast } from '@/hooks/use-toast'
 import { usePremiumStatus } from '@/hooks/use-premium-status'
-import { Loader2, Radar, Sparkles, AlertCircle, Info, Crown, HelpCircle, TrendingUp } from 'lucide-react'
+import { Loader2, Radar, Sparkles, AlertCircle, Info, Crown, HelpCircle, TrendingUp, BarChart3 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,8 +36,9 @@ function RadarCardLoading() {
 }
 
 export function RadarPageContent() {
-  const [activeTab, setActiveTab] = useState<'meu-radar' | 'explorar'>('meu-radar')
+  const [activeTab, setActiveTab] = useState<'meu-radar' | 'explorar' | 'etfs'>('meu-radar')
   const [localTickers, setLocalTickers] = useState<string[]>([])
+  const [localEtfTickers, setLocalEtfTickers] = useState<string[]>([])
 
   const {
     radarConfig,
@@ -63,6 +64,16 @@ export function RadarPageContent() {
       setLocalTickers(radarConfig.tickers)
     }
   }, [radarConfig?.tickers])
+
+  // Sincronizar ETF tickers a partir dos dados carregados
+  useEffect(() => {
+    const etfTickers = (radarData as RadarAssetData[])
+      .filter((a) => a.assetType === 'ETF')
+      .map((a) => a.ticker)
+    if (etfTickers.length > 0) {
+      setLocalEtfTickers(etfTickers)
+    }
+  }, [radarData])
 
   const handleTickersChange = (tickers: string[]) => {
     setLocalTickers(tickers)
@@ -113,6 +124,22 @@ export function RadarPageContent() {
       })
     }
   }
+
+  const handleEtfTickersChange = (etfTickers: string[]) => {
+    const nonEtfTickers = localTickers.filter((t) => !localEtfTickers.includes(t))
+    setLocalEtfTickers(etfTickers)
+    setLocalTickers([...nonEtfTickers, ...etfTickers])
+  }
+
+  const handleEtfSave = async (etfTickers: string[]) => {
+    const nonEtfTickers = localTickers.filter((t) => !localEtfTickers.includes(t))
+    const merged = [...nonEtfTickers, ...etfTickers]
+    await saveRadar(merged)
+    setLocalTickers(merged)
+    setLocalEtfTickers(etfTickers)
+  }
+
+  const etfRadarData = (radarData as RadarAssetData[]).filter((a) => a.assetType === 'ETF')
 
   // Converter dados do explore para formato do grid
   const exploreGridData: RadarAssetData[] = exploreData.map((item: any) => ({
@@ -172,6 +199,10 @@ export function RadarPageContent() {
           <TabsTrigger value="meu-radar" className="flex items-center gap-2">
             <Radar className="w-4 h-4" />
             Meu Radar
+          </TabsTrigger>
+          <TabsTrigger value="etfs" className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            ETFs
           </TabsTrigger>
           <TabsTrigger value="explorar" className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
@@ -256,6 +287,63 @@ export function RadarPageContent() {
                 <Radar className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                 <p className="text-muted-foreground mb-4">
                   Seu radar está vazio. Adicione tickers acima para começar.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Tab: ETFs */}
+        <TabsContent value="etfs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-teal-600" />
+                ETFs no Radar
+              </CardTitle>
+              <CardDescription>
+                Adicione ETFs para acompanhar Score PJ-ETF, classe, taxa, retornos e score IA lado a lado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadarTickerInput
+                currentTickers={localEtfTickers}
+                onTickersChange={handleEtfTickersChange}
+                onSave={handleEtfSave}
+                assetTypeFilter="ETF"
+              />
+            </CardContent>
+          </Card>
+
+          {loadingConfig || loadingData ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">Carregando ETFs...</p>
+              </CardContent>
+            </Card>
+          ) : etfRadarData.length > 0 ? (
+            <RadarGrid
+              data={etfRadarData}
+              isPremium={isPremium!}
+              etfMode={true}
+            />
+          ) : localEtfTickers.length > 0 ? (
+            <Alert>
+              <AlertCircle className="w-4 h-4" />
+              <AlertDescription>
+                Carregando dados dos ETFs adicionados...
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground mb-2">
+                  Nenhum ETF no radar. Adicione ETFs acima para começar.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Ex: BOVA11, IVVB11, SPXR11, IMAB11, HASH11
                 </p>
               </CardContent>
             </Card>

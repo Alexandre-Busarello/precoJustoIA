@@ -30,7 +30,13 @@ import {
   Filter,
   X,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Trophy,
+  Wallet,
+  Landmark,
+  Building2,
+  Coins,
+  Leaf,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -51,6 +57,7 @@ interface RankingHistorySectionProps {
 }
 
 const modelIcons: Record<string, any> = {
+  // Ações
   'ai': Brain,
   'graham': Target,
   'fundamentalist': BarChart3,
@@ -60,9 +67,18 @@ const modelIcons: Record<string, any> = {
   'dividendYield': DollarSign,
   'gordon': DollarSign,
   'screening': Sparkles,
+  'barsi': Leaf,
+  // FIIs
+  'fiiDividendYield': Building2,
+  // ETFs
+  'etfs-melhor-score-geral': Trophy,
+  'etfs-menor-taxa-administracao': Wallet,
+  'etfs-maior-retorno-1a': TrendingUp,
+  'etfs-renda-fixa': Landmark,
 }
 
 const modelColors: Record<string, string> = {
+  // Ações
   'ai': 'from-purple-500 to-pink-500',
   'graham': 'from-blue-500 to-cyan-500',
   'fundamentalist': 'from-green-500 to-emerald-500',
@@ -72,6 +88,22 @@ const modelColors: Record<string, string> = {
   'dividendYield': 'from-green-600 to-teal-600',
   'gordon': 'from-violet-500 to-purple-500',
   'screening': 'from-amber-500 to-yellow-500',
+  'barsi': 'from-emerald-600 to-green-500',
+  // FIIs
+  'fiiDividendYield': 'from-orange-500 to-amber-500',
+  // ETFs
+  'etfs-melhor-score-geral': 'from-teal-500 to-cyan-500',
+  'etfs-menor-taxa-administracao': 'from-teal-600 to-emerald-500',
+  'etfs-maior-retorno-1a': 'from-teal-400 to-blue-500',
+  'etfs-renda-fixa': 'from-slate-500 to-teal-600',
+}
+
+// Retorna o label correto para o tipo de ativo com base no modelo
+function getAssetLabel(model: string, count: number): string {
+  const plural = count !== 1;
+  if (model.startsWith('etfs-')) return plural ? 'ETFs' : 'ETF';
+  if (model === 'fiiDividendYield') return plural ? 'FIIs' : 'FII';
+  return plural ? 'ações' : 'ação';
 }
 
 const modelOptions = [
@@ -436,7 +468,7 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <TrendingUp className="w-3 h-3" />
-                            {item.resultCount} {item.resultCount === 1 ? 'ação' : 'ações'}
+                            {item.resultCount} {getAssetLabel(item.model, item.resultCount)}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />

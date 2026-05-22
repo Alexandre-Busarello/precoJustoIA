@@ -55,6 +55,20 @@ interface RecreateAllResponse {
   error?: string;
 }
 
+async function recreateAllEtfHistoricalPrices(): Promise<RecreateAllResponse> {
+  const response = await fetch('/api/admin/historical-prices/etf-recreate-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Erro ao recriar preços históricos dos ETFs');
+  }
+
+  return response.json();
+}
+
 async function recreateHistoricalPrices(ticker: string): Promise<RecreateResponse> {
   const response = await fetch(`/api/admin/historical-prices/${encodeURIComponent(ticker)}`, {
     method: 'POST',
@@ -87,6 +101,7 @@ export default function AdminHistoricalPricesPage() {
   const [ticker, setTicker] = useState('');
   const [result, setResult] = useState<RecreateResponse | null>(null);
   const [allResult, setAllResult] = useState<RecreateAllResponse | null>(null);
+  const [etfAllResult, setEtfAllResult] = useState<RecreateAllResponse | null>(null);
 
   const recreateMutation = useMutation({
     mutationFn: recreateHistoricalPrices,
@@ -128,6 +143,26 @@ export default function AdminHistoricalPricesPage() {
     }
   });
 
+  const recreateAllEtfMutation = useMutation({
+    mutationFn: recreateAllEtfHistoricalPrices,
+    onSuccess: (data) => {
+      setEtfAllResult(data);
+      if (data.success) {
+        toast.success(data.message);
+      } else {
+        toast.error(data.error || 'Erro ao recriar preços históricos dos ETFs');
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro: ${error.message}`);
+      setEtfAllResult({
+        success: false,
+        message: '',
+        error: error.message
+      });
+    }
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ticker.trim()) {
@@ -148,6 +183,16 @@ export default function AdminHistoricalPricesPage() {
     setResult(null);
     setAllResult(null);
     await recreateAllMutation.mutateAsync();
+  };
+
+  const handleRecreateAllEtfs = async () => {
+    if (!confirm('Tem certeza que deseja recriar preços históricos de TODOS os ETFs? Isso pode levar alguns minutos.')) {
+      return;
+    }
+
+    setResult(null);
+    setEtfAllResult(null);
+    await recreateAllEtfMutation.mutateAsync();
   };
 
   return (
@@ -201,23 +246,60 @@ export default function AdminHistoricalPricesPage() {
           </CardContent>
         </Card>
 
+        {/* Botão ETFs */}
+        <Card className="mb-6 border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+              Carregar Histórico de Todos os ETFs
+            </CardTitle>
+            <CardDescription>
+              Carrega preços históricos desde 2000 para todos os ETFs cadastrados. Após a primeira carga, o CRON diário atualiza apenas os preços novos.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={handleRecreateAllEtfs}
+              disabled={recreateAllEtfMutation.isPending || recreateMutation.isPending || recreateAllMutation.isPending}
+              className="w-full bg-teal-600 hover:bg-teal-700"
+            >
+              {recreateAllEtfMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Carregando histórico dos ETFs...
+                </>
+              ) : (
+                <>
+                  <Database className="h-4 w-4 mr-2" />
+                  Carregar Histórico de Todos os ETFs (desde 2000)
+                </>
+              )}
+            </Button>
+            {recreateAllEtfMutation.isPending && (
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">
+                ⏳ Buscando dados do Yahoo Finance para todos os ETFs. Aguarde...
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Formulário */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Recriar Preços Históricos</CardTitle>
             <CardDescription>
-              Digite o ticker da empresa para recriar todos os preços históricos desde 2010
+              Digite o ticker de qualquer ativo (ação, ETF, FII) para recriar todos os preços históricos desde 2000
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="ticker">Ticker da Empresa *</Label>
+                <Label htmlFor="ticker">Ticker do Ativo *</Label>
                 <Input
                   id="ticker"
                   value={ticker}
                   onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                  placeholder="Ex: PETR4, VALE3, ITUB4"
+                  placeholder="Ex: PETR4, BOVA11, IVVB11, HGLG11"
                   disabled={recreateMutation.isPending}
                   className="mt-1"
                 />
@@ -462,6 +544,93 @@ export default function AdminHistoricalPricesPage() {
           </Card>
         )}
 
+        {/* Resultado - ETF Recriar Todas */}
+        {etfAllResult && (
+          <Card className={`mb-6 ${etfAllResult.success ? 'border-teal-200 dark:border-teal-800' : 'border-red-200 dark:border-red-800'}`}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                {etfAllResult.success ? (
+                  <>
+                    <CheckCircle2 className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                    <CardTitle className="text-teal-600 dark:text-teal-400">ETFs — Processamento Concluído</CardTitle>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    <CardTitle className="text-red-600 dark:text-red-400">Erro</CardTitle>
+                  </>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {etfAllResult.success && etfAllResult.results ? (
+                <div className="space-y-4">
+                  <Alert>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertDescription>{etfAllResult.message}</AlertDescription>
+                  </Alert>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="p-4 rounded-lg border bg-gray-50 dark:bg-gray-900/50">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
+                      <p className="text-lg font-semibold">{etfAllResult.results.total.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-teal-50 dark:bg-teal-900/50">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Sucesso</p>
+                      <p className="text-lg font-semibold text-teal-600 dark:text-teal-400">{etfAllResult.results.success.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-red-50 dark:bg-red-900/50">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Falhas</p>
+                      <p className="text-lg font-semibold text-red-600 dark:text-red-400">{etfAllResult.results.failed.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-yellow-50 dark:bg-yellow-900/50">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Ignoradas</p>
+                      <p className="text-lg font-semibold text-yellow-600 dark:text-yellow-400">{etfAllResult.results.skipped.toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+                  {etfAllResult.results.details.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-sm font-semibold mb-2">
+                        Detalhes ({etfAllResult.results.details.length} ETFs):
+                      </p>
+                      <div className="max-h-96 overflow-y-auto border rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                            <tr>
+                              <th className="text-left p-2">Ticker</th>
+                              <th className="text-left p-2">Status</th>
+                              <th className="text-left p-2">Mensagem</th>
+                              <th className="text-right p-2">Registros</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {etfAllResult.results.details.map((detail, idx) => (
+                              <tr key={idx} className="border-b">
+                                <td className="p-2 font-mono font-semibold">{detail.ticker}</td>
+                                <td className="p-2">
+                                  {detail.status === 'success' && <span className="text-teal-600 dark:text-teal-400">✓ Sucesso</span>}
+                                  {detail.status === 'failed' && <span className="text-red-600 dark:text-red-400">✗ Falha</span>}
+                                  {detail.status === 'skipped' && <span className="text-yellow-600 dark:text-yellow-400">⊘ Ignorado</span>}
+                                </td>
+                                <td className="p-2 text-xs text-gray-600 dark:text-gray-400">{detail.message}</td>
+                                <td className="p-2 text-right">{detail.recordsSaved ? detail.recordsSaved.toLocaleString('pt-BR') : '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{etfAllResult.error || 'Erro ao carregar histórico dos ETFs'}</AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Informações */}
         <Card className="mt-6 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
           <CardHeader>
@@ -512,6 +681,12 @@ export default function AdminHistoricalPricesPage() {
             <p className="text-yellow-700 dark:text-yellow-300 font-semibold mt-2">
               ⚠️ Esta operação pode levar alguns minutos dependendo da quantidade de dados disponíveis
             </p>
+            <div className="mt-3 p-3 rounded-lg bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800">
+              <p className="font-semibold text-teal-800 dark:text-teal-200 mb-1">🤖 CRON automático para ETFs:</p>
+              <p className="text-xs text-teal-700 dark:text-teal-300">
+                Roda diariamente às 08:30 — após a primeira carga manual, atualiza apenas os preços novos de forma incremental. ETFs sem histórico recebem carga automática dos últimos 20 anos.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>

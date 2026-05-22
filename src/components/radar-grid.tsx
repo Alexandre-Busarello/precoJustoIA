@@ -26,6 +26,10 @@ export interface RadarAssetData {
     segment: string | null
     isPapel: boolean | null
   }
+  etfProfile?: {
+    etfClass: string | null
+    netExpenseRatio: number | null
+  }
   strategies: {
     approved: string[]
     all: any
@@ -34,7 +38,7 @@ export interface RadarAssetData {
     upside: number | null
     status: 'green' | 'yellow' | 'red'
     label: string
-    /** Linha de texto para valuation FII (ex.: P/VP e DY). */
+    /** Linha de texto para valuation FII (ex.: P/VP e DY) ou ETF (retorno 1a). */
     detail?: string | null
   }
   technical: {
@@ -57,24 +61,30 @@ interface RadarGridProps {
   radarTickers?: string[]
   showAddButton?: boolean
   isPremium?: boolean
+  etfMode?: boolean
 }
 
-export function RadarGrid({ 
-  data, 
-  loading, 
+export function RadarGrid({
+  data,
+  loading,
   className,
   onAddToRadar,
   radarTickers = [],
   showAddButton = false,
   isPremium = false,
+  etfMode = false,
 }: RadarGridProps) {
-  const assetHref = (asset: RadarAssetData) =>
-    asset.assetType === 'FII' ? `/fii/${asset.ticker.toLowerCase()}` : `/acao/${asset.ticker.toLowerCase()}`
+  const assetHref = (asset: RadarAssetData) => {
+    if (asset.assetType === 'FII') return `/fii/${asset.ticker.toLowerCase()}`
+    if (asset.assetType === 'ETF') return `/etf/${asset.ticker.toLowerCase()}`
+    return `/acao/${asset.ticker.toLowerCase()}`
+  }
 
-  const technicalHref = (asset: RadarAssetData) =>
-    asset.assetType === 'FII'
-      ? `/fii/${asset.ticker.toLowerCase()}`
-      : `/acao/${asset.ticker.toLowerCase()}/analise-tecnica`
+  const technicalHref = (asset: RadarAssetData) => {
+    if (asset.assetType === 'FII') return `/fii/${asset.ticker.toLowerCase()}`
+    if (asset.assetType === 'ETF') return `/etf/${asset.ticker.toLowerCase()}/analise-tecnica`
+    return `/acao/${asset.ticker.toLowerCase()}/analise-tecnica`
+  }
 
   if (loading) {
     return (
@@ -118,7 +128,7 @@ export function RadarGrid({
               <th className="text-center p-3 text-xs font-medium text-muted-foreground">
                 <div className="flex flex-col items-center gap-1">
                   <span>Estratégias / Perfil</span>
-                  {!isPremium && (
+                  {!isPremium && !etfMode && (
                     <Badge variant="outline" className="text-xs">
                       Apenas Graham
                     </Badge>
@@ -180,14 +190,28 @@ export function RadarGrid({
                 <td className="p-3 text-center">
                   <RadarStatusIndicator
                     status={asset.overallStatus}
-                    label={asset.assetType === 'FII' ? 'PJ-FII' : 'Score'}
+                    label={asset.assetType === 'FII' ? 'PJ-FII' : asset.assetType === 'ETF' ? 'PJ-ETF' : 'Score'}
                     value={asset.overallScore ?? undefined}
                   />
                 </td>
 
-                {/* Estratégias */}
+                {/* Estratégias / Classe */}
                 <td className="p-3 text-center">
-                  {asset.assetType === 'FII' ? (
+                  {asset.assetType === 'ETF' ? (
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                      <Badge variant="secondary" className="text-xs">ETF</Badge>
+                      {asset.etfProfile?.etfClass && (
+                        <Badge variant="outline" className="text-xs max-w-[120px] truncate" title={asset.etfProfile.etfClass}>
+                          {asset.etfProfile.etfClass}
+                        </Badge>
+                      )}
+                      {asset.etfProfile?.netExpenseRatio !== null && asset.etfProfile?.netExpenseRatio !== undefined && (
+                        <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300 border-amber-300">
+                          {(asset.etfProfile.netExpenseRatio * 100).toFixed(2)}% a.a.
+                        </Badge>
+                      )}
+                    </div>
+                  ) : asset.assetType === 'FII' ? (
                     <div className="flex flex-wrap gap-1.5 justify-center">
                       <Badge variant="secondary" className="text-xs">
                         FII
@@ -224,6 +248,8 @@ export function RadarGrid({
                     value={
                       asset.assetType === 'FII'
                         ? (asset.valuation.detail ?? undefined)
+                        : asset.assetType === 'ETF'
+                        ? (asset.valuation.label || undefined)
                         : (asset.valuation.upside ?? undefined)
                     }
                   />
@@ -279,7 +305,9 @@ export function RadarGrid({
                   <RadarStatusIndicator
                     status={asset.sentiment.status}
                     label="Sentimento"
-                    value={asset.sentiment.score ?? undefined}
+                    value={asset.sentiment.score !== null && asset.sentiment.score !== undefined
+                      ? asset.sentiment.score
+                      : asset.sentiment.label}
                   />
                 </td>
 
@@ -351,7 +379,7 @@ export function RadarGrid({
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <RadarStatusIndicator
                   status={asset.overallStatus}
-                  label={asset.assetType === 'FII' ? 'PJ-FII' : 'Score Geral'}
+                  label={asset.assetType === 'FII' ? 'PJ-FII' : asset.assetType === 'ETF' ? 'PJ-ETF' : 'Score Geral'}
                   value={asset.overallScore ?? undefined}
                 />
                 <RadarStatusIndicator
@@ -360,6 +388,8 @@ export function RadarGrid({
                   value={
                     asset.assetType === 'FII'
                       ? (asset.valuation.detail ?? undefined)
+                      : asset.assetType === 'ETF'
+                      ? (asset.valuation.label || undefined)
                       : (asset.valuation.upside ?? undefined)
                   }
                 />
@@ -407,16 +437,30 @@ export function RadarGrid({
                 <RadarStatusIndicator
                   status={asset.sentiment.status}
                   label="Sentimento"
-                  value={asset.sentiment.score ?? undefined}
+                  value={asset.sentiment.score !== null && asset.sentiment.score !== undefined
+                    ? asset.sentiment.score
+                    : asset.sentiment.label}
                 />
               </div>
 
-              {/* Estratégias */}
+              {/* Estratégias / Perfil */}
               <div className="pt-4 border-t">
                 <div className="text-xs font-semibold text-foreground mb-3">
-                  {asset.assetType === 'FII' ? 'Perfil FII' : 'Estratégias Aprovadas'}
+                  {asset.assetType === 'ETF' ? 'Classe / Taxa' : asset.assetType === 'FII' ? 'Perfil FII' : 'Estratégias Aprovadas'}
                 </div>
-                {asset.assetType === 'FII' ? (
+                {asset.assetType === 'ETF' ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="secondary" className="text-xs">ETF</Badge>
+                    {asset.etfProfile?.etfClass && (
+                      <Badge variant="outline" className="text-xs">{asset.etfProfile.etfClass}</Badge>
+                    )}
+                    {asset.etfProfile?.netExpenseRatio !== null && asset.etfProfile?.netExpenseRatio !== undefined && (
+                      <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300 border-amber-300">
+                        {(asset.etfProfile.netExpenseRatio * 100).toFixed(2)}% a.a.
+                      </Badge>
+                    )}
+                  </div>
+                ) : asset.assetType === 'FII' ? (
                   <div className="flex flex-wrap gap-1.5">
                     <Badge variant="secondary" className="text-xs">
                       FII

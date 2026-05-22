@@ -492,7 +492,7 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
             <Activity className="w-4 h-4 text-teal-600" />
             Principais Posições
           </h2>
-          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${etfs.length}, 1fr)` }}>
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
             {etfs.map((etf) => (
               <Card key={etf.ticker}>
                 <CardHeader className="pb-2">
@@ -542,7 +542,7 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
               <Shield className="w-4 h-4 text-teal-600" />
               Análise IA
             </h2>
-            <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(etfs.length, 3)}, 1fr)` }}>
+            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
               {etfs
                 .filter((e) => e.aiAnalysisSummary)
                 .map((etf) => (

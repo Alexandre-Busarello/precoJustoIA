@@ -357,11 +357,11 @@ export default async function EtfPage({ params }: PageProps) {
                     {/* Comparador Inteligente */}
                     {etf?.etfClass && peerTickers.length >= 1 && (
                       <div className="mb-4">
-                        <Button asChild className="w-full bg-black hover:bg-zinc-900 text-white dark:bg-white dark:text-black dark:hover:bg-zinc-100 h-10 text-sm font-semibold">
+                        <Button asChild className="w-full bg-black hover:bg-zinc-900 text-white dark:bg-white dark:text-black dark:hover:bg-zinc-100 h-auto min-h-10 py-2 text-sm font-semibold">
                           <Link href={`/compara-etfs/${[ticker, ...peerTickers].map(t => t.toLowerCase()).join('/')}`}>
-                            <BarChart3 className="w-4 h-4 mr-2" />
+                            <BarChart3 className="w-4 h-4 mr-2 shrink-0" />
                             Comparador Inteligente
-                            <span className="ml-2 opacity-60 font-normal text-xs">{etf.etfClass}</span>
+                            <span className="ml-2 opacity-60 font-normal text-xs hidden sm:inline">{etf.etfClass}</span>
                             <span className="ml-1.5 opacity-40 text-xs">({peerTickers.length + 1})</span>
                           </Link>
                         </Button>
@@ -485,19 +485,21 @@ export default async function EtfPage({ params }: PageProps) {
                   const hasLink = !!h.company?.ticker
 
                   const inner = (
-                    <div className="flex items-center justify-between px-5 py-3 hover:bg-muted/40 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center justify-between px-5 py-3 hover:bg-muted/40 transition-colors gap-2">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <span className="text-xs text-muted-foreground w-5 text-right shrink-0">
                           {idx + 1}
                         </span>
-                        <div className="min-w-0">
-                          {holdingTicker && (
-                            <span className="font-mono text-sm font-bold mr-2">{holdingTicker}</span>
-                          )}
-                          <span className="text-sm text-muted-foreground truncate">{holdingName}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-1.5 min-w-0">
+                            {holdingTicker && (
+                              <span className="font-mono text-sm font-bold shrink-0">{holdingTicker}</span>
+                            )}
+                            <span className="text-sm text-muted-foreground truncate min-w-0 flex-1">{holdingName}</span>
+                          </div>
                         </div>
                       </div>
-                      <span className="font-bold text-sm shrink-0 ml-4">{weightPct}%</span>
+                      <span className="font-bold text-sm shrink-0 ml-2">{weightPct}%</span>
                     </div>
                   )
 

@@ -269,7 +269,8 @@ const models = [
 interface QuickRankerProps {
   rankingId?: string | null;
   assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii';
-  onRankingGenerated?: () => void; // Callback quando um novo ranking é gerado
+  onRankingGenerated?: () => void;
+  onBack?: () => void;
 }
 
 // Interface para o ref handle
@@ -279,7 +280,7 @@ export interface QuickRankerHandle {
 }
 
 const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
-  ({ rankingId, assetTypeFilter = 'both', onRankingGenerated }, ref) => {
+  ({ rankingId, assetTypeFilter = 'both', onRankingGenerated, onBack }, ref) => {
   const { data: session } = useSession()
   const { trackEvent } = useTracking()
   const { trackEngagement } = useEngagementPixel()
@@ -319,6 +320,7 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
   const resultsRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLDivElement>(null)
+  const paramsRef = useRef<HTMLDivElement>(null)
 
   // Abrir Sheet de parâmetros automaticamente quando um modelo é selecionado no mobile
   useEffect(() => {
@@ -537,15 +539,19 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
     }
     
     setSelectedModel(model)
-    
+
     // No mobile: abrir Sheet de parâmetros automaticamente
     if (isMobile) {
       setWizardStep(1)
       setShowModelSheet(false)
-      // Pequeno delay para garantir que o estado seja atualizado antes de abrir o Sheet
       setTimeout(() => {
         setShowParamsSheet(true)
       }, 100)
+    } else {
+      // No desktop: scroll suave até a área de parâmetros
+      setTimeout(() => {
+        paramsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
     }
     setResults(null)
     setError(null)
@@ -671,6 +677,9 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
         setParams({
           tipoFii: "both",
           assetTypeFilter: "fii",
+          minDY: 0.06,        // DY mínimo 6%
+          maxPVP: 1.1,        // P/VP máximo 1,10
+          minLiquidity: 300_000, // Liquidez mínima R$300k/dia
           limit: 50,
         });
         break;
@@ -2050,7 +2059,134 @@ const QuickRankerComponent = forwardRef<QuickRankerHandle, QuickRankerProps>(
           </div>
         )}
 
-        {/* Screening */}
+        {/* Screening de FIIs */}
+        {selectedModel === "fiiScreening" && (
+          <div className="space-y-5">
+            <div className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
+              <div className="flex items-start space-x-2">
+                <Search className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-orange-900 dark:text-orange-100 mb-1">
+                    🏢 Screening de FIIs
+                  </p>
+                  <p className="text-xs text-orange-800 dark:text-orange-200">
+                    Configure critérios de filtragem para selecionar fundos imobiliários. Todos os FIIs que passarem nos filtros serão ordenados pelo PJ-FII Score.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tipo de FII */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Tipo de FII</Label>
+              <Select
+                value={params.tipoFii || 'both'}
+                onValueChange={(value) => setParams({ ...params, tipoFii: value as 'papel' | 'tijolo' | 'both' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="both">🏢 Tijolo + Papel</SelectItem>
+                  <SelectItem value="tijolo">🧱 Somente Tijolo</SelectItem>
+                  <SelectItem value="papel">📄 Somente Papel</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">FIIs de tijolo possuem imóveis físicos; papel investe em CRIs e outros títulos</p>
+            </div>
+
+            {/* DY Mínimo */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Dividend Yield Mínimo</Label>
+                <Badge variant="outline" className="font-mono">
+                  {formatPercentage((params.minDY ?? 0.06) * 100)}
+                </Badge>
+              </div>
+              <Slider
+                value={[(params.minDY ?? 0.06) * 100]}
+                onValueChange={(value) => setParams({ ...params, minDY: value[0] / 100 })}
+                max={14}
+                min={0}
+                step={0.5}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Sem filtro (0%)</span>
+                <span>Alto (14%)</span>
+              </div>
+              <p className="text-xs text-muted-foreground">DY dos últimos 12 meses. Defina 0% para não filtrar por DY.</p>
+            </div>
+
+            {/* P/VP Máximo */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">P/VP Máximo</Label>
+                <Badge variant="outline" className="font-mono">
+                  {(params.maxPVP ?? 1.1).toFixed(2)}
+                </Badge>
+              </div>
+              <Slider
+                value={[(params.maxPVP ?? 1.1) * 10]}
+                onValueChange={(value) => setParams({ ...params, maxPVP: value[0] / 10 })}
+                max={20}
+                min={3}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Conservador (0,3)</span>
+                <span>Liberal (2,0)</span>
+              </div>
+              <p className="text-xs text-muted-foreground">P/VP acima de 1,0 indica prêmio sobre valor patrimonial</p>
+            </div>
+
+            {/* Liquidez Mínima */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Liquidez Diária Mínima</Label>
+                <Badge variant="outline" className="font-mono text-xs">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 0 }).format(params.minLiquidity ?? 300_000)}
+                </Badge>
+              </div>
+              <Slider
+                value={[Math.log10(params.minLiquidity ?? 300_000)]}
+                onValueChange={(value) => setParams({ ...params, minLiquidity: Math.round(Math.pow(10, value[0])) })}
+                max={7}
+                min={4}
+                step={0.25}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>R$ 10k</span>
+                <span>R$ 10M</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Volume médio negociado por dia. Maior liquidez = menos risco de dificuldade na venda.</p>
+            </div>
+
+            {/* Número de resultados */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Número de Resultados</Label>
+                <Badge variant="outline" className="font-mono">{params.limit ?? 50}</Badge>
+              </div>
+              <Slider
+                value={[params.limit ?? 50]}
+                onValueChange={(value) => setParams({ ...params, limit: value[0] })}
+                max={100}
+                min={10}
+                step={10}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>10</span>
+                <span>100</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Screening de Ações */}
         {selectedModel === "screening" && (
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -3309,11 +3445,11 @@ Análise baseada nos critérios selecionados com foco em encontrar oportunidades
               <>
                 {/* Desktop: mostrar inline */}
                 {!isMobile && (
-              <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-xl border">
-                <div className="flex items-center gap-2">
-                  <Target className="w-5 h-5 text-blue-600" />
-                  <h4 className="font-semibold text-lg">Configure os parâmetros</h4>
-                </div>
+                  <div ref={paramsRef} className="space-y-4 sm:space-y-6 p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/10 dark:to-violet-950/10 rounded-xl border">
+                    <div className="flex items-center gap-2">
+                      <Target className="w-5 h-5 text-blue-600" />
+                      <h4 className="font-semibold text-lg">Configure os parâmetros</h4>
+                    </div>
                     <ParametersContent />
                   </div>
                 )}

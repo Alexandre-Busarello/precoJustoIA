@@ -637,15 +637,21 @@ Sua tarefa é identificar quais ferramentas são necessárias para responder à 
     }
 
     // Adicionar function calls e responses ao histórico
+    // IMPORTANTE: usar as parts originais da resposta (não reconstruir manualmente),
+    // pois modelos mais novos anexam um thoughtSignature em cada functionCall part
+    // que precisa ser devolvido intacto nos próximos turnos, senão a API rejeita
+    // a chamada com "Function call is missing a thought_signature"
+    const modelParts = response.candidates?.[0]?.content?.parts ?? functionCalls.map(fc => ({
+      functionCall: {
+        name: fc.name,
+        args: fc.args,
+        id: fc.id
+      }
+    }))
+
     fullContents.push({
       role: 'model',
-      parts: functionCalls.map(fc => ({
-        functionCall: {
-          name: fc.name,
-          args: fc.args,
-          id: fc.id
-        }
-      }))
+      parts: modelParts
     })
 
     fullContents.push({
@@ -1515,15 +1521,21 @@ export async function processBenMessage(
 
         // Adicionar resposta do modelo com function calls
         // IMPORTANTE: Gemini aceita apenas 'user' e 'model' como roles
+        // IMPORTANTE: usar as parts originais da resposta (não reconstruir manualmente),
+        // pois modelos mais novos anexam um thoughtSignature em cada functionCall part
+        // que precisa ser devolvido intacto nos próximos turnos, senão a API rejeita
+        // a chamada com "Function call is missing a thought_signature"
+        const modelParts = response.candidates?.[0]?.content?.parts ?? functionCalls.map(fc => ({
+          functionCall: {
+            name: fc.name,
+            args: fc.args,
+            id: fc.id
+          }
+        }))
+
         fullContents.push({
           role: 'model',
-          parts: functionCalls.map(fc => ({
-            functionCall: {
-              name: fc.name,
-              args: fc.args,
-              id: fc.id
-            }
-          }))
+          parts: modelParts
         })
 
         // Adicionar function responses como mensagem do usuário

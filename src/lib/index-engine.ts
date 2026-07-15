@@ -519,6 +519,37 @@ export async function calculateDailyReturn(
     }
 
     // 4. Calcular variação ponderada R_t = Σ(w_{i,t-1} × r_{i,t})
+    //
+    // IMPORTANTE: w_{i,t-1} é o peso REAL do ativo no dia anterior, que migra com a
+    // performance de cada ativo desde a entrada (comprar e segurar até o próximo
+    // rebalanceamento) — não o targetWeight fixo definido no último rebalanceamento.
+    // Um investidor real que compra ações proporcionalmente ao targetWeight no dia da
+    // entrada passa a ter, nos dias seguintes, um peso maior nos ativos que subiram mais
+    // (e menor nos que caíram/subiram menos). Usar o targetWeight fixo todos os dias
+    // equivaleria a rebalancear a carteira diariamente de volta ao alvo, o que não é o
+    // que a carteira teórica pretende simular.
+    //
+    // Peso real no dia anterior: w_{i,t-1} = targetWeight_i × (preço_i,t-1 / entryPrice_i),
+    // normalizado para somar 1 entre os ativos da composição.
+    const driftedWeights = new Map<string, number>();
+    {
+      let totalDriftFactor = 0;
+      const rawDriftFactors = new Map<string, number>();
+      for (const comp of composition) {
+        const priceYesterdayForDrift = pricesYesterday.get(comp.assetTicker);
+        const rawDriftFactor = (priceYesterdayForDrift && comp.entryPrice > 0)
+          ? comp.targetWeight * (priceYesterdayForDrift / comp.entryPrice)
+          : comp.targetWeight; // Fallback: sem preço de ontem, usar targetWeight como peso
+        rawDriftFactors.set(comp.assetTicker, rawDriftFactor);
+        totalDriftFactor += rawDriftFactor;
+      }
+      for (const comp of composition) {
+        const rawDriftFactor = rawDriftFactors.get(comp.assetTicker) ?? comp.targetWeight;
+        const driftedWeight = totalDriftFactor > 0 ? rawDriftFactor / totalDriftFactor : comp.targetWeight;
+        driftedWeights.set(comp.assetTicker, driftedWeight);
+      }
+    }
+
     let totalReturn = 0;
     let totalWeightedYield = 0;
     let totalWeight = 0;
@@ -584,8 +615,9 @@ export async function calculateDailyReturn(
       // Calcular variação percentual incluindo dividendo: r_{i,t} = (PreçoAjustadoHoje / PreçoOntem) - 1
       const dailyReturn = (adjustedPriceToday / priceYesterday) - 1;
 
-      // Peso do ativo (targetWeight)
-      const weight = comp.targetWeight;
+      // Peso real do ativo no dia anterior (migra com a performance desde a entrada,
+      // não o targetWeight fixo — ver cálculo de driftedWeights acima)
+      const weight = driftedWeights.get(comp.assetTicker) ?? comp.targetWeight;
 
       // Contribuição ponderada: w_{i,t-1} × r_{i,t}
       const weightedContribution = weight * dailyReturn;
@@ -696,12 +728,33 @@ export async function calculateDailyReturn(
     const currentYield = totalWeight > 0 ? totalWeightedYield / totalWeight : null;
 
     // 7. Criar snapshot da composição atual
+    // Peso registrado é o peso real de HOJE (migrado desde a entrada usando o preço de
+    // hoje), não o targetWeight fixo — é este valor que servirá de w_{i,t-1} no cálculo
+    // do dia seguinte.
+    const todayDriftedWeights = new Map<string, number>();
+    {
+      let totalTodayDriftFactor = 0;
+      const rawTodayDriftFactors = new Map<string, number>();
+      for (const comp of composition) {
+        const priceTodayForDrift = pricesToday.get(comp.assetTicker)?.price;
+        const rawFactor = (priceTodayForDrift && comp.entryPrice > 0)
+          ? comp.targetWeight * (priceTodayForDrift / comp.entryPrice)
+          : comp.targetWeight;
+        rawTodayDriftFactors.set(comp.assetTicker, rawFactor);
+        totalTodayDriftFactor += rawFactor;
+      }
+      for (const comp of composition) {
+        const rawFactor = rawTodayDriftFactors.get(comp.assetTicker) ?? comp.targetWeight;
+        todayDriftedWeights.set(comp.assetTicker, totalTodayDriftFactor > 0 ? rawFactor / totalTodayDriftFactor : comp.targetWeight);
+      }
+    }
+
     const compositionSnapshot: Record<string, CompositionSnapshot> = {};
     for (const comp of composition) {
       const priceToday = pricesToday.get(comp.assetTicker)?.price;
       if (priceToday) {
         compositionSnapshot[comp.assetTicker] = {
-          weight: comp.targetWeight,
+          weight: todayDriftedWeights.get(comp.assetTicker) ?? comp.targetWeight,
           price: priceToday,
           entryPrice: comp.entryPrice,
           entryDate: comp.entryDate
@@ -740,12 +793,16 @@ export async function updateIndexPoints(
   indexId: string,
   date: Date,
   forceUpdate: boolean = false,
-  skipCache: boolean = false
+  skipCache: boolean = false,
+  knownMarketOpen?: boolean
 ): Promise<boolean> {
   try {
     // Verificar se houve pregão antes de calcular pontos
     // Passar skipCache para checkMarketWasOpen quando updateIndexPoints recebe skipCache=true
-    const marketWasOpen = await checkMarketWasOpen(date, skipCache);
+    // Se o chamador já confirmou o pregão para esta data (knownMarketOpen=true), não repetir a
+    // consulta ao Yahoo Finance: com muitos índices, checar o pregão uma vez por índice esgota
+    // rapidamente o rate limit do Yahoo e derruba o job inteiro (circuit breaker de indisponibilidade)
+    const marketWasOpen = knownMarketOpen ?? await checkMarketWasOpen(date, skipCache);
     if (!marketWasOpen) {
       // Formatar data usando timezone de Brasília para consistência
       const formatter = new Intl.DateTimeFormat('en-US', {

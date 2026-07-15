@@ -19,28 +19,55 @@ import { getChart, getChartWithoutCache } from './yahooFinance2-service';
 export async function hasIBOVQuoteForDate(date: Date, skipCache: boolean = false): Promise<boolean> {
   try {
     const ibovSymbol = '^BVSP'; // IBOVESPA no Yahoo Finance (sem .SA)
-    
+
     // Buscar dados do dia específico (usar intervalo diário para precisão)
     const startDate = new Date(date);
     startDate.setUTCDate(startDate.getUTCDate() - 2); // Buscar alguns dias antes
     const endDate = new Date(date);
     endDate.setUTCDate(endDate.getUTCDate() + 1); // Até o dia seguinte
-    
+
     const chartOptions = {
       period1: startDate,
       period2: endDate,
       interval: '1d', // Dados diários para precisão
       return: 'array'
     };
-    
-    // Usar versão sem cache se solicitado (para realtime-return)
-    const result = skipCache 
-      ? await getChartWithoutCache(ibovSymbol, chartOptions)
-      : await getChart(ibovSymbol, chartOptions);
-    
+
+    // O Yahoo Finance sofre 429/erros transitórios com frequência (rate limiting).
+    // Sem retry, um único hiccup faz esta função concluir (erroneamente) que não houve
+    // pregão, o que derruba o rebalanceamento mensal inteiro. Tenta algumas vezes antes de desistir.
+    const MAX_ATTEMPTS = 3;
+    let result: any = null;
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        // Usar versão sem cache se solicitado (para realtime-return)
+        result = skipCache
+          ? await getChartWithoutCache(ibovSymbol, chartOptions)
+          : await getChart(ibovSymbol, chartOptions);
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err;
+        if (attempt < MAX_ATTEMPTS) {
+          const delayMs = 500 * attempt;
+          console.warn(`⚠️ [MARKET STATUS] Tentativa ${attempt}/${MAX_ATTEMPTS} falhou ao buscar cotação do IBOVESPA, tentando novamente em ${delayMs}ms:`, err instanceof Error ? err.message : err);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    // Todas as tentativas falharam: propagar o erro em vez de silenciosamente assumir
+    // "sem pregão" (o catch externo loga isso claramente e o cron pode tentar de novo depois,
+    // sem marcar o índice como "sem movimentação" indevidamente)
+    if (lastError) {
+      throw lastError;
+    }
+
     // O resultado pode vir como array direto ou como objeto com quotes
     const quotes = Array.isArray(result) ? result : (result?.quotes || []);
-    
+
     if (!quotes || quotes.length === 0) {
       return false;
     }
@@ -79,7 +106,11 @@ export async function hasIBOVQuoteForDate(date: Date, skipCache: boolean = false
     
     return false;
   } catch (error) {
-    console.error(`❌ [MARKET STATUS] Erro ao verificar cotação do IBOVESPA para ${date.toISOString()}:`, error);
+    // IMPORTANTE: chegar aqui significa que NÃO conseguimos confirmar se houve pregão
+    // (falha ao consultar o Yahoo Finance após retries), o que é diferente de "confirmamos
+    // que não houve pregão". Retornar false é o comportamento mais seguro (não calcular pontos
+    // com dados incompletos), mas o erro é logado como falha real para não passar despercebido.
+    console.error(`❌ [MARKET STATUS] Falha ao verificar cotação do IBOVESPA para ${date.toISOString()} (assumindo "sem pregão" por segurança, mas isto pode ser um falso negativo):`, error);
     return false;
   }
 }

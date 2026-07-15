@@ -64,28 +64,36 @@ function isTradingDay(date: Date = new Date()): boolean {
 }
 
 /**
- * Verifica se o screening já foi executado neste mês (timezone de Brasília)
- * Verifica nos logs de rebalanceamento se há algum log deste mês
+ * Verifica se o screening de um índice específico já foi executado neste mês (timezone de Brasília)
+ * Verifica nos logs de rebalanceamento se há algum log deste mês PARA ESTE ÍNDICE
+ *
+ * IMPORTANTE: esta checagem é por índice (indexId), não global. Uma versão anterior verificava
+ * apenas se existia *algum* log SYSTEM/REBALANCE no mês (sem filtrar por índice), o que fazia
+ * com que, assim que UM índice fosse processado no mês, TODOS os demais índices ainda não
+ * processados ficassem bloqueados até o mês seguinte — mesmo que o job de screening não tivesse
+ * dado tempo de rodar para eles (job é incremental/checkpointed e processa um índice por vez
+ * até o timeout de execução).
  */
-async function wasScreeningExecutedThisMonth(date: Date = new Date()): Promise<boolean> {
+async function wasScreeningExecutedThisMonth(indexId: string, date: Date = new Date()): Promise<boolean> {
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/Sao_Paulo',
       year: 'numeric',
       month: '2-digit',
     });
-    
+
     const parts = formatter.formatToParts(date);
     const year = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
     const month = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10);
-    
+
     // Criar início e fim do mês atual em Brasília
     const startOfMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
     const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-    
-    // Verificar se há algum log de rebalanceamento neste mês
+
+    // Verificar se há algum log de rebalanceamento neste mês PARA ESTE ÍNDICE
     const logThisMonth = await prisma.indexRebalanceLog.findFirst({
       where: {
+        indexId,
         action: 'REBALANCE',
         ticker: 'SYSTEM',
         date: {
@@ -97,10 +105,10 @@ async function wasScreeningExecutedThisMonth(date: Date = new Date()): Promise<b
         date: true,
       },
     });
-    
+
     return !!logThisMonth;
   } catch (error) {
-    console.error('⚠️ [CRON INDICES] Erro ao verificar se screening foi executado este mês:', error);
+    console.error(`⚠️ [CRON INDICES] Erro ao verificar se screening foi executado este mês para índice ${indexId}:`, error);
     // Em caso de erro, retornar false para permitir execução (fail-safe)
     return false;
   }
@@ -382,7 +390,9 @@ async function fillMissingHistoryWithCheckpoint(
     for (const date of missingDates) {
       try {
         // CRÍTICO: Não usar cache para atualização de pontos no cron do after market
-        const success = await updateIndexPoints(indexId, date, false, true);
+        // O pregão já foi confirmado para esta data ao montar missingDates acima:
+        // não repetir a consulta ao Yahoo (knownMarketOpen=true) para não gastar o rate limit
+        const success = await updateIndexPoints(indexId, date, false, true, true);
         if (success) {
           filledCount++;
           // Atualizar checkpoint com a data processada
@@ -673,7 +683,10 @@ async function runMarkToMarketJob(): Promise<{
       // 2. Calcular pontos para hoje
       // CRÍTICO: Usar skipCache=true para garantir preços mais atualizados do Yahoo Finance
       // O cron de after market não pode usar cache (nem do ibovespa nem dos ativos)
-      const success = await updateIndexPoints(index.id, today, false, true);
+      // O pregão de hoje já foi confirmado uma única vez no início do job (marketWasOpen acima):
+      // não repetir essa consulta ao Yahoo por índice, senão o rate limit estoura com muitos índices
+      // e o circuit breaker do yahooFinance2-service bloqueia o restante do job por 1h
+      const success = await updateIndexPoints(index.id, today, false, true, true);
       
       if (success) {
         successCount++;
@@ -799,20 +812,11 @@ async function runScreeningJob(): Promise<{
     return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
   }
   
-  // No máximo um rebalanceamento por mês (independente do dia do mês)
-  const alreadyExecuted = await wasScreeningExecutedThisMonth(today);
-  if (alreadyExecuted) {
-    const formatter = new Intl.DateTimeFormat('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-    const dateStr = formatter.format(today);
-    console.log(`⏸️ [CRON INDICES] Screening job skipped: já foi executado neste mês (hoje: ${dateStr})`);
-    return { success: 0, failed: 0, rebalanced: 0, processed: 0, remaining: 0, errors: [] };
-  }
-  
+  // NOTA: o limite de "no máximo um rebalanceamento por mês" é verificado por índice,
+  // dentro do loop abaixo (não mais aqui globalmente). Um gate global bloqueava TODOS os
+  // índices assim que qualquer um deles fosse processado no mês, mesmo que o job (incremental,
+  // processa um índice por vez até o timeout) ainda não tivesse alcançado os demais.
+
   console.log('🔍 [CRON INDICES] Starting Screening job (incremental)...');
 
   // Limpar checkpoints antigos com null antes de começar
@@ -1008,6 +1012,25 @@ async function runScreeningJob(): Promise<{
           });
           continue;
         }
+      }
+
+      // No máximo um rebalanceamento por mês PARA ESTE ÍNDICE (verificado por índice, não
+      // globalmente, para não travar índices ainda não processados quando o job é retomado
+      // em outro dia do mesmo mês)
+      const alreadyExecutedThisMonth = await wasScreeningExecutedThisMonth(index.id, todayIndex);
+      if (alreadyExecutedThisMonth) {
+        console.log(`    ⏭️ ${index.ticker}: Já foi rebalanceado neste mês, skipping`);
+        successCount++;
+        await clearIndexCheckpoint('screening', index.id);
+        await saveCheckpoint({
+          jobType: 'screening',
+          indexId: null,
+          lastProcessedIndexId,
+          processedCount: startIndex + successCount + failedCount,
+          totalCount: allIndices.length,
+          errors
+        });
+        continue;
       }
 
       // Criar checkpoint do índice antes de começar processamento

@@ -292,9 +292,15 @@ export async function calculateRealTimeReturn(
       // Calcular variação percentual: r_i = (preço_atual - preço_fechamento) / preço_fechamento
       const assetReturn = (currentPrice - lastClosePrice) / lastClosePrice;
 
+      // Peso REAL no último fechamento (já migrado desde a entrada — ver compositionSnapshot
+      // em calculateDailyReturn), não o targetWeight fixo. Usar o targetWeight aqui faria a
+      // variação "ao vivo" divergir do valor que o mark-to-market vai persistir no fechamento,
+      // já que este usa o peso drifted (w_{i,t-1}).
+      const weight = lastSnapshot?.[comp.assetTicker]?.weight ?? comp.targetWeight;
+
       // Contribuição ponderada: w_i × r_i
-      totalReturn += comp.targetWeight * assetReturn;
-      totalWeight += comp.targetWeight;
+      totalReturn += weight * assetReturn;
+      totalWeight += weight;
     }
 
     // Se não conseguiu calcular para nenhum ativo, retornar null

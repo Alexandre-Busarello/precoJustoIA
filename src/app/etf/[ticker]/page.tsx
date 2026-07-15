@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
@@ -12,12 +13,33 @@ import { BenChatFAB } from '@/components/ben-chat-fab'
 import { cache } from '@/lib/cache-service'
 import { ensureTodayPrice } from '@/lib/quote-service'
 import { getOrCalculateDailyTechnicalAnalysis } from '@/lib/technical-analysis-service'
+import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
+import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
+import { AnonLimitCTA } from '@/components/anon-limit-cta'
 import Link from 'next/link'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Crown, Eye, TrendingUp, Info, AlertTriangle, Sparkles, BarChart3 } from 'lucide-react'
+
+function PremiumLockOverlay({ isLoggedIn }: { isLoggedIn: boolean }) {
+  const ctaHref = isLoggedIn ? '/checkout' : '/register'
+  const ctaLabel = isLoggedIn ? 'Upgrade Premium' : 'Cadastre-se Grátis'
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-background/85 backdrop-blur-[2px] border border-dashed border-teal-300/80 px-3 text-center">
+      <Crown className="h-6 w-6 text-teal-600 mb-1" />
+      <p className="text-xs text-muted-foreground mb-2 max-w-xs">
+        {isLoggedIn
+          ? 'Assine o Premium para ver este conteúdo completo.'
+          : 'Crie sua conta gratuita ou faça login para desbloquear.'}
+      </p>
+      <Button asChild size="sm" variant="outline" className="text-xs">
+        <Link href={ctaHref}>{ctaLabel}</Link>
+      </Button>
+    </div>
+  )
+}
 
 interface PageProps {
   params: { ticker: string }
@@ -140,12 +162,25 @@ export default async function EtfPage({ params }: PageProps) {
   }
 
   const session = await getServerSession(authOptions)
-  let isPremium = false
   const isLoggedIn = !!session?.user
+  let canViewFullContent = false
+  let shouldShowAnonLimitCTA = false
 
-  if (isLoggedIn) {
+  if (session?.user?.id) {
     const user = await getCurrentUser()
-    isPremium = user?.isPremium ?? false
+    canViewFullContent = user?.isPremium || false
+  } else {
+    const headersList = await headers()
+    const ip = RateLimitMiddleware.getClientIPFromHeaders(headersList)
+    const usageResult = await checkAndRecordUsage({
+      userId: null,
+      ip,
+      feature: 'anon_full_view',
+      resourceId: `company:${ticker}`,
+      recordUsage: true,
+    })
+    canViewFullContent = usageResult.allowed
+    shouldShowAnonLimitCTA = !usageResult.allowed && usageResult.shouldConvertLead
   }
 
   // Atualiza preço do dia via Yahoo Finance antes de carregar os dados da página
@@ -199,7 +234,7 @@ export default async function EtfPage({ params }: PageProps) {
 
   const etf = companyData.etfData
   const holdings = etf?.holdings ?? []
-  const visibleHoldings = isPremium ? holdings : holdings.slice(0, 5)
+  const visibleHoldings = canViewFullContent ? holdings : holdings.slice(0, 5)
 
   const monthlyPricesCount = await prisma.historicalPrice.count({
     where: { companyId: companyData.id, interval: '1mo' },
@@ -414,7 +449,7 @@ export default async function EtfPage({ params }: PageProps) {
             <div className="lg:flex-shrink-0 w-full lg:w-auto">
               <EtfHeaderScore
                 ticker={ticker}
-                canViewFullContent={isPremium || isLoggedIn}
+                canViewFullContent={canViewFullContent}
                 isLoggedIn={isLoggedIn}
               />
             </div>
@@ -422,14 +457,20 @@ export default async function EtfPage({ params }: PageProps) {
           </div>
         </div>
 
+        {shouldShowAnonLimitCTA && (
+          <div className="mb-8">
+            <AnonLimitCTA />
+          </div>
+        )}
+
         {/* Retornos Históricos */}
         {returnsData.length > 0 && (
-          <Card className="mb-6">
+          <Card className="mb-6 relative overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Retornos Históricos</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-6">
+            <CardContent className={!canViewFullContent ? 'relative min-h-[120px]' : undefined}>
+              <div className={`flex flex-wrap gap-6 ${!canViewFullContent ? 'filter blur-sm pointer-events-none select-none' : ''}`}>
                 {returnsData.map((r) => (
                   <div key={r.label} className="text-center min-w-[70px]">
                     <p className="text-xs text-muted-foreground mb-1">{r.label}</p>
@@ -445,12 +486,13 @@ export default async function EtfPage({ params }: PageProps) {
                   </div>
                 ))}
               </div>
-              {isEstimated && (
+              {canViewFullContent && isEstimated && (
                 <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
                   <Info className="w-3 h-3" />
                   Retorno de 1 ano estimado com base no retorno de 6 meses anualizado
                 </p>
               )}
+              {!canViewFullContent && <PremiumLockOverlay isLoggedIn={isLoggedIn} />}
             </CardContent>
           </Card>
         )}
@@ -462,13 +504,13 @@ export default async function EtfPage({ params }: PageProps) {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">
                   Principais Participações
-                  {!isPremium && holdings.length > 5 && (
+                  {!canViewFullContent && holdings.length > 5 && (
                     <span className="ml-2 text-xs font-normal text-muted-foreground">
                       (top 5 de {holdings.length})
                     </span>
                   )}
                 </CardTitle>
-                {!isPremium && holdings.length > 5 && (
+                {!canViewFullContent && holdings.length > 5 && (
                   <Badge variant="outline" className="text-xs gap-1">
                     <Crown className="w-3 h-3 text-yellow-500" />
                     Premium vê todas
@@ -528,14 +570,15 @@ export default async function EtfPage({ params }: PageProps) {
                 </span>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            <CardContent className={!canViewFullContent ? 'relative min-h-[140px]' : undefined}>
+              <div className={`space-y-3 ${!canViewFullContent ? 'filter blur-sm pointer-events-none select-none' : ''}`}>
                 {companyData.description.split('\n\n').filter(Boolean).map((paragraph, i) => (
                   <p key={i} className="text-sm text-muted-foreground leading-relaxed">
                     {paragraph.trim()}
                   </p>
                 ))}
               </div>
+              {!canViewFullContent && <PremiumLockOverlay isLoggedIn={isLoggedIn} />}
             </CardContent>
           </Card>
         )}

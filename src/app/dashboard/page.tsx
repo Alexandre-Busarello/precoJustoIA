@@ -8,6 +8,7 @@ import { usePremiumStatus } from "@/hooks/use-premium-status";
 import { useDashboardStats, useTopCompanies, useDashboardPortfolios } from "@/hooks/use-dashboard-data";
 import { useCacheInvalidation } from "@/hooks/use-cache-invalidation";
 import { CacheIndicator } from "@/components/cache-indicator";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -168,6 +169,16 @@ export default function Dashboard() {
                   Perfil
                 </Link>
               </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                asChild
+                className="sm:hidden"
+              >
+                <Link href="/perfil" aria-label="Perfil">
+                  <User className="w-4 h-4" />
+                </Link>
+              </Button>
               {isTrialActive && subscriptionTier === 'FREE' ? (
                 <div className="flex items-center gap-2">
                   <Badge
@@ -282,7 +293,7 @@ export default function Dashboard() {
         <DashboardRadarSection />
 
         {/* Layout Principal */}
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* COLUNA PRINCIPAL (Mobile: 100% | Desktop: 66%) */}
           <div className="lg:col-span-2 space-y-6">
 
@@ -577,6 +588,7 @@ export default function Dashboard() {
                       <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-blue-600" />
                         Boas Empresas para Analisar
+                        <InfoTooltip content="Score de 0 a 100, calculado a partir de indicadores fundamentalistas como P/L, ROE, dívida e crescimento. A classificação (Excelente, Boa, Regular ou Ruim) reflete essa pontuação geral." />
                         {companiesUpdatedAt && (
                           <CacheIndicator 
                             queryKey={['top-companies', 3, 80]}
@@ -794,6 +806,9 @@ export default function Dashboard() {
                       Minhas Inscrições
                     </Link>
                   </Button>
+                  <p className="text-[10px] text-muted-foreground text-center mt-1">
+                    Alerta simples por ticker. Para alertas avançados por indicador, veja Monitoramentos Customizados no menu de perfil.
+                  </p>
                 </div>
                 {!isPremium && (
                   <Button

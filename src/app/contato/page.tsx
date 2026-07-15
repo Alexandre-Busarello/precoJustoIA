@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Footer } from "@/components/footer"
+import { FALLBACK_MONTHLY_PRICE_FORMATTED } from "@/lib/price-utils"
 import { 
   Mail, 
   MessageCircle, 
@@ -88,15 +89,15 @@ export default function ContatoPage() {
                   Respondemos em até 24 horas.
                 </p>
                 <div className="space-y-2 mb-6">
-                  <p className="font-medium">busamar@gmail.com (temporariamente)</p>
+                  <p className="font-medium">contato@precojusto.ai</p>
                   <p className="text-sm text-muted-foreground">Geral</p>
                 </div>
                 <div className="space-y-2 mb-6">
-                  <p className="font-medium">busamar@gmail.com (temporariamente)</p>
+                  <p className="font-medium">suporte@precojusto.ai</p>
                   <p className="text-sm text-muted-foreground">Suporte Técnico</p>
                 </div>
                 <Button className="w-full" asChild>
-                  <a href="mailto:busamar@gmail.com" className="flex items-center justify-center gap-2">
+                  <a href="mailto:contato@precojusto.ai" className="flex items-center justify-center gap-2">
                     <Send className="w-4 h-4" />
                     Enviar E-mail
                   </a>
@@ -124,7 +125,7 @@ export default function ContatoPage() {
                   <span className="text-sm text-muted-foreground">Seg-Sex: 9h às 18h</span>
                 </div>
                 <Button className="w-full bg-green-600 hover:bg-green-700" asChild>
-                  <a href="https://wa.me/5511999999999" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2">
+                  <a href="https://wa.me/5521979155962" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2">
                     <MessageCircle className="w-4 h-4" />
                     Abrir WhatsApp
                   </a>
@@ -347,7 +348,7 @@ export default function ContatoPage() {
               <CardContent className="p-6">
                 <h3 className="text-lg font-bold mb-3">Qual a diferença entre os planos?</h3>
                 <p className="text-muted-foreground text-sm leading-relaxed">
-                  O plano gratuito inclui a Fórmula de Graham. O Premium (R$ 21,90/mês) adiciona 
+                  O plano gratuito inclui a Fórmula de Graham. O Premium ({FALLBACK_MONTHLY_PRICE_FORMATTED}/mês) adiciona
                   8 modelos de valuation e análises com inteligência artificial do Google Gemini.
                   Além de backtesting de carteiras, comparação de ativos e análise de risco.
                 </p>
@@ -360,7 +361,7 @@ export default function ContatoPage() {
               Não encontrou a resposta que procurava?
             </p>
             <Button size="lg" variant="outline" asChild>
-              <a href="mailto:busamar@gmail.com" className="flex items-center gap-3">
+              <a href="mailto:contato@precojusto.ai" className="flex items-center gap-3">
                 <Mail className="w-5 h-5" />
                 Entre em Contato Conosco
               </a>

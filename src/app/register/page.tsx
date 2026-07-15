@@ -11,6 +11,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Badge } from "@/components/ui/badge"
 import { Gift, Sparkles, CheckCircle, Eye, EyeOff } from "lucide-react"
 import { useTrialAvailable } from "@/hooks/use-trial-available"
+import { toast } from "sonner"
 
 function RegisterForm() {
   const [email, setEmail] = useState("")
@@ -18,7 +19,6 @@ function RegisterForm() {
   const [website, setWebsite] = useState("") // 🍯 HONEYPOT: Campo para detectar bots
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isAvailable: isTrialAvailable } = useTrialAvailable()
@@ -43,7 +43,6 @@ function RegisterForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setError("")
 
     // Armazenar returnUrl em cookie para uso após verificação de email
     if (returnUrl) {
@@ -57,7 +56,7 @@ function RegisterForm() {
     }
 
     if (password.length < 6) {
-      setError("A senha deve ter pelo menos 6 caracteres")
+      toast.error("A senha deve ter pelo menos 6 caracteres")
       setIsLoading(false)
       return
     }
@@ -91,7 +90,7 @@ function RegisterForm() {
         })
 
         if (result?.error) {
-          setError("Erro ao fazer login após registro")
+          toast.error("Conta criada, mas houve um erro ao fazer login. Tente entrar manualmente.")
         } else {
           // Redirecionar para página de verificação de email (usuário já está logado)
           // Adicionar ?new_user=true para disparar pixel de conversão imediatamente
@@ -104,10 +103,10 @@ function RegisterForm() {
         }
       } else {
         const data = await response.json()
-        setError(data.message || "Erro ao criar conta")
+        toast.error(data.message || "Erro ao criar conta")
       }
     } catch {
-      setError("Erro ao criar conta")
+      toast.error("Erro ao criar conta. Tente novamente.")
     } finally {
       setIsLoading(false)
     }
@@ -269,9 +268,6 @@ function RegisterForm() {
               />
             </div>
 
-            {error && (
-              <div className="text-sm text-red-600 text-center">{error}</div>
-            )}
             <Button
               type="submit"
               className="w-full"

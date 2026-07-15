@@ -135,8 +135,9 @@ export default async function SupportPage() {
               </div>
               <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">Resposta Prioritária</h3>
               <p className="text-gray-600 text-sm sm:text-base">
-                Receba respostas em até 24 horas úteis. Suporte prioritário para 
-                questões técnicas e dúvidas sobre análises.
+                Assinantes Premium têm um canal dedicado de tickets, com SLA de até 5 dias
+                úteis (média de 2 dias). Suporte prioritário para questões técnicas e
+                dúvidas sobre análises.
               </p>
             </div>
 

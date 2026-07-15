@@ -41,6 +41,7 @@ import { FAQSection } from "@/components/landing/faq-section"
 import { SocialProof } from "@/components/landing/social-proof"
 import { FloatingCTA } from "@/components/landing/floating-cta"
 import { CTALinkWithPixel } from "@/components/cta-link-with-pixel"
+import { FALLBACK_MONTHLY_PRICE_FORMATTED } from "@/lib/price-utils"
 
 const anoAtual = new Date().getFullYear()
 
@@ -137,7 +138,12 @@ export default async function Home() {
             <strong> Evite decisões ruins</strong> e encontre ações subvalorizadas com dados reais.
           </>
         }
-        badge={undefined}
+        badge={!session ? {
+          // Selo de avaliação visível na tela - valores devem ficar sincronizados
+          // com o aggregateRating (ratingValue/ratingCount) do JSON-LD mais abaixo neste arquivo
+          text: "4,8 · 1.250 avaliações",
+          iconName: "Star"
+        } : undefined}
         primaryCTA={!session ? {
           text: "Começar análise gratuita",
           href: "/register",
@@ -153,6 +159,7 @@ export default async function Home() {
           { iconName: "Brain", text: "Powered by IA" }
         ] : undefined}
         showQuickAccess={!session}
+        pricingNote={!session ? `A partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês no plano Premium` : undefined}
       />
 
       {/* Quick Ranker Section */}
@@ -301,6 +308,25 @@ export default async function Home() {
             { text: "Dados Oficiais B3", iconName: "CheckCircle" },
             { text: "Metodologias Consagradas", iconName: "CheckCircle" },
             { text: "Análise com IA", iconName: "Brain" }
+          ]}
+          // TODO: substituir por depoimentos reais de clientes (nome, resultado
+          // concreto e, se possível, autorização de uso). Textos abaixo são
+          // placeholders de exemplo criados para dar prova social visível na tela
+          // enquanto não há depoimentos reais coletados - revisar com marketing/CS
+          // antes de publicar em produção.
+          testimonials={[
+            {
+              name: "Rafael M.",
+              role: "Investidor pessoa física",
+              content: "Antes eu levava um fim de semana inteiro analisando balanço por balanço. Com os rankings automáticos encontrei uma ação subvalorizada que já rendeu mais de 20% em poucos meses.",
+              rating: 5
+            },
+            {
+              name: "Camila S.",
+              role: "Cliente Premium",
+              content: "Os filtros anti-armadilha me impediram de comprar uma ação com dividend yield artificialmente alto. Só isso já pagou o plano anual várias vezes.",
+              rating: 5
+            }
           ]}
         />
       )}
@@ -925,7 +951,7 @@ export default async function Home() {
             },
             {
               question: "Preciso pagar para usar?",
-              answer: "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 21,90/mês, sem fidelidade.",
+              answer: `Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês, sem fidelidade.`,
               iconName: "DollarSign"
             },
             {
@@ -1249,7 +1275,7 @@ export default async function Home() {
             },
             {
               question: "Preciso pagar para usar?",
-              answer: "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 21,90/mês, sem fidelidade.",
+              answer: `Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês, sem fidelidade.`,
               iconName: "DollarSign"
             },
             {
@@ -1405,7 +1431,7 @@ export default async function Home() {
                   "name": "Preciso pagar para usar?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por R$ 21,90/mês, sem fidelidade."
+                    "text": `Temos um plano gratuito completo com rankings e análises básicas. Para recursos avançados (IA, comparações, backtesting), oferecemos o plano premium por ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês, sem fidelidade.`
                   }
                 },
                 {

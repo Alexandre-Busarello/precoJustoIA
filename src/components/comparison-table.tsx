@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
-import { 
+import { InfoTooltip } from '@/components/info-tooltip'
+import {
   Table, 
   TableBody, 
   TableCell, 
@@ -137,6 +138,7 @@ const indicators = [
     key: 'pvp',
     label: 'P/VP',
     description: 'Preço/Valor Patrimonial',
+    tooltip: 'Compara o preço da ação com o patrimônio da empresa por ação. Valores baixos podem indicar que a ação está barata em relação ao que a empresa possui.',
     format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
     getBestType: () => 'lowest' as const,
     isPremium: false
@@ -176,6 +178,7 @@ const indicators = [
     key: 'margemLiquida',
     label: 'Margem Líquida',
     description: 'Margem de Lucro Líquido',
+    tooltip: 'De cada R$ 100 que a empresa vende, quanto sobra de lucro no final. Quanto maior, mais eficiente é o negócio em gerar lucro.',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true
@@ -184,6 +187,7 @@ const indicators = [
     key: 'roic',
     label: 'ROIC',
     description: 'Retorno sobre Capital Investido',
+    tooltip: 'Mostra o quanto a empresa ganha de retorno para cada real investido em suas operações. Quanto maior, mais eficiente a empresa é em usar o dinheiro investido para gerar lucro.',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true
@@ -192,16 +196,18 @@ const indicators = [
     key: 'dividaLiquidaEbitda',
     label: 'Dív. Líq./EBITDA',
     description: 'Dívida Líquida sobre EBITDA',
+    tooltip: 'Indica quantos anos a empresa levaria para quitar suas dívidas usando só a geração de caixa operacional. Quanto menor, menos endividada ela está.',
     format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
     getBestType: () => 'lowest' as const,
     isPremium: true
   },
-  
+
   // Indicadores de Crescimento (Premium)
   {
     key: 'cagrLucros5a',
     label: 'CAGR Lucros 5a',
     description: 'Crescimento Lucros (5 anos)',
+    tooltip: 'É a taxa média de crescimento anual do lucro da empresa nos últimos 5 anos, considerando o efeito composto (juros sobre juros).',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true
@@ -210,6 +216,7 @@ const indicators = [
     key: 'cagrReceitas5a',
     label: 'CAGR Receitas 5a',
     description: 'Crescimento Receitas (5 anos)',
+    tooltip: 'É a taxa média de crescimento anual da receita (vendas) da empresa nos últimos 5 anos, considerando o efeito composto.',
     format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true
@@ -236,17 +243,19 @@ const indicators = [
     key: 'overallScore',
     label: 'Score Geral',
     description: 'Pontuação Geral da Empresa',
+    tooltip: 'Uma nota de 0 a 100 que resume a saúde financeira e o potencial da empresa, combinando vários indicadores e estratégias de análise.',
     format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
     isStrategy: true
   },
-  
+
   // Estratégias de Investimento (Premium) - No final da tabela
   {
     key: 'graham',
     label: 'Graham',
     description: 'Análise Benjamin Graham',
+    tooltip: 'Modelo criado pelo "pai do value investing" que estima um preço justo com base no lucro e no valor patrimonial da empresa. Nota alta indica ação potencialmente descontada por esse método.',
     format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
@@ -274,6 +283,7 @@ const indicators = [
     key: 'magicFormula',
     label: 'Magic Formula',
     description: 'Fórmula Mágica de Greenblatt',
+    tooltip: 'Estratégia que busca boas empresas negociadas a preços baixos, combinando rentabilidade sobre o capital com o quanto a ação está "barata".',
     format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
@@ -283,6 +293,7 @@ const indicators = [
     key: 'fcd',
     label: 'FCD',
     description: 'Fluxo de Caixa Descontado',
+    tooltip: 'Estima quanto a empresa vale hoje somando o dinheiro que ela deve gerar no futuro, trazido a valor presente. Um dos métodos mais usados para achar o "preço justo" de uma ação.',
     format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
@@ -292,6 +303,7 @@ const indicators = [
     key: 'gordon',
     label: 'Gordon',
     description: 'Modelo de Gordon',
+    tooltip: 'Calcula o preço justo de uma ação com base nos dividendos que ela paga e na expectativa de crescimento desses dividendos ao longo do tempo.',
     format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
@@ -301,6 +313,7 @@ const indicators = [
     key: 'fundamentalist',
     label: 'Fundamentalista 3+1',
     description: 'Análise Fundamentalista Simplificada',
+    tooltip: 'Método simplificado que avalia a empresa em 3 pilares (valuation, rentabilidade e endividamento) mais 1 critério de crescimento.',
     format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
     getBestType: () => 'highest' as const,
     isPremium: true,
@@ -372,9 +385,10 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
         </div>
       </CardHeader>
       <CardContent className="p-4 sm:p-6">
-        <div className="overflow-x-auto -mx-4 sm:mx-0">
-          <div className="min-w-[600px] sm:min-w-[800px] px-4 sm:px-0">
-            <Table>
+        <div className="relative -mx-4 sm:mx-0">
+          <div className="overflow-x-auto">
+            <div className="min-w-[600px] sm:min-w-[800px] px-4 sm:px-0">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24 sm:w-32 md:w-48 text-xs sm:text-sm sticky left-0 bg-background/95 backdrop-blur-sm z-20 border-r border-border">Indicador</TableHead>
@@ -447,6 +461,11 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                     <TableCell className="font-medium p-2 sm:p-4 sticky left-0 bg-background/95 backdrop-blur-sm z-10 border-r border-border">
                       <div className="flex items-center space-x-2 min-w-0">
                         <span className="text-xs sm:text-sm truncate">{indicator.label}</span>
+                        {'tooltip' in indicator && indicator.tooltip && (
+                          <span className="flex-shrink-0">
+                            <InfoTooltip content={indicator.tooltip} />
+                          </span>
+                        )}
                         {indicator.isPremium && (
                           <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
                         )}
@@ -586,10 +605,19 @@ export function ComparisonTable({ companies, userIsPremium }: ComparisonTablePro
                   </TableRow>
                 )
               })}
-            </TableBody>
-          </Table>
+              </TableBody>
+              </Table>
+            </div>
           </div>
+          {/* Indicador de scroll horizontal (apenas mobile) */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-background to-transparent sm:hidden"
+          />
         </div>
+        <p className="mt-2 text-xs text-center text-muted-foreground sm:hidden">
+          ⟷ arraste para o lado para ver mais indicadores
+        </p>
 
         {/* Legenda dos símbolos */}
         <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-gray-50 dark:bg-gray-900/20 rounded-lg border">

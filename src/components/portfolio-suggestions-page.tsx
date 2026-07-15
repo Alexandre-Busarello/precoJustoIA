@@ -11,6 +11,7 @@ import { PortfolioTransactionFormSuggested } from './portfolio-transaction-form-
 import { PortfolioRebalancingCombinedForm } from './portfolio-rebalancing-combined-form';
 import { useState, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { PortfolioTabs } from '@/components/portfolio-tabs';
 // Formatting functions (local to avoid importing Node.js modules)
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return 'N/A';
@@ -341,6 +342,9 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
             <span className="sm:inline">Atualizar</span>
           </Button>
         </div>
+
+        {/* Portfolio Navigation Tabs */}
+        <PortfolioTabs portfolioId={portfolioId} />
 
         {/* Cash Balance Alert */}
         {cashBalance >= 100 && (

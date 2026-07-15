@@ -21,6 +21,7 @@ import {
   ChevronDown
 } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { toast } from 'sonner'
 import { OptimizedPixPayment } from './optimized-pix-payment'
 import { useCheckoutUrl } from './kiwify-checkout-link'
 import { usePricing } from '@/hooks/use-pricing'
@@ -177,6 +178,9 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
   const handlePaymentError = (error: string) => {
     console.error('Payment error:', error)
     setIsProcessing(false)
+    toast.error('Pagamento recusado', {
+      description: error || 'Verifique os dados do cartão ou tente outro método.'
+    })
   }
 
   if (status === 'loading' || isLoadingPricing || status === 'unauthenticated') {
@@ -259,13 +263,48 @@ export function OptimizedCheckout({ initialPlan = 'monthly' }: OptimizedCheckout
           </Card>
         )}
 
+        {/* Indicador de Etapas */}
+        {(() => {
+          const stepLabels = ['Plano', 'Pagamento', 'Confirmação']
+          const currentStepIndex = showPayment ? 2 : step === 'payment' ? 1 : 0
+          return (
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {stepLabels.map((label, idx) => (
+                <div key={label} className="flex items-center gap-2">
+                  <div
+                    className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold flex-shrink-0 ${
+                      idx <= currentStepIndex
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                    }`}
+                  >
+                    {idx + 1}
+                  </div>
+                  <span
+                    className={`text-sm ${
+                      idx <= currentStepIndex
+                        ? 'text-blue-600 dark:text-blue-400 font-medium'
+                        : 'text-gray-400 dark:text-gray-500'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                  {idx < stepLabels.length - 1 && (
+                    <ArrowRight className="w-3 h-3 text-gray-300 dark:text-gray-600 flex-shrink-0" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            {showPayment 
-              ? 'Pagamento via PIX' 
-              : step === 'plan' 
-                ? 'Escolha seu Plano Premium' 
+            {showPayment
+              ? 'Pagamento via PIX'
+              : step === 'plan'
+                ? 'Escolha seu Plano Premium'
                 : 'Escolha a forma de pagamento'}
           </h1>
           <p className="text-gray-600 dark:text-gray-300">

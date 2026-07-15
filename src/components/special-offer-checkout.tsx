@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Timer
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { OptimizedPixPayment } from './optimized-pix-payment'
 import { OptimizedCardPayment } from './optimized-card-payment'
 import { usePricing } from '@/hooks/use-pricing'
@@ -153,6 +154,9 @@ export function SpecialOfferCheckout() {
   const handlePaymentError = (error: string) => {
     console.error('Payment error:', error)
     setIsProcessing(false)
+    toast.error('Pagamento recusado', {
+      description: error || 'Verifique os dados do cartão ou tente outro método.'
+    })
   }
 
   if (status === 'loading' || isLoadingPricing || status === 'unauthenticated') {

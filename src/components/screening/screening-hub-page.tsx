@@ -8,6 +8,7 @@ import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { useIsMobile } from "@/hooks/use-is-mobile"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { ScreeningConfigurator } from "@/components/screening-configurator"
 import {
   FiiScreeningConfigurator,
@@ -39,7 +40,10 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  Filter,
+  X
 } from "lucide-react"
 import Link from "next/link"
 import Script from "next/script"
@@ -74,6 +78,8 @@ interface ScreeningParams {
   liquidezCorrenteFilter?: ScreeningFilter;
   dividaLiquidaEbitdaFilter?: ScreeningFilter;
   marketCapFilter?: ScreeningFilter;
+  selectedSectors?: string[];
+  selectedIndustries?: string[];
 }
 
 interface RankingResult {
@@ -131,6 +137,7 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
   const itemsPerPage = 20
   const [showRegisterModal, setShowRegisterModal] = useState(false)
   const [anonymousScreeningsCount, setAnonymousScreeningsCount] = useState(0)
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({})
 
   const isLoggedIn = !!session
   const isMobile = useIsMobile()
@@ -186,7 +193,7 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
     await handleGenerateScreening(generatedParams)
   }
 
-  const handleGenerateScreening = async (customParams?: ScreeningParams) => {
+  const handleGenerateScreening = async (customParams?: ScreeningParams, customFiiParams?: FiiScreeningFormParams) => {
     // Verificar se usuário anônimo já atingiu o limite
     if (!isLoggedIn && anonymousScreeningsCount >= MAX_ANONYMOUS_SCREENINGS) {
       // Usar setTimeout para garantir que o estado seja atualizado antes de mostrar o modal
@@ -200,9 +207,10 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
     setError(null)
 
     try {
-      // Usar parâmetros customizados (da IA) ou do estado
+      // Usar parâmetros customizados (da IA ou de ajustes rápidos) ou do estado
       const paramsToUse = customParams || params;
-      
+      const fiiParamsToUse = customFiiParams || fiiParams;
+
       // Remover limit do params - backend sempre controla o limite baseado no status Premium
       const { limit, ...paramsWithoutLimit } = paramsToUse;
       
@@ -220,14 +228,14 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
             ? {
                 model: "fiiScreening",
                 params: {
-                  tipoFii: fiiParams.tipoFii,
-                  minDY: fiiParams.minDY,
-                  maxPVP: fiiParams.maxPVP,
-                  minLiquidity: fiiParams.minLiquidity,
-                  minQtdImoveis: fiiParams.minQtdImoveis,
-                  maxVacancia: fiiParams.maxVacancia,
-                  segmentos: fiiParams.segmento
-                    ? [fiiParams.segmento]
+                  tipoFii: fiiParamsToUse.tipoFii,
+                  minDY: fiiParamsToUse.minDY,
+                  maxPVP: fiiParamsToUse.maxPVP,
+                  minLiquidity: fiiParamsToUse.minLiquidity,
+                  minQtdImoveis: fiiParamsToUse.minQtdImoveis,
+                  maxVacancia: fiiParamsToUse.maxVacancia,
+                  segmentos: fiiParamsToUse.segmento
+                    ? [fiiParamsToUse.segmento]
                     : undefined,
                   assetTypeFilter: "fii",
                   companySize: "all",
@@ -451,9 +459,174 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
     if (sortColumn !== column) {
       return <ArrowUpDown className="w-4 h-4 ml-1 inline" />
     }
-    return sortDirection === 'asc' 
+    return sortDirection === 'asc'
       ? <ArrowUp className="w-4 h-4 ml-1 inline" />
       : <ArrowDown className="w-4 h-4 ml-1 inline" />
+  }
+
+  // Reseta os filtros para o estado padrão (sem nenhum critério ativo) e reexecuta a busca
+  const handleClearAllFilters = () => {
+    if (isFiisHub) {
+      const clearedFiiParams: FiiScreeningFormParams = { tipoFii: 'both' }
+      setFiiParams(clearedFiiParams)
+      handleGenerateScreening(undefined, clearedFiiParams)
+    } else {
+      const clearedParams: ScreeningParams = {
+        companySize: 'all',
+        useTechnicalAnalysis: true,
+        assetTypeFilter,
+      }
+      setParams(clearedParams)
+      handleGenerateScreening(clearedParams)
+    }
+  }
+
+  // Gera até 2 sugestões contextuais para afrouxar os filtros ativos quando o resultado vem vazio
+  const getEmptyStateSuggestions = (): { label: string; onClick: () => void }[] => {
+    const suggestions: { label: string; onClick: () => void }[] = []
+
+    if (isFiisHub) {
+      if (fiiParams.maxPVP !== undefined) {
+        suggestions.push({
+          label: 'Aumentar P/VP máximo',
+          onClick: () => {
+            const next: FiiScreeningFormParams = { ...fiiParams, maxPVP: Number((fiiParams.maxPVP! * 1.3).toFixed(2)) }
+            setFiiParams(next)
+            handleGenerateScreening(undefined, next)
+          },
+        })
+      }
+      if (fiiParams.minDY !== undefined && fiiParams.minDY > 0) {
+        suggestions.push({
+          label: 'Reduzir Dividend Yield mínimo',
+          onClick: () => {
+            const next: FiiScreeningFormParams = { ...fiiParams, minDY: Math.max(0, Number((fiiParams.minDY! * 0.7).toFixed(2))) }
+            setFiiParams(next)
+            handleGenerateScreening(undefined, next)
+          },
+        })
+      }
+      if (fiiParams.tipoFii && fiiParams.tipoFii !== 'both') {
+        suggestions.push({
+          label: 'Incluir todos os tipos de FII',
+          onClick: () => {
+            const next: FiiScreeningFormParams = { ...fiiParams, tipoFii: 'both' }
+            setFiiParams(next)
+            handleGenerateScreening(undefined, next)
+          },
+        })
+      }
+      if (fiiParams.segmento) {
+        suggestions.push({
+          label: 'Remover filtro de segmento',
+          onClick: () => {
+            const next: FiiScreeningFormParams = { ...fiiParams, segmento: undefined }
+            setFiiParams(next)
+            handleGenerateScreening(undefined, next)
+          },
+        })
+      }
+    } else {
+      if (params.plFilter?.enabled && params.plFilter?.max !== undefined) {
+        suggestions.push({
+          label: 'Aumentar P/L máximo',
+          onClick: () => {
+            const next: ScreeningParams = {
+              ...params,
+              plFilter: { ...params.plFilter!, max: Number((params.plFilter!.max! * 1.5).toFixed(1)) },
+            }
+            setParams(next)
+            handleGenerateScreening(next)
+          },
+        })
+      }
+      if (params.roeFilter?.enabled && params.roeFilter?.min !== undefined) {
+        suggestions.push({
+          label: 'Reduzir ROE mínimo',
+          onClick: () => {
+            const next: ScreeningParams = {
+              ...params,
+              roeFilter: { ...params.roeFilter!, min: Number((params.roeFilter!.min! * 0.6).toFixed(1)) },
+            }
+            setParams(next)
+            handleGenerateScreening(next)
+          },
+        })
+      }
+      if (params.dyFilter?.enabled && params.dyFilter?.min !== undefined) {
+        suggestions.push({
+          label: 'Reduzir Dividend Yield mínimo',
+          onClick: () => {
+            const next: ScreeningParams = {
+              ...params,
+              dyFilter: { ...params.dyFilter!, min: Number((params.dyFilter!.min! * 0.6).toFixed(1)) },
+            }
+            setParams(next)
+            handleGenerateScreening(next)
+          },
+        })
+      }
+      if (params.companySize && params.companySize !== 'all') {
+        suggestions.push({
+          label: 'Ampliar para todos os tamanhos de empresa',
+          onClick: () => {
+            const next: ScreeningParams = { ...params, companySize: 'all' }
+            setParams(next)
+            handleGenerateScreening(next)
+          },
+        })
+      }
+      if (params.selectedSectors && params.selectedSectors.length > 0) {
+        suggestions.push({
+          label: 'Ampliar para todos os setores',
+          onClick: () => {
+            const next: ScreeningParams = { ...params, selectedSectors: [], selectedIndustries: [] }
+            setParams(next)
+            handleGenerateScreening(next)
+          },
+        })
+      }
+    }
+
+    return suggestions.slice(0, 2)
+  }
+
+  const EmptyResultsState = () => {
+    const suggestions = getEmptyStateSuggestions()
+    return (
+      <div className="text-center py-12 px-4 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg">
+        <Filter className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+        <p className="text-lg font-semibold mb-1">
+          Nenhum{isFiisHub ? " FII encontrado" : " resultado encontrado"}
+        </p>
+        <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+          Os filtros aplicados foram muito restritivos para os critérios atuais. Tente uma das sugestões abaixo ou limpe todos os filtros para ampliar a busca.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {suggestions.map((suggestion, index) => (
+            <Button
+              key={index}
+              variant="outline"
+              size="sm"
+              onClick={suggestion.onClick}
+              disabled={loading}
+            >
+              {suggestion.label}
+            </Button>
+          ))}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleClearAllFilters}
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Limpar todos os filtros
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   // Se usuário está logado, mostrar apenas funcionalidade
@@ -597,8 +770,10 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
                 )}
         </div>
 
+              {results.count === 0 && <EmptyResultsState />}
+
               {/* Results Table - Desktop */}
-              {!isMobile && (
+              {!isMobile && results.count > 0 && (
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                   <thead>
@@ -703,7 +878,7 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
               )}
 
               {/* Results Cards - Mobile */}
-              {isMobile && (
+              {isMobile && results.count > 0 && (
                 <div className="grid gap-4">
                   {getPaginatedResults().map((result, index) => (
                     <Card key={index} className="border-0 shadow-md">
@@ -749,16 +924,56 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
                           </p>
                         </div>
 
-                        {result.key_metrics && (
-                          <div className="grid grid-cols-2 gap-2 pt-3 border-t">
-                            {Object.entries(result.key_metrics).slice(0, 4).map(([key, value]) => (
-                              <div key={key}>
-                                <p className="text-xs text-muted-foreground">{translateMetricName(key)}</p>
-                                <p className="font-semibold text-sm">{formatMetricValue(key, value as number)}</p>
+                        {result.key_metrics && (() => {
+                          const metricEntries = Object.entries(result.key_metrics)
+                          const visibleMetrics = metricEntries.slice(0, 4)
+                          const hiddenMetrics = metricEntries.slice(4)
+                          const isExpanded = !!expandedCards[result.ticker]
+
+                          return (
+                            <Collapsible
+                              open={isExpanded}
+                              onOpenChange={(open) =>
+                                setExpandedCards((prev) => ({ ...prev, [result.ticker]: open }))
+                              }
+                            >
+                              <div className="grid grid-cols-2 gap-2 pt-3 border-t">
+                                {visibleMetrics.map(([key, value]) => (
+                                  <div key={key}>
+                                    <p className="text-xs text-muted-foreground">{translateMetricName(key)}</p>
+                                    <p className="font-semibold text-sm">{formatMetricValue(key, value as number)}</p>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        )}
+
+                              {hiddenMetrics.length > 0 && (
+                                <>
+                                  <CollapsibleTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="mt-2 flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                                    >
+                                      {isExpanded ? 'Mostrar menos' : `+${hiddenMetrics.length} métricas`}
+                                      <ChevronDown
+                                        className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                      />
+                                    </button>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="grid grid-cols-2 gap-2 pt-2 mt-2 border-t">
+                                      {hiddenMetrics.map(([key, value]) => (
+                                        <div key={key}>
+                                          <p className="text-xs text-muted-foreground">{translateMetricName(key)}</p>
+                                          <p className="font-semibold text-sm">{formatMetricValue(key, value as number)}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </CollapsibleContent>
+                                </>
+                              )}
+                            </Collapsible>
+                          )
+                        })()}
                       </CardContent>
                     </Card>
                   ))}
@@ -1299,12 +1514,15 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
               )}
             </div>
 
+            {results.count === 0 && <EmptyResultsState />}
+
             {/* Results Table */}
+            {results.count > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-800">
-                    <th 
+                    <th
                       className="p-3 text-left cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 select-none"
                       onClick={() => handleSort('ticker')}
                     >
@@ -1383,6 +1601,7 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
                 </tbody>
               </table>
               </div>
+            )}
 
             {/* Pagination - Apenas para Premium */}
             {isPremium && results.results.length > itemsPerPage && (

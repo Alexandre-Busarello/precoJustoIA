@@ -369,12 +369,32 @@ export function QuizModal({ campaignId, onClose, isPageMode = false }: QuizModal
 
   // Se for modo página, renderizar sem Dialog
   if (isPageMode) {
+    const totalQuestions = quiz?.quizConfig.questions.length ?? 0
+    const answeredQuestions = quiz?.quizConfig.questions.filter((question) => {
+      const response = responses[question.id]
+      return response !== undefined && response !== null && response !== ''
+    }).length ?? 0
+
     return (
       <Card className={cn(
         "max-w-2xl mx-auto",
         template === 'ILLUSTRATED' && "max-w-3xl"
       )}>
         <CardContent className="p-6 relative">
+          {totalQuestions > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
+                <span>Pergunta {Math.min(answeredQuestions + 1, totalQuestions)} de {totalQuestions}</span>
+                <span>{answeredQuestions} respondida{answeredQuestions === 1 ? '' : 's'}</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${(answeredQuestions / totalQuestions) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
           {getTemplateContent()}
           {onClose && (
             <Button

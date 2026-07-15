@@ -196,10 +196,17 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
         },
         {
           title: "Rankings",
-          href: "/ranking", 
+          href: "/ranking",
           icon: <BarChart3 className="w-5 h-5" />,
           show: true,
           description: "As melhores ações segundo Graham, Bazin e outros"
+        },
+        {
+          title: "Projeções IBOV",
+          href: "/projecoes-ibov",
+          icon: <BarChart3 className="w-5 h-5" />,
+          show: true,
+          description: "Projeções do Ibovespa calculadas por IA"
         },
       ],
     },
@@ -264,7 +271,7 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
           href: "/acompanhar-acoes-bolsa-de-valores",
           icon: <Bell className="w-5 h-5" />,
           show: true,
-          description: "Monitore ações e receba alertas personalizados"
+          description: "Veja como funcionam os alertas simples e avançados por ação"
         },
         {
           title: "Arbitragem de Dívida",
@@ -720,34 +727,43 @@ export function MobileNav({ isOpen, setIsOpen }: MobileNavProps) {
           {/* Footer Actions */}
           {session && (
             <div className="border-t border-border p-4 space-y-2">
+              <p className="px-3 pt-1 pb-0.5 text-xs font-semibold text-muted-foreground uppercase">
+                Acompanhamentos
+              </p>
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start"
+                className="w-full justify-start h-auto py-2"
                 asChild
               >
-                <Link 
-                  href="/dashboard/subscriptions" 
-                  className="flex items-center gap-3"
+                <Link
+                  href="/dashboard/subscriptions"
+                  className="flex items-start gap-3"
                   onClick={() => setIsOpen(false)}
                 >
-                  <Bell className="w-4 h-4" />
-                  Inscrições
+                  <Bell className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span className="flex flex-col items-start text-left">
+                    <span>Minhas Inscrições</span>
+                    <span className="text-xs text-muted-foreground font-normal">Alerta simples por ticker</span>
+                  </span>
                 </Link>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start"
+                className="w-full justify-start h-auto py-2"
                 asChild
               >
-                <Link 
-                  href="/dashboard/monitoramentos-customizados" 
-                  className="flex items-center gap-3"
+                <Link
+                  href="/dashboard/monitoramentos-customizados"
+                  className="flex items-start gap-3"
                   onClick={() => setIsOpen(false)}
                 >
-                  <Settings className="w-4 h-4" />
-                  Monitoramentos Customizados
+                  <Settings className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span className="flex flex-col items-start text-left">
+                    <span>Monitoramentos Customizados</span>
+                    <span className="text-xs text-muted-foreground font-normal">Alertas avançados por indicador</span>
+                  </span>
                 </Link>
               </Button>
               <Button

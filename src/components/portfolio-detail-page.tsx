@@ -14,6 +14,7 @@ import { usePortfolioSuggestionsAvailable } from '@/hooks/use-portfolio-suggesti
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart3, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { PortfolioTabs } from '@/components/portfolio-tabs';
 
 interface PortfolioDetailPageProps {
   portfolioId: string;
@@ -171,6 +172,9 @@ export function PortfolioDetailPage({ portfolioId }: PortfolioDetailPageProps) {
             Configurações
           </Button>
         </div>
+
+        {/* Portfolio Navigation Tabs */}
+        <PortfolioTabs portfolioId={portfolioId} />
 
         {/* Smart Input Zone - Hero Section */}
         <div className="mb-6">

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PortfolioAnalytics } from '@/components/portfolio-analytics';
+import { PortfolioTabs } from '@/components/portfolio-tabs';
 
 interface PortfolioAnalyticsPageProps {
   portfolioId: string;
@@ -82,6 +83,9 @@ export function PortfolioAnalyticsPage({ portfolioId }: PortfolioAnalyticsPagePr
             </p>
           </div>
         </div>
+
+        {/* Portfolio Navigation Tabs */}
+        <PortfolioTabs portfolioId={portfolioId} />
 
         {/* Analytics Component */}
         <PortfolioAnalytics portfolioId={portfolioId} />

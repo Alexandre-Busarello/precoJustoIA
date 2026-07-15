@@ -25,14 +25,20 @@ import { LandingPricingSection } from "@/components/landing-pricing-section"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
+import {
+  FALLBACK_MONTHLY_PRICE_FORMATTED,
+  FALLBACK_ANNUAL_PRICE_FORMATTED,
+  FALLBACK_MONTHLY_PRICE_DECIMAL,
+  FALLBACK_ANNUAL_PRICE_DECIMAL,
+} from "@/lib/price-utils"
 
 export const metadata: Metadata = {
-  title: "Planos e Preços | Análise Fundamentalista Gratuita + Premium R$ 21,90/mês - Preço Justo AI",
-  description: "💰 Planos de análise fundamentalista: GRATUITO com Fórmula de Graham + PREMIUM R$ 21,90/mês com 8 modelos (Dividend Yield, Fórmula Mágica, IA). Compare funcionalidades, economize 12% no plano anual. Investir em ações da B3 nunca foi tão acessível!",
+  title: `Planos e Preços | Análise Fundamentalista Gratuita + Premium ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês - Preço Justo AI`,
+  description: `💰 Planos de análise fundamentalista: GRATUITO com Fórmula de Graham + PREMIUM ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês com 8 modelos (Dividend Yield, Fórmula Mágica, IA). Compare funcionalidades, economize 12% no plano anual. Investir em ações da B3 nunca foi tão acessível!`,
   keywords: "planos análise fundamentalista, preço análise ações, análise fundamentalista gratuita, plano premium investimentos, quanto custa análise ações, assinatura análise fundamentalista, preço justo ações custo, análise bovespa preço, investir ações barato, planos investimentos B3",
   openGraph: {
     title: "Planos e Preços - Preço Justo AI",
-    description: "Plano gratuito com Graham + Premium com 8 modelos e IA por R$ 21,90/mês. Análise fundamentalista completa para ações da B3.",
+    description: `Plano gratuito com Graham + Premium com 8 modelos e IA por ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês. Análise fundamentalista completa para ações da B3.`,
     type: "website",
     url: "https://precojusto.ai/planos",
     siteName: "Preço Justo AI",
@@ -41,7 +47,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Planos e Preços - Preço Justo AI",
-    description: "Plano gratuito com Graham + Premium com 8 modelos e IA por R$ 21,90/mês.",
+    description: `Plano gratuito com Graham + Premium com 8 modelos e IA por ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês.`,
   },
   robots: {
     index: true,
@@ -427,7 +433,7 @@ export default function PlanosPage() {
             "@context": "https://schema.org",
             "@type": "Product",
             "name": "Preço Justo AI - Análise Fundamentalista Premium",
-            "description": "Plataforma completa de análise fundamentalista com IA para ações da B3. Plano gratuito com Graham + Premium com 8 modelos por R$ 21,90/mês.",
+            "description": `Plataforma completa de análise fundamentalista com IA para ações da B3. Plano gratuito com Graham + Premium com 8 modelos por ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês.`,
             "brand": {
               "@type": "Brand",
               "name": "Preço Justo AI"
@@ -442,9 +448,9 @@ export default function PlanosPage() {
                 "availability": "https://schema.org/InStock"
               },
               {
-                "@type": "Offer", 
+                "@type": "Offer",
                 "name": "Premium Mensal",
-                "price": "19.90",
+                "price": FALLBACK_MONTHLY_PRICE_DECIMAL,
                 "priceCurrency": "BRL",
                 "billingIncrement": "P1M",
                 "description": "8 modelos de valuation + análise com IA",
@@ -452,8 +458,8 @@ export default function PlanosPage() {
               },
               {
                 "@type": "Offer",
-                "name": "Premium Anual", 
-                "price": "189.90",
+                "name": "Premium Anual",
+                "price": FALLBACK_ANNUAL_PRICE_DECIMAL,
                 "priceCurrency": "BRL",
                 "billingIncrement": "P1Y",
                 "description": "Plano anual com 20% de desconto + recursos exclusivos",

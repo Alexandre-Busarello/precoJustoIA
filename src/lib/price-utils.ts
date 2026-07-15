@@ -4,8 +4,8 @@
 
 /**
  * Formata um preço em centavos para o formato brasileiro "R$ X,XX"
- * @param priceInCents Preço em centavos (ex: 1990 = R$ 21,90)
- * @returns String formatada (ex: "R$ 21,90")
+ * @param priceInCents Preço em centavos (ex: 1990 = R$ 19,90)
+ * @returns String formatada (ex: "R$ 19,90")
  */
 export function formatPrice(priceInCents: number): string {
   const priceInReais = priceInCents / 100
@@ -69,4 +69,25 @@ export function calculatePixDiscount(priceInCents: number): number {
 export function getPixDiscountAmount(priceInCents: number): number {
   return Math.round(priceInCents * 0.15) // 15% de desconto
 }
+
+/**
+ * Preços de fallback/estáticos usados enquanto os dados dinâmicos da API
+ * de pricing (`/api/v1/pricing/offers`, com base na tabela `offers` no banco)
+ * ainda não carregaram, e também no JSON-LD estático de SEO (que não pode
+ * fazer fetch em tempo de renderização).
+ *
+ * IMPORTANTE: esta é a ÚNICA fonte de verdade para esses valores de fallback.
+ * Não hardcode "R$ 19,90"/"R$ 189,90" (ou "19.90"/"189.90") em outros lugares —
+ * importe estas constantes para evitar divergência entre UI e JSON-LD.
+ * Caso o preço real cadastrado no banco mude, atualize aqui também.
+ */
+export const FALLBACK_MONTHLY_PRICE_IN_CENTS = 1990 // R$ 19,90
+export const FALLBACK_ANNUAL_PRICE_IN_CENTS = 18990 // R$ 189,90
+
+export const FALLBACK_MONTHLY_PRICE_FORMATTED = formatPrice(FALLBACK_MONTHLY_PRICE_IN_CENTS)
+export const FALLBACK_ANNUAL_PRICE_FORMATTED = formatPrice(FALLBACK_ANNUAL_PRICE_IN_CENTS)
+
+// Valor decimal sem símbolo de moeda, no formato exigido pelo schema.org (ex: "19.90")
+export const FALLBACK_MONTHLY_PRICE_DECIMAL = (FALLBACK_MONTHLY_PRICE_IN_CENTS / 100).toFixed(2)
+export const FALLBACK_ANNUAL_PRICE_DECIMAL = (FALLBACK_ANNUAL_PRICE_IN_CENTS / 100).toFixed(2)
 

@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { toast } from "sonner"
 
 function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -24,14 +24,13 @@ function LoginForm() {
   // Verificar erro OAuth na URL
   useEffect(() => {
     if (oauthError === 'OAuthAccountNotLinked') {
-      setError("Esta conta Google já está vinculada a outra conta. Faça login com email e senha primeiro para vincular sua conta Google.")
+      toast.error("Esta conta Google já está vinculada a outra conta. Faça login com email e senha primeiro para vincular sua conta Google.")
     }
   }, [oauthError])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setError("")
 
     try {
       const result = await signIn("credentials", {
@@ -41,13 +40,13 @@ function LoginForm() {
       })
 
       if (result?.error) {
-        setError("Email ou senha incorretos")
+        toast.error("E-mail ou senha incorretos")
       } else {
         // Redirecionar para callbackUrl após login bem-sucedido
         router.push(callbackUrl)
       }
     } catch {
-      setError("Erro ao fazer login")
+      toast.error("Erro ao fazer login. Tente novamente.")
     } finally {
       setIsLoading(false)
     }
@@ -55,7 +54,6 @@ function LoginForm() {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
-    setError("")
     await signIn("google", { callbackUrl })
   }
 
@@ -122,9 +120,6 @@ function LoginForm() {
                 required
               />
             </div>
-            {error && (
-              <div className="text-sm text-red-600 text-center">{error}</div>
-            )}
             <Button
               type="submit"
               className="w-full"

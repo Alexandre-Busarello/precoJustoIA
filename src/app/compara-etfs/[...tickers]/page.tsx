@@ -6,6 +6,7 @@ import { CompanyLogo } from '@/components/company-logo'
 import { Footer } from '@/components/footer'
 import { Breadcrumbs } from '@/components/landing/breadcrumbs'
 import { EtfComparisonSelector } from '@/components/etf-comparison-selector'
+import { InfoTooltip } from '@/components/info-tooltip'
 import Link from 'next/link'
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -202,17 +203,22 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
     ranks,
     format,
     sublabel,
+    tooltip,
   }: {
     label: string
     values: (number | null)[]
     ranks: number[]
     format: (v: number | null) => string
     sublabel?: string
+    tooltip?: string
   }) {
     return (
       <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
         <td className="py-3 px-4 text-sm font-medium text-muted-foreground sticky left-0 bg-background z-10 min-w-[140px]">
-          {label}
+          <div className="flex items-center gap-1.5">
+            <span>{label}</span>
+            {tooltip && <InfoTooltip content={tooltip} />}
+          </div>
           {sublabel && <div className="text-xs text-muted-foreground/70">{sublabel}</div>}
         </td>
         {values.map((val, i) => {
@@ -308,7 +314,8 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="relative">
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b-2 border-border">
@@ -347,6 +354,7 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
                   <MetricRow
                     label="Score PJ-ETF"
                     sublabel="0–100"
+                    tooltip="Nota de 0 a 100 criada pelo Preço Justo AI para resumir a qualidade geral do ETF, considerando custo, retorno, risco e concentração."
                     values={etfs.map((e) => e.etfScore)}
                     ranks={rankScore}
                     format={(v) => v !== null ? `${v}/100` : '—'}
@@ -354,6 +362,7 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
                   <MetricRow
                     label="Score IA"
                     sublabel="análise quantitativa"
+                    tooltip="Nota gerada por inteligência artificial a partir dos dados quantitativos do ETF, complementar ao Score PJ-ETF."
                     values={etfs.map((e) => e.aiAnalysisScore)}
                     ranks={rankAI}
                     format={(v) => v !== null ? `${v}/100` : '—'}
@@ -363,6 +372,7 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
                   <SectionRow label="Custo" />
                   <MetricRow
                     label="Taxa de Administração"
+                    tooltip="Percentual cobrado por ano sobre o valor investido para manter o ETF funcionando. Quanto menor, mais fica de retorno para o investidor."
                     values={etfs.map((e) => e.netExpenseRatio)}
                     ranks={rankCusto}
                     format={fmtTaxa}
@@ -432,6 +442,7 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
                   <SectionRow label="Risco" />
                   <MetricRow
                     label="Volatilidade 12m"
+                    tooltip="Mede o quanto o preço do ETF costuma variar (sobe e desce) nos últimos 12 meses. Quanto maior, mais oscilações o investimento pode apresentar no curto prazo."
                     values={etfs.map((e) => e.volatility12m)}
                     ranks={rankVol}
                     format={fmtPct}
@@ -482,7 +493,16 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
                   </tr>
                 </tbody>
               </table>
+              </div>
+              {/* Indicador de scroll horizontal (apenas mobile) */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-background to-transparent sm:hidden"
+              />
             </div>
+            <p className="pt-2 pb-3 text-xs text-center text-muted-foreground sm:hidden">
+              ⟷ arraste para o lado para ver mais indicadores
+            </p>
           </CardContent>
         </Card>
 

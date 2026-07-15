@@ -210,20 +210,32 @@ export function UserProfileDropdown({
           </Link>
         </DropdownMenuItem>
         
+        <DropdownMenuSeparator />
+
+        <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase">
+          Acompanhamentos
+        </DropdownMenuLabel>
+
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/subscriptions" className="cursor-pointer">
-            <Bell className="mr-2 h-4 w-4" />
-            Minhas Inscrições
+          <Link href="/dashboard/subscriptions" className="cursor-pointer items-start">
+            <Bell className="mr-2 h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex flex-col">
+              <span>Minhas Inscrições</span>
+              <span className="text-xs text-muted-foreground font-normal">Alerta simples por ticker</span>
+            </div>
           </Link>
         </DropdownMenuItem>
-        
+
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/monitoramentos-customizados" className="cursor-pointer">
-            <Settings className="mr-2 h-4 w-4" />
-            Monitoramentos Customizados
+          <Link href="/dashboard/monitoramentos-customizados" className="cursor-pointer items-start">
+            <Settings className="mr-2 h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex flex-col">
+              <span>Monitoramentos Customizados</span>
+              <span className="text-xs text-muted-foreground font-normal">Alertas avançados por indicador</span>
+            </div>
           </Link>
         </DropdownMenuItem>
-        
+
         <DropdownMenuItem asChild>
           <Link href="/perfil" className="cursor-pointer">
             <User className="mr-2 h-4 w-4" />

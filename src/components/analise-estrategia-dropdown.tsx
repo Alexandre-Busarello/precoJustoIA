@@ -49,7 +49,7 @@ const sections: NavSection[] = [
         title: "Acompanhar Ações",
         href: "/acompanhar-acoes-bolsa-de-valores",
         icon: Bell,
-        description: "Monitore ações e receba alertas personalizados.",
+        description: "Veja como funcionam os alertas simples e avançados por ação.",
         iconGradient: "bg-gradient-to-br from-blue-500 to-indigo-500",
       },
       {

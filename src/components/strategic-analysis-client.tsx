@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { useCompanyAnalysis } from '@/hooks/use-company-data';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
+import { FALLBACK_MONTHLY_PRICE_FORMATTED } from '@/lib/price-utils';
 import Link from 'next/link';
 
 // Shadcn UI Components
@@ -767,7 +768,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
                         <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
+                          {isLoggedIn ? `Assinar Premium — a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês` : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">
@@ -973,7 +974,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <Button asChild className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700">
                         <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
+                          {isLoggedIn ? `Assinar Premium — a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês` : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">
@@ -1179,7 +1180,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <Button asChild className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
                         <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
+                          {isLoggedIn ? `Assinar Premium — a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês` : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">
@@ -1347,6 +1348,11 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                     {isLoggedIn ? "Assinar Premium - 1 dia grátis" : "Cadastre-se para Ver"}
                   </Link>
                 </Button>
+                {isLoggedIn && (
+                  <p className="text-xs text-orange-700 dark:text-orange-300 mt-2">
+                    a partir de {FALLBACK_MONTHLY_PRICE_FORMATTED}/mês após o período grátis
+                  </p>
+                )}
               </div>
 
               {/* Preview Anti-Dividend Trap */}
@@ -2165,7 +2171,7 @@ export default function StrategicAnalysisClient({ ticker, currentPrice, latestFi
                       <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
                         <Link href={isLoggedIn ? "/checkout" : "/register"}>
                           <Crown className="w-4 h-4 mr-2" />
-                          {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
+                          {isLoggedIn ? `Assinar Premium — a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês` : "Cadastre-se para Ver"}
                         </Link>
                       </Button>
                       <Button asChild variant="outline">

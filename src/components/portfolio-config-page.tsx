@@ -1,12 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PortfolioConfigForm } from '@/components/portfolio-config-form';
 import { PortfolioAssetManager } from '@/components/portfolio-asset-manager';
+import { PortfolioTabs } from '@/components/portfolio-tabs';
 
 interface PortfolioConfigPageProps {
   portfolioId: string;
@@ -24,6 +25,7 @@ const fetchPortfolio = async (portfolioId: string) => {
 
 export function PortfolioConfigPage({ portfolioId }: PortfolioConfigPageProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const {
     data: portfolio,
@@ -90,6 +92,9 @@ export function PortfolioConfigPage({ portfolioId }: PortfolioConfigPageProps) {
           </h1>
         </div>
 
+        {/* Portfolio Navigation Tabs */}
+        <PortfolioTabs portfolioId={portfolioId} />
+
         {/* Config Form */}
         <div className="mb-6">
           <PortfolioConfigForm
@@ -121,8 +126,11 @@ export function PortfolioConfigPage({ portfolioId }: PortfolioConfigPageProps) {
           <PortfolioAssetManager
             portfolioId={portfolioId}
             onUpdate={() => {
-              // Refresh portfolio data
-              window.location.reload();
+              // Refresh portfolio data via React Query cache invalidation
+              // (avoids a disruptive full-page reload)
+              queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+              queryClient.invalidateQueries({ queryKey: ['portfolio-assets', portfolioId] });
+              queryClient.invalidateQueries({ queryKey: ['portfolio-metrics', portfolioId] });
             }}
           />
         </div>

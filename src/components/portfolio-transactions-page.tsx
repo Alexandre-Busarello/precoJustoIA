@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PortfolioTransactionList } from '@/components/portfolio-transaction-list';
 import { PortfolioSmartInput } from '@/components/portfolio-smart-input';
+import { PortfolioTabs } from '@/components/portfolio-tabs';
 
 interface PortfolioTransactionsPageProps {
   portfolioId: string;
@@ -79,6 +80,9 @@ export function PortfolioTransactionsPage({ portfolioId }: PortfolioTransactions
             Transações
           </h1>
         </div>
+
+        {/* Portfolio Navigation Tabs */}
+        <PortfolioTabs portfolioId={portfolioId} />
 
         {/* Smart Input Zone - Expanded by default on transactions page */}
         <div className="mb-6">

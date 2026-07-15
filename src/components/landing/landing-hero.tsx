@@ -3,9 +3,9 @@
 import { Button } from "@/components/ui/button"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { useSession } from "next-auth/react"
-import { 
-  ArrowRight, 
-  Rocket, 
+import {
+  ArrowRight,
+  Rocket,
   Sparkles,
   Building2,
   BarChart3,
@@ -17,6 +17,7 @@ import {
   Search,
   Target,
   CheckCircle,
+  Star,
   LucideIcon
 } from "lucide-react"
 import Link from "next/link"
@@ -37,6 +38,7 @@ const iconMap: Record<string, LucideIcon> = {
   Search,
   Target,
   CheckCircle,
+  Star,
 }
 
 interface LandingHeroProps {
@@ -63,6 +65,8 @@ interface LandingHeroProps {
     text: string
   }>
   showQuickAccess?: boolean
+  // Linha pequena de preço de entrada exibida junto do texto de "sem cartão de crédito"
+  pricingNote?: string
 }
 
 export function LandingHero({
@@ -72,7 +76,8 @@ export function LandingHero({
   secondaryCTA,
   badge,
   socialProof,
-  showQuickAccess = true
+  showQuickAccess = true,
+  pricingNote
 }: LandingHeroProps) {
   const { data: session } = useSession()
   const { trackEngagement } = useEngagementPixel()
@@ -172,6 +177,13 @@ export function LandingHero({
         {showQuickAccess && (
           <p className="text-xs sm:text-sm text-muted-foreground px-4">
             ✅ Grátis para sempre • ✅ Sem cartão de crédito • ✅ Acesso imediato
+          </p>
+        )}
+
+        {/* Pricing Note - preço de entrada do plano pago, exibido logo abaixo do quick access */}
+        {pricingNote && (
+          <p className="text-xs sm:text-sm text-muted-foreground/80 px-4 mt-1">
+            {pricingNote}
           </p>
         )}
       </div>

@@ -291,7 +291,7 @@ export function EnhancedStockComparisonSelector({ initialTickers = [] }: Enhance
                     </div>
                     <button
                       onClick={() => handleRemove(company.ticker)}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors opacity-0 group-hover:opacity-100"
+                      className="absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                       aria-label={`Remover ${company.ticker}`}
                     >
                       <X className="w-4 h-4" />

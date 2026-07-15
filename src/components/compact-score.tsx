@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { FALLBACK_MONTHLY_PRICE_FORMATTED } from '@/lib/price-utils';
 
 // Lucide Icons
 import { Crown, Calculator } from 'lucide-react';
@@ -175,6 +176,9 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
       {/* Overlay para Premium/Login */}
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-[2px] rounded-lg border border-dashed border-orange-300">
         <Crown className="w-6 h-6 text-orange-600 mb-2" />
+        <p className="text-xs font-medium text-center px-2">
+          Veja a nota completa e o que ela significa
+        </p>
         <p className="text-xs text-muted-foreground mb-2 text-center px-2">
           {isLoggedIn ? "Upgrade para ver o score real" : "Faça login para ver o score"}
         </p>
@@ -183,6 +187,11 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
             {isLoggedIn ? "Upgrade Premium" : "Cadastre-se Grátis"}
           </Link>
         </Button>
+        {isLoggedIn && (
+          <p className="text-[10px] text-muted-foreground mt-1 text-center">
+            a partir de {FALLBACK_MONTHLY_PRICE_FORMATTED}/mês
+          </p>
+        )}
       </div>
     </div>
   );

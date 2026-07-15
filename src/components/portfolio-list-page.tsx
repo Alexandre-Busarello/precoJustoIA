@@ -16,6 +16,7 @@ import {
   Settings,
   LineChart,
   Trash2,
+  MoreVertical,
 } from 'lucide-react';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { PortfolioTutorialBanner } from '@/components/portfolio-tutorial-banner';
@@ -30,6 +31,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Portfolio {
   id: string;
@@ -269,36 +277,55 @@ export function PortfolioListPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="flex-shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/carteira/${portfolio.id}/config`);
-                        }}
-                        title="Configurações"
-                      >
-                        <Settings className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="flex-shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteDialogState({
-                            open: true,
-                            portfolioId: portfolio.id,
-                            portfolioName: portfolio.name,
-                          });
-                        }}
-                        title="Excluir carteira"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Mais ações"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/carteira/${portfolio.id}/transacoes`)}
+                        >
+                          <Receipt className="h-4 w-4 mr-2" />
+                          Transações
+                        </DropdownMenuItem>
+                        {portfolio.trackingStarted && (
+                          <DropdownMenuItem
+                            onClick={() => router.push(`/carteira/${portfolio.id}/analise`)}
+                          >
+                            <LineChart className="h-4 w-4 mr-2" />
+                            Análise
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/carteira/${portfolio.id}/config`)}
+                        >
+                          <Settings className="h-4 w-4 mr-2" />
+                          Configurações
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() =>
+                            setDeleteDialogState({
+                              open: true,
+                              portfolioId: portfolio.id,
+                              portfolioName: portfolio.name,
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
                   {/* Métricas */}
@@ -360,45 +387,7 @@ export function PortfolioListPage() {
                       }}
                     >
                       <TrendingUp className="h-3 w-3 mr-1" />
-                      Detalhes
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/carteira/${portfolio.id}/transacoes`);
-                      }}
-                    >
-                      <Receipt className="h-3 w-3 mr-1" />
-                      Transações
-                    </Button>
-                    {portfolio.trackingStarted && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/carteira/${portfolio.id}/analise`);
-                        }}
-                      >
-                        <LineChart className="h-3 w-3 mr-1" />
-                        Análise
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/carteira/${portfolio.id}/config`);
-                      }}
-                    >
-                      <Settings className="h-3 w-3 mr-1" />
-                      Config
+                      Ver Carteira
                     </Button>
                   </div>
                 </CardContent>

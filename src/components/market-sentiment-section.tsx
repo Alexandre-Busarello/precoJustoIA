@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
+import { FALLBACK_MONTHLY_PRICE_FORMATTED } from '@/lib/price-utils'
 
 interface MarketSentimentSectionProps {
   ticker: string
@@ -259,7 +260,7 @@ export default function MarketSentimentSection({
                     <Button asChild className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700">
                       <Link href={isLoggedIn ? "/checkout" : "/register"}>
                         <Sparkles className="w-4 h-4 mr-2" />
-                        {isLoggedIn ? "Assinar Premium" : "Cadastre-se para Ver"}
+                        {isLoggedIn ? `Assinar Premium — a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês` : "Cadastre-se para Ver"}
                       </Link>
                     </Button>
                   </div>

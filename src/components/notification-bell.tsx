@@ -166,7 +166,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 sm:w-96">
         <div className="p-2">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-0.5">
             <h3 className="font-semibold text-sm">Notificações</h3>
             {unreadCount > 0 && (
               <Badge variant="secondary" className="text-xs">
@@ -174,6 +174,9 @@ export function NotificationBell({ className }: NotificationBellProps) {
               </Badge>
             )}
           </div>
+          <p className="text-xs text-muted-foreground mb-1">
+            Avisos gerais da plataforma (diferente dos alertas de ações)
+          </p>
         </div>
         <DropdownMenuSeparator />
         <ScrollArea className="h-[400px]">

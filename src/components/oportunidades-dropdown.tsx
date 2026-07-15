@@ -1,7 +1,7 @@
 "use client"
 
 import { NavDropdown, NavSection } from "./nav-dropdown"
-import { Radar, Search, DollarSign, TrendingUp, Building2 } from "lucide-react"
+import { Radar, Search, DollarSign, TrendingUp, Building2, BarChart3 } from "lucide-react"
 
 const sections: NavSection[] = [
   {
@@ -46,6 +46,13 @@ const sections: NavSection[] = [
         href: "/ranking",
         icon: TrendingUp,
         description: "As melhores ações segundo Graham, Bazin e outros.",
+        iconGradient: "bg-gradient-to-br from-blue-500 to-purple-500",
+      },
+      {
+        title: "Projeções IBOV",
+        href: "/projecoes-ibov",
+        icon: BarChart3,
+        description: "Projeções do Ibovespa calculadas por IA.",
         iconGradient: "bg-gradient-to-br from-blue-500 to-purple-500",
       },
     ],

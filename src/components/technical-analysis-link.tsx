@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { TrendingUp, ArrowRight, Crown, Info, ChevronDown } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import TechnicalAnalysisTrafficLight from './technical-analysis-traffic-light'
+import { FALLBACK_MONTHLY_PRICE_FORMATTED } from '@/lib/price-utils'
 
 interface TechnicalAnalysisLinkProps {
   ticker: string
@@ -46,14 +47,43 @@ export default function TechnicalAnalysisLink({
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Acesse análise técnica completa com indicadores avançados, suporte/resistência 
+                Acesse análise técnica completa com indicadores avançados, suporte/resistência
                 e previsão de preços com IA.
               </p>
+
+              {/* Prévia com blur - mesmo padrão visual usado no Score e na Análise Fundamentalista */}
+              <div className="relative mb-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-muted/30 p-4">
+                <div className="filter blur-sm pointer-events-none select-none grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Preço Atual</p>
+                    <p className="text-sm font-semibold">R$ {currentPrice.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Sinal</p>
+                    <p className="text-sm font-semibold text-green-600">Sobrevenda</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Preço Justo (IA)</p>
+                    <p className="text-sm font-semibold">R$ XX,XX</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Faixa Prevista</p>
+                    <p className="text-sm font-semibold">R$ XX,XX - XX,XX</p>
+                  </div>
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[1px] rounded-lg border border-dashed border-orange-300 dark:border-orange-700">
+                  <div className="flex items-center space-x-2">
+                    <Crown className="w-5 h-5 text-orange-600" />
+                    <span className="text-xs font-medium text-muted-foreground">Prévia — resultado real disponível no Premium</span>
+                  </div>
+                </div>
+              </div>
+
               <Alert className="mb-4 border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
                 <Info className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="text-blue-900 dark:text-blue-100 text-xs">
-                  A análise técnica é um auxílio complementar para identificar as melhores regiões 
-                  de preço para entrada em um ativo para <strong>longo prazo</strong>. 
+                  A análise técnica é um auxílio complementar para identificar as melhores regiões
+                  de preço para entrada em um ativo para <strong>longo prazo</strong>.
                   <strong> Não é recomendada para day trade.</strong>
                 </AlertDescription>
               </Alert>
@@ -63,6 +93,9 @@ export default function TechnicalAnalysisLink({
                   Upgrade para Premium
                 </Link>
               </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                a partir de {FALLBACK_MONTHLY_PRICE_FORMATTED}/mês
+              </p>
             </div>
           </div>
         </CardContent>

@@ -7,7 +7,12 @@ import { CheckCircle, Zap, Shield, Trophy, Gift, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useTrialAvailable } from '@/hooks/use-trial-available'
 import { usePricing } from '@/hooks/use-pricing'
-import { formatPrice, getPixDiscountAmount } from '@/lib/price-utils'
+import {
+  formatPrice,
+  getPixDiscountAmount,
+  FALLBACK_MONTHLY_PRICE_FORMATTED,
+  FALLBACK_ANNUAL_PRICE_FORMATTED,
+} from '@/lib/price-utils'
 
 export function LandingPricingSection() {
   const { isAvailable: isTrialAvailable } = useTrialAvailable()
@@ -166,7 +171,7 @@ export function LandingPricingSection() {
                       <div className="flex items-center justify-center gap-2 mb-2">
                         <span className="text-lg text-muted-foreground line-through">{annualOriginalPrice}</span>
                         <div className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                          {annual?.price_formatted || 'R$ 189,90'}
+                          {annual?.price_formatted || FALLBACK_ANNUAL_PRICE_FORMATTED}
                         </div>
                       </div>
                       <p className="text-sm text-muted-foreground">por ano • PIX ou Cartão</p>
@@ -289,7 +294,7 @@ export function LandingPricingSection() {
                   ) : (
                     <>
                       <div className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent mb-2">
-                        {monthly?.price_formatted || 'R$ 21,90'}
+                        {monthly?.price_formatted || FALLBACK_MONTHLY_PRICE_FORMATTED}
                       </div>
                       <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
                       <div className="mt-2 inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">
@@ -406,7 +411,7 @@ export function LandingPricingSection() {
                   {isLoadingPricing ? (
                     <span className="inline-block h-8 w-32 bg-gray-200 rounded animate-pulse"></span>
                   ) : (
-                    `+${annual?.price_formatted || 'R$ 189,90'}`
+                    `+${annual?.price_formatted || FALLBACK_ANNUAL_PRICE_FORMATTED}`
                   )}
                 </div>
                 <p className="text-muted-foreground">Custo do Premium Anual</p>

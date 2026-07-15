@@ -19,10 +19,10 @@ import {
   CheckCircle,
   Loader2,
   Info,
-  Settings,
-  BarChart3
+  Settings
 } from 'lucide-react';
 import { AssetSearchInput, CompanySearchResult } from '@/components/asset-search-input';
+import { BacktestLoadingOverlay } from '@/components/backtest-loading-overlay';
 
 // Interfaces
 interface BacktestAsset {
@@ -395,40 +395,24 @@ export function BacktestConfigForm({
 
   return (
     <>
-      {/* Loading Overlay Fullscreen - Similar ao quick-ranker */}
+      {/* Loading Overlay Fullscreen */}
       {isLoading && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl">
-            <div className="text-center space-y-4 sm:space-y-6">
-              <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
-                <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <BarChart3 className="absolute inset-0 m-auto w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                  {isAddingAsset && 'Adicionando ativo...'}
-                  {isRemovingAsset && 'Removendo ativo...'}
-                  {isSaving && 'Salvando configuração...'}
-                  {isRunning && 'Executando backtest...'}
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 px-2">
-                  {isAddingAsset && 'Calculando alocações proporcionais'}
-                  {isRemovingAsset && 'Redistribuindo alocações'}
-                  {isSaving && 'Salvando suas configurações'}
-                  {isRunning && 'Processando simulação histórica'}
-                </p>
-              </div>
-              
-              <div className="flex items-center justify-center gap-1">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <BacktestLoadingOverlay
+          title={
+            (isAddingAsset && 'Adicionando ativo...') ||
+            (isRemovingAsset && 'Removendo ativo...') ||
+            (isSaving && 'Salvando configuração...') ||
+            (isRunning && 'Executando backtest...') ||
+            ''
+          }
+          description={
+            (isAddingAsset && 'Calculando alocações proporcionais') ||
+            (isRemovingAsset && 'Redistribuindo alocações') ||
+            (isSaving && 'Salvando suas configurações') ||
+            (isRunning && 'Processando simulação histórica') ||
+            undefined
+          }
+        />
       )}
       
     <div className="space-y-6" id="backtest-config-form-start">
@@ -525,6 +509,28 @@ export function BacktestConfigForm({
                   Simulação apenas com capital inicial, sem novos aportes
                 </p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rebalanceFrequency">Rebalanceamento</Label>
+              <Select
+                value={config.rebalanceFrequency}
+                onValueChange={(value) =>
+                  setConfig(prev => ({ ...prev, rebalanceFrequency: value as 'monthly' | 'quarterly' | 'yearly' }))
+                }
+              >
+                <SelectTrigger id="rebalanceFrequency">
+                  <SelectValue placeholder="Frequência" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                  <SelectItem value="quarterly">Trimestral</SelectItem>
+                  <SelectItem value="yearly">Anual</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Frequência com que a carteira é reequilibrada de volta às alocações-alvo
+              </p>
             </div>
           </div>
 

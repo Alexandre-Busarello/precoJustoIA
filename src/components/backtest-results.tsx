@@ -244,7 +244,6 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
   };
 
   const totalGainFromAssets = calculateTotalGainFromAssets();
-  const gainPercentage = result.totalInvested > 0 ? (totalGain / result.totalInvested) * 100 : 0;
   const totalMonths = (result.positiveMonths || 0) + (result.negativeMonths || 0);
   const consistencyRate = totalMonths > 0 ? ((result.positiveMonths || 0) / totalMonths) * 100 : 0;
   // CORREÇÃO: Calcular retorno médio mensal baseado no retorno anualizado (composição correta)
@@ -818,144 +817,253 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
         </Card>
       )}
 
-      {/* Header com Resumo */}
-      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20">
-        <CardHeader>
-          <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <CardTitle className="text-lg sm:text-2xl flex items-center gap-2 flex-wrap">
-                  <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 flex-shrink-0" />
-                  <span className="truncate">Resultados do Backtesting</span>
-                  {periodAdjusted && (
-                    <Badge variant="outline" className="text-xs sm:text-sm text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20 whitespace-nowrap">
-                      <span className="hidden sm:inline">Período Ajustado</span>
-                      <span className="sm:hidden">Ajustado</span>
-                    </Badge>
-                  )}
-                </CardTitle>
-                {config && (
-                  <div className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-1 text-xs sm:text-sm">
-                      <span className="font-medium">{config.name}</span>
-                      <span>•</span>
-                      <span>{config.assets?.length || 0} ativos</span>
-                      <span>•</span>
-                      <span>{result.monthlyReturns?.length + 1 || 0} meses</span>
-                    </div>
-                    {periodAdjusted && (
-                      <div className="text-xs text-amber-600 dark:text-amber-400">
-                        Período: {effectiveStartDate?.toLocaleDateString('pt-BR')} - {effectiveEndDate?.toLocaleDateString('pt-BR')}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              {/* <div className="flex gap-2">
-                <Button variant="outline" size="sm">
-                  <Share2 className="w-4 h-4 mr-2" />
-                  Compartilhar
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Download className="w-4 h-4 mr-2" />
-                  Exportar
-                </Button>
-              </div> */}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Valor Final</p>
-              <p className="text-lg sm:text-2xl font-bold text-green-600 truncate">
-                {formatCurrency(result.finalValue)}
-              </p>
-            </div>
-            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Ganho Total</p>
-              <p className={`text-lg sm:text-2xl font-bold truncate ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(totalGain)}
-              </p>
-            </div>
-            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Retorno Total</p>
-              <p className={`text-lg sm:text-2xl font-bold ${result.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+      {/* Barra de contexto — leve, sem gradiente */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground min-w-0">
+          <BarChart3 className="w-4 h-4 flex-shrink-0" />
+          {config && (
+            <>
+              <span className="font-medium text-foreground truncate">{config.name}</span>
+              <span aria-hidden="true">·</span>
+              <span className="whitespace-nowrap">{config.assets?.length || 0} ativos</span>
+              <span aria-hidden="true">·</span>
+              <span className="whitespace-nowrap">{(result.monthlyReturns?.length || 0) + 1} meses</span>
+            </>
+          )}
+        </div>
+        {periodAdjusted && (
+          <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 w-fit whitespace-nowrap">
+            Período ajustado: {effectiveStartDate?.toLocaleDateString('pt-BR')} – {effectiveEndDate?.toLocaleDateString('pt-BR')}
+          </Badge>
+        )}
+      </div>
+
+      {/* Hero: manchete de retorno + gráfico comparativo (o dado mais importante, logo de cara) */}
+      <Card className="border bg-card">
+        <CardContent className="pt-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm text-muted-foreground mb-1">Retorno da carteira no período</p>
+              <p className={`text-4xl sm:text-5xl font-bold tracking-tight ${result.totalReturn >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
                 {formatPercentage(result.totalReturn)}
               </p>
-            </div>
-            <div className="text-center p-2 sm:p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Retorno Anual</p>
-              <p className={`text-lg sm:text-2xl font-bold ${result.annualizedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatPercentage(result.annualizedReturn)}
+              <p className="text-sm text-muted-foreground mt-2">
+                {formatCurrency(result.finalValue)} de valor final
+                {benchmarkData && showBenchmarks && (
+                  <span className="hidden sm:inline"> — veja como se compara ao CDI e ao Ibovespa abaixo</span>
+                )}
               </p>
             </div>
+            <div className="flex gap-6 sm:gap-8">
+              <div>
+                <p className="text-xs text-muted-foreground">Ganho total</p>
+                <p className={`text-lg font-semibold ${totalGain >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+                  {formatCurrency(totalGain)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Retorno anualizado</p>
+                <p className={`text-lg font-semibold ${result.annualizedReturn >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+                  {formatPercentage(result.annualizedReturn)}
+                </p>
+              </div>
+            </div>
           </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-foreground flex items-center gap-2">
+              <LineChartIcon className="w-4 h-4 text-muted-foreground" />
+              Evolução patrimonial comparativa
+            </p>
+            {benchmarkData && !loadingBenchmarks && (
+              <Button
+                variant={showBenchmarks ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowBenchmarks(!showBenchmarks)}
+                className="text-xs"
+              >
+                {showBenchmarks ? 'Ocultar' : 'Mostrar'} CDI/Ibovespa
+              </Button>
+            )}
+          </div>
+
+          {loadingBenchmarks ? (
+            <div className="h-72 sm:h-80 bg-muted/40 rounded-lg flex items-center justify-center">
+              <div className="text-center">
+                <BarChart3 className="w-10 h-10 mx-auto text-muted-foreground mb-3 animate-pulse" />
+                <p className="text-sm text-muted-foreground">Carregando benchmarks...</p>
+              </div>
+            </div>
+          ) : chartData.length > 0 ? (
+            <div className="h-72 sm:h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 11 }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                    stroke="var(--muted-foreground)"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    stroke="var(--muted-foreground)"
+                    tickFormatter={(value) => {
+                      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+                      if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+                      return value.toFixed(0);
+                    }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--popover)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      padding: '12px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    }}
+                    formatter={(value: any, name) => {
+                      const numValue = Number(value);
+                      const label = String(name ?? '');
+                      if (isNaN(numValue) || numValue === null || numValue === undefined) {
+                        return ['N/A', label];
+                      }
+                      const formattedValue = formatCurrency(numValue);
+                      if (label === 'carteira') return [formattedValue, 'Sua Carteira'];
+                      if (label === 'cdi') return [formattedValue, 'CDI'];
+                      if (label === 'ibov') return [formattedValue, 'IBOVESPA'];
+                      return [formattedValue, label];
+                    }}
+                    labelFormatter={(label) => label}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} iconType="line" />
+
+                  <Line
+                    type="monotone"
+                    dataKey="carteira"
+                    stroke="#2563eb"
+                    strokeWidth={2.5}
+                    dot={false}
+                    name="Sua Carteira"
+                    activeDot={{ r: 5 }}
+                  />
+                  {showBenchmarks && benchmarkData?.cdi && benchmarkData.cdi.length > 0 && (
+                    <Line
+                      type="monotone"
+                      dataKey="cdi"
+                      stroke="var(--muted-foreground)"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      name="CDI"
+                    />
+                  )}
+                  {showBenchmarks && benchmarkData?.ibov && benchmarkData.ibov.length > 0 && (
+                    <Line
+                      type="monotone"
+                      dataKey="ibov"
+                      stroke="#d97706"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      name="IBOVESPA"
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-72 sm:h-80 bg-muted/40 rounded-lg flex items-center justify-center">
+              <div className="text-center">
+                <BarChart3 className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground">Nenhum dado disponível para o gráfico</p>
+              </div>
+            </div>
+          )}
+
+          {/* Comparativo com benchmarks — tons neutros, cor só na identidade de cada série */}
+          {showBenchmarks && benchmarkData && chartData.length > 0 && (() => {
+            const finalCarteira = chartData[chartData.length - 1]?.carteira || 0;
+            const finalCDI = (chartData[chartData.length - 1] as any)?.cdi || 0;
+            const finalIBOV = (chartData[chartData.length - 1] as any)?.ibov || 0;
+            const totalInvestedForReturn = result.totalInvested;
+
+            const returnCarteira = totalInvestedForReturn > 0 ? ((finalCarteira - totalInvestedForReturn) / totalInvestedForReturn) * 100 : 0;
+            const returnCDI = totalInvestedForReturn > 0 ? ((finalCDI - totalInvestedForReturn) / totalInvestedForReturn) * 100 : 0;
+            const returnIBOV = totalInvestedForReturn > 0 ? ((finalIBOV - totalInvestedForReturn) / totalInvestedForReturn) * 100 : 0;
+
+            const tiles = [
+              { label: 'Sua Carteira', value: returnCarteira, final: finalCarteira, dotClass: 'bg-blue-600', delta: null as number | null, visible: true },
+              { label: 'CDI', value: returnCDI, final: finalCDI, dotClass: 'bg-muted-foreground', delta: returnCarteira - returnCDI, visible: benchmarkData.cdi.length > 0 },
+              { label: 'IBOVESPA', value: returnIBOV, final: finalIBOV, dotClass: 'bg-amber-600', delta: returnCarteira - returnIBOV, visible: benchmarkData.ibov.length > 0 },
+            ];
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {tiles.filter(t => t.visible).map((tile) => (
+                  <div key={tile.label} className="p-3 sm:p-4 rounded-lg border bg-card">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs sm:text-sm font-medium text-foreground">{tile.label}</span>
+                      <span className={`w-2.5 h-2.5 rounded-full ${tile.dotClass}`}></span>
+                    </div>
+                    <p className={`text-xl sm:text-2xl font-bold ${tile.value >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+                      {tile.value >= 0 ? '+' : ''}{tile.value.toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatCurrency(tile.final)}
+                      {tile.delta !== null && (
+                        <span className="ml-2">
+                          {tile.delta >= 0 ? '▲' : '▼'} {Math.abs(tile.delta).toFixed(1)}pp vs. carteira
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
-      {/* Métricas Principais - máx 3 colunas para evitar truncamento em telas grandes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      {/* Métricas secundárias — cartões neutros, sem cor decorativa por métrica */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <MetricCard
+          title="Retorno Anualizado"
+          value={formatPercentage(result.annualizedReturn)}
+          icon={<TrendingUp />}
+          tone={result.annualizedReturn >= 0 ? 'positive' : 'negative'}
+          description="Retorno composto ao ano"
+        />
         <MetricCard
           title="Volatilidade"
           value={formatPercentage(result.volatility)}
           icon={<Activity />}
-          color="orange"
+          tone="neutral"
           description="Risco anualizado da carteira"
         />
         <MetricCard
           title="Sharpe Ratio"
           value={result.sharpeRatio ? result.sharpeRatio.toFixed(2) : 'N/A'}
           icon={<Target />}
-          color="purple"
+          tone="neutral"
           description="Retorno ajustado ao risco"
         />
         <MetricCard
           title="Drawdown Máximo"
           value={formatPercentage(result.maxDrawdown)}
           icon={<TrendingDown />}
-          color="red"
+          tone="negative"
           description="Maior perda do pico ao vale"
-        />
-        <MetricCard
-          title="Consistência"
-          value={`${consistencyRate.toFixed(1)}%`}
-          icon={<Calendar />}
-          color="blue"
-          description={`${result.positiveMonths} meses positivos de ${result.positiveMonths + result.negativeMonths}`}
-        />
-        <MetricCard
-          title="Tempo de Recuperação"
-          value={
-            recoveryMetrics.isCurrentlyInDrawdown 
-              ? `${recoveryMetrics.currentDrawdownDuration}+ meses` 
-              : recoveryMetrics.averageRecoveryTime > 0 
-                ? `${recoveryMetrics.averageRecoveryTime.toFixed(1)} meses` 
-                : 'N/A'
-          }
-          icon={recoveryMetrics.isCurrentlyInDrawdown ? <TrendingDown /> : <TrendingUp />}
-          color={recoveryMetrics.isCurrentlyInDrawdown ? "red" : "purple"}
-          description={
-            recoveryMetrics.isCurrentlyInDrawdown 
-              ? `Em drawdown há ${recoveryMetrics.currentDrawdownDuration} meses`
-              : recoveryMetrics.recoveryCount > 0 
-                ? `Média após ${recoveryMetrics.recoveryCount} recuperações completas` 
-                : 'Nenhuma perda significativa'
-          }
-        />
-        <MetricCard
-          title="Dividendos Recebidos"
-          value={result.totalDividendsReceived ? formatCurrency(result.totalDividendsReceived) : 'R$ 0,00'}
-          icon={<DollarSign />}
-          color="green"
-          description="Simulação: pagos em Mar/Ago/Out (33,33% cada)"
         />
       </div>
 
       {/* Tabs com Análises Detalhadas */}
       <Tabs defaultValue="overview" className="space-y-4">
         <div className="relative mb-4">
-          <div 
+          <div
             className="overflow-x-auto pb-2"
             style={{
               scrollbarWidth: 'none', /* Firefox */
@@ -972,12 +1080,13 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 <span className="hidden sm:inline">Visão Geral</span>
                 <span className="sm:hidden">Visão</span>
               </TabsTrigger>
-              <TabsTrigger value="evolution" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
-                Evolução
-              </TabsTrigger>
               <TabsTrigger value="assets" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
                 <span className="hidden sm:inline">Por Ativo</span>
                 <span className="sm:hidden">Ativos</span>
+              </TabsTrigger>
+              <TabsTrigger value="evolution" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
+                <span className="hidden sm:inline">Dados Mensais</span>
+                <span className="sm:hidden">Mensal</span>
               </TabsTrigger>
               <TabsTrigger value="transactions" className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm">
                 <span className="hidden sm:inline">Transações</span>
@@ -994,73 +1103,50 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
         {/* Visão Geral */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Resumo Financeiro */}
+            {/* Resumo Financeiro — sem repetir Valor Final/Ganho Total, já na manchete acima */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5" />
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <DollarSign className="w-4 h-4 text-muted-foreground" />
                   Resumo Financeiro
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Capital Próprio Investido:</span>
+                  <span className="text-sm sm:text-base text-muted-foreground">Capital Próprio Investido:</span>
                   <span className="font-semibold text-sm sm:text-base">{formatCurrency(result.totalInvested)}</span>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Valor Final:</span>
-                  <span className="font-semibold text-sm sm:text-base">{formatCurrency(result.finalValue)}</span>
                 </div>
                 {result.finalCashReserve !== undefined && (
                   <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                    <span className="text-sm sm:text-base">Saldo em Caixa:</span>
-                    <span className="font-semibold text-blue-600 text-sm sm:text-base">{formatCurrency(result.finalCashReserve || 0)}</span>
+                    <span className="text-sm sm:text-base text-muted-foreground">Saldo em Caixa:</span>
+                    <span className="font-semibold text-sm sm:text-base">{formatCurrency(result.finalCashReserve || 0)}</span>
                   </div>
                 )}
                 {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
-                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                    <span className="text-sm sm:text-base">Dividendos Recebidos:</span>
-                    <span className="font-semibold text-green-600 text-sm sm:text-base">{formatCurrency(result.totalDividendsReceived)}</span>
-                  </div>
-                )}
-                <Separator />
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-base sm:text-lg">
-                  <span>Ganho/Perda Total:</span>
-                  <span className={`font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    <span className="block sm:inline">{formatCurrency(totalGain)}</span>
-                    <span className="block sm:inline sm:ml-1">({gainPercentage.toFixed(2)}%)</span>
-                  </span>
-                </div>
-                {/* Informações sobre Dividendos */}
-                {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
-                  <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400 pl-2 sm:pl-4">
+                  <>
+                    <Separator />
                     <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                      <span>• Dividendos Recebidos e Reinvestidos:</span>
-                      <span className="font-medium text-blue-600">
-                        {formatCurrency(totalDividends)}
+                      <span className="text-sm sm:text-base text-muted-foreground">Dividendos Recebidos e Reinvestidos:</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-500 text-sm sm:text-base">{formatCurrency(totalDividends)}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Reinvestidos automaticamente — já incluídos no ganho de capital.
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-sm text-muted-foreground">
+                      <span>Yield sobre Investimento:</span>
+                      <span className="font-medium text-emerald-600 dark:text-emerald-500">
+                        {((result.totalDividendsReceived / result.totalInvested) * 100).toFixed(2)}%
                       </span>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Os dividendos foram automaticamente reinvestidos e já estão incluídos no ganho de capital acima.
-                    </div>
-                  </div>
+                  </>
                 )}
-                {result.totalDividendsReceived !== undefined && result.totalDividendsReceived > 0 && (
-                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-sm text-gray-600 dark:text-gray-400">
-                    <span>Yield sobre Investimento:</span>
-                    <span className="font-medium text-green-600">
-                      {((result.totalDividendsReceived / result.totalInvested) * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                )}
+                <Separator />
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                   <div className="flex flex-col">
-                    <span className="text-sm sm:text-base">Retorno Médio Mensal (Composto):</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      Equivalente mensal do retorno anualizado
-                    </span>
+                    <span className="text-sm sm:text-base text-muted-foreground">Retorno Médio Mensal (Composto):</span>
+                    <span className="text-xs text-muted-foreground">Equivalente mensal do retorno anualizado</span>
                   </div>
-                  <span className={`font-semibold text-sm sm:text-base ${averageMonthlyReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`font-semibold text-sm sm:text-base ${averageMonthlyReturn >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
                     {formatPercentage(averageMonthlyReturn)}
                   </span>
                 </div>
@@ -1070,51 +1156,49 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
             {/* Estatísticas de Performance */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
                   Estatísticas de Performance
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Meses Positivos:</span>
-                  <Badge variant="default" className="bg-green-500 w-fit">
-                    {result.positiveMonths}
-                  </Badge>
+                  <span className="text-sm sm:text-base text-muted-foreground">Consistência (meses positivos):</span>
+                  <span className="font-semibold text-sm sm:text-base">{consistencyRate.toFixed(1)}% <span className="text-muted-foreground font-normal">({result.positiveMonths}/{result.positiveMonths + result.negativeMonths})</span></span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Meses Negativos:</span>
-                  <Badge variant="destructive" className="w-fit">
-                    {result.negativeMonths}
-                  </Badge>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Taxa de Acerto:</span>
-                  <span className="font-semibold text-sm sm:text-base">{consistencyRate.toFixed(1)}%</span>
+                  <span className="text-sm sm:text-base text-muted-foreground">Tempo de Recuperação:</span>
+                  <span className="font-semibold text-sm sm:text-base">
+                    {recoveryMetrics.isCurrentlyInDrawdown
+                      ? `Em drawdown há ${recoveryMetrics.currentDrawdownDuration}+ meses`
+                      : recoveryMetrics.averageRecoveryTime > 0
+                        ? `${recoveryMetrics.averageRecoveryTime.toFixed(1)} meses (média)`
+                        : 'Sem perdas significativas'}
+                  </span>
                 </div>
                 <Separator />
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Melhor Mês:</span>
-                  <span className="font-semibold text-green-600 text-sm sm:text-base">
+                  <span className="text-sm sm:text-base text-muted-foreground">Melhor Mês:</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-500 text-sm sm:text-base">
                     {formatPercentage(Math.max(...result.monthlyReturns.map(m => m.return)))}
                   </span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Pior Mês:</span>
-                  <span className="font-semibold text-red-600 text-sm sm:text-base">
+                  <span className="text-sm sm:text-base text-muted-foreground">Pior Mês:</span>
+                  <span className="font-semibold text-red-600 dark:text-red-500 text-sm sm:text-base">
                     {formatPercentage(Math.min(...result.monthlyReturns.map(m => m.return)))}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Maior Sequência Positiva:</span>
-                  <span className="font-semibold text-green-600 text-sm sm:text-base">
+                  <span className="text-sm sm:text-base text-muted-foreground">Maior Sequência Positiva:</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-500 text-sm sm:text-base">
                     {longestPositiveStreak} {longestPositiveStreak === 1 ? 'mês' : 'meses'}
                   </span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-sm sm:text-base">Maior Sequência Negativa:</span>
-                  <span className="font-semibold text-red-600 text-sm sm:text-base">
+                  <span className="text-sm sm:text-base text-muted-foreground">Maior Sequência Negativa:</span>
+                  <span className="font-semibold text-red-600 dark:text-red-500 text-sm sm:text-base">
                     {longestNegativeStreak} {longestNegativeStreak === 1 ? 'mês' : 'meses'}
                   </span>
                 </div>
@@ -1126,257 +1210,6 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
         {/* Evolução da Carteira */}
         <TabsContent value="evolution">
           <div className="space-y-6">
-            {/* Gráfico de Evolução com Benchmarks */}
-            <Card>
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <CardTitle className="flex items-center gap-2">
-                    <LineChartIcon className="w-5 h-5" />
-                    Evolução Patrimonial Comparativa
-                </CardTitle>
-                  {benchmarkData && !loadingBenchmarks && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant={showBenchmarks ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setShowBenchmarks(!showBenchmarks)}
-                        className="text-xs"
-                      >
-                        <BarChart3 className="w-3 h-3 mr-1" />
-                        {showBenchmarks ? 'Ocultar' : 'Mostrar'} Benchmarks
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                {showBenchmarks && benchmarkData && (
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                    Comparação do valor acumulado investindo com a mesma estratégia de aportes mensais em cada opção (Carteira, CDI, IBOVESPA)
-                  </p>
-                )}
-              </CardHeader>
-              <CardContent>
-                {loadingBenchmarks ? (
-                  <div className="h-80 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-                    <div className="text-center">
-                      <BarChart3 className="w-16 h-16 mx-auto text-gray-400 mb-4 animate-pulse" />
-                      <p className="text-gray-500">Carregando benchmarks...</p>
-                    </div>
-                  </div>
-                ) : chartData.length > 0 ? (
-                  <div className="h-80 sm:h-96">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis 
-                          dataKey="month" 
-                          tick={{ fontSize: 11 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={70}
-                          stroke="#6b7280"
-                        />
-                        <YAxis 
-                          tick={{ fontSize: 11 }}
-                          stroke="#6b7280"
-                          label={{ 
-                            value: 'Valor (R$)', 
-                            angle: -90, 
-                            position: 'insideLeft',
-                            style: { fontSize: 12, fill: '#6b7280' }
-                          }}
-                          tickFormatter={(value) => {
-                            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-                            if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
-                            return value.toFixed(0);
-                          }}
-                        />
-                        <Tooltip 
-                          contentStyle={{
-                            backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            fontSize: '13px',
-                            padding: '12px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                          }}
-                          formatter={(value: any, name) => {
-                            // Garantir que o valor é um número válido
-                            const numValue = Number(value);
-                            const label = String(name ?? '');
-                            if (isNaN(numValue) || numValue === null || numValue === undefined) {
-                              return ['N/A', label];
-                            }
-                            
-                            const formattedValue = formatCurrency(numValue);
-                            
-                            // Mapear nomes amigáveis
-                            if (label === 'carteira') return [formattedValue, '💼 Sua Carteira'];
-                            if (label === 'cdi') return [formattedValue, '🟢 CDI'];
-                            if (label === 'ibov') return [formattedValue, '🟠 IBOVESPA'];
-                            
-                            return [formattedValue, label];
-                          }}
-                          labelFormatter={(label) => `📅 ${label}`}
-                        />
-                        <Legend 
-                          wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
-                          iconType="line"
-                        />
-                        
-                        {/* Linha da Carteira - Destaque */}
-                        <Line 
-                          type="monotone" 
-                          dataKey="carteira" 
-                          stroke="#3b82f6" 
-                          strokeWidth={3}
-                          dot={false}
-                          name="Sua Carteira"
-                          activeDot={{ r: 6 }}
-                        />
-                        
-                        {/* Linha do CDI */}
-                        {showBenchmarks && benchmarkData?.cdi && benchmarkData.cdi.length > 0 && (
-                          <Line 
-                            type="monotone" 
-                            dataKey="cdi" 
-                            stroke="#10b981" 
-                          strokeWidth={2}
-                            strokeDasharray="5 5"
-                            dot={false}
-                            name="CDI"
-                          />
-                        )}
-                        
-                        {/* Linha do IBOVESPA */}
-                        {showBenchmarks && benchmarkData?.ibov && benchmarkData.ibov.length > 0 && (
-                          <Line 
-                            type="monotone" 
-                            dataKey="ibov" 
-                            stroke="#f59e0b" 
-                            strokeWidth={2}
-                            strokeDasharray="5 5"
-                            dot={false}
-                            name="IBOVESPA"
-                          />
-                        )}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="h-80 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-                    <div className="text-center">
-                      <BarChart3 className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                      <p className="text-gray-500">Nenhum dado disponível para o gráfico</p>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Card de Performance Comparativa */}
-                {showBenchmarks && benchmarkData && chartData.length > 0 && (() => {
-                  const finalCarteira = chartData[chartData.length - 1]?.carteira || 0;
-                  const finalCDI = (chartData[chartData.length - 1] as any)?.cdi || 0;
-                  const finalIBOV = (chartData[chartData.length - 1] as any)?.ibov || 0;
-                  const totalInvested = result.totalInvested;
-                  
-                  const returnCarteira = totalInvested > 0 ? ((finalCarteira - totalInvested) / totalInvested) * 100 : 0;
-                  const returnCDI = totalInvested > 0 ? ((finalCDI - totalInvested) / totalInvested) * 100 : 0;
-                  const returnIBOV = totalInvested > 0 ? ((finalIBOV - totalInvested) / totalInvested) * 100 : 0;
-                  
-                  // Debug: logs dos cards
-                  // CORREÇÃO: Usar meses únicos das TRANSAÇÕES (fonte da verdade), não chartData.length
-                  const uniqueMonths = transactions ? new Set(transactions.map(t => t.month)).size : chartData.length;
-                  const numMesesReais = uniqueMonths;
-                  const numAportesEstimado = numMesesReais; // SEMPRE todos os meses
-                  const totalAportesEstimado = (config?.monthlyContribution || 0) * numAportesEstimado;
-                  const totalInvestidoCalculado = (config?.initialCapital || 0) + totalAportesEstimado;
-                  
-                  console.log('📊 ===== CARDS DE PERFORMANCE =====');
-                  console.log('📊 📊 BREAKDOWN DO TOTAL INVESTIDO:');
-                  console.log('📊   Capital Inicial:', formatCurrency(config?.initialCapital || 0));
-                  console.log('📊   Aporte Mensal:', formatCurrency(config?.monthlyContribution || 0));
-                  console.log('📊   Número de Meses (Transações):', numMesesReais, '✅ (fonte da verdade)');
-                  console.log('📊   Número de Meses (chartData):', chartData.length, chartData.length !== numMesesReais ? '⚠️  (DIFERENTE!)' : '');
-                  console.log('📊   Número de Aportes:', numAportesEstimado);
-                  console.log('📊   Total Aportes Calculado:', formatCurrency(totalAportesEstimado));
-                  console.log('📊   ➡️ TOTAL INVESTIDO (Calculado):', formatCurrency(totalInvestidoCalculado));
-                  console.log('📊   ➡️ TOTAL INVESTIDO (Backend):', formatCurrency(totalInvested));
-                  console.log('📊   ⚠️  Diferença:', formatCurrency(totalInvestidoCalculado - totalInvested), `(${((Math.abs(totalInvestidoCalculado - totalInvested) / totalInvested) * 100).toFixed(2)}%)`);
-                  console.log('📊');
-                  console.log('📊 VALORES FINAIS:');
-                  console.log('📊 Final Carteira:', formatCurrency(finalCarteira), '→ Ganho:', formatCurrency(finalCarteira - totalInvested), '→ Retorno:', returnCarteira.toFixed(2) + '%');
-                  console.log('📊 Final CDI:', formatCurrency(finalCDI), '→ Ganho:', formatCurrency(finalCDI - totalInvested), '→ Retorno:', returnCDI.toFixed(2) + '%');
-                  console.log('📊 Final IBOV:', formatCurrency(finalIBOV), '→ Ganho:', formatCurrency(finalIBOV - totalInvested), '→ Retorno:', returnIBOV.toFixed(2) + '%');
-                  console.log('📊 ==================================');
-                  
-                  return (
-                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                      {/* Sua Carteira */}
-                      <div className="p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <span className="text-xs sm:text-sm font-medium text-blue-900 dark:text-blue-100 block">Sua Carteira</span>
-                            <span className="text-[10px] text-blue-600 dark:text-blue-400">Retorno Total</span>
-                          </div>
-                          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                        </div>
-                        <p className="text-lg sm:text-2xl font-bold text-blue-600">
-                          {returnCarteira >= 0 ? '+' : ''}{returnCarteira.toFixed(1)}%
-                        </p>
-                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                          {formatCurrency(finalCarteira)}
-                        </p>
-                      </div>
-                      
-                      {/* CDI */}
-                      {benchmarkData.cdi.length > 0 && (
-                        <div className="p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                          <div className="flex items-center justify-between mb-2">
-                            <div>
-                              <span className="text-xs sm:text-sm font-medium text-green-900 dark:text-green-100 block">CDI</span>
-                              <span className="text-[10px] text-green-600 dark:text-green-400">Retorno Total</span>
-                            </div>
-                            <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-dashed border-green-700"></div>
-                          </div>
-                          <p className="text-lg sm:text-2xl font-bold text-green-600">
-                            {returnCDI >= 0 ? '+' : ''}{returnCDI.toFixed(1)}%
-                          </p>
-                          <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                            {formatCurrency(finalCDI)}
-                            <span className="ml-2">
-                              {(returnCarteira - returnCDI) >= 0 ? '▲' : '▼'} 
-                              {Math.abs(returnCarteira - returnCDI).toFixed(1)}pp
-                            </span>
-                          </p>
-                        </div>
-                      )}
-                      
-                      {/* IBOVESPA */}
-                      {benchmarkData.ibov.length > 0 && (
-                        <div className="p-3 sm:p-4 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
-                          <div className="flex items-center justify-between mb-2">
-                            <div>
-                              <span className="text-xs sm:text-sm font-medium text-orange-900 dark:text-orange-100 block">IBOVESPA</span>
-                              <span className="text-[10px] text-orange-600 dark:text-orange-400">Retorno Total</span>
-                            </div>
-                            <div className="w-3 h-3 rounded-full bg-orange-500 border-2 border-dashed border-orange-700"></div>
-                          </div>
-                          <p className="text-lg sm:text-2xl font-bold text-orange-600">
-                            {returnIBOV >= 0 ? '+' : ''}{returnIBOV.toFixed(1)}%
-                          </p>
-                          <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
-                            {formatCurrency(finalIBOV)}
-                            <span className="ml-2">
-                              {(returnCarteira - returnIBOV) >= 0 ? '▲' : '▼'} 
-                              {Math.abs(returnCarteira - returnIBOV).toFixed(1)}pp
-                            </span>
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
 
             {/* Tabela de Dados Mensais com Paginação */}
             <Card>
@@ -1981,37 +1814,31 @@ interface MetricCardProps {
   title: string;
   value: string;
   icon: React.ReactNode;
-  color: 'blue' | 'green' | 'red' | 'orange' | 'purple';
+  /** Cor é só semântica (bom/ruim), nunca decorativa por métrica. */
+  tone?: 'positive' | 'negative' | 'neutral';
   description?: string;
 }
 
-function MetricCard({ title, value, icon, color, description }: MetricCardProps) {
-  const colorClasses = {
-    blue: 'border-blue-200 bg-blue-50 dark:bg-blue-950/20 text-blue-600',
-    green: 'border-green-200 bg-green-50 dark:bg-green-950/20 text-green-600',
-    red: 'border-red-200 bg-red-50 dark:bg-red-950/20 text-red-600',
-    orange: 'border-orange-200 bg-orange-50 dark:bg-orange-950/20 text-orange-600',
-    purple: 'border-purple-200 bg-purple-50 dark:bg-purple-950/20 text-purple-600'
-  };
+function MetricCard({ title, value, icon, tone = 'neutral', description }: MetricCardProps) {
+  const valueClass =
+    tone === 'positive' ? 'text-emerald-600 dark:text-emerald-500' :
+    tone === 'negative' ? 'text-red-600 dark:text-red-500' :
+    'text-foreground';
 
   return (
-    <Card className={`${colorClasses[color]} min-w-0`}>
+    <Card className="border bg-card min-w-0">
       <CardContent className="p-3 sm:p-4">
         <div className="flex items-start gap-2 sm:gap-3 min-w-0">
-          <div className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 flex items-center justify-center ${color === 'blue' ? 'bg-blue-500' : 
-                                          color === 'green' ? 'bg-green-500' :
-                                          color === 'red' ? 'bg-red-500' :
-                                          color === 'orange' ? 'bg-orange-500' :
-                                          'bg-purple-500'}`}>
-            <div className="w-4 h-4 sm:w-5 sm:h-5 text-white flex items-center justify-center">
+          <div className="p-1.5 sm:p-2 rounded-lg flex-shrink-0 flex items-center justify-center bg-muted">
+            <div className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex items-center justify-center">
               {icon}
             </div>
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
-            <p className="text-xs sm:text-sm font-medium opacity-80 break-words">{title}</p>
-            <p className="text-lg sm:text-2xl font-bold break-all">{value}</p>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground break-words">{title}</p>
+            <p className={`text-lg sm:text-2xl font-bold break-all ${valueClass}`}>{value}</p>
             {description && (
-              <p className="text-xs opacity-70 mt-1 break-words line-clamp-2">{description}</p>
+              <p className="text-xs text-muted-foreground/80 mt-1 break-words line-clamp-2">{description}</p>
             )}
           </div>
         </div>

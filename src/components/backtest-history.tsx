@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { BacktestLoadingOverlay } from '@/components/backtest-loading-overlay';
 import { 
   History, 
   Calendar, 
@@ -337,32 +338,10 @@ export function BacktestHistory({ onShowDetails }: BacktestHistoryProps = {}) {
     <>
       {/* Loading Overlay Fullscreen */}
       {runningBacktest && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl">
-            <div className="text-center space-y-4 sm:space-y-6">
-              <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
-                <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <BarChart3 className="absolute inset-0 m-auto w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                  Executando backtest...
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 px-2">
-                  Processando dados históricos e calculando métricas
-                </p>
-              </div>
-              
-              <div className="flex items-center justify-center gap-1">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <BacktestLoadingOverlay
+          title="Executando backtest..."
+          description="Processando dados históricos e calculando métricas"
+        />
       )}
     
     <div className="space-y-4">

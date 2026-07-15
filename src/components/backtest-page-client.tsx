@@ -11,6 +11,7 @@ import { BacktestDataQualityPanel } from '@/components/backtest-data-quality-pan
 import { BacktestWelcomeScreen } from '@/components/backtest-welcome-screen';
 import { BacktestConfigHistory } from '@/components/backtest-config-history';
 import { BacktestProgressIndicator } from '@/components/backtest-progress-indicator';
+import { BacktestLoadingOverlay } from '@/components/backtest-loading-overlay';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useTracking } from '@/hooks/use-tracking';
@@ -827,34 +828,12 @@ export function BacktestPageClient() {
 
   return (
     <>
-      {/* Loading Overlay Fullscreen - Similar ao quick-ranker */}
+      {/* Loading Overlay Fullscreen */}
       {isLoadingConfig && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl">
-            <div className="text-center space-y-4 sm:space-y-6">
-              <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
-                <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <BarChart3 className="absolute inset-0 m-auto w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                  Carregando configuração...
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 px-2">
-                  Buscando dados da configuração de backtest
-                </p>
-              </div>
-              
-              <div className="flex items-center justify-center gap-1">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <BacktestLoadingOverlay
+          title="Carregando configuração..."
+          description="Buscando dados da configuração de backtest"
+        />
       )}
       
     <div className="space-y-6">
@@ -938,8 +917,8 @@ export function BacktestPageClient() {
                 onClick={() => updateUrl('lista')}
               >
                 <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Minhas Configs</span>
-                <span className="sm:hidden">Lista</span>
+                <span className="hidden sm:inline">Minhas Configurações</span>
+                <span className="sm:hidden">Configs</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="configure" 
@@ -966,10 +945,8 @@ export function BacktestPageClient() {
                 onClick={() => updateUrl('history', (currentConfig as any)?.id)}
               >
                 <History className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">
-                  {currentConfig && (currentConfig as any).id ? 'Histórico da Config' : 'Histórico Geral'}
-                </span>
-                <span className="sm:hidden">Histórico</span>
+                <span className="hidden sm:inline">Execuções</span>
+                <span className="sm:hidden">Execuções</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1106,26 +1083,55 @@ export function BacktestPageClient() {
           )}
         </TabsContent>
 
-        {/* Histórico */}
+        {/* Execuções */}
         <TabsContent value="history">
           {(() => {
             const hasConfigId = currentConfig && (currentConfig as any).id;
-            console.log('🔍 History Tab - currentConfig:', currentConfig?.name);
-            console.log('🔍 History Tab - hasConfigId:', hasConfigId);
-            console.log('🔍 History Tab - configId:', (currentConfig as any)?.id);
-            
+
             return hasConfigId ? (
-              // Se há uma configuração específica selecionada, mostrar histórico dela
-              <BacktestConfigHistory
-                configId={(currentConfig as any).id}
-                configName={currentConfig.name}
-                onShowResult={handleShowDetails}
-              />
+              // Configuração específica selecionada: mostrar as execuções dela
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-lg border bg-muted/40">
+                  <p className="text-sm text-muted-foreground">
+                    Mostrando execuções de: <strong className="text-foreground">{currentConfig.name}</strong>
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      updateUrl('lista');
+                      setActiveTab('lista');
+                    }}
+                  >
+                    Ver todas as configurações
+                  </Button>
+                </div>
+                <BacktestConfigHistory
+                  configId={(currentConfig as any).id}
+                  configName={currentConfig.name}
+                  onShowResult={handleShowDetails}
+                />
+              </div>
             ) : (
-              // Caso contrário, mostrar histórico geral
-              <BacktestHistory 
-                onShowDetails={handleShowDetails}
-              />
+              // Nenhuma configuração selecionada: orientar o usuário a escolher uma
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <History className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Selecione uma configuração</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Escolha uma configuração salva em &quot;Minhas Configurações&quot; para ver o histórico de execuções dela.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      updateUrl('lista');
+                      setActiveTab('lista');
+                    }}
+                  >
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                    Ver Minhas Configurações
+                  </Button>
+                </CardContent>
+              </Card>
             );
           })()}
         </TabsContent>

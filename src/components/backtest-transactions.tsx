@@ -33,9 +33,14 @@ export function BacktestTransactions({ transactions }: BacktestTransactionsProps
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
   const itemsPerPage = 20
-  
+
+  // Paginação do resumo por mês (12 meses por página, equivalente a 1 ano)
+  const [summaryPage, setSummaryPage] = useState(1)
+  const summaryItemsPerPage = 12
+
   // Ref para scroll automático
   const transactionsTableRef = useRef<HTMLDivElement>(null);
+  const summaryTableRef = useRef<HTMLDivElement>(null);
 
   // Debug: verificar se as transações estão chegando
   console.log('🔍 BacktestTransactions - Transações recebidas:', transactions?.length || 0);
@@ -81,6 +86,12 @@ export function BacktestTransactions({ transactions }: BacktestTransactionsProps
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex)
+
+  // Paginação do resumo por mês
+  const summaryTotalPages = Math.ceil(months.length / summaryItemsPerPage)
+  const summaryStartIndex = (summaryPage - 1) * summaryItemsPerPage
+  const summaryEndIndex = summaryStartIndex + summaryItemsPerPage
+  const paginatedMonths = months.slice(summaryStartIndex, summaryEndIndex)
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -163,6 +174,40 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
   const handleMonthFilter = (month: number | null) => {
     setSelectedMonth(month)
     setCurrentPage(1) // Reset para primeira página
+  }
+
+  const goToNextSummaryPage = () => {
+    if (summaryPage < summaryTotalPages) {
+      setSummaryPage(summaryPage + 1)
+      setTimeout(() => {
+        summaryTableRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }, 100);
+    }
+  }
+
+  const goToPreviousSummaryPage = () => {
+    if (summaryPage > 1) {
+      setSummaryPage(summaryPage - 1)
+      setTimeout(() => {
+        summaryTableRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }, 100);
+    }
+  }
+
+  const goToSummaryPage = (page: number) => {
+    setSummaryPage(page)
+    setTimeout(() => {
+      summaryTableRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }, 100);
   }
 
   return (
@@ -281,7 +326,8 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
             </div>
 
             {/* Layout Desktop: Tabela */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden md:block relative">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr className="border-b">
@@ -371,7 +417,16 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                   })}
                 </tbody>
               </table>
+              </div>
+              {/* Indicador de scroll horizontal (telas menores dentro do breakpoint md) */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-background to-transparent lg:hidden"
+              />
             </div>
+            <p className="mt-2 text-xs text-center text-muted-foreground lg:hidden">
+              ⟷ arraste para o lado para ver mais colunas
+            </p>
             </div>
 
             {/* Controles de Paginação */}
@@ -464,8 +519,11 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
           </TabsContent>
 
           <TabsContent value="summary" className="space-y-4">
-            <div className="grid gap-4">
-              {months.map(month => {
+            <div className="text-xs sm:text-sm text-muted-foreground">
+              {months.length} {months.length === 1 ? 'mês' : 'meses'} no total
+            </div>
+            <div ref={summaryTableRef} className="grid gap-4">
+              {paginatedMonths.map(month => {
                 const monthTransactions = transactionsByMonth[month]
                 const totalContribution = monthTransactions[0]?.totalContribution || 0
                 const portfolioValue = monthTransactions[0]?.portfolioValue || 0
@@ -580,6 +638,94 @@ const getTransactionTypeInfo = (type: string, ticker?: string) => {
                 )
               })}
             </div>
+
+            {/* Controles de Paginação do Resumo (1 página = até 12 meses) */}
+            {summaryTotalPages > 1 && (
+              <div className="mt-6 pt-4 border-t space-y-3">
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 text-center sm:text-left">
+                  <span className="block sm:inline">Página {summaryPage} de {summaryTotalPages}</span>
+                  <span className="hidden sm:inline"> • </span>
+                  <span className="block sm:inline">Mostrando meses {summaryStartIndex + 1}-{Math.min(summaryEndIndex, months.length)} de {months.length}</span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2">
+                  {/* Primeira página */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToSummaryPage(1)}
+                    disabled={summaryPage === 1}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                    title="Primeira página"
+                  >
+                    <span className="text-xs sm:text-sm">««</span>
+                    <span className="hidden lg:inline text-xs">Início</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToPreviousSummaryPage}
+                    disabled={summaryPage === 1}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                  >
+                    <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">Anterior</span>
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(summaryTotalPages <= 3 ? summaryTotalPages : 3, summaryTotalPages) }, (_, i) => {
+                      let pageNum
+                      if (summaryTotalPages <= 3) {
+                        pageNum = i + 1
+                      } else if (summaryPage <= 2) {
+                        pageNum = i + 1
+                      } else if (summaryPage >= summaryTotalPages - 1) {
+                        pageNum = summaryTotalPages - 2 + i
+                      } else {
+                        pageNum = summaryPage - 1 + i
+                      }
+
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={summaryPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => goToSummaryPage(pageNum)}
+                          className="w-7 h-7 sm:w-8 sm:h-8 p-0 text-xs sm:text-sm"
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToNextSummaryPage}
+                    disabled={summaryPage === summaryTotalPages}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                  >
+                    <span className="hidden sm:inline">Próxima</span>
+                    <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                  </Button>
+
+                  {/* Última página */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToSummaryPage(summaryTotalPages)}
+                    disabled={summaryPage === summaryTotalPages}
+                    className="flex items-center gap-1 h-8 px-2 sm:px-3"
+                    title="Última página"
+                  >
+                    <span className="hidden lg:inline text-xs">Fim</span>
+                    <span className="text-xs sm:text-sm">»»</span>
+                  </Button>
+                </div>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>

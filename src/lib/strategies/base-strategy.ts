@@ -39,6 +39,61 @@ export function formatPercent(value: unknown): string {
 }
 
 /**
+ * Campos de FinancialData armazenados como decimal (0.12 = 12%).
+ * Ao exibir para humanos/IA, sempre multiplicar por 100 e usar formatPercent.
+ * NÃO inclui razões (P/L, P/VP, Dívida Líq./PL, EV/EBITDA, liquidez).
+ */
+export const DECIMAL_PERCENT_FIELDS = [
+  'roe',
+  'roa',
+  'roic',
+  'margemLiquida',
+  'margemEbitda',
+  'margemBruta',
+  'dy',
+  'payout',
+  'dividendYield12m',
+  'crescimentoLucros',
+  'crescimentoReceitas',
+  'cagrLucros5a',
+  'cagrReceitas5a',
+  'passivoAtivos',
+  'earningsYield',
+  'retornoAnoAtual',
+  'variacao52Semanas',
+] as const;
+
+export type DecimalPercentField = (typeof DECIMAL_PERCENT_FIELDS)[number];
+
+export function isDecimalPercentField(field: string): boolean {
+  return (DECIMAL_PERCENT_FIELDS as readonly string[]).includes(field);
+}
+
+/** Converte decimal (0.12) para percentual numérico (12). */
+export function toPercentNumber(value: unknown): number | null {
+  const numValue = toNumber(value);
+  if (numValue === null) return null;
+  return numValue * 100;
+}
+
+/**
+ * Formata valor financeiro para prompts de IA.
+ * Percentuais em decimal viram "12.00%"; razões ficam como "1.08".
+ */
+export function formatMetricForAi(
+  value: unknown,
+  options: { isPercent?: boolean; digits?: number } = {}
+): string {
+  const numValue = toNumber(value);
+  if (numValue === null) return 'N/A';
+  const digits = options.digits ?? 2;
+  if (options.isPercent) {
+    return `${(numValue * 100).toFixed(digits)}%`;
+  }
+  return numValue.toFixed(digits);
+}
+
+/**
  * Valida e normaliza o CAGR de lucros de 5 anos para evitar distorções
  * CAGR deve ser mais conservador que crescimento anual por ser uma média de longo prazo
  */

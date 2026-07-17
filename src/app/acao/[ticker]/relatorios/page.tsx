@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { PredecessorTickerLink } from '@/components/predecessor-ticker-link';
 import { isCurrentUserPremium, getCurrentUser } from '@/lib/user-service';
+import { AIReportsService } from '@/lib/ai-reports-service';
 
 interface PageProps {
   params: Promise<{
@@ -35,7 +36,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   return {
     title: `Relatórios: ${company.name} (${company.ticker}) | Preço Justo AI`,
-    description: `Histórico completo de relatórios e análises de ${company.name}. Acompanhe a evolução do ativo ao longo do tempo.`,
+    description: `Relatórios e análises dos últimos 6 meses de ${company.name}. Acompanhe a evolução recente do ativo.`,
   };
 }
 
@@ -66,12 +67,13 @@ export default async function ReportsListPage({ params }: PageProps) {
   const currentUser = await getCurrentUser();
   const currentUserId = currentUser?.id || null;
 
-  // Buscar todos os relatórios, depois filtrar por tipo e userId
-  // Nota: userId pode não estar disponível no Prisma Client até regenerar após migration
+  // Apenas relatórios dos últimos 6 meses (mais antigos perdem relevância na tela do ativo)
+  const displayCutoff = AIReportsService.getDisplayCutoffDate();
   const allReportsRaw = await prisma.aIReport.findMany({
     where: {
       companyId: company.id,
       status: 'COMPLETED',
+      createdAt: { gte: displayCutoff },
     },
     orderBy: {
       createdAt: 'desc',
@@ -181,7 +183,7 @@ export default async function ReportsListPage({ params }: PageProps) {
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {reports.length} relatório{reports.length !== 1 ? 's' : ''} no total
+                {reports.length} relatório{reports.length !== 1 ? 's' : ''} nos últimos {AIReportsService.DISPLAY_WINDOW_MONTHS} meses
               </span>
             </div>
             {monthlyReports.length > 0 && (
@@ -261,7 +263,7 @@ export default async function ReportsListPage({ params }: PageProps) {
             Nenhum relatório disponível
           </h3>
           <p className="text-muted-foreground">
-            Ainda não há relatórios disponíveis para este ativo.
+            Nenhum relatório nos últimos {AIReportsService.DISPLAY_WINDOW_MONTHS} meses.
             <br />
             Inscreva-se no monitoramento para ser notificado quando houver novos relatórios.
           </p>

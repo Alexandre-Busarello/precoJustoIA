@@ -2,6 +2,12 @@ import { prisma } from '@/lib/prisma';
 import { safeWrite } from '@/lib/prisma-wrapper';
 import { GoogleGenAI } from '@google/genai';
 import { ScoreComposition, compareScoreCompositions } from '@/lib/score-composition-service';
+import {
+  formatPercent,
+  isDecimalPercentField,
+  toNumber,
+  toPercentNumber,
+} from '@/lib/strategies/base-strategy';
 
 /**
  * Serviço de Relatórios de Monitoramento
@@ -238,7 +244,14 @@ ${currentScoreComposition.penalties.map(penalty =>
 
 ${significantFinancialChanges.slice(0, 5).map(change => {
           const indicatorName = this.getIndicatorDisplayName(change.indicator);
-          return `- **${indicatorName}**: ${change.previous?.toFixed(2)} → ${change.current?.toFixed(2)} (${change.change > 0 ? '+' : ''}${change.changePercent.toFixed(1)}%)`;
+          const isPercent = isDecimalPercentField(change.indicator);
+          const prevDisplay = isPercent
+            ? formatPercent(change.previous)
+            : (change.previous !== null && change.previous !== undefined ? change.previous.toFixed(2) : 'N/A');
+          const currDisplay = isPercent
+            ? formatPercent(change.current)
+            : (change.current !== null && change.current !== undefined ? change.current.toFixed(2) : 'N/A');
+          return `- **${indicatorName}**: ${prevDisplay} → ${currDisplay} (variação relativa: ${change.change > 0 ? '+' : ''}${change.changePercent.toFixed(1)}%)`;
         }).join('\n')}`;
       }
       
@@ -349,6 +362,10 @@ ${JSON.stringify(this.extractRelevantData(previousData), null, 2)}
 ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
 \`\`\`
 
+**IMPORTANTE SOBRE UNIDADES DOS INDICADORES:**
+- ROE, ROIC, margens, DY e crescimentos já estão em PERCENTUAL (ex: 10.6 = 10,6%). NÃO trate como "próximo de zero".
+- P/L, P/VP, EV/EBITDA, liquidez corrente e dívida/patrimônio são RAZÕES (não percentuais).
+
 **INSTRUÇÕES PARA O RELATÓRIO:**
 
 1. **O que aconteceu?** (1-2 parágrafos)
@@ -390,26 +407,36 @@ ${JSON.stringify(this.extractRelevantData(currentData), null, 2)}
   }
 
   /**
-   * Extrai apenas os dados financeiros relevantes para o relatório
+   * Extrai dados financeiros relevantes para o relatório de IA.
+   * Campos percentuais (decimal no banco) são convertidos para escala 0–100
+   * (ex: roe 0.106 → 10.6) para a IA não interpretar como ~0%.
    */
   private static extractRelevantData(data: Record<string, unknown>): Record<string, unknown> {
     const financials = (data as any).financials || {};
-    
+
+    const asRatio = (value: unknown) => toNumber(value);
+    const asPercent = (value: unknown) => toPercentNumber(value);
+
     return {
-      pl: financials.pl,
-      pvp: financials.pvp,
-      roe: financials.roe,
-      roic: financials.roic,
-      margemLiquida: financials.margemLiquida,
-      margemEbitda: financials.margemEbitda,
-      dy: financials.dy,
-      evEbitda: financials.evEbitda,
-      liquidezCorrente: financials.liquidezCorrente,
-      debtToEquity: financials.debtToEquity,
-      crescimentoReceitas: financials.crescimentoReceitas,
-      crescimentoLucros: financials.crescimentoLucros,
-      marketCap: financials.marketCap,
-      currentPrice: (data as any).currentPrice,
+      pl: asRatio(financials.pl),
+      pvp: asRatio(financials.pvp),
+      roe: asPercent(financials.roe),
+      roic: asPercent(financials.roic),
+      margemLiquida: asPercent(financials.margemLiquida),
+      margemEbitda: asPercent(financials.margemEbitda),
+      dy: asPercent(financials.dy),
+      evEbitda: asRatio(financials.evEbitda),
+      liquidezCorrente: asRatio(financials.liquidezCorrente),
+      debtToEquity: asRatio(financials.debtToEquity),
+      crescimentoReceitas: asPercent(financials.crescimentoReceitas),
+      crescimentoLucros: asPercent(financials.crescimentoLucros),
+      marketCap: asRatio(financials.marketCap),
+      currentPrice: toNumber((data as any).currentPrice),
+      units: {
+        percentFields: ['roe', 'roic', 'margemLiquida', 'margemEbitda', 'dy', 'crescimentoReceitas', 'crescimentoLucros'],
+        ratioFields: ['pl', 'pvp', 'evEbitda', 'liquidezCorrente', 'debtToEquity'],
+        note: 'Campos percentuais já convertidos (10.6 = 10,6%). Razões não são percentuais.',
+      },
     };
   }
 

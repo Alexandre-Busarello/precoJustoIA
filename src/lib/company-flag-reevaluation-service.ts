@@ -10,7 +10,7 @@ import { FlagType } from '@prisma/client';
 import { GoogleGenAI } from '@google/genai';
 import { executeCompanyAnalysis } from './company-analysis-service';
 import { getComprehensiveFinancialData } from './financial-data-service';
-import { toNumber } from './strategies';
+import { formatPercent, toNumber } from './strategies';
 
 export interface ReevaluationResult {
   shouldKeepActive: boolean;
@@ -241,15 +241,20 @@ function buildResearchSummary(
   const parts: string[] = [];
 
   parts.push(`**DADOS FINANCEIROS ATUAIS:**`);
+  // ROE, ROIC, margens e DY vêm em decimal no banco (0.12 = 12%). Usar formatPercent.
+  parts.push(`(ROE, ROIC, margens e DY estão em percentual já convertido; ex: 12.00% = 12%)`);
   
   if (financialData?.financialData?.[0]) {
     const latest = financialData.financialData[0];
-    parts.push(`- P/L: ${latest.pl || 'N/A'}`);
-    parts.push(`- P/VP: ${latest.pvp || 'N/A'}`);
-    parts.push(`- ROE: ${latest.roe ? `${latest.roe.toFixed(2)}%` : 'N/A'}`);
-    parts.push(`- ROIC: ${latest.roic ? `${latest.roic.toFixed(2)}%` : 'N/A'}`);
-    parts.push(`- Dívida Líquida/PL: ${latest.dividaLiquidaPl || 'N/A'}`);
-    parts.push(`- Margem Líquida: ${latest.margemLiquida ? `${latest.margemLiquida.toFixed(2)}%` : 'N/A'}`);
+    const pl = toNumber(latest.pl);
+    const pvp = toNumber(latest.pvp);
+    const dividaLiquidaPl = toNumber(latest.dividaLiquidaPl);
+    parts.push(`- P/L: ${pl !== null ? pl.toFixed(2) : 'N/A'}`);
+    parts.push(`- P/VP: ${pvp !== null ? pvp.toFixed(2) : 'N/A'}`);
+    parts.push(`- ROE: ${formatPercent(latest.roe)}`);
+    parts.push(`- ROIC: ${formatPercent(latest.roic)}`);
+    parts.push(`- Dívida Líquida/PL: ${dividaLiquidaPl !== null ? dividaLiquidaPl.toFixed(2) : 'N/A'}`);
+    parts.push(`- Margem Líquida: ${formatPercent(latest.margemLiquida)}`);
   }
 
   if (overallScore !== null && overallScore !== undefined) {
@@ -295,6 +300,11 @@ A empresa ${ticker} (${companyName}) teve uma flag de "${flagType}" criada há m
 
 **CONDIÇÕES ATUAIS DA EMPRESA:**
 ${currentConditions.researchData || 'Dados não disponíveis'}
+
+**IMPORTANTE SOBRE INDICADORES:**
+- ROE, ROIC, Margem Líquida e outros percentuais já estão convertidos (ex: "10.60%" = ROE de 10,6%).
+- NÃO interprete valores como 10.60% como "próximo de zero". ROE/ROIC típicos saudáveis ficam entre ~8% e 20%+.
+- P/L, P/VP e Dívida Líquida/PL são razões (não percentuais).
 
 **SUA TAREFA:**
 

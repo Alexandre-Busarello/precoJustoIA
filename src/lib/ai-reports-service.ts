@@ -32,6 +32,16 @@ export interface CreateAIReportData {
 export class AIReportsService {
   private static readonly CACHE_DURATION_DAYS = 30
 
+  /** Janela de exibição na tela do ativo: relatórios mais antigos que isso não são listados. */
+  static readonly DISPLAY_WINDOW_MONTHS = 6
+
+  /** Data mínima (inclusive) para listar relatórios na UI do ativo. */
+  static getDisplayCutoffDate(now: Date = new Date()): Date {
+    const cutoff = new Date(now)
+    cutoff.setMonth(cutoff.getMonth() - this.DISPLAY_WINDOW_MONTHS)
+    return cutoff
+  }
+
   /**
    * Verifica se há um relatório sendo gerado para a empresa
    */
@@ -516,18 +526,20 @@ export class AIReportsService {
         return []
       }
 
+      const cutoff = this.getDisplayCutoffDate()
       const reports = await safeQueryWithParams(
         'ai_reports-history',
         () => prisma.aIReport.findMany({
           where: {
-            companyId: company.id
+            companyId: company.id,
+            createdAt: { gte: cutoff },
           },
           orderBy: {
             createdAt: 'desc'
           },
           take: limit
         }),
-        { companyId: company.id, limit }
+        { companyId: company.id, limit, cutoff: cutoff.toISOString() }
       ) as any[]
 
       return reports.map(report => ({

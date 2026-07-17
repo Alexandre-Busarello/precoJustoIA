@@ -37,7 +37,7 @@ export async function GET(
     const limit = parseInt(searchParams.get('limit') || '10')
 
     // Criar chave de cache considerando ticker e limit
-    const cacheKey = `ai-reports-history:${ticker}:${limit}`;
+    const cacheKey = `ai-reports-history:v2:${ticker}:${limit}`;
 
     // Verificar cache
     const cachedData = await cache.get(cacheKey);

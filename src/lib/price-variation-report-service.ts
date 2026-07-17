@@ -8,6 +8,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from './prisma';
 import { DividendService } from './dividend-service';
+import { formatPercent, toNumber } from './strategies/base-strategy';
 
 export interface PriceVariationReportParams {
   ticker: string;
@@ -347,6 +348,52 @@ async function identifyProfitabilityStatus(companyId: number): Promise<{
 }
 
 /**
+ * Formata indicadores financeiros atuais para prompts de IA.
+ * ROE/ROIC/margens/DY no banco estão em decimal (0.12 = 12%) — usa formatPercent.
+ */
+async function buildFinancialMetricsSection(companyId: number): Promise<string> {
+  const latest = await prisma.financialData.findFirst({
+    where: { companyId },
+    orderBy: { year: 'desc' },
+    select: {
+      pl: true,
+      pvp: true,
+      roe: true,
+      roic: true,
+      dy: true,
+      margemLiquida: true,
+      margemEbitda: true,
+      dividaLiquidaPl: true,
+      crescimentoLucros: true,
+      crescimentoReceitas: true,
+      year: true,
+    },
+  });
+
+  if (!latest) {
+    return '';
+  }
+
+  const pl = toNumber(latest.pl);
+  const pvp = toNumber(latest.pvp);
+  const dividaLiquidaPl = toNumber(latest.dividaLiquidaPl);
+
+  return `**INDICADORES FINANCEIROS ATUAIS (ano ${latest.year}):**
+- P/L: ${pl !== null ? pl.toFixed(2) : 'N/A'}
+- P/VP: ${pvp !== null ? pvp.toFixed(2) : 'N/A'}
+- ROE: ${formatPercent(latest.roe)}
+- ROIC: ${formatPercent(latest.roic)}
+- Dividend Yield: ${formatPercent(latest.dy)}
+- Margem Líquida: ${formatPercent(latest.margemLiquida)}
+- Margem EBITDA: ${formatPercent(latest.margemEbitda)}
+- Dívida Líquida/PL: ${dividaLiquidaPl !== null ? dividaLiquidaPl.toFixed(2) : 'N/A'}
+- Crescimento Lucros: ${formatPercent(latest.crescimentoLucros)}
+- Crescimento Receitas: ${formatPercent(latest.crescimentoReceitas)}
+
+**UNIDADES:** ROE, ROIC, margens, DY e crescimentos já estão em percentual (ex: 10.60% = 10,6%). Valores tipicamente saudáveis de ROE/ROIC ficam entre ~8% e 20%+. P/L, P/VP e Dívida Líquida/PL são razões (não percentuais). NÃO interprete percentuais convertidos como "próximos de zero".`;
+}
+
+/**
  * Analisa se a queda de preço indica perda de fundamento
  */
 export async function analyzeFundamentalImpact(
@@ -393,8 +440,15 @@ export async function analyzeFundamentalImpact(
     profitabilityContext: '',
   };
 
+  let financialMetricsSection = '';
+
   if (companyId) {
-    profitabilityStatus = await identifyProfitabilityStatus(companyId);
+    const [status, metricsSection] = await Promise.all([
+      identifyProfitabilityStatus(companyId),
+      buildFinancialMetricsSection(companyId),
+    ]);
+    profitabilityStatus = status;
+    financialMetricsSection = metricsSection;
   }
 
   const ai = new GoogleGenAI({
@@ -428,6 +482,8 @@ A ação ${ticker} (${companyName}) teve uma queda de ${Math.abs(variation.varia
 ${dividendsSection}
 
 ${profitabilitySection}
+
+${financialMetricsSection}
 
 **DADOS DA PESQUISA:**
 ${researchData}

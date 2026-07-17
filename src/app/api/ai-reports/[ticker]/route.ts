@@ -33,8 +33,8 @@ export async function GET(
       userIsPremium = user?.isPremium || false
     }
 
-    // Criar chave de cache considerando todos os parâmetros
-    const cacheKey = `ai-reports:${ticker}:${type || 'default'}:${limit || 'single'}:${userIsPremium ? 'premium' : 'free'}`;
+    // Criar chave de cache considerando todos os parâmetros (v2 = janela de 6 meses)
+    const cacheKey = `ai-reports:v2:${ticker}:${type || 'default'}:${limit || 'single'}:${userIsPremium ? 'premium' : 'free'}`;
 
     // Verificar cache
     const cachedData = await cache.get(cacheKey);
@@ -58,6 +58,9 @@ export async function GET(
       )
     }
 
+    // Apenas relatórios dos últimos 6 meses na tela do ativo
+    const displayCutoff = AIReportsService.getDisplayCutoffDate();
+
     // Se tipo for FUNDAMENTAL_CHANGE ou limit especificado, buscar múltiplos relatórios
     if (type === 'FUNDAMENTAL_CHANGE' || limit) {
       const reports = await safeQueryWithParams(
@@ -66,7 +69,8 @@ export async function GET(
           where: {
             companyId: company.id,
             type: type || undefined,
-            status: 'COMPLETED'
+            status: 'COMPLETED',
+            createdAt: { gte: displayCutoff },
           },
           orderBy: {
             createdAt: 'desc'
@@ -88,7 +92,7 @@ export async function GET(
             status: true
           }
         }),
-        { companyId: company.id, type: type || 'all' }
+        { companyId: company.id, type: type || 'all', cutoff: displayCutoff.toISOString() }
       ) as any[]
 
       // Processar preview para usuários não Premium
@@ -117,7 +121,8 @@ export async function GET(
         where: {
           companyId: company.id,
           type: type || 'MONTHLY_OVERVIEW',
-          status: 'COMPLETED'
+          status: 'COMPLETED',
+          createdAt: { gte: displayCutoff },
         },
         orderBy: {
           createdAt: 'desc'
@@ -138,7 +143,7 @@ export async function GET(
           status: true
         }
       }),
-      { companyId: company.id, type: type || 'MONTHLY_OVERVIEW' }
+      { companyId: company.id, type: type || 'MONTHLY_OVERVIEW', cutoff: displayCutoff.toISOString() }
     ) as any
 
     if (!report) {

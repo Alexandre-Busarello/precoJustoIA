@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { cache } from '@/lib/cache-service';
 import { calculateCompanyOverallScore } from '@/lib/calculate-company-score-service';
+import { AIReportsService } from '@/lib/ai-reports-service';
 
 const CACHE_TTL = 1 * 60 * 60; // 1 hora em segundos
 
@@ -71,7 +72,7 @@ export async function GET(
     const ticker = resolvedParams.ticker.toUpperCase();
 
     // Cache key para preview (sempre anônimo para landing page)
-    const cacheKey = `company-preview:${ticker}`;
+    const cacheKey = `company-preview:v2:${ticker}`;
 
     // Verificar cache
     const cachedData = await cache.get<CompanyPreviewResponse>(cacheKey);
@@ -166,7 +167,9 @@ export async function GET(
       return null;
     };
 
-    // Buscar relatórios mais recentes em paralelo
+    const displayCutoff = AIReportsService.getDisplayCutoffDate();
+
+    // Buscar relatórios mais recentes (apenas últimos 6 meses) em paralelo
     const [monthlyReportRaw, priceVariationReportRaw, activeFlags] = await Promise.all([
       // Relatório mensal mais recente
       safeQueryWithParams(
@@ -176,6 +179,7 @@ export async function GET(
             companyId: company.id,
             type: 'MONTHLY_OVERVIEW',
             status: 'COMPLETED',
+            createdAt: { gte: displayCutoff },
           },
           orderBy: { createdAt: 'desc' },
           select: {
@@ -185,7 +189,7 @@ export async function GET(
             createdAt: true,
           },
         }),
-        { companyId: company.id, type: 'MONTHLY_OVERVIEW' }
+        { companyId: company.id, type: 'MONTHLY_OVERVIEW', cutoff: displayCutoff.toISOString() }
       ) as unknown as { id: string; conclusion: string | null; content: string; createdAt: Date } | null,
 
       // Relatório de variação de preço mais recente
@@ -196,6 +200,7 @@ export async function GET(
             companyId: company.id,
             type: 'PRICE_VARIATION',
             status: 'COMPLETED',
+            createdAt: { gte: displayCutoff },
           },
           orderBy: { createdAt: 'desc' },
           select: {
@@ -206,7 +211,7 @@ export async function GET(
             createdAt: true,
           },
         }),
-        { companyId: company.id, type: 'PRICE_VARIATION' }
+        { companyId: company.id, type: 'PRICE_VARIATION', cutoff: displayCutoff.toISOString() }
       ) as unknown as { id: string; conclusion: string | null; content: string; windowDays: number | null; createdAt: Date } | null,
 
       // Flags ativos com relatório para extrair texto amigável

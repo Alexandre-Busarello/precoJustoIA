@@ -125,16 +125,23 @@ export async function getCompanyMetrics(ticker: string) {
         priceDate: priceDate,
         priceSource: priceSource,
         score: score,
+        // Percentuais (ROE, ROIC, margens, DY) convertidos para escala 0–100 (0.12 → 12).
+        // Razões (P/L, P/VP, Dívida Líq./PL) permanecem sem conversão.
         financials: latestFinancial ? {
-          pl: latestFinancial.pl ? Number(latestFinancial.pl) : null,
-          pvp: latestFinancial.pvp ? Number(latestFinancial.pvp) : null,
-          dy: latestFinancial.dy ? Number(latestFinancial.dy) : null,
-          roe: latestFinancial.roe ? Number(latestFinancial.roe) : null,
-          roic: latestFinancial.roic ? Number(latestFinancial.roic) : null,
-          roa: latestFinancial.roa ? Number(latestFinancial.roa) : null,
-          margemLiquida: latestFinancial.margemLiquida ? Number(latestFinancial.margemLiquida) : null,
-          dividaLiquidaPl: latestFinancial.dividaLiquidaPl ? Number(latestFinancial.dividaLiquidaPl) : null,
-          year: latestFinancial.year
+          pl: latestFinancial.pl != null ? Number(latestFinancial.pl) : null,
+          pvp: latestFinancial.pvp != null ? Number(latestFinancial.pvp) : null,
+          dy: latestFinancial.dy != null ? Number(latestFinancial.dy) * 100 : null,
+          roe: latestFinancial.roe != null ? Number(latestFinancial.roe) * 100 : null,
+          roic: latestFinancial.roic != null ? Number(latestFinancial.roic) * 100 : null,
+          roa: latestFinancial.roa != null ? Number(latestFinancial.roa) * 100 : null,
+          margemLiquida: latestFinancial.margemLiquida != null ? Number(latestFinancial.margemLiquida) * 100 : null,
+          dividaLiquidaPl: latestFinancial.dividaLiquidaPl != null ? Number(latestFinancial.dividaLiquidaPl) : null,
+          year: latestFinancial.year,
+          units: {
+            percentFields: ['dy', 'roe', 'roic', 'roa', 'margemLiquida'],
+            ratioFields: ['pl', 'pvp', 'dividaLiquidaPl'],
+            note: 'Campos percentuais já convertidos (ex: roe 10.6 = 10,6%). Não tratar como ~0%.',
+          },
         } : null
       }
     }
@@ -1305,12 +1312,14 @@ export async function listCompanyAIReports(ticker: string, reportType?: string, 
       ? (reportType.toUpperCase() as 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE' | 'PRICE_VARIATION' | 'CUSTOM_TRIGGER')
       : undefined
 
-    // Buscar TODOS os relatórios (sem limite padrão e sem filtro isActive para listar todos)
+    // Listar apenas relatórios dos últimos 6 meses (mesma janela da tela do ativo)
+    const { AIReportsService } = await import('./ai-reports-service')
+    const displayCutoff = AIReportsService.getDisplayCutoffDate()
     const reports = await prisma.aIReport.findMany({
       where: {
         companyId: company.id,
         status: 'COMPLETED',
-        // Remover filtro isActive para retornar TODOS os relatórios, não apenas os ativos
+        createdAt: { gte: displayCutoff },
         ...(typeFilter && { type: typeFilter })
       },
       orderBy: {
@@ -1465,12 +1474,16 @@ export async function getCompanyAIReportContent(ticker: string, reportType?: str
       ? (reportType.toUpperCase() as 'MONTHLY_OVERVIEW' | 'FUNDAMENTAL_CHANGE' | 'PRICE_VARIATION' | 'CUSTOM_TRIGGER')
       : undefined
 
-    // Buscar relatórios com CONTEÚDO COMPLETO
+    // Conteúdo completo: se IDs específicos, respeitar; senão, só últimos 6 meses
+    const { AIReportsService } = await import('./ai-reports-service')
+    const displayCutoff = AIReportsService.getDisplayCutoffDate()
     const whereClause: any = {
       companyId: company.id,
       status: 'COMPLETED',
       ...(typeFilter && { type: typeFilter }),
-      ...(reportIds && reportIds.length > 0 ? { id: { in: reportIds } } : {})
+      ...(reportIds && reportIds.length > 0
+        ? { id: { in: reportIds } }
+        : { createdAt: { gte: displayCutoff } }),
     }
 
     const reports = await prisma.aIReport.findMany({
@@ -2325,7 +2338,7 @@ export async function getPlatformFeatures(query?: string, category?: string) {
 export const benToolsSchema = [
   {
     name: 'getCompanyMetrics',
-    description: 'Obtém métricas financeiras FUNDAMENTALISTAS de uma empresa (P/L, P/VP, ROE, ROIC, margem líquida, score geral, etc.). Use quando o usuário perguntar sobre FUNDAMENTOS, VALORIZAÇÃO, RENTABILIDADE ou ANÁLISE FUNDAMENTALISTA de uma ação específica. NÃO use para análise técnica ou gráficos.',
+    description: 'Obtém métricas financeiras FUNDAMENTALISTAS de uma empresa (P/L, P/VP, ROE, ROIC, margem líquida, score geral, etc.). Use quando o usuário perguntar sobre FUNDAMENTOS, VALORIZAÇÃO, RENTABILIDADE ou ANÁLISE FUNDAMENTALISTA de uma ação específica. NÃO use para análise técnica ou gráficos. ROE/ROIC/ROA/margens/DY já vêm em percentual (ex: 10.6 = 10,6%); P/L, P/VP e Dívida Líq./PL são razões.',
     parameters: {
       type: 'object',
       properties: {

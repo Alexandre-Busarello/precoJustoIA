@@ -1347,7 +1347,7 @@ export async function processBenMessage(
     const functionDeclarations = [
       {
         name: 'getCompanyMetrics',
-        description: 'Obtém métricas financeiras e score de uma empresa específica. Use quando o usuário perguntar sobre uma ação específica.',
+        description: 'Obtém métricas financeiras e score de uma empresa específica. Use quando o usuário perguntar sobre uma ação específica. ROE/ROIC/ROA/margens/DY já vêm em percentual (ex: 10.6 = 10,6%); P/L, P/VP e Dívida Líq./PL são razões.',
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -1752,6 +1752,7 @@ ${pageContextSection}${contextSection}${memorySection}${preprocessSection}${tick
   - Quando o usuário pedir "análise técnica", "gráficos", "indicadores técnicos", "RSI", "MACD", "médias móveis", "suporte/resistência" ou qualquer termo relacionado a análise técnica → Use SEMPRE getTechnicalAnalysis
   - Quando o usuário pedir dados sobre "fundamentos", "P/L", "P/VP", "ROE", "ROIC", "score", "valorização" ou análise fundamentalista → Use getCompanyMetrics
   - NUNCA use getCompanyMetrics quando o usuário pedir análise técnica
+  - **UNIDADES getCompanyMetrics / getFairValue**: ROE, ROIC, ROA, margens e DY já vêm em percentual (ex: 10.6 = 10,6%). NÃO diga que estão próximos de zero. P/L, P/VP e Dívida Líq./PL são razões.
 - **CRÍTICO - VALOR JUSTO E VALUATION:**
   - Quando o usuário perguntar sobre "valor justo", "preço justo", "valor intrínseco", "fair value", "valuation", "quanto vale", "preço alvo", "quanto deveria valer" ou qualquer pergunta sobre avaliação/precificação → Use SEMPRE getFairValue
   - A ferramenta getFairValue combina múltiplas estratégias (Graham, FCD, Gordon, Barsi e Análise Técnica) para uma avaliação completa

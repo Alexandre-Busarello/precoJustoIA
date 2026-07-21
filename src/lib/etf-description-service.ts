@@ -128,7 +128,14 @@ export async function generateEtfDescriptions(
   if (options.ticker) {
     where.ticker = options.ticker.toUpperCase();
   } else if (!options.forceAll) {
-    where.description = null;
+    // Gera para ETFs sem descrição OU cuja descrição não veio da IA
+    // (ex: texto cru em inglês herdado do longBusinessSummary da Yahoo Finance).
+    // Prisma's `not` não casa com NULL (semântica SQL), então precisa ser explícito.
+    where.OR = [
+      { description: null },
+      { descriptionSource: null },
+      { descriptionSource: { not: 'ai' } },
+    ];
   }
 
   const companies = await prisma.company.findMany({
@@ -192,7 +199,10 @@ export async function generateEtfDescriptions(
     const description = await generateOne(ai, input);
 
     if (description) {
-      await prisma.company.update({ where: { id: company.id }, data: { description } });
+      await prisma.company.update({
+        where: { id: company.id },
+        data: { description, descriptionSource: 'ai' },
+      });
       console.log(`✅ ${company.ticker}: ${description.length} chars`);
       stats.generated++;
     } else {

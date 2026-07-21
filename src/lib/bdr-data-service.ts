@@ -1363,6 +1363,7 @@ export class BDRDataService {
         // Atualizar dados básicos se necessário
         if (!company.description && profile?.longBusinessSummary) {
           updateData.description = profile.longBusinessSummary;
+          updateData.descriptionSource = "external";
           updateData.sector = profile?.sector || profile?.sectorDisp;
           updateData.industry = profile?.industry || profile?.industryDisp;
           updateData.website = profile?.website;
@@ -1404,6 +1405,7 @@ export class BDRDataService {
               description:
                 profile?.longBusinessSummary ||
                 `BDR representando ações de ${companyName}`,
+              descriptionSource: profile?.longBusinessSummary ? "external" : null,
               website: profile?.website || null,
 
               // Dados de localização (empresa original, não brasileira)

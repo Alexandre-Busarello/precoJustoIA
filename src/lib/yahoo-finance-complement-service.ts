@@ -445,6 +445,7 @@ export class YahooFinanceComplementService {
       
       if (!existingCompany.description && yahooData.assetProfile?.longBusinessSummary) {
         updateData.description = yahooData.assetProfile.longBusinessSummary.substring(0, 1000);
+        updateData.descriptionSource = 'external';
         fieldsComplemented++;
       }
       

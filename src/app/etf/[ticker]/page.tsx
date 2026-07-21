@@ -206,6 +206,7 @@ export default async function EtfPage({ params }: PageProps) {
       logoUrl: true,
       website: true,
       description: true,
+      descriptionSource: true,
       assetType: true,
       dailyQuotes: {
         orderBy: { date: 'desc' },
@@ -559,7 +560,7 @@ export default async function EtfPage({ params }: PageProps) {
         )}
 
         {/* Description */}
-        {companyData.description && (
+        {companyData.description && companyData.descriptionSource === 'ai' && (
           <Card className="mb-6">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">

@@ -46,11 +46,12 @@ export class AssetRegistrationService {
     // Check if already registered
     const existing = await prisma.company.findUnique({
       where: { ticker: tickerUpper },
-      select: { 
-        id: true, 
+      select: {
+        id: true,
         assetType: true,
         sector: true,
-        industry: true
+        industry: true,
+        descriptionSource: true
       }
     });
 
@@ -163,11 +164,14 @@ export class AssetRegistrationService {
    * Atualiza registro da empresa (preserva sector/industry se já existentes)
    */
   private static async updateCompanyRecord(
-    companyId: number, 
+    companyId: number,
     assetInfo: AssetInfo,
-    existing: { sector: string | null; industry: string | null }
+    existing: { sector: string | null; industry: string | null; descriptionSource: string | null }
   ): Promise<void> {
     try {
+      // Preserve AI-generated descriptions — never overwrite them with raw Yahoo text
+      const preserveAiDescription = existing.descriptionSource === 'ai';
+
       await safeWrite(
         'update-company',
         () => prisma.company.update({
@@ -177,7 +181,10 @@ export class AssetRegistrationService {
             // Preserve sector/industry if already set, otherwise update from Yahoo
             sector: existing.sector || assetInfo.sector,
             industry: existing.industry || assetInfo.industry,
-            description: assetInfo.description?.substring(0, 1000),
+            ...(preserveAiDescription ? {} : {
+              description: assetInfo.description?.substring(0, 1000),
+              descriptionSource: assetInfo.description ? 'external' : undefined
+            }),
             country: 'BR',
             address: assetInfo.quoteSummary?.assetProfile?.address1,
             city: assetInfo.quoteSummary?.assetProfile?.city,
@@ -211,6 +218,7 @@ export class AssetRegistrationService {
             sector: assetInfo.sector,
             industry: assetInfo.industry,
             description: assetInfo.description?.substring(0, 1000), // Limit description length
+            descriptionSource: assetInfo.description ? 'external' : undefined,
             country: 'BR',
             address: assetInfo.quoteSummary?.assetProfile?.address1,
             city: assetInfo.quoteSummary?.assetProfile?.city,

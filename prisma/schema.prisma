@@ -164,6 +164,7 @@ model Company {
   industry                      String?
   cnpj                          String?
   description                   String?
+  descriptionSource             String?                  @map("description_source")
   website                       String?
   address                       String?
   city                          String?

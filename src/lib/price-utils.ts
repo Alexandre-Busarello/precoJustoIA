@@ -67,7 +67,8 @@ export function calculatePixDiscount(priceInCents: number): number {
  * @returns Valor do desconto em centavos
  */
 export function getPixDiscountAmount(priceInCents: number): number {
-  return Math.round(priceInCents * 0.15) // 15% de desconto
+  // Derivado do preço final para evitar divergência de 1 centavo no arredondamento
+  return priceInCents - calculatePixDiscount(priceInCents)
 }
 
 /**

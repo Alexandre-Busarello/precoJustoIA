@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/user-service'
 import { createPixPayment } from '@/lib/mercadopago'
 import { prisma } from '@/lib/prisma'
 import { isOfferExpired } from '@/lib/offer-utils'
+import { calculatePixDiscount } from '@/lib/price-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,10 +70,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Para ofertas especiais, não aplicar desconto PIX (já é uma oferta com desconto)
-    // Para outras ofertas, aplicar desconto de 5% para PIX
+    // Para outras ofertas, aplicar desconto de 15% para PIX (mesma regra da UI)
     const amount = planType === 'special'
       ? offer.price_in_cents / 100
-      : Math.round(offer.price_in_cents * 0.95) / 100
+      : calculatePixDiscount(offer.price_in_cents) / 100
 
     // Gerar chave de idempotência única
     const idempotencyKey = `pix-${user.id}-${planType}-${Date.now()}-${Math.random().toString(36).substring(7)}`

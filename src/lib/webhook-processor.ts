@@ -11,6 +11,7 @@ import { EmailQueueService } from '@/lib/email-queue-service'
 import { stripe } from '@/lib/stripe'
 import { payment as mercadoPagoPayment } from '@/lib/mercadopago'
 import { createOrUpdateKiwifyUser, sendWelcomeEmailWithPasswordReset } from '@/lib/kiwify-user-service'
+import { calculatePixDiscount } from '@/lib/price-utils'
 
 export class WebhookProcessor {
   /**
@@ -591,7 +592,8 @@ export class WebhookProcessor {
     })
 
     // Converter amount para centavos para comparação
-    // O valor recebido já tem desconto PIX de 5% aplicado (95% do preço original)
+    // Monthly/Annual: valor já vem com desconto PIX de 15% (85% do preço)
+    // Special: sem desconto PIX adicional (preço cheio da oferta)
     const amountInCents = Math.round(amount * 100)
     
     let planDuration: number
@@ -604,16 +606,15 @@ export class WebhookProcessor {
     const specialOffer = offers.find((o) => o.type === 'SPECIAL')
     
     // Comparar com tolerância de 2 centavos (para arredondamentos)
-    // O valor recebido já tem desconto PIX aplicado (95% do preço original)
-    if (specialOffer?.price_in_cents != null && Math.abs(amountInCents - Math.round(specialOffer.price_in_cents * 0.95)) <= 2) {
+    if (specialOffer?.price_in_cents != null && Math.abs(amountInCents - specialOffer.price_in_cents) <= 2) {
       planDuration = specialOffer.premium_duration_days || 365
       planType = 'special'
       isSpecialOffer = true
       console.log(`✅ Oferta especial identificada: ${planDuration} dias`)
-    } else if (monthlyOffer?.price_in_cents != null && Math.abs(amountInCents - Math.round(monthlyOffer.price_in_cents * 0.95)) <= 2) {
+    } else if (monthlyOffer?.price_in_cents != null && Math.abs(amountInCents - calculatePixDiscount(monthlyOffer.price_in_cents)) <= 2) {
       planDuration = 30
       planType = 'monthly'
-    } else if (annualOffer?.price_in_cents != null && Math.abs(amountInCents - Math.round(annualOffer.price_in_cents * 0.95)) <= 2) {
+    } else if (annualOffer?.price_in_cents != null && Math.abs(amountInCents - calculatePixDiscount(annualOffer.price_in_cents)) <= 2) {
       planDuration = 365
       planType = 'annual'
     } else {

@@ -180,7 +180,7 @@ export function LandingPricingSection() {
                       </p>
                       <div className="mt-2 inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">
                         <span className="text-xs font-bold text-green-700 dark:text-green-300">
-                          💰 PIX: 5% OFF • Economize {annualPixDiscount}
+                          💰 PIX: 15% OFF • Economize {annualPixDiscount}
                         </span>
                       </div>
                       <div className="mt-1 inline-flex items-center gap-1 bg-green-50 dark:bg-green-950/30 px-3 py-1 rounded-full">
@@ -299,7 +299,7 @@ export function LandingPricingSection() {
                       <p className="text-sm text-muted-foreground">por mês • PIX ou Cartão</p>
                       <div className="mt-2 inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">
                         <span className="text-xs font-bold text-green-700 dark:text-green-300">
-                          💰 PIX: 5% OFF • Economize {monthlyPixDiscount}
+                          💰 PIX: 15% OFF • Economize {monthlyPixDiscount}
                         </span>
                       </div>
                       <p className="text-xs text-green-600 font-medium mt-1">Apenas R$ {monthlyPricePerDay} por dia</p>

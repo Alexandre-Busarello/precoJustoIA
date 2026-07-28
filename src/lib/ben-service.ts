@@ -24,7 +24,7 @@ async function webSearch(query: string): Promise<any> {
       config: {
         tools: [{ googleSearch: {} }],
         thinkingConfig: {
-          thinkingBudget: 0
+          thinkingBudget: -1
         }
       },
       contents: [
@@ -317,7 +317,7 @@ IMPORTANTE: Retorne APENAS o JSON, sem markdown ou texto adicional.`
       model: 'gemini-flash-lite-latest',
       config: {
         thinkingConfig: {
-          thinkingBudget: 0
+          thinkingBudget: -1
         }
       },
       contents: [
@@ -427,7 +427,7 @@ Retorne APENAS o título, sem aspas, sem markdown, sem texto adicional.`
       model: 'gemini-flash-lite-latest',
       config: {
         thinkingConfig: {
-          thinkingBudget: 0
+          thinkingBudget: -1
         }
       },
       contents: [
@@ -578,7 +578,7 @@ Sua tarefa é identificar quais ferramentas são necessárias para responder à 
 - NÃO gere uma resposta final ainda - apenas colete os dados` }]
       },
       thinkingConfig: {
-        thinkingBudget: 0
+        thinkingBudget: -1
       },
       tools: [{
         functionDeclarations
@@ -729,7 +729,7 @@ Responda APENAS com:
       parts: [{ text: 'Você é um validador de dados. Analise se os dados coletados correspondem ao que foi solicitado.' }]
     },
     thinkingConfig: {
-      thinkingBudget: 0
+      thinkingBudget: -1
     },
     tools: [{
       functionDeclarations
@@ -1015,7 +1015,7 @@ Sua tarefa é:
       parts: [{ text: systemPrompt }]
     },
     thinkingConfig: {
-      thinkingBudget: 0
+      thinkingBudget: -1
     }
   }
 
@@ -1434,7 +1434,7 @@ export async function processBenMessage(
           parts: [{ text: systemPrompt }]
         },
         thinkingConfig: {
-          thinkingBudget: 0
+          thinkingBudget: -1
         }
       }
 

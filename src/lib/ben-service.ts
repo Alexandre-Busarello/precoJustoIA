@@ -219,14 +219,14 @@ function buildFunctionDeclarations(): any[] {
       required.push(...tool.parameters.required)
     }
 
+    const hasProperties = Object.keys(properties).length > 0
+
     return {
       name: tool.name,
       description: tool.description,
-      parameters: {
-        type: Type.OBJECT,
-        properties,
-        required
-      }
+      ...(hasProperties
+        ? { parameters: { type: Type.OBJECT, properties, required } }
+        : {})
     }
   })
 }
@@ -1361,21 +1361,11 @@ export async function processBenMessage(
       },
       {
         name: 'getMarketSentiment',
-        description: 'Obtém o sentimento geral do mercado brasileiro baseado em notícias recentes.',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {},
-          required: []
-        }
+        description: 'Obtém o sentimento geral do mercado brasileiro baseado em notícias recentes.'
       },
       {
         name: 'getIbovData',
-        description: 'Obtém dados sobre o índice IBOVESPA, incluindo composição e performance.',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {},
-          required: []
-        }
+        description: 'Obtém dados sobre o índice IBOVESPA, incluindo composição e performance.'
       },
       {
         name: 'webSearch',
@@ -1393,12 +1383,7 @@ export async function processBenMessage(
       },
       {
         name: 'getUserRadar',
-        description: 'Consulta o radar de investimentos do usuário atual. Retorna lista de tickers monitorados com dados consolidados (score, preço, análise técnica, sentimento). Use quando o usuário perguntar sobre seu radar ou ações que está monitorando.',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {},
-          required: []
-        }
+        description: 'Consulta o radar de investimentos do usuário atual. Retorna lista de tickers monitorados com dados consolidados (score, preço, análise técnica, sentimento). Use quando o usuário perguntar sobre seu radar ou ações que está monitorando.'
       },
       {
         name: 'getTechnicalAnalysis',

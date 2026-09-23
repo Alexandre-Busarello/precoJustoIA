@@ -24,8 +24,7 @@ import {
   Calendar,
   BookOpen,
   TrendingUp,
-  User,
-  Linkedin
+  User
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -49,8 +48,6 @@ export const metadata: Metadata = {
   title: `Análise Fundamentalista de Ações B3 ${anoAtual} com IA | Preço Justo AI - Investimentos Bovespa`,
   description: `Descubra as melhores ações da Bovespa ${anoAtual} com análise fundamentalista automatizada e IA. 8 modelos de valuation (Graham, Método Barsi, Fórmula Mágica) em +500 empresas B3. Rankings instantâneos, comparador de ações e backtesting. Comece grátis!`,
   keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, valuation ações, como investir em ações, melhores ações B3, análise de ações grátis, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações, comparador ações bovespa, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista, backtesting carteiras, screening ações B3",
-  authors: [{ name: "Alexandre Busarello", url: "https://precojusto.ai/fundador" }],
-  creator: "Alexandre Busarello",
   publisher: "Preço Justo AI",
   formatDetection: {
     email: false,
@@ -972,165 +969,6 @@ export default async function Home() {
           ]}
         />
 
-      {/* Fundador Section */}
-      <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4 leading-tight">
-                Conheça o{" "}
-                <span className="text-blue-600">Fundador</span>
-              </h2>
-              <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-4xl mx-auto px-2">
-                Especialista em tecnologia e análise fundamentalista, com experiência 
-                em grandes plataformas educacionais e mercado financeiro.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
-              {/* Foto e Info */}
-              <div className="text-center lg:text-left">
-                <div className="relative inline-block mb-8">
-                  <div className="w-48 h-48 bg-gradient-to-br from-blue-600 to-violet-600 rounded-full p-2 mx-auto lg:mx-0">
-                    <div className="w-full h-full rounded-full overflow-hidden bg-white">
-                      <Image
-                        src="/eu.png"
-                        alt="Alexandre Busarello - Fundador & CEO do Preço Justo AI"
-                        width={192}
-                        height={192}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        placeholder="blur"
-                        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
-                      />
-                    </div>
-                  </div>
-                  <div className="absolute -bottom-2 -right-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                    <CheckCircle className="w-3 h-3 inline mr-1" />
-                    CEO
-                  </div>
-                </div>
-                
-                <h3 className="text-2xl font-bold mb-2">Fundador & CEO</h3>
-                <p className="text-lg text-muted-foreground mb-4">
-                  Gerente Técnico na Descomplica
-                </p>
-                
-                <div className="flex flex-wrap justify-center lg:justify-start gap-3 mb-6">
-                  <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                    <Building2 className="w-3 h-3 mr-1" />
-                    15+ anos exp.
-                  </Badge>
-                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                    <Users className="w-3 h-3 mr-1" />
-                    +70k usuários
-                  </Badge>
-                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                    20% economia AWS
-                  </Badge>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button size="lg" variant="outline" className="text-lg px-6 py-3" asChild>
-                    <Link href="/fundador" className="flex items-center gap-3">
-                      <User className="w-5 h-5" />
-                      História Completa
-                      <ArrowRight className="w-5 h-5" />
-                    </Link>
-                  </Button>
-                  <Button size="lg" variant="outline" className="text-lg px-6 py-3 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white" asChild>
-                    <Link href="https://www.linkedin.com/in/alexandre-busarello-26a6b422/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3">
-                      <Linkedin className="w-5 h-5" />
-                      LinkedIn
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Conquistas */}
-              <div className="space-y-6">
-                <Card className="border-0 shadow-lg">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Rocket className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold mb-2">Liderança Técnica Comprovada</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Gerente técnico na Descomplica, liderando times de UEE e SRE, 
-                          responsável por plataforma educacional com mais de 70 mil alunos ativos.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-lg">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <TrendingUp className="w-6 h-6 text-green-600" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold mb-2">Otimização e Resultados</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Implementou estratégias que reduziram 20% dos custos na AWS, 
-                          modernizando infraestrutura e implementando melhores práticas DevOps.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-lg">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <BarChart3 className="w-6 h-6 text-purple-600" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold mb-2">Visão de Mercado</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Combina expertise técnica com conhecimento profundo em análise 
-                          fundamentalista para democratizar o acesso a investimentos inteligentes.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Credenciais */}
-            <div className="mt-16 text-center">
-              <div className="bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-2xl p-8">
-                <h4 className="text-xl font-bold mb-6">Experiência Técnica</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600 mb-1">15+</div>
-                    <div className="text-sm text-muted-foreground">Anos de Experiência</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600 mb-1">70k+</div>
-                    <div className="text-sm text-muted-foreground">Usuários Impactados</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600 mb-1">20%</div>
-                    <div className="text-sm text-muted-foreground">Redução de Custos</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600 mb-1">AWS</div>
-                    <div className="text-sm text-muted-foreground">Especialista Cloud</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Blog Section */}
       <section className="py-16 sm:py-20 lg:py-24 bg-white dark:bg-background">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -1320,11 +1158,6 @@ export default async function Home() {
                 "name": "Preço Justo AI",
                 "url": "https://precojusto.ai"
               },
-              "creator": {
-                "@type": "Person",
-                "name": "Alexandre Busarello",
-                "url": "https://precojusto.ai/fundador"
-              },
               "offers": [
                 {
                   "@type": "Offer",
@@ -1385,14 +1218,7 @@ export default async function Home() {
               "url": "https://precojusto.ai",
               "logo": "https://precojusto.ai/logo-preco-justo.png",
               "description": "Plataforma líder em análise fundamentalista de ações da B3 com inteligência artificial",
-              "founder": {
-                "@type": "Person",
-                "name": "Alexandre Busarello"
-              },
-              "foundingDate": "2024",
-              "sameAs": [
-                "https://www.linkedin.com/in/alexandre-busarello-26a6b422/"
-              ]
+              "foundingDate": "2024"
             },
             {
               "@context": "https://schema.org",

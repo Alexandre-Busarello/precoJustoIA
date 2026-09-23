@@ -122,11 +122,6 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/fundador" className="hover:text-blue-400 transition-colors">
-                  Fundador & CEO
-                </Link>
-              </li>
-              <li>
                 <Link href="/como-funciona" className="hover:text-blue-400 transition-colors">
                   Como Funciona
                 </Link>

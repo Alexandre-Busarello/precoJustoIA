@@ -4,6 +4,14 @@ import { getToken } from 'next-auth/jwt'
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
+
+  // Conteúdo removido permanentemente: 410 Gone acelera a desindexação no Google
+  if (pathname === '/fundador' || pathname.startsWith('/fundador/') || pathname === '/eu.png') {
+    return new NextResponse('Gone', {
+      status: 410,
+      headers: { 'X-Robots-Tag': 'noindex, noarchive, noimageindex' },
+    })
+  }
   
   // 🛡️ PROTEÇÃO GLOBAL: Rate limiting em todas as rotas /api/*
   // Isso aplica proteção básica automaticamente sem precisar alterar cada rota
@@ -109,6 +117,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/fundador',
+    '/fundador/:path*',
+    '/eu.png',
     '/api/:path*',        // 🛡️ Proteger todas as rotas da API
     '/admin/:path*',
     '/upgrade',

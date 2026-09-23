@@ -92,7 +92,6 @@ export default function TermosDeUsoPage() {
                 <div>
                   <h4 className="font-semibold mb-2">Preço Justo AI</h4>
                   <p className="text-muted-foreground">
-                    <strong>Razão Social:</strong> Busamar Tecnologia<br/>
                     <strong>Plataforma:</strong> precojusto.ai<br/>
                     <strong>E-mail de contato:</strong> contato@precojusto.ai<br/>
                     <strong>Suporte:</strong> suporte@precojusto.ai<br/>

@@ -89,7 +89,6 @@ export default function LGPDPage() {
                 <div>
                   <h4 className="font-semibold mb-2">Preço Justo AI</h4>
                   <p className="text-muted-foreground">
-                    <strong>Responsável:</strong> Busamar Tecnologia<br/>
                     <strong>E-mail para questões de privacidade:</strong> privacidade@precojusto.ai<br/>
                     <strong>Data de vigência:</strong> Esta política está em vigor desde 01 de janeiro de 2025
                   </p>

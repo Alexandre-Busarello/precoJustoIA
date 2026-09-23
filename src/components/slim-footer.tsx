@@ -21,15 +21,13 @@ export function SlimFooter() {
             Política de Privacidade (LGPD)
           </Link>
           <span className="hidden sm:inline text-gray-600">•</span>
-          <a 
-            href="https://wa.me/5521979155962" 
-            target="_blank" 
-            rel="noopener noreferrer"
+          <Link 
+            href="/contato"
             className="text-gray-300 hover:text-green-400 transition-colors text-sm sm:text-base flex items-center gap-1.5"
           >
             <MessageCircle className="w-4 h-4" />
             Contato / Suporte
-          </a>
+          </Link>
         </div>
 
         {/* Disclaimer Importante */}

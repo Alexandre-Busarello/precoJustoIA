@@ -1,5 +1,4 @@
 import { Metadata } from "next"
-import Image from "next/image"
 import { Suspense } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
@@ -25,9 +24,7 @@ import {
   Users,
   Star,
   AlertCircle,
-  Smartphone,
-  Rocket,
-  MapPin
+  Smartphone
 } from "lucide-react"
 
 export const metadata: Metadata = {
@@ -503,83 +500,6 @@ export default function OfertaPage() {
                 <span>Processo simples</span>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Sobre o Fundador - Seção de Confiança */}
-      <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-gray-50 to-blue-50 dark:from-background dark:to-blue-950/20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-4xl mx-auto">
-            <Card className="border-2 border-blue-200 dark:border-blue-800 shadow-xl">
-              <CardContent className="p-6 sm:p-8 lg:p-10">
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
-                  {/* Foto do Fundador */}
-                  <div className="flex-shrink-0">
-                    <div className="relative">
-                      <div className="w-32 h-32 sm:w-40 sm:h-40 bg-gradient-to-br from-blue-600 to-violet-600 rounded-full p-2">
-                        <div className="w-full h-full rounded-full overflow-hidden bg-white">
-                          <Image
-                            src="/eu.png"
-                            alt="Alexandre Busarello - Fundador & CEO do Preço Justo AI"
-                            width={160}
-                            height={160}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                      </div>
-                      <div className="absolute -bottom-2 -right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-lg">
-                        <CheckCircle className="w-3 h-3 inline mr-1" />
-                        CEO
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Informações */}
-                  <div className="flex-1 text-center sm:text-left">
-                    <div className="flex flex-wrap justify-center sm:justify-start gap-2 mb-3">
-                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                        <Building2 className="w-3 h-3 mr-1" />
-                        Gerente Técnico - Descomplica
-                      </Badge>
-                      <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        15+ anos experiência
-                      </Badge>
-                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                        <TrendingUp className="w-3 h-3 mr-1" />
-                        10+ anos mercado financeiro
-                      </Badge>
-                    </div>
-                    
-                    <h3 className="text-xl sm:text-2xl font-bold mb-2">
-                      <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-                        Alexandre Busarello
-                      </span>
-                    </h3>
-                    <p className="text-sm sm:text-base text-muted-foreground mb-4">
-                      Fundador & CEO do Preço Justo AI
-                    </p>
-                    
-                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-4">
-                      Lidero times técnicos responsáveis por plataformas com <strong>+70k usuários</strong>. 
-                      Criei o Preço Justo AI para democratizar a análise fundamentalista, combinando minha 
-                      experiência em tecnologia com <strong>mais de 10 anos de expertise em mercado financeiro</strong>, 
-                      onde invisto e faço análises quantitativas e qualitativas regularmente.
-                    </p>
-                    
-                    <div className="flex items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
-                      <span>Blumenau, SC</span>
-                      <span>•</span>
-                      <Rocket className="w-4 h-4" />
-                      <span>Plataforma com +500 empresas analisadas</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </section>

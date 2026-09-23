@@ -76,7 +76,7 @@ export default function ContatoPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-16">
             {/* Email */}
             <Card className="border-0 shadow-lg text-center hover:shadow-xl transition-all duration-300">
               <CardContent className="p-8">
@@ -100,34 +100,6 @@ export default function ContatoPage() {
                   <a href="mailto:contato@precojusto.ai" className="flex items-center justify-center gap-2">
                     <Send className="w-4 h-4" />
                     Enviar E-mail
-                  </a>
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* WhatsApp */}
-            <Card className="border-0 shadow-lg text-center hover:shadow-xl transition-all duration-300">
-              <CardContent className="p-8">
-                <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <MessageCircle className="w-8 h-8 text-white" />
-                </div>
-                <h3 className="text-xl font-bold mb-4">WhatsApp</h3>
-                <p className="text-muted-foreground mb-6 leading-relaxed">
-                  Atendimento rápido para usuários premium. 
-                  Horário comercial: 9h às 18h.
-                </p>
-                <div className="space-y-2 mb-6">
-                  <p className="font-medium">(21) 979155962</p>
-                  <p className="text-sm text-muted-foreground">Apenas usuários Premium</p>
-                </div>
-                <div className="flex items-center justify-center gap-2 mb-6">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Seg-Sex: 9h às 18h</span>
-                </div>
-                <Button className="w-full bg-green-600 hover:bg-green-700" asChild>
-                  <a href="https://wa.me/5521979155962" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2">
-                    <MessageCircle className="w-4 h-4" />
-                    Abrir WhatsApp
                   </a>
                 </Button>
               </CardContent>

@@ -46,17 +46,13 @@ export function SEOStructuredData({
           },
           "description": "Plataforma de análise fundamentalista de ações da B3 com inteligência artificial",
           "foundingDate": "2024",
-          "founder": {
-            "@type": "Person",
-            "name": "Alexandre Busarello"
-          },
           "sameAs": [
             "https://www.linkedin.com/company/preco-justo-ai"
           ],
           "contactPoint": {
             "@type": "ContactPoint",
             "contactType": "customer service",
-            "email": "busamar@gmail.com"
+            "email": "contato@precojusto.ai"
           }
         },
         // Website

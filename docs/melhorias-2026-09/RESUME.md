@@ -12,7 +12,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 
 | Onda | Lotes | Status |
 |---|---|---|
-| 0 | `w0-foundation` (design tokens, dark mode plumbing, primitivos, formatação pt-BR, header/footer/nav mobile, política de interrupções) | **Concluída** — commit `6ad9d41` + commit de integração da onda 0 |
+| 0 | `w0-foundation` (design tokens, dark mode plumbing, primitivos, formatação pt-BR, header/footer/nav mobile, política de interrupções) | **Concluída** — `6ad9d41` (fundação, aprovada pelo testador no 3º ciclo) + `b5aca7c` (integração) |
 | 1 | `w1-asset-stock`, `w1-asset-indicators-ai`, `w1-asset-fii-etf-bdr`, `w1-technical-radars`, `w1-home-pricing-checkout`, `w1-dashboard-alerts`, `w1-account-ben-onboarding`, `w1-portfolio`, `w1-ranking`, `w1-backtest`, `w1-screening`, `w1-comparador`, `w1-finance-foundation` | Pendente |
 | 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | Pendente |
 | 3 | `w3-onde-aportar` (premissa central: onde aportar, incl. modo premium "Todo o mercado") + `w3-screening-filters` (em paralelo, arquivos disjuntos) | Pendente |
@@ -35,6 +35,16 @@ Lotes da mesma onda não compartilham arquivos (verificado), então rodam em par
 - `src/middleware.ts` não roda porque o `middleware.ts` da raiz tem precedência (o 410 de `/fundador` do commit `5777118` não está valendo) — corrigido no lote `w2-platform-seo-pwa`; confirmar em produção com `curl -I https://precojusto.ai/upgrade`.
 - `POST /api/generate-analysis` e `/api/review-analysis` chamam o Gemini sem autenticação (lote `w2-platform-seo-pwa`).
 - Ativar o cron do e-mail "Seu aporte do mês" no `vercel.json` depois da onda 3.
+
+## Pendências conhecidas ao fim da onda 0 (já cobertas pelos lotes da onda 1, conferir)
+
+- Dark: cards de pódio Ouro/Prata ilegíveis em `/compara-acoes/*` (`w1-comparador`); `bg-blue-50` em `comprehensive-financial-view.tsx:586` (`w1-asset-indicators-ai`); CTAs com gradiente em /sobre, /planos, /metodologia, /como-funciona; hero antigo de /suporte. O tema padrão segue claro e o toggle desligado, então nada disso aparece para o usuário ainda.
+- Compliance: selo "4,8 · 1.250 avaliações" e "Encontre as Melhores Ações" na home, "Sinal Compra"/emoji no /dashboard, "melhores ações da B3" em /planos.
+- 404 antigos: `/api/sectors` (screening) e `/api/user/me` (radar de dividendos).
+- Overlay "Não sabe como configurar?" em /screening-acoes (premium) ainda abre sozinho.
+- Select com ItemText em flex (`convert-backtest-modal.tsx:186`, `create-ticket-dialog.tsx:123`); triggers segmentados com 38 px no mobile; overflow de 11 px em /acao/petr4 a 320 px.
+- Páginas que ainda importam o `Footer` antigo (agora vazio): home, contato, termos, lgpd, metodologia, blog, como-funciona, dashboard, planos, sobre, screening-hub-page — os donos removem o import; a onda 4 apaga o export.
+- Ambiente: o disco do PC estava 99% cheio ao fim da sessão; as screenshots intermediárias foram apagadas. `.next/` (~650 MB) pode ser apagado com segurança antes de retomar.
 
 ## SEGURANÇA — banco de produção
 

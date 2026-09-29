@@ -5,7 +5,6 @@ import CompanySearch from '@/components/company-search';
 import { CompanyPreview } from '@/components/company-preview';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Footer } from '@/components/footer';
 import { Rocket, ArrowRight } from 'lucide-react';
 import { CTALinkWithPixel } from '@/components/cta-link-with-pixel';
 
@@ -134,9 +133,6 @@ export default function AnalisarAcoesClient() {
           </div>
         </section>
       )}
-
-      {/* Footer */}
-      <Footer />
 
       {/* Structured Data */}
       <script

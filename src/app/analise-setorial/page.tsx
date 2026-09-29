@@ -4,7 +4,6 @@ import { getCurrentUser } from '@/lib/user-service'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { analyzeSectors } from '@/lib/sector-analysis-service'
-import { Footer } from '@/components/footer'
 import { LandingHero } from '@/components/landing/landing-hero'
 import { CTASection } from '@/components/landing/cta-section'
 import { FAQSection } from '@/components/landing/faq-section'
@@ -355,7 +354,6 @@ export default async function AnaliseSetorialPage() {
         ]}
       />
 
-      <Footer />
     </div>
   )
 }

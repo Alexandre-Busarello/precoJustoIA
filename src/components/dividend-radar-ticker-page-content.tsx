@@ -10,7 +10,6 @@ import { CompanyLogo } from '@/components/company-logo'
 import { useDividendRadarProjections } from '@/hooks/use-dividend-radar'
 import { DividendProjection } from '@/lib/dividend-radar-service'
 import { cn } from '@/lib/utils'
-import { BenChatFAB } from '@/components/ben-chat-fab'
 
 interface Company {
   id: number
@@ -464,8 +463,6 @@ export function DividendRadarTickerPageContent({
         </Card>
       )}
 
-      {/* Ben Chat FAB */}
-      <BenChatFAB />
     </div>
   )
 }

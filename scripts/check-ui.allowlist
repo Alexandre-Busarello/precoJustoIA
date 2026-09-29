@@ -1,0 +1,12 @@
+# Exceções do scripts/check-ui.sh
+# Formato: <caminho> [regra1,regra2]   (sem regras = todas; caminho terminado em "/" = prefixo)
+# Regras: gradient clip-text backdrop-blur heavy-weight large-shadow emoji purple-text
+# Mantenha esta lista curta: cada entrada precisa de um motivo e deve sair quando o arquivo for migrado.
+
+# Painel administrativo interno: fora do escopo do redesign e sempre no tema claro (FORCED_LIGHT_PREFIXES).
+src/app/admin/
+src/components/admin/
+
+# Landing pages de parceiros seguem a identidade visual do parceiro.
+src/app/parceiros/
+src/components/parceiros/

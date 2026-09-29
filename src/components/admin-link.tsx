@@ -1,31 +1,30 @@
 "use client"
 
 import { useSession } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Shield } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useAdminCheck } from '@/hooks/use-user-data'
 
+/** Atalho para o painel admin (só administradores, desktop; no mobile o link fica no menu). */
 export default function AdminLink() {
   const { data: session } = useSession()
+  const pathname = usePathname()
   const { data: adminData, isLoading } = useAdminCheck()
-  
+
   const isAdmin = adminData?.isAdmin || false
 
-  if (isLoading || !session || !isAdmin) {
+  if (isLoading || !session || !isAdmin || pathname?.startsWith('/admin')) {
     return null
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50">
-      <Button asChild className="bg-red-600 hover:bg-red-700 text-white shadow-lg">
-        <Link href="/admin" className="flex items-center gap-2">
-          <Shield className="w-4 h-4" />
-          <span className="hidden sm:inline">Painel Admin</span>
-          <Badge variant="secondary" className="bg-red-500 text-white text-xs">
-            Admin
-          </Badge>
+    <div className="fixed bottom-4 left-4 z-40 hidden lg:block">
+      <Button asChild variant="outline" size="sm" className="bg-background shadow-md">
+        <Link href="/admin">
+          <Shield className="size-4 text-muted-foreground" strokeWidth={1.75} />
+          Painel admin
         </Link>
       </Button>
     </div>

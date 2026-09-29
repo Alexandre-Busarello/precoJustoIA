@@ -1,84 +1,94 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSession } from "next-auth/react"
+import { Search } from "lucide-react"
 import CompanySearch from "@/components/company-search"
+import { useShell } from "@/components/shell-context"
+import { cn } from "@/lib/utils"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 
-export function GlobalSearchBar() {
-  const { data: session } = useSession()
-  const [bannerHidden, setBannerHidden] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+const DESKTOP_QUERY = "(min-width: 1024px)"
 
-  // Detectar se é mobile (breakpoint lg = 1024px, igual ao usado no header)
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false)
   useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024) // lg breakpoint
-    }
-
-    // Verificar inicialmente
-    checkMobile()
-
-    // Observar mudanças de tamanho da janela
-    window.addEventListener('resize', checkMobile)
-
-    return () => {
-      window.removeEventListener('resize', checkMobile)
-    }
+    const mql = window.matchMedia(DESKTOP_QUERY)
+    const update = () => setIsDesktop(mql.matches)
+    update()
+    mql.addEventListener("change", update)
+    return () => mql.removeEventListener("change", update)
   }, [])
+  return isDesktop
+}
 
-  // Verificar se o banner está fechado
+/**
+ * Busca global de ativos: dialog no desktop (Ctrl/Cmd + K) e sheet em tela cheia no mobile.
+ * Montado uma vez no header; abre via `useShell().openSearch()`.
+ */
+export function GlobalSearchBar() {
+  const { searchOpen, setSearchOpen, openSearch } = useShell()
+  const isDesktop = useIsDesktop()
+  const close = () => setSearchOpen(false)
+
   useEffect(() => {
-    if (session && typeof window !== 'undefined') {
-      const hidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
-      setBannerHidden(hidden)
-      
-      // Observar mudanças no localStorage
-      const handleStorageChange = () => {
-        const newHidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
-        setBannerHidden(newHidden)
-      }
-      
-      window.addEventListener('storage', handleStorageChange)
-      
-      // Também observar mudanças na mesma aba usando um evento customizado
-      const handleCustomStorageChange = () => {
-        const newHidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
-        setBannerHidden(newHidden)
-      }
-      
-      window.addEventListener('marketTickerVisibilityChange', handleCustomStorageChange)
-      
-      return () => {
-        window.removeEventListener('storage', handleStorageChange)
-        window.removeEventListener('marketTickerVisibilityChange', handleCustomStorageChange)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        openSearch()
       }
     }
-  }, [session])
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [openSearch])
 
-  // Posição dinâmica: 
-  // - Mobile: 81px (header) quando banner oculto, 121px (header + banner) quando visível
-  // - Desktop: 103px (header) quando banner oculto, 120px (header + banner) quando visível
-  const topPosition = (session && bannerHidden) 
-    ? (isMobile ? '81px' : '103px') 
-    : (isMobile ? '121px' : '120px')
+  if (isDesktop) {
+    return (
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="top-[12vh] translate-y-0 gap-0 p-3 sm:max-w-xl sm:p-3" showCloseButton={false}>
+          <DialogTitle className="sr-only">Buscar ativo</DialogTitle>
+          <DialogDescription className="sr-only">Digite o ticker ou o nome da empresa e pressione Enter.</DialogDescription>
+          <CompanySearch variant="list" autoFocus onNavigate={close} placeholder="Buscar por ticker ou nome (ex.: PETR4)" />
+        </DialogContent>
+      </Dialog>
+    )
+  }
 
   return (
-    <div 
-      className="sticky z-[45] bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border-b border-border/50 backdrop-blur-md transition-all duration-300 shadow-sm"
-      style={{ top: topPosition }}
-    >
-      <div className="container mx-auto px-4 py-3">
-        <div className="max-w-3xl mx-auto">
-          {/* Search Input - CompanySearch já tem lupa e Ctrl+K integrados */}
-          <CompanySearch 
-            placeholder="Buscar empresa por ticker (ex: PETR4, VALE3) ou nome..." 
-            className="w-full max-w-full"
-          />
+    <Sheet open={searchOpen} onOpenChange={setSearchOpen}>
+      <SheetContent side="top" className="h-dvh gap-0 overflow-y-auto border-b-0 px-4 pb-6">
+        <div className="flex h-14 items-center pr-10">
+          <SheetTitle className="text-base">Buscar ativo</SheetTitle>
+          <SheetDescription className="sr-only">Digite o ticker ou o nome da empresa.</SheetDescription>
         </div>
-      </div>
-    </div>
+        <CompanySearch variant="list" autoFocus onNavigate={close} placeholder="Ticker ou nome (ex.: PETR4)" />
+      </SheetContent>
+    </Sheet>
   )
 }
 
+/** Botão compacto de busca no header desktop, com o atalho de teclado. */
+export function SearchTrigger({ className }: { className?: string }) {
+  const { openSearch } = useShell()
+  const [shortcut, setShortcut] = useState("Ctrl K")
+
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/.test(navigator.platform)) setShortcut("⌘K")
+  }, [])
+
+  return (
+    <button
+      type="button"
+      onClick={openSearch}
+      aria-label="Buscar ativo"
+      className={cn(
+        "inline-flex h-9 w-9 items-center justify-center gap-2 rounded-md border border-border bg-background text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none xl:w-60 xl:justify-start xl:px-3",
+        className
+      )}
+    >
+      <Search className="size-4" strokeWidth={1.75} aria-hidden="true" />
+      <span className="hidden flex-1 text-left xl:inline">Buscar ativo</span>
+      <kbd className="hidden rounded-sm border border-border bg-muted px-1.5 font-sans text-xs text-muted-foreground xl:inline">{shortcut}</kbd>
+    </button>
+  )
+}

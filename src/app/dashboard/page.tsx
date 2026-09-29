@@ -21,7 +21,6 @@ import { DashboardRadarSection } from "@/components/dashboard-radar-section";
 import { DashboardNotificationBanner } from "@/components/dashboard-notification-banner";
 import { NotificationModalsWrapper } from "@/components/notification-modals-wrapper";
 import { DashboardIbovBanner } from "@/components/dashboard-ibov-banner";
-import { BenChatFAB } from "@/components/ben-chat-fab";
 import {
   BarChart3,
   TrendingUp,
@@ -852,8 +851,6 @@ export default function Dashboard() {
       {/* Footer */}
       <Footer />
 
-      {/* Ben Chat FAB */}
-      <BenChatFAB />
     </div>
   );
 }

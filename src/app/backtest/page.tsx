@@ -8,7 +8,6 @@ import { CTASection } from '@/components/landing/cta-section'
 import { FAQSection } from '@/components/landing/faq-section'
 import { FeatureCard } from '@/components/landing/feature-card'
 import { Breadcrumbs } from '@/components/landing/breadcrumbs'
-import { Footer } from '@/components/footer'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   TrendingUp,
@@ -324,7 +323,6 @@ export default async function BacktestPage() {
         ]}
       />
 
-      <Footer />
     </div>
   )
 }

@@ -2,37 +2,39 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Building2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface CompanyLogoProps {
   logoUrl?: string | null
   companyName: string
   ticker: string
   size?: number
+  className?: string
 }
 
-export function CompanyLogo({ 
-  logoUrl, 
-  companyName, 
-  size = 80 
-}: CompanyLogoProps) {
+/** Logo da empresa; sem imagem (ou com erro) mostra monograma neutro com as 2 primeiras letras do ticker. */
+export function CompanyLogo({ logoUrl, companyName, ticker, size = 80, className }: CompanyLogoProps) {
   const [hasError, setHasError] = useState(false)
+  const monogram = (ticker || companyName || '?').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
 
-  // Se não há URL ou houve erro, mostrar fallback
   if (!logoUrl || hasError) {
     return (
-      <div 
-        className="bg-gradient-to-br from-blue-500 to-violet-500 rounded-xl flex items-center justify-center"
-        style={{ width: size, height: size }}
+      <div
+        role="img"
+        aria-label={`Logo ${companyName}`}
+        className={cn('flex shrink-0 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground', className)}
+        style={{ width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.36)) }}
       >
-        <Building2 className="w-10 h-10 text-white" />
+        {monogram}
       </div>
     )
   }
 
+  // Fundo branco fixo de propósito: logos de terceiros costumam ter traço escuro sobre transparente
+  // e precisam desse contraste também no tema escuro.
   return (
-    <div 
-      className="bg-white rounded-xl flex items-center justify-center overflow-hidden border"
+    <div
+      className={cn('flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-white', className)}
       style={{ width: size, height: size }}
     >
       <Image

@@ -16,7 +16,6 @@ import { getIndicesList } from '@/lib/index-data'
 import { IndicesClient } from '@/components/indices/indices-client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { Footer } from '@/components/footer'
 import { FAQSection } from '@/components/landing/faq-section'
 
 export const metadata: Metadata = {
@@ -173,9 +172,6 @@ export default async function IndicesPage() {
           />
         )}
       </div>
-
-      {/* Footer - Apenas para usuários deslogados */}
-      {!isLoggedIn && <Footer />}
 
       {/* Schema Markup para FAQ SEO */}
       {!isLoggedIn && (

@@ -2,7 +2,6 @@ import { Metadata } from 'next'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { DividendRadarPageContent } from '@/components/dividend-radar-page-content'
-import { Footer } from '@/components/footer'
 import { LandingHero } from '@/components/landing/landing-hero'
 import { CTASection } from '@/components/landing/cta-section'
 import { FAQSection } from '@/components/landing/faq-section'
@@ -318,8 +317,6 @@ export default async function RadarDividendosPage() {
           ]}
         />
       )}
-
-      {!isLoggedIn && <Footer />}
 
       {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
       {!isLoggedIn && (

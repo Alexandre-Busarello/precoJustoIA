@@ -1,73 +1,79 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { usePremiumStatus } from '@/hooks/use-premium-status'
 import { useExitIntent } from '@/hooks/use-exit-intent'
+import { claimModalSlot, releaseModalSlot } from '@/lib/interruptions'
 import { ExitIntentModal } from './exit-intent-modal'
 
+const SLOT_ID = 'exit-intent'
+const LAST_SHOWN_KEY = 'pja-exit-intent-last-shown'
+const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000
+const DESKTOP_POINTER_QUERY = '(min-width: 1024px) and (pointer: fine)'
+
+function shownRecently(): boolean {
+  try {
+    const raw = window.localStorage.getItem(LAST_SHOWN_KEY)
+    const last = raw ? Number(raw) : 0
+    return Number.isFinite(last) && last > 0 && Date.now() - last < COOLDOWN_MS
+  } catch {
+    return false
+  }
+}
+
+function markShown() {
+  try {
+    window.localStorage.setItem(LAST_SHOWN_KEY, String(Date.now()))
+  } catch {
+    // localStorage indisponível: o limite por página (slot de interrupção) continua valendo
+  }
+}
+
 interface ExitIntentProviderProps {
-  /**
-   * Páginas onde o exit intent deve ser ativado
-   * @default ['/planos', '/checkout']
-   */
+  /** Páginas onde a pesquisa de saída pode aparecer. Nunca em /checkout. @default ['/planos'] */
   enabledPages?: string[]
 }
 
 /**
- * Provider que gerencia exit intent em páginas específicas
- * Só exibe o modal se:
- * - Usuário não estiver logado OU
- * - Estiver em trial (premium temporário) OU
- * - Não for premium (sem trial)
- * 
- * Usuários premium pagos não veem o exit intent pois já são clientes.
+ * Pesquisa de saída não bloqueante (card no canto inferior direito).
+ * Regras: só desktop com mouse, só visitante anônimo ou em teste grátis, nunca em /checkout,
+ * no máximo 1 vez a cada 30 dias e respeitando o slot único de interrupção da página.
  */
-export function ExitIntentProvider({ enabledPages = ['/planos', '/checkout'] }: ExitIntentProviderProps) {
+export function ExitIntentProvider({ enabledPages = ['/planos'] }: ExitIntentProviderProps) {
   const pathname = usePathname()
-  const { data: session, status } = useSession()
-  const { isPremium, isTrialActive, isLoading: isLoadingPremium } = usePremiumStatus()
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const { status } = useSession()
+  const { isTrialActive, isLoading: isLoadingPremium } = usePremiumStatus()
+  const [isOpen, setIsOpen] = useState(false)
+  const [eligibleDevice, setEligibleDevice] = useState(false)
 
-  // Verificar se exit intent deve estar ativo nesta página
-  const isEnabled = enabledPages.includes(pathname)
+  useEffect(() => {
+    setEligibleDevice(window.matchMedia(DESKTOP_POINTER_QUERY).matches && !shownRecently())
+  }, [pathname])
 
-  // Só ativar se:
-  // 1. Está em uma página habilitada
-  // 2. Status não está carregando
-  // 3. Usuário não está logado OU está em trial OU não é premium (sem trial)
-  // Nota: Usuários em trial também devem ver o exit intent pois ainda não compraram
-  const shouldActivate = isEnabled && 
-    status !== 'loading' && 
+  const isEnabledPage = !!pathname && enabledPages.includes(pathname) && !pathname.startsWith('/checkout')
+  const shouldActivate =
+    isEnabledPage &&
+    eligibleDevice &&
+    status !== 'loading' &&
     !isLoadingPremium &&
-    (status === 'unauthenticated' || isTrialActive || !isPremium)
+    (status === 'unauthenticated' || Boolean(isTrialActive))
 
   const handleExitIntent = useCallback(() => {
-    if (shouldActivate) {
-      console.log('[ExitIntentProvider] Modal aberto')
-      setIsModalOpen(true)
-    }
-  }, [shouldActivate])
+    if (shownRecently() || !claimModalSlot(SLOT_ID)) return
+    markShown()
+    setIsOpen(true)
+  }, [])
 
-  useExitIntent({
-    enabled: shouldActivate,
-    onExitIntent: handleExitIntent,
-    minTimeOnPage: 10, // Mínimo 10 segundos na página
-    minTimeSinceInteraction: 5, // Mínimo 5 segundos desde última interação
-    debug: process.env.NODE_ENV === 'development', // Debug apenas em desenvolvimento
-  })
+  useExitIntent({ enabled: shouldActivate, onExitIntent: handleExitIntent, minTimeOnPage: 10, minTimeSinceInteraction: 5 })
 
-  if (!isEnabled) {
-    return null
-  }
+  const handleClose = useCallback(() => {
+    setIsOpen(false)
+    releaseModalSlot(SLOT_ID)
+  }, [])
 
-  return (
-    <ExitIntentModal
-      isOpen={isModalOpen}
-      onClose={() => setIsModalOpen(false)}
-      page={pathname}
-    />
-  )
+  if (!isEnabledPage || !pathname) return null
+
+  return <ExitIntentModal isOpen={isOpen} onClose={handleClose} page={pathname} />
 }
-

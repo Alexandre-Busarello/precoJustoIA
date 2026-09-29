@@ -1,60 +1,27 @@
 import Link from 'next/link';
-import { MessageCircle } from 'lucide-react';
+import { LEGAL_NOTICE } from '@/lib/site-constants';
 
+/** Rodapé enxuto das landing pages de oferta: links legais, aviso e copyright. */
 export function SlimFooter() {
+  const year = new Date().getFullYear();
+
   return (
-    <footer className="bg-gray-900 text-white py-8 sm:py-12">
-      <div className="container mx-auto px-4">
-        {/* Links Legais e Confiança - Centralizados */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <Link 
-            href="/termos-de-uso" 
-            className="text-gray-300 hover:text-blue-400 transition-colors text-sm sm:text-base"
-          >
-            Termos de Uso
+    <footer className="border-t border-border bg-surface py-8 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+      <div className="container mx-auto space-y-4 px-4 text-center">
+        <nav aria-label="Links legais" className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-sm">
+          <Link href="/termos-de-uso" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground">
+            Termos de uso
           </Link>
-          <span className="hidden sm:inline text-gray-600">•</span>
-          <Link 
-            href="/lgpd" 
-            className="text-gray-300 hover:text-blue-400 transition-colors text-sm sm:text-base"
-          >
-            Política de Privacidade (LGPD)
+          <Link href="/lgpd" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground">
+            Privacidade e LGPD
           </Link>
-          <span className="hidden sm:inline text-gray-600">•</span>
-          <Link 
-            href="/contato"
-            className="text-gray-300 hover:text-green-400 transition-colors text-sm sm:text-base flex items-center gap-1.5"
-          >
-            <MessageCircle className="w-4 h-4" />
-            Contato / Suporte
+          <Link href="/contato" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground">
+            Contato
           </Link>
-        </div>
-
-        {/* Disclaimer Importante */}
-        <div className="border-t border-gray-700 pt-6 mb-6">
-          <div className="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-4 sm:p-6 max-w-4xl mx-auto">
-            <p className="text-xs sm:text-sm text-gray-300 leading-relaxed text-center">
-              <strong className="text-yellow-400">⚠️ Aviso Importante:</strong> Esta plataforma é uma ferramenta de apoio à decisão de investimento. 
-              Não oferecemos consultoria financeira ou recomendações de compra/venda. Todos os investimentos envolvem riscos e a rentabilidade passada não garante resultados futuros.
-            </p>
-          </div>
-        </div>
-
-        {/* Copyright */}
-        <div className="border-t border-gray-700 pt-6 text-center">
-          <div className="text-gray-400 text-xs sm:text-sm mb-2">
-            © 2025 Preço Justo AI. Todos os direitos reservados.
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs text-gray-500">
-            <span>Dados fornecidos pela BRAPI</span>
-            <span className="hidden sm:inline">•</span>
-            <span>Powered by Google Gemini AI</span>
-            <span className="hidden sm:inline">•</span>
-            <span>Feito com ❤️ no Brasil</span>
-          </div>
-        </div>
+        </nav>
+        <p className="mx-auto max-w-3xl text-xs leading-5 text-muted-foreground">{LEGAL_NOTICE}</p>
+        <p className="text-xs text-muted-foreground">© {year} Preço Justo AI. Todos os direitos reservados.</p>
       </div>
     </footer>
   );
 }
-

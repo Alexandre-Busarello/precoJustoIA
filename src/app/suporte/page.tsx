@@ -6,7 +6,6 @@ import { getCurrentUser } from '@/lib/user-service'
 import SupportCenter from '@/components/support-center'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Footer } from '@/components/footer'
 import { 
   Headphones, 
   Shield, 
@@ -220,7 +219,6 @@ export default async function SupportPage() {
         </div>
       </div>
 
-      <Footer />
     </div>
   )
 }

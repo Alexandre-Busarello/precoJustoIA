@@ -8,8 +8,6 @@ import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
 import { EtfHeaderScore } from '@/components/etf-header-score'
 import { InfoTooltip } from '@/components/info-tooltip'
-import { Footer } from '@/components/footer'
-import { BenChatFAB } from '@/components/ben-chat-fab'
 import { cache } from '@/lib/cache-service'
 import { ensureTodayPrice } from '@/lib/quote-service'
 import { getOrCalculateDailyTechnicalAnalysis } from '@/lib/technical-analysis-service'
@@ -584,9 +582,6 @@ export default async function EtfPage({ params }: PageProps) {
           </Card>
         )}
       </div>
-
-      {!isLoggedIn && <Footer />}
-      <BenChatFAB />
 
       <script
         type="application/ld+json"

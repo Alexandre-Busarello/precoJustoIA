@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import Link from 'next/link'
-import { BenChatFAB } from '@/components/ben-chat-fab'
 
 const RadarTickerInput = dynamic(
   () => import('@/components/radar-ticker-input').then((mod) => mod.RadarTickerInput),
@@ -548,8 +547,6 @@ export function RadarPageContent() {
         </Collapsible>
       </Card>
 
-      {/* Ben Chat FAB */}
-      <BenChatFAB />
     </div>
   )
 }

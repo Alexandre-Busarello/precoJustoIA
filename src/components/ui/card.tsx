@@ -2,12 +2,22 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * Contêiner com borda fina (sem sombra e sem margem externa).
+ * `density="compact"` reduz o espaçamento vertical para listas densas.
+ */
+function Card({
+  className,
+  density = "default",
+  ...props
+}: React.ComponentProps<"div"> & { density?: "default" | "compact" }) {
   return (
     <div
       data-slot="card"
+      data-density={density}
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm mb-4",
+        "bg-card text-card-foreground flex flex-col rounded-lg border [--card-px:1rem] sm:[--card-px:1.25rem]",
+        density === "compact" ? "gap-3 py-4" : "gap-4 py-5",
         className
       )}
       {...props}
@@ -20,7 +30,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6",
+        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-[var(--card-px,1.25rem)] has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-4",
         className
       )}
       {...props}
@@ -65,7 +75,7 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-content"
-      className={cn("px-6", className)}
+      className={cn("px-[var(--card-px,1.25rem)]", className)}
       {...props}
     />
   )
@@ -75,7 +85,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-footer"
-      className={cn("flex items-center px-6 [.border-t]:pt-6", className)}
+      className={cn("flex items-center px-[var(--card-px,1.25rem)] [.border-t]:pt-4", className)}
       {...props}
     />
   )

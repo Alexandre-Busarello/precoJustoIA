@@ -3,7 +3,6 @@ import { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
-import { Footer } from '@/components/footer'
 import { Breadcrumbs } from '@/components/landing/breadcrumbs'
 import { EtfComparisonSelector } from '@/components/etf-comparison-selector'
 import { InfoTooltip } from '@/components/info-tooltip'
@@ -612,7 +611,6 @@ export default async function ComparaEtfsPage({ params }: PageProps) {
         </div>
       </div>
 
-      <Footer />
     </div>
   )
 }

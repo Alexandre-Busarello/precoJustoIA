@@ -1,7 +1,6 @@
 import { Metadata } from 'next'
 import { EtfComparisonSelector } from '@/components/etf-comparison-selector'
 import { Breadcrumbs } from '@/components/landing/breadcrumbs'
-import { Footer } from '@/components/footer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -222,7 +221,6 @@ export default function ComparadorEtfsPage() {
         </div>
       </div>
 
-      <Footer />
     </div>
   )
 }

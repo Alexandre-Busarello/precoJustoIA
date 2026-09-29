@@ -17,7 +17,6 @@ import TechnicalAnalysisLink from '@/components/technical-analysis-link'
 import MarketSentimentSection from '@/components/market-sentiment-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import AssetSubscriptionButton from '@/components/asset-subscription-button'
-import { Footer } from '@/components/footer'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import { getSectorCompetitors } from '@/lib/competitor-service'
@@ -29,7 +28,6 @@ import { StrategyFactory } from '@/lib/strategies/strategy-factory'
 import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config'
 import type { CompanyData } from '@/lib/strategies/types'
 import Link from 'next/link'
-import { BenChatFAB } from '@/components/ben-chat-fab'
 import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
 import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
 import { AnonLimitCTA } from '@/components/anon-limit-cta'
@@ -875,11 +873,6 @@ export default async function BdrPage({ params }: PageProps) {
         )}
       </div>
 
-      {/* Footer para usuários não logados - SEO */}
-      {!session && (
-        <Footer />
-      )}
-
       {/* Schema Structured Data para SEO */}
       {latestFinancials && (
         <script
@@ -938,8 +931,6 @@ export default async function BdrPage({ params }: PageProps) {
         />
       )}
 
-      {/* Ben Chat FAB */}
-      {session && <BenChatFAB />}
     </>
   )
 }

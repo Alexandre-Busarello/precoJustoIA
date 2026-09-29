@@ -30,10 +30,8 @@ import { IndexDailyView } from '@/components/indices/index-daily-view'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
-import { Footer } from '@/components/footer'
 import { FAQSection } from '@/components/landing/faq-section'
 import { MarketTickerBar } from '@/components/indices/market-ticker-bar'
-import { BenChatFAB } from '@/components/ben-chat-fab'
 
 interface IndexDetailPageProps {
   params: Promise<{ ticker: string }>
@@ -397,12 +395,6 @@ export default async function IndexDetailPage({ params }: IndexDetailPageProps) 
           />
         )}
       </div>
-
-      {/* Footer - Apenas para usuários deslogados */}
-      {!isLoggedIn && <Footer />}
-
-      {/* Ben Chat FAB */}
-      <BenChatFAB />
 
       {/* Structured Data para SEO */}
       <script

@@ -15,12 +15,10 @@ import ComprehensiveFinancialView from '@/components/comprehensive-financial-vie
 import TechnicalAnalysisSection from '@/components/technical-analysis-section'
 import MarketSentimentSection from '@/components/market-sentiment-section'
 import { AddToBacktestButton } from '@/components/add-to-backtest-button'
-import { Footer } from '@/components/footer'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import Link from 'next/link'
-import { BenChatFAB } from '@/components/ben-chat-fab'
 import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
 import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
 import { AnonLimitCTA } from '@/components/anon-limit-cta'
@@ -844,14 +842,6 @@ export default async function FiiPage({ params }: PageProps) {
           </>
         )}
       </div>
-
-      {/* Footer para usuários não logados - SEO */}
-      {!session && (
-        <Footer />
-      )}
-
-      {/* Ben Chat FAB */}
-      <BenChatFAB />
 
       <script
         type="application/ld+json"

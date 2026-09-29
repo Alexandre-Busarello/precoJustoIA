@@ -1,19 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { usePathname } from 'next/navigation'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { useEffect, useId, useState } from 'react'
+import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 interface ExitIntentModalProps {
   isOpen: boolean
@@ -21,257 +12,175 @@ interface ExitIntentModalProps {
   page: string
 }
 
-type Reason = 'price_too_high' | 'missing_features' | 'just_browsing' | ''
+type Reason = 'price_too_high' | 'missing_features' | 'just_browsing'
 
+const OPTIONS: Array<{ value: Reason; label: string }> = [
+  { value: 'price_too_high', label: 'O preço está alto' },
+  { value: 'missing_features', label: 'Faltaram funcionalidades' },
+  { value: 'just_browsing', label: 'Só estava olhando' },
+]
+
+function parsePrice(value: string): number {
+  return parseFloat(value.replace(/[^\d,]/g, '').replace(',', '.'))
+}
+
+function formatPriceInput(value: string): string {
+  const cleaned = value.replace(/[^\d,]/g, '')
+  const parts = cleaned.split(',')
+  return parts.length > 2 ? `${parts[0]},${parts.slice(1).join('')}` : cleaned
+}
+
+/**
+ * Pesquisa de saída em card não bloqueante (canto inferior direito, sem overlay).
+ * Um clique responde; "preço alto" pede o valor sugerido antes de enviar. Esc ou X fecham.
+ */
 export function ExitIntentModal({ isOpen, onClose, page }: ExitIntentModalProps) {
-  const [reason, setReason] = useState<Reason>('')
-  const [suggestedPrice, setSuggestedPrice] = useState<string>('')
+  const titleId = useId()
+  const [reason, setReason] = useState<Reason | null>(null)
+  const [suggestedPrice, setSuggestedPrice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showPriceInput, setShowPriceInput] = useState(false)
+  const [done, setDone] = useState(false)
 
-  // Resetar estado quando o modal abre
   useEffect(() => {
-    if (isOpen) {
-      setReason('')
-      setSuggestedPrice('')
-      setError(null)
-      setShowPriceInput(false)
-    }
-  }, [isOpen])
-
-  // Mostrar input de preço quando selecionar "price_too_high"
-  useEffect(() => {
-    setShowPriceInput(reason === 'price_too_high')
-    if (reason !== 'price_too_high') {
-      setSuggestedPrice('')
-    }
-  }, [reason])
-
-  const handleSubmit = async () => {
+    if (!isOpen) return
+    setReason(null)
+    setSuggestedPrice('')
     setError(null)
-
-    // Validação
-    if (!reason) {
-      setError('Por favor, selecione uma opção')
-      return
+    setDone(false)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
     }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [isOpen, onClose])
 
-    if (reason === 'price_too_high' && !suggestedPrice) {
-      setError('Por favor, informe o valor sugerido')
-      return
-    }
+  useEffect(() => {
+    if (!done) return
+    const timer = setTimeout(onClose, 2500)
+    return () => clearTimeout(timer)
+  }, [done, onClose])
 
-    if (reason === 'price_too_high') {
-      const priceValue = parseFloat(suggestedPrice.replace(/[^\d,]/g, '').replace(',', '.'))
-      const priceInCents = Math.round(priceValue * 100)
-
-      if (isNaN(priceValue) || priceValue <= 0) {
-        setError('Por favor, informe um valor válido')
+  const submit = async (value: Reason, price?: string) => {
+    setError(null)
+    let priceInCents: number | null = null
+    if (value === 'price_too_high') {
+      const parsed = parsePrice(price ?? '')
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setError('Informe um valor válido')
         return
       }
-
-      if (priceInCents < 0 || priceInCents > 1000000) {
+      priceInCents = Math.round(parsed * 100)
+      if (priceInCents > 1000000) {
         setError('O valor deve estar entre R$ 0 e R$ 10.000')
         return
       }
     }
 
     setIsSubmitting(true)
-
     try {
       const response = await fetch('/api/v1/feedback/exit-intent', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reason,
-          suggested_price_in_cents:
-            reason === 'price_too_high'
-              ? Math.round(parseFloat(suggestedPrice.replace(/[^\d,]/g, '').replace(',', '.')) * 100)
-              : null,
-          page,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: value, suggested_price_in_cents: priceInCents, page }),
       })
-
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao enviar feedback')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Erro ao enviar a resposta')
       }
-
-      // Sucesso - fechar modal
-      onClose()
+      setDone(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar feedback')
+      setError(err instanceof Error ? err.message : 'Erro ao enviar a resposta')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const formatPriceInput = (value: string) => {
-    // Remover tudo exceto números e vírgula
-    const cleaned = value.replace(/[^\d,]/g, '')
-    // Garantir apenas uma vírgula
-    const parts = cleaned.split(',')
-    if (parts.length > 2) {
-      return parts[0] + ',' + parts.slice(1).join('')
-    }
-    return cleaned
+  const choose = (value: Reason) => {
+    setReason(value)
+    if (value !== 'price_too_high') void submit(value)
   }
 
+  if (!isOpen) return null
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>Opa, antes de ir...</DialogTitle>
-          <DialogDescription>
-            O que te impediu de assinar hoje?
-          </DialogDescription>
-        </DialogHeader>
+    <section
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={titleId}
+      className="fixed right-6 bottom-6 z-40 w-[22rem] rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-md"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Fechar"
+        className="absolute top-1 right-1 inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <X className="size-4" strokeWidth={1.75} />
+      </button>
 
-        <div className="space-y-4">
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setReason('price_too_high')}
-              className={cn(
-                'w-full text-left p-4 rounded-lg border-2 transition-all',
-                'hover:border-primary hover:bg-accent',
-                reason === 'price_too_high'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border'
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={cn(
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 flex-shrink-0',
-                    reason === 'price_too_high'
-                      ? 'border-primary bg-primary'
-                      : 'border-muted-foreground'
-                  )}
-                >
-                  {reason === 'price_too_high' && (
-                    <div className="w-2 h-2 rounded-full bg-white" />
-                  )}
-                </div>
-                <Label className="cursor-pointer flex-1 font-normal">
-                  O preço é muito alto
-                </Label>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setReason('missing_features')}
-              className={cn(
-                'w-full text-left p-4 rounded-lg border-2 transition-all',
-                'hover:border-primary hover:bg-accent',
-                reason === 'missing_features'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border'
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={cn(
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 flex-shrink-0',
-                    reason === 'missing_features'
-                      ? 'border-primary bg-primary'
-                      : 'border-muted-foreground'
-                  )}
-                >
-                  {reason === 'missing_features' && (
-                    <div className="w-2 h-2 rounded-full bg-white" />
-                  )}
-                </div>
-                <Label className="cursor-pointer flex-1 font-normal">
-                  Faltaram funcionalidades
-                </Label>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setReason('just_browsing')}
-              className={cn(
-                'w-full text-left p-4 rounded-lg border-2 transition-all',
-                'hover:border-primary hover:bg-accent',
-                reason === 'just_browsing'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border'
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={cn(
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 flex-shrink-0',
-                    reason === 'just_browsing'
-                      ? 'border-primary bg-primary'
-                      : 'border-muted-foreground'
-                  )}
-                >
-                  {reason === 'just_browsing' && (
-                    <div className="w-2 h-2 rounded-full bg-white" />
-                  )}
-                </div>
-                <Label className="cursor-pointer flex-1 font-normal">
-                  Só estava olhando
-                </Label>
-              </div>
-            </button>
+      {done ? (
+        <p id={titleId} className="pr-8 text-sm font-medium" role="status">
+          Obrigado pelo retorno.
+        </p>
+      ) : (
+        <>
+          <h2 id={titleId} className="pr-8 text-sm font-semibold">
+            Antes de sair: o que faltou para assinar hoje?
+          </h2>
+          <div className="mt-3 grid gap-2">
+            {OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSubmitting}
+                aria-pressed={reason === option.value}
+                onClick={() => choose(option.value)}
+                className="justify-start aria-pressed:border-brand aria-pressed:bg-brand-subtle"
+              >
+                {option.label}
+              </Button>
+            ))}
           </div>
 
-          {showPriceInput && (
-            <div className="space-y-2">
-              <Label htmlFor="suggested_price">
-                Entendido. Qual valor (para o plano anual) você consideraria justo?
+          {reason === 'price_too_high' && (
+            <form
+              className="mt-3 space-y-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void submit('price_too_high', suggestedPrice)
+              }}
+            >
+              <Label htmlFor="exit-intent-price" className="text-xs font-normal text-muted-foreground">
+                Qual valor anual você consideraria justo?
               </Label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">R$</span>
                 <Input
-                  id="suggested_price"
-                  type="text"
+                  id="exit-intent-price"
+                  inputMode="decimal"
                   placeholder="299,90"
                   value={suggestedPrice}
                   onChange={(e) => setSuggestedPrice(formatPriceInput(e.target.value))}
                   className="flex-1"
+                  autoFocus
                 />
+                <Button type="submit" size="sm" disabled={isSubmitting || !suggestedPrice}>
+                  Enviar
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Informe o valor anual que você consideraria justo
-              </p>
-            </div>
+            </form>
           )}
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-            </div>
+            <p className="mt-2 text-xs text-negative" role="alert">
+              {error}
+            </p>
           )}
-
-          <div className="flex gap-2 pt-2">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="flex-1"
-              disabled={isSubmitting}
-            >
-              Fechar
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              className="flex-1"
-              disabled={isSubmitting || !reason}
-            >
-              {isSubmitting ? 'Enviando...' : 'Enviar'}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </>
+      )}
+    </section>
   )
 }
-

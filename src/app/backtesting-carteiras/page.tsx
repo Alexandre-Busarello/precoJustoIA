@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Footer } from '@/components/footer';
 import { FAQSection } from '@/components/landing/faq-section';
 import { 
   TrendingUp, 
@@ -476,9 +475,6 @@ export default async function BacktestingCarteirasPage() {
           faqs={faqs}
         />
       )}
-
-      {/* Footer */}
-      <Footer />
 
       {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
       {!session && (

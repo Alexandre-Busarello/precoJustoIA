@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getCurrentUser } from '@/lib/user-service';
 import { redirect } from 'next/navigation';
-import { Footer } from '@/components/footer';
 import { BarChart3, Crown, Home } from 'lucide-react';
 import Link from 'next/link';
 
@@ -44,8 +43,6 @@ export default async function BacktestLayout({
         {children}
       </div>
 
-      {/* Footer */}
-      <Footer />
     </div>
   );
 }

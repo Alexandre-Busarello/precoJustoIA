@@ -35,6 +35,8 @@ export interface NavSection {
 interface NavDropdownProps {
   /** Item de topo vindo de @/lib/navigation (grupo com `items` ou link direto com `href`). */
   section?: NavigationSection
+  /** Estado ativo calculado pelo header (um único item de topo ativo). Sem ele, usa a rota atual. */
+  active?: boolean
   /** Legado: título + grupos antigos. */
   title?: string
   sections?: NavSection[]
@@ -58,7 +60,7 @@ export function NavDropdown(props: NavDropdownProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
   const { trackEngagement } = useEngagementPixel()
-  const active = isSectionActive(pathname, section)
+  const active = props.active ?? isSectionActive(pathname, section)
 
   const handleLinkClick = () => {
     if (!session) trackEngagement()

@@ -69,7 +69,7 @@ export function formatCompact(value: Maybe<number>, { digits = 1 }: { digits?: n
   if (index > 0 && Math.round((abs / COMPACT_STEPS[index].limit) * factor) / factor >= 1000) index -= 1
   const step = COMPACT_STEPS[index]
   const scaled = numberFormat({ minimumFractionDigits: digits, maximumFractionDigits: digits }).format(abs / step.limit)
-  return `${value < 0 ? MINUS : ''}${scaled} ${step.suffix}`
+  return `${value < 0 ? MINUS : ''}${scaled} ${step.suffix}`
 }
 
 /** `formatBRLCompact(625_680_000_000)` → `R$ 625,7 bi` (mi/bi/tri). Abaixo de 1 milhão equivale a `formatBRL`. */

@@ -151,6 +151,32 @@ export function isSectionActive(pathname: string | null | undefined, section: Na
   return (section.items ?? []).some((item) => isActiveHref(pathname, item.href, item.exact))
 }
 
+/** Comprimento do link mais específico da seção que corresponde à rota (-1 se nenhum). */
+function sectionMatchLength(pathname: string | null | undefined, section: NavSection): number {
+  const links = section.href ? [{ href: section.href, exact: section.exact }] : (section.items ?? [])
+  return links.reduce(
+    (best, link) => (isActiveHref(pathname, link.href, link.exact) ? Math.max(best, link.href.split('#')[0].length) : best),
+    -1
+  )
+}
+
+/**
+ * Item de topo ativo: o de link mais específico; em empate (mesmo link em dois grupos, ex. /indices), o primeiro.
+ * Garante um único item de topo destacado no header.
+ */
+export function getActiveSection(pathname: string | null | undefined, sections: NavSection[]): NavSection | undefined {
+  let active: NavSection | undefined
+  let bestLength = -1
+  for (const section of sections) {
+    const length = sectionMatchLength(pathname, section)
+    if (length > bestLength) {
+      active = section
+      bestLength = length
+    }
+  }
+  return active
+}
+
 const AUTH_ROUTES = ['/login', '/register', '/esqueci-senha', '/redefinir-senha', '/verificar-email']
 
 function matchesPrefix(pathname: string, prefix: string): boolean {

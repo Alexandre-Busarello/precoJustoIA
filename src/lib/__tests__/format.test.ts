@@ -25,21 +25,21 @@ test('formatBRL', () => {
 })
 
 test('formatBRLCompact usa mi/bi/tri', () => {
-  assert.equal(formatBRLCompact(625_680_000_000), `R$${NBSP}625,7 bi`)
-  assert.equal(formatBRLCompact(29_338_560_000_000), `R$${NBSP}29,3 tri`)
-  assert.equal(formatBRLCompact(12_500_000), `R$${NBSP}12,5 mi`)
-  assert.equal(formatBRLCompact(-2_000_000_000), `${MINUS}R$${NBSP}2,0 bi`)
-  assert.equal(formatBRLCompact(999_950_000), `R$${NBSP}1,0 bi`)
-  assert.equal(formatBRLCompact(999_949_999), `R$${NBSP}999,9 mi`)
+  assert.equal(formatBRLCompact(625_680_000_000), `R$${NBSP}625,7${NBSP}bi`)
+  assert.equal(formatBRLCompact(29_338_560_000_000), `R$${NBSP}29,3${NBSP}tri`)
+  assert.equal(formatBRLCompact(12_500_000), `R$${NBSP}12,5${NBSP}mi`)
+  assert.equal(formatBRLCompact(-2_000_000_000), `${MINUS}R$${NBSP}2,0${NBSP}bi`)
+  assert.equal(formatBRLCompact(999_950_000), `R$${NBSP}1,0${NBSP}bi`)
+  assert.equal(formatBRLCompact(999_949_999), `R$${NBSP}999,9${NBSP}mi`)
   assert.equal(formatBRLCompact(950_000), `R$${NBSP}950.000,00`)
 })
 
 test('formatCompact sem moeda', () => {
-  assert.equal(formatCompact(1_500_000), '1,5 mi')
+  assert.equal(formatCompact(1_500_000), `1,5${NBSP}mi`)
   assert.equal(formatCompact(1234), '1.234')
   assert.equal(formatCompact(950_000), '950.000')
-  assert.equal(formatCompact(-1_500_000), `${MINUS}1,5 mi`)
-  assert.equal(formatCompact(999_960_000_000), '1,0 tri')
+  assert.equal(formatCompact(-1_500_000), `${MINUS}1,5${NBSP}mi`)
+  assert.equal(formatCompact(999_960_000_000), `1,0${NBSP}tri`)
 })
 
 test('formatPct recebe fração', () => {
@@ -112,8 +112,8 @@ test('negativos usam U+2212 em todas as funções', () => {
 })
 
 test('arredondamento que chega a 1 milhão sobe para mi', () => {
-  assert.equal(formatCompact(999_999.6), '1,0 mi')
+  assert.equal(formatCompact(999_999.6), `1,0${NBSP}mi`)
   assert.equal(formatCompact(999_999.4), '999.999')
-  assert.equal(formatBRLCompact(999_999.999), `R$${NBSP}1,0 mi`)
+  assert.equal(formatBRLCompact(999_999.999), `R$${NBSP}1,0${NBSP}mi`)
   assert.equal(formatBRLCompact(999_999.99), `R$${NBSP}999.999,99`)
 })

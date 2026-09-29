@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Search } from "lucide-react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
-import { isMinimalChromeRoute, isStandaloneRoute, navigation } from "@/lib/navigation"
+import { getActiveSection, isMinimalChromeRoute, isStandaloneRoute, navigation } from "@/lib/navigation"
 import { Button } from "@/components/ui/button"
 import { BrandLogo } from "@/components/ui/brand-logo"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -30,6 +30,7 @@ export default function Header() {
 
   const minimal = isMinimalChromeRoute(pathname)
   const sections = session ? navigation.app : navigation.marketing
+  const activeSection = getActiveSection(pathname, sections)
   const handleAnonClick = () => {
     if (!session) trackEngagement()
   }
@@ -46,7 +47,7 @@ export default function Header() {
             <>
               <nav aria-label="Principal" className="ml-4 hidden items-center gap-0.5 lg:flex xl:ml-6">
                 {sections.map((section) => (
-                  <NavDropdown key={section.label} section={section} />
+                  <NavDropdown key={section.label} section={section} active={section === activeSection} />
                 ))}
               </nav>
 

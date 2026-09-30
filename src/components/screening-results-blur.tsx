@@ -1,591 +1,190 @@
 "use client"
 
-import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
+import Link from "next/link"
 import { useSession } from "next-auth/react"
+import { Lock } from "lucide-react"
+import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { useEmailVerified } from "@/hooks/use-user-data"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
-import { Mail, Crown } from "lucide-react"
-
-interface RankingResult {
-  ticker: string
-  name: string
-  sector: string | null
-  currentPrice: number
-  logoUrl?: string | null
-  fairValue: number | null
-  upside: number | null
-  marginOfSafety: number | null
-  rational: string
-  key_metrics?: Record<string, number | null>
-  fairValueModel?: string | null
-}
 import { CompanyLogo } from "@/components/company-logo"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import Link from "next/link"
-import { Lock } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { formatBRL, formatDeltaPct } from "@/lib/format"
+import { cn } from "@/lib/utils"
+import {
+  formatMetricValue,
+  resultUpside,
+  translateMetricName,
+  type ScreeningResult,
+} from "@/components/screening/screening-metrics"
 
 interface ScreeningResultsBlurProps {
-  results: RankingResult[]
+  results: ScreeningResult[]
   totalCount: number
   isPremium: boolean
+  /** Métrica em destaque em cada linha (padrão: a primeira disponível de HIGHLIGHT_KEYS). */
+  highlightMetric?: string
 }
 
-export function ScreeningResultsBlur({ results, totalCount, isPremium }: ScreeningResultsBlurProps) {
+const FREE_VISIBLE = 3
+const LOCKED_PREVIEW_ROWS = 3
+
+/** Métrica que melhor resume a estratégia, na ordem de preferência. */
+const HIGHLIGHT_KEYS = ["magicScore", "dy", "cagrReceitas", "pl", "roe"]
+
+function highlightKey(results: ScreeningResult[]): string | null {
+  const first = results[0]?.key_metrics
+  if (!first) return null
+  return HIGHLIGHT_KEYS.find((key) => typeof first[key] === "number") ?? null
+}
+
+function ResultRow({ result, rank, metricKey }: { result: ScreeningResult; rank: number; metricKey: string | null }) {
+  const value = resultUpside(result)
+  const tone = value === null || value === 0 ? "text-foreground" : value > 0 ? "text-positive" : "text-negative"
+  return (
+    <Link
+      href={`/acao/${result.ticker.toLowerCase()}`}
+      className="block rounded-lg border border-border bg-card p-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="w-5 shrink-0 text-sm tabular-nums text-muted-foreground">{rank}</span>
+          <CompanyLogo ticker={result.ticker} logoUrl={result.logoUrl} size={36} companyName={result.name} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-foreground">{result.ticker}</span>
+              {result.sector && <Badge variant="neutral">{result.sector}</Badge>}
+            </div>
+            <p className="truncate text-sm text-muted-foreground">{result.name}</p>
+          </div>
+        </div>
+        <dl className="grid grid-cols-3 gap-3 text-left sm:flex sm:shrink-0 sm:gap-6 sm:text-right">
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Preço</dt>
+            <dd className="text-sm font-medium tabular-nums text-foreground">{formatBRL(result.currentPrice)}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Upside</dt>
+            <dd className={cn("text-sm font-medium tabular-nums", tone)}>{formatDeltaPct(value)}</dd>
+          </div>
+          {metricKey && (
+            <div className="min-w-0">
+              <dt className="break-words text-xs leading-tight text-muted-foreground">{translateMetricName(metricKey)}</dt>
+              <dd className="text-sm font-medium tabular-nums text-foreground">
+                {formatMetricValue(metricKey, result.key_metrics?.[metricKey])}
+              </dd>
+            </div>
+          )}
+        </dl>
+      </div>
+    </Link>
+  )
+}
+
+/** Linha fantasma para a prévia bloqueada: mesmas proporções da linha real, sem dados. */
+function PlaceholderRow({ rank }: { rank: number }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center gap-3">
+        <span className="w-5 shrink-0 text-sm tabular-nums text-muted-foreground">{rank}</span>
+        <div className="size-9 shrink-0 rounded-md bg-muted" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-4 w-20 rounded-sm bg-muted" />
+          <div className="h-3 w-40 max-w-full rounded-sm bg-muted" />
+        </div>
+        <div className="hidden h-8 w-40 rounded-sm bg-muted sm:block" />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Lista de resultados das páginas de estratégia. Para quem não é Premium mostra os 3 primeiros
+ * e, se houver mais empresas, uma prévia bloqueada com um único CTA.
+ */
+export function ScreeningResultsBlur({ results, totalCount, isPremium, highlightMetric }: ScreeningResultsBlurProps) {
   const { data: session, status } = useSession()
   const { trackEngagement } = useEngagementPixel()
   const { data: emailVerifiedData, isLoading: isLoadingEmail } = useEmailVerified()
-  const { subscriptionTier, trialStartedAt, trialEndsAt, isTrialActive } = usePremiumStatus()
-  const top3 = results.slice(0, 3)
-  const blurred = results.slice(3, 20) // Posições 4-20 com blur (se existirem dados reais)
-  
-  // SEMPRE mostrar blur quando não for premium, independente do totalCount retornado
-  // Isso é um ponto de conversão - sempre mostrar que há mais resultados disponíveis
-  const shouldShowBlur = !isPremium
+  const { isTrialActive } = usePremiumStatus()
 
-  // Verificar se usuário está logado mas não é Premium
-  const isLoggedIn = status === 'authenticated' && !!session
-  const isFreeUser = isLoggedIn && subscriptionTier === 'FREE' && !isTrialActive
-  
-  // Verificar se email está verificado
-  const emailVerified = emailVerifiedData?.verified ?? false
-  
-  // Verificar se trial já expirou (teve trial mas não está mais ativo)
-  // Trial expirou se: teve trial (trialStartedAt existe) mas não está ativo e trialEndsAt já passou
-  const now = new Date()
-  const trialExpired = isLoggedIn && 
-                       trialStartedAt && 
-                       !isTrialActive && 
-                       trialEndsAt && 
-                       new Date(trialEndsAt) < now
-  
-  // Handler para disparar pixel quando usuário deslogado clica em CTA
-  const handleCTAClick = () => {
-    if (!session) {
-      trackEngagement()
+  const isLoggedIn = status === "authenticated" && !!session
+  const metricKey =
+    highlightMetric && typeof results[0]?.key_metrics?.[highlightMetric] === "number" ? highlightMetric : highlightKey(results)
+  const visible = isPremium ? results : results.slice(0, FREE_VISIBLE)
+  const hiddenCount = Math.max(0, totalCount - visible.length)
+  // Fora do Premium o backend devolve no máximo 3 e não informa o total: com 3 resultados pode haver mais.
+  const showLocked = !isPremium && (hiddenCount > 0 || results.length >= FREE_VISIBLE)
+
+  if (results.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-card px-4 py-10 text-center">
+        <p className="font-medium text-foreground">Nenhuma empresa atende aos critérios hoje</p>
+        <p className="mt-1 text-sm text-muted-foreground">Os filtros são revistos diariamente com os dados mais recentes.</p>
+      </div>
+    )
+  }
+
+  const returnUrl = typeof window !== "undefined" ? `?returnUrl=${encodeURIComponent(window.location.pathname)}` : ""
+  const needsEmailVerification = isLoggedIn && !isTrialActive && !isLoadingEmail && emailVerifiedData?.verified === false
+
+  let cta: { text: string; href: string; description: string }
+  if (!isLoggedIn) {
+    cta = {
+      text: "Criar conta grátis",
+      href: `/register${returnUrl}`,
+      description: "Crie uma conta grátis e teste o Premium por 1 dia para ver a lista completa.",
+    }
+  } else if (needsEmailVerification) {
+    cta = {
+      text: "Verificar e-mail",
+      href: "/verificar-email",
+      description: "Verifique seu e-mail para ativar o teste de 1 dia do Premium e ver a lista completa.",
+    }
+  } else {
+    cta = {
+      text: "Assinar Premium",
+      href: "/checkout",
+      description: "Assine o Premium para ver a lista completa e usar todos os filtros do screening.",
     }
   }
-  
-  // Usar totalCount se disponível, senão assumir que há mais resultados
-  // Sempre mostrar pelo menos 10 cards com blur para criar efeito visual convincente
-  const remainingCount = totalCount > 3 ? totalCount - 3 : 10 // Se totalCount <= 3, assumir pelo menos 10 mais
-  const blurredCount = shouldShowBlur ? Math.min(Math.max(remainingCount, 10), 17) : 0 // Mínimo 10, máximo 17 cards (posições 4-20)
-  
-  // Debug: verificar valores
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('[ScreeningResultsBlur]', {
-      resultsLength: results.length,
-      totalCount,
-      remainingCount,
-      shouldShowBlur,
-      blurredCount,
-      isPremium
-    })
-  }
-
-  const formatCurrency = (value: number | null) => {
-    if (value === null) return "N/A"
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value)
-  }
-
-  const formatPercentage = (value: number | null) => {
-    if (value === null) return "N/A"
-    return `${value.toFixed(1)}%`
-  }
-
-  const formatMetricValue = (key: string, value: number | null) => {
-    if (value === null || value === undefined) return 'N/A'
-    
-    const percentualMetrics = ['roe', 'roa', 'roic', 'margemLiquida', 'margemEbitda', 'dy', 'pl', 'pvp']
-    
-    if (percentualMetrics.includes(key.toLowerCase())) {
-      if (key === 'dy' || key === 'roe' || key === 'roa' || key === 'roic' || key === 'margemLiquida' || key === 'margemEbitda') {
-        if (value >= 0 && value <= 1) {
-          return `${(value * 100).toFixed(1)}%`
-        }
-        return `${value.toFixed(1)}%`
-      }
-      return value.toFixed(2)
-    }
-    
-    return value.toLocaleString('pt-BR', {
-      minimumFractionDigits: value % 1 === 0 ? 0 : 2,
-      maximumFractionDigits: 2
-    })
-  }
-
-  const getKeyMetric = (result: RankingResult, key: string): number | null => {
-    if (key === 'currentPrice') return result.currentPrice
-    if (key === 'upside') return result.upside
-    if (key === 'fairValue') return result.fairValue
-    return result.key_metrics?.[key] as number | null
-  }
-
-  // Determinar qual métrica chave mostrar baseado nos resultados
-  const getKeyMetricLabel = (): string => {
-    if (results.length === 0) return 'Preço'
-    
-    // Verificar se tem DY (dividendos)
-    if (results[0]?.key_metrics?.dy) return 'DY'
-    // Verificar se tem P/L (graham)
-    if (results[0]?.key_metrics?.pl) return 'P/L'
-    // Verificar se tem CAGR (small caps)
-    if (results[0]?.key_metrics?.cagrReceitas) return 'CAGR'
-    // Verificar se tem Upside (deep value)
-    if (results[0]?.upside) return 'Upside'
-    
-    return 'Preço'
-  }
-
-  const keyMetricLabel = getKeyMetricLabel()
 
   return (
-    <div className="space-y-6">
-      {/* Top 3 - Sem blur */}
-      <div className="space-y-4">
-        {top3.map((result, index) => (
-          <Link
-            key={result.ticker}
-            href={`/acao/${result.ticker}`}
-            className="block"
-          >
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg transition-shadow">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold flex-shrink-0">
-                    {index + 1}
-                  </div>
-                  <CompanyLogo 
-                    ticker={result.ticker} 
-                    logoUrl={result.logoUrl} 
-                    size={40} 
-                    companyName={result.name} 
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="font-semibold text-lg truncate">{result.ticker}</div>
-                      {result.sector && (
-                        <Badge variant="secondary" className="text-xs">
-                          {result.sector}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground truncate">{result.name}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 sm:gap-4 text-right flex-shrink-0 flex-wrap">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Preço</div>
-                    <div className="font-semibold text-sm sm:text-base">{formatCurrency(result.currentPrice)}</div>
-                  </div>
-                  {result.fairValue && (
-                    <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground truncate">
-                        Preço Justo
-                      </div>
-                      <div className="font-semibold text-blue-600 text-xs sm:text-sm truncate">{formatCurrency(result.fairValue)}</div>
-                    </div>
-                  )}
-                  {/* DY sempre em destaque quando disponível */}
-                  {getKeyMetric(result, 'dy') && (
-                    <div>
-                      <div className="text-xs text-muted-foreground">DY</div>
-                      <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'dy')! * 100)}</div>
-                    </div>
-                  )}
-                  {/* Upside sempre em destaque quando disponível */}
-                  {getKeyMetric(result, 'upside') && (
-                    <div>
-                      <div className="text-xs text-muted-foreground">Upside</div>
-                      <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'upside'))}</div>
-                    </div>
-                  )}
-                  {/* Outras métricas específicas da estratégia */}
-                  {keyMetricLabel === 'P/L' && getKeyMetric(result, 'pl') && (
-                    <div>
-                      <div className="text-xs text-muted-foreground">P/L</div>
-                      <div className="font-semibold text-sm sm:text-base">{formatMetricValue('pl', getKeyMetric(result, 'pl'))}</div>
-                    </div>
-                  )}
-                  {keyMetricLabel === 'CAGR' && getKeyMetric(result, 'cagrReceitas') && (
-                    <div>
-                      <div className="text-xs text-muted-foreground">CAGR</div>
-                      <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'cagrReceitas')! * 100)}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Link>
+    <div className="space-y-3">
+      <ol className="space-y-3">
+        {visible.map((result, index) => (
+          <li key={result.ticker}>
+            <ResultRow result={result} rank={index + 1} metricKey={metricKey} />
+          </li>
         ))}
-      </div>
+      </ol>
 
-      {/* Resultados com Blur (4-20) */}
-      {shouldShowBlur && blurredCount > 0 && (
-        <div className="relative">
-          {/* Mostrar primeiro um card com blur */}
-          <div className="mb-6" style={{ filter: 'blur(5px)', pointerEvents: 'none', userSelect: 'none' }}>
-            {(() => {
-              const result = blurred[0] // Se tiver resultado real, usar; senão, criar fantasma
-              
-              return (
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 opacity-60">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-bold flex-shrink-0">
-                        4
-                      </div>
-                      {result ? (
-                        <>
-                          <CompanyLogo 
-                            ticker={result.ticker} 
-                            logoUrl={result.logoUrl} 
-                            size={40} 
-                            companyName={result.name} 
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <div className="font-semibold text-lg truncate">{result.ticker}</div>
-                              {result.sector && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {result.sector}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground truncate">{result.name}</div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-lg bg-gray-200 dark:bg-gray-700 h-5 w-24 rounded" />
-                            <div className="text-sm bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded mt-1" />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 sm:gap-4 text-right flex-shrink-0 flex-wrap">
-                      {result ? (
-                        <>
-                          <div>
-                            <div className="text-xs text-muted-foreground">Preço</div>
-                            <div className="font-semibold text-sm sm:text-base">{formatCurrency(result.currentPrice)}</div>
-                          </div>
-                          {result.fairValue && (
-                            <div className="min-w-0">
-                              <div className="text-xs text-muted-foreground truncate">
-                                Preço Justo
-                              </div>
-                              <div className="font-semibold text-blue-600 text-xs sm:text-sm truncate">{formatCurrency(result.fairValue)}</div>
-                            </div>
-                          )}
-                          {/* DY sempre em destaque quando disponível */}
-                          {getKeyMetric(result, 'dy') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">DY</div>
-                              <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'dy')! * 100)}</div>
-                            </div>
-                          )}
-                          {/* Upside sempre em destaque quando disponível */}
-                          {getKeyMetric(result, 'upside') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">Upside</div>
-                              <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'upside'))}</div>
-                            </div>
-                          )}
-                          {/* Outras métricas específicas da estratégia */}
-                          {keyMetricLabel === 'P/L' && getKeyMetric(result, 'pl') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">P/L</div>
-                              <div className="font-semibold text-sm sm:text-base">{formatMetricValue('pl', getKeyMetric(result, 'pl'))}</div>
-                            </div>
-                          )}
-                          {keyMetricLabel === 'CAGR' && getKeyMetric(result, 'cagrReceitas') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">CAGR</div>
-                              <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'cagrReceitas')! * 100)}</div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <div className="bg-gray-200 dark:bg-gray-700 h-8 w-16 sm:w-20 rounded" />
-                          <div className="bg-gray-200 dark:bg-gray-700 h-8 w-12 sm:w-16 rounded" />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
+      {showLocked && (
+        <div className="grid">
+          <div aria-hidden="true" className="pointer-events-none space-y-3 blur-[3px] select-none [grid-area:1/1]">
+            {Array.from({ length: hiddenCount > 0 ? Math.min(LOCKED_PREVIEW_ROWS, hiddenCount) : LOCKED_PREVIEW_ROWS }, (_, index) => (
+              <PlaceholderRow key={index} rank={visible.length + index + 1} />
+            ))}
           </div>
-
-          {/* CTA após primeiro card blur */}
-          <div className="text-center mb-6 pointer-events-auto z-10 relative">
-            <Lock className="w-10 h-10 mx-auto mb-3 text-blue-600 dark:text-blue-400" />
-            <h3 className="text-xl font-bold mb-2">
-              A IA encontrou mais oportunidades nesta estratégia
-            </h3>
-            
-            {/* Mensagem e CTA baseado no status do usuário */}
-            {isLoggedIn && isFreeUser && !isLoadingEmail ? (
-              // Usuário logado mas não Premium
-              emailVerified === false ? (
-                // Email não verificado - pedir para verificar
-                <>
-                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
-                    <div className="flex items-start gap-3">
-                      <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 text-left">
-                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                          Verifique seu email para ativar seu trial de 1 dia
-                        </p>
-                        <p className="text-xs text-blue-700 dark:text-blue-300">
-                          Seu período de trial Premium só será ativado após verificar seu email. Verifique agora e desbloqueie a lista completa!
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                    <Link href="/verificar-email">
-                      Verificar Email e Ativar Trial
-                    </Link>
-                  </Button>
-                </>
-              ) : trialExpired ? (
-                // Trial expirado - CTA para checkout
-                <>
-                  <p className="text-muted-foreground mb-4 px-4">
-                    Seu trial expirou. Assine Premium para desbloquear a lista completa e todas as funcionalidades avançadas.
-                  </p>
-                  <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                    <Link href="/checkout">
-                      <Crown className="w-4 h-4 mr-2" />
-                      Assinar Premium
-                    </Link>
-                  </Button>
-                </>
-              ) : (
-                // Email verificado mas não tem trial ativo (nunca teve ou expirou) - checkout
-                <>
-                  <p className="text-muted-foreground mb-4 px-4">
-                    Desbloqueie a lista completa e veja todas as empresas que passaram nos filtros
-                  </p>
-                  <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                    <Link href="/checkout">
-                      <Crown className="w-4 h-4 mr-2" />
-                      Assinar Premium
-                    </Link>
-                  </Button>
-                </>
-              )
-            ) : (
-              // Usuário não logado - CTA para registro
-              <>
-                <p className="text-muted-foreground mb-4 px-4">
-                  Desbloqueie a lista completa e veja todas as empresas que passaram nos filtros
-                </p>
-                <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                  <Link 
-                    href={`/register${typeof window !== 'undefined' ? `?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}` : ''}`} 
-                    onClick={handleCTAClick}
-                  >
-                    Desbloquear Lista Completa
-                  </Link>
-                </Button>
-              </>
-            )}
+          {/* relative z-10: a camada com blur cria contexto de empilhamento e ficaria por cima do CTA */}
+          <div className="relative z-10 flex items-center justify-center p-4 [grid-area:1/1]">
+            <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-center shadow-md">
+              <Lock className="mx-auto size-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              <p className="mt-2 font-medium text-foreground">
+                {hiddenCount > 0
+                  ? `Mais ${hiddenCount.toLocaleString("pt-BR")} ${hiddenCount === 1 ? "empresa atende" : "empresas atendem"} a estes critérios`
+                  : "Veja a lista completa desta estratégia"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{cta.description}</p>
+              <Button asChild className="mt-4 h-11 w-full sm:w-auto">
+                <Link href={cta.href} onClick={() => !session && trackEngagement()}>
+                  {cta.text}
+                </Link>
+              </Button>
+            </div>
           </div>
-
-          {/* Cards restantes com blur */}
-          <div className="space-y-4" style={{ filter: 'blur(5px)', pointerEvents: 'none', userSelect: 'none' }}>
-            {Array.from({ length: Math.max(0, blurredCount - 1) }).map((_, index) => {
-              const actualIndex = index + 4 // Posição real (5, 6, 7, ...) - primeiro já foi mostrado
-              const result = blurred[index + 1] // Se tiver resultado real, usar; senão, criar fantasma
-              
-              return (
-                <div
-                  key={result?.ticker || `blurred-${actualIndex}`}
-                  className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 opacity-60"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-bold flex-shrink-0">
-                        {actualIndex + 1}
-                      </div>
-                      {result ? (
-                        <>
-                          <CompanyLogo 
-                            ticker={result.ticker} 
-                            logoUrl={result.logoUrl} 
-                            size={40} 
-                            companyName={result.name} 
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <div className="font-semibold text-lg truncate">{result.ticker}</div>
-                              {result.sector && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {result.sector}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground truncate">{result.name}</div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-lg bg-gray-200 dark:bg-gray-700 h-5 w-24 rounded" />
-                            <div className="text-sm bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded mt-1" />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 sm:gap-4 text-right flex-shrink-0 flex-wrap">
-                      {result ? (
-                        <>
-                          <div>
-                            <div className="text-xs text-muted-foreground">Preço</div>
-                            <div className="font-semibold text-sm sm:text-base">{formatCurrency(result.currentPrice)}</div>
-                          </div>
-                          {result.fairValue && (
-                            <div className="min-w-0">
-                              <div className="text-xs text-muted-foreground truncate">
-                                Preço Justo
-                              </div>
-                              <div className="font-semibold text-blue-600 text-xs sm:text-sm truncate">{formatCurrency(result.fairValue)}</div>
-                            </div>
-                          )}
-                          {/* DY sempre em destaque quando disponível */}
-                          {getKeyMetric(result, 'dy') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">DY</div>
-                              <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'dy')! * 100)}</div>
-                            </div>
-                          )}
-                          {/* Upside sempre em destaque quando disponível */}
-                          {getKeyMetric(result, 'upside') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">Upside</div>
-                              <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'upside'))}</div>
-                            </div>
-                          )}
-                          {/* Outras métricas específicas da estratégia */}
-                          {keyMetricLabel === 'P/L' && getKeyMetric(result, 'pl') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">P/L</div>
-                              <div className="font-semibold text-sm sm:text-base">{formatMetricValue('pl', getKeyMetric(result, 'pl'))}</div>
-                            </div>
-                          )}
-                          {keyMetricLabel === 'CAGR' && getKeyMetric(result, 'cagrReceitas') && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">CAGR</div>
-                              <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'cagrReceitas')! * 100)}</div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <div className="bg-gray-200 dark:bg-gray-700 h-8 w-16 sm:w-20 rounded" />
-                          <div className="bg-gray-200 dark:bg-gray-700 h-8 w-12 sm:w-16 rounded" />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Se for premium, mostrar todos sem blur */}
-      {isPremium && blurred.length > 0 && (
-        <div className="space-y-4">
-          {blurred.map((result, index) => (
-            <Link
-              key={result.ticker}
-              href={`/acao/${result.ticker}`}
-              className="block"
-            >
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg transition-shadow">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-bold flex-shrink-0">
-                      {index + 4}
-                    </div>
-                    <CompanyLogo 
-                      ticker={result.ticker} 
-                      logoUrl={result.logoUrl} 
-                      size={40} 
-                      companyName={result.name} 
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="font-semibold text-lg truncate">{result.ticker}</div>
-                        {result.sector && (
-                          <Badge variant="secondary" className="text-xs">
-                            {result.sector}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-sm text-muted-foreground truncate">{result.name}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 sm:gap-4 text-right flex-shrink-0 flex-wrap">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Preço</div>
-                      <div className="font-semibold text-sm sm:text-base">{formatCurrency(result.currentPrice)}</div>
-                    </div>
-                    {result.fairValue && (
-                      <div className="min-w-0">
-                        <div className="text-xs text-muted-foreground truncate">
-                          Preço Justo
-                        </div>
-                        <div className="font-semibold text-blue-600 text-xs sm:text-sm truncate">{formatCurrency(result.fairValue)}</div>
-                      </div>
-                    )}
-                    {/* DY sempre em destaque quando disponível */}
-                    {getKeyMetric(result, 'dy') && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">DY</div>
-                        <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'dy')! * 100)}</div>
-                      </div>
-                    )}
-                    {/* Upside sempre em destaque quando disponível */}
-                    {result.upside !== null && result.upside !== undefined && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Upside</div>
-                        <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(result.upside)}</div>
-                      </div>
-                    )}
-                    {/* P/L e CAGR apenas se forem a métrica principal */}
-                    {keyMetricLabel === 'P/L' && getKeyMetric(result, 'pl') && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">P/L</div>
-                        <div className="font-semibold text-sm sm:text-base">{formatMetricValue('pl', getKeyMetric(result, 'pl'))}</div>
-                      </div>
-                    )}
-                    {keyMetricLabel === 'CAGR' && getKeyMetric(result, 'cagrReceitas') && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">CAGR</div>
-                        <div className="font-semibold text-green-600 text-sm sm:text-base">{formatPercentage(getKeyMetric(result, 'cagrReceitas')! * 100)}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
         </div>
       )}
     </div>
   )
 }
-

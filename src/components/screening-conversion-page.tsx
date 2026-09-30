@@ -1,253 +1,224 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { Info, Loader2 } from "lucide-react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
-import { ScreeningResultsBlur } from "./screening-results-blur"
+import { useSession } from "next-auth/react"
+import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Loader2, Info } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ScreeningPreset } from "@/lib/screening-presets"
+import { formatBRLCompact, formatMultiple, formatNumber, formatPct } from "@/lib/format"
+import type { ScreeningPreset } from "@/lib/screening-presets"
+import type { ScreeningResponse } from "@/components/screening/screening-metrics"
+import { ScreeningResultsBlur } from "./screening-results-blur"
 import { SocialShareButton } from "./social-share-button"
-
-interface RankingResponse {
-  model: string
-  params: any
-  rational: string
-  results: Array<{
-    ticker: string
-    name: string
-    sector: string | null
-    currentPrice: number
-    logoUrl?: string | null
-    fairValue: number | null
-    upside: number | null
-    marginOfSafety: number | null
-    rational: string
-    key_metrics?: Record<string, number | null>
-    fairValueModel?: string | null
-  }>
-  count: number
-}
 
 interface ScreeningConversionPageProps {
   preset: ScreeningPreset
 }
 
+/** Métrica que resume cada estratégia nas linhas de resultado. */
+const HIGHLIGHT_METRIC: Record<ScreeningPreset["slug"], string> = {
+  "as-acoes-mais-baratas-segundo-graham": "pl",
+  "top-vacas-leiteiras-dividendos": "dy",
+  "small-caps-crescimento-explosivo": "cagrReceitas",
+  "oportunidades-desconto-excessivo": "pvp",
+  "ranking-formula-magica-b3": "magicScore",
+}
+
+const FREE_RESULT_LIMIT = 3
+
+const SORT_LABELS: Record<string, string> = {
+  pl_asc: "Menor P/L primeiro",
+  dy_desc: "Maior dividend yield primeiro",
+  upside_desc: "Maior upside primeiro",
+  magic_score_desc: "Maior score da Fórmula Mágica primeiro",
+}
+
+function range(label: string, min: string | null, max: string | null): string | null {
+  if (min && max) return `${label} entre ${min} e ${max}`
+  if (min) return `${label} a partir de ${min}`
+  if (max) return `${label} até ${max}`
+  return null
+}
+
+/** Critérios da estratégia em texto, formatados com @/lib/format. */
+function describeFilters(preset: ScreeningPreset): string[] {
+  const p = preset.params
+  const pct = (value?: number) => (value === undefined ? null : formatPct(value, { digits: 0 }))
+  const mult = (value?: number) => (value === undefined ? null : formatMultiple(value))
+  const points = (value?: number) => (value === undefined ? null : `${formatNumber(value, { digits: 0 })}%`)
+  const score = (value?: number) => (value === undefined ? null : formatNumber(value, { digits: 0 }))
+
+  if (preset.slug === "ranking-formula-magica-b3") {
+    return ["Ordena pela combinação de ROIC alto e earnings yield alto (EV/EBIT baixo)", "Apenas ações da B3"]
+  }
+
+  const items = [
+    p.plFilter?.enabled ? range("P/L", mult(p.plFilter.min), mult(p.plFilter.max)) : null,
+    p.pvpFilter?.enabled ? range("P/VP", mult(p.pvpFilter.min), mult(p.pvpFilter.max)) : null,
+    p.margemLiquidaFilter?.enabled ? range("Margem líquida", pct(p.margemLiquidaFilter.min), pct(p.margemLiquidaFilter.max)) : null,
+    p.roeFilter?.enabled ? range("ROE", pct(p.roeFilter.min), pct(p.roeFilter.max)) : null,
+    p.dyFilter?.enabled ? range("Dividend yield", pct(p.dyFilter.min), pct(p.dyFilter.max)) : null,
+    p.payoutFilter?.enabled ? range("Payout", pct(p.payoutFilter.min), pct(p.payoutFilter.max)) : null,
+    p.cagrReceitas5aFilter?.enabled
+      ? range("CAGR de receitas (5 anos)", pct(p.cagrReceitas5aFilter.min), pct(p.cagrReceitas5aFilter.max))
+      : null,
+    p.dividaLiquidaEbitdaFilter?.enabled
+      ? range("Dívida líquida/EBITDA", mult(p.dividaLiquidaEbitdaFilter.min), mult(p.dividaLiquidaEbitdaFilter.max))
+      : null,
+    p.marketCapFilter?.enabled
+      ? range(
+          "Valor de mercado",
+          p.marketCapFilter.min === undefined ? null : formatBRLCompact(p.marketCapFilter.min),
+          p.marketCapFilter.max === undefined ? null : formatBRLCompact(p.marketCapFilter.max)
+        )
+      : null,
+    p.grahamUpsideFilter?.enabled
+      ? range("Upside até o preço justo de Graham", points(p.grahamUpsideFilter.min), points(p.grahamUpsideFilter.max))
+      : null,
+    p.overallScoreFilter?.enabled ? range("Score geral", score(p.overallScoreFilter.min), score(p.overallScoreFilter.max)) : null,
+    p.assetTypeFilter === "b3" ? "Apenas ações da B3" : null,
+    p.sortBy && SORT_LABELS[p.sortBy] ? `Ordenação: ${SORT_LABELS[p.sortBy].toLowerCase()}` : null,
+  ]
+  return items.filter((item): item is string => !!item)
+}
+
 export function ScreeningConversionPage({ preset }: ScreeningConversionPageProps) {
   const { isPremium } = usePremiumStatus()
+  const { data: session } = useSession()
+  const hasFullAccess = !!session && !!isPremium
   const [loading, setLoading] = useState(true)
-  const [results, setResults] = useState<RankingResponse | null>(null)
+  const [results, setResults] = useState<ScreeningResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
   const [showConfig, setShowConfig] = useState(false)
   const [shareUrl, setShareUrl] = useState("")
 
-  // Obter URL atual para compartilhamento
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setShareUrl(window.location.href)
-    }
+    setShareUrl(window.location.href)
   }, [])
 
   useEffect(() => {
+    const controller = new AbortController()
     const fetchResults = async () => {
       setLoading(true)
       setError(null)
-
       try {
-        // Magic Formula usa modelo diferente
-        const model = preset.slug === 'ranking-formula-magica-b3' ? 'magicFormula' : 'screening'
-        const params = preset.slug === 'ranking-formula-magica-b3' 
+        const isMagicFormula = preset.slug === "ranking-formula-magica-b3"
+        const params = isMagicFormula
           ? { assetTypeFilter: preset.params.assetTypeFilter }
           : {
               ...preset.params,
-              includeBDRs: preset.params.assetTypeFilter === 'both' || preset.params.assetTypeFilter === 'bdr',
+              includeBDRs: preset.params.assetTypeFilter === "both" || preset.params.assetTypeFilter === "bdr",
             }
 
         const response = await fetch("/api/rank-builder", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            params,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: isMagicFormula ? "magicFormula" : "screening", params }),
+          signal: controller.signal,
         })
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        const data: RankingResponse = await response.json()
-        setResults(data)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        setResults(await response.json())
       } catch (err) {
+        if (controller.signal.aborted) return
         console.error("Erro ao gerar screening:", err)
-        setError("Erro ao carregar resultados. Tente novamente.")
+        setError("Não foi possível carregar os resultados.")
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
-
     fetchResults()
-  }, [preset])
+    return () => controller.abort()
+  }, [preset, retryToken])
 
-  const formatFilters = () => {
-    const filters: string[] = []
-    const params = preset.params
+  const filters = describeFilters(preset)
+  const count = results?.count ?? 0
+  const shown = results?.results.length ?? 0
+  // Fora do Premium o backend corta em 3 antes de contar; nesse caso não afirmamos o total.
+  const countKnown = hasFullAccess || count > shown || shown < FREE_RESULT_LIMIT
 
-    if (params.plFilter?.enabled) {
-      filters.push(`P/L ${params.plFilter.max !== undefined ? `≤ ${params.plFilter.max}` : ''}${params.plFilter.min !== undefined ? ` ≥ ${params.plFilter.min}` : ''}`)
-    }
-    if (params.pvpFilter?.enabled) {
-      filters.push(`P/VP ${params.pvpFilter.max !== undefined ? `≤ ${params.pvpFilter.max}` : ''}${params.pvpFilter.min !== undefined ? ` ≥ ${params.pvpFilter.min}` : ''}`)
-    }
-    if (params.margemLiquidaFilter?.enabled) {
-      filters.push(`Margem Líquida ${params.margemLiquidaFilter.min !== undefined ? `≥ ${(params.margemLiquidaFilter.min * 100).toFixed(1)}%` : ''}`)
-    }
-    if (params.dyFilter?.enabled) {
-      filters.push(`Dividend Yield ${params.dyFilter.min !== undefined ? `≥ ${(params.dyFilter.min * 100).toFixed(1)}%` : ''}`)
-    }
-    if (params.payoutFilter?.enabled) {
-      filters.push(`Payout ${params.payoutFilter.min !== undefined ? `≥ ${(params.payoutFilter.min * 100).toFixed(1)}%` : ''}${params.payoutFilter.max !== undefined ? ` ≤ ${(params.payoutFilter.max * 100).toFixed(1)}%` : ''}`)
-    }
-    if (params.marketCapFilter?.enabled) {
-      const maxBi = params.marketCapFilter.max ? (params.marketCapFilter.max / 1_000_000_000).toFixed(2) : null
-      filters.push(`Market Cap ${maxBi ? `≤ R$ ${maxBi}bi` : ''}`)
-    }
-    if (params.cagrReceitas5aFilter?.enabled) {
-      filters.push(`CAGR Receitas ${params.cagrReceitas5aFilter.min !== undefined ? `≥ ${(params.cagrReceitas5aFilter.min * 100).toFixed(1)}%` : ''}`)
-    }
-    if (params.dividaLiquidaEbitdaFilter?.enabled) {
-      filters.push(`Dívida Líq/EBITDA ${params.dividaLiquidaEbitdaFilter.max !== undefined ? `≤ ${params.dividaLiquidaEbitdaFilter.max.toFixed(2)}x` : ''}`)
-    }
-    if (params.grahamUpsideFilter?.enabled) {
-      filters.push(`Upside ${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}`)
-    }
-
-    return filters
-  }
+  const actions = (
+    <>
+      {shareUrl && <SocialShareButton url={shareUrl} title={preset.title} description={preset.description} />}
+      <Button variant="outline" size="sm" className="h-11 md:h-8" onClick={() => setShowConfig(true)}>
+        <Info className="size-4" strokeWidth={1.75} aria-hidden="true" />
+        Ver critérios
+      </Button>
+    </>
+  )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
-      <div className="container mx-auto px-4 py-8 sm:py-12 max-w-4xl">
-        {/* Header com título e botões de ação */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white flex-1">
-              {preset.title}
-            </h1>
-            {/* Botões de ação - Desktop */}
-            <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-              {shareUrl && (
-                <SocialShareButton
-                  url={shareUrl}
-                  title={preset.title}
-                  description={preset.description}
-                />
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowConfig(true)}
-              >
-                <Info className="w-4 h-4 mr-2" />
-                Ver Filtros
-              </Button>
-            </div>
+    <div className="bg-background">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 pt-6 pb-12 sm:px-6">
+        <PageHeader
+          breadcrumb={[
+            { label: "Screening de ações", href: "/screening-acoes" },
+            { label: preset.shortTitle },
+          ]}
+          title={preset.title}
+          description={preset.hook}
+          actions={actions}
+        />
+
+        {loading && (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-16" role="status">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">Aplicando os critérios às empresas da B3</p>
           </div>
-          <p className="text-lg text-muted-foreground leading-relaxed mb-4 sm:mb-0">
-            {results && results.results.length > 0 ? (
-              // Hook dinâmico baseado nos resultados reais
-              preset.slug === 'as-acoes-mais-baratas-segundo-graham' 
-                ? `O mentor do Warren Buffett tinha uma regra: nunca pagar caro. A IA aplicou a regra dele na B3 hoje e encontrou ${results.count} empresas que passam no teste de segurança e valor.`
-                : preset.slug === 'top-vacas-leiteiras-dividendos'
-                ? `Esqueça a poupança. A IA encontrou ${results.count} empresas que são verdadeiras "Vacas Leiteiras" da bolsa, pagando dividendos acima da Selic. Veja o Yield da primeira da lista...`
-                : preset.slug === 'small-caps-crescimento-explosivo'
-                ? `As gigantes já cresceram. O dinheiro grosso está nas pequenas. A IA filtrou ${results.count} empresas que estão crescendo a receita a mais de 20% ao ano. Essa aqui pode ser a próxima WEG...`
-                : preset.slug === 'oportunidades-desconto-excessivo'
-                ? `O mercado bateu demais nessas ações e errou a mão. A IA encontrou ${results.count} empresas com desconto excessivo em relação ao valor justo. Veja o potencial de valorização da primeira da lista...`
-                : preset.slug === 'ranking-formula-magica-b3'
-                ? `Existe uma fórmula matemática que bateu o mercado por 20 anos seguidos. Ela cruza qualidade com preço baixo. Hoje, o Ranking da Fórmula Mágica na B3 tem ${results.count} empresas ranqueadas. Veja o novo líder...`
-                : preset.hook
-            ) : preset.hook}
-          </p>
-          {/* Botões de ação - Mobile (abaixo do texto) */}
-          <div className="sm:hidden flex gap-2 mt-4">
-            {shareUrl && (
-              <SocialShareButton
-                url={shareUrl}
-                title={preset.title}
-                description={preset.description}
-              />
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowConfig(true)}
-              className="flex-1 justify-center"
-            >
-              <Info className="w-4 h-4 mr-2" />
-              Ver Filtros
+        )}
+
+        {error && !loading && (
+          <div role="alert" className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-negative">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => setRetryToken((token) => token + 1)}>
+              Tentar novamente
             </Button>
           </div>
-        </div>
-
-        {/* Loading State */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
-            <p className="text-muted-foreground">Analisando empresas da B3...</p>
-          </div>
         )}
 
-        {/* Error State */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <p className="text-red-800 dark:text-red-200">{error}</p>
-          </div>
-        )}
-
-        {/* Results */}
         {results && !loading && (
-          <div>
-            <h2 className="hidden sm:block text-xl font-semibold mb-4">
-              Resultados ({results.count} empresas encontradas)
+          <section aria-labelledby="preset-results-title" className="space-y-3">
+            <h2 id="preset-results-title" className="text-lg font-semibold tabular-nums text-foreground">
+              {countKnown
+                ? `${count.toLocaleString("pt-BR")} ${count === 1 ? "empresa atende" : "empresas atendem"} aos critérios hoje`
+                : `Primeiras ${shown} empresas que atendem aos critérios hoje`}
             </h2>
             <ScreeningResultsBlur
               results={results.results}
-              totalCount={results.count}
-              isPremium={isPremium ?? false}
+              totalCount={count}
+              isPremium={hasFullAccess}
+              highlightMetric={HIGHLIGHT_METRIC[preset.slug]}
             />
-          </div>
+            <p className="text-xs text-muted-foreground">
+              Preço justo e upside são estimativas baseadas em modelos e dados públicos. Não é recomendação de investimento.
+            </p>
+          </section>
         )}
 
-        {/* Modal de Configuração */}
+        <p className="text-sm text-muted-foreground">
+          Quer ajustar os critérios?{" "}
+          <Link href="/screening-acoes" className="font-medium text-brand hover:underline">
+            Monte seu próprio filtro no screening
+          </Link>
+        </p>
+
         <Dialog open={showConfig} onOpenChange={setShowConfig}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Filtros Aplicados</DialogTitle>
-              <DialogDescription>
-                Esta estratégia usa os seguintes critérios para encontrar as melhores ações:
-              </DialogDescription>
+              <DialogTitle>Critérios da estratégia</DialogTitle>
+              <DialogDescription>{preset.description}</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div>
-                <h3 className="font-semibold mb-2">Filtros Ativos:</h3>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                  {formatFilters().map((filter, index) => (
-                    <li key={index}>{filter}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">Descrição:</h3>
-                <p className="text-sm text-muted-foreground">{preset.description}</p>
-              </div>
-            </div>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-foreground marker:text-muted-foreground">
+              {filters.map((filter) => (
+                <li key={filter}>{filter}</li>
+              ))}
+            </ul>
           </DialogContent>
         </Dialog>
       </div>
     </div>
   )
 }
-

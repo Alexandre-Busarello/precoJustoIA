@@ -1,713 +1,339 @@
 'use client'
 
+import * as React from 'react'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { AddToBacktestButton } from '@/components/add-to-backtest-button'
-import { InfoTooltip } from '@/components/info-tooltip'
-import {
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table'
-import { 
-  Crown, 
-  Lock, 
-  TrendingUp, 
-  TrendingDown, 
-  Minus,
-  Eye,
-  ArrowUpDown,
-  Trophy
-} from 'lucide-react'
+import { ChevronDown, Lock } from 'lucide-react'
 
-// Tipo para dados da empresa
-interface CompanyData {
+import { cn } from '@/lib/utils'
+import { InfoHint } from '@/components/ui/info-hint'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+
+/**
+ * Tabela única de comparação: linhas = indicadores (agrupados), colunas = ativos (até 6).
+ * A 1ª coluna fica fixa no mobile. O melhor valor de cada linha aparece em `font-semibold`
+ * com um ponto da cor da marca e o rótulo "melhor" para leitores de tela.
+ *
+ * Os valores chegam já formatados (texto) junto do número bruto usado para achar o melhor valor,
+ * porque a página é renderizada no servidor e não pode passar funções de formatação.
+ */
+
+export interface ComparisonAsset {
   ticker: string
   name: string
-  sector?: string | null
-  currentPrice: number
-  financialData: {
-    pl?: number | null
-    pvp?: number | null
-    roe?: number | null
-    dy?: number | null
-    margemLiquida?: number | null
-    roic?: number | null
-    marketCap?: number | null
-    receitaTotal?: number | null
-    lucroLiquido?: number | null
-    dividaLiquidaEbitda?: number | null
-    dividaLiquidaPatrimonio?: number | null
-    liquidezCorrente?: number | null
-    // Indicadores de Crescimento
-    cagrLucros5a?: number | null
-    cagrReceitas5a?: number | null
-    crescimentoLucros?: number | null
-    crescimentoReceitas?: number | null
-  } | null
-  // Dados de fallback
-  keyStatistics?: Array<{
-    forwardPE?: number | null
-    priceToBook?: number | null
-    dividendYield?: number | null
-  }>
-  // Dados históricos para médias
-  historicalFinancials?: Array<{
-    year: number
-    pl?: unknown
-    pvp?: unknown
-    roe?: unknown
-    dy?: unknown
-    margemLiquida?: unknown
-    roic?: unknown
-    marketCap?: unknown
-    receitaTotal?: unknown
-    lucroLiquido?: unknown
-    dividaLiquidaEbitda?: unknown
-    dividaLiquidaPl?: unknown
-    liquidezCorrente?: unknown
-    cagrLucros5a?: unknown
-    cagrReceitas5a?: unknown
-    crescimentoLucros?: unknown
-    crescimentoReceitas?: unknown
-  }>
-  strategies?: {
-    graham?: { score: number; isEligible: boolean; fairValue?: number | null } | null
-    dividendYield?: { score: number; isEligible: boolean } | null
-    lowPE?: { score: number; isEligible: boolean } | null
-    magicFormula?: { score: number; isEligible: boolean } | null
-    fcd?: { score: number; isEligible: boolean; fairValue?: number | null } | null
-    gordon?: { score: number; isEligible: boolean; fairValue?: number | null } | null
-    fundamentalist?: { score: number; isEligible: boolean } | null
-  } | null
-  overallScore?: {
-    score: number
-    grade: string
-    classification: string
-    recommendation: string
-  } | null
+  href: string
+  /** Linha curta abaixo do nome (ex.: preço formatado). */
+  meta?: string | null
+}
+
+export interface ComparisonCell {
+  /** Número usado para achar o melhor valor; `null` quando não há dado ou a linha não é numérica. */
+  value: number | null
+  /** Texto exibido (já formatado com @/lib/format). */
+  text: string
+  /** Linha secundária opcional (ex.: média de 7 anos), exibida com o seletor ligado. */
+  secondary?: string | null
+}
+
+/**
+ * - `higher`: maior é melhor.
+ * - `lower`: menor é melhor.
+ * - `lower-positive`: menor é melhor, ignorando valores ≤ 0 (P/L e P/VP negativos indicam prejuízo ou patrimônio negativo).
+ * - `none`: linha informativa, sem destaque.
+ */
+export type ComparisonBetter = 'higher' | 'lower' | 'lower-positive' | 'none'
+
+export interface ComparisonRow {
+  key: string
+  label: string
+  description?: string
+  hint?: string
+  better: ComparisonBetter
+  cells: ComparisonCell[]
+  /** Linha exclusiva do Premium: os valores não são enviados e aparece um cadeado. */
+  locked?: boolean
+  /** Linha de texto (ex.: benchmark): o conteúdo quebra linha em vez de alargar a coluna. */
+  text?: boolean
+}
+
+export interface ComparisonGroup {
+  key: string
+  label: string
+  rows: ComparisonRow[]
+  /** Mostra só as primeiras N linhas até o usuário expandir o grupo. */
+  collapseAfter?: number
 }
 
 interface ComparisonTableProps {
-  companies: CompanyData[]
-  userIsPremium: boolean
+  assets: ComparisonAsset[]
+  groups: ComparisonGroup[]
+  /** Rótulo do seletor que mostra a linha secundária das células (ex.: "Média de 7 anos"). */
+  secondaryLabel?: string
+  /** Conteúdo exibido abaixo da tabela quando há linhas bloqueadas (ex.: chamada para o Premium). */
+  lockedNotice?: React.ReactNode
+  /** Linha extra no fim da tabela, uma célula por ativo (ex.: botão de backtest). */
+  footerRow?: { label: string; cells: React.ReactNode[] }
+  /** Legenda acessível da tabela. */
+  caption: string
+  className?: string
 }
 
-// Função para calcular média histórica de um indicador
-function calculateHistoricalAverage(historicalData: any[], fieldName: string): number | null {
-  if (!historicalData || historicalData.length === 0) return null
-  
-  const validValues = historicalData
-    .map(data => {
-      const value = data[fieldName]
-      if (value === null || value === undefined) return null
-      if (typeof value === 'number') return value
-      if (typeof value === 'string') return parseFloat(value)
-      if (value && typeof value === 'object' && 'toNumber' in value) {
-        return (value as { toNumber: () => number }).toNumber()
-      }
-      return parseFloat(String(value))
-    })
-    .filter(val => val !== null && !isNaN(val as number)) as number[]
-  
-  if (validValues.length === 0) return null
-  
-  const sum = validValues.reduce((acc, val) => acc + val, 0)
-  return sum / validValues.length
+const EPSILON = 1e-9
+
+function isComparable(value: number | null, better: ComparisonBetter): value is number {
+  if (value === null || !Number.isFinite(value)) return false
+  if (better === 'lower-positive') return value > 0
+  return true
 }
 
-// Indicadores premium são definidos inline nos objetos de indicadores
+/**
+ * Índices das colunas com o melhor valor da linha. Empates marcam todos os empatados.
+ * Sem destaque quando há menos de 2 valores comparáveis ou quando todos são iguais.
+ */
+export function getBestIndices(cells: ComparisonCell[], better: ComparisonBetter): number[] {
+  if (better === 'none') return []
+  const valid = cells
+    .map((cell, index) => ({ value: cell.value, index }))
+    .filter((entry): entry is { value: number; index: number } => isComparable(entry.value, better))
+  if (valid.length < 2) return []
+  const values = valid.map((entry) => entry.value)
+  const best = better === 'higher' ? Math.max(...values) : Math.min(...values)
+  const tolerance = EPSILON * Math.max(1, Math.abs(best))
+  const tied = valid.filter((entry) => Math.abs(entry.value - best) <= tolerance).map((entry) => entry.index)
+  return tied.length === valid.length ? [] : tied
+}
 
-// Configuração dos indicadores
-const indicators = [
-  // Indicadores Básicos (Gratuitos)
-  {
-    key: 'pl',
-    label: 'P/L',
-    description: 'Preço/Lucro',
-    format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
-    getBestType: () => 'lowest' as const,
-    isPremium: false
-  },
-  {
-    key: 'pvp',
-    label: 'P/VP',
-    description: 'Preço/Valor Patrimonial',
-    tooltip: 'Compara o preço da ação com o patrimônio da empresa por ação. Valores baixos podem indicar que a ação está barata em relação ao que a empresa possui.',
-    format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
-    getBestType: () => 'lowest' as const,
-    isPremium: false
-  },
-  {
-    key: 'roe',
-    label: 'ROE',
-    description: 'Retorno sobre Patrimônio',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: false
-  },
-  {
-    key: 'dy',
-    label: 'Dividend Yield',
-    description: 'Rendimento de Dividendos',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: false
-  },
-  {
-    key: 'marketCap',
-    label: 'Valor de Mercado',
-    description: 'Capitalização de Mercado',
-    format: (value: number | null) => {
-      if (!value) return 'N/A'
-      if (value >= 1_000_000_000) return `R$ ${(value / 1_000_000_000).toFixed(2)}B`
-      if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(2)}M`
-      return `R$ ${(value / 1_000).toFixed(2)}K`
-    },
-    getBestType: () => 'neutral' as const,
-    isPremium: false
-  },
-  
-  // Indicadores Avançados (Premium)
-  {
-    key: 'margemLiquida',
-    label: 'Margem Líquida',
-    description: 'Margem de Lucro Líquido',
-    tooltip: 'De cada R$ 100 que a empresa vende, quanto sobra de lucro no final. Quanto maior, mais eficiente é o negócio em gerar lucro.',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true
-  },
-  {
-    key: 'roic',
-    label: 'ROIC',
-    description: 'Retorno sobre Capital Investido',
-    tooltip: 'Mostra o quanto a empresa ganha de retorno para cada real investido em suas operações. Quanto maior, mais eficiente a empresa é em usar o dinheiro investido para gerar lucro.',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true
-  },
-  {
-    key: 'dividaLiquidaEbitda',
-    label: 'Dív. Líq./EBITDA',
-    description: 'Dívida Líquida sobre EBITDA',
-    tooltip: 'Indica quantos anos a empresa levaria para quitar suas dívidas usando só a geração de caixa operacional. Quanto menor, menos endividada ela está.',
-    format: (value: number | null) => value ? value.toFixed(2) : 'N/A',
-    getBestType: () => 'lowest' as const,
-    isPremium: true
-  },
+interface LeaderSummary {
+  leaders: string[]
+  wins: number
+  total: number
+}
 
-  // Indicadores de Crescimento (Premium)
-  {
-    key: 'cagrLucros5a',
-    label: 'CAGR Lucros 5a',
-    description: 'Crescimento Lucros (5 anos)',
-    tooltip: 'É a taxa média de crescimento anual do lucro da empresa nos últimos 5 anos, considerando o efeito composto (juros sobre juros).',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true
-  },
-  {
-    key: 'cagrReceitas5a',
-    label: 'CAGR Receitas 5a',
-    description: 'Crescimento Receitas (5 anos)',
-    tooltip: 'É a taxa média de crescimento anual da receita (vendas) da empresa nos últimos 5 anos, considerando o efeito composto.',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true
-  },
-  {
-    key: 'crescimentoLucros',
-    label: 'Crescimento Lucros',
-    description: 'Variação Anual dos Lucros',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true
-  },
-  {
-    key: 'crescimentoReceitas',
-    label: 'Crescimento Receitas',
-    description: 'Variação Anual das Receitas',
-    format: (value: number | null) => value ? `${(value * 100).toFixed(2)}%` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true
-  },
-  
-  // Score Geral (Premium) - Separador visual
-  {
-    key: 'overallScore',
-    label: 'Score Geral',
-    description: 'Pontuação Geral da Empresa',
-    tooltip: 'Uma nota de 0 a 100 que resume a saúde financeira e o potencial da empresa, combinando vários indicadores e estratégias de análise.',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  },
-
-  // Estratégias de Investimento (Premium) - No final da tabela
-  {
-    key: 'graham',
-    label: 'Graham',
-    description: 'Análise Benjamin Graham',
-    tooltip: 'Modelo criado pelo "pai do value investing" que estima um preço justo com base no lucro e no valor patrimonial da empresa. Nota alta indica ação potencialmente descontada por esse método.',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  },
-  {
-    key: 'dividendYieldStrategy',
-    label: 'Dividend Yield',
-    description: 'Estratégia de Dividendos',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  },
-  {
-    key: 'lowPE',
-    label: 'Low P/E',
-    description: 'Estratégia P/L Baixo',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  },
-  {
-    key: 'magicFormula',
-    label: 'Magic Formula',
-    description: 'Fórmula Mágica de Greenblatt',
-    tooltip: 'Estratégia que busca boas empresas negociadas a preços baixos, combinando rentabilidade sobre o capital com o quanto a ação está "barata".',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  },
-  {
-    key: 'fcd',
-    label: 'FCD',
-    description: 'Fluxo de Caixa Descontado',
-    tooltip: 'Estima quanto a empresa vale hoje somando o dinheiro que ela deve gerar no futuro, trazido a valor presente. Um dos métodos mais usados para achar o "preço justo" de uma ação.',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  },
-  {
-    key: 'gordon',
-    label: 'Gordon',
-    description: 'Modelo de Gordon',
-    tooltip: 'Calcula o preço justo de uma ação com base nos dividendos que ela paga e na expectativa de crescimento desses dividendos ao longo do tempo.',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  },
-  {
-    key: 'fundamentalist',
-    label: 'Fundamentalista 3+1',
-    description: 'Análise Fundamentalista Simplificada',
-    tooltip: 'Método simplificado que avalia a empresa em 3 pilares (valuation, rentabilidade e endividamento) mais 1 critério de crescimento.',
-    format: (value: number | null) => value !== null && value !== undefined ? `${value.toFixed(1)}/100` : 'N/A',
-    getBestType: () => 'highest' as const,
-    isPremium: true,
-    isStrategy: true
-  }
-]
-
-export function ComparisonTable({ companies, userIsPremium }: ComparisonTableProps) {
-
-  // Função para determinar o melhor valor e empates (usando médias históricas quando disponível)
-  const getBestValueInfo = (
-    values: (number | null)[], 
-    type: 'highest' | 'lowest' | 'neutral',
-    indicatorKey: string
-  ): { bestIndex: number; tiedIndices: number[]; historicalAverages: (number | null)[] | null } => {
-    if (type === 'neutral') return { bestIndex: -1, tiedIndices: [], historicalAverages: null }
-    
-    // Calcular médias históricas para este indicador
-    const historicalAverages = companies.map(company => {
-      if (!company.historicalFinancials) return null
-      return calculateHistoricalAverage(company.historicalFinancials, indicatorKey)
-    })
-    
-    // Usar médias históricas para ranking se disponível, senão usar valores atuais
-    const rankingValues = values.map((currentValue, index) => {
-      const historicalAvg = historicalAverages[index]
-      return historicalAvg !== null ? historicalAvg : currentValue
-    })
-    
-    const validValues = rankingValues.map((v, i) => ({ value: v, index: i })).filter(v => v.value !== null)
-    if (validValues.length === 0) return { bestIndex: -1, tiedIndices: [], historicalAverages }
-    
-    // Encontrar o melhor valor
-    let bestValue: number
-    if (type === 'highest') {
-      bestValue = Math.max(...validValues.map(v => v.value!))
-    } else {
-      bestValue = Math.min(...validValues.map(v => v.value!))
+/** Quem lidera em mais indicadores (entre as linhas liberadas que têm um melhor valor). */
+export function summarizeLeaders(assets: ComparisonAsset[], groups: ComparisonGroup[]): LeaderSummary | null {
+  const wins = new Array(assets.length).fill(0) as number[]
+  let total = 0
+  for (const group of groups) {
+    for (const row of group.rows) {
+      if (row.locked) continue
+      const best = getBestIndices(row.cells, row.better)
+      if (best.length === 0) continue
+      total += 1
+      best.forEach((index) => {
+        wins[index] += 1
+      })
     }
-    
-    // Encontrar todos os índices com o melhor valor (empates)
-    const tiedIndices = validValues
-      .filter(v => Math.abs(v.value! - bestValue) < 0.01) // Tolerância para números decimais
-      .map(v => v.index)
-    
-    // Se há empate (mais de um valor igual ao melhor), não destacar um único campeão
-    const bestIndex = tiedIndices.length > 1 ? -1 : tiedIndices[0]
-    
-    return { bestIndex, tiedIndices, historicalAverages }
   }
+  if (total === 0) return null
+  const max = Math.max(...wins)
+  if (max === 0) return null
+  const leaders = assets.filter((_, index) => wins[index] === max).map((asset) => asset.ticker)
+  return { leaders, wins: max, total }
+}
 
-  // Função removida - não utilizada
+function joinTickers(tickers: string[]): string {
+  if (tickers.length <= 1) return tickers[0] ?? ''
+  return `${tickers.slice(0, -1).join(', ')} e ${tickers[tickers.length - 1]}`
+}
 
-  // Função removida - não utilizada
+function summaryText({ leaders, wins, total }: LeaderSummary): React.ReactNode {
+  const names = <span className="font-semibold text-foreground">{joinTickers(leaders)}</span>
+  const count = `${wins} de ${total} ${total === 1 ? 'indicador' : 'indicadores'}`
+  if (leaders.length === 1) return <>{names} lidera em {count}</>
+  return <>{names} lideram em {count} cada</>
+}
+
+const STICKY_CELL =
+  'sticky left-0 z-10 w-[112px] min-w-[112px] max-w-[112px] whitespace-normal border-r border-border sm:w-56 sm:min-w-56 sm:max-w-56 lg:w-80 lg:min-w-80 lg:max-w-80 group-data-[scrolled=true]/cmp:shadow-[6px_0_8px_-6px_rgb(0_0_0/0.18)]'
+
+export function ComparisonTable({
+  assets,
+  groups,
+  secondaryLabel,
+  lockedNotice,
+  footerRow,
+  caption,
+  className,
+}: ComparisonTableProps) {
+  const [showSecondary, setShowSecondary] = React.useState(false)
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
+  const [scrolled, setScrolled] = React.useState(false)
+  const switchId = React.useId()
+
+  const summary = React.useMemo(() => summarizeLeaders(assets, groups), [assets, groups])
+  const hasSecondary = groups.some((group) => group.rows.some((row) => row.cells.some((cell) => cell.secondary)))
+  const hasLocked = groups.some((group) => group.rows.some((row) => row.locked))
+  const colCount = assets.length + 1
+
+  const toggleGroup = (key: string) => {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   return (
-    <Card>
-      <CardHeader className="p-4 sm:p-6">
-        <div>
-          <CardTitle className="flex items-center space-x-2 text-base sm:text-lg mb-2">
-            <ArrowUpDown className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-            <span className="truncate">Comparação Detalhada</span>
-          </CardTitle>
-          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 max-w-fit">
-            <span className="hidden md:inline">Ranking por Médias Históricas</span>
-            <span className="hidden sm:inline md:hidden">Ranking Médias 7a</span>
-            <span className="sm:hidden">Médias 7a</span>
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="p-4 sm:p-6">
-        <div className="relative -mx-4 sm:mx-0">
-          <div className="overflow-x-auto">
-            <div className="min-w-[600px] sm:min-w-[800px] px-4 sm:px-0">
-              <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-24 sm:w-32 md:w-48 text-xs sm:text-sm sticky left-0 bg-background/95 backdrop-blur-sm z-20 border-r border-border">Indicador</TableHead>
-                {companies.map((company) => (
-                  <TableHead key={company.ticker} className="text-center min-w-20 sm:min-w-28 md:min-w-36">
-                    <div className="space-y-1">
-                      <div className="font-bold text-xs sm:text-sm">{company.ticker}</div>
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs block mx-auto max-w-full"
-                        title={company.sector || 'N/A'}
-                      >
-                        <span className="truncate block max-w-16 sm:max-w-24 md:max-w-full">
-                          {company.sector || 'N/A'}
-                        </span>
-                      </Badge>
-                    </div>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {indicators.map((indicator) => {
-                const values = companies.map(c => {
-                  // Score Geral
-                  if (indicator.key === 'overallScore') {
-                    return c.overallScore?.score !== null && c.overallScore?.score !== undefined ? c.overallScore.score : null
-                  }
-                  
-                  // Estratégias de Investimento
-                  if (indicator.isStrategy && c.strategies) {
-                    // Mapear chave da estratégia corretamente
-                    let strategyKey = indicator.key
-                    if (indicator.key === 'dividendYieldStrategy') {
-                      strategyKey = 'dividendYield'
-                    }
-                    
-                    const strategy = (c.strategies as Record<string, { score: number; isEligible: boolean }>)[strategyKey]
-                    return strategy?.score !== null && strategy?.score !== undefined ? strategy.score : null
-                  }
-                  
-                  // Indicadores Financeiros com fallbacks
-                  if (c.financialData) {
-                    const financialData = c.financialData as Record<string, number | null>
-                    const keyStats = (c as any).keyStatistics?.[0] // Assumindo que keyStatistics foi incluído
-                    
-                    // Aplicar fallbacks específicos
-                    switch (indicator.key) {
-                      case 'pl':
-                        return financialData.pl ?? (keyStats?.forwardPE ? Number(keyStats.forwardPE) : null)
-                      
-                      case 'pvp':
-                        return financialData.pvp ?? (keyStats?.priceToBook ? Number(keyStats.priceToBook) : null)
-                      
-                      case 'dy':
-                        return financialData.dy ?? (keyStats?.dividendYield ? Number(keyStats.dividendYield) / 100 : null)
-                      
-                      default:
-                        return financialData[indicator.key]
-                    }
-                  }
-                  
-                  return null
-                })
-                const { bestIndex, tiedIndices, historicalAverages } = getBestValueInfo(values, indicator.getBestType(), indicator.key)
-                const shouldBlur = indicator.isPremium && !userIsPremium
-
-                return (
-                  <TableRow key={indicator.key}>
-                    <TableCell className="font-medium p-2 sm:p-4 sticky left-0 bg-background/95 backdrop-blur-sm z-10 border-r border-border">
-                      <div className="flex items-center space-x-2 min-w-0">
-                        <span className="text-xs sm:text-sm truncate">{indicator.label}</span>
-                        {'tooltip' in indicator && indicator.tooltip && (
-                          <span className="flex-shrink-0">
-                            <InfoTooltip content={indicator.tooltip} />
-                          </span>
-                        )}
-                        {indicator.isPremium && (
-                          <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground truncate mt-1">
-                        {indicator.description}
-                      </div>
-                    </TableCell>
-                    {values.map((value, companyIndex) => {
-                      const isBest = bestIndex === companyIndex && bestIndex !== -1
-                      const isTied = tiedIndices.includes(companyIndex) && tiedIndices.length > 1
-                      const historicalAvg = historicalAverages?.[companyIndex]
-                      
-                      // Função para formatar valores históricos
-                      const formatHistoricalValue = (val: number | null) => {
-                        if (val === null) return 'N/A'
-                        
-                        // Formatação específica para cada tipo de indicador
-                        switch (indicator.key) {
-                          case 'marketCap':
-                            if (val >= 1_000_000_000) return `R$ ${(val / 1_000_000_000).toFixed(1)}B`
-                            if (val >= 1_000_000) return `R$ ${(val / 1_000_000).toFixed(1)}M`
-                            return `R$ ${(val / 1_000).toFixed(1)}K`
-                          
-                          case 'roe':
-                          case 'margemLiquida':
-                          case 'roic':
-                          case 'cagrLucros5a':
-                          case 'cagrReceitas5a':
-                          case 'crescimentoLucros':
-                          case 'crescimentoReceitas':
-                          case 'dy':
-                            return `${(val * 100).toFixed(1)}%`
-                          
-                          case 'pl':
-                          case 'pvp':
-                          case 'dividaLiquidaEbitda':
-                            return val.toFixed(2)
-                          
-                          default:
-                            return indicator.format(val)
-                        }
-                      }
-                      
-                      return (
-                        <TableCell key={companyIndex} className={`text-center relative p-2 sm:p-4 ${shouldBlur ? 'blur-sm' : ''}`}>
-                          {/* Exibição híbrida se há dados históricos */}
-                          {historicalAvg !== null && !indicator.isStrategy ? (
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-center space-x-1">
-                                <div className={`text-xs sm:text-sm font-medium ${isBest ? 'font-bold text-green-600' : isTied ? 'font-semibold text-blue-600' : ''}`}>
-                                  {indicator.format(value)}
-                                </div>
-                                {isBest && userIsPremium && (
-                                  <div className="flex items-center">
-                                    {indicator.getBestType() === 'highest' && (
-                                      <>
-                                        <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 mr-1" />
-                                        <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500" />
-                                      </>
-                                    )}
-                                    {indicator.getBestType() === 'lowest' && (
-                                      <>
-                                        <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 mr-1" />
-                                        <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500" />
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                                {isBest && !userIsPremium && (
-                                  <div className="flex items-center">
-                                    {indicator.getBestType() === 'highest' && (
-                                      <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
-                                    )}
-                                    {indicator.getBestType() === 'lowest' && (
-                                      <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
-                                    )}
-                                  </div>
-                                )}
-                                {isTied && !isBest && (
-                                  <div className="flex items-center" title="Empate">
-                                    <Minus className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Média 7a: {formatHistoricalValue(historicalAvg || null)}
-                              </div>
-                            </div>
-                          ) : (
-                            /* Exibição normal para estratégias ou quando não há dados históricos */
-                            <div className="flex items-center justify-center space-x-1">
-                              <span className={`text-xs sm:text-sm ${isBest ? 'font-bold text-green-600' : isTied ? 'font-semibold text-blue-600' : ''}`}>
-                                {indicator.format(value)}
-                              </span>
-                            {isBest && userIsPremium && (
-                              <div className="flex items-center">
-                                {indicator.getBestType() === 'highest' && (
-                                  <>
-                                    <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 mr-1" />
-                                    <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500" />
-                                  </>
-                                )}
-                                {indicator.getBestType() === 'lowest' && (
-                                  <>
-                                    <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 mr-1" />
-                                    <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500" />
-                                  </>
-                                )}
-                              </div>
-                            )}
-                            {isBest && !userIsPremium && (
-                              <div className="flex items-center">
-                                {indicator.getBestType() === 'highest' && (
-                                  <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
-                                )}
-                                {indicator.getBestType() === 'lowest' && (
-                                  <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
-                                )}
-                              </div>
-                            )}
-                            {isTied && !isBest && (
-                              <div className="flex items-center" title="Empate">
-                                <Minus className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
-                              </div>
-                            )}
-                            </div>
-                          )}
-                          {shouldBlur && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-                              <Lock className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                          )}
-                        </TableCell>
-                      )
-                    })}
-                  </TableRow>
-                )
-              })}
-              </TableBody>
-              </Table>
-            </div>
-          </div>
-          {/* Indicador de scroll horizontal (apenas mobile) */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-background to-transparent sm:hidden"
-          />
-        </div>
-        <p className="mt-2 text-xs text-center text-muted-foreground sm:hidden">
-          ⟷ arraste para o lado para ver mais indicadores
-        </p>
-
-        {/* Legenda dos símbolos */}
-        <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-gray-50 dark:bg-gray-900/20 rounded-lg border">
-          <h4 className="font-semibold mb-3 text-xs sm:text-sm">Legenda dos Símbolos</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 text-xs">
-            <div className="flex items-center space-x-2 min-w-0">
-              <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
-              <span className="truncate">Melhor valor único (Premium)</span>
-            </div>
-            <div className="flex items-center space-x-2 min-w-0">
-              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 flex-shrink-0" />
-              <span className="truncate">Melhor valor (maior é melhor)</span>
-            </div>
-            <div className="flex items-center space-x-2 min-w-0">
-              <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 flex-shrink-0" />
-              <span className="truncate">Melhor valor (menor é melhor)</span>
-            </div>
-            <div className="flex items-center space-x-2 min-w-0">
-              <Minus className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 flex-shrink-0" />
-              <span className="truncate">Empate no melhor valor</span>
-            </div>
-            <div className="flex items-center space-x-2 min-w-0">
-              <Crown className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
-              <span className="truncate">Recurso Premium</span>
-            </div>
-            <div className="flex items-center space-x-2 min-w-0">
-              <Lock className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
-              <span className="truncate">Bloqueado (Premium)</span>
-            </div>
-          </div>
-        </div>
-
-        {!userIsPremium && (
-          <div className="mt-4 p-3 sm:p-4 bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-            <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
-              <Crown className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 flex-shrink-0 self-center sm:self-start" />
-              <div className="flex-1 min-w-0">
-                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 text-sm sm:text-base">
-                  Desbloqueie Análises Avançadas
-                </h4>
-                <p className="text-xs sm:text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                  Acesse indicadores premium como Margem Líquida, ROIC, indicadores de crescimento, análise de endividamento e muito mais.
-                </p>
-              </div>
-              <Button asChild size="sm" className="bg-yellow-600 hover:bg-yellow-700 w-full sm:w-auto">
-                <Link href="/dashboard">
-                  <Crown className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
-                  <span className="text-xs sm:text-sm">Upgrade Premium</span>
-                </Link>
-              </Button>
-            </div>
+    <section className={cn('min-w-0 space-y-3', className)} aria-label={caption}>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {summary ? (
+          <p className="text-sm text-muted-foreground" data-testid="comparison-summary">
+            {summaryText(summary)}
+          </p>
+        ) : (
+          <span />
+        )}
+        {secondaryLabel && hasSecondary && (
+          <div className="flex min-h-11 items-center gap-2 md:min-h-0">
+            <Switch
+              id={switchId}
+              checked={showSecondary}
+              onCheckedChange={setShowSecondary}
+              className="relative before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-['']"
+            />
+            <Label htmlFor={switchId} className="cursor-pointer text-sm font-normal text-muted-foreground">
+              {secondaryLabel}
+            </Label>
           </div>
         )}
+      </div>
 
-        {/* Links para análises individuais */}
-        <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t">
-          <h4 className="font-semibold mb-3 text-sm sm:text-base">Análises Individuais</h4>
-          <div className="flex flex-wrap gap-2">
-            {companies.map((company) => (
-              <Button key={company.ticker} asChild variant="outline" size="sm" className="text-xs sm:text-sm">
-                <Link href={`/acao/${company.ticker}`} prefetch={false}>
-                  <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                  {company.ticker}
-                </Link>
-              </Button>
-            ))}
-          </div>
-        </div>
+      <div
+        data-scrolled={scrolled}
+        className="group/cmp relative w-full max-w-full overflow-x-auto rounded-lg border border-border bg-card"
+        onScroll={(event) => setScrolled(event.currentTarget.scrollLeft > 0)}
+      >
+        <table className="w-full border-collapse text-sm">
+          <caption className="sr-only">{caption}</caption>
+          <thead className="bg-surface">
+            <tr className="border-b border-border">
+              <th scope="col" className={cn(STICKY_CELL, 'bg-surface px-3 py-2 text-left align-bottom text-xs font-medium text-muted-foreground')}>
+                Indicador
+              </th>
+              {assets.map((asset) => (
+                <th key={asset.ticker} scope="col" className="min-w-24 px-3 py-2 text-right align-bottom font-normal">
+                  <span className="flex flex-col items-end sm:flex-row sm:items-baseline sm:justify-end sm:gap-2">
+                    <Link
+                      href={asset.href}
+                      prefetch={false}
+                      className="inline-flex min-h-11 items-center whitespace-nowrap text-sm font-semibold sm:min-h-8 text-foreground underline-offset-4 hover:text-brand hover:underline"
+                    >
+                      {asset.ticker}
+                    </Link>
+                    {asset.meta && <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">{asset.meta}</span>}
+                  </span>
+                  <span className="hidden text-xs text-muted-foreground sm:line-clamp-1" title={asset.name}>
+                    {asset.name}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          {groups.map((group) => {
+            const isOpen = expanded.has(group.key)
+            const limit = group.collapseAfter
+            const hiddenCount = limit !== undefined ? Math.max(0, group.rows.length - limit) : 0
+            const visibleRows = hiddenCount > 0 && !isOpen ? group.rows.slice(0, limit) : group.rows
+            return (
+              <tbody key={group.key}>
+                <tr className="border-b border-border bg-surface">
+                  <th scope="colgroup" colSpan={colCount} className="h-7 px-3 text-left text-xs font-medium text-muted-foreground">
+                    <span className="sticky left-3">{group.label}</span>
+                  </th>
+                </tr>
+                {visibleRows.map((row) => {
+                  const best = row.locked ? [] : getBestIndices(row.cells, row.better)
+                  return (
+                    <tr key={row.key} className="group/row border-b border-border hover:bg-muted" data-row={row.key}>
+                      <th scope="row" className={cn(STICKY_CELL, 'bg-card px-3 py-1.5 text-left align-middle font-normal group-hover/row:bg-muted lg:py-1')}>
+                        <span className="block min-w-0 lg:flex lg:items-center lg:gap-2">
+                          <span className="flex shrink-0 items-center gap-1">
+                            <span className="text-sm font-medium leading-5 text-foreground">{row.label}</span>
+                            {row.hint && <InfoHint content={row.hint} label={`Sobre ${row.label}`} side="right" />}
+                          </span>
+                          {row.description && (
+                            <span className="hidden min-w-0 text-xs leading-4 text-muted-foreground sm:block lg:truncate" title={row.description}>
+                              {row.description}
+                            </span>
+                          )}
+                        </span>
+                      </th>
+                      {row.cells.map((cell, index) => {
+                        const isBest = best.includes(index)
+                        return (
+                          <td
+                            key={assets[index]?.ticker ?? index}
+                            className={cn(
+                              'h-10 px-3 py-1.5 text-right align-middle lg:h-9 lg:py-1',
+                              row.text ? 'whitespace-normal break-words' : 'tabular-nums whitespace-nowrap'
+                            )}
+                            data-best={isBest || undefined}
+                          >
+                            {row.locked ? (
+                              <span className="inline-flex items-center text-muted-foreground">
+                                <Lock className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                                <span className="sr-only">Disponível no Premium</span>
+                              </span>
+                            ) : (
+                              <>
+                                <span className={cn('inline-flex items-center gap-1.5', isBest ? 'font-semibold text-foreground' : 'text-foreground')}>
+                                  {isBest && <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />}
+                                  {cell.text}
+                                  {isBest && <span className="sr-only"> (melhor)</span>}
+                                </span>
+                                {showSecondary && cell.secondary && (
+                                  <span className="block text-xs text-muted-foreground">{cell.secondary}</span>
+                                )}
+                              </>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+                {hiddenCount > 0 && (
+                  <tr className="border-b border-border">
+                    <td colSpan={colCount} className="px-3 py-0">
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() => toggleGroup(group.key)}
+                        className="sticky left-3 inline-flex min-h-11 items-center lg:min-h-9 gap-1 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+                      >
+                        {isOpen ? 'Mostrar menos' : `Mostrar mais ${hiddenCount}`}
+                        <ChevronDown className={cn('size-4 transition-transform', isOpen && 'rotate-180')} strokeWidth={1.75} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            )
+          })}
+          {footerRow && (
+            <tbody>
+              <tr>
+                <th scope="row" className={cn(STICKY_CELL, 'bg-card px-3 py-1 text-left align-middle text-sm font-medium text-foreground')}>
+                  {footerRow.label}
+                </th>
+                {footerRow.cells.map((cell, index) => (
+                  <td key={assets[index]?.ticker ?? index} className="px-3 py-1 text-right align-middle">
+                    <div className="flex justify-end">{cell}</div>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          )}
+        </table>
+      </div>
 
-        {/* Botões de Backtest */}
-        <div className="mt-4 pt-3 border-t">
-          <h4 className="font-semibold mb-3 text-sm sm:text-base">Adicionar ao Backtest</h4>
-          <div className="flex flex-wrap gap-2">
-            {companies.map((company) => (
-              <AddToBacktestButton
-                key={`backtest-${company.ticker}`}
-                asset={{
-                  ticker: company.ticker,
-                  companyName: company.name,
-                  sector: company.sector || undefined,
-                  currentPrice: company.currentPrice
-                }}
-                variant="outline"
-                size="sm"
-                showLabel={true}
-              />
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+        Melhor valor da linha, considerando o dado mais recente.
+      </p>
+
+      {hasLocked && lockedNotice}
+    </section>
   )
 }

@@ -2,12 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { CompanyLogo } from '@/components/company-logo'
-import { BarChart3, X, Search, Plus, ArrowRight } from 'lucide-react'
+import { X, Search, Plus } from 'lucide-react'
 
 interface EtfCompany {
   id: number
@@ -18,9 +16,13 @@ interface EtfCompany {
 
 interface EtfComparisonSelectorProps {
   initialTickers?: string[]
+  /** Título do bloco (padrão: "Selecione os ETFs"). */
+  title?: string
 }
 
-export function EtfComparisonSelector({ initialTickers = [] }: EtfComparisonSelectorProps) {
+const MAX_ETFS = 6
+
+export function EtfComparisonSelector({ initialTickers = [], title = 'Selecione os ETFs' }: EtfComparisonSelectorProps) {
   const [selected, setSelected] = useState<EtfCompany[]>([])
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<EtfCompany[]>([])
@@ -31,7 +33,7 @@ export function EtfComparisonSelector({ initialTickers = [] }: EtfComparisonSele
   const dropdownRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
-  // Dismiss dropdown on outside click
+  // Fecha a lista ao clicar fora
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
@@ -45,7 +47,7 @@ export function EtfComparisonSelector({ initialTickers = [] }: EtfComparisonSele
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Debounce search
+  // Busca com debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query.trim().length >= 1) search(query.trim())
@@ -54,13 +56,13 @@ export function EtfComparisonSelector({ initialTickers = [] }: EtfComparisonSele
     return () => clearTimeout(timer)
   }, [query])
 
-  // Pre-select initial tickers
+  // Pré-seleciona os tickers iniciais
   useEffect(() => {
     if (!initialTickers.length) return
     const load = async () => {
       const fetched: EtfCompany[] = []
-      for (const t of initialTickers.slice(0, 6)) {
-        const res = await fetch(`/api/search-companies?q=${t}`)
+      for (const t of initialTickers.slice(0, MAX_ETFS)) {
+        const res = await fetch(`/api/search-companies?q=${encodeURIComponent(t)}`)
         if (!res.ok) continue
         const { companies } = await res.json()
         const etf = companies?.find(
@@ -91,7 +93,7 @@ export function EtfComparisonSelector({ initialTickers = [] }: EtfComparisonSele
   }
 
   function add(company: EtfCompany) {
-    if (selected.length >= 6) return
+    if (selected.length >= MAX_ETFS) return
     if (selected.some((s) => s.ticker === company.ticker)) return
     setSelected((prev) => [...prev, company])
     setQuery('')
@@ -107,106 +109,113 @@ export function EtfComparisonSelector({ initialTickers = [] }: EtfComparisonSele
     router.push(`/compara-etfs/${selected.map((s) => s.ticker.toLowerCase()).join('/')}`)
   }
 
+  const missing = 2 - selected.length
+
   return (
-    <Card className="border-2 border-teal-200 dark:border-teal-800">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-xl">
-          <BarChart3 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-          Comparador de ETFs
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Selecione de 2 a 6 ETFs para comparar lado a lado
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Selected ETFs */}
+    <section className="rounded-lg border border-border bg-card p-4 sm:p-5" aria-labelledby="etf-selector-title">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="etf-selector-title" className="text-lg font-semibold tracking-tight text-foreground">
+            {title}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">De 2 a 6 ETFs, pelo código (ex.: BOVA11, IVVB11).</p>
+        </div>
+        <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+          {selected.length}/{MAX_ETFS}
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-4">
         {selected.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <ul className="flex flex-wrap gap-2" aria-label="ETFs selecionados">
             {selected.map((etf) => (
-              <div
+              <li
                 key={etf.ticker}
-                className="flex items-center gap-2 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 rounded-lg px-3 py-1.5"
+                className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background py-1 pl-2 pr-1"
               >
                 <CompanyLogo ticker={etf.ticker} companyName={etf.name} logoUrl={etf.logoUrl} size={24} />
-                <span className="text-sm font-semibold">{etf.ticker}</span>
-                <span className="text-xs text-muted-foreground hidden sm:block truncate max-w-[100px]">{etf.name}</span>
-                <button
+                <span className="text-sm font-medium text-foreground">{etf.ticker}</span>
+                <span className="hidden max-w-[120px] truncate text-xs text-muted-foreground sm:block">{etf.name}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => remove(etf.ticker)}
-                  className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
+                  aria-label={`Remover ${etf.ticker}`}
+                  className="text-muted-foreground hover:text-foreground"
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+                  <X className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                </Button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
 
-        {/* Search input */}
-        {selected.length < 6 && (
+        {selected.length < MAX_ETFS && (
           <div className="relative">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                ref={inputRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar ETF por código (ex: BOVA11, IVVB11...)"
-                className="pl-9"
-                onFocus={() => results.length > 0 && setShowResults(true)}
-              />
-            </div>
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+            <Input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar ETF por código"
+              aria-label="Buscar ETF por código"
+              className="pl-9"
+              onFocus={() => results.length > 0 && setShowResults(true)}
+            />
             {showResults && results.length > 0 && (
               <div
                 ref={dropdownRef}
-                className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border rounded-lg shadow-xl max-h-64 overflow-y-auto"
+                className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover shadow-md"
               >
                 {results.map((etf) => {
                   const isSelected = selected.some((s) => s.ticker === etf.ticker)
                   return (
                     <button
                       key={etf.ticker}
+                      type="button"
                       onClick={() => add(etf)}
-                      disabled={isSelected || selected.length >= 6}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      disabled={isSelected || selected.length >= MAX_ETFS}
+                      className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CompanyLogo ticker={etf.ticker} companyName={etf.name} logoUrl={etf.logoUrl} size={24} />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm">{etf.ticker}</div>
-                        <div className="text-xs text-muted-foreground truncate">{etf.name}</div>
-                      </div>
-                      <Badge variant="outline" className="text-xs shrink-0 text-teal-700 dark:text-teal-300 border-teal-300">ETF</Badge>
-                      {isSelected && <span className="text-xs text-teal-600">Adicionado</span>}
-                      {!isSelected && <Plus className="w-4 h-4 text-muted-foreground" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium text-foreground">{etf.ticker}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{etf.name}</span>
+                      </span>
+                      {isSelected ? (
+                        <span className="text-xs text-muted-foreground">Adicionado</span>
+                      ) : (
+                        <Plus className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                      )}
                     </button>
                   )
                 })}
               </div>
             )}
             {showResults && !loading && results.length === 0 && query.length >= 1 && (
-              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border rounded-lg shadow-xl p-4 text-sm text-muted-foreground text-center">
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-border bg-popover p-4 text-center text-sm text-muted-foreground shadow-md">
                 Nenhum ETF encontrado para &quot;{query}&quot;
               </div>
             )}
           </div>
         )}
 
-        {/* CTA */}
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm text-muted-foreground">
-            {selected.length < 2
-              ? `Adicione mais ${2 - selected.length} ETF${2 - selected.length > 1 ? 's' : ''} para comparar`
-              : `${selected.length} ETF${selected.length > 1 ? 's' : ''} selecionado${selected.length > 1 ? 's' : ''}`}
+            {missing > 0
+              ? `Adicione mais ${missing} ETF${missing > 1 ? 's' : ''} para comparar`
+              : `${selected.length} ETFs selecionados`}
           </span>
-          <Button
-            onClick={compare}
-            disabled={selected.length < 2}
-            className="bg-teal-600 hover:bg-teal-700 text-white gap-2"
-          >
+          <Button type="button" onClick={compare} disabled={selected.length < 2} className="w-full sm:w-auto">
             Comparar
-            <ArrowRight className="w-4 h-4" />
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

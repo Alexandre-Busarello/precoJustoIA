@@ -138,6 +138,31 @@ export interface BarsiParams extends StrategyParams {
   focusOnBEST?: boolean; // Focar apenas nos setores B.E.S.T. (padrão: true)
 }
 
+/** Bazin: preço-teto = média de proventos dos anos completos ÷ DY alvo. */
+export interface BazinParams extends StrategyParams {
+  targetDividendYield?: number; // DY alvo (padrão 0.06 = 6%)
+  yearsForAverage?: number; // Anos-calendário completos na média (padrão 5)
+  useNetJcp?: boolean; // Usar JCP líquido de IRRF (padrão false: bruto, padrão de mercado)
+  excludeExtraordinary?: boolean; // Remover proventos > 2× a mediana (padrão true)
+}
+
+/** Lynch: P/L justo = crescimento + DY (em p.p.) e PEG = P/L ÷ crescimento. */
+export interface LynchParams extends StrategyParams {
+  maxPeg?: number; // PEG máximo aceito (padrão 1.0)
+  maxGrowthRate?: number; // Teto do crescimento usado (padrão 0.25 = 25%)
+  minGrowthRate?: number; // Crescimento mínimo para o modelo fazer sentido (padrão 0.05 = 5%)
+}
+
+/** Bancos e seguradoras: P/VP justo = (ROE − g) / (Ke − g). */
+export interface BankPvpParams extends StrategyParams {
+  costOfEquity?: number; // Ke; padrão: premissas macro (NTN-B + IPCA + ERP, nunca abaixo da Selic)
+  growthRate?: number; // g perpétuo nominal (padrão 0.05)
+  minRoe?: number; // ROE mínimo (padrão 0.12 = 12%)
+}
+
+/** Chaves dos modelos novos, separadas das uniões existentes para não quebrar switches exaustivos. */
+export type NewModelKey = 'bazin' | 'lynch' | 'bankPvp';
+
 export type ModelParams =
   | GrahamParams
   | DividendYieldParams
@@ -267,7 +292,7 @@ export interface CompanyData {
   /** Prisma AssetType em string, ex.: FII */
   assetType?: string;
   /** Últimos pagamentos para PJ-FII Score */
-  dividendHistory?: { amount: unknown; exDate: Date }[];
+  dividendHistory?: { amount: unknown; exDate: Date; paymentDate?: Date | null; type?: string | null }[];
 }
 
 // Resultado de análise individual
@@ -279,6 +304,14 @@ export interface StrategyAnalysis {
   reasoning: string;
   criteria: { label: string; value: boolean; description: string }[];
   key_metrics?: Record<string, number | null>;
+  /** Desconto vs valor intrínseco (1 − P/VJ), em fração. */
+  discount?: number | null;
+  /** Participação do valor terminal no valor estimado (FCD/DDM), em fração. */
+  terminalValueShare?: number | null;
+  /** Ponte EV → Equity usada no valuation. */
+  equityBridge?: { ev: number; netDebt: number; equity: number } | null;
+  /** Critérios com dado disponível sobre o total avaliado (ex.: 6 de 9). */
+  dataCoverage?: { used: number; total: number };
 }
 
 // Resultado para ranking

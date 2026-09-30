@@ -1,6 +1,6 @@
 'use client'
 
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { cn } from '@/lib/utils'
@@ -10,294 +10,119 @@ interface MarkdownRendererProps {
   className?: string
 }
 
+/**
+ * Escala dos títulos: prosa normal (relatório de IA, blog) e compacta (chat, cards, textos curtos).
+ * H1 nunca passa de text-xl (20 px): o título da página é sempre maior que o da prosa.
+ */
+const HEADING = {
+  regular: {
+    h1: 'mt-8 mb-3 text-xl leading-snug',
+    h2: 'mt-8 mb-3 text-lg leading-snug',
+    h3: 'mt-6 mb-2 text-base leading-snug',
+    h4: 'mt-5 mb-2 text-sm leading-snug',
+  },
+  compact: {
+    h1: 'mt-4 mb-2 text-base leading-snug',
+    h2: 'mt-4 mb-2 text-base leading-snug',
+    h3: 'mt-3 mb-1.5 text-sm leading-snug',
+    h4: 'mt-3 mb-1.5 text-sm leading-snug',
+  },
+} as const
+
+/** Remove o nó da AST que o react-markdown repassa aos componentes (não é atributo de DOM). */
+function domProps<T extends { node?: unknown }>(props: T): Omit<T, 'node'> {
+  const rest = { ...props }
+  delete rest.node
+  return rest
+}
+
+const HEADING_BASE = 'scroll-mt-24 font-semibold tracking-tight text-foreground first:mt-0'
+
+function buildComponents(scale: keyof typeof HEADING): Components {
+  const heading = HEADING[scale]
+  return {
+    h1: (props) => <h1 {...domProps(props)} className={cn(HEADING_BASE, heading.h1)} />,
+    h2: (props) => <h2 {...domProps(props)} className={cn(HEADING_BASE, heading.h2)} />,
+    h3: (props) => <h3 {...domProps(props)} className={cn(HEADING_BASE, heading.h3)} />,
+    h4: (props) => <h4 {...domProps(props)} className={cn(HEADING_BASE, heading.h4)} />,
+    h5: (props) => <h5 {...domProps(props)} className="mt-3 mb-1.5 text-sm font-medium text-muted-foreground first:mt-0" />,
+    h6: (props) => <h6 {...domProps(props)} className="mt-3 mb-1.5 text-xs font-medium text-muted-foreground first:mt-0" />,
+    p: (props) => <p {...domProps(props)} className="my-3 first:mt-0 last:mb-0" />,
+    ul: (props) => <ul {...domProps(props)} className="my-3 list-disc space-y-1.5 pl-5 marker:text-muted-foreground first:mt-0 last:mb-0" />,
+    ol: (props) => <ol {...domProps(props)} className="my-3 list-decimal space-y-1.5 pl-5 marker:text-muted-foreground first:mt-0 last:mb-0" />,
+    li: (props) => <li {...domProps(props)} className="pl-1 [&>p]:my-1" />,
+    strong: (props) => <strong {...domProps(props)} className="font-semibold text-foreground" />,
+    em: (props) => <em {...domProps(props)} className="italic" />,
+    a: (props) => {
+      const external = props.href?.startsWith('http')
+      return (
+        <a
+          {...domProps(props)}
+          className="font-medium text-brand underline decoration-brand/40 underline-offset-2 transition-colors hover:decoration-brand"
+          target={external ? '_blank' : undefined}
+          rel={external ? 'noopener noreferrer' : undefined}
+        />
+      )
+    },
+    blockquote: (props) => <blockquote {...domProps(props)} className="my-4 border-l-2 border-border pl-4 text-muted-foreground first:mt-0 last:mb-0" />,
+    code: (props) => (
+      <code
+        {...domProps(props)}
+        className={cn('rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.9em] text-foreground', props.className)}
+      />
+    ),
+    // Bloco de código: rola na horizontal; o `code` interno perde o fundo de código inline.
+    pre: (props) => (
+      <pre
+        {...domProps(props)}
+        className="my-4 overflow-x-auto rounded-lg border border-border bg-surface p-4 font-mono text-sm leading-6 text-foreground [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[length:inherit]"
+      />
+    ),
+    // Tabela larga rola dentro do próprio contêiner, sem estourar a página no mobile.
+    table: (props) => (
+      <div className="my-4 w-full overflow-x-auto rounded-lg border border-border">
+        <table {...domProps(props)} className="w-full border-collapse text-sm tabular-nums [&_tbody_tr:last-child_td]:border-0" />
+      </div>
+    ),
+    thead: (props) => <thead {...domProps(props)} className="bg-surface" />,
+    th: (props) => (
+      <th
+        {...domProps(props)}
+        className="border-b border-border px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-muted-foreground"
+      />
+    ),
+    td: (props) => <td {...domProps(props)} className="border-b border-border px-3 py-2 align-top text-foreground" />,
+    hr: (props) => <hr {...domProps(props)} className="my-6 border-border" />,
+    img: (props) => (
+      <figure className="my-6">
+        {/* Imagens do Markdown vêm de domínios arbitrários (blog, IA): next/image exigiria cada host no next.config. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img {...domProps(props)} alt={props.alt ?? ''} className="mx-auto block h-auto max-w-full rounded-lg border border-border" />
+        {props.alt && <figcaption className="mt-2 text-center text-xs text-muted-foreground">{props.alt}</figcaption>}
+      </figure>
+    ),
+  }
+}
+
+const REGULAR_COMPONENTS = buildComponents('regular')
+const COMPACT_COMPONENTS = buildComponents('compact')
+
+/**
+ * Markdown (IA, blog, chat, metodologia) com a tipografia do design system e cores por token (funciona no escuro).
+ * Quem passa `prose-sm`, `text-xs` ou `text-sm` em `className` recebe a escala compacta.
+ */
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+  const compact = /(^|\s)(prose-sm|text-xs|text-sm)(\s|$)/.test(className ?? '')
+
   return (
-    <article className={cn("prose prose-lg max-w-none", className)}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        components={{
-          // Títulos com fonte do sistema
-          h1: ({ children, ...props }) => (
-            <h1 
-              className="scroll-mt-20 text-[2.5rem] md:text-[3rem] font-bold text-[#1a1a1a] dark:text-gray-100 mb-6 mt-10 first:mt-0 leading-tight" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </h1>
-          ),
-          
-          h2: ({ children, ...props }) => (
-            <h2 
-              className="scroll-mt-20 text-[2rem] md:text-[2.25rem] font-bold text-[#1a1a1a] dark:text-gray-100 mb-4 mt-10 first:mt-0 leading-tight" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </h2>
-          ),
-          
-          h3: ({ children, ...props }) => (
-            <h3 
-              className="scroll-mt-20 text-[1.5rem] md:text-[1.75rem] font-semibold text-[#1a1a1a] dark:text-gray-100 mb-3 mt-8 first:mt-0 leading-snug" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </h3>
-          ),
-          
-          h4: ({ children, ...props }) => (
-            <h4 
-              className="scroll-mt-20 text-[1.25rem] md:text-[1.375rem] font-semibold text-[#242424] dark:text-gray-200 mb-3 mt-6 first:mt-0 leading-snug" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </h4>
-          ),
-          
-          h5: ({ children, ...props }) => (
-            <h5 
-              className="scroll-mt-20 text-[1.125rem] font-semibold text-[#242424] dark:text-gray-200 mb-2 mt-5 first:mt-0 leading-snug" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </h5>
-          ),
-          
-          h6: ({ children, ...props }) => (
-            <h6 
-              className="scroll-mt-20 text-[1rem] font-semibold text-[#3a3a3a] dark:text-gray-300 mb-2 mt-4 first:mt-0 leading-normal" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </h6>
-          ),
-
-          // Parágrafos com fonte do sistema
-          p: ({ children, ...props }) => (
-            <p 
-              className="text-[#3a3a3a] dark:text-gray-300 leading-relaxed mb-4 text-[1rem] font-normal" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </p>
-          ),
-
-          // Listas compactas
-          ul: ({ children, ...props }) => (
-            <ul 
-              className="space-y-2 mb-4 ml-0 list-none" 
-              {...props}
-            >
-              {children}
-            </ul>
-          ),
-          
-          ol: ({ children, ...props }) => (
-            <ol 
-              className="space-y-2 mb-4 ml-6 list-decimal" 
-              {...props}
-            >
-              {children}
-            </ol>
-          ),
-          
-          li: ({ children, ...props }) => (
-            <li 
-              className="leading-relaxed text-[1rem] text-[#3a3a3a] dark:text-gray-300 pl-6 relative before:content-['•'] before:absolute before:left-0 before:text-[#666]" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </li>
-          ),
-
-          // Texto em destaque sutil
-          strong: ({ children, ...props }) => (
-            <strong 
-              className="font-bold text-[#1a1a1a] dark:text-gray-50" 
-              {...props}
-            >
-              {children}
-            </strong>
-          ),
-          
-          em: ({ children, ...props }) => (
-            <em 
-              className="italic text-[#242424] dark:text-gray-200" 
-              {...props}
-            >
-              {children}
-            </em>
-          ),
-
-          // Links minimalistas
-          // Garantir que links dentro de parênteses sejam renderizados corretamente
-          a: ({ children, href, ...props }) => (
-            <a 
-              href={href}
-              className="text-[#1a1a1a] dark:text-gray-200 underline decoration-[#1a1a1a]/30 dark:decoration-gray-400/30 underline-offset-2 hover:decoration-[#1a1a1a] dark:hover:decoration-gray-200 transition-colors duration-150 inline" 
-              target={href?.startsWith('http') ? '_blank' : undefined}
-              rel={href?.startsWith('http') ? 'noopener noreferrer' : undefined}
-              {...props}
-            >
-              {children}
-            </a>
-          ),
-
-          // Citações compactas
-          blockquote: ({ children, ...props }) => (
-            <blockquote 
-              className="border-l-[3px] border-gray-300 dark:border-gray-600 bg-transparent pl-6 pr-0 py-1 my-6 italic text-[1rem] text-[#3a3a3a] dark:text-gray-300" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </blockquote>
-          ),
-
-          // Código inline minimalista
-          code: ({ children, className, ...props }) => {
-            const isInline = !className
-            
-            if (isInline) {
-              return (
-                <code 
-                  className="bg-[#f6f6f6] dark:bg-gray-800 text-[#1a1a1a] dark:text-gray-200 px-1.5 py-0.5 rounded text-[0.925em] font-mono" 
-                  {...props}
-                >
-                  {children}
-                </code>
-              )
-            }
-            
-            // Para blocos de código
-            return (
-              <code 
-                className="block text-[14px] font-mono leading-[1.6] whitespace-pre-wrap" 
-                {...props}
-              >
-                {children}
-              </code>
-            )
-          },
-          
-          pre: ({ children, ...props }) => (
-            <div className="my-6">
-              {/* Header minimalista */}
-              <div className="bg-[#f6f6f6] dark:bg-gray-800 px-4 py-2 rounded-t-lg border-b border-gray-200 dark:border-gray-700">
-                <span className="text-xs text-[#666] dark:text-gray-400 font-mono">
-                  Dados
-                </span>
-              </div>
-              
-              {/* Conteúdo do código */}
-              <pre 
-                className="bg-[#fafafa] dark:bg-gray-900 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-lg p-4 overflow-x-auto" 
-                {...props}
-              >
-                <div className="text-[#1a1a1a] dark:text-gray-200 font-mono text-[14px] leading-normal">
-                  {children}
-                </div>
-              </pre>
-            </div>
-          ),
-
-          // Tabelas compactas
-          table: ({ children, ...props }) => (
-            <div className="overflow-x-auto my-6 border border-gray-200 dark:border-gray-700 rounded-lg">
-              <table 
-                className="min-w-full border-collapse" 
-                {...props}
-              >
-                {children}
-              </table>
-            </div>
-          ),
-          
-          thead: ({ children, ...props }) => (
-            <thead 
-              className="bg-[#fafafa] dark:bg-gray-800" 
-              {...props}
-            >
-              {children}
-            </thead>
-          ),
-          
-          th: ({ children, ...props }) => (
-            <th 
-              className="border-b border-gray-200 dark:border-gray-700 px-4 py-2 text-left font-semibold text-[0.875rem] text-[#1a1a1a] dark:text-gray-200" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </th>
-          ),
-          
-          td: ({ children, ...props }) => (
-            <td 
-              className="border-b border-gray-100 dark:border-gray-800 px-4 py-2 text-[0.875rem] text-[#3a3a3a] dark:text-gray-300" 
-              style={{ 
-                fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
-              }}
-              {...props}
-            >
-              {children}
-            </td>
-          ),
-
-          // Linha horizontal compacta
-          hr: ({ ...props }) => (
-            <hr 
-              className="border-0 border-t border-gray-200 dark:border-gray-700 my-8" 
-              {...props}
-            />
-          ),
-
-          // Imagens compactas
-          img: ({ src, alt, ...props }) => (
-            <figure className="my-6">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={src}
-                alt={alt}
-                className="max-w-full h-auto rounded-lg mx-auto block border border-gray-200 dark:border-gray-700" 
-                {...props}
-              />
-              {alt && (
-                <figcaption className="text-center text-[0.8125rem] text-[#666] dark:text-gray-400 mt-2">
-                  {alt}
-                </figcaption>
-              )}
-            </figure>
-          ),
-        }}
-      >
+    <article
+      className={cn(
+        'prose prose-sm sm:prose-base dark:prose-invert max-w-none min-w-0 break-words text-foreground',
+        compact ? 'text-sm leading-6' : 'text-sm leading-6 sm:text-base sm:leading-7',
+        className
+      )}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={compact ? COMPACT_COMPONENTS : REGULAR_COMPONENTS}>
         {content}
       </ReactMarkdown>
     </article>

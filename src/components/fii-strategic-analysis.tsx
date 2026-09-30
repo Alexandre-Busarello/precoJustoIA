@@ -48,7 +48,9 @@ export function FiiStrategicAnalysis({ price, valuation, dividendYield, pvp, liq
   const fairValue = valuation?.fairValue ?? null;
   const isVpReference = valuation?.upsideSource === "valor_patrimonial";
   const margin = marginOfSafety(price, fairValue);
-  const status = valuationStatusLabel(margin);
+  const statusLabel = valuationStatusLabel(margin);
+  // Com preço-teto como referência, o status fala em preço-teto (igual ao cabeçalho).
+  const status = statusLabel && !isVpReference ? statusLabel.replace("preço justo", "preço-teto") : statusLabel;
   const targetLabel = formatPct(FII_LISTING_TARGET_DY, { digits: 0 });
 
   const referenceLabel = isVpReference

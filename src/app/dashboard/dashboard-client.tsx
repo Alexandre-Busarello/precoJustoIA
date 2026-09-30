@@ -98,10 +98,11 @@ function DashboardStats() {
 
   const list = portfolios.data?.portfolios ?? [];
   const totalValue = list.reduce((sum, p) => sum + (p.currentValue || 0), 0);
-  const netInvested = list.reduce((sum, p) => sum + Math.max(p.netInvested || 0, 0), 0);
-  // Retorno total ponderado pelo capital líquido investido de cada carteira (cada totalReturn é fração).
+  // Retorno combinado: cada totalReturn é (V + W − I) ÷ I, então pondera pelo total aportado (I) de cada carteira,
+  // o que dá Σ(V + W − I) ÷ ΣI mesmo quando houve resgates.
+  const totalInvested = list.reduce((sum, p) => sum + Math.max(p.totalInvested || 0, 0), 0);
   const weightedReturn =
-    netInvested > 0 ? list.reduce((sum, p) => sum + p.totalReturn * Math.max(p.netInvested || 0, 0), 0) / netInvested : null;
+    totalInvested > 0 ? list.reduce((sum, p) => sum + p.totalReturn * Math.max(p.totalInvested || 0, 0), 0) / totalInvested : null;
 
   const portfoliosPending = portfolios.isLoading;
   const portfoliosFailed = portfolios.isError && !portfolios.data;

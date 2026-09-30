@@ -73,7 +73,7 @@ function VerifyEmailContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       {/* Disparar pixel de conversão quando usuário chega após cadastro por email */}
       {/* Isso garante atribuição correta antes da validação do email (evita quebra de sessão) */}
       <GoogleAdsConversionPixel />

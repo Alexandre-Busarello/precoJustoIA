@@ -210,6 +210,8 @@ const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]\s
 /** Termos em inglês que alguns modelos ainda emitem. */
 const ENGLISH_TERMS: Array<[RegExp, string]> = [
   [/\bLow P\/E\b/g, 'P/L baixo'],
+  [/\bUpside potencial\b/g, 'Potencial'],
+  [/\bupside potencial\b/g, 'potencial'],
   [/\bUpside\b/g, 'Potencial'],
   [/\bupside\b/g, 'potencial'],
 ]

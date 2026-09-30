@@ -30,6 +30,8 @@ export interface AssetHeaderProps {
   /** Variação do dia como fração (0,012 = +1,2%). */
   dayChange?: number | null
   fairValue?: number | null
+  /** Rótulo do valor de referência; padrão "Preço justo" (ex.: "Preço-teto" em FIIs). */
+  fairValueTitle?: string
   /** Modelo do preço justo (ex.: "Graham"). */
   fairValueLabel?: string
   /** Seletor de modelo, renderizado abaixo do preço justo. */
@@ -81,6 +83,7 @@ export function AssetHeader({
   price,
   dayChange,
   fairValue,
+  fairValueTitle,
   fairValueLabel,
   fairValueSlot,
   marginOfSafety,
@@ -98,6 +101,10 @@ export function AssetHeader({
   // Dentro da faixa estimada (±5%) a margem fica neutra; a cor só aparece fora dela.
   const status = hasMargin ? valuationStatus(marginOfSafety) : null
   const marginTone = status === 'below' ? 'positive' : status === 'above' ? 'negative' : 'default'
+  const fairTitle = fairValueTitle ?? 'Preço justo'
+  const fairNoun = fairTitle.toLowerCase()
+  const statusLabel = valuationStatusLabel(marginOfSafety)
+  const statusCaption = statusLabel && fairValueTitle ? statusLabel.replace('preço justo', fairNoun) : statusLabel
   const scoreValue = score?.value
   const hasScore = typeof scoreValue === 'number' && Number.isFinite(scoreValue)
 
@@ -134,7 +141,7 @@ export function AssetHeader({
         <Stat label="Preço" value={formatBRL(price)} delta={dayChange} deltaLabel="hoje" />
         <div className="min-w-0">
           <Stat
-            label="Preço justo"
+            label={fairTitle}
             value={formatBRL(fairValue)}
             caption={fairValueLabel}
             locked={fairLocked}
@@ -145,9 +152,9 @@ export function AssetHeader({
           label="Margem de segurança"
           value={formatDeltaPct(marginOfSafety)}
           tone={marginTone}
-          caption={valuationStatusLabel(marginOfSafety) ?? undefined}
+          caption={statusCaption ?? undefined}
           locked={fairLocked}
-          hint="Quanto o preço atual está abaixo (positivo) ou acima (negativo) do preço justo estimado: 1 − preço ÷ preço justo."
+          hint={`Quanto o preço atual está abaixo (positivo) ou acima (negativo) do ${fairNoun} estimado: 1 − preço ÷ ${fairNoun}.`}
         />
         <Stat
           label="Score"

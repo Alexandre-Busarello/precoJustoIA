@@ -678,6 +678,7 @@ export default async function BdrPage({ params }: PageProps) {
                   financials={serializedFinancials}
                   userIsPremium={canViewFullContent}
                   companyId={companyData.id}
+                  reportsHref={`/bdr/${ticker.toLowerCase()}/relatorios`}
                 />
               </div>
               <MarketSentimentSection

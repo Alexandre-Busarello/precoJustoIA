@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { AIReportFeedback } from '@/components/ai-report-feedback'
 import { useAIReports } from '@/hooks/use-company-data'
+import { useHydrated } from '@/components/strategic-analysis-client'
 import { formatDate, formatNumber } from '@/lib/format'
 
 interface AIReport {
@@ -150,8 +151,17 @@ export default function AIAnalysisDual({
   // Evita chamadas de geração simultâneas
   const isGeneratingRef = useRef(false)
 
-  const { data: monthlyData, isLoading: isLoadingMonthly, error: monthlyError, refetch: refetchMonthly } = useAIReports(ticker, 'MONTHLY_OVERVIEW')
-  const { data: changesData, isLoading: isLoadingChanges } = useAIReports(ticker, 'FUNDAMENTAL_CHANGE')
+  const monthlyQuery = useAIReports(ticker, 'MONTHLY_OVERVIEW')
+  const changesQuery = useAIReports(ticker, 'FUNDAMENTAL_CHANGE')
+  // useAIReports semeia os dados a partir do localStorage no primeiro render do cliente; até a hidratação
+  // terminar, repetimos o estado do servidor (carregando, sem dados) para não haver mismatch no reload.
+  const hydrated = useHydrated()
+  const monthlyData = hydrated ? monthlyQuery.data : undefined
+  const isLoadingMonthly = !hydrated || monthlyQuery.isLoading
+  const monthlyError = hydrated ? monthlyQuery.error : null
+  const refetchMonthly = monthlyQuery.refetch
+  const changesData = hydrated ? changesQuery.data : undefined
+  const isLoadingChanges = !hydrated || changesQuery.isLoading
 
   const monthlyReport = monthlyData?.success && monthlyData.report ? monthlyData.report as unknown as AIReport : null
   const changeReports = changesData?.success && changesData.reports ? changesData.reports as unknown as AIReport[] : []

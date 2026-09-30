@@ -41,7 +41,8 @@ const HEADING_BASE = 'scroll-mt-24 font-semibold tracking-tight text-foreground 
 function buildComponents(scale: keyof typeof HEADING): Components {
   const heading = HEADING[scale]
   return {
-    h1: (props) => <h1 {...domProps(props)} className={cn(HEADING_BASE, heading.h1)} />,
+    // "#" do markdown vira <h2> com cara de título: a página que hospeda o texto já tem o seu <h1>.
+    h1: (props) => <h2 {...domProps(props)} className={cn(HEADING_BASE, heading.h1)} />,
     h2: (props) => <h2 {...domProps(props)} className={cn(HEADING_BASE, heading.h2)} />,
     h3: (props) => <h3 {...domProps(props)} className={cn(HEADING_BASE, heading.h3)} />,
     h4: (props) => <h4 {...domProps(props)} className={cn(HEADING_BASE, heading.h4)} />,
@@ -118,7 +119,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
     <article
       className={cn(
         'prose prose-sm sm:prose-base dark:prose-invert max-w-none min-w-0 break-words text-foreground',
-        compact ? 'text-sm leading-6' : 'text-sm leading-6 sm:text-base sm:leading-7',
+        compact ? 'text-sm leading-6' : 'text-base leading-7',
         className
       )}
     >

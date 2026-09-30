@@ -24,6 +24,7 @@ import { AddToBacktestButton } from '@/components/add-to-backtest-button'
 import { Button } from '@/components/ui/button'
 import {
   ComparisonTable,
+  ComparisonLockedNotice,
   type ComparisonBetter,
   type ComparisonGroup,
   type ComparisonRow,
@@ -149,8 +150,9 @@ async function executeStrategiesForCompany(company: Record<string, unknown>, use
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const resolvedParams = await params
   const tickersParam = resolvedParams.tickers // Manter tickers originais da URL
-  const tickers = tickersParam.map((t) => t.toUpperCase()) // Maiúsculo apenas para consulta no BD
-  const canonical = `/compara-acoes/${tickersParam.map((t) => t.toLowerCase()).join('/')}`
+  // Maiúsculo apenas para consulta no BD; sem repetidos e no máximo 6 ativos
+  const tickers = [...new Set(tickersParam.map((t) => t.toUpperCase()))].slice(0, 6)
+  const canonical = `/compara-acoes/${tickers.map((t) => t.toLowerCase()).join('/')}`
 
   if (tickers.length < 2) {
     return {
@@ -165,8 +167,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       select: { ticker: true, name: true, sector: true },
     })
 
-    const foundTickers = companies.map((c) => c.ticker).join(' vs ')
-    const companyNames = companies.map((c) => c.name).join(', ')
+    // Mesma ordem da URL (e do H1/colunas), não a ordem do banco
+    const ordered = [...companies].sort((a, b) => tickers.indexOf(a.ticker) - tickers.indexOf(b.ticker))
+    const foundTickers = ordered.map((c) => c.ticker).join(' vs ')
+    const companyNames = ordered.map((c) => c.name).join(', ')
 
     const title = `Comparação ${foundTickers} | Análise Comparativa de Ações`
     const description = `Compare as ações ${foundTickers} (${companyNames}) com análise fundamentalista completa. Indicadores financeiros, valuation, estratégias de investimento e scores lado a lado.`
@@ -214,7 +218,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function CompareStocksPage({ params }: PageProps) {
   const resolvedParams = await params
   const tickersParam = resolvedParams.tickers // Manter tickers originais da URL
-  const tickers = tickersParam.map((t) => t.toUpperCase()) // Maiúsculo apenas para consulta no BD
+  // Maiúsculo apenas para consulta no BD; sem repetidos e no máximo 6 ativos
+  const tickers = [...new Set(tickersParam.map((t) => t.toUpperCase()))].slice(0, 6)
 
   // Validar se há pelo menos 2 tickers
   if (tickers.length < 2) {
@@ -610,14 +615,11 @@ export default async function CompareStocksPage({ params }: PageProps) {
         }}
         lockedNotice={
           shouldShowAnonLimitCTA ? undefined : (
-            <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                ROIC, margem, endividamento, crescimento e as notas por modelo ficam disponíveis no Premium.
-              </p>
-              <Button asChild size="sm" className="shrink-0">
-                <Link href="/planos">Ver planos</Link>
-              </Button>
-            </div>
+            <ComparisonLockedNotice
+              message="ROIC, margem, endividamento, crescimento e as notas por modelo ficam disponíveis no Premium."
+              href="/planos"
+              cta="Ver planos"
+            />
           )
         }
       />

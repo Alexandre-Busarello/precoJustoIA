@@ -401,7 +401,8 @@ export default async function FiiPage({ params }: PageProps) {
   const fairValueLabel =
     fiiValuation?.upsideSource === 'valor_patrimonial'
       ? fiiListingFairValueModelLabel('valor_patrimonial') ?? undefined
-      : `Preço-teto (DY-alvo ${formatPct(FII_LISTING_TARGET_DY, { digits: 0 })})`
+      : `DY-alvo ${formatPct(FII_LISTING_TARGET_DY, { digits: 0 })}`
+  const fairValueTitle = fiiValuation?.upsideSource === 'valor_patrimonial' ? undefined : 'Preço-teto'
 
   const segment: string | null = companyData.fiiData?.segment || companyData.sector || null
   // Só carimbos de data e hora reais: `daily_quotes.date` é só data e mostraria um horário inventado.
@@ -445,6 +446,7 @@ export default async function FiiPage({ params }: PageProps) {
           price={price}
           dayChange={dayChange}
           fairValue={fairValue}
+          fairValueTitle={fairValueTitle}
           fairValueLabel={fairValue !== null ? fairValueLabel : undefined}
           marginOfSafety={marginOfSafety(price, fairValue)}
           score={fiiScore ? { value: fiiScore.score, label: fiiScoreLabel(fiiScore.classification) } : null}
@@ -514,15 +516,22 @@ export default async function FiiPage({ params }: PageProps) {
                   />
                 </section>
 
-                <AIAnalysisDual
-                  ticker={ticker}
-                  name={fullCompany!.name}
-                  sector={fullCompany!.sector}
-                  currentPrice={currentPrice}
-                  financials={serializedFinancials}
-                  userIsPremium={canViewFullContent}
-                  companyId={fullCompany!.id}
-                />
+                <section aria-labelledby="analise-ia" className="space-y-4">
+                  <SectionHeader
+                    id="analise-ia"
+                    title="Análise com IA"
+                    description="Relatório gerado por IA a partir dos dados públicos do fundo."
+                  />
+                  <AIAnalysisDual
+                    ticker={ticker}
+                    name={fullCompany!.name}
+                    sector={fullCompany!.sector}
+                    currentPrice={currentPrice}
+                    financials={serializedFinancials}
+                    userIsPremium={canViewFullContent}
+                    companyId={fullCompany!.id}
+                  />
+                </section>
               </>
             )}
 

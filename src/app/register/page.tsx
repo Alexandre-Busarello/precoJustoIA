@@ -124,7 +124,7 @@ function RegisterForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-md px-4">
         <Card className="w-full">
           <CardHeader className="space-y-1">

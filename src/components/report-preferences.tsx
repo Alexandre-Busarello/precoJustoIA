@@ -81,7 +81,7 @@ export default function ReportPreferences({ initialPreferences }: ReportPreferen
         <h2 id="report-preferences" className="text-lg font-semibold tracking-tight text-foreground">
           O que você recebe por e-mail
         </h2>
-        <p className="text-sm text-muted-foreground">Vale para todos os ativos da lista abaixo.</p>
+        <p className="text-sm text-muted-foreground">Vale para todos os ativos da lista acima.</p>
       </div>
       <ul className="divide-y divide-border rounded-lg border border-border bg-card">
         {REPORT_TYPES.map((type) => (

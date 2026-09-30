@@ -67,8 +67,8 @@ export async function GET(request: NextRequest) {
         dividendHistory: {
           where: {
             exDate: {
-              // Buscar dividendos dos últimos 4 meses
-              gte: new Date(new Date().setMonth(new Date().getMonth() - 4)),
+              // Dividendos desde o dia 1 do 4º mês anterior: o calendário desenha os 4 meses passados inteiros
+              gte: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth() - 4, 1)),
             },
           },
           orderBy: { exDate: 'desc' },

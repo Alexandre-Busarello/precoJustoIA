@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { InfoHint } from '@/components/ui/info-hint'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 
 /**
  * Tabela única de comparação: linhas = indicadores (agrupados), colunas = ativos (até 6).
@@ -333,7 +334,23 @@ export function ComparisonTable({
         Melhor valor da linha, considerando o dado mais recente.
       </p>
 
-      {hasLocked && lockedNotice}
+      {/* Fragmento criado aqui: o elemento vindo do servidor não entra direto na lista de filhos (aviso de key do React 19). */}
+      {hasLocked && lockedNotice ? <>{lockedNotice}</> : null}
     </section>
+  )
+}
+
+/**
+ * Aviso das linhas bloqueadas. Fica neste módulo (cliente) para a página do servidor passar só
+ * `<ComparisonLockedNotice />`, sem montar filhos no servidor (evita o aviso de `key` do React na hidratação).
+ */
+export function ComparisonLockedNotice({ message, href, cta }: { message: string; href: string; cta: string }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-muted-foreground">{message}</p>
+      <Button asChild size="sm" className="shrink-0">
+        <Link href={href}>{cta}</Link>
+      </Button>
+    </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreHorizontal, Plus, Receipt, Settings, LineChart, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,8 @@ interface Portfolio {
 const fetchPortfolios = async (): Promise<Portfolio[]> => {
   try {
     const response = await fetch('/api/portfolio');
+    // Visitante sem sessão: não há carteiras para listar (não é erro).
+    if (response.status === 401) return [];
     if (!response.ok) {
       throw new Error('Erro ao carregar carteiras');
     }
@@ -134,21 +137,25 @@ export function PortfolioListPage() {
   const { toast } = useToast();
   const { isPremium } = usePremiumStatus();
   const queryClient = useQueryClient();
+  // Sem sessão não busca (a API responde 401): o visitante vê o estado vazio com o convite para criar.
+  const { status: sessionStatus } = useSession();
 
   const {
     data: portfoliosData,
-    isLoading: loading,
+    isLoading: queryLoading,
     error: portfoliosError,
     refetch,
   } = useQuery({
     queryKey: ['portfolios'],
     queryFn: fetchPortfolios,
+    enabled: sessionStatus === 'authenticated',
     refetchOnMount: true,
     refetchOnWindowFocus: false,
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
   });
 
+  const loading = sessionStatus === 'loading' || queryLoading;
   const portfolios = Array.isArray(portfoliosData) ? portfoliosData : [];
   const [showConvertBacktestModal, setShowConvertBacktestModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
@@ -161,11 +168,12 @@ export function PortfolioListPage() {
 
   // A primeira leitura logo após criar uma carteira pode vir vazia: refaz uma vez.
   useEffect(() => {
+    if (sessionStatus !== 'authenticated') return;
     if (!loading && portfolios.length === 0 && !portfoliosError && !hasRefetchedRef.current) {
       hasRefetchedRef.current = true;
       refetch();
     }
-  }, [loading, portfolios.length, portfoliosError, refetch]);
+  }, [sessionStatus, loading, portfolios.length, portfoliosError, refetch]);
 
   const handleCreatePortfolio = () => {
     if (!isPremium && portfolios.length >= 1) {

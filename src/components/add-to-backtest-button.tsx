@@ -7,13 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BacktestConfigSelector } from '@/components/backtest-config-selector';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
-import { 
-  BarChart3, 
-  Check, 
-  Crown,
-  Loader2,
-  Settings
-} from 'lucide-react';
+import { BarChart3, Check, Loader2, Lock, Settings } from 'lucide-react';
+
+const ICON = 'size-4';
 
 // Interface para o ativo
 interface AssetData {
@@ -64,7 +60,7 @@ export function AddToBacktestButton({
   const handleAddToBacktest = () => {
     // Verificar se usuário está logado
     if (!session?.user?.id) {
-      router.push('/login?redirect=/backtest');
+      router.push('/login?callbackUrl=%2Fbacktest');
       return;
     }
 
@@ -102,9 +98,10 @@ export function AddToBacktestButton({
         disabled
         className={className}
         title="Backtest indisponível para FIIs (sem histórico de preços diário adequado)"
+        aria-label={showLabel ? undefined : 'Backtest indisponível para FIIs'}
       >
-        <BarChart3 className="w-4 h-4 mr-2" />
-        {showLabel && 'Backtest (indisponível)'}
+        <BarChart3 className={ICON} strokeWidth={1.75} aria-hidden="true" />
+        {showLabel && 'Backtest indisponível'}
       </Button>
     );
   }
@@ -115,11 +112,12 @@ export function AddToBacktestButton({
       <Button
         variant={variant}
         size={size}
-        onClick={() => router.push('/login?redirect=/backtest')}
+        onClick={() => router.push('/login?callbackUrl=%2Fbacktest')}
         className={className}
+        aria-label={showLabel ? undefined : 'Entrar para usar o backtest'}
       >
-        <BarChart3 className="w-4 h-4 mr-2" />
-        {showLabel && 'Fazer Login'}
+        <BarChart3 className={ICON} strokeWidth={1.75} aria-hidden="true" />
+        {showLabel && 'Entrar para testar'}
       </Button>
     );
   }
@@ -132,9 +130,10 @@ export function AddToBacktestButton({
         size={size}
         disabled
         className={className}
+        aria-label={showLabel ? undefined : 'Carregando'}
       >
-        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-        {showLabel && 'Carregando...'}
+        <Loader2 className={`${ICON} animate-spin`} strokeWidth={1.75} aria-hidden="true" />
+        {showLabel && 'Carregando'}
       </Button>
     );
   }
@@ -145,10 +144,11 @@ export function AddToBacktestButton({
         variant={variant}
         size={size}
         onClick={() => router.push('/dashboard?upgrade=backtest')}
-        className={`${className} border-yellow-300 text-yellow-700 hover:bg-yellow-50`}
+        className={className}
+        aria-label={showLabel ? undefined : 'Backtest (Premium)'}
       >
-        <Crown className="w-4 h-4 mr-2" />
-        {showLabel && 'Premium'}
+        <Lock className={ICON} strokeWidth={1.75} aria-hidden="true" />
+        {showLabel && 'Backtest (Premium)'}
       </Button>
     );
   }
@@ -158,22 +158,18 @@ export function AddToBacktestButton({
     <>
       <div className="flex items-center gap-2">
         <Button
-          variant={isAdded ? 'default' : variant}
+          variant={variant}
           size={size}
           onClick={handleAddToBacktest}
-          className={`${className} ${isAdded ? 'bg-green-600 hover:bg-green-700 border-green-600' : ''}`}
+          className={className}
+          aria-label={showLabel ? undefined : isAdded ? 'Adicionado ao backtest' : 'Adicionar ao backtest'}
         >
           {isAdded ? (
-            <Check className="w-4 h-4 mr-2" />
+            <Check className={ICON} strokeWidth={1.75} aria-hidden="true" />
           ) : (
-            <Settings className="w-4 h-4 mr-2" />
+            <Settings className={ICON} strokeWidth={1.75} aria-hidden="true" />
           )}
-          
-          {showLabel && (
-            <span>
-              {isAdded ? 'Adicionado' : 'Backtest'}
-            </span>
-          )}
+          {showLabel && <span>{isAdded ? 'Adicionado ao backtest' : 'Adicionar ao backtest'}</span>}
         </Button>
 
         {/* Contador de ativos (se houver) */}
@@ -213,16 +209,11 @@ function BacktestCounter({ onGoToBacktest }: { onGoToBacktest: () => void }) {
   if (count === 0) return null;
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={onGoToBacktest}
-      className="text-xs px-2 py-1 h-auto"
-    >
-      <Badge variant="default" className="bg-blue-600 text-white">
+    <Button variant="ghost" size="sm" onClick={onGoToBacktest}>
+      <Badge variant="brand" className="tabular-nums">
         {count}
       </Badge>
-      <span className="ml-1">Ver Carteira</span>
+      Ver backtest
     </Button>
   );
 }

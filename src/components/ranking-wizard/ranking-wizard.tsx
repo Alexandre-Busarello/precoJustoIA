@@ -1,101 +1,98 @@
 'use client'
 
-import { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { useWizardState } from './use-wizard-state'
-import { WizardStepper } from './wizard-stepper'
-import { StepDestination } from './steps/step-destination'
-import { StepHistory } from './steps/step-history'
-import { StepAssetType } from './steps/step-asset-type'
-import { StepConfigure } from './steps/step-configure'
+import { useCallback, useState } from 'react'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { QuickRanker } from '@/components/quick-ranker'
+import { RankingHistorySection } from '@/components/ranking-history-section'
+import type { RankingUniverse } from '@/lib/ranking-models'
+import { applyRankingSelection, parseRankingUrl, type RankingTab } from './ranking-url'
 
 interface RankingWizardProps {
   isLoggedIn: boolean
+  /** Sessão ainda carregando: a aba Histórico espera antes de pedir login. */
+  sessionLoading?: boolean
 }
 
-const slideVariants = {
-  enterForward: { x: '100%', opacity: 0 },
-  enterBackward: { x: '-100%', opacity: 0 },
-  center: { x: 0, opacity: 1 },
-  exitForward: { x: '-100%', opacity: 0 },
-  exitBackward: { x: '100%', opacity: 0 },
-}
+/** Troca de aba com fade curto; some com `prefers-reduced-motion`. */
+const TAB_TRANSITION = 'animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none'
 
-const fadeVariants = {
-  enterForward: { opacity: 0 },
-  enterBackward: { opacity: 0 },
-  center: { opacity: 1 },
-  exitForward: { opacity: 0 },
-  exitBackward: { opacity: 0 },
-}
+/**
+ * Ferramenta de rankings: abre direto no ranking padrão (aba Ranking) e guarda os rankings gerados na aba Histórico.
+ * O estado vive na URL: `?tab=historico`, `?id=<ranking salvo>`, `?assetType=` e `?model=` (links antigos continuam valendo).
+ */
+export function RankingWizard({ isLoggedIn, sessionLoading = false }: RankingWizardProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [initial] = useState(() => parseRankingUrl(searchParams))
+  const { tab, rankingId } = parseRankingUrl(searchParams)
+  const [historyRefresh, setHistoryRefresh] = useState(0)
 
-function useReducedMotion() {
-  if (typeof window === 'undefined') return false
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
+  const replaceParams = useCallback(
+    (update: (params: URLSearchParams) => void) => {
+      const next = new URLSearchParams(searchParams.toString())
+      update(next)
+      const query = next.toString()
+      router.replace(query ? `/ranking?${query}` : '/ranking', { scroll: false })
+    },
+    [router, searchParams]
+  )
 
-export function RankingWizard({ isLoggedIn }: RankingWizardProps) {
-  const { state, navigate } = useWizardState()
-  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0)
-  const reducedMotion = useReducedMotion()
+  const changeTab = (value: string) => {
+    const nextTab = value as RankingTab
+    replaceParams((params) => {
+      params.delete('s')
+      if (nextTab === 'historico') params.set('tab', 'historico')
+      else params.delete('tab')
+    })
+  }
 
-  const variants = reducedMotion ? fadeVariants : slideVariants
-  const transitionDuration = reducedMotion ? 0.2 : 0.28
-
-  const enterVariant = state.direction === 'forward' ? 'enterForward' : 'enterBackward'
-  const exitVariant = state.direction === 'forward' ? 'exitForward' : 'exitBackward'
+  const changeSelection = useCallback(
+    (modelKey: string, universe: RankingUniverse) => replaceParams((params) => applyRankingSelection(params, modelKey, universe)),
+    [replaceParams]
+  )
+  const refreshHistory = useCallback(() => setHistoryRefresh((value) => value + 1), [])
 
   return (
-    <div className="w-full">
-      {/* Stepper */}
-      <WizardStepper flow={state.flow} currentStep={state.step} />
+    <Tabs value={tab} onValueChange={changeTab} className="gap-6">
+      <TabsList variant="underline">
+        <TabsTrigger value="ranking">Ranking</TabsTrigger>
+        <TabsTrigger value="historico">Histórico</TabsTrigger>
+      </TabsList>
 
-      {/* Step content with animation */}
-      <div className="relative overflow-hidden">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={state.step}
-            initial={enterVariant}
-            animate="center"
-            exit={exitVariant}
-            variants={variants}
-            transition={{ duration: transitionDuration }}
-            style={{ willChange: 'transform, opacity' }}
-          >
-            {state.step === 'destination' && (
-              <StepDestination
-                isLoggedIn={isLoggedIn}
-                onSelect={navigate.selectFlow}
-              />
-            )}
+      <TabsContent value="ranking" forceMount className={`data-[state=inactive]:hidden ${TAB_TRANSITION}`}>
+        <QuickRanker
+          isLoggedIn={isLoggedIn}
+          initialUniverse={initial.universe}
+          initialModelKey={initial.modelKey}
+          rankingId={rankingId}
+          onRankingGenerated={refreshHistory}
+          onSelectionChange={changeSelection}
+        />
+      </TabsContent>
 
-            {state.step === 'history' && (
-              <StepHistory
-                onLoadRanking={navigate.loadRanking}
-                onBack={navigate.back}
-                onCreateNew={() => navigate.selectFlow('new')}
-                refreshTrigger={historyRefreshTrigger}
-              />
-            )}
-
-            {state.step === 'asset-type' && (
-              <StepAssetType
-                onSelect={navigate.selectAssetType}
-                onBack={navigate.back}
-              />
-            )}
-
-            {state.step === 'configure' && (
-              <StepConfigure
-                assetType={state.assetType}
-                rankingId={state.rankingId}
-                onBack={navigate.back}
-                onRankingGenerated={() => setHistoryRefreshTrigger((t) => t + 1)}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </div>
+      <TabsContent value="historico" className={TAB_TRANSITION}>
+        {isLoggedIn ? (
+          <RankingHistorySection onLoadRanking={(id) => router.push(`/ranking?id=${id}`)} refreshTrigger={historyRefresh} />
+        ) : sessionLoading ? null : (
+          <div className="rounded-lg border border-dashed border-border bg-card px-4 py-10 text-center">
+            <p className="text-sm font-medium text-foreground">Entre para ver seu histórico</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+              Com a conta grátis, cada ranking que você gera fica salvo com os parâmetros usados.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <Button asChild size="sm">
+                <Link href="/register">Criar conta grátis</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/login?callbackUrl=%2Franking%3Ftab%3Dhistorico">Entrar</Link>
+              </Button>
+            </div>
+          </div>
+        )}
+      </TabsContent>
+    </Tabs>
   )
 }

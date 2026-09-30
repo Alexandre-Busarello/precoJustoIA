@@ -1,0 +1,515 @@
+/**
+ * Registro tipado dos modelos de ranking exibidos em /ranking.
+ *
+ * A UI (seletor de modelo, painel de parâmetros, coluna de score e preço justo) é montada só a partir
+ * deste registro: um modelo novo precisa apenas de uma entrada aqui e do suporte correspondente na API
+ * (`/api/rank-builder` para ações e FIIs, `/api/etf-ranking` para ETFs).
+ *
+ * Unidades dos parâmetros: percentuais são **frações** (0,2 = 20%), como a API espera.
+ */
+
+export type RankingAssetType = 'stock' | 'fii' | 'etf' | 'bdr'
+export type RankingPlan = 'free' | 'premium'
+
+/** Universo escolhido no seletor "Classe de ativo" (é o `assetTypeFilter` enviado à API). */
+export type RankingUniverse = 'b3' | 'bdr' | 'both' | 'fii' | 'etf'
+
+export type RankingParamValue = string | number | boolean
+export type RankingParams = Record<string, unknown>
+
+/** Formato do valor de um parâmetro numérico. */
+export type RankingParamUnit = 'pct' | 'multiple' | 'number' | 'brl'
+
+interface RankingFieldBase {
+  key: string
+  label: string
+  hint?: string
+}
+
+export interface RankingSliderField extends RankingFieldBase {
+  kind: 'slider'
+  unit: RankingParamUnit
+  min: number
+  max: number
+  step: number
+}
+
+export interface RankingSelectField extends RankingFieldBase {
+  kind: 'select'
+  options: Array<{ value: string | number; label: string }>
+}
+
+export interface RankingSwitchField extends RankingFieldBase {
+  kind: 'switch'
+}
+
+export type RankingParamField = RankingSliderField | RankingSelectField | RankingSwitchField
+
+export interface RankingModel {
+  key: string
+  label: string
+  plan: RankingPlan
+  assetType: RankingAssetType
+  /** Uma frase: o que o modelo procura. */
+  description: string
+  /** Modelos com IA nunca rodam automaticamente (custo e tempo de execução). */
+  isAi?: boolean
+  /**
+   * O tamanho do resultado depende do plano de quem pede (ex.: ETFs: 10 no gratuito, lista completa no Premium).
+   * A prévia automática desses modelos precisa levar a sessão quando o usuário é Premium.
+   */
+  planLimitedResults?: boolean
+  /** Parâmetros editáveis no painel. */
+  fields: RankingParamField[]
+  /** Parâmetros iniciais (inclui os fixos, que não aparecem no painel). */
+  defaults: (universe: RankingUniverse) => RankingParams
+  /** Métrica de `key_metrics` exibida na coluna Score. */
+  score?: { key: string; label: string; format: 'score' | 'pct' }
+  /** Métrica de `key_metrics` usada como preço de referência no lugar de `fairValue` (ex.: preço-teto). */
+  fairValueKey?: string
+  /** Rótulo da coluna de preço de referência (padrão "Preço justo"). */
+  fairValueLabel?: string
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Campos reutilizados
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMPANY_SIZE: RankingSelectField = {
+  kind: 'select',
+  key: 'companySize',
+  label: 'Tamanho da empresa',
+  options: [
+    { value: 'all', label: 'Todas as empresas' },
+    { value: 'small_caps', label: 'Small caps (até R$ 2 bi)' },
+    { value: 'mid_caps', label: 'Médias (R$ 2 bi a R$ 10 bi)' },
+    { value: 'blue_chips', label: 'Large caps (acima de R$ 10 bi)' },
+  ],
+}
+
+const TECHNICAL: RankingSwitchField = {
+  kind: 'switch',
+  key: 'useTechnicalAnalysis',
+  label: 'Priorizar ativos em sobrevenda',
+  hint: 'Reordena o resultado pelo RSI e pelo estocástico: ativos em sobrevenda aparecem primeiro. Não altera os critérios do modelo.',
+}
+
+const TIPO_FII: RankingSelectField = {
+  kind: 'select',
+  key: 'tipoFii',
+  label: 'Tipo de FII',
+  options: [
+    { value: 'both', label: 'Tijolo e papel' },
+    { value: 'tijolo', label: 'Só tijolo' },
+    { value: 'papel', label: 'Só papel' },
+  ],
+  hint: 'FIIs de tijolo têm imóveis físicos; os de papel investem em CRIs e outros títulos.',
+}
+
+function fiiLiquidityField(): RankingSelectField {
+  return {
+    kind: 'select',
+    key: 'minLiquidity',
+    label: 'Liquidez diária mínima',
+    options: [
+      { value: 100_000, label: 'R$ 100 mil' },
+      { value: 300_000, label: 'R$ 300 mil' },
+      { value: 500_000, label: 'R$ 500 mil' },
+      { value: 1_000_000, label: 'R$ 1 mi' },
+      { value: 5_000_000, label: 'R$ 5 mi' },
+    ],
+    hint: 'Volume médio negociado por dia. Mais liquidez facilita comprar e vender cotas.',
+  }
+}
+
+const isBdr = (universe: RankingUniverse) => universe === 'bdr'
+
+/** Parâmetros comuns aos modelos de ações. */
+function stockBase(): RankingParams {
+  return { companySize: 'all', useTechnicalAnalysis: true }
+}
+
+function etfPreset(key: string, label: string, description: string): RankingModel {
+  return {
+    key,
+    label,
+    plan: 'free',
+    assetType: 'etf',
+    description,
+    planLimitedResults: true,
+    fields: [],
+    defaults: () => ({}),
+    score: { key: 'etfScore', label: 'Score', format: 'score' },
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Registro
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const RANKING_MODELS: RankingModel[] = [
+  {
+    key: 'graham',
+    label: 'Número de Graham',
+    plan: 'free',
+    assetType: 'stock',
+    description: 'Preço justo pela fórmula de Graham (√(22,5 × LPA × VPA)) com filtros de rentabilidade, liquidez e endividamento.',
+    fields: [
+      COMPANY_SIZE,
+      {
+        kind: 'slider',
+        key: 'marginOfSafety',
+        label: 'Upside mínimo',
+        unit: 'pct',
+        min: 0.05,
+        max: 0.5,
+        step: 0.05,
+        hint: 'Diferença mínima entre o preço justo e o preço atual (preço justo ÷ preço − 1).',
+      },
+      TECHNICAL,
+    ],
+    defaults: (universe) => ({ ...stockBase(), marginOfSafety: isBdr(universe) ? 0.15 : 0.2 }),
+    score: { key: 'qualityScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'dividendYield',
+    label: 'Anti-armadilha de dividendos',
+    plan: 'premium',
+    assetType: 'stock',
+    description: 'Dividend yield médio alto com filtros de sustentabilidade que descartam yields inflados por queda de preço.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'minYield', label: 'Dividend yield mínimo', unit: 'pct', min: 0.02, max: 0.12, step: 0.005 },
+      TECHNICAL,
+    ],
+    defaults: (universe) => ({ ...stockBase(), minYield: isBdr(universe) ? 0.025 : 0.04 }),
+    score: { key: 'sustainabilityScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'lowPE',
+    label: 'P/L baixo com qualidade',
+    plan: 'premium',
+    assetType: 'stock',
+    description: 'P/L baixo combinado com médias históricas de ROE, margem e crescimento para evitar armadilhas de valor.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'maxPE', label: 'P/L máximo', unit: 'multiple', min: 5, max: 30, step: 1 },
+      { kind: 'slider', key: 'minROE', label: 'ROE mínimo', unit: 'pct', min: 0.05, max: 0.25, step: 0.01 },
+      TECHNICAL,
+    ],
+    defaults: (universe) => ({ ...stockBase(), maxPE: isBdr(universe) ? 25 : 12, minROE: 0.12 }),
+    score: { key: 'valueScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'magicFormula',
+    label: 'Fórmula Mágica',
+    plan: 'premium',
+    assetType: 'stock',
+    description: 'Método de Joel Greenblatt: combina retorno sobre o capital (ROIC) e earnings yield.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'limit', label: 'Número de resultados', unit: 'number', min: 5, max: 30, step: 5 },
+      TECHNICAL,
+    ],
+    defaults: () => ({ ...stockBase(), limit: 10 }),
+    score: { key: 'magicScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'fcd',
+    label: 'Fluxo de caixa descontado',
+    plan: 'premium',
+    assetType: 'stock',
+    description: 'Valor intrínseco pela projeção do fluxo de caixa livre da firma, descontado pelo custo de capital.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'growthRate', label: 'Crescimento anual', unit: 'pct', min: 0, max: 0.1, step: 0.005 },
+      { kind: 'slider', key: 'discountRate', label: 'Taxa de desconto (WACC)', unit: 'pct', min: 0.05, max: 0.2, step: 0.005 },
+      { kind: 'slider', key: 'yearsProjection', label: 'Anos de projeção', unit: 'number', min: 3, max: 10, step: 1 },
+      {
+        kind: 'slider',
+        key: 'minMarginOfSafety',
+        label: 'Upside mínimo',
+        unit: 'pct',
+        min: 0.1,
+        max: 0.5,
+        step: 0.05,
+        hint: 'Diferença mínima entre o preço justo e o preço atual (preço justo ÷ preço − 1).',
+      },
+      TECHNICAL,
+    ],
+    defaults: (universe) => ({
+      ...stockBase(),
+      growthRate: isBdr(universe) ? 0.03 : 0.025,
+      discountRate: isBdr(universe) ? 0.12 : 0.1,
+      yearsProjection: 5,
+      minMarginOfSafety: isBdr(universe) ? 0.1 : 0.15,
+      limit: 10,
+    }),
+    score: { key: 'fcdQualityScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'gordon',
+    label: 'Gordon',
+    plan: 'premium',
+    assetType: 'stock',
+    description: 'Preço justo pelo modelo de dividendos de Gordon, com taxas calibradas por setor.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'discountRate', label: 'Taxa de desconto', unit: 'pct', min: 0.05, max: 0.2, step: 0.005 },
+      { kind: 'slider', key: 'dividendGrowthRate', label: 'Crescimento dos dividendos', unit: 'pct', min: 0, max: 0.1, step: 0.005 },
+      {
+        kind: 'switch',
+        key: 'useSectoralAdjustment',
+        label: 'Ajuste setorial automático',
+        hint: 'Ajusta a taxa de desconto e o crescimento conforme o setor da empresa.',
+      },
+      TECHNICAL,
+    ],
+    defaults: (universe) => ({
+      ...stockBase(),
+      discountRate: isBdr(universe) ? 0.12 : 0.11,
+      dividendGrowthRate: isBdr(universe) ? 0.05 : 0.04,
+      useSectoralAdjustment: true,
+      sectoralWaccAdjustment: 0,
+      limit: 10,
+    }),
+    score: { key: 'compositeScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'fundamentalist',
+    label: 'Fundamentalista 3+1',
+    plan: 'premium',
+    assetType: 'stock',
+    description: 'Três indicadores essenciais (qualidade, preço e endividamento) adaptados ao perfil da empresa, com bônus de dividendos.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'minROE', label: 'ROE mínimo', unit: 'pct', min: 0.1, max: 0.3, step: 0.01 },
+      { kind: 'slider', key: 'minROIC', label: 'ROIC mínimo', unit: 'pct', min: 0.1, max: 0.3, step: 0.01 },
+      { kind: 'slider', key: 'maxDebtToEbitda', label: 'Dív. líq./EBITDA máxima', unit: 'multiple', min: 1, max: 6, step: 0.5 },
+      { kind: 'slider', key: 'minPayout', label: 'Payout mínimo', unit: 'pct', min: 0.2, max: 0.8, step: 0.05 },
+      { kind: 'slider', key: 'maxPayout', label: 'Payout máximo', unit: 'pct', min: 0.4, max: 1, step: 0.05 },
+      TECHNICAL,
+    ],
+    defaults: (universe) => ({
+      ...stockBase(),
+      minROE: 0.15,
+      minROIC: 0.15,
+      maxDebtToEbitda: isBdr(universe) ? 4 : 3,
+      minPayout: isBdr(universe) ? 0.3 : 0.4,
+      maxPayout: isBdr(universe) ? 0.9 : 0.8,
+      limit: 10,
+    }),
+    score: { key: 'fundamentalistScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'barsi',
+    label: 'Barsi',
+    plan: 'premium',
+    assetType: 'stock',
+    description: 'Dividendos em setores perenes, com preço-teto calculado pelo dividend yield alvo.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'targetDividendYield', label: 'Dividend yield alvo', unit: 'pct', min: 0.03, max: 0.1, step: 0.005 },
+      {
+        kind: 'slider',
+        key: 'maxPriceToPayMultiplier',
+        label: 'Multiplicador do preço-teto',
+        unit: 'multiple',
+        min: 0.8,
+        max: 1.5,
+        step: 0.1,
+      },
+      {
+        kind: 'slider',
+        key: 'minConsecutiveDividends',
+        label: 'Anos seguidos pagando dividendos',
+        unit: 'number',
+        min: 1,
+        max: 10,
+        step: 1,
+      },
+      { kind: 'slider', key: 'maxDebtToEquity', label: 'Dívida/PL máxima', unit: 'pct', min: 0.5, max: 2, step: 0.1 },
+      { kind: 'slider', key: 'minROE', label: 'ROE mínimo', unit: 'pct', min: 0.05, max: 0.25, step: 0.01 },
+      {
+        kind: 'switch',
+        key: 'focusOnBEST',
+        label: 'Só setores perenes',
+        hint: 'Bancos, energia elétrica, saneamento, seguros e telecomunicações.',
+      },
+      TECHNICAL,
+    ],
+    defaults: (universe) => ({
+      ...stockBase(),
+      targetDividendYield: isBdr(universe) ? 0.03 : 0.05,
+      maxPriceToPayMultiplier: 1,
+      minConsecutiveDividends: 3,
+      maxDebtToEquity: isBdr(universe) ? 1.5 : 1,
+      minROE: isBdr(universe) ? 0.12 : 0.1,
+      focusOnBEST: true,
+      limit: 10,
+    }),
+    score: { key: 'barsiScore', label: 'Score', format: 'score' },
+    fairValueKey: 'ceilingPrice',
+    fairValueLabel: 'Preço-teto',
+  },
+  {
+    key: 'ai',
+    label: 'Síntese com IA',
+    plan: 'premium',
+    assetType: 'stock',
+    isAi: true,
+    description: 'Estimativa gerada por IA que combina os modelos quantitativos. Leva alguns minutos e pode variar entre execuções.',
+    fields: [COMPANY_SIZE, TECHNICAL],
+    defaults: () => ({
+      ...stockBase(),
+      riskTolerance: 'Moderado',
+      timeHorizon: 'Longo Prazo',
+      focus: 'Crescimento e Valor',
+      limit: 10,
+    }),
+    score: { key: 'compositeScore', label: 'Score', format: 'score' },
+  },
+  {
+    key: 'fiiDividendYield',
+    label: 'Maior dividend yield (FIIs)',
+    plan: 'free',
+    assetType: 'fii',
+    description: 'FIIs ordenados pelo dividend yield, com limites de P/VP e liquidez para reduzir armadilhas.',
+    fields: [
+      TIPO_FII,
+      { kind: 'slider', key: 'minYield', label: 'Dividend yield mínimo', unit: 'pct', min: 0.04, max: 0.14, step: 0.005 },
+      { kind: 'slider', key: 'maxPvp', label: 'P/VP máximo', unit: 'multiple', min: 0.5, max: 1.5, step: 0.05 },
+      fiiLiquidityField(),
+    ],
+    defaults: () => ({ tipoFii: 'both', minYield: 0.08, maxPvp: 1.1, minLiquidity: 500_000, assetTypeFilter: 'fii', limit: 50 }),
+    score: { key: 'dy', label: 'DY', format: 'pct' },
+  },
+  {
+    key: 'fiiRanking',
+    label: 'Ranking PJ-FII',
+    plan: 'premium',
+    assetType: 'fii',
+    description: 'Score próprio de 0 a 100 com cinco pilares: dividendos, valuation, qualidade do portfólio, liquidez e gestão.',
+    fields: [
+      TIPO_FII,
+      { kind: 'slider', key: 'minScore', label: 'Score mínimo', unit: 'number', min: 40, max: 90, step: 5 },
+      fiiLiquidityField(),
+    ],
+    defaults: () => ({ tipoFii: 'both', minScore: 55, minLiquidity: 1_000_000, companySize: 'all', assetTypeFilter: 'fii', limit: 30 }),
+    score: { key: 'pjFiiScore', label: 'Score', format: 'score' },
+  },
+  etfPreset(
+    'etfs-melhor-score-geral',
+    'Maior score (ETFs)',
+    'ETFs com maior score composto: custo, retorno, liquidez, solidez e qualidade da carteira.'
+  ),
+  etfPreset('etfs-menor-taxa-administracao', 'Menor taxa de administração', 'ETFs com score a partir de 40, ordenados pela menor taxa de administração.'),
+  etfPreset('etfs-maior-retorno-1a', 'Maior retorno em 12 meses', 'ETFs com maior retorno em 12 meses (retorno de 6 meses anualizado quando falta histórico).'),
+  etfPreset('etfs-renda-fixa', 'Renda fixa (Selic e IPCA)', 'ETFs cujo índice de referência é Selic, IPCA, IRF-M ou IMA.'),
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Universos e helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const RANKING_UNIVERSES: Array<{ value: RankingUniverse; label: string }> = [
+  { value: 'b3', label: 'Ações B3' },
+  { value: 'bdr', label: 'BDRs' },
+  { value: 'both', label: 'Ações e BDRs' },
+  { value: 'fii', label: 'FIIs' },
+  { value: 'etf', label: 'ETFs' },
+]
+
+export const DEFAULT_RANKING_UNIVERSE: RankingUniverse = 'b3'
+export const DEFAULT_RANKING_MODEL = 'graham'
+
+/** Tipos de modelo aceitos em cada universo. */
+const UNIVERSE_ASSET_TYPES: Record<RankingUniverse, RankingAssetType[]> = {
+  b3: ['stock'],
+  bdr: ['stock', 'bdr'],
+  both: ['stock', 'bdr'],
+  fii: ['fii'],
+  etf: ['etf'],
+}
+
+/** Modelo aberto quando o usuário troca de universo e o modelo atual não se aplica. */
+const UNIVERSE_DEFAULT_MODEL: Record<RankingUniverse, string> = {
+  b3: DEFAULT_RANKING_MODEL,
+  bdr: DEFAULT_RANKING_MODEL,
+  both: DEFAULT_RANKING_MODEL,
+  fii: 'fiiDividendYield',
+  etf: 'etfs-melhor-score-geral',
+}
+
+export function isRankingUniverse(value: unknown): value is RankingUniverse {
+  return RANKING_UNIVERSES.some((u) => u.value === value)
+}
+
+export function getRankingModel(key: string | null | undefined): RankingModel | undefined {
+  if (!key) return undefined
+  return RANKING_MODELS.find((m) => m.key === key)
+}
+
+export function modelsForUniverse(universe: RankingUniverse): RankingModel[] {
+  const types = UNIVERSE_ASSET_TYPES[universe]
+  return RANKING_MODELS.filter((m) => types.includes(m.assetType))
+}
+
+export function isModelInUniverse(model: RankingModel, universe: RankingUniverse): boolean {
+  return UNIVERSE_ASSET_TYPES[universe].includes(model.assetType)
+}
+
+export function defaultModelForUniverse(universe: RankingUniverse): RankingModel {
+  return getRankingModel(UNIVERSE_DEFAULT_MODEL[universe]) ?? RANKING_MODELS[0]
+}
+
+/** Universo natural de um modelo (usado em links como `/ranking?model=fiiRanking`). */
+export function universeForModel(model: RankingModel, preferred: RankingUniverse = DEFAULT_RANKING_UNIVERSE): RankingUniverse {
+  if (isModelInUniverse(model, preferred)) return preferred
+  if (model.assetType === 'fii') return 'fii'
+  if (model.assetType === 'etf') return 'etf'
+  if (model.assetType === 'bdr') return 'bdr'
+  return 'b3'
+}
+
+export function canUseRankingModel(model: RankingModel, isPremium: boolean): boolean {
+  return model.plan === 'free' || isPremium
+}
+
+/** Modelo que pode rodar sem clique: liberado para o plano e sem IA. */
+export function canAutoRunRankingModel(model: RankingModel, isPremium: boolean): boolean {
+  return canUseRankingModel(model, isPremium) && !model.isAi
+}
+
+/**
+ * Credenciais da prévia automática (abertura da página). Sem sessão a API não grava o ranking no histórico,
+ * então modelos gratuitos vão sem cookies, exceto quando o plano muda o resultado e o usuário é Premium
+ * (senão ele receberia a lista cortada do plano gratuito). Modelos premium sempre exigem sessão.
+ */
+export function previewCredentials(model: RankingModel, isPremium: boolean): 'omit' | 'same-origin' {
+  if (model.plan !== 'free') return 'same-origin'
+  if (model.planLimitedResults && isPremium) return 'same-origin'
+  return 'omit'
+}
+
+/** Rótulo de um modelo salvo no histórico, inclusive os que saíram do registro. */
+export function rankingModelLabel(key: string): string {
+  const legacy: Record<string, string> = {
+    screening: 'Screening de ações',
+    fiiScreening: 'Screening de FIIs',
+  }
+  return getRankingModel(key)?.label ?? legacy[key] ?? key
+}
+
+/** Corpo enviado à API para um modelo de ações/FIIs (`/api/rank-builder`). */
+export function buildRankBuilderBody(model: RankingModel, universe: RankingUniverse, params: RankingParams) {
+  const assetTypeFilter = model.assetType === 'fii' ? 'fii' : universe
+  return {
+    model: model.key,
+    params: {
+      ...params,
+      includeBDRs: assetTypeFilter === 'both' || assetTypeFilter === 'bdr',
+      assetTypeFilter,
+    },
+  }
+}

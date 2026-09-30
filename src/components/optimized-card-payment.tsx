@@ -2,22 +2,31 @@
 
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { loadStripe } from '@stripe/stripe-js'
+import type { Stripe } from '@stripe/stripe-js'
+import { loadStripe } from '@stripe/stripe-js/pure'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { 
-  CreditCard, 
-  Lock, 
-  CheckCircle,
-  RefreshCw,
-  Shield
-} from 'lucide-react'
+import { CheckCircle, Lock, RefreshCw } from 'lucide-react'
+import { formatBRL } from '@/lib/format'
 import { usePaymentVerification } from '@/components/session-refresh-provider'
 import { StripeErrorDisplay, PaymentProcessingError } from '@/components/stripe-error-display'
 import { formatStripeError } from '@/lib/stripe-error-handler'
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+// Stripe.js só é baixado quando o formulário de cartão é renderizado (não no import do módulo).
+// Se o script falhar (bloqueador de anúncios, rede), a promessa resolve null e o botão fica desabilitado
+// em vez de gerar uma rejeição não tratada.
+let stripePromise: Promise<Stripe | null> | null = null
+function getStripe(): Promise<Stripe | null> {
+  if (!stripePromise) {
+    stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!).catch((error: unknown) => {
+      console.error('Falha ao carregar o Stripe.js', error)
+      stripePromise = null
+      return null
+    })
+  }
+  return stripePromise
+}
 
 interface OptimizedCardPaymentProps {
   planType: 'monthly' | 'annual' | 'special'
@@ -26,21 +35,25 @@ interface OptimizedCardPaymentProps {
   onError: (error: string) => void
 }
 
-const cardElementOptions = {
-  style: {
-    base: {
-      fontSize: '16px',
-      color: '#424770',
-      '::placeholder': {
-        color: '#aab7c4',
+/** O CardElement roda num iframe do Stripe e não lê CSS vars: cores fixas por tema, próximas dos tokens. */
+function getCardElementOptions(isDark: boolean) {
+  return {
+    style: {
+      base: {
+        fontSize: '16px',
+        color: isDark ? '#eef0f3' : '#1f2230',
+        iconColor: isDark ? '#a3a8b3' : '#6b7080',
+        '::placeholder': {
+          color: isDark ? '#8a8f99' : '#6b7080',
+        },
       },
-      padding: '12px',
+      invalid: {
+        color: isDark ? '#f0877c' : '#c2352b',
+        iconColor: isDark ? '#f0877c' : '#c2352b',
+      },
     },
-    invalid: {
-      color: '#9e2146',
-    },
-  },
-  hidePostalCode: true,
+    hidePostalCode: true,
+  }
 }
 
 function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardPaymentProps) {
@@ -52,6 +65,8 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
   const [setupData, setSetupData] = useState<any>(null)
   const [currentError, setCurrentError] = useState<any>(null)
   const { startVerification } = usePaymentVerification()
+  const { resolvedTheme } = useTheme()
+  const cardElementOptions = getCardElementOptions(resolvedTheme === 'dark')
 
   const handleRetry = () => {
     setPaymentStatus('idle')
@@ -176,16 +191,10 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
 
   if (paymentStatus === 'success') {
     return (
-      <div className="text-center py-8">
-        <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="w-10 h-10 text-green-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-green-600 mb-2">
-          Pagamento Aprovado!
-        </h3>
-        <p className="text-gray-600 dark:text-gray-300">
-          Sua assinatura Premium foi ativada com sucesso
-        </p>
+      <div role="status" className="py-6 text-center">
+        <CheckCircle className="mx-auto size-10 text-positive" strokeWidth={1.75} aria-hidden="true" />
+        <h3 className="mt-4 text-lg font-semibold text-foreground">Pagamento aprovado</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Sua assinatura Premium foi ativada. Redirecionando.</p>
       </div>
     )
   }
@@ -201,19 +210,12 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Header */}
-      <div className="text-center">
-        <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <CreditCard className="w-8 h-8 text-blue-600" />
-        </div>
-        <h3 className="text-lg font-semibold mb-2">Dados do Cartão</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          Assinatura recorrente - cancele quando quiser
-        </p>
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold text-foreground">Dados do cartão</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Assinatura com renovação automática. Cancele quando quiser.</p>
       </div>
 
-      {/* Error Display - Inline */}
       {paymentStatus === 'idle' && currentError && (
         <StripeErrorDisplay
           error={currentError}
@@ -224,81 +226,39 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
         />
       )}
 
-      {/* Card Input */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Número do cartão, validade e CVV
-              </label>
-              <div className="border rounded-lg p-3 bg-white dark:bg-gray-800">
-                <CardElement options={cardElementOptions} />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Security Info */}
-      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-        <div className="flex items-start space-x-3">
-          <Shield className="w-5 h-5 text-green-600 mt-0.5" />
-          <div>
-            <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1">
-              Pagamento Seguro
-            </h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Seus dados são protegidos com criptografia SSL de 256 bits. 
-              Processamento via Stripe, líder mundial em segurança de pagamentos.
-            </p>
-          </div>
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-foreground">Número do cartão, validade e CVV</label>
+        <div className="rounded-md border border-input bg-background px-3 py-3.5 focus-within:border-brand focus-within:ring-[3px] focus-within:ring-ring">
+          <CardElement options={cardElementOptions} />
         </div>
       </div>
 
-      {/* Features */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-        <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-          ✨ Sua assinatura inclui:
-        </h4>
-        <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-          <li>• Renovação automática</li>
-          <li>• Cancele a qualquer momento</li>
-          <li>• Acesso imediato após pagamento</li>
-          <li>• Suporte prioritário</li>
-        </ul>
-      </div>
+      <p className="flex items-start gap-2 text-sm text-muted-foreground">
+        <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        Os dados do cartão são enviados direto ao Stripe, com criptografia. Não armazenamos o número do cartão.
+      </p>
 
-      {/* Submit Button */}
-      <Button
-        type="submit"
-        disabled={!stripe || loading}
-        size="lg"
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-      >
+      <Button type="submit" disabled={!stripe || loading} className="h-12 w-full md:h-10">
         {loading ? (
           <>
-            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-            Processando...
+            <RefreshCw className="size-4 animate-spin" strokeWidth={1.75} />
+            Processando
           </>
         ) : (
-          <>
-            <Lock className="w-4 h-4 mr-2" />
-            Finalizar Assinatura - R$ {price}
-          </>
+          <>Assinar por {formatBRL(price)}</>
         )}
       </Button>
 
-      {/* Terms */}
-      <p className="text-xs text-gray-500 text-center">
-        Ao finalizar, você concorda com nossos{' '}
-        <a href="/termos-de-uso" className="text-blue-600 hover:underline">
+      <p className="text-center text-xs text-muted-foreground">
+        Ao assinar, você concorda com os{' '}
+        <a href="/termos-de-uso" className="text-brand underline-offset-4 hover:underline">
           Termos de Uso
         </a>{' '}
-        e{' '}
-        <a href="/lgpd" className="text-blue-600 hover:underline">
+        e a{' '}
+        <a href="/lgpd" className="text-brand underline-offset-4 hover:underline">
           Política de Privacidade
         </a>
+        .
       </p>
     </form>
   )
@@ -306,7 +266,7 @@ function CardPaymentForm({ planType, price, onSuccess, onError }: OptimizedCardP
 
 export function OptimizedCardPayment(props: OptimizedCardPaymentProps) {
   return (
-    <Elements stripe={stripePromise}>
+    <Elements stripe={getStripe()}>
       <CardPaymentForm {...props} />
     </Elements>
   )

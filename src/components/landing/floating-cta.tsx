@@ -1,77 +1,85 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Button } from "@/components/ui/button"
-import { X, Rocket, ArrowRight } from "lucide-react"
-import Link from "next/link"
-import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
-import { useSession } from "next-auth/react"
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useEngagementPixel } from '@/hooks/use-engagement-pixel'
+import { useSession } from 'next-auth/react'
+import { cn } from '@/lib/utils'
 
 interface FloatingCTAProps {
   text: string
   href: string
-  showAfterScroll?: number // pixels scrolled before showing
+  /** id do hero: a barra aparece depois que ele sai da tela. */
+  heroId?: string
+  /** id do CTA final: a barra some quando ele entra na tela (ou já passou). */
+  hideWhenVisibleId?: string
+  /** Fallback sem `heroId`: pixels rolados antes de aparecer. */
+  showAfterScroll?: number
   className?: string
 }
 
+/**
+ * Barra fina de CTA no rodapé da tela, só no mobile.
+ * Aparece quando o hero sai da viewport e some quando o CTA final aparece, para não duplicar ações.
+ */
 export function FloatingCTA({
   text,
   href,
+  heroId,
+  hideWhenVisibleId,
   showAfterScroll = 300,
-  className = ''
+  className,
 }: FloatingCTAProps) {
   const { data: session } = useSession()
   const { trackEngagement } = useEngagementPixel()
   const [isVisible, setIsVisible] = useState(false)
   const [isDismissed, setIsDismissed] = useState(false)
 
-  // Handler para disparar pixel quando usuário deslogado clica em CTA
-  const handleCTAClick = () => {
-    if (!session) {
-      trackEngagement()
-    }
-  }
-
   useEffect(() => {
     if (isDismissed) return
 
-    const handleScroll = () => {
-      const scrolled = window.scrollY
-      setIsVisible(scrolled > showAfterScroll)
+    const update = () => {
+      const viewportHeight = window.innerHeight
+      const hero = heroId ? document.getElementById(heroId) : null
+      const heroGone = hero ? hero.getBoundingClientRect().bottom <= 0 : window.scrollY > showAfterScroll
+      const finalCta = hideWhenVisibleId ? document.getElementById(hideWhenVisibleId) : null
+      const finalReached = finalCta ? finalCta.getBoundingClientRect().top < viewportHeight : false
+      setIsVisible(heroGone && !finalReached)
     }
 
-    // Verificar posição inicial
-    handleScroll()
-
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [showAfterScroll, isDismissed])
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [heroId, hideWhenVisibleId, showAfterScroll, isDismissed])
 
   if (isDismissed) return null
 
   return (
-    <div className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} ${className}`}>
-      <div className="bg-white dark:bg-background border-2 border-blue-600 rounded-full shadow-2xl px-4 py-2 flex items-center gap-3 max-w-md mx-auto">
-        <Button
-          size="sm"
-          className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white rounded-full px-6"
-          asChild
-        >
-          <Link href={href} onClick={handleCTAClick} className="flex items-center gap-2">
-            <Rocket className="w-4 h-4" />
-            <span className="font-semibold">{text}</span>
-            <ArrowRight className="w-4 h-4" />
+    <div
+      aria-hidden={!isVisible}
+      inert={!isVisible}
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] transition-transform duration-200 md:hidden',
+        isVisible ? 'translate-y-0' : 'translate-y-full',
+        className
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <Button className="flex-1" asChild>
+          <Link href={href} onClick={() => !session && trackEngagement()}>
+            {text}
           </Link>
         </Button>
-        <button
-          onClick={() => setIsDismissed(true)}
-          className="text-muted-foreground hover:text-foreground transition-colors p-1"
-          aria-label="Fechar"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <Button variant="ghost" size="icon" onClick={() => setIsDismissed(true)} aria-label="Fechar">
+          <X className="size-4" strokeWidth={1.75} />
+        </Button>
       </div>
     </div>
   )
 }
-

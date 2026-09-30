@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { usePaymentVerification } from '@/components/session-refresh-provider'
-import { Badge } from '@/components/ui/badge'
 import { CheckCircle, RefreshCw } from 'lucide-react'
 
 interface PaymentSuccessHandlerProps {
@@ -17,14 +16,12 @@ export function PaymentSuccessHandler({ isPremium: initialIsPremium }: PaymentSu
   useEffect(() => {
     // Se o usuário ainda não é Premium, iniciar verificação
     if (!initialIsPremium) {
-      console.log('Usuário ainda não é Premium, iniciando verificação...')
       startVerification()
       
       // Verificar periodicamente se a sessão foi atualizada
       const checkInterval = setInterval(async () => {
         const updatedUser = await checkSession()
         if (updatedUser && updatedUser.subscriptionTier === 'PREMIUM') {
-          console.log('Usuário agora é Premium!')
           setIsPremium(true)
           setIsChecking(false)
           clearInterval(checkInterval)
@@ -46,29 +43,19 @@ export function PaymentSuccessHandler({ isPremium: initialIsPremium }: PaymentSu
 
   if (isChecking && !isPremium) {
     return (
-      <div className="mb-6">
-        <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200">
-          <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-          Ativando sua conta Premium...
-        </Badge>
-        <p className="text-sm text-gray-600 mt-2">
-          Aguarde alguns segundos enquanto processamos seu pagamento.
-        </p>
-      </div>
+      <p role="status" className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground">
+        <RefreshCw className="size-4 animate-spin text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+        Ativando sua conta Premium. Isso leva alguns segundos.
+      </p>
     )
   }
 
   if (isPremium) {
     return (
-      <div className="mb-6">
-        <Badge className="bg-green-50 text-green-700 border-green-200">
-          <CheckCircle className="w-3 h-3 mr-1" />
-          Conta Premium Ativada
-        </Badge>
-        <p className="text-sm text-gray-600 mt-2">
-          Sua conta Premium foi ativada com sucesso! Aproveite todos os recursos exclusivos.
-        </p>
-      </div>
+      <p role="status" className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground">
+        <CheckCircle className="size-4 text-positive" strokeWidth={1.75} aria-hidden="true" />
+        Conta Premium ativada
+      </p>
     )
   }
 

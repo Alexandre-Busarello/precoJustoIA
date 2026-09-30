@@ -1,18 +1,16 @@
-'use client'
-
-import { useEffect, useState } from 'react'
+import { COVERED_COMPANIES_LABEL } from '@/lib/site-constants'
+import { FALLBACK_ANNUAL_PRICE_DECIMAL, FALLBACK_MONTHLY_PRICE_DECIMAL } from '@/lib/price-utils'
 
 interface StructuredDataProps {
   type: 'website' | 'organization' | 'article' | 'product'
   data?: Record<string, any>
 }
 
+/**
+ * JSON-LD global (renderizado no servidor, no HTML inicial).
+ * Não incluir nota média ou avaliações de usuários enquanto não houver avaliações reais coletadas.
+ */
 export function StructuredData({ type, data = {} }: StructuredDataProps) {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
   const getStructuredData = () => {
     const baseData = {
       '@context': 'https://schema.org',
@@ -106,40 +104,39 @@ export function StructuredData({ type, data = {} }: StructuredDataProps) {
           ...baseData,
           '@type': 'SoftwareApplication',
           name: 'Preço Justo AI',
-          description: 'Plataforma de análise fundamentalista com IA para ações da B3',
+          description: `Preço justo e valuation de ${COVERED_COMPANIES_LABEL} da B3 com 8 modelos de valuation, rankings, comparador e backtest.`,
           url: 'https://precojusto.ai',
           applicationCategory: 'FinanceApplication',
-          operatingSystem: 'Web Browser',
-          offers: {
-            '@type': 'Offer',
-            price: '0',
-            priceCurrency: 'BRL',
-            availability: 'https://schema.org/InStock',
-            priceValidUntil: '2025-12-31'
-          },
-          aggregateRating: {
-            '@type': 'AggregateRating',
-            ratingValue: '4.8',
-            reviewCount: '150',
-            bestRating: '5',
-            worstRating: '1'
-          },
-          author: {
+          operatingSystem: 'Web',
+          offers: [
+            { '@type': 'Offer', name: 'Grátis', price: '0', priceCurrency: 'BRL', availability: 'https://schema.org/InStock' },
+            {
+              '@type': 'Offer',
+              name: 'Premium mensal',
+              price: FALLBACK_MONTHLY_PRICE_DECIMAL,
+              priceCurrency: 'BRL',
+              availability: 'https://schema.org/InStock'
+            },
+            {
+              '@type': 'Offer',
+              name: 'Premium anual',
+              price: FALLBACK_ANNUAL_PRICE_DECIMAL,
+              priceCurrency: 'BRL',
+              availability: 'https://schema.org/InStock'
+            }
+          ],
+          publisher: {
             '@type': 'Organization',
-            name: 'Preço Justo AI'
+            name: 'Preço Justo AI',
+            url: 'https://precojusto.ai'
           },
-          screenshot: 'https://precojusto.ai/logo-preco-justo.png',
+          screenshot: 'https://precojusto.ai/images/product/acao-petr4.webp',
           ...data
         }
 
       default:
         return baseData
     }
-  }
-
-  // Só renderizar no cliente para evitar problemas de hidratação
-  if (!isClient) {
-    return null;
   }
 
   return (

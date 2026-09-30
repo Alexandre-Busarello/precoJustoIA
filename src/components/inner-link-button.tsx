@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { MouseEvent } from "react"
+import { cn } from "@/lib/utils"
 
 interface InnerLinkButtonProps {
   href: string
@@ -9,6 +10,7 @@ interface InnerLinkButtonProps {
   children: React.ReactNode
 }
 
+/** Link secundário dentro de um card clicável: navega sem disparar o clique do card. */
 export function InnerLinkButton({ href, className, children }: InnerLinkButtonProps) {
   const router = useRouter()
 
@@ -20,11 +22,10 @@ export function InnerLinkButton({ href, className, children }: InnerLinkButtonPr
   return (
     <button
       onClick={handleClick}
-      className={className}
+      className={cn("cursor-pointer text-sm font-medium text-brand underline-offset-4 hover:underline", className)}
       type="button"
     >
       {children}
     </button>
   )
 }
-

@@ -4,25 +4,17 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { 
-  CreditCard, 
-  Smartphone, 
-  Check, 
-  Shield, 
-  Clock,
-  Zap,
-  Lock,
-  AlertCircle,
-  Timer
-} from 'lucide-react'
+import { ArrowLeft, Check, CreditCard, Loader2, Smartphone, Timer } from 'lucide-react'
 import { toast } from 'sonner'
 import { OptimizedPixPayment } from './optimized-pix-payment'
 import { OptimizedCardPayment } from './optimized-card-payment'
+import { PREMIUM_FEATURES } from './landing-pricing-section'
 import { usePricing } from '@/hooks/use-pricing'
 import { formatPrice } from '@/lib/price-utils'
+import { formatBRL } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { formatTimeUntilExpiration, getTimeUntilExpiration } from '@/lib/offer-utils'
 import { usePremiumStatus } from '@/hooks/use-premium-status'
 import Link from 'next/link'
@@ -97,27 +89,11 @@ export function SpecialOfferCheckout() {
     }
 
     return {
-      name: 'Oferta Especial Premium',
+      name: 'Premium, oferta especial',
       price: special.price_in_cents / 100,
       period: durationText,
       description: `Acesso Premium por ${durationText}`,
-      features: [
-        'Tudo do plano gratuito',
-        'Análise de IA e Relatórios',
-        'Análise Técnica e Preço Justo Técnico',
-        'Radar de Oportunidades',
-        'Análise de Sentimento de Mercado',
-        'Radar de Dividendos com projeções por IA',
-        'Valuation e Screening Completo',
-        'Backtesting e Carteiras',
-        'Comparador completo',
-        'Rankings ilimitados',
-        'Análise individual por empresa',
-        'Relatórios mensais personalizados',
-        'Suporte prioritário',
-        'Central de Suporte Premium',
-        `${durationText} de acesso Premium`
-      ],
+      features: [...PREMIUM_FEATURES, `${durationText} de acesso Premium`],
       offerId: special.id,
       expiresAt: special.expires_at,
       isExpired,
@@ -161,439 +137,206 @@ export function SpecialOfferCheckout() {
 
   if (status === 'loading' || isLoadingPricing || status === 'unauthenticated') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">
-            {status === 'loading' ? 'Verificando autenticação...' : 
-             status === 'unauthenticated' ? 'Redirecionando para login...' :
-             isLoadingPricing ? 'Carregando oferta especial...' :
-             'Carregando...'}
-          </p>
-        </div>
+      <div className="flex min-h-[60vh] items-center justify-center bg-background">
+        <p role="status" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />
+          {status === 'unauthenticated' ? 'Redirecionando para o login' : 'Carregando a oferta'}
+        </p>
       </div>
     )
   }
 
   if (!offerData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Oferta Especial não encontrada</h2>
-          <p className="text-muted-foreground mb-4">
-            Esta oferta especial não está mais disponível.
-          </p>
-          <Link href="/checkout">
-            <Button>Ver Planos Disponíveis</Button>
-          </Link>
+      <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
+        <div className="max-w-sm text-center">
+          <h1 className="text-xl font-semibold text-foreground">Oferta especial indisponível</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Esta condição não está mais ativa. Veja os planos disponíveis.</p>
+          <Button className="mt-4" asChild>
+            <Link href="/checkout">Ver planos</Link>
+          </Button>
         </div>
       </div>
     )
   }
 
+  const premiumNotice = isPremium && (
+    <p className="rounded-lg border border-border bg-surface p-3 text-sm text-foreground">
+      Você já tem Premium ativo. Os {offerData.period} desta oferta são somados ao seu período atual.
+    </p>
+  )
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 overflow-x-hidden">
-      <div className="w-full max-w-full mx-auto px-3 sm:px-4 py-6 sm:py-8">
-        {/* Header */}
-        <div className="text-center mb-6 sm:mb-8">
-          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 rounded-full mb-3 sm:mb-4 border border-orange-200 dark:border-orange-800">
-            <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-orange-600 dark:text-orange-400 animate-pulse flex-shrink-0" />
-            <span className="text-xs font-semibold text-orange-700 dark:text-orange-300 whitespace-nowrap">OFERTA RELÂMPAGO</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold mb-2 sm:mb-3 bg-gradient-to-r from-orange-600 via-red-600 to-pink-600 bg-clip-text text-transparent break-words">
-            Invista como um Profissional
-          </h1>
-          <p className="text-xs sm:text-sm md:text-base lg:text-lg text-gray-700 dark:text-gray-300 font-medium break-words">
-            {discount ? (
-              <>
-                <span className="whitespace-normal">{discount.formatted} de desconto ({discount.percentage}% OFF) em comparação com nosso plano anual ativo</span>
-                <span className="block sm:inline"> - Oportunidade única!</span>
-              </>
-            ) : (
-              'Oportunidade única com desconto especial!'
+    <div className="bg-background">
+      <div className="container mx-auto max-w-5xl px-4 py-6 sm:py-10">
+        <header className="mb-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Oferta especial Premium</h1>
+            {!isExpired && timeRemaining && (
+              <Badge variant="warning" className="tabular-nums">
+                <Timer strokeWidth={1.75} aria-hidden="true" />
+                Termina em {formatTimeUntilExpiration(timeRemaining)}
+              </Badge>
             )}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+            {discount
+              ? `${discount.formatted} a menos que o plano anual (${discount.percentage}% de desconto).`
+              : 'Condição especial por tempo limitado.'}
           </p>
-        </div>
+        </header>
 
-        <div className="w-full max-w-6xl mx-auto">
-          {!showPayment ? (
-            <div className="grid lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-              {/* Left Column - Main Offer Card (2/3 width on desktop) */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Special Offer Card - Compact Header */}
-                <Card className={`relative overflow-hidden border-2 ${isExpired ? 'opacity-75 border-gray-300' : 'border-orange-500 shadow-xl'}`}>
-                  {/* Background gradient effect */}
-                  {!isExpired && (
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-red-50 to-yellow-50 dark:from-orange-950/20 dark:via-red-950/20 dark:to-yellow-950/20 opacity-50"></div>
-                  )}
-                  
-                  <CardContent className="p-3 sm:p-4 md:p-6 relative z-10">
-                    {/* Compact Header */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-3">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-md flex-shrink-0">
-                          <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 dark:text-white break-words">
-                            {offerData.name}
-                          </h3>
-                          {!isExpired && (
-                            <Badge className="mt-0.5 bg-gradient-to-r from-orange-500 to-red-500 text-white border-0 text-[10px] sm:text-xs">
-                              Oferta Limitada
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      {timeRemaining && !isExpired && (
-                        <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg border border-orange-300 dark:border-orange-700 flex-shrink-0 self-start sm:self-auto">
-                          <Timer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-600 dark:text-orange-400 flex-shrink-0" />
-                          <span className="text-[10px] sm:text-xs font-bold text-orange-700 dark:text-orange-300 whitespace-nowrap">
-                            {formatTimeUntilExpiration(timeRemaining)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+        {!showPayment ? (
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="space-y-6 lg:col-span-2">
+              <div className={cn('rounded-lg bg-card p-4 sm:p-6', isExpired ? 'border border-border opacity-75' : 'border-2 border-brand')}>
+                <h2 className="text-base font-semibold text-foreground">{offerData.name}</h2>
+                <p className="mt-3 text-4xl font-semibold tracking-tight tabular-nums text-foreground">
+                  {formatBRL(offerData.price)}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">{offerData.description} · pagamento único</p>
 
-                    {/* Price - Compact but Prominent */}
-                    <div className="text-center mb-3 sm:mb-4">
-                      <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mb-1">Por apenas</div>
-                      <div className="text-2xl sm:text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-1 break-words">
-                        {formatPrice(offerData.price * 100)}
-                      </div>
-                      <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 sm:mb-3 break-words">
-                        {offerData.description}
-                      </div>
-                      {discount && (
-                        <div className="inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 bg-green-100 dark:bg-green-900/30 rounded-full mb-3 sm:mb-4">
-                          <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-600 dark:text-green-400 flex-shrink-0" />
-                          <span className="text-[10px] sm:text-xs font-semibold text-green-700 dark:text-green-300 whitespace-nowrap">
-                            Economia de {discount.formatted}
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* Disclaimer para usuários Premium */}
-                      {!isExpired && isPremium && (
-                        <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                          <div className="flex items-start gap-1.5 sm:gap-2">
-                            <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                            <div className="text-[10px] sm:text-xs text-blue-800 dark:text-blue-200 break-words min-w-0">
-                              <p className="font-semibold mb-0.5 sm:mb-1">Você já possui Premium ativo</p>
-                              <p className="break-words leading-tight">
-                                Ao efetuar esta compra, os <strong>{offerData.period}</strong> de acesso Premium serão <strong>somados</strong> à sua assinatura vigente, estendendo seu período de acesso.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* CTA Button - Pagar Agora com PIX */}
-                      {!isExpired && (
-                        <Button
-                          className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-sm sm:text-base md:text-lg py-4 sm:py-5 md:py-6 shadow-lg hover:shadow-xl transition-all"
-                          onClick={() => handleMethodSelect('pix')}
-                          disabled={isProcessing}
-                        >
-                          <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap">
-                            <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 flex-shrink-0" />
-                            <span className="whitespace-nowrap text-xs sm:text-sm md:text-base">Pagar Agora com PIX</span>
-                            <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0" />
-                          </div>
-                          <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 opacity-90 font-normal">
-                            Aprovação instantânea
-                          </div>
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Features - Compact Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2 mb-3 sm:mb-4">
-                      {offerData.features.slice(0, 6).map((feature, index) => (
-                        <div 
-                          key={index} 
-                          className="flex items-start gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-700 dark:text-gray-300 min-w-0"
-                        >
-                          <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-500 flex-shrink-0 mt-0.5" />
-                          <span className="break-words min-w-0 leading-tight">{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {isExpired && (
-                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-2.5 sm:p-3">
-                        <div className="flex items-start gap-1.5 sm:gap-2 text-yellow-800 dark:text-yellow-200">
-                          <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 mt-0.5" />
-                          <p className="text-[10px] sm:text-xs font-medium break-words">
-                            Oferta expirada. Confira nossos planos regulares abaixo.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Features Expanded - Collapsible on mobile */}
-                <Card className="lg:hidden">
-                  <CardContent className="p-3 sm:p-4">
-                    <h4 className="font-semibold text-xs sm:text-sm mb-2 sm:mb-3">Todos os benefícios incluídos:</h4>
-                    <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
-                      {offerData.features.map((feature, index) => (
-                        <div 
-                          key={index} 
-                          className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm min-w-0"
-                        >
-                          <Check className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                          <span className="break-words min-w-0 leading-tight">{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                {isExpired ? (
+                  <p className="mt-4 rounded-lg border border-border bg-warning-subtle p-3 text-sm text-foreground">
+                    Esta oferta terminou. Os planos regulares estão abaixo.
+                  </p>
+                ) : (
+                  <div className="mt-5 space-y-3 lg:hidden">
+                    {premiumNotice}
+                    <Button className="h-12 w-full" onClick={() => handleMethodSelect('pix')} disabled={isProcessing}>
+                      <Smartphone className="size-4" strokeWidth={1.75} />
+                      Pagar com PIX
+                    </Button>
+                  </div>
+                )}
               </div>
 
-              {/* Right Column - Payment Methods (1/3 width on desktop, full on mobile) */}
-              {!isExpired && (
-                <div className="lg:col-span-1 w-full">
-                  <Card className="sticky top-4 border-2 border-blue-200 dark:border-blue-800 shadow-lg">
-                    <CardContent className="p-3 sm:p-4 md:p-6">
-                      <h3 className="text-sm sm:text-base md:text-lg font-bold mb-1 text-center">Escolha o pagamento</h3>
-                      <p className="text-[10px] sm:text-xs text-gray-500 text-center mb-3 sm:mb-4">Aprovação imediata</p>
-                      
-                      {/* Disclaimer para usuários Premium */}
-                      {isPremium && (
-                        <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                          <div className="flex items-start gap-1.5 sm:gap-2">
-                            <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                            <div className="text-[10px] sm:text-xs text-blue-800 dark:text-blue-200 break-words min-w-0">
-                              <p className="font-semibold mb-0.5 sm:mb-1">Você já possui Premium</p>
-                              <p className="break-words leading-tight">
-                                Os <strong>{offerData?.period}</strong> serão <strong>somados</strong> à sua assinatura vigente.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="space-y-2 sm:space-y-3">
-                        {/* PIX Option - Primary CTA */}
-                        <Button
-                          className="w-full h-auto p-2.5 sm:p-3 md:p-4 flex flex-col items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all"
-                          onClick={() => handleMethodSelect('pix')}
-                          disabled={isProcessing}
-                        >
-                          <div className="flex items-center gap-1.5 sm:gap-2">
-                            <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 flex-shrink-0" />
-                            <span className="font-bold text-sm sm:text-base md:text-lg">PIX</span>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-[10px] sm:text-xs opacity-90">Aprovação instantânea</div>
-                            <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 font-semibold opacity-90">
-                              Pagamento único
-                            </div>
-                          </div>
-                        </Button>
-
-                        {/* Card Option */}
-                        <Button
-                          variant={hasStripePriceId ? "outline" : "outline"}
-                          className={`w-full h-auto p-2.5 sm:p-3 md:p-4 flex flex-col items-center gap-1.5 sm:gap-2 transition-all ${
-                            hasStripePriceId
-                              ? 'hover:bg-blue-50 hover:border-blue-400 border-blue-300'
-                              : 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-300'
-                          }`}
-                          onClick={() => handleMethodSelect('card')}
-                          disabled={isProcessing || !hasStripePriceId}
-                        >
-                          <CreditCard className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 flex-shrink-0 ${hasStripePriceId ? 'text-blue-600' : 'text-gray-400'}`} />
-                          <div className="text-center min-w-0 w-full">
-                            <div className={`font-semibold text-xs sm:text-sm md:text-base ${hasStripePriceId ? 'text-gray-900' : 'text-gray-400'}`}>
-                              Cartão
-                            </div>
-                            {hasStripePriceId ? (
-                              <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 break-words">Assinatura automática</div>
-                            ) : (
-                              <div className="text-[10px] sm:text-xs text-red-500 mt-0.5 sm:mt-1 font-medium break-words px-1 sm:px-2">
-                                Disponível apenas via PIX
-                              </div>
-                            )}
-                          </div>
-                        </Button>
-                      </div>
-
-                      {/* Trust Indicators - Compact */}
-                      <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 md:gap-4 text-[10px] sm:text-xs text-gray-500">
-                          <div className="flex flex-col items-center gap-0.5 sm:gap-1">
-                            <Shield className="w-3 h-3 sm:w-4 sm:h-4" />
-                            <span>Seguro</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5 sm:gap-1">
-                            <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
-                            <span>SSL</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5 sm:gap-1">
-                            <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
-                            <span>Imediato</span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Expanded Features - Desktop Only */}
-              {!isExpired && (
-                <div className="lg:col-span-2 hidden lg:block w-full">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h4 className="font-semibold mb-4">Todos os benefícios incluídos:</h4>
-                      <div className="grid md:grid-cols-2 gap-3">
-                        {offerData.features.map((feature, index) => (
-                          <div 
-                            key={index} 
-                            className="flex items-start gap-2 text-sm min-w-0"
-                          >
-                            <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                            <span className="text-gray-700 dark:text-gray-300 break-words min-w-0">{feature}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Regular Plans - Mostrar se oferta expirada */}
-              {isExpired && (monthly || annual) && (
-                <div className="lg:col-span-3">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="text-lg font-semibold mb-4 text-center">Planos Disponíveis</h3>
-                      <div className="grid md:grid-cols-2 gap-4 max-w-2xl mx-auto">
-                        {monthly && (
-                          <Link href="/checkout?plan=monthly">
-                            <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-blue-400">
-                              <CardContent className="p-6 text-center">
-                                <h4 className="font-semibold mb-2">Premium Mensal</h4>
-                                <div className="text-3xl font-bold text-blue-600 mb-1">
-                                  {formatPrice(monthly.price_in_cents)}
-                                </div>
-                                <div className="text-sm text-gray-500">/mês</div>
-                                <Button className="mt-4 w-full">Escolher Plano</Button>
-                              </CardContent>
-                            </Card>
-                          </Link>
-                        )}
-                        {annual && (
-                          <Link href="/checkout?plan=annual">
-                            <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-blue-400 border-blue-300">
-                              <CardContent className="p-6 text-center">
-                                <Badge className="mb-2 bg-blue-500">Mais Popular</Badge>
-                                <h4 className="font-semibold mb-2">Premium Anual</h4>
-                                <div className="text-3xl font-bold text-blue-600 mb-1">
-                                  {formatPrice(annual.price_in_cents)}
-                                </div>
-                                <div className="text-sm text-gray-500">/ano</div>
-                                <Button className="mt-4 w-full">Escolher Plano</Button>
-                              </CardContent>
-                            </Card>
-                          </Link>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+              <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
+                <h2 className="text-base font-semibold text-foreground">O que está incluído</h2>
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {offerData.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm text-foreground">
+                      <Check className="mt-0.5 size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Payment Form */}
-              <div className="grid lg:grid-cols-3 gap-8">
-                {/* Payment Component */}
-                <div className="lg:col-span-2">
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-semibold">
-                          {selectedMethod === 'pix' ? 'Pagamento via PIX' : 'Pagamento com Cartão'}
-                        </h3>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowPayment(false)}
-                        >
-                          Voltar
-                        </Button>
-                      </div>
 
-                      {selectedMethod === 'pix' ? (
-                        <OptimizedPixPayment
-                          planType="special"
-                          price={offerData.price}
-                          onSuccess={handlePaymentSuccess}
-                          onError={handlePaymentError}
-                        />
-                      ) : (
-                        <OptimizedCardPayment
-                          planType="special"
-                          price={offerData.price}
-                          onSuccess={handlePaymentSuccess}
-                          onError={handlePaymentError}
-                        />
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
+            {!isExpired && (
+              <aside className="h-fit space-y-3 rounded-lg border border-border bg-card p-4 sm:p-6 lg:sticky lg:top-4">
+                <h2 className="text-base font-semibold text-foreground">Forma de pagamento</h2>
+                <div className="hidden lg:block">{premiumNotice}</div>
+                <Button className="w-full" onClick={() => handleMethodSelect('pix')} disabled={isProcessing}>
+                  <Smartphone className="size-4" strokeWidth={1.75} />
+                  Pagar com PIX
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleMethodSelect('card')}
+                  disabled={isProcessing || !hasStripePriceId}
+                >
+                  <CreditCard className="size-4" strokeWidth={1.75} />
+                  Pagar com cartão
+                </Button>
+                {!hasStripePriceId && <p className="text-xs text-muted-foreground">Esta oferta aceita somente PIX.</p>}
+                <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+                  Pagamento seguro · Ativação imediata · Reembolso em até 7 dias
+                </p>
+              </aside>
+            )}
 
-                {/* Order Summary */}
-                <div className="lg:col-span-1">
-                  <Card className="sticky top-4">
-                    <CardContent className="p-6">
-                      <h3 className="font-semibold mb-4">Resumo do Pedido</h3>
-                      
-                      <div className="space-y-3 mb-4">
-                        <div className="flex justify-between">
-                          <span>{offerData.name}</span>
-                          <span>{formatPrice(offerData.price * 100)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Oferta especial</span>
-                          <span className="text-green-600 font-medium">
-                            ✓ Desconto aplicado
-                          </span>
-                        </div>
-                      </div>
-
-                      <Separator className="my-4" />
-
-                      <div className="flex justify-between font-semibold text-lg mb-4">
-                        <span>Total</span>
-                        <span className="text-blue-600">
-                          {formatPrice(offerData.price * 100)}
-                        </span>
-                      </div>
-                      <div className="text-xs text-green-600 font-medium text-center mb-2">
-                        ✓ Oferta especial com desconto já aplicado
-                      </div>
-
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <p>✓ Ativação imediata após pagamento</p>
-                        <p>✓ Suporte incluído</p>
-                        <p>✓ Garantia de 7 dias</p>
-                        <p>✓ {offerData.period} de acesso Premium</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+            {isExpired && (monthly || annual) && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3">
+                {monthly && (
+                  <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
+                    <h3 className="text-base font-semibold text-foreground">Premium mensal</h3>
+                    <p className="mt-2 flex items-baseline gap-1">
+                      <span className="text-3xl font-semibold tabular-nums text-foreground">{formatBRL(monthly.price_in_cents / 100)}</span>
+                      <span className="text-sm text-muted-foreground">/mês</span>
+                    </p>
+                    <Button variant="outline" className="mt-4 w-full" asChild>
+                      <Link href="/checkout?plan=monthly">Escolher o mensal</Link>
+                    </Button>
+                  </div>
+                )}
+                {annual && (
+                  <div className="rounded-lg border-2 border-brand bg-card p-4 sm:p-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-base font-semibold text-foreground">Premium anual</h3>
+                      <Badge variant="brand">Recomendado</Badge>
+                    </div>
+                    <p className="mt-2 flex items-baseline gap-1">
+                      <span className="text-3xl font-semibold tabular-nums text-foreground">{formatBRL(annual.price_in_cents / 100)}</span>
+                      <span className="text-sm text-muted-foreground">/ano</span>
+                    </p>
+                    <Button className="mt-4 w-full" asChild>
+                      <Link href="/checkout?plan=annual">Escolher o anual</Link>
+                    </Button>
+                  </div>
+                )}
               </div>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="rounded-lg border border-border bg-card p-4 sm:p-6 lg:col-span-2">
+              <div className="mb-4 hidden items-center justify-between sm:flex">
+                <h2 className="text-base font-semibold text-foreground">
+                  {selectedMethod === 'pix' ? 'Pague com PIX' : 'Pague com cartão'}
+                </h2>
+                <Button variant="ghost" size="sm" onClick={() => setShowPayment(false)}>
+                  <ArrowLeft className="size-4" strokeWidth={1.75} />
+                  Voltar
+                </Button>
+              </div>
+
+              {selectedMethod === 'pix' ? (
+                <OptimizedPixPayment
+                  planType="special"
+                  price={offerData.price}
+                  onSuccess={handlePaymentSuccess}
+                  onError={handlePaymentError}
+                />
+              ) : (
+                <OptimizedCardPayment
+                  planType="special"
+                  price={offerData.price}
+                  onSuccess={handlePaymentSuccess}
+                  onError={handlePaymentError}
+                />
+              )}
+
+              <Button variant="ghost" className="mt-4 w-full sm:hidden" onClick={() => setShowPayment(false)}>
+                <ArrowLeft className="size-4" strokeWidth={1.75} />
+                Voltar
+              </Button>
+            </div>
+
+            <aside className="h-fit rounded-lg border border-border bg-card p-4 sm:p-6 lg:sticky lg:top-4">
+              <h2 className="text-base font-semibold text-foreground">Resumo do pedido</h2>
+              <dl className="mt-4 space-y-2 text-sm tabular-nums">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-foreground">{offerData.name}</dt>
+                  <dd className="text-foreground">{formatBRL(offerData.price)}</dd>
+                </div>
+                <div className="flex justify-between gap-4 text-muted-foreground">
+                  <dt>Acesso Premium</dt>
+                  <dd>{offerData.period}</dd>
+                </div>
+              </dl>
+              <Separator className="my-4" />
+              <div className="flex justify-between text-base font-semibold tabular-nums text-foreground">
+                <span>Total</span>
+                <span>{formatBRL(offerData.price)}</span>
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground">Ativação imediata após a confirmação · Reembolso em até 7 dias</p>
+            </aside>
+          </div>
+        )}
       </div>
     </div>
   )
 }
-

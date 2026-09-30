@@ -1,7 +1,6 @@
-'use client'
-
 import Link from "next/link"
-import { ChevronRight, Home } from "lucide-react"
+import { ChevronRight } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface BreadcrumbItem {
   label: string
@@ -13,32 +12,31 @@ interface BreadcrumbsProps {
   className?: string
 }
 
-export function Breadcrumbs({ items, className = '' }: BreadcrumbsProps) {
+/** Trilha de navegação a partir do início. O último item é a página atual. */
+export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
   return (
-    <nav className={`flex items-center gap-2 text-sm text-muted-foreground mb-6 ${className}`} aria-label="Breadcrumb">
-      <Link 
-        href="/" 
-        className="hover:text-foreground transition-colors flex items-center gap-1"
-        aria-label="Início"
-      >
-        <Home className="w-4 h-4" />
-      </Link>
-      {items.map((item, index) => (
-        <div key={index} className="flex items-center gap-2">
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          {item.href ? (
-            <Link 
-              href={item.href} 
-              className="hover:text-foreground transition-colors"
-            >
-              {item.label}
-            </Link>
-          ) : (
-            <span className="text-foreground font-medium">{item.label}</span>
-          )}
-        </div>
-      ))}
+    <nav aria-label="Trilha de navegação" className={cn("mb-6", className)}>
+      <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+        <li>
+          <Link href="/" className="inline-flex min-h-8 items-center hover:text-foreground hover:underline underline-offset-4">
+            Início
+          </Link>
+        </li>
+        {items.map((item, index) => (
+          <li key={`${item.label}-${index}`} className="flex items-center gap-1">
+            <ChevronRight className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+            {item.href ? (
+              <Link href={item.href} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline underline-offset-4">
+                {item.label}
+              </Link>
+            ) : (
+              <span aria-current="page" className="font-medium text-foreground">
+                {item.label}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
     </nav>
   )
 }
-

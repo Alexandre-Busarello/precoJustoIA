@@ -1,25 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { 
-  QrCode, 
-  Copy, 
-  CheckCircle, 
-  Clock,
-  Smartphone,
-  RefreshCw,
-  AlertCircle,
-  Zap
-} from 'lucide-react'
 import Image from 'next/image'
+import { AlertCircle, Check, CheckCircle, ChevronDown, Clock, Copy, QrCode, RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { usePaymentVerification } from '@/components/session-refresh-provider'
+import { formatBRL } from '@/lib/format'
 
 interface OptimizedPixPaymentProps {
   planType: 'monthly' | 'annual' | 'special'
+  /** Valor a pagar em reais (já com desconto PIX quando houver). */
   price: number
   onSuccess: () => void
   onError: (error: string) => void
@@ -34,35 +26,75 @@ interface PixData {
   ticket_url?: string
 }
 
-export function OptimizedPixPayment({ 
-  planType, 
-  price, 
-  onSuccess, 
-  onError 
-}: OptimizedPixPaymentProps) {
+const PIX_TTL_SECONDS = 600
+
+function formatTime(seconds: number) {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+/**
+ * Pagamento PIX. No celular o código copia-e-cola é a ação principal (não dá para escanear a própria tela);
+ * o QR code fica recolhido em "Pagar com outro aparelho". A partir de 640 px o QR aparece ao lado do código.
+ */
+export function OptimizedPixPayment({ planType, price, onSuccess, onError }: OptimizedPixPaymentProps) {
   const { data: session } = useSession()
   const [pixData, setPixData] = useState<PixData | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'checking' | 'approved' | 'failed'>('pending')
-  const [timeLeft, setTimeLeft] = useState(600) // 10 minutos
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'approved' | 'failed'>('pending')
+  const [timeLeft, setTimeLeft] = useState(PIX_TTL_SECONDS)
   const { startVerification } = usePaymentVerification()
+  // Intervalo de consulta do status; guardado para parar ao expirar, ao gerar outro código ou ao desmontar.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Timer countdown
+  const stopPaymentCheck = () => {
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = null
+  }
+
+  const isExpired = Boolean(pixData) && timeLeft <= 0 && paymentStatus === 'pending'
+
+  useEffect(() => {
+    // Para a consulta quando o código expira e ao desmontar.
+    const clear = () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    if (isExpired) clear()
+    return clear
+  }, [isExpired])
+
   useEffect(() => {
     if (pixData && timeLeft > 0 && paymentStatus === 'pending') {
-      const timer = setInterval(() => {
-        setTimeLeft(prev => prev - 1)
-      }, 1000)
+      const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000)
       return () => clearInterval(timer)
     }
   }, [pixData, timeLeft, paymentStatus])
 
-  // Format time
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+  const startPaymentCheck = (paymentId: string) => {
+    const checkPayment = async () => {
+      try {
+        const response = await fetch(`/api/payment/status/${paymentId}`)
+        const data = await response.json()
+
+        if (data.status === 'approved') {
+          setPaymentStatus('approved')
+          stopPaymentCheck()
+          startVerification()
+          setTimeout(onSuccess, 2000)
+        } else if (data.status === 'cancelled' || data.status === 'rejected') {
+          setPaymentStatus('failed')
+          stopPaymentCheck()
+        }
+      } catch (error) {
+        console.error('Erro ao verificar pagamento:', error)
+      }
+    }
+
+    stopPaymentCheck()
+    pollRef.current = setInterval(checkPayment, 10000)
   }
 
   const createPixPayment = async () => {
@@ -73,14 +105,13 @@ export function OptimizedPixPayment({
 
     setLoading(true)
     try {
-      // Gerar chave de idempotência única no frontend
       const idempotencyKey = `pix-frontend-${session.user.email}-${planType}-${Date.now()}-${Math.random().toString(36).substring(7)}`
-      
+
       const response = await fetch('/api/checkout/create-pix', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': idempotencyKey
+          'X-Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({
           planType,
@@ -97,13 +128,13 @@ export function OptimizedPixPayment({
       }
 
       const data = await response.json()
-      console.log('Dados do PIX recebidos:', data)
-      
+
       if (!data.qr_code && !data.qr_code_base64) {
-        throw new Error('QR Code não foi gerado pelo MercadoPago')
+        throw new Error('O código PIX não foi gerado. Tente novamente.')
       }
-      
+
       setPixData(data)
+      setTimeLeft(PIX_TTL_SECONDS)
       startPaymentCheck(data.id)
     } catch (error) {
       console.error('Erro ao criar PIX:', error)
@@ -113,207 +144,168 @@ export function OptimizedPixPayment({
     }
   }
 
-  const startPaymentCheck = (paymentId: string) => {
-    const checkPayment = async () => {
-      try {
-        const response = await fetch(`/api/payment/status/${paymentId}`)
-        const data = await response.json()
-        
-        if (data.status === 'approved') {
-          setPaymentStatus('approved')
-          
-          // Iniciar verificação de pagamento para atualizar sessão
-          startVerification()
-          
-          setTimeout(onSuccess, 2000)
-        } else if (data.status === 'cancelled' || data.status === 'rejected') {
-          setPaymentStatus('failed')
-        }
-      } catch (error) {
-        console.error('Erro ao verificar pagamento:', error)
-      }
-    }
-
-    // Verificar a cada 10 segundos
-    const interval = setInterval(checkPayment, 10000)
-    
-    // Parar após 10 minutos
-    setTimeout(() => clearInterval(interval), 600000)
-  }
-
   const copyPixCode = async () => {
-    if (pixData?.qr_code) {
-      try {
-        await navigator.clipboard.writeText(pixData.qr_code)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      } catch (error) {
-        console.error('Erro ao copiar:', error)
-      }
+    if (!pixData?.qr_code) return
+    try {
+      await navigator.clipboard.writeText(pixData.qr_code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch (error) {
+      console.error('Erro ao copiar:', error)
     }
   }
 
   if (!pixData) {
     return (
-      <div className="text-center py-8">
-        <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <Smartphone className="w-10 h-10 text-green-600" />
+      <div className="space-y-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Valor a pagar</p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums text-foreground">{formatBRL(price)}</p>
+          {planType !== 'special' && (
+            <p className="mt-1 text-sm text-muted-foreground">Com 15% de desconto do PIX já aplicado</p>
+          )}
         </div>
-        
-        <h3 className="text-xl font-semibold mb-2">Pagamento via PIX</h3>
-        <p className="text-gray-600 dark:text-gray-300 mb-4">
-          Aprovação instantânea e segura
-        </p>
-        {planType !== 'special' && (
-          <div className="mb-6">
-            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 inline-flex items-center">
-              <Zap className="w-3 h-3 mr-1" />
-              5% de desconto aplicado
-            </Badge>
-          </div>
-        )}
-
-        <Button 
-          onClick={createPixPayment}
-          disabled={loading}
-          size="lg"
-          className="bg-green-600 hover:bg-green-700 text-white px-8"
-        >
+        <Button onClick={createPixPayment} disabled={loading} className="h-12 w-full sm:w-auto md:h-10">
           {loading ? (
             <>
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              Gerando PIX...
+              <RefreshCw className="size-4 animate-spin" strokeWidth={1.75} />
+              Gerando código PIX
             </>
           ) : (
             <>
-              <QrCode className="w-4 h-4 mr-2" />
-              Gerar PIX
+              <QrCode className="size-4" strokeWidth={1.75} />
+              Gerar código PIX
             </>
           )}
         </Button>
+        <p className="text-sm text-muted-foreground">A aprovação é imediata e sua conta é ativada automaticamente.</p>
       </div>
     )
   }
 
   if (paymentStatus === 'approved') {
     return (
-      <div className="text-center py-8">
-        <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="w-10 h-10 text-green-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-green-600 mb-2">
-          Pagamento Aprovado!
-        </h3>
-        <p className="text-gray-600 dark:text-gray-300">
-          Sua conta Premium foi ativada com sucesso
-        </p>
+      <div role="status" className="py-6 text-center">
+        <CheckCircle className="mx-auto size-10 text-positive" strokeWidth={1.75} aria-hidden="true" />
+        <h3 className="mt-4 text-lg font-semibold text-foreground">Pagamento aprovado</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Sua conta Premium foi ativada. Redirecionando.</p>
       </div>
     )
   }
 
   if (paymentStatus === 'failed') {
     return (
-      <div className="text-center py-8">
-        <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <AlertCircle className="w-10 h-10 text-red-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-red-600 mb-2">
-          Pagamento não realizado
-        </h3>
-        <p className="text-gray-600 dark:text-gray-300 mb-4">
-          O pagamento foi cancelado ou rejeitado
-        </p>
-        <Button onClick={() => window.location.reload()} variant="outline">
-          Tentar Novamente
+      <div role="alert" className="py-6 text-center">
+        <AlertCircle className="mx-auto size-10 text-negative" strokeWidth={1.75} aria-hidden="true" />
+        <h3 className="mt-4 text-lg font-semibold text-foreground">Pagamento não realizado</h3>
+        <p className="mt-1 text-sm text-muted-foreground">O pagamento foi cancelado ou recusado pelo banco.</p>
+        <Button onClick={() => window.location.reload()} variant="outline" className="mt-4">
+          Tentar novamente
         </Button>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Status Header */}
-      <div className="text-center">
-        <Badge variant="secondary" className="mb-2">
-          <Clock className="w-3 h-3 mr-1" />
-          Expira em {formatTime(timeLeft)}
-        </Badge>
-        <h3 className="text-lg font-semibold">Escaneie o QR Code</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          Use o app do seu banco ou carteira digital
+  if (isExpired) {
+    return (
+      <div role="alert" className="py-6 text-center">
+        <Clock className="mx-auto size-10 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+        <h3 className="mt-4 text-lg font-semibold text-foreground">Código PIX expirado</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          O código vale por 10 minutos. Se você já pagou, a ativação chega em instantes. Se não, gere um novo código.
         </p>
+        <Button
+          onClick={() => {
+            setPixData(null)
+            setCopied(false)
+            setTimeLeft(PIX_TTL_SECONDS)
+          }}
+          variant="outline"
+          className="mt-4 h-12 w-full sm:w-auto md:h-10"
+        >
+          <RefreshCw className="size-4" strokeWidth={1.75} />
+          Gerar novo código
+        </Button>
+      </div>
+    )
+  }
+
+  const qrImage = pixData.qr_code_base64 ? (
+    <Image
+      src={`data:image/png;base64,${pixData.qr_code_base64}`}
+      alt="QR code do PIX"
+      width={200}
+      height={200}
+      unoptimized
+      className="size-[200px] rounded-md border border-border"
+    />
+  ) : null
+
+  const copyButton = (className: string, variant: 'default' | 'outline' = 'default') => (
+    <Button onClick={copyPixCode} variant={variant} className={className} aria-live="polite">
+      {copied ? (
+        <>
+          <Check className="size-4" strokeWidth={1.75} />
+          Copiado
+        </>
+      ) : (
+        <>
+          <Copy className="size-4" strokeWidth={1.75} />
+          Copiar código PIX
+        </>
+      )}
+    </Button>
+  )
+
+  return (
+    <div className="space-y-5">
+      {/* Celular: copia e cola primeiro */}
+      <div className="space-y-3 sm:hidden">
+        <p className="text-sm font-medium text-foreground">Cole no app do seu banco</p>
+        {pixData.qr_code && copyButton('h-12 w-full')}
+        <p className="text-sm text-muted-foreground">
+          No app, escolha PIX copia e cola e confirme {formatBRL(price)}.
+        </p>
+        {qrImage && (
+          <details className="group rounded-lg border border-border">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
+              Pagar com outro aparelho
+              <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" strokeWidth={1.75} aria-hidden="true" />
+            </summary>
+            <div className="flex justify-center px-3 pb-4">{qrImage}</div>
+          </details>
+        )}
       </div>
 
-      {/* QR Code */}
-      {pixData.qr_code_base64 && (
-        <Card className="bg-white dark:bg-gray-800">
-          <CardContent className="p-6 text-center">
-            <div className="inline-block p-4 bg-white rounded-lg shadow-sm">
-              <Image
-                src={`data:image/png;base64,${pixData.qr_code_base64}`}
-                alt="QR Code PIX"
-                width={200}
-                height={200}
-                className="mx-auto"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* PIX Code */}
-      {pixData.qr_code && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 mr-3">
-                <p className="text-xs text-gray-500 mb-1">Código PIX</p>
-                <p className="text-sm font-mono bg-gray-100 dark:bg-gray-700 p-2 rounded break-all">
-                  {pixData.qr_code.substring(0, 50)}...
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={copyPixCode}
-                className={copied ? 'bg-green-50 border-green-300' : ''}
-              >
-                {copied ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 mr-1 text-green-600" />
-                    Copiado
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 mr-1" />
-                    Copiar
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Instructions */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-        <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-          Como pagar:
-        </h4>
-        <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-          <li>1. Abra o app do seu banco</li>
-          <li>2. Escaneie o QR Code ou cole o código PIX</li>
-          <li>3. Confirme o pagamento de R$ {price}</li>
-          <li>4. Sua conta será ativada automaticamente</li>
-        </ol>
+      {/* A partir de 640 px: QR code ao lado do código */}
+      <div className="hidden gap-6 sm:flex sm:items-start">
+        {qrImage && <div className="shrink-0">{qrImage}</div>}
+        <div className="min-w-0 flex-1 space-y-3">
+          <h3 className="text-base font-semibold text-foreground">Escaneie o QR code no app do seu banco</h3>
+          <p className="text-sm text-muted-foreground">
+            Ou copie o código e use a opção PIX copia e cola. Valor: <span className="tabular-nums">{formatBRL(price)}</span>.
+          </p>
+          {pixData.qr_code && (
+            <>
+              <p className="rounded-md bg-muted p-2 font-mono text-xs break-all text-muted-foreground">
+                {pixData.qr_code.substring(0, 60)}…
+              </p>
+              {copyButton('', 'outline')}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Status Indicator */}
-      <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
-        <RefreshCw className="w-4 h-4 animate-spin" />
-        <span>Aguardando confirmação do pagamento...</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
+        <span role="status" className="inline-flex items-center gap-2">
+          <RefreshCw className="size-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />
+          Aguardando a confirmação do pagamento
+        </span>
+        <Badge variant="neutral" className="tabular-nums">
+          <Clock strokeWidth={1.75} aria-hidden="true" />
+          Expira em {formatTime(Math.max(timeLeft, 0))}
+        </Badge>
       </div>
     </div>
   )
 }
-

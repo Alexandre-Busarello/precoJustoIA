@@ -13,7 +13,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 | Onda | Lotes | Status |
 |---|---|---|
 | 0 | `w0-foundation` (design tokens, dark mode plumbing, primitivos, formatação pt-BR, header/footer/nav mobile, política de interrupções) | **Concluída** — `6ad9d41` (fundação, aprovada pelo testador no 3º ciclo) + `b5aca7c` (integração) |
-| 1 | `w1-asset-stock`, `w1-asset-indicators-ai`, `w1-asset-fii-etf-bdr`, `w1-technical-radars`, `w1-home-pricing-checkout`, `w1-dashboard-alerts`, `w1-account-ben-onboarding`, `w1-portfolio`, `w1-ranking`, `w1-backtest`, `w1-screening`, `w1-comparador`, `w1-finance-foundation` | Pendente |
+| 1 | `w1-asset-stock`, `w1-asset-indicators-ai`, `w1-asset-fii-etf-bdr`, `w1-technical-radars`, `w1-home-pricing-checkout`, `w1-dashboard-alerts`, `w1-account-ben-onboarding`, `w1-portfolio`, `w1-ranking`, `w1-backtest`, `w1-screening`, `w1-comparador`, `w1-finance-foundation` | **Concluída** (30/09) — 13 lotes aprovados pelo testador (`395302f`…`7ff4c71`) + integração `7134d14` |
 | 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | Pendente |
 | 3 | `w3-onde-aportar` (premissa central: onde aportar, incl. modo premium "Todo o mercado") + `w3-screening-filters` (em paralelo, arquivos disjuntos) | Pendente |
 | 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` (libera o toggle de tema) | Pendente |
@@ -35,6 +35,24 @@ Lotes da mesma onda não compartilham arquivos (verificado), então rodam em par
 - `src/middleware.ts` não roda porque o `middleware.ts` da raiz tem precedência (o 410 de `/fundador` do commit `5777118` não está valendo) — corrigido no lote `w2-platform-seo-pwa`; confirmar em produção com `curl -I https://precojusto.ai/upgrade`.
 - `POST /api/generate-analysis` e `/api/review-analysis` chamam o Gemini sem autenticação (lote `w2-platform-seo-pwa`).
 - Ativar o cron do e-mail "Seu aporte do mês" no `vercel.json` depois da onda 3.
+
+## Pendências conhecidas ao fim da onda 1 (levar para as ondas 2–4)
+
+- **Funções financeiras (`src/lib/finance/*`)** — ajustar antes/durante a onda 2:
+  - `annualizeFromLast12` retorna null quando dividendo e JCP têm a mesma data-com (agrupar por exDate antes de calcular intervalos) e ignora pagamentos antigos (receber `asOf` e marcar dados defasados).
+  - `fullYearTotals` pode descartar um 1º ano completo em históricos curtos.
+  - `magicFormulaRank` aceita ROIC negativo (excluir `roic <= 0`).
+  - `signals.fundamentalsIntact` usa `ratioBasis: 'quarterly'` por padrão, mas o ROE do schema é anual/TTM — a onda 3 deve passar `ratioBasis: 'ttm'` (ou mudar o padrão); janela de 8 trimestres não verifica trimestres consecutivos; textos dos checks devem usar `@/lib/format`.
+  - `macro.ts`: `ipcaExpected` é o IPCA realizado 12m (SGS 433), não expectativa — não rotular como "IPCA esperado"; `parseSgsDate` aceita datas impossíveis.
+  - `sector-classification.ts`: algumas regex classificam errado ("Máquinas Agrícolas", "Artefatos de Ferro e Aço", "Tecnologia financeira") — validar com as strings de produção.
+- Radar de dividendos: API `dividend-radar/grid` não envia `paymentDate`/`type` ("Não informado" na UI).
+- `/acao/taee11` premium a 320 px: scroll horizontal dentro do card da IA.
+- `/projecoes-ibov` (cards vermelhos antigos), blog, `/como-funciona`, `/contato`, `/sobre` e calculadoras ainda com gradientes → lote `w2-ui-market-tools` / `w2-ui-institutional-auth`.
+- Breadcrumb inconsistente entre páginas; botão flutuante do Ben cobre conteúdo no mobile; alvos de toque < 44 px (InfoHint, `Button size="sm"`, chips do Ben, cabeçalhos ordenáveis do DataTable); slider do quiz sem nome acessível.
+- Backend: backtest salva "Carteira de exemplo" duplicada a cada execução; `rank-builder`/`ranking-history` com decimal com ponto e textos em inglês; BDRs com preço justo sem sentido (AAPL34 Graham ≈ −1.109%) → lote `w2-valuation-core` (moeda/paridade de BDR).
+- Validar manualmente a troca de aba Ações/ETFs no comparador com a página já aberta.
+- Ações do dono: cron `/api/cron/macro-indicators` no `vercel.json`; fonte automática de `NTNB_REAL_LONG` (hoje usa 7,68% fixo); redirect `/comparador-etfs` → `/comparador?tipo=etfs` (onda 2).
+- ESLint: seguem só os 6 erros antigos em `parceiros/clube-dos-dividendos/sections/features-portfolio.tsx:47`.
 
 ## Pendências conhecidas ao fim da onda 0 (já cobertas pelos lotes da onda 1, conferir)
 

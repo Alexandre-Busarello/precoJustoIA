@@ -29,6 +29,7 @@ MACHINE LIMITS (the owner's PC has 15 GB RAM and freezes when full — this is c
   flock -w 3600 ${S}/heavy.lock npx tsx scripts/local/screenshots.ts ...
 - Never start another dev server, never run next build, never open extra browsers outside the screenshot script. The dev server on http://localhost:3100 (local Docker DB) is managed by a watchdog that may restart it for memory — if a request fails with connection refused, wait 30 s and retry.
 - Screenshots: pass only the routes you need (--routes) and only the viewports/auth you need; write to ${S}/shots/<your-batch-id>/... Keep outputs out of the repo.
+- DISK IS NEARLY FULL (~2 GB free on the whole machine). Screenshots: deviceScaleFactor 1, only the routes/viewports you need, prefer viewport-height (not full-page) captures unless you must see the whole page; after reviewing, DELETE raw captures you no longer need and keep at most a few evidence images per batch. Before any big screenshot run check \`df -h /\` — if less than 1 GB is free, delete old dirs under ${S}/shots first (never delete anything outside ${S}). Never write large files inside the repo.
 - Test users: premium@local.test / Local123!  and free@local.test / Local123! (local DB only).
 `
 
@@ -103,7 +104,8 @@ Steps:
 2. Use the git lock (other batches commit concurrently): flock -w 600 ${S}/git.lock sh -c 'git add -A -- <files...> && git commit -m "<subject>" -m "<body>" -- <files...>'
    Subject (pt-BR, imperative, <= 72 chars) describing the batch, e.g. "refactor(ui): página de ação com AssetHeader e tabela de valuation". Body: 3-8 bullet lines of what changed. End the message with a blank line and exactly:
    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-3. Verify with git show --stat HEAD (make sure the commit contains only this batch's files). Return sha + files.`, { label: `commit:${b.id}`, phase: 'Commit', schema: COMMIT_SCHEMA, effort: 'low' })
+3. Verify with git show --stat HEAD (make sure the commit contains only this batch's files).
+4. Free disk: rm -rf ${S}/shots/${b.id}* ${S}/shots/qa-${b.id}* (screenshot dirs of this batch only). Return sha + files.`, { label: `commit:${b.id}`, phase: 'Commit', schema: COMMIT_SCHEMA, effort: 'low' })
 
 async function runBatch(b) {
   let dev = await programmer(b)

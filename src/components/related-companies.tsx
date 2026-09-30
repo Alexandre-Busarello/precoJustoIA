@@ -1,14 +1,12 @@
+'use client';
+
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { formatBRL, formatDeltaPct, formatNumber } from '@/lib/format';
+import { marginOfSafety, valuationStatus } from '@/lib/valuation-metrics';
 import { CompanyLogo } from '@/components/company-logo';
-import { CompanySizeBadge } from '@/components/company-size-badge';
-import { 
-  Building2, 
-  TrendingUp, 
-  ArrowRight,
-  Eye
-} from 'lucide-react';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { SectionHeader } from '@/components/ui/section-header';
 
 interface RelatedCompany {
   ticker: string;
@@ -17,6 +15,12 @@ interface RelatedCompany {
   logoUrl?: string | null;
   marketCap?: number | null;
   assetType?: string;
+  /** Último preço. */
+  price?: number | null;
+  /** Preço justo de referência para a margem (Graham). */
+  fairValue?: number | null;
+  /** Score geral (0–100). */
+  score?: number | null;
 }
 
 interface RelatedCompaniesProps {
@@ -25,118 +29,130 @@ interface RelatedCompaniesProps {
   currentSector?: string | null;
   currentIndustry?: string | null;
   currentAssetType?: string;
+  /** Mostra a margem de segurança (Graham exige conta ou acesso completo). */
+  showMargin?: boolean;
+  /** Mostra o score (Premium ou acesso completo). */
+  showScore?: boolean;
 }
 
-export function RelatedCompanies({ 
-  companies, 
-  currentTicker, 
+const MAX_ROWS = 5;
+
+function assetUrl(ticker: string, assetType?: string) {
+  const lowerTicker = ticker.toLowerCase();
+  switch (assetType) {
+    case 'FII':
+      return `/fii/${lowerTicker}`;
+    case 'BDR':
+      return `/bdr/${lowerTicker}`;
+    case 'ETF':
+      return `/etf/${lowerTicker}`;
+    default:
+      return `/acao/${lowerTicker}`;
+  }
+}
+
+function Blurred({ children }: { children: string }) {
+  return (
+    <>
+      <span aria-hidden="true" className="select-none text-muted-foreground blur-sm">
+        {children}
+      </span>
+      <span className="sr-only">Disponível para assinantes</span>
+    </>
+  );
+}
+
+const MARGIN_TONE = { below: 'text-positive', within: 'text-foreground', above: 'text-negative' } as const;
+
+/** Empresas do mesmo setor em tabela compacta (ticker · preço · margem · score), com links internos. */
+export function RelatedCompanies({
+  companies,
+  currentTicker,
   currentSector,
-  currentAssetType = 'STOCK'
+  currentAssetType = 'STOCK',
+  showMargin = true,
+  showScore = true,
 }: RelatedCompaniesProps) {
   if (!companies || companies.length === 0) {
     return null;
   }
 
-  const getAssetUrl = (ticker: string, assetType?: string) => {
-    const lowerTicker = ticker.toLowerCase();
-    switch (assetType) {
-      case 'FII':
-        return `/fii/${lowerTicker}`;
-      case 'BDR':
-        return `/bdr/${lowerTicker}`;
-      case 'ETF':
-        return `/etf/${lowerTicker}`;
-      case 'STOCK':
-      default:
-        return `/acao/${lowerTicker}`;
-    }
-  };
+  const rows = companies.slice(0, MAX_ROWS);
 
-  const getCurrentAssetUrl = (ticker: string) => {
-    return getAssetUrl(ticker, currentAssetType);
-  };
+  const columns: DataTableColumn<RelatedCompany>[] = [
+    {
+      key: 'ticker',
+      header: 'Ativo',
+      sticky: true,
+      cell: (company) => (
+        <Link
+          href={assetUrl(company.ticker, company.assetType)}
+          prefetch={false}
+          className="flex min-h-11 items-center gap-2 md:min-h-0"
+        >
+          <CompanyLogo logoUrl={company.logoUrl} companyName={company.name} ticker={company.ticker} size={24} />
+          <span className="font-medium whitespace-nowrap text-foreground hover:underline">
+            <span className="sr-only">Valuation </span>
+            {company.ticker}
+          </span>
+          <span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:inline">{company.name}</span>
+        </Link>
+      ),
+    },
+    {
+      key: 'price',
+      header: 'Preço',
+      align: 'right',
+      cell: (company) => formatBRL(company.price),
+    },
+    {
+      key: 'margin',
+      header: 'Margem (Graham)',
+      align: 'right',
+      hint: 'Margem de segurança pelo Número de Graham: 1 − preço ÷ preço justo.',
+      cell: (company) => {
+        if (!showMargin) return <Blurred>+00,0%</Blurred>;
+        const margin = marginOfSafety(company.price, company.fairValue);
+        const status = valuationStatus(margin);
+        return <span className={cn('font-medium', status && MARGIN_TONE[status])}>{formatDeltaPct(margin)}</span>;
+      },
+    },
+    {
+      key: 'score',
+      header: 'Score',
+      align: 'right',
+      cell: (company) => {
+        if (!showScore) return <Blurred>00/100</Blurred>;
+        return typeof company.score === 'number' ? `${formatNumber(Math.round(company.score), { digits: 0 })}/100` : '—';
+      },
+    },
+  ];
+
+  const compareTickers = rows.slice(0, 3).map((c) => c.ticker).join('/');
 
   return (
-    <Card className="mt-8">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-blue-600" />
-          Empresas Relacionadas
-          {currentSector && (
-            <Badge variant="outline" className="ml-2">
-              {currentSector}
-            </Badge>
-          )}
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Explore empresas similares e outras do mesmo setor para comparar oportunidades
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {companies.map((company) => (
+    <div className="space-y-4">
+      <SectionHeader
+        title="Empresas relacionadas"
+        description={currentSector ? `Outras empresas do setor ${currentSector}.` : 'Empresas similares para comparar.'}
+        actions={
+          rows.length >= 2 && currentAssetType === 'STOCK' ? (
             <Link
-              key={company.ticker}
-              href={getAssetUrl(company.ticker, company.assetType)}
+              href={`/compara-acoes/${currentTicker}/${compareTickers}`}
               prefetch={false}
-              className="group block"
+              className="inline-flex min-h-11 items-center text-sm font-medium text-brand underline-offset-4 hover:underline md:min-h-0"
             >
-              <div className="border rounded-lg p-4 hover:shadow-md hover:border-blue-200 transition-all duration-200 group-hover:bg-blue-50/50">
-                <div className="flex items-start gap-3">
-                  {/* Logo da empresa */}
-                  <div className="flex-shrink-0">
-                    <CompanyLogo
-                      logoUrl={company.logoUrl}
-                      companyName={company.name}
-                      ticker={company.ticker}
-                      size={40}
-                    />
-                  </div>
-                  
-                  {/* Informações da empresa */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-semibold text-sm group-hover:text-blue-600 transition-colors">
-                        <span className="sr-only">Valuation </span>
-                        {company.ticker}
-                      </h4>
-                      {company.marketCap && (
-                        <CompanySizeBadge marketCap={company.marketCap} />
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                      {company.name}
-                    </p>
-                    
-                    {/* Call to action */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1 text-xs text-blue-600 group-hover:text-blue-700">
-                        <Eye className="w-3 h-3" />
-                        <span>Ver Valuation {company.name}</span>
-                      </div>
-                      <ArrowRight className="w-3 h-3 text-muted-foreground group-hover:text-blue-600 transition-colors" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              Comparar com o setor
             </Link>
-          ))}
-        </div>
-
-        {/* Link para comparação básica - apenas para ações */}
-        {companies.length >= 2 && currentAssetType === 'STOCK' && (
-          <div className="mt-6 pt-4 border-t">
-            <Link
-              href={`/compara-acoes/${currentTicker}/${companies.slice(0, 3).map(c => c.ticker).join('/')}`}
-              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              <TrendingUp className="w-4 h-4" />
-              Comparar com outras empresas do setor
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          ) : undefined
+        }
+      />
+      <DataTable
+        columns={columns}
+        rows={rows}
+        getRowId={(company) => company.ticker}
+        caption={`Empresas relacionadas a ${currentTicker}`}
+      />
+    </div>
   );
 }

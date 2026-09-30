@@ -45,26 +45,19 @@ function fireConversionPixel() {
   }
 }
 
+type EmailSubscriptionStatus = 'idle' | 'loading' | 'success';
+
 /**
- * "Acompanhar {ticker}" por e-mail para visitantes anônimos.
- * Nunca abre sozinho: sem `open`, não renderiza nada visível. Logados não veem o modal.
+ * Inscrição por e-mail em um ativo (visitante anônimo): valida, dispara o pixel de conversão e
+ * faz POST em /api/asset-subscriptions/by-ticker/[ticker]. Usado pelo modal e pelo card "Acompanhar".
  */
-export function EmailCaptureModal({ ticker, open, onOpenChange }: EmailCaptureModalProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
+export function useEmailSubscription(ticker: string, { onSuccess }: { onSuccess?: () => void } = {}) {
   const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [status, setStatus] = useState<EmailSubscriptionStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { data: session } = useSession();
 
-  const isOpen = open ?? internalOpen;
-  const setOpen = (value: boolean) => {
-    if (onOpenChange) onOpenChange(value);
-    else setInternalOpen(value);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -81,7 +74,7 @@ export function EmailCaptureModal({ ticker, open, onOpenChange }: EmailCaptureMo
       return;
     }
 
-    setIsLoading(true);
+    setStatus('loading');
     try {
       const response = await fetch(`/api/asset-subscriptions/by-ticker/${ticker}`, {
         method: 'POST',
@@ -99,19 +92,41 @@ export function EmailCaptureModal({ ticker, open, onOpenChange }: EmailCaptureMo
         // localStorage indisponível: a inscrição já foi feita no servidor
       }
 
-      setIsSuccess(true);
+      setStatus('success');
       toast({
         title: 'Inscrição recebida',
         description: 'Confirme pelo link que enviamos para o seu e-mail.',
       });
-      setTimeout(() => setOpen(false), 3000);
+      onSuccess?.();
     } catch (err) {
       console.error('Erro ao criar subscription:', err);
+      setStatus('idle');
       setError(err instanceof Error ? err.message : 'Erro ao processar inscrição. Tente novamente.');
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  return { email, setEmail, status, error, submit };
+}
+
+/**
+ * "Acompanhar {ticker}" por e-mail para visitantes anônimos.
+ * Nunca abre sozinho: sem `open`, não renderiza nada visível. Logados não veem o modal.
+ */
+export function EmailCaptureModal({ ticker, open, onOpenChange }: EmailCaptureModalProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const { data: session } = useSession();
+
+  const isOpen = open ?? internalOpen;
+  const setOpen = (value: boolean) => {
+    if (onOpenChange) onOpenChange(value);
+    else setInternalOpen(value);
+  };
+
+  const { email, setEmail, status, error, submit } = useEmailSubscription(ticker, {
+    onSuccess: () => setTimeout(() => setOpen(false), 3000),
+  });
+  const isLoading = status === 'loading';
+  const isSuccess = status === 'success';
 
   if (session?.user) {
     return null;
@@ -134,7 +149,7 @@ export function EmailCaptureModal({ ticker, open, onOpenChange }: EmailCaptureMo
             <p className="mt-1 text-xs text-muted-foreground">Confirme pelo link que enviamos para o seu e-mail.</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <form onSubmit={submit} className="space-y-4" noValidate>
             <div className="space-y-2">
               <Label htmlFor="email-capture">Seu e-mail</Label>
               <div className="relative">

@@ -1,11 +1,9 @@
 /**
- * Componente discreto para exibir link ao ticker predecessor (ticker antigo)
- * quando uma empresa foi migrada de outro ticker
+ * Link discreto para o ticker anterior (predecessor) quando a empresa migrou de ticker.
  */
 
 import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
-import { History, ExternalLink } from 'lucide-react';
+import { History } from 'lucide-react';
 
 interface PredecessorTickerLinkProps {
   predecessorTicker: string;
@@ -15,55 +13,22 @@ interface PredecessorTickerLinkProps {
 
 export function PredecessorTickerLink({
   predecessorTicker,
-  currentTicker,
   pageType,
 }: PredecessorTickerLinkProps) {
   const basePath = `/acao/${predecessorTicker.toLowerCase()}`;
-  const href =
-    pageType === 'analise-tecnica'
-      ? `${basePath}/analise-tecnica`
-      : `${basePath}/relatorios`;
+  const href = pageType === 'analise-tecnica' ? `${basePath}/analise-tecnica` : `${basePath}/relatorios`;
 
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <History className="h-3 w-3" />
-      <span>Anteriormente:</span>
+    <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+      <History className="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+      <span>Anteriormente</span>
       <Link
         href={href}
-        className="inline-flex items-center gap-1 hover:text-foreground transition-colors underline decoration-dotted underline-offset-2"
+        className="inline-flex min-h-11 items-center font-medium text-foreground underline decoration-dotted underline-offset-2 hover:text-brand md:min-h-0"
       >
-        <span className="font-mono font-medium">{predecessorTicker}</span>
-        <ExternalLink className="h-3 w-3" />
+        {predecessorTicker}
       </Link>
-      <span className="text-muted-foreground/70">
-        ({pageType === 'analise-tecnica' ? 'análise técnica' : 'relatórios'})
-      </span>
-    </div>
+      <span>({pageType === 'analise-tecnica' ? 'análise técnica' : 'relatórios'})</span>
+    </p>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

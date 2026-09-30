@@ -5,18 +5,18 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
-import { CompanyLogo } from '@/components/company-logo'
-import { CompanySizeBadge } from '@/components/company-size-badge'
-import StrategicAnalysisClient from '@/components/strategic-analysis-client'
-import HeaderScoreWrapper from '@/components/header-score-wrapper'
+import { getCompanySizeInfo } from '@/components/company-size-badge'
+import StrategicAnalysisClient, { StatementsAnalysisSection, StockSummaryHeader } from '@/components/strategic-analysis-client'
 import { PageCacheIndicator } from '@/components/page-cache-indicator'
 import AIAnalysisDual from '@/components/ai-analysis-dual'
 import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisLink from '@/components/technical-analysis-link'
 import MarketSentimentSection from '@/components/market-sentiment-section'
-import { AddToBacktestButton } from '@/components/add-to-backtest-button'
-import AssetSubscriptionButton from '@/components/asset-subscription-button'
+import { FollowAssetCard } from '@/components/asset/follow-asset-card'
+import { AssetSectionNav, type AssetSection } from '@/components/asset/asset-section-nav'
+import { SectionHeader } from '@/components/ui/section-header'
+import { Button } from '@/components/ui/button'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
 import { getSectorCompetitors } from '@/lib/competitor-service'
@@ -31,25 +31,8 @@ import Link from 'next/link'
 import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
 import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
 import { AnonLimitCTA } from '@/components/anon-limit-cta'
-
-// Shadcn UI Components
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-
-// Lucide Icons
-import {
-  Building2,
-  PieChart,
-  Eye,
-  User,
-  GitCompare,
-  ChevronDown,
-  Info,
-  FileText,
-  Globe
-} from 'lucide-react'
+import { formatBRL, formatDeltaPct, formatMultiple, formatNumber, formatPct } from '@/lib/format'
+import { marginOfSafety, valuationStatusLabel } from '@/lib/valuation-metrics'
 
 interface PageProps {
   params: {
@@ -73,14 +56,15 @@ function toNumber(value: PrismaDecimal | Date | string | null): number | null {
   return parseFloat(String(value))
 }
 
-// Funções de formatação
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return 'N/A'
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(value)
-}
+/** Mesmas âncoras da página de ação. */
+const SECTIONS: AssetSection[] = [
+  { id: 'valuation', label: 'Valuation' },
+  { id: 'indicadores', label: 'Indicadores' },
+  { id: 'dividendos', label: 'Dividendos' },
+  { id: 'demonstracoes', label: 'Demonstrações' },
+  { id: 'analise-ia', label: 'Análise IA' },
+  { id: 'tecnica', label: 'Técnica' },
+]
 
 // Cache
 const METADATA_CACHE_TTL = 60 * 60 // 60 minutos em segundos
@@ -92,7 +76,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const ticker = tickerParam.toUpperCase()
   
   // Verificar cache primeiro
-  const cacheKey = `metadata-bdr-${ticker}`
+  const cacheKey = `metadata-bdr-v2-${ticker}`
   const cached = await cache.get<any>(cacheKey, {
     prefix: 'companies',
     ttl: METADATA_CACHE_TTL
@@ -142,7 +126,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     if (!company) {
       return {
-        title: `${ticker} - BDR Não Encontrado | Análise Fácil`,
+        title: `${ticker} - BDR não encontrado`,
         description: `O BDR ${ticker} não foi encontrado em nossa base de dados de análise de Brazilian Depositary Receipts.`
       }
     }
@@ -150,7 +134,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // Verificar se é realmente um BDR, senão redirecionar
     if (company.assetType !== 'BDR') {
       return {
-        title: `${ticker} - Redirecionando...`,
+        title: `${ticker} - Redirecionando`,
         description: `Redirecionando para a página correta do ativo ${ticker}.`
       }
     }
@@ -204,30 +188,28 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       const grahamAnalysis = StrategyFactory.runGrahamAnalysis(companyAnalysisData, STRATEGY_CONFIG.graham)
       fairPrice = grahamAnalysis.fairValue
       upside = grahamAnalysis.upside
-    } catch (error) {
+    } catch {
       // Ignorar erro silenciosamente - não bloquear metadata
     }
     
-    const title = `${ticker} (${company.name}): Preço Justo e Potencial ${anoAtual} | Preço Justo AI`
+    const title = `${ticker} (${company.name}): Preço Justo e Potencial ${anoAtual}`
     
-    // Construir descrição base com informações financeiras
-    let baseDescription = `Análise completa do BDR ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}`
-    
+    // Descrição para SEO com números em pt-BR; campos ausentes são omitidos
+    const pl = toNumber(latestFinancials?.pl ?? null)
+    const roe = toNumber(latestFinancials?.roe ?? null)
+    let baseDescription = `Análise completa do BDR ${company.name} (${ticker}). Preço atual ${formatBRL(currentPrice)}`
     if (fairPrice && fairPrice > 0) {
-      baseDescription += `, Preço Justo calculado em R$ ${fairPrice.toFixed(2)}`
+      baseDescription += `, preço justo estimado em ${formatBRL(fairPrice)} pelo Número de Graham`
       if (upside !== null) {
-        baseDescription += `, com potencial de ${upside > 0 ? '+' : ''}${upside.toFixed(2)}%`
+        baseDescription += ` (potencial de ${formatDeltaPct(upside / 100)})`
       }
     }
-    
-    const plInfo = latestFinancials?.pl ? `P/L: ${(toNumber(latestFinancials.pl) ?? 0).toFixed(1)}` : ''
-    const roeInfo = latestFinancials?.roe ? `ROE: ${((toNumber(latestFinancials.roe) ?? 0) * 100).toFixed(1)}%` : ''
-    const sectorInfo = company.sector ? `Setor ${company.sector}` : ''
-    
-    const financialMetrics = [plInfo, roeInfo, sectorInfo].filter(Boolean)
-    if (financialMetrics.length > 0) {
-      baseDescription += `. ${financialMetrics.join(', ')}.`
-    }
+    const extras = [
+      pl !== null ? `P/L ${formatMultiple(pl)}` : null,
+      roe !== null ? `ROE ${formatPct(roe)}` : null,
+      company.sector ? `setor ${company.sector}` : null,
+    ].filter(Boolean)
+    baseDescription += extras.length > 0 ? `. ${extras.join(', ')}.` : '.'
     
     // Verificar se a descrição contém o texto padrão sobre BDRs
     const defaultBdrText = 'BDRs são certificados de depósito que representam ações de empresas estrangeiras negociadas na B3'
@@ -302,7 +284,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return metadata
   } catch {
     return {
-      title: `${ticker} - Análise de BDR | Preço Justo AI`,
+      title: `${ticker} - Análise de BDR`,
       description: `Análise completa do BDR ${ticker} com indicadores financeiros, valuation e estratégias de investimento em Brazilian Depositary Receipts.`,
       alternates: {
         canonical: `/bdr/${tickerParam.toLowerCase()}`,
@@ -405,7 +387,7 @@ export default async function BdrPage({ params }: PageProps) {
         },
         dailyQuotes: {
           orderBy: { date: 'desc' },
-          take: 1
+          take: 2
         }
       }
     }),
@@ -454,7 +436,10 @@ export default async function BdrPage({ params }: PageProps) {
 
   const latestFinancials = companyData.financialData?.[0]
   const latestQuote = companyData.dailyQuotes?.[0]
+  const previousQuote = companyData.dailyQuotes?.[1]
   const currentPrice = toNumber(latestQuote?.price) ?? toNumber(latestFinancials?.lpa) ?? 0
+  const previousPrice = toNumber(previousQuote?.price)
+  const dayChange = currentPrice > 0 && previousPrice && previousPrice > 0 ? currentPrice / previousPrice - 1 : null
 
   // Buscar concorrentes inteligentes para comparador premium (apenas BDRs)
   const currentMarketCap = toNumber(latestFinancials?.marketCap)
@@ -541,11 +526,12 @@ export default async function BdrPage({ params }: PageProps) {
       // Executar análise Graham para obter preço justo
       const grahamAnalysis = StrategyFactory.runGrahamAnalysis(companyAnalysisData, STRATEGY_CONFIG.graham)
       const fairPrice = grahamAnalysis.fairValue
-      const upside = grahamAnalysis.upside
       const anoAtual = new Date().getFullYear()
-      const recommendation = upside && upside > 0 ? "compra" : "aguardar"
 
-      if (!fairPrice || fairPrice <= 0) return null
+      if (!fairPrice || fairPrice <= 0 || currentPrice <= 0) return null
+
+      const margin = marginOfSafety(currentPrice, fairPrice)
+      const statusLabel = valuationStatusLabel(margin)?.toLowerCase()
 
       const faqs = [
         {
@@ -553,7 +539,7 @@ export default async function BdrPage({ params }: PageProps) {
           "name": `Qual é o preço justo do BDR ${ticker} (${companyData.name})?`,
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": `De acordo com o método de Graham/Bazin, o preço justo estimado para o BDR ${ticker} é de R$ ${fairPrice.toFixed(2)}, o que representa um potencial de ${upside ? upside.toFixed(2) : 'N/A'}% em relação ao preço atual de R$ ${currentPrice.toFixed(2)}.`
+            "text": `Pelo Número de Graham, o preço justo estimado para o BDR ${ticker} é de ${formatBRL(fairPrice)}, uma margem de segurança de ${formatDeltaPct(margin)} em relação ao preço atual de ${formatBRL(currentPrice)}.`
           }
         },
         {
@@ -561,7 +547,7 @@ export default async function BdrPage({ params }: PageProps) {
           "name": `Vale a pena investir no BDR ${ticker} em ${anoAtual}?`,
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": `Com base nos fundamentos atuais, o BDR apresenta uma margem de segurança que sugere ${recommendation}. O preço justo calculado é de R$ ${fairPrice.toFixed(2)} e o preço atual é R$ ${currentPrice.toFixed(2)}. Veja a análise completa no Preço Justo AI.`
+            "text": `Este conteúdo não é recomendação de investimento. Pelo Número de Graham, o preço atual de ${formatBRL(currentPrice)} está ${statusLabel ?? 'sem comparação com o preço justo'} (estimativa de ${formatBRL(fairPrice)}). Compare os demais modelos, o score e os indicadores na análise completa.`
           }
         }
       ]
@@ -579,298 +565,182 @@ export default async function BdrPage({ params }: PageProps) {
 
   const faqSchema = generateFAQSchema()
 
+  const isLoggedIn = !!session?.user?.id
+  const sizeInfo = getCompanySizeInfo(currentMarketCap)
+  const dividendYield = toNumber(latestFinancials?.dy ?? null)
+  const location = [companyData.city, companyData.state].filter(Boolean).join(', ')
+  const aboutItems = [
+    companyData.sector ? { label: 'Setor', value: companyData.sector } : null,
+    companyData.industry ? { label: 'Subsetor', value: companyData.industry } : null,
+    location ? { label: 'Sede', value: location } : null,
+    companyData.fullTimeEmployees
+      ? { label: 'Funcionários', value: formatNumber(companyData.fullTimeEmployees, { digits: 0 }) }
+      : null,
+  ].filter((item): item is { label: string; value: string } => item !== null)
+
   return (
     <>
-      <div className="container mx-auto py-8 px-4">
-        {/* Layout Responsivo: 2 Cards Separados */}
-        <div className="mb-8">
-          <div className="lg:flex lg:space-x-6 space-y-6 lg:space-y-0">
-            
-            {/* Card do Header da Empresa */}
-            <Card className="flex-1">
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-start space-y-4 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                  {/* Logo da empresa com fallback */}
-                  <div className="flex-shrink-0 self-center sm:self-start">
-                    <CompanyLogo
-                      logoUrl={companyData.logoUrl}
-                      companyName={companyData.name}
-                      ticker={ticker}
-                      size={80}
-                    />
-                  </div>
-
-                  {/* Informações básicas */}
-                  <div className="flex-1 min-w-0">
-                    {/* Header: Ticker + Preço (Responsivo) */}
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3">
-                      {/* Ticker e Setor */}
-                      <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-3 lg:mb-0">
-                        <h1 className="text-2xl sm:text-3xl font-bold truncate">{ticker}</h1>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary" className="text-sm w-fit">
-                            <Globe className="w-3 h-3 mr-1" />
-                            BDR
-                          </Badge>
-                          <Badge variant="outline" className="text-sm w-fit">
-                            {companyData.sector || 'N/A'}
-                          </Badge>
-                          <CompanySizeBadge 
-                            marketCap={toNumber(latestFinancials?.marketCap)} 
-                            size="md"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Preço */}
-                      <div className="lg:text-right lg:flex-shrink-0">
-                        <p className="text-sm text-muted-foreground">Preço Atual</p>
-                        <p className="text-xl sm:text-2xl font-bold text-green-600">
-                          {formatCurrency(currentPrice)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Último dado disponível
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <h2 className="text-lg sm:text-xl text-muted-foreground mb-4 truncate">
-                      Análise do BDR {companyData.name}
-                    </h2>
-
-                    {/* Informação sobre BDR */}
-                    <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <Globe className="w-4 h-4 text-purple-600" />
-                        <h3 className="font-semibold text-purple-900 dark:text-purple-100">
-                          Brazilian Depositary Receipt (BDR)
-                        </h3>
-                      </div>
-                      <p className="text-sm text-purple-700 dark:text-purple-300">
-                        BDRs são certificados de depósito que representam ações de empresas estrangeiras 
-                        negociadas na B3. Permitem investir em empresas internacionais através da bolsa brasileira.
-                      </p>
-                    </div>
-
-                    {/* Descrição da Empresa - Collapsible para SEO */}
-                    {companyData.description && (
-                      <div className="mb-4">
-                        <Collapsible>
-                          <CollapsibleTrigger className="flex items-center space-x-2 text-left p-0 hover:no-underline">
-                            <Info className="w-4 h-4 text-muted-foreground" />
-                            <span className="font-medium text-muted-foreground">
-                              Sobre a {companyData.name}
-                            </span>
-                            <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform duration-200" />
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="mt-3">
-                            <div className="p-4 bg-muted/50 rounded-lg border">
-                              <p className="text-sm leading-relaxed text-muted-foreground">
-                                {companyData.description}
-                              </p>
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </div>
-                    )}
-
-                    {/* Card de Notificações - Destacado (apenas quando cards estão empilhados, até 1024px) */}
-                    <div className="mb-6 lg:hidden">
-                      <AssetSubscriptionButton
-                        ticker={ticker}
-                        companyId={companyData.id}
-                        variant="card"
-                        size="default"
-                        showLabel={true}
-                      />
-                    </div>
-
-                    {/* Botões de Ação */}
-                    <div className="mb-4 flex flex-wrap gap-2">
-                      {smartComparatorUrl && (
-                        <Button asChild>
-                          <Link href={smartComparatorUrl}>
-                            <GitCompare className="w-4 h-4 mr-2" />
-                            Comparador Inteligente
-                          </Link>
-                        </Button>
-                      )}
-                      
-                      <AddToBacktestButton
-                        asset={{
-                          ticker: companyData.ticker,
-                          companyName: companyData.name,
-                          sector: companyData.sector || undefined,
-                          currentPrice: companyData.dailyQuotes?.[0]?.price ? Number(companyData.dailyQuotes[0].price) : undefined
-                        }}
-                        variant="outline"
-                        size="default"
-                        showLabel={true}
-                      />
-
-                      {reportsCount > 0 && (
-                        <Button asChild variant="outline" size="default">
-                          <Link href={`/bdr/${ticker.toLowerCase()}/relatorios`}>
-                            <FileText className="w-4 h-4 mr-2" />
-                            Relatórios ({reportsCount})
-                          </Link>
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
-                      {companyData.industry && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <PieChart className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{companyData.industry}</span>
-                        </div>
-                      )}
-                      
-                      {companyData.website && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Eye className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <Link 
-                            href={companyData.website} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline truncate"
-                          >
-                            Site oficial
-                          </Link>
-                        </div>
-                      )}
-                      
-                      {(companyData.city || companyData.state) && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">
-                            {[companyData.city, companyData.state].filter(Boolean).join(', ')}
-                          </span>
-                        </div>
-                      )}
-
-                      {companyData.fullTimeEmployees && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{companyData.fullTimeEmployees.toLocaleString()} funcionários</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card do Score - Separado */}
-            <div className="lg:flex-shrink-0">
-              <PageCacheIndicator ticker={ticker} />
-              <HeaderScoreWrapper ticker={ticker} canViewFullContent={canViewFullContent} />
-              
-              {/* Card de Notificações - Destacado (apenas quando cards estão lado a lado, >= 1024px) */}
-              <div className="hidden lg:block mt-4 lg:w-80">
-                <AssetSubscriptionButton
-                  ticker={ticker}
-                  companyId={companyData.id}
-                  variant="card"
-                  size="default"
-                  showLabel={true}
-                  compact={true}
-                />
-              </div>
-            </div>
+      <div className="mx-auto max-w-6xl space-y-8 px-4 pt-6 pb-12">
+        <div className="space-y-3">
+          <StockSummaryHeader
+            ticker={ticker}
+            name={companyData.name}
+            subtitle={companyData.sector ? `BDR · ${companyData.sector}` : 'BDR'}
+            logoUrl={companyData.logoUrl}
+            price={currentPrice > 0 ? currentPrice : null}
+            dayChange={dayChange}
+            updatedAt={latestFinancials?.updatedAt ?? null}
+            badges={sizeInfo ? [{ label: sizeInfo.label, variant: 'neutral' }] : []}
+            sector={companyData.sector}
+            industry={companyData.industry}
+            canViewFullContent={canViewFullContent}
+            isLoggedIn={isLoggedIn}
+            compareHref={smartComparatorUrl ?? `/comparador?tickers=${ticker}`}
+          />
+          <div className="flex justify-end">
+            <PageCacheIndicator ticker={ticker} isPremium={canViewFullContent} className="text-xs text-muted-foreground" />
           </div>
         </div>
 
-        {latestFinancials && (
+        {shouldShowAnonLimitCTA && <AnonLimitCTA />}
+
+        {latestFinancials ? (
           <>
-            {shouldShowAnonLimitCTA && (
-              <div className="mb-8">
-                <AnonLimitCTA />
+            <AssetSectionNav sections={SECTIONS} />
+
+            <section id="valuation" className="scroll-mt-28">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+                <StrategicAnalysisClient
+                  ticker={ticker}
+                  currentPrice={currentPrice}
+                  latestFinancials={serializedFinancials}
+                  userIsPremium={canViewFullContent}
+                  sector={companyData.sector}
+                  industry={companyData.industry}
+                />
+                <FollowAssetCard
+                  ticker={ticker}
+                  companyId={companyData.id}
+                  isLoggedIn={isLoggedIn}
+                  className="lg:sticky lg:top-32"
+                />
               </div>
-            )}
-            {/* Análises Estratégicas - Usando componente cliente */}
-            {latestFinancials && (
-              <StrategicAnalysisClient 
+            </section>
+
+            <section id="indicadores" className="scroll-mt-28 space-y-4">
+              <SectionHeader title="Indicadores" description="Valores atuais e médias históricas dos principais indicadores." />
+              <FinancialIndicators
                 ticker={ticker}
-                currentPrice={currentPrice}
                 latestFinancials={serializedFinancials}
+                comprehensiveData={comprehensiveData}
+              />
+            </section>
+
+            <section id="dividendos" className="scroll-mt-28">
+              <DividendRadarCompact ticker={ticker} companyName={companyData.name} dividendYield={dividendYield} />
+            </section>
+
+            <section id="demonstracoes" className="scroll-mt-28 space-y-4">
+              <SectionHeader
+                title="Demonstrações financeiras"
+                description="Dados anuais dos últimos 7 anos completos, para acompanhar tendências de resultado."
+              />
+              {comprehensiveData ? (
+                <ComprehensiveFinancialView data={comprehensiveData} />
+              ) : (
+                <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+                  Demonstrações anuais indisponíveis para {ticker}.
+                </p>
+              )}
+              <StatementsAnalysisSection ticker={ticker} userIsPremium={canViewFullContent} />
+            </section>
+
+            <section id="analise-ia" className="scroll-mt-28 space-y-8">
+              <div className="space-y-4">
+                <SectionHeader
+                  title="Análise com IA"
+                  description="Relatório gerado por IA a partir dos dados públicos da empresa."
+                  actions={
+                    reportsCount > 0 ? (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/bdr/${ticker.toLowerCase()}/relatorios`} prefetch={false}>
+                          Relatórios ({reportsCount})
+                        </Link>
+                      </Button>
+                    ) : undefined
+                  }
+                />
+                <AIAnalysisDual
+                  ticker={ticker}
+                  name={companyData.name}
+                  sector={companyData.sector}
+                  currentPrice={currentPrice}
+                  financials={serializedFinancials}
+                  userIsPremium={canViewFullContent}
+                  companyId={companyData.id}
+                />
+              </div>
+              <MarketSentimentSection
+                ticker={ticker}
+                youtubeAnalysis={serializedYoutubeAnalysis}
                 userIsPremium={canViewFullContent}
               />
-            )}
+            </section>
 
-            {/* Análise de Sentimento de Mercado - YouTube */}
-            <MarketSentimentSection
-              ticker={ticker}
-              youtubeAnalysis={serializedYoutubeAnalysis}
-              userIsPremium={canViewFullContent}
-            />
-
-            {/* Análise Técnica */}
-            <TechnicalAnalysisLink 
-              ticker={ticker} 
-              userIsPremium={canViewFullContent}
-              currentPrice={currentPrice}
-              assetType="BDR"
-            />
-
-            {/* Radar de Dividendos */}
-            <div className="mb-6">
-              <DividendRadarCompact 
+            <section id="tecnica" className="scroll-mt-28">
+              <TechnicalAnalysisLink
                 ticker={ticker}
-                companyName={companyData.name}
+                userIsPremium={canViewFullContent}
+                currentPrice={currentPrice}
+                assetType="BDR"
               />
-            </div>
-
-            {/* Indicadores Financeiros com Gráficos */}
-            <FinancialIndicators 
-              ticker={ticker}
-              latestFinancials={serializedFinancials}
-              comprehensiveData={comprehensiveData}
-            />
-
-            {/* Análise com IA */}
-            <AIAnalysisDual
-              ticker={ticker}
-              name={companyData.name}
-              sector={companyData.sector}
-              currentPrice={currentPrice}
-              financials={serializedFinancials}
-              userIsPremium={canViewFullContent}
-              companyId={companyData.id}
-            />
-
-            {/* Dados Financeiros Completos */}
-            {comprehensiveData && (
-              <div className="mt-8">
-                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                      Dados Financeiros Detalhados
-                    </h3>
-                  </div>
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Esta seção apresenta <strong>dados anuais</strong> detalhados dos últimos 7 anos completos, 
-                    complementando os indicadores mostrados acima. Ideal para análise de tendências 
-                    e performance histórica da empresa.
-                  </p>
-                </div>
-                <ComprehensiveFinancialView data={comprehensiveData} />
-              </div>
-            )}
-
-            {/* Footer com data da atualização */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Dados financeiros atualizados em: {' '}
-                {latestFinancials.updatedAt 
-                  ? new Date(latestFinancials.updatedAt).toLocaleDateString('pt-BR')
-                  : 'N/A'
-                }
-              </p>
-            </div>
+            </section>
           </>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+            <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+              Ainda não há dados financeiros processados para {ticker}. Os modelos de valuation aparecem assim que os
+              demonstrativos forem importados.
+            </p>
+            <FollowAssetCard ticker={ticker} companyId={companyData.id} isLoggedIn={isLoggedIn} />
+          </div>
         )}
+
+        <section aria-labelledby="sobre-empresa" className="space-y-4">
+          <SectionHeader id="sobre-empresa" title={`Sobre a ${companyData.name}`} />
+          {companyData.description && (
+            <p className="max-w-[68ch] text-sm leading-6 text-muted-foreground">{companyData.description}</p>
+          )}
+          <p className="max-w-[68ch] text-sm leading-6 text-muted-foreground">
+            BDRs (Brazilian Depositary Receipts) são certificados negociados na B3 que representam ações de empresas
+            estrangeiras. Permitem investir em empresas internacionais pela bolsa brasileira, em reais.
+          </p>
+          {(aboutItems.length > 0 || companyData.website) && (
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              {aboutItems.map((item) => (
+                <div key={item.label} className="min-w-0">
+                  <dt className="text-xs text-muted-foreground">{item.label}</dt>
+                  <dd className="mt-0.5 text-foreground">{item.value}</dd>
+                </div>
+              ))}
+              {companyData.website && (
+                <div className="min-w-0">
+                  <dt className="text-xs text-muted-foreground">Site</dt>
+                  <dd className="mt-0.5">
+                    <a
+                      href={companyData.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-brand underline-offset-4 hover:underline"
+                    >
+                      Site oficial
+                    </a>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          )}
+        </section>
       </div>
 
       {/* Schema Structured Data para SEO */}
@@ -908,7 +778,7 @@ export default async function BdrPage({ params }: PageProps) {
               },
               "stockExchange": "B3 - Brasil Bolsa Balcão",
               "tickerSymbol": ticker,
-              "priceRange": formatCurrency(currentPrice),
+              "priceRange": formatBRL(currentPrice),
               "dividendYield": toNumber(latestFinancials.dy),
               "peRatio": toNumber(latestFinancials.pl),
               "pbRatio": toNumber(latestFinancials.pvp),

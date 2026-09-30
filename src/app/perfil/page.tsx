@@ -1,12 +1,19 @@
 "use client"
 
-import { useSession } from "next-auth/react"
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { signOut, useSession } from "next-auth/react"
+import { ChevronRight, Loader2 } from "lucide-react"
+import { PageHeader } from "@/components/page-header"
+import { SectionHeader } from "@/components/ui/section-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -15,111 +22,149 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Switch } from "@/components/ui/switch"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { useToast } from "@/hooks/use-toast"
-import {
-  User,
-  Shield,
-  Calendar,
-  Lock,
-  Mail,
-  AlertTriangle,
-  X,
-  Check,
-  Loader2,
-  CreditCard,
-  Bell,
-  BarChart3,
-  MessageSquare,
-} from "lucide-react"
-import Link from "next/link"
-import { signOut } from "next-auth/react"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
+import { THEME_TOGGLE_ENABLED } from "@/lib/theme"
+import { formatDate } from "@/lib/format"
 
 interface ProfileData {
   id: string
   name: string | null
   email: string
-  subscriptionTier: 'FREE' | 'PREMIUM'
+  subscriptionTier: "FREE" | "PREMIUM" | "VIP"
   premiumExpiresAt: string | null
-  stripeCustomerId: string | null
-  stripeSubscriptionId: string | null
+  stripeCurrentPeriodEnd: string | null
   hasActiveSubscription: boolean
   cancelAtPeriodEnd: boolean
-  createdAt: string
   isPremium: boolean
+}
+
+/** Seção da página de conta: título + bloco com linhas separadas por borda fina. */
+function AccountSection({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id: string
+  title: string
+  description?: string
+  children: ReactNode
+}) {
+  return (
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-24 space-y-3">
+      <SectionHeader id={`${id}-title`} title={title} description={description} />
+      <div className="divide-y divide-border rounded-lg border border-border bg-card">{children}</div>
+    </section>
+  )
+}
+
+/** Linha de configuração: rótulo e ajuda à esquerda, controle à direita (abaixo no mobile). */
+function SettingRow({
+  label,
+  hint,
+  htmlFor,
+  children,
+}: {
+  label: ReactNode
+  hint?: ReactNode
+  htmlFor?: string
+  children?: ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5">
+      <div className="min-w-0 space-y-0.5">
+        {htmlFor ? (
+          <Label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
+            {label}
+          </Label>
+        ) : (
+          <p className="text-sm font-medium text-foreground">{label}</p>
+        )}
+        {hint && <div className="text-sm text-muted-foreground">{hint}</div>}
+      </div>
+      {children && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
+    </div>
+  )
+}
+
+function LinkRow({ href, title, description }: { href: string; title: string; description: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-14 items-center gap-3 p-4 transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none sm:px-5"
+    >
+      <span className="min-w-0 flex-1 space-y-0.5">
+        <span className="block text-sm font-medium text-foreground">{title}</span>
+        <span className="block text-sm text-muted-foreground">{description}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+    </Link>
+  )
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="space-y-8" aria-busy="true" aria-label="Carregando conta">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="space-y-3">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function PerfilPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const { toast } = useToast()
+  const { isTrialActive, trialEndsAt } = usePremiumStatus()
+
   const [profileData, setProfileData] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(true)
-  
-  // Estados para formulários
+  const [loadError, setLoadError] = useState(false)
+
   const [name, setName] = useState("")
   const [updatingName, setUpdatingName] = useState(false)
-  
+
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [updatingPassword, setUpdatingPassword] = useState(false)
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
-  
-  const [cancellingSubscription, setCancellingSubscription] = useState(false)
+
   const [showCancelDialog, setShowCancelDialog] = useState(false)
-  
-  const [anonymizing, setAnonymizing] = useState(false)
+  const [cancellingSubscription, setCancellingSubscription] = useState(false)
+
   const [showAnonymizeDialog, setShowAnonymizeDialog] = useState(false)
   const [anonymizeConfirm, setAnonymizeConfirm] = useState(false)
-  
-  // Estados para preferências de notificações
+  const [anonymizing, setAnonymizing] = useState(false)
+
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true)
   const [updatingPreferences, setUpdatingPreferences] = useState(false)
-  
-  // Estado para banner de índices
-  const [marketTickerHidden, setMarketTickerHidden] = useState(false)
 
-  useEffect(() => {
-    if (status === "loading") return
-    if (!session) {
-      router.push("/login")
-      return
-    }
-    fetchProfile()
-    fetchNotificationPreferences()
-    checkMarketTickerStatus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, status, router])
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       setLoading(true)
+      setLoadError(false)
       const response = await fetch("/api/profile")
-      if (response.ok) {
-        const data = await response.json()
-        setProfileData(data)
-        setName(data.name || "")
-      } else {
-        toast({
-          title: "Erro",
-          description: "Não foi possível carregar os dados do perfil",
-          variant: "destructive",
-        })
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = (await response.json()) as ProfileData
+      setProfileData(data)
+      setName(data.name || "")
     } catch (error) {
       console.error("Erro ao buscar perfil:", error)
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar dados do perfil",
-        variant: "destructive",
-      })
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const fetchNotificationPreferences = async () => {
+  const fetchNotificationPreferences = useCallback(async () => {
     try {
       const response = await fetch("/api/user/preferences/notifications")
       if (response.ok) {
@@ -129,97 +174,69 @@ export default function PerfilPage() {
     } catch (error) {
       console.error("Erro ao buscar preferências de notificações:", error)
     }
-  }
+  }, [])
 
-  const checkMarketTickerStatus = () => {
-    if (typeof window !== 'undefined') {
-      const hidden = localStorage.getItem('market-ticker-banner-hidden-v2') === 'true'
-      setMarketTickerHidden(hidden)
+  useEffect(() => {
+    if (status === "loading") return
+    if (!session) {
+      router.replace("/login?callbackUrl=/perfil")
+      return
     }
-  }
+    fetchProfile()
+    fetchNotificationPreferences()
+  }, [session, status, router, fetchProfile, fetchNotificationPreferences])
 
-  const handleReenableMarketTicker = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('market-ticker-banner-hidden-v2')
-      setMarketTickerHidden(false)
-      // Disparar evento customizado para notificar outros componentes
-      window.dispatchEvent(new Event('marketTickerVisibilityChange'))
-      toast({
-        title: "Sucesso",
-        description: "Banner de índices reativado.",
-      })
-    }
-  }
+  // O conteúdo chega depois do carregamento: rola até a âncora (ex.: /perfil#assinatura) quando ela existir
+  useEffect(() => {
+    if (!profileData) return
+    const hash = window.location.hash.slice(1)
+    if (!hash) return
+    requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ block: "start" }))
+  }, [profileData])
 
-  const handleUpdateNotificationPreferences = async () => {
+  const handleToggleEmailNotifications = async (enabled: boolean) => {
+    setEmailNotificationsEnabled(enabled)
+    setUpdatingPreferences(true)
     try {
-      setUpdatingPreferences(true)
       const response = await fetch("/api/user/preferences/notifications", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          emailNotificationsEnabled,
-        }),
+        body: JSON.stringify({ emailNotificationsEnabled: enabled }),
       })
-
-      if (response.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Preferências de notificações atualizadas",
-        })
-      } else {
-        throw new Error("Erro ao atualizar preferências")
-      }
+      if (!response.ok) throw new Error("Erro ao atualizar preferências")
+      toast({ title: enabled ? "E-mails de notificação ativados" : "E-mails de notificação desativados" })
     } catch (error) {
       console.error("Erro ao atualizar preferências:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível atualizar as preferências",
-        variant: "destructive",
-      })
+      setEmailNotificationsEnabled(!enabled)
+      toast({ title: "Não foi possível salvar", description: "Tente novamente em instantes.", variant: "destructive" })
     } finally {
       setUpdatingPreferences(false)
     }
   }
 
-  const handleUpdateName = async () => {
-    if (!name.trim()) {
-      toast({
-        title: "Erro",
-        description: "Nome não pode estar vazio",
-        variant: "destructive",
-      })
+  const handleUpdateName = async (e: FormEvent) => {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) {
+      toast({ title: "Informe um nome", variant: "destructive" })
       return
     }
-
     try {
       setUpdatingName(true)
       const response = await fetch("/api/profile/update-name", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: trimmed }),
       })
-
       const data = await response.json()
-
-      if (response.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Nome atualizado com sucesso",
-        })
-        setProfileData((prev) => prev ? { ...prev, name: data.name } : null)
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao atualizar nome",
-          variant: "destructive",
-        })
-      }
+      if (!response.ok) throw new Error(data.error || "Erro ao atualizar nome")
+      toast({ title: "Nome atualizado" })
+      setProfileData((prev) => (prev ? { ...prev, name: data.name } : prev))
     } catch (error) {
       console.error("Erro ao atualizar nome:", error)
       toast({
-        title: "Erro",
-        description: "Erro ao atualizar nome",
+        title: "Não foi possível atualizar o nome",
+        description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       })
     } finally {
@@ -227,61 +244,42 @@ export default function PerfilPage() {
     }
   }
 
-  const handleUpdatePassword = async () => {
+  const resetPasswordForm = () => {
+    setCurrentPassword("")
+    setNewPassword("")
+    setConfirmPassword("")
+    setPasswordError(null)
+  }
+
+  const handleUpdatePassword = async (e: FormEvent) => {
+    e.preventDefault()
     if (newPassword.length < 8) {
-      toast({
-        title: "Erro",
-        description: "A nova senha deve ter pelo menos 8 caracteres",
-        variant: "destructive",
-      })
+      setPasswordError("A nova senha precisa ter pelo menos 8 caracteres.")
       return
     }
-
     if (newPassword !== confirmPassword) {
-      toast({
-        title: "Erro",
-        description: "As senhas não coincidem",
-        variant: "destructive",
-      })
+      setPasswordError("A confirmação não confere com a nova senha.")
       return
     }
-
     try {
       setUpdatingPassword(true)
+      setPasswordError(null)
       const response = await fetch("/api/profile/update-password", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword,
-        }),
+        body: JSON.stringify({ currentPassword, newPassword }),
       })
-
       const data = await response.json()
-
-      if (response.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Senha atualizada com sucesso",
-        })
-        setShowPasswordDialog(false)
-        setCurrentPassword("")
-        setNewPassword("")
-        setConfirmPassword("")
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao atualizar senha",
-          variant: "destructive",
-        })
+      if (!response.ok) {
+        setPasswordError(data.error || "Não foi possível atualizar a senha.")
+        return
       }
+      toast({ title: "Senha atualizada" })
+      setShowPasswordDialog(false)
+      resetPasswordForm()
     } catch (error) {
       console.error("Erro ao atualizar senha:", error)
-      toast({
-        title: "Erro",
-        description: "Erro ao atualizar senha",
-        variant: "destructive",
-      })
+      setPasswordError("Não foi possível atualizar a senha. Tente novamente.")
     } finally {
       setUpdatingPassword(false)
     }
@@ -290,31 +288,17 @@ export default function PerfilPage() {
   const handleCancelSubscription = async () => {
     try {
       setCancellingSubscription(true)
-      const response = await fetch("/api/profile/cancel-subscription", {
-        method: "POST",
-      })
-
+      const response = await fetch("/api/profile/cancel-subscription", { method: "POST" })
       const data = await response.json()
-
-      if (response.ok) {
-        toast({
-          title: "Assinatura cancelada",
-          description: data.message,
-        })
-        setShowCancelDialog(false)
-        fetchProfile() // Atualizar dados
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao cancelar assinatura",
-          variant: "destructive",
-        })
-      }
+      if (!response.ok) throw new Error(data.error || "Erro ao cancelar a renovação")
+      toast({ title: "Renovação automática cancelada", description: data.message })
+      setShowCancelDialog(false)
+      fetchProfile()
     } catch (error) {
       console.error("Erro ao cancelar assinatura:", error)
       toast({
-        title: "Erro",
-        description: "Erro ao cancelar assinatura",
+        title: "Não foi possível cancelar a renovação",
+        description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       })
     } finally {
@@ -323,15 +307,7 @@ export default function PerfilPage() {
   }
 
   const handleAnonymize = async () => {
-    if (!anonymizeConfirm) {
-      toast({
-        title: "Confirmação necessária",
-        description: "Você deve confirmar a anonimização",
-        variant: "destructive",
-      })
-      return
-    }
-
+    if (!anonymizeConfirm) return
     try {
       setAnonymizing(true)
       const response = await fetch("/api/profile/anonymize", {
@@ -339,28 +315,15 @@ export default function PerfilPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirm: true }),
       })
-
       const data = await response.json()
-
-      if (response.ok) {
-        toast({
-          title: "Conta anonimizada",
-          description: data.message,
-        })
-        // Fazer logout e redirecionar
-        await signOut({ callbackUrl: "/" })
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao anonimizar conta",
-          variant: "destructive",
-        })
-      }
+      if (!response.ok) throw new Error(data.error || "Erro ao anonimizar conta")
+      toast({ title: "Conta anonimizada", description: data.message })
+      await signOut({ callbackUrl: "/" })
     } catch (error) {
       console.error("Erro ao anonimizar conta:", error)
       toast({
-        title: "Erro",
-        description: "Erro ao anonimizar conta",
+        title: "Não foi possível anonimizar a conta",
+        description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       })
     } finally {
@@ -368,549 +331,302 @@ export default function PerfilPage() {
     }
   }
 
-  if (status === "loading" || loading) {
+  const header = <PageHeader title="Minha conta" description="Dados de acesso, assinatura e preferências." />
+
+  if (status === "loading" || (loading && !profileData)) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-6 sm:py-8">
+        {header}
+        <ProfileSkeleton />
+      </div>
+    )
+  }
+
+  if (!session) return null
+
+  if (loadError || !profileData) {
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-6 sm:py-8">
+        {header}
+        <div role="alert" className="space-y-3 rounded-lg border border-border bg-card p-6">
+          <p className="text-sm font-medium text-foreground">Não foi possível carregar os dados da conta.</p>
+          <Button variant="outline" onClick={fetchProfile}>
+            Tentar novamente
+          </Button>
         </div>
       </div>
     )
   }
 
-  if (!session || !profileData) {
-    return null
-  }
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    })
-  }
-
-  // Usar isPremium diretamente do user-service (já considera fase Alfa e outros casos)
   const isPremiumActive = profileData.isPremium
+  const renews = profileData.hasActiveSubscription && !profileData.cancelAtPeriodEnd
+  const periodEnd = profileData.stripeCurrentPeriodEnd ?? profileData.premiumExpiresAt
+  const planLabel = isTrialActive ? "Teste Premium" : isPremiumActive ? "Premium" : "Gratuito"
+
+  let planDateLabel: string | null = null
+  let planDate: string | null = null
+  if (isTrialActive && trialEndsAt) {
+    planDateLabel = "Teste termina em"
+    planDate = formatDate(trialEndsAt, { style: "datetime" })
+  } else if (isPremiumActive && renews && periodEnd) {
+    planDateLabel = "Próxima renovação"
+    planDate = formatDate(periodEnd)
+  } else if (isPremiumActive && profileData.premiumExpiresAt) {
+    planDateLabel = "Acesso Premium até"
+    planDate = formatDate(profileData.premiumExpiresAt)
+  }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-          Meu Perfil
-        </h1>
-        <p className="text-slate-600 dark:text-slate-400">
-          Gerencie suas informações pessoais e configurações da conta
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-3xl space-y-10 px-4 py-6 sm:py-8">
+      {header}
 
-      {/* Informações do Usuário */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="w-5 h-5" />
-            Informações Pessoais
-          </CardTitle>
-          <CardDescription>
-            Seus dados de cadastro e informações da conta
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 block">
-              Nome
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Seu nome"
-                className="flex-1"
-              />
-              <Button
-                onClick={handleUpdateName}
-                disabled={updatingName || name === profileData.name}
-                size="sm"
-              >
-                {updatingName ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Salvar"
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 block">
-              Email
-            </label>
+      <AccountSection id="conta" title="Conta">
+        <form onSubmit={handleUpdateName} className="grid gap-2 p-4 sm:px-5">
+          <Label htmlFor="perfil-nome" className="text-sm font-medium text-foreground">
+            Nome
+          </Label>
+          <div className="flex gap-2">
             <Input
-              value={profileData.email}
-              disabled
-              className="bg-slate-50 dark:bg-slate-900"
+              id="perfil-nome"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Seu nome"
+              autoComplete="name"
+              className="min-w-0 flex-1"
             />
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Para alterar seu email, entre em contato com o{" "}
-              <Link href="/suporte" className="text-blue-600 hover:underline">
-                suporte
-              </Link>
-            </p>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 block">
-              Senha
-            </label>
-            <Button
-              variant="outline"
-              onClick={() => setShowPasswordDialog(true)}
-              className="w-full"
-            >
-              <Lock className="w-4 h-4 mr-2" />
-              Alterar Senha
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Conversas com Ben */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5" />
-            Conversas com Ben
-          </CardTitle>
-          <CardDescription>
-            Gerencie suas conversas com o assistente de IA
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild variant="outline" className="w-full">
-            <Link href="/conversas-ben" className="flex items-center justify-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              Ver Minhas Conversas com Ben
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Status Premium */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="w-5 h-5" />
-            Status Premium
-          </CardTitle>
-          <CardDescription>
-            Informações sobre sua assinatura Premium
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
-            <div className="flex items-center gap-3">
-              {isPremiumActive ? (
-                <Badge className="bg-green-600 text-white">
-                  <Shield className="w-3 h-3 mr-1" />
-                  Premium Ativo
-                </Badge>
-              ) : (
-                <Badge variant="outline">
-                  <X className="w-3 h-3 mr-1" />
-                  Plano Gratuito
-                </Badge>
-              )}
-            </div>
-            {!isPremiumActive && (
-              <Button asChild size="sm">
-                <Link href="/planos">Assinar Premium</Link>
-              </Button>
-            )}
-          </div>
-
-          {isPremiumActive && (
-            <>
-              {profileData.premiumExpiresAt && (
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Premium válido até
-                    </p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">
-                      {formatDate(profileData.premiumExpiresAt)}
-                    </p>
-                  </div>
-                  <Calendar className="w-5 h-5 text-slate-400" />
-                </div>
-              )}
-
-              {profileData.hasActiveSubscription && !profileData.cancelAtPeriodEnd && (
-                <div className="p-4 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <CreditCard className="w-5 h-5 text-blue-600 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                        Assinatura Recorrente Ativa
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
-                        Sua assinatura será renovada automaticamente. Você pode cancelar a
-                        recorrência mantendo o acesso até o fim do período atual.
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowCancelDialog(true)}
-                        className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900"
-                      >
-                        Cancelar Recorrência
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {profileData.cancelAtPeriodEnd && (
-                <div className="p-4 border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-orange-600 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-orange-900 dark:text-orange-100 mb-1">
-                        Recorrência Cancelada
-                      </p>
-                      <p className="text-xs text-orange-700 dark:text-orange-300">
-                        Sua assinatura não será renovada. Você manterá acesso Premium até{" "}
-                        {formatDate(profileData.premiumExpiresAt)}.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Preferências de Notificações */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="w-5 h-5" />
-            Preferências de Notificações
-          </CardTitle>
-          <CardDescription>
-            Configure como você deseja receber notificações
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <Mail className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Receber notificações por email
-                </label>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 ml-6">
-                Quando desabilitado, você ainda receberá notificações na plataforma, mas não por email
-              </p>
-            </div>
-            <Switch
-              checked={emailNotificationsEnabled}
-              onCheckedChange={setEmailNotificationsEnabled}
-            />
-          </div>
-          <Button
-            onClick={handleUpdateNotificationPreferences}
-            disabled={updatingPreferences}
-            className="w-full"
-          >
-            {updatingPreferences ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Salvando...
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4 mr-2" />
-                Salvar Preferências
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Preferências de Interface */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            Preferências de Interface
-          </CardTitle>
-          <CardDescription>
-            Configure como você deseja visualizar elementos da interface
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <BarChart3 className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Banner de Índices do Mercado
-                </label>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 ml-6">
-                {marketTickerHidden 
-                  ? "O banner está oculto. Você pode reativá-lo clicando no botão abaixo."
-                  : "Exibe índices internacionais e próprios no topo da página"}
-              </p>
-            </div>
-            {marketTickerHidden && (
-              <Button
-                onClick={handleReenableMarketTicker}
-                variant="outline"
-                size="sm"
-              >
-                <Check className="w-4 h-4 mr-2" />
-                Reativar Banner
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* LGPD - Anonimização */}
-      <Card className="mb-6 border-red-200 dark:border-red-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
-            <AlertTriangle className="w-5 h-5" />
-            Privacidade e Dados (LGPD)
-          </CardTitle>
-          <CardDescription>
-            Anonimização de conta conforme Lei Geral de Proteção de Dados
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="p-4 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 rounded-lg">
-            <p className="text-sm text-red-900 dark:text-red-100 mb-3">
-              <strong>Atenção:</strong> A anonimização é uma ação irreversível. Ao anonimizar sua conta:
-            </p>
-            <ul className="text-sm text-red-800 dark:text-red-200 space-y-2 mb-4 list-disc list-inside">
-              <li>Seu nome e email serão anonimizados na base de dados</li>
-              <li>Sua assinatura será cancelada (se houver)</li>
-              <li>Você perderá acesso à sua conta permanentemente</li>
-              <li>Esta ação não pode ser desfeita</li>
-            </ul>
-            <Button
-              variant="destructive"
-              onClick={() => setShowAnonymizeDialog(true)}
-              className="w-full"
-            >
-              Anonimizar Minha Conta
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Disclaimer sobre troca de email */}
-      <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <Mail className="w-5 h-5 text-blue-600 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                Precisa trocar seu email?
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                Para alterar seu endereço de email, entre em contato com nosso{" "}
-                <Link href="/suporte" className="underline font-medium">
-                  suporte
-                </Link>
-                {" "}abrindo um ticket. Nossa equipe irá ajudá-lo com a alteração.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Dialog de Alterar Senha */}
-      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Alterar Senha</DialogTitle>
-            <DialogDescription>
-              Digite sua senha atual e a nova senha
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                Senha Atual
-              </label>
-              <Input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Digite sua senha atual"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                Nova Senha
-              </label>
-              <Input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Mínimo 8 caracteres"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                Confirmar Nova Senha
-              </label>
-              <Input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Digite a nova senha novamente"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowPasswordDialog(false)
-                setCurrentPassword("")
-                setNewPassword("")
-                setConfirmPassword("")
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={handleUpdatePassword} disabled={updatingPassword}>
-              {updatingPassword ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Check className="w-4 h-4 mr-2" />
-              )}
+            <Button type="submit" variant="outline" disabled={updatingName || name.trim() === (profileData.name ?? "")}>
+              {updatingName && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
               Salvar
             </Button>
-          </DialogFooter>
+          </div>
+        </form>
+        <div className="grid gap-2 p-4 sm:px-5">
+          <Label htmlFor="perfil-email" className="text-sm font-medium text-foreground">
+            E-mail
+          </Label>
+          <Input id="perfil-email" value={profileData.email} readOnly disabled />
+          <p className="text-sm text-muted-foreground">
+            Para trocar o e-mail, abra um chamado no{" "}
+            <Link href="/suporte" className="font-medium text-brand underline-offset-4 hover:underline">
+              suporte
+            </Link>
+            .
+          </p>
+        </div>
+        <SettingRow label="Senha" hint="Use pelo menos 8 caracteres.">
+          <Button variant="outline" onClick={() => setShowPasswordDialog(true)}>
+            Alterar senha
+          </Button>
+        </SettingRow>
+        <LinkRow href="/conversas-ben" title="Conversas com o Ben" description="Histórico das suas conversas com o assistente." />
+      </AccountSection>
+
+      <AccountSection id="assinatura" title="Assinatura">
+        <SettingRow
+          label="Plano"
+          hint={
+            isPremiumActive
+              ? renews
+                ? "A assinatura renova automaticamente. Você pode cancelar a renovação e manter o acesso até o fim do período."
+                : profileData.cancelAtPeriodEnd
+                  ? "A renovação automática foi cancelada."
+                  : undefined
+              : "Rankings avançados, backtest, alertas de preço e análises com IA fazem parte do Premium."
+          }
+        >
+          <Badge variant={isPremiumActive ? "brand" : "neutral"}>{planLabel}</Badge>
+        </SettingRow>
+        {planDateLabel && planDate && (
+          <SettingRow label={planDateLabel}>
+            <span className="text-sm font-medium text-foreground tabular-nums">{planDate}</span>
+          </SettingRow>
+        )}
+        {profileData.cancelAtPeriodEnd && isPremiumActive && (
+          <div role="status" className="bg-warning-subtle p-4 text-sm text-foreground sm:px-5">
+            Sua assinatura não será renovada. O acesso Premium continua até{" "}
+            <span className="font-medium tabular-nums">{formatDate(profileData.premiumExpiresAt)}</span>.
+          </div>
+        )}
+        {(!isPremiumActive || isTrialActive || renews) && (
+          <div className="flex flex-wrap gap-2 p-4 sm:px-5">
+            {(!isPremiumActive || isTrialActive) && (
+              <Button asChild>
+                <Link href="/planos">Ver planos</Link>
+              </Button>
+            )}
+            {renews && (
+              <Button variant="outline" onClick={() => setShowCancelDialog(true)}>
+                Cancelar renovação automática
+              </Button>
+            )}
+          </div>
+        )}
+        <LinkRow
+          href="/dashboard/subscriptions"
+          title="Minhas inscrições"
+          description="Alertas simples por ticker: um e-mail quando o ativo mudar de forma relevante."
+        />
+        <LinkRow
+          href="/dashboard/monitoramentos-customizados"
+          title="Monitoramentos customizados"
+          description="Alertas avançados por preço ou indicador."
+        />
+      </AccountSection>
+
+      <AccountSection id="preferencias" title="Preferências">
+        <SettingRow
+          label="Notificações por e-mail"
+          htmlFor="perfil-email-notificacoes"
+          hint="Desativado, você continua recebendo as notificações dentro da plataforma."
+        >
+          <Switch
+            id="perfil-email-notificacoes"
+            checked={emailNotificationsEnabled}
+            onCheckedChange={handleToggleEmailNotifications}
+            disabled={updatingPreferences}
+          />
+        </SettingRow>
+        {THEME_TOGGLE_ENABLED && (
+          <SettingRow label="Tema" hint="Claro, escuro ou igual ao sistema.">
+            <ThemeToggle variant="list" className="w-full sm:w-72" />
+          </SettingRow>
+        )}
+      </AccountSection>
+
+      <AccountSection id="privacidade" title="Privacidade e dados" description="Direitos previstos na LGPD.">
+        <SettingRow
+          label="Anonimizar conta"
+          hint="Seu nome e e-mail são anonimizados, a assinatura é cancelada e o acesso à conta é encerrado. Não pode ser desfeito."
+        >
+          <Button variant="outline" className="text-negative hover:text-negative" onClick={() => setShowAnonymizeDialog(true)}>
+            Anonimizar conta
+          </Button>
+        </SettingRow>
+      </AccountSection>
+
+      <Dialog
+        open={showPasswordDialog}
+        onOpenChange={(open) => {
+          setShowPasswordDialog(open)
+          if (!open) resetPasswordForm()
+        }}
+      >
+        <DialogContent>
+          <form onSubmit={handleUpdatePassword} className="grid min-w-0 gap-4">
+            <DialogHeader>
+              <DialogTitle>Alterar senha</DialogTitle>
+              <DialogDescription>Informe a senha atual e escolha uma nova.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-1.5">
+              <Label htmlFor="senha-atual">Senha atual</Label>
+              <Input
+                id="senha-atual"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="senha-nova">Nova senha</Label>
+              <Input
+                id="senha-nova"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={8}
+                required
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="senha-confirmacao">Confirmar nova senha</Label>
+              <Input
+                id="senha-confirmacao"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                aria-describedby={passwordError ? "senha-erro" : undefined}
+                required
+              />
+            </div>
+            {passwordError && (
+              <p id="senha-erro" role="alert" className="text-sm text-negative">
+                {passwordError}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setShowPasswordDialog(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={updatingPassword}>
+                {updatingPassword && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+                Salvar senha
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Cancelar Assinatura */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancelar Recorrência da Assinatura</DialogTitle>
+            <DialogTitle>Cancelar a renovação automática?</DialogTitle>
             <DialogDescription>
-              Você tem certeza que deseja cancelar a recorrência da sua assinatura?
+              O acesso Premium continua até{" "}
+              {profileData.premiumExpiresAt ? formatDate(profileData.premiumExpiresAt) : "o fim do período atual"}. Depois, a
+              conta volta ao plano gratuito. Você pode assinar de novo quando quiser.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Ao cancelar a recorrência:
-            </p>
-            <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-2 list-disc list-inside mb-4">
-              <li>Sua assinatura não será renovada automaticamente</li>
-              <li>Você manterá acesso Premium até{" "}
-                {profileData.premiumExpiresAt
-                  ? formatDate(profileData.premiumExpiresAt)
-                  : "o fim do período atual"}
-              </li>
-              <li>Após a expiração, você voltará ao plano gratuito</li>
-            </ul>
-            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-              Você pode assinar novamente a qualquer momento.
-            </p>
-          </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowCancelDialog(false)}
-            >
-              Manter Assinatura
+            <Button variant="ghost" onClick={() => setShowCancelDialog(false)}>
+              Manter assinatura
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleCancelSubscription}
-              disabled={cancellingSubscription}
-            >
-              {cancellingSubscription ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <X className="w-4 h-4 mr-2" />
-              )}
-              Cancelar Recorrência
+            <Button variant="destructive" onClick={handleCancelSubscription} disabled={cancellingSubscription}>
+              {cancellingSubscription && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+              Cancelar renovação
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Anonimização */}
-      <Dialog open={showAnonymizeDialog} onOpenChange={setShowAnonymizeDialog}>
-        <DialogContent className="max-w-md">
+      <Dialog
+        open={showAnonymizeDialog}
+        onOpenChange={(open) => {
+          setShowAnonymizeDialog(open)
+          if (!open) setAnonymizeConfirm(false)
+        }}
+      >
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-red-600 dark:text-red-400">
-              Anonimizar Conta
-            </DialogTitle>
-            <DialogDescription>
-              Esta ação é irreversível e você perderá acesso permanente à sua conta.
-            </DialogDescription>
+            <DialogTitle>Anonimizar conta</DialogTitle>
+            <DialogDescription>Esta ação é irreversível.</DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <div className="p-4 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 rounded-lg mb-4">
-              <p className="text-sm font-medium text-red-900 dark:text-red-100 mb-2">
-                O que acontecerá:
-              </p>
-              <ul className="text-xs text-red-800 dark:text-red-200 space-y-1 list-disc list-inside">
-                <li>Seu nome e email serão anonimizados</li>
-                <li>Sua assinatura será cancelada</li>
-                <li>Você perderá acesso à conta</li>
-                <li>Esta ação não pode ser desfeita</li>
-              </ul>
-            </div>
-            <div className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                id="anonymize-confirm"
-                checked={anonymizeConfirm}
-                onChange={(e) => setAnonymizeConfirm(e.target.checked)}
-                className="mt-1"
-              />
-              <label
-                htmlFor="anonymize-confirm"
-                className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer"
-              >
-                Entendo que esta ação é irreversível e que perderei acesso permanente à minha conta.
-              </label>
-            </div>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-foreground marker:text-muted-foreground">
+            <li>Seu nome e e-mail são anonimizados.</li>
+            <li>Sua assinatura, se houver, é cancelada.</li>
+            <li>Você perde o acesso à conta de forma permanente.</li>
+          </ul>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="anonymize-confirm"
+              checked={anonymizeConfirm}
+              onCheckedChange={(checked) => setAnonymizeConfirm(checked === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor="anonymize-confirm" className="text-sm leading-5 font-normal text-foreground">
+              Entendo que esta ação é irreversível e que perderei o acesso à minha conta.
+            </Label>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowAnonymizeDialog(false)
-                setAnonymizeConfirm(false)
-              }}
-            >
+            <Button variant="ghost" onClick={() => setShowAnonymizeDialog(false)}>
               Cancelar
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleAnonymize}
-              disabled={!anonymizeConfirm || anonymizing}
-            >
-              {anonymizing ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 mr-2" />
-              )}
-              Anonimizar Conta
+            <Button variant="destructive" onClick={handleAnonymize} disabled={!anonymizeConfirm || anonymizing}>
+              {anonymizing && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+              Anonimizar conta
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -918,4 +634,3 @@ export default function PerfilPage() {
     </div>
   )
 }
-

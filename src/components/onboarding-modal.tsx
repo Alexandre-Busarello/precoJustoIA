@@ -1,349 +1,162 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { ChevronRight } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { cn } from "@/lib/utils"
-import { Hand, TrendingUp, Target, Sparkles } from "lucide-react"
 
-type OnboardingStep = "welcome" | "name" | "acquisition" | "experience" | "focus"
+type QuestionStep = "name" | "acquisition" | "experience" | "focus"
+type OnboardingStep = "welcome" | QuestionStep | "done"
+
+const QUESTION_ORDER: QuestionStep[] = ["name", "acquisition", "experience", "focus"]
 
 interface OnboardingModalProps {
   isOpen: boolean
   onClose: () => void
   onComplete: () => void
-  onlyQuestions?: string[] // Se fornecido, mostra apenas essas perguntas (ex: ['acquisition', 'experience'])
+  /** Mostra só estas perguntas, sem a tela de boas-vindas (ex.: ['acquisition', 'experience']). */
+  onlyQuestions?: string[]
+  /** Perguntas ainda sem resposta (onboarding-status). Na tela de boas-vindas, limita "Personalizar" a elas. */
+  pendingQuestions?: string[]
+  /** Respostas já salvas, preservadas quando o usuário pula uma pergunta. */
   savedData?: {
     name?: string | null
     acquisitionSource?: string | null
     experienceLevel?: string | null
     investmentFocus?: string | null
-  } // Dados já salvos do onboarding para preservar ao voltar
+  }
 }
 
-const ACQUISITION_OPTIONS = [
-  { value: "google", label: "Pesquisei no Google" },
-  { value: "youtube", label: "Vi um vídeo no YouTube" },
-  { value: "friend", label: "Indicação de um amigo ou colega" },
-  { value: "instagram", label: "Instagram / Facebook" },
+interface Option {
+  value: string
+  label: string
+  description?: string
+}
+
+const ACQUISITION_OPTIONS: Option[] = [
+  { value: "google", label: "Pesquisa no Google" },
+  { value: "youtube", label: "Vídeo no YouTube" },
+  { value: "friend", label: "Indicação de amigo ou colega" },
+  { value: "instagram", label: "Instagram ou Facebook" },
   { value: "linkedin", label: "LinkedIn" },
-  { value: "article", label: "Vi em um artigo ou notícia (Blog, Portal)" },
+  { value: "article", label: "Artigo ou notícia (blog, portal)" },
   { value: "other", label: "Outro" },
 ]
 
-const EXPERIENCE_OPTIONS = [
+const EXPERIENCE_OPTIONS: Option[] = [
   { value: "beginner", label: "Estou começando agora", description: "Iniciante" },
   { value: "intermediate", label: "Já invisto, mas não costumo analisar a fundo", description: "Intermediário" },
-  { value: "advanced", label: "Já faço minhas próprias análises fundamentalistas", description: "Avançado" },
+  { value: "advanced", label: "Faço minhas próprias análises fundamentalistas", description: "Avançado" },
 ]
 
-const FOCUS_OPTIONS = [
-  { value: "dividends", label: "Renda Passiva", description: "Receber Dividendos" },
-  { value: "growth", label: "Crescimento", description: "Valorização das Ações" },
-  { value: "both", label: "Ambos", description: "Dividendos + Crescimento" },
-  { value: "explore", label: "Apenas explorar e aprender", description: "" },
+const FOCUS_OPTIONS: Option[] = [
+  { value: "dividends", label: "Renda passiva", description: "Receber dividendos" },
+  { value: "growth", label: "Crescimento", description: "Valorização das ações" },
+  { value: "both", label: "Os dois", description: "Dividendos e crescimento" },
+  { value: "explore", label: "Explorar e aprender" },
 ]
 
-export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, savedData }: OnboardingModalProps) {
+/** Primeiros passos: levam direto ao que o Premium entrega (o teste dura 1 dia). */
+const FIRST_STEPS = [
+  {
+    href: "/acao/petr4",
+    title: "Abrir o valuation completo de uma ação",
+    description: "8 modelos de avaliação, preço justo estimado, margem de segurança e histórico. Exemplo: PETR4.",
+  },
+  {
+    href: "/dashboard/monitoramentos-customizados/criar",
+    title: "Criar um alerta de preço",
+    description: "Receba um e-mail quando o ativo chegar ao preço que você definir.",
+  },
+  {
+    href: "/ranking?model=barsi",
+    title: "Gerar um ranking Barsi ou Gordon",
+    description: "Ações pagadoras de dividendos ordenadas por preço-teto ou pelo modelo de Gordon.",
+  },
+] as const
+
+function splitAcquisition(saved?: string | null): { source: string; detail: string } {
+  if (!saved) return { source: "", detail: "" }
+  if (saved.startsWith("other: ")) return { source: "other", detail: saved.replace("other: ", "") }
+  return { source: saved, detail: "" }
+}
+
+export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, pendingQuestions, savedData }: OnboardingModalProps) {
   const { data: session } = useSession()
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome")
-  const [name, setName] = useState<string>("")
-  const [acquisitionSource, setAcquisitionSource] = useState<string>("")
-  const [acquisitionOtherDetail, setAcquisitionOtherDetail] = useState<string>("")
-  const [experienceLevel, setExperienceLevel] = useState<string>("")
-  const [investmentFocus, setInvestmentFocus] = useState<string>("")
+  const { isPremium, isTrialActive } = usePremiumStatus()
+  const partial = Boolean(onlyQuestions && onlyQuestions.length > 0)
+  const questions = partial
+    ? QUESTION_ORDER.filter((q) => onlyQuestions!.includes(q))
+    : pendingQuestions
+      ? // O status não lista o nome: ele conta como pendente só se ainda não foi salvo
+        QUESTION_ORDER.filter((q) => (q === "name" ? !savedData?.name : pendingQuestions.includes(q)))
+      : QUESTION_ORDER
+
+  // O provider só monta o modal quando ele abre: o estado inicial vem das respostas salvas
+  const initialAcquisition = splitAcquisition(savedData?.acquisitionSource)
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(() => (partial ? questions[0] ?? "welcome" : "welcome"))
+  const [name, setName] = useState(savedData?.name ?? "")
+  const [acquisitionSource, setAcquisitionSource] = useState(initialAcquisition.source)
+  const [acquisitionOtherDetail, setAcquisitionOtherDetail] = useState(initialAcquisition.detail)
+  const [experienceLevel, setExperienceLevel] = useState(savedData?.experienceLevel ?? "")
+  const [investmentFocus, setInvestmentFocus] = useState(savedData?.investmentFocus ?? "")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const markedSeenRef = useRef(false)
 
-  // Registrar que a modal apareceu (marcar lastOnboardingSeenAt) quando modal abre pela primeira vez
-  const [hasMarkedAsSeen, setHasMarkedAsSeen] = useState(false)
-  
+  // Registra que o onboarding foi exibido (lastOnboardingSeenAt), uma vez por abertura
   useEffect(() => {
-    // Quando modal abre pela primeira vez, marcar como visto
-    if (isOpen && !hasMarkedAsSeen && session?.user?.email) {
-      // Chamar endpoint para marcar como visto (sem salvar dados ainda)
-      fetch("/api/user/onboarding/mark-seen", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-        .then(() => {
-          setHasMarkedAsSeen(true)
-          console.log('[Onboarding] Modal marcada como vista')
-        })
-        .catch((error) => {
-          console.error("Erro ao marcar onboarding como visto:", error)
-        })
-    }
-  }, [isOpen, hasMarkedAsSeen, session?.user?.email])
-
-  // Carregar dados salvos quando o modal abre
-  useEffect(() => {
-    if (isOpen) {
-      // Se onlyQuestions for fornecido, pular welcome e ir direto para a primeira pergunta
-      if (onlyQuestions && onlyQuestions.length > 0) {
-        // Determinar o primeiro passo baseado nas perguntas faltantes
-        if (onlyQuestions.includes('name')) {
-          setCurrentStep("name")
-        } else if (onlyQuestions.includes('acquisition')) {
-          setCurrentStep("acquisition")
-        } else if (onlyQuestions.includes('experience')) {
-          setCurrentStep("experience")
-        } else if (onlyQuestions.includes('focus')) {
-          setCurrentStep("focus")
-        } else {
-          setCurrentStep("welcome")
-        }
-      } else {
-        setCurrentStep("welcome")
-      }
-      
-      // Carregar dados salvos se existirem (quando voltando para complementar)
-      if (savedData) {
-        if (savedData.name) {
-          setName(savedData.name)
-        }
-        if (savedData.acquisitionSource) {
-          // Se for "other: detalhe", separar
-          if (savedData.acquisitionSource.startsWith('other: ')) {
-            setAcquisitionSource("other")
-            setAcquisitionOtherDetail(savedData.acquisitionSource.replace('other: ', ''))
-          } else {
-            setAcquisitionSource(savedData.acquisitionSource)
-          }
-        }
-        if (savedData.experienceLevel) {
-          setExperienceLevel(savedData.experienceLevel)
-        }
-        if (savedData.investmentFocus) {
-          setInvestmentFocus(savedData.investmentFocus)
-        }
-      } else {
-        // Se não há dados salvos, resetar tudo (onboarding novo)
-        setName("")
-        setAcquisitionSource("")
-        setAcquisitionOtherDetail("")
-        setExperienceLevel("")
-        setInvestmentFocus("")
-      }
-    } else {
-      // Quando modal fecha, resetar flag para permitir marcar novamente se reabrir
-      setHasMarkedAsSeen(false)
-    }
-  }, [isOpen, onlyQuestions, savedData])
-
-  // Resetar detalhe quando mudar de seleção
-  useEffect(() => {
-    if (acquisitionSource !== "other") {
-      setAcquisitionOtherDetail("")
-    }
-  }, [acquisitionSource])
-
-  const handleSkip = async () => {
-    if (currentStep === "welcome") {
-      await saveOnboardingData(null, null, null, null)
-      onClose()
+    if (!isOpen) {
+      markedSeenRef.current = false
       return
     }
+    if (markedSeenRef.current || !session?.user?.email) return
+    markedSeenRef.current = true
+    fetch("/api/user/onboarding/mark-seen", { method: "POST", headers: { "Content-Type": "application/json" } }).catch(
+      (error) => console.error("Erro ao marcar onboarding como visto:", error)
+    )
+  }, [isOpen, session?.user?.email])
 
-    // Avançar para o próximo passo ou fechar
-    if (currentStep === "name") {
-      const next = getNextStep("name")
-      if (next) {
-        setCurrentStep(next)
-      } else {
-        // Não há mais perguntas, salvar e fechar
-        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
-        onClose()
-      }
-    } else if (currentStep === "acquisition") {
-      const next = getNextStep("acquisition")
-      if (next) {
-        setCurrentStep(next)
-      } else {
-        // Não há mais perguntas, salvar e fechar
-        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
-        onClose()
-      }
-    } else if (currentStep === "experience") {
-      const next = getNextStep("experience")
-      if (next) {
-        setCurrentStep(next)
-      } else {
-        // Não há mais perguntas, salvar e fechar
-        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
-        onClose()
-      }
-    } else if (currentStep === "focus") {
-      // Preparar acquisition com detalhe se for "other"
-      let finalAcquisition = acquisitionSource || null
-      if (acquisitionSource === "other" && acquisitionOtherDetail.trim()) {
-        finalAcquisition = `other: ${acquisitionOtherDetail.trim()}`
-      }
-      await saveOnboardingData(name.trim() || null, finalAcquisition, experienceLevel || null, investmentFocus || null)
-      onClose()
+  const finalAcquisition = () => {
+    if (acquisitionSource === "other") {
+      const detail = acquisitionOtherDetail.trim()
+      return detail ? `other: ${detail}` : savedData?.acquisitionSource ?? null
     }
+    return acquisitionSource || savedData?.acquisitionSource || null
   }
 
-  // Função auxiliar para determinar o próximo passo válido
-  const getNextStep = (current: OnboardingStep): OnboardingStep | null => {
-    if (onlyQuestions && onlyQuestions.length > 0) {
-      // Se estamos mostrando apenas perguntas específicas, pular as que não estão na lista
-      const steps = ["name", "acquisition", "experience", "focus"] as OnboardingStep[]
-      const currentIndex = steps.indexOf(current)
-      
-      for (let i = currentIndex + 1; i < steps.length; i++) {
-        const step = steps[i]
-        if (step === "name" && onlyQuestions.includes("name")) return step
-        if (step === "acquisition" && onlyQuestions.includes("acquisition")) return step
-        if (step === "experience" && onlyQuestions.includes("experience")) return step
-        if (step === "focus" && onlyQuestions.includes("focus")) return step
-      }
-      return null // Não há mais perguntas
-    }
-    
-    // Comportamento normal
-    if (current === "welcome") return "name"
-    if (current === "name") return "acquisition"
-    if (current === "acquisition") return "experience"
-    if (current === "experience") return "focus"
-    return null
-  }
-
-  const handleNext = async () => {
-    if (currentStep === "welcome") {
-      const next = getNextStep("welcome")
-      if (next) {
-        setCurrentStep(next)
-      }
-      return
-    }
-
-    if (currentStep === "name") {
-      // Nome é opcional, pode avançar mesmo sem preencher
-      const next = getNextStep("name")
-      if (next) {
-        setCurrentStep(next)
-      } else {
-        // Última pergunta, salvar e fechar
-        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
-        onComplete()
-        onClose()
-      }
-      return
-    }
-
-    if (currentStep === "acquisition") {
-      if (!acquisitionSource) return
-      const next = getNextStep("acquisition")
-      if (next) {
-        setCurrentStep(next)
-      } else {
-        // Última pergunta, salvar e fechar
-        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
-        onComplete()
-        onClose()
-      }
-      return
-    }
-
-    if (currentStep === "experience") {
-      if (!experienceLevel) return
-      const next = getNextStep("experience")
-      if (next) {
-        setCurrentStep(next)
-      } else {
-        // Última pergunta, salvar e fechar
-        await saveOnboardingData(name.trim() || null, acquisitionSource || null, experienceLevel || null, investmentFocus || null)
-        onComplete()
-        onClose()
-      }
-      return
-    }
-
-    if (currentStep === "focus") {
-      if (!investmentFocus) return
-      // Preparar acquisition com detalhe se for "other"
-      let finalAcquisition = acquisitionSource || null
-      if (acquisitionSource === "other" && acquisitionOtherDetail.trim()) {
-        finalAcquisition = `other: ${acquisitionOtherDetail.trim()}`
-      }
-      await saveOnboardingData(name.trim() || null, finalAcquisition, experienceLevel || null, investmentFocus)
-      onComplete()
-      onClose()
-    }
-  }
-
-  const saveOnboardingData = async (
-    userName: string | null,
-    acquisition: string | null,
-    experience: string | null,
-    focus: string | null
-  ) => {
+  /** Salva as respostas; perguntas sem resposta nova mantêm o valor salvo. */
+  const saveAnswers = async () => {
     if (!session?.user?.email) return
-
     setIsSubmitting(true)
     try {
-      // Preparar dados preservando valores já salvos
-      // Se não há valor novo mas há valor salvo, usar o valor salvo para preservar
-      // Se não há valor novo nem salvo, enviar null (pular pergunta)
-      // Se há valor novo, usar o valor novo
-      
-      let finalName: string | null = userName || null
-      if (!userName && savedData?.name) {
-        // Preservar valor salvo se não há valor novo
-        finalName = savedData.name
-      }
-      
-      let finalAcquisition: string | null = acquisition || null
-      if (acquisition === "other" && acquisitionOtherDetail.trim()) {
-        finalAcquisition = `other: ${acquisitionOtherDetail.trim()}`
-      } else if (!acquisition && savedData?.acquisitionSource) {
-        // Preservar valor salvo se não há valor novo
-        finalAcquisition = savedData.acquisitionSource
-      }
-
-      let finalExperience: string | null = experience || null
-      if (!experience && savedData?.experienceLevel) {
-        // Preservar valor salvo se não há valor novo
-        finalExperience = savedData.experienceLevel
-      }
-
-      let finalFocus: string | null = focus || null
-      if (!focus && savedData?.investmentFocus) {
-        // Preservar valor salvo se não há valor novo
-        finalFocus = savedData.investmentFocus
-      }
-
-      // Sempre enviar todos os valores para garantir que valores salvos sejam preservados
-      const payload = {
-        name: finalName,
-        acquisitionSource: finalAcquisition,
-        experienceLevel: finalExperience,
-        investmentFocus: finalFocus,
-      }
-
       const response = await fetch("/api/user/onboarding", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim() || savedData?.name || null,
+          acquisitionSource: finalAcquisition(),
+          experienceLevel: experienceLevel || savedData?.experienceLevel || null,
+          investmentFocus: investmentFocus || savedData?.investmentFocus || null,
+        }),
       })
-
       if (!response.ok) {
         console.error("Erro ao salvar dados do onboarding")
         return
       }
-
-      // Limpar cache do localStorage após salvar com sucesso
-      if (session?.user?.email) {
-        const cacheKey = `onboarding-status-cache-${session.user.email}`
-        localStorage.removeItem(cacheKey)
-        console.log('[Onboarding] Cache limpo após salvar dados')
-      }
+      localStorage.removeItem(`onboarding-status-cache-${session.user.email}`)
     } catch (error) {
       console.error("Erro ao salvar dados do onboarding:", error)
     } finally {
@@ -351,383 +164,264 @@ export function OnboardingModal({ isOpen, onClose, onComplete, onlyQuestions, sa
     }
   }
 
-  const getStepNumber = () => {
-    switch (currentStep) {
-      case "name":
-        return "1 de 4"
-      case "acquisition":
-        return "2 de 4"
-      case "experience":
-        return "3 de 4"
-      case "focus":
-        return "4 de 4"
-      default:
-        return ""
+  const hasAnswers = Boolean(name.trim() || acquisitionSource || experienceLevel || investmentFocus)
+
+  /** Esc, "Fechar" ou "Agora não": guarda o que já foi respondido e fecha. */
+  const handleDismiss = async () => {
+    if (isSubmitting) return
+    if (currentStep !== "welcome" && currentStep !== "done" && hasAnswers) {
+      await saveAnswers()
+      onComplete()
     }
+    onClose()
   }
 
-  const canProceed = () => {
+  const goToNextQuestion = async (from: QuestionStep) => {
+    const next = questions[questions.indexOf(from) + 1]
+    if (next) {
+      setCurrentStep(next)
+      return
+    }
+    await saveAnswers()
+    onComplete()
+    if (partial) onClose()
+    else setCurrentStep("done")
+  }
+
+  const canProceed = (() => {
     switch (currentStep) {
-      case "name":
-        // Nome é opcional, sempre pode prosseguir
-        return true
       case "acquisition":
-        // Se selecionou "other", precisa preencher o detalhe
-        if (acquisitionSource === "other") {
-          return !!acquisitionOtherDetail.trim()
-        }
-        return !!acquisitionSource
+        return acquisitionSource === "other" ? Boolean(acquisitionOtherDetail.trim()) : Boolean(acquisitionSource)
       case "experience":
-        return !!experienceLevel
+        return Boolean(experienceLevel)
       case "focus":
-        return !!investmentFocus
+        return Boolean(investmentFocus)
       default:
         return true
     }
-  }
+  })()
+
+  const questionIndex = currentStep === "welcome" || currentStep === "done" ? -1 : questions.indexOf(currentStep)
+  const isLastQuestion = questionIndex === questions.length - 1
+
+  const trialNote = isTrialActive
+    ? "Seu teste Premium vale por 1 dia. Comece pelo que mais importa:"
+    : isPremium
+      ? "Comece pelo que mais importa:"
+      : "Comece pelo que mais importa. Alguns recursos fazem parte do plano Premium."
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent 
-        className="max-w-lg max-h-[90vh] overflow-y-auto" 
-        showCloseButton={false}
-      >
-        {/* Welcome Step */}
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleDismiss()}>
+      <DialogContent className="sm:max-w-lg">
         {currentStep === "welcome" && (
-          <div className="space-y-6 py-4">
-            <DialogHeader className="text-center">
-              <div className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                <Hand className="w-8 h-8 text-white" />
-              </div>
-              <DialogTitle className="text-2xl font-bold">
-                👋 Boas-vindas ao Preço Justo AI!
-              </DialogTitle>
-              <DialogDescription className="text-base pt-2">
-                Vamos personalizar sua experiência. São algumas perguntas rápidas para te ajudar a encontrar as melhores oportunidades da bolsa.
-              </DialogDescription>
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-xl text-balance">Boas-vindas ao Preço Justo AI</DialogTitle>
+              <DialogDescription>{trialNote}</DialogDescription>
             </DialogHeader>
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button
-                onClick={handleNext}
-                className="flex-1"
-                size="lg"
-              >
-                Vamos lá!
+            <FirstStepsList onNavigate={onClose} />
+            <DialogFooter>
+              <Button variant="ghost" onClick={handleDismiss}>
+                Agora não
               </Button>
-              <Button
-                onClick={handleSkip}
-                variant="outline"
-                className="flex-1"
-                size="lg"
-                disabled={isSubmitting}
-              >
-                Pular por enquanto
-              </Button>
-            </div>
-          </div>
+              {questions.length > 0 && (
+                <Button variant="outline" onClick={() => setCurrentStep(questions[0])}>
+                  {questions.length === 1 ? "Personalizar em 1 pergunta" : `Personalizar em ${questions.length} perguntas`}
+                </Button>
+              )}
+            </DialogFooter>
+          </>
         )}
 
-        {/* Name Step */}
-        {currentStep === "name" && (
-          <div className="space-y-6 py-4">
+        {currentStep === "done" && (
+          <>
             <DialogHeader>
-              <DialogTitle className="text-xl">
-                Pergunta {getStepNumber()}
-              </DialogTitle>
-              <DialogDescription className="text-base pt-2">
-                Como podemos te chamar?
-                <br />
-                <span className="text-sm text-muted-foreground">
-                  Este campo é opcional. Você pode pular se preferir.
-                </span>
-              </DialogDescription>
+              <DialogTitle className="text-xl">Tudo pronto</DialogTitle>
+              <DialogDescription>{trialNote}</DialogDescription>
             </DialogHeader>
-
-            <div className="space-y-2">
-              <Input
-                type="text"
-                placeholder="Seu nome (opcional)"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full"
-                autoFocus
-              />
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button
-                onClick={handleNext}
-                className="flex-1"
-                size="lg"
-                disabled={isSubmitting}
-              >
-                Próximo
+            <FirstStepsList onNavigate={onClose} />
+            <DialogFooter>
+              <Button variant="ghost" onClick={onClose}>
+                Fechar
               </Button>
-              <Button
-                onClick={handleSkip}
-                variant="outline"
-                className="flex-1"
-                size="lg"
-                disabled={isSubmitting}
-              >
-                Pular esta pergunta
-              </Button>
-            </div>
-          </div>
+            </DialogFooter>
+          </>
         )}
 
-        {/* Acquisition Step */}
-        {currentStep === "acquisition" && (
-          <div className="space-y-6 py-4">
+        {questionIndex >= 0 && (
+          <form
+            className="grid min-w-0 gap-5"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (canProceed && !isSubmitting) goToNextQuestion(currentStep as QuestionStep)
+            }}
+          >
             <DialogHeader>
-              <DialogTitle className="text-xl">
-                Pergunta {getStepNumber()}
+              <p className="text-xs font-medium text-muted-foreground tabular-nums">
+                Pergunta {questionIndex + 1} de {questions.length}
+              </p>
+              <DialogTitle className="text-xl leading-snug">
+                {currentStep === "name" && "Como podemos te chamar?"}
+                {currentStep === "acquisition" && "Como você conheceu o Preço Justo AI?"}
+                {currentStep === "experience" && "Qual frase descreve melhor você como investidor?"}
+                {currentStep === "focus" && "Qual é o seu foco principal na bolsa?"}
               </DialogTitle>
-              <DialogDescription className="text-base pt-2">
-                Como você chegou até aqui?
-                <br />
-                <span className="text-sm text-muted-foreground">
-                  Isso nos ajuda muito a saber onde focar nossos esforços.
-                </span>
+              <DialogDescription>
+                {currentStep === "name" && "Opcional. Usamos só para personalizar a saudação."}
+                {currentStep === "acquisition" && "Isso nos ajuda a saber onde investir nosso esforço."}
+                {currentStep === "experience" && "Adaptamos as explicações e a linguagem ao seu nível."}
+                {currentStep === "focus" && "Destacamos os rankings e ferramentas mais úteis para você."}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-2">
-              {ACQUISITION_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setAcquisitionSource(option.value)}
-                  className={cn(
-                    "w-full text-left p-4 rounded-lg border-2 transition-all",
-                    "hover:border-primary hover:bg-accent",
-                    acquisitionSource === option.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                        acquisitionSource === option.value
-                          ? "border-primary bg-primary"
-                          : "border-muted-foreground"
-                      )}
-                    >
-                      {acquisitionSource === option.value && (
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      )}
-                    </div>
-                    <span className="text-sm font-medium">{option.label}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Campo de detalhe quando "Outro" é selecionado */}
-            {acquisitionSource === "other" && (
-              <div className="pt-2">
+            {currentStep === "name" && (
+              <div className="grid gap-2">
+                <Label htmlFor="onboarding-name" className="sr-only">
+                  Seu nome
+                </Label>
                 <Input
-                  type="text"
-                  placeholder="Por favor, nos conte como você chegou até aqui..."
-                  value={acquisitionOtherDetail}
-                  onChange={(e) => setAcquisitionOtherDetail(e.target.value)}
-                  className="w-full"
+                  id="onboarding-name"
+                  placeholder="Seu nome"
+                  autoComplete="given-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   autoFocus
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Este campo é obrigatório quando você seleciona &quot;Outro&quot;
-                </p>
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button
-                onClick={handleNext}
-                className="flex-1"
-                size="lg"
-                disabled={!canProceed() || isSubmitting}
-              >
-                Próximo
-              </Button>
-              <Button
-                onClick={handleSkip}
-                variant="outline"
-                className="flex-1"
-                size="lg"
-                disabled={isSubmitting}
-              >
-                Pular esta pergunta
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Experience Step */}
-        {currentStep === "experience" && (
-          <div className="space-y-6 py-4">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
-                Pergunta {getStepNumber()}
-              </DialogTitle>
-              <DialogDescription className="text-base pt-2">
-                Qual frase te descreve melhor como investidor?
-                <br />
-                <span className="text-sm text-muted-foreground">
-                  Vamos adaptar as dicas e a linguagem para você.
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-2">
-              {EXPERIENCE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setExperienceLevel(option.value)}
-                  className={cn(
-                    "w-full text-left p-4 rounded-lg border-2 transition-all",
-                    "hover:border-primary hover:bg-accent",
-                    experienceLevel === option.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={cn(
-                        "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5",
-                        experienceLevel === option.value
-                          ? "border-primary bg-primary"
-                          : "border-muted-foreground"
-                      )}
-                    >
-                      {experienceLevel === option.value && (
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium text-sm">{option.label}</div>
-                      {option.description && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          ({option.description})
-                        </div>
-                      )}
-                    </div>
+            {currentStep === "acquisition" && (
+              <div className="grid gap-3">
+                <OptionList
+                  name="acquisition"
+                  legend="Como você conheceu o Preço Justo AI?"
+                  options={ACQUISITION_OPTIONS}
+                  value={acquisitionSource}
+                  onChange={(value) => {
+                    setAcquisitionSource(value)
+                    if (value !== "other") setAcquisitionOtherDetail("")
+                  }}
+                />
+                {acquisitionSource === "other" && (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="onboarding-acquisition-detail">Onde você nos encontrou?</Label>
+                    <Input
+                      id="onboarding-acquisition-detail"
+                      value={acquisitionOtherDetail}
+                      onChange={(e) => setAcquisitionOtherDetail(e.target.value)}
+                      autoFocus
+                      required
+                    />
                   </div>
-                </button>
-              ))}
-            </div>
+                )}
+              </div>
+            )}
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+            {currentStep === "experience" && (
+              <OptionList
+                name="experience"
+                legend="Qual frase descreve melhor você como investidor?"
+                options={EXPERIENCE_OPTIONS}
+                value={experienceLevel}
+                onChange={setExperienceLevel}
+              />
+            )}
+
+            {currentStep === "focus" && (
+              <OptionList
+                name="focus"
+                legend="Qual é o seu foco principal na bolsa?"
+                options={FOCUS_OPTIONS}
+                value={investmentFocus}
+                onChange={setInvestmentFocus}
+              />
+            )}
+
+            <DialogFooter>
               <Button
-                onClick={handleNext}
-                className="flex-1"
-                size="lg"
-                disabled={!canProceed() || isSubmitting}
-              >
-                Próximo
-              </Button>
-              <Button
-                onClick={handleSkip}
-                variant="outline"
-                className="flex-1"
-                size="lg"
+                type="button"
+                variant="ghost"
                 disabled={isSubmitting}
+                onClick={() => goToNextQuestion(currentStep as QuestionStep)}
               >
-                Pular esta pergunta
+                Pular
               </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Focus Step */}
-        {currentStep === "focus" && (
-          <div className="space-y-6 py-4">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
-                Pergunta {getStepNumber()}
-              </DialogTitle>
-              <DialogDescription className="text-base pt-2">
-                Qual é o seu foco principal na bolsa?
-                <br />
-                <span className="text-sm text-muted-foreground">
-                  Vamos te mostrar os rankings e ferramentas certos.
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-2">
-              {FOCUS_OPTIONS.map((option) => {
-                const Icon = option.value === "dividends" ? Target : 
-                            option.value === "growth" ? TrendingUp :
-                            option.value === "both" ? Sparkles : Hand
-                
-                return (
-                  <button
-                    key={option.value}
-                    onClick={() => setInvestmentFocus(option.value)}
-                    className={cn(
-                      "w-full text-left p-4 rounded-lg border-2 transition-all",
-                      "hover:border-primary hover:bg-accent",
-                      investmentFocus === option.value
-                        ? "border-primary bg-primary/5"
-                        : "border-border"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={cn(
-                          "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5",
-                          investmentFocus === option.value
-                            ? "border-primary bg-primary"
-                            : "border-muted-foreground"
-                        )}
-                      >
-                        {investmentFocus === option.value && (
-                          <div className="w-2 h-2 rounded-full bg-white" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-sm flex items-center gap-2">
-                          <Icon className="w-4 h-4" />
-                          {option.label}
-                        </div>
-                        {option.description && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            ({option.description})
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button
-                onClick={handleNext}
-                className="flex-1"
-                size="lg"
-                disabled={!canProceed() || isSubmitting}
-              >
-                {isSubmitting ? "Salvando..." : "Concluir e Explorar!"}
+              <Button type="submit" disabled={!canProceed || isSubmitting}>
+                {isSubmitting ? "Salvando…" : isLastQuestion ? "Concluir" : "Continuar"}
               </Button>
-              <Button
-                onClick={handleSkip}
-                variant="outline"
-                className="flex-1"
-                size="lg"
-                disabled={isSubmitting}
-              >
-                Pular esta pergunta
-              </Button>
-            </div>
-          </div>
+            </DialogFooter>
+          </form>
         )}
       </DialogContent>
     </Dialog>
   )
 }
 
+function FirstStepsList({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <ol className="divide-y divide-border rounded-lg border border-border">
+      {FIRST_STEPS.map((step, index) => (
+        <li key={step.href}>
+          <Link
+            href={step.href}
+            onClick={onNavigate}
+            className="flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground tabular-nums">{index + 1}</span>
+            <span className="min-w-0 flex-1 space-y-0.5">
+              <span className="block text-sm font-medium text-foreground">{step.title}</span>
+              <span className="block text-xs text-muted-foreground">{step.description}</span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+          </Link>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** Grupo de opções com rádio nativo (setas do teclado navegam entre as opções). */
+function OptionList({
+  name,
+  legend,
+  options,
+  value,
+  onChange,
+}: {
+  name: string
+  legend: string
+  options: Option[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <fieldset className="grid gap-2">
+      <legend className="sr-only">{legend}</legend>
+      {options.map((option) => {
+        const checked = value === option.value
+        return (
+          <label
+            key={option.value}
+            className={cn(
+              "flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-accent has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring",
+              checked ? "border-brand bg-brand-subtle" : "border-border"
+            )}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={checked}
+              onChange={() => onChange(option.value)}
+              className="mt-0.5 size-4 shrink-0 accent-[var(--brand)] outline-none"
+            />
+            <span className="min-w-0 space-y-0.5">
+              <span className="block text-sm font-medium text-foreground">{option.label}</span>
+              {option.description && <span className="block text-xs text-muted-foreground">{option.description}</span>}
+            </span>
+          </label>
+        )
+      })}
+    </fieldset>
+  )
+}

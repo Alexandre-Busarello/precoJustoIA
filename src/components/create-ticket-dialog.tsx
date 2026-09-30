@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -15,171 +16,154 @@ interface CreateTicketDialogProps {
   onTicketCreated: () => void
 }
 
-const categories = [
-  { value: 'GENERAL', label: 'Dúvida Geral', description: 'Perguntas sobre como usar a plataforma' },
-  { value: 'TECHNICAL', label: 'Problema Técnico', description: 'Erros, bugs ou falhas no sistema' },
-  { value: 'BILLING', label: 'Cobrança/Assinatura', description: 'Questões sobre pagamento ou plano' },
-  { value: 'ACCOUNT', label: 'Problema na Conta', description: 'Login, senha ou dados da conta' },
-  { value: 'BUG_REPORT', label: 'Reportar Bug', description: 'Comportamento inesperado do sistema' },
-  { value: 'FEATURE_REQUEST', label: 'Sugestão', description: 'Ideias para melhorar a plataforma' }
+const CATEGORIES = [
+  { value: 'GENERAL', label: 'Dúvida geral', description: 'Como usar a plataforma' },
+  { value: 'TECHNICAL', label: 'Problema técnico', description: 'Erros ou falhas no sistema' },
+  { value: 'BILLING', label: 'Cobrança ou assinatura', description: 'Pagamento e plano' },
+  { value: 'ACCOUNT', label: 'Conta', description: 'Login, senha ou dados cadastrais' },
+  { value: 'BUG_REPORT', label: 'Reportar bug', description: 'Comportamento inesperado' },
+  { value: 'FEATURE_REQUEST', label: 'Sugestão', description: 'Ideias para melhorar a plataforma' },
 ]
 
+const MIN_TITLE = 5
+const MAX_TITLE = 200
+const MIN_DESCRIPTION = 10
+const MAX_DESCRIPTION = 2000
+const EMPTY_FORM = { title: '', description: '', category: 'GENERAL' }
+
 export default function CreateTicketDialog({ open, onOpenChange, onTicketCreated }: CreateTicketDialogProps) {
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    category: 'GENERAL'
-    // Removido priority - será inferido automaticamente
-  })
+  const [formData, setFormData] = useState(EMPTY_FORM)
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Sem DialogTrigger o Radix não sabe para onde devolver o foco: guarda o elemento que abriu o diálogo
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    if (open && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      returnFocusRef.current = document.activeElement
+    }
+  }, [open])
+  const handleCloseAutoFocus = (event: Event) => {
+    const target = returnFocusRef.current
+    if (target?.isConnected) {
+      event.preventDefault()
+      target.focus()
+    }
+  }
+
+  const update = (field: keyof typeof EMPTY_FORM, value: string) => setFormData((prev) => ({ ...prev, [field]: value }))
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    
-    if (!formData.title.trim() || !formData.description.trim()) {
+    const title = formData.title.trim()
+    const description = formData.description.trim()
+    if (title.length < MIN_TITLE || description.length < MIN_DESCRIPTION) {
       toast({
-        title: 'Campos obrigatórios',
-        description: 'Por favor, preencha o título e a descrição.',
-        variant: 'destructive'
+        title: 'Complete o chamado',
+        description: `O título precisa de ao menos ${MIN_TITLE} caracteres e a descrição, de ${MIN_DESCRIPTION}.`,
+        variant: 'destructive',
       })
       return
     }
 
     setLoading(true)
-
     try {
       const response = await fetch('/api/tickets', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: formData.title,
-          description: formData.description,
-          category: formData.category
-          // Removido priority - será inferido automaticamente
-        })
+          title,
+          description,
+          category: formData.category,
+        }),
       })
-
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || 'Erro ao criar ticket')
+        throw new Error(error.error || 'Erro ao abrir chamado')
       }
-
-      toast({
-        title: 'Ticket criado com sucesso!',
-        description: 'Seu ticket foi criado e nossa equipe será notificada.',
-      })
-
-      // Reset form
-      setFormData({
-        title: '',
-        description: '',
-        category: 'GENERAL'
-      })
-
+      toast({ title: 'Chamado aberto', description: 'A equipe foi avisada e responde por aqui.' })
+      setFormData(EMPTY_FORM)
       onTicketCreated()
-
     } catch (error) {
       toast({
-        title: 'Erro ao criar ticket',
-        description: error instanceof Error ? error.message : 'Erro desconhecido',
-        variant: 'destructive'
+        title: 'Não foi possível abrir o chamado',
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
+        variant: 'destructive',
       })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[600px] max-h-[90vh] p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="text-lg sm:text-xl">Criar Novo Ticket</DialogTitle>
-          <DialogDescription className="text-sm sm:text-base">
-            Descreva seu problema ou solicitação. Nossa equipe responderá o mais breve possível.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-xl" onCloseAutoFocus={handleCloseAutoFocus}>
+        <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>Novo chamado</DialogTitle>
+            <DialogDescription>Descreva o problema ou a solicitação. A resposta chega por aqui e por e-mail.</DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="category" className="text-sm sm:text-base">Categoria</Label>
-              <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.value} value={category.value}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{category.label}</span>
-                        <span className="text-xs text-gray-500">{category.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <Label htmlFor="ticket-category">Categoria</Label>
+            <Select value={formData.category} onValueChange={(value) => update('category', value)}>
+              <SelectTrigger id="ticket-category" className="w-full">
+                <SelectValue placeholder="Selecione uma categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORIES.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
+                    <span className="text-muted-foreground"> · {category.description}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-sm sm:text-base">Título *</Label>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <Label htmlFor="ticket-title">Título</Label>
             <Input
-              id="title"
-              placeholder="Resumo do seu problema ou solicitação"
+              id="ticket-title"
+              placeholder="Resumo do problema ou da solicitação"
               value={formData.title}
-              onChange={(e) => handleInputChange('title', e.target.value)}
-              maxLength={200}
+              onChange={(e) => update('title', e.target.value)}
+              minLength={MIN_TITLE}
+              maxLength={MAX_TITLE}
               required
-              className="text-sm sm:text-base"
+              aria-describedby="ticket-title-count"
             />
-            <p className="text-xs text-gray-500">
-              {formData.title.length}/200 caracteres
+            <p id="ticket-title-count" className="text-xs text-muted-foreground tabular-nums">
+              Mínimo de {MIN_TITLE} caracteres · {formData.title.length}/{MAX_TITLE}
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description" className="text-sm sm:text-base">Descrição *</Label>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <Label htmlFor="ticket-description">Descrição</Label>
             <Textarea
-              id="description"
-              placeholder="Descreva detalhadamente seu problema, incluindo passos para reproduzir (se aplicável), mensagens de erro, ou qualquer informação relevante..."
+              id="ticket-description"
+              placeholder="O que aconteceu, os passos para reproduzir, mensagens de erro, navegador e dispositivo."
               value={formData.description}
-              onChange={(e) => handleInputChange('description', e.target.value)}
-              maxLength={2000}
-              rows={4}
+              onChange={(e) => update('description', e.target.value)}
+              minLength={MIN_DESCRIPTION}
+              maxLength={MAX_DESCRIPTION}
+              rows={5}
               required
-              className="text-sm sm:text-base resize-none"
+              className="resize-none"
+              aria-describedby="ticket-description-count"
             />
-            <p className="text-xs text-gray-500">
-              {formData.description.length}/2000 caracteres
+            <p id="ticket-description-count" className="text-xs text-muted-foreground tabular-nums">
+              Mínimo de {MIN_DESCRIPTION} caracteres · {formData.description.length}/{MAX_DESCRIPTION}
             </p>
           </div>
 
-          <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
-            <h4 className="font-medium text-blue-900 mb-2 text-sm sm:text-base">Dicas para um suporte mais eficiente:</h4>
-            <ul className="text-xs sm:text-sm text-blue-800 space-y-1">
-              <li>• Seja específico sobre o problema</li>
-              <li>• Inclua passos para reproduzir o erro</li>
-              <li>• Mencione qual navegador/dispositivo está usando</li>
-              <li>• Anexe capturas de tela se relevante</li>
-            </ul>
-          </div>
-
-          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
-              {loading ? 'Criando...' : 'Criar Ticket'}
+            <Button type="submit" disabled={loading || !formData.title.trim() || !formData.description.trim()}>
+              {loading && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+              Abrir chamado
             </Button>
           </DialogFooter>
         </form>

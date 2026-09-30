@@ -1,14 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import { Check, Plus } from 'lucide-react'
 import { CompanyLogo } from '@/components/company-logo'
 import { RadarStatusIndicator } from '@/components/radar-status-indicator'
-import { RadarStrategyBadges } from '@/components/radar-strategy-badges'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { RadarStrategyBadges, RADAR_STRATEGY_LABELS, type RadarStrategies } from '@/components/radar-strategy-badges'
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
 import { Button } from '@/components/ui/button'
+import { formatBRL, formatDeltaPct, formatNumber, formatPct } from '@/lib/format'
+import { normalizeTechnicalLabel, technicalRangeText } from '@/lib/radar-service'
 import { cn } from '@/lib/utils'
-import { ExternalLink, Plus, Check, TrendingUp } from 'lucide-react'
 
 export type RadarAssetKind = 'STOCK' | 'FII' | 'BDR' | 'ETF'
 
@@ -32,9 +33,11 @@ export interface RadarAssetData {
   }
   strategies: {
     approved: string[]
+    /** Formato varia por tipo de ativo (ações, FII, ETF). */
     all: any
   }
   valuation: {
+    /** Upside em pontos percentuais (12,5 = 12,5%). */
     upside: number | null
     status: 'green' | 'yellow' | 'red'
     label: string
@@ -64,6 +67,100 @@ interface RadarGridProps {
   etfMode?: boolean
 }
 
+function assetHref(asset: RadarAssetData) {
+  const ticker = asset.ticker.toLowerCase()
+  if (asset.assetType === 'FII') return `/fii/${ticker}`
+  if (asset.assetType === 'ETF') return `/etf/${ticker}`
+  if (asset.assetType === 'BDR') return `/bdr/${ticker}`
+  return `/acao/${ticker}`
+}
+
+function technicalHref(asset: RadarAssetData) {
+  if (asset.assetType === 'FII') return assetHref(asset)
+  return `${assetHref(asset)}/analise-tecnica`
+}
+
+function approvedCount(asset: RadarAssetData): number | null {
+  if (asset.assetType === 'FII' || asset.assetType === 'ETF') return null
+  const all = (asset.strategies.all ?? {}) as RadarStrategies
+  const present = RADAR_STRATEGY_LABELS.filter((s) => all[s.key])
+  if (present.length === 0) return null
+  return present.filter((s) => all[s.key]?.isEligible).length
+}
+
+function profileText(asset: RadarAssetData): string {
+  if (asset.assetType === 'ETF') {
+    const parts = [asset.etfProfile?.etfClass ?? 'ETF']
+    const fee = asset.etfProfile?.netExpenseRatio
+    if (fee !== null && fee !== undefined) parts.push(`taxa ${formatPct(fee, { digits: 2 })} a.a.`)
+    return parts.join(' · ')
+  }
+  const parts = ['FII']
+  if (asset.fiiProfile?.isPapel === true) parts.push('Papel')
+  if (asset.fiiProfile?.isPapel === false) parts.push('Tijolo')
+  if (asset.fiiProfile?.segment) parts.push(asset.fiiProfile.segment)
+  return parts.join(' · ')
+}
+
+function sentimentValue(asset: RadarAssetData): string {
+  if (typeof asset.sentiment.score === 'number') return formatNumber(asset.sentiment.score, { digits: 0 })
+  const label = asset.sentiment.label
+  return !label || label === 'N/A' ? '—' : label
+}
+
+function UpsideCell({ asset }: { asset: RadarAssetData }) {
+  if (asset.assetType === 'FII') {
+    const detail = asset.valuation.detail
+    return <span className="text-sm tabular-nums text-foreground">{detail && detail !== 'N/A' ? detail : '—'}</span>
+  }
+  const upside = asset.valuation.upside
+  const fraction = typeof upside === 'number' ? upside / 100 : null
+  const shown = fraction === null ? 0 : Math.sign(fraction) * Math.sign(Math.round(Math.abs(fraction) * 1000))
+  return (
+    <span
+      className={cn(
+        'text-sm font-medium tabular-nums',
+        shown > 0 ? 'text-positive' : shown < 0 ? 'text-negative' : 'text-foreground'
+      )}
+    >
+      {formatDeltaPct(fraction)}
+    </span>
+  )
+}
+
+function TechnicalCell({ asset }: { asset: RadarAssetData }) {
+  const text = technicalRangeText(asset.technical.label)
+  const entry = asset.technical.fairEntryPrice
+  const hasData = normalizeTechnicalLabel(asset.technical.label) !== null
+  const detail =
+    entry !== null ? (
+      <span className="block text-xs tabular-nums text-muted-foreground">
+        Entrada {formatBRL(entry)}
+        {asset.currentPrice > 0 && ` · preço ${formatDeltaPct(asset.currentPrice / entry - 1)}`}
+      </span>
+    ) : null
+  if (!hasData) {
+    return (
+      <div className="min-w-0">
+        <span className="text-sm text-muted-foreground">—</span>
+        {detail}
+      </div>
+    )
+  }
+  return (
+    <Link
+      href={technicalHref(asset)}
+      className="group flex min-h-11 min-w-0 flex-col justify-center rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+      title={asset.assetType === 'FII' ? 'Ver análise técnica na página do FII' : 'Ver análise técnica completa'}
+    >
+      <span className="text-sm font-medium text-foreground underline decoration-border decoration-1 underline-offset-4 group-hover:decoration-foreground">
+        {text}
+      </span>
+      {detail}
+    </Link>
+  )
+}
+
 export function RadarGrid({
   data,
   loading,
@@ -74,451 +171,137 @@ export function RadarGrid({
   isPremium = false,
   etfMode = false,
 }: RadarGridProps) {
-  const assetHref = (asset: RadarAssetData) => {
-    if (asset.assetType === 'FII') return `/fii/${asset.ticker.toLowerCase()}`
-    if (asset.assetType === 'ETF') return `/etf/${asset.ticker.toLowerCase()}`
-    return `/acao/${asset.ticker.toLowerCase()}`
-  }
+  const hasFii = data.some((a) => a.assetType === 'FII')
+  const strategyNames = RADAR_STRATEGY_LABELS.map((s) => s.label).join(', ')
 
-  const technicalHref = (asset: RadarAssetData) => {
-    if (asset.assetType === 'FII') return `/fii/${asset.ticker.toLowerCase()}`
-    if (asset.assetType === 'ETF') return `/etf/${asset.ticker.toLowerCase()}/analise-tecnica`
-    return `/acao/${asset.ticker.toLowerCase()}/analise-tecnica`
-  }
+  const columns: DataTableColumn<RadarAssetData>[] = [
+    {
+      key: 'ticker',
+      header: 'Ativo',
+      sortable: true,
+      sortValue: (asset) => asset.ticker,
+      cell: (asset) => (
+        <Link
+          href={assetHref(asset)}
+          className="flex min-h-11 items-center gap-2.5 rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <CompanyLogo logoUrl={asset.logoUrl} companyName={asset.name} ticker={asset.ticker} size={32} />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">{asset.ticker}</span>
+            <span className="block max-w-[7.5rem] truncate text-xs text-muted-foreground sm:max-w-[13rem]">{asset.name}</span>
+          </span>
+        </Link>
+      ),
+    },
+    {
+      key: 'score',
+      className: 'whitespace-nowrap',
+      header: 'Score',
+      sortable: true,
+      sortValue: (asset) => asset.overallScore,
+      hint: 'Nota de solidez de 0 a 100 (PJ-FII para fundos, PJ-ETF para ETFs). Ponto cheio: 70 ou mais; meio cheio: 50 a 69; vazio: abaixo de 50.',
+      cell: (asset) => (
+        <RadarStatusIndicator
+          status={asset.overallStatus}
+          value={formatNumber(asset.overallScore, { digits: 0 })}
+        />
+      ),
+    },
+    {
+      key: 'strategies',
+      className: 'whitespace-nowrap',
+      header: etfMode ? 'Classe e taxa' : hasFii ? 'Estratégias / perfil' : 'Estratégias',
+      sortable: !etfMode,
+      sortValue: approvedCount,
+      hint: etfMode
+        ? 'Classe do ETF e taxa de administração anual.'
+        : `Quantos modelos o ativo atende: ${strategyNames}. Ponto cheio: aprovado; vazio: não aprovado.${
+            isPremium ? '' : ' No plano gratuito, só o modelo de Graham é considerado.'
+          }${hasFii ? ' Para FIIs, mostra o tipo e o segmento do fundo.' : ''}`,
+      cell: (asset) =>
+        asset.assetType === 'ETF' || asset.assetType === 'FII' ? (
+          <span className="block max-w-[12rem] truncate text-sm text-muted-foreground">{profileText(asset)}</span>
+        ) : (
+          <RadarStrategyBadges strategies={(asset.strategies.all ?? {}) as RadarStrategies} ticker={asset.ticker} />
+        ),
+    },
+    {
+      key: 'upside',
+      className: 'whitespace-nowrap',
+      header: hasFii ? 'Upside · P/VP e DY' : 'Upside',
+      align: 'right',
+      sortable: true,
+      sortValue: (asset) => (asset.assetType === 'FII' ? null : asset.valuation.upside),
+      hint: etfMode
+        ? 'Distância entre o preço atual e a entrada técnica estimada.'
+        : `Potencial até o maior preço justo entre Graham, FCD e Gordon. É uma estimativa de modelo, não recomendação.${
+            hasFii ? ' Para FIIs, mostra P/VP e dividend yield.' : ''
+          }`,
+      cell: (asset) => <UpsideCell asset={asset} />,
+    },
+    {
+      key: 'technical',
+      className: 'whitespace-nowrap',
+      header: 'Técnica',
+      hint: 'Posição do preço em relação à faixa técnica estimada por IA para 30 dias. Dentro da faixa: preço na faixa e até a entrada técnica, com score de 50 ou mais. Dentro da faixa, acima da entrada: preço na faixa, mas acima da entrada técnica. Acima ou abaixo da faixa: preço fora da faixa. Até ou acima da entrada: sem faixa estimada, só a comparação com a entrada técnica. Neutro: preço próximo da entrada ou score abaixo de 50. Não é recomendação.',
+      cell: (asset) => <TechnicalCell asset={asset} />,
+    },
+    {
+      key: 'sentiment',
+      className: 'whitespace-nowrap',
+      header: etfMode ? 'Score IA' : 'Sentimento',
+      sortable: true,
+      sortValue: (asset) => asset.sentiment.score,
+      hint: etfMode
+        ? 'Nota de 0 a 100 da análise do ETF feita por IA.'
+        : 'Sentimento de 0 a 100 a partir de notícias e vídeos sobre o ativo. Ponto cheio: 70 ou mais; meio cheio: 50 a 69; vazio: abaixo de 50.',
+      cell: (asset) => <RadarStatusIndicator status={asset.sentiment.status} value={sentimentValue(asset)} />,
+    },
+  ]
 
-  if (loading) {
-    return (
-      <div className={cn('space-y-4', className)}>
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="animate-pulse">
-            <CardContent className="p-4">
-              <div className="h-16 bg-muted rounded" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    )
-  }
-
-  if (data.length === 0) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-8 text-center">
-          <p className="text-muted-foreground">
-            Nenhum ativo encontrado. Adicione tickers ao seu radar ou explore oportunidades.
-          </p>
-        </CardContent>
-      </Card>
-    )
+  if (showAddButton) {
+    columns.push({
+      key: 'action',
+      header: <span className="sr-only">Adicionar ao radar</span>,
+      align: 'right',
+      cell: (asset) =>
+        radarTickers.includes(asset.ticker) ? (
+          <span className="inline-flex min-h-11 items-center gap-1 text-xs text-muted-foreground">
+            <Check className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            No radar
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onAddToRadar?.(asset.ticker)
+            }}
+            aria-label={`Adicionar ${asset.ticker} ao radar`}
+          >
+            <Plus className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+            Adicionar
+          </Button>
+        ),
+    })
   }
 
   return (
-    <div className={cn('space-y-2', className)}>
-      {/* Desktop: Tabela */}
-      <div className="hidden md:block overflow-x-auto -mx-4 px-4">
-        <table className="w-full min-w-[800px]">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-3 text-xs font-medium text-muted-foreground">
-                Ativo
-              </th>
-              <th className="text-center p-3 text-xs font-medium text-muted-foreground">
-                Score
-              </th>
-              <th className="text-center p-3 text-xs font-medium text-muted-foreground">
-                <div className="flex flex-col items-center gap-1">
-                  <span>Estratégias / Perfil</span>
-                  {!isPremium && !etfMode && (
-                    <Badge variant="outline" className="text-xs">
-                      Apenas Graham
-                    </Badge>
-                  )}
-                </div>
-              </th>
-              <th className="text-center p-3 text-xs font-medium text-muted-foreground">
-                Valuation
-              </th>
-              <th className="text-center p-3 text-xs font-medium text-muted-foreground">
-                Técnico
-              </th>
-              <th className="text-center p-3 text-xs font-medium text-muted-foreground">
-                Sentimento
-              </th>
-              {showAddButton && (
-                <th className="text-center p-3 text-xs font-medium text-muted-foreground">
-                  Ação
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((asset) => (
-              <tr
-                key={asset.ticker}
-                className="border-b hover:bg-muted/50 transition-colors"
-              >
-                {/* Ticker */}
-                <td className="p-3">
-                  <Link
-                    href={assetHref(asset)}
-                    className="flex items-center gap-3 group"
-                  >
-                    <CompanyLogo
-                      logoUrl={asset.logoUrl}
-                      companyName={asset.name}
-                      ticker={asset.ticker}
-                      size={40}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm">{asset.ticker}</span>
-                        <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {asset.name}
-                      </div>
-                      {asset.sector && (
-                        <Badge variant="outline" className="text-xs mt-1">
-                          {asset.sector}
-                        </Badge>
-                      )}
-                    </div>
-                  </Link>
-                </td>
-
-                {/* Score Geral */}
-                <td className="p-3 text-center">
-                  <RadarStatusIndicator
-                    status={asset.overallStatus}
-                    label={asset.assetType === 'FII' ? 'PJ-FII' : asset.assetType === 'ETF' ? 'PJ-ETF' : 'Score'}
-                    value={asset.overallScore ?? undefined}
-                  />
-                </td>
-
-                {/* Estratégias / Classe */}
-                <td className="p-3 text-center">
-                  {asset.assetType === 'ETF' ? (
-                    <div className="flex flex-wrap gap-1.5 justify-center">
-                      <Badge variant="secondary" className="text-xs">ETF</Badge>
-                      {asset.etfProfile?.etfClass && (
-                        <Badge variant="outline" className="text-xs max-w-[120px] truncate" title={asset.etfProfile.etfClass}>
-                          {asset.etfProfile.etfClass}
-                        </Badge>
-                      )}
-                      {asset.etfProfile?.netExpenseRatio !== null && asset.etfProfile?.netExpenseRatio !== undefined && (
-                        <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300 border-amber-300">
-                          {(asset.etfProfile.netExpenseRatio * 100).toFixed(2)}% a.a.
-                        </Badge>
-                      )}
-                    </div>
-                  ) : asset.assetType === 'FII' ? (
-                    <div className="flex flex-wrap gap-1.5 justify-center">
-                      <Badge variant="secondary" className="text-xs">
-                        FII
-                      </Badge>
-                      {asset.fiiProfile?.isPapel === true && (
-                        <Badge variant="outline" className="text-xs">
-                          Papel
-                        </Badge>
-                      )}
-                      {asset.fiiProfile?.isPapel === false && (
-                        <Badge variant="outline" className="text-xs">
-                          Tijolo
-                        </Badge>
-                      )}
-                      {asset.fiiProfile?.segment && (
-                        <Badge variant="outline" className="text-xs max-w-[140px] truncate" title={asset.fiiProfile.segment}>
-                          {asset.fiiProfile.segment}
-                        </Badge>
-                      )}
-                    </div>
-                  ) : (
-                    <RadarStrategyBadges
-                      strategies={asset.strategies.all}
-                      compact={false}
-                    />
-                  )}
-                </td>
-
-                {/* Valuation */}
-                <td className="p-3 text-center">
-                  <RadarStatusIndicator
-                    status={asset.valuation.status}
-                    label={asset.assetType === 'FII' ? (asset.valuation.label || 'P/VP · DY') : 'Upside'}
-                    value={
-                      asset.assetType === 'FII'
-                        ? (asset.valuation.detail ?? undefined)
-                        : asset.assetType === 'ETF'
-                        ? (asset.valuation.label || undefined)
-                        : (asset.valuation.upside ?? undefined)
-                    }
-                  />
-                </td>
-
-                {/* Análise Técnica */}
-                <td className="p-3 text-center">
-                  <div className="flex flex-col items-center gap-1.5">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <RadarStatusIndicator
-                        status={asset.technical.status}
-                        label="Entry"
-                        value={asset.technical.label}
-                      />
-                      <Link
-                        href={technicalHref(asset)}
-                        className="text-muted-foreground hover:text-primary transition-colors shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                        title={
-                          asset.assetType === 'FII'
-                            ? 'Ver análise técnica na página do FII'
-                            : 'Ver análise técnica completa'
-                        }
-                      >
-                        <TrendingUp className="w-3.5 h-3.5" />
-                      </Link>
-                    </div>
-                    {asset.technical.fairEntryPrice !== null && (
-                      <div className="flex flex-col gap-0.5 text-xs">
-                        <div className="text-muted-foreground">
-                          Atual: R$ {asset.currentPrice.toFixed(2)}
-                        </div>
-                        <div className="font-medium text-primary">
-                          Justo: R$ {asset.technical.fairEntryPrice.toFixed(2)}
-                        </div>
-                        {asset.currentPrice < asset.technical.fairEntryPrice && (
-                          <div className="text-green-600 font-medium">
-                            ↓ {((asset.technical.fairEntryPrice - asset.currentPrice) / asset.currentPrice * 100).toFixed(1)}% abaixo
-                          </div>
-                        )}
-                        {asset.currentPrice > asset.technical.fairEntryPrice && (
-                          <div className="text-red-600 font-medium">
-                            ↑ {((asset.currentPrice - asset.technical.fairEntryPrice) / asset.technical.fairEntryPrice * 100).toFixed(1)}% acima
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </td>
-
-                {/* Sentimento */}
-                <td className="p-3 text-center">
-                  <RadarStatusIndicator
-                    status={asset.sentiment.status}
-                    label="Sentimento"
-                    value={asset.sentiment.score !== null && asset.sentiment.score !== undefined
-                      ? asset.sentiment.score
-                      : asset.sentiment.label}
-                  />
-                </td>
-
-                {/* Botão Adicionar ao Radar */}
-                {showAddButton && (
-                  <td className="p-3 text-center">
-                    {radarTickers.includes(asset.ticker) ? (
-                      <Badge variant="outline" className="text-xs">
-                        <Check className="w-3 h-3 mr-1" />
-                        No Radar
-                      </Badge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          onAddToRadar?.(asset.ticker)
-                        }}
-                        className="text-xs"
-                      >
-                        <Plus className="w-3 h-3 mr-1" />
-                        Adicionar
-                      </Button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile: Cards */}
-      <div className="md:hidden space-y-4">
-        {data.map((asset) => (
-          <Card key={asset.ticker} className="overflow-hidden">
-            <CardContent className="p-4 sm:p-5">
-              <Link
-                href={assetHref(asset)}
-                className="block mb-4"
-              >
-                <div className="flex items-start gap-3">
-                  <CompanyLogo
-                    logoUrl={asset.logoUrl}
-                    companyName={asset.name}
-                    ticker={asset.ticker}
-                    size={48}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-base">{asset.ticker}</span>
-                      <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
-                    </div>
-                    <div className="text-sm text-muted-foreground break-words mb-2">
-                      {asset.name}
-                    </div>
-                    {asset.sector && (
-                      <Badge variant="outline" className="text-xs">
-                        {asset.sector}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </Link>
-
-              {/* Indicadores em grid para mobile */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <RadarStatusIndicator
-                  status={asset.overallStatus}
-                  label={asset.assetType === 'FII' ? 'PJ-FII' : asset.assetType === 'ETF' ? 'PJ-ETF' : 'Score Geral'}
-                  value={asset.overallScore ?? undefined}
-                />
-                <RadarStatusIndicator
-                  status={asset.valuation.status}
-                  label={asset.assetType === 'FII' ? (asset.valuation.label || 'P/VP · DY') : 'Upside'}
-                  value={
-                    asset.assetType === 'FII'
-                      ? (asset.valuation.detail ?? undefined)
-                      : asset.assetType === 'ETF'
-                      ? (asset.valuation.label || undefined)
-                      : (asset.valuation.upside ?? undefined)
-                  }
-                />
-                <div className="col-span-2 flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <RadarStatusIndicator
-                      status={asset.technical.status}
-                      label="Entry Point"
-                      value={asset.technical.label}
-                    />
-                    <Link
-                      href={technicalHref(asset)}
-                      className="text-muted-foreground hover:text-primary transition-colors shrink-0 ml-2"
-                      onClick={(e) => e.stopPropagation()}
-                      title={
-                        asset.assetType === 'FII'
-                          ? 'Ver análise técnica na página do FII'
-                          : 'Ver análise técnica completa'
-                      }
-                    >
-                      <TrendingUp className="w-4 h-4" />
-                    </Link>
-                  </div>
-                  {asset.technical.fairEntryPrice !== null && (
-                    <div className="flex flex-col gap-0.5 text-xs text-left pl-1">
-                      <div className="text-muted-foreground">
-                        Atual: R$ {asset.currentPrice.toFixed(2)}
-                      </div>
-                      <div className="font-medium text-primary">
-                        Justo: R$ {asset.technical.fairEntryPrice.toFixed(2)}
-                      </div>
-                      {asset.currentPrice < asset.technical.fairEntryPrice && (
-                        <div className="text-green-600 font-medium">
-                          ↓ {((asset.technical.fairEntryPrice - asset.currentPrice) / asset.currentPrice * 100).toFixed(1)}% abaixo
-                        </div>
-                      )}
-                      {asset.currentPrice > asset.technical.fairEntryPrice && (
-                        <div className="text-red-600 font-medium">
-                          ↑ {((asset.currentPrice - asset.technical.fairEntryPrice) / asset.technical.fairEntryPrice * 100).toFixed(1)}% acima
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <RadarStatusIndicator
-                  status={asset.sentiment.status}
-                  label="Sentimento"
-                  value={asset.sentiment.score !== null && asset.sentiment.score !== undefined
-                    ? asset.sentiment.score
-                    : asset.sentiment.label}
-                />
-              </div>
-
-              {/* Estratégias / Perfil */}
-              <div className="pt-4 border-t">
-                <div className="text-xs font-semibold text-foreground mb-3">
-                  {asset.assetType === 'ETF' ? 'Classe / Taxa' : asset.assetType === 'FII' ? 'Perfil FII' : 'Estratégias Aprovadas'}
-                </div>
-                {asset.assetType === 'ETF' ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    <Badge variant="secondary" className="text-xs">ETF</Badge>
-                    {asset.etfProfile?.etfClass && (
-                      <Badge variant="outline" className="text-xs">{asset.etfProfile.etfClass}</Badge>
-                    )}
-                    {asset.etfProfile?.netExpenseRatio !== null && asset.etfProfile?.netExpenseRatio !== undefined && (
-                      <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300 border-amber-300">
-                        {(asset.etfProfile.netExpenseRatio * 100).toFixed(2)}% a.a.
-                      </Badge>
-                    )}
-                  </div>
-                ) : asset.assetType === 'FII' ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    <Badge variant="secondary" className="text-xs">
-                      FII
-                    </Badge>
-                    {asset.fiiProfile?.isPapel === true && (
-                      <Badge variant="outline" className="text-xs">
-                        Papel
-                      </Badge>
-                    )}
-                    {asset.fiiProfile?.isPapel === false && (
-                      <Badge variant="outline" className="text-xs">
-                        Tijolo
-                      </Badge>
-                    )}
-                    {asset.fiiProfile?.segment && (
-                      <Badge variant="outline" className="text-xs">
-                        {asset.fiiProfile.segment}
-                      </Badge>
-                    )}
-                  </div>
-                ) : (
-                  <RadarStrategyBadges
-                    strategies={asset.strategies.all}
-                    compact={false}
-                  />
-                )}
-              </div>
-
-              {/* Botão Adicionar ao Radar (Mobile) */}
-              {showAddButton && (
-                <div className="mt-4 pt-4 border-t">
-                  {radarTickers.includes(asset.ticker) ? (
-                    <Badge variant="outline" className="w-full justify-center py-2">
-                      <Check className="w-4 h-4 mr-2" />
-                      Já está no Radar
-                    </Badge>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onAddToRadar?.(asset.ticker)
-                      }}
-                      className="w-full"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Adicionar ao Radar
-                    </Button>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
+    <DataTable
+      className={className}
+      columns={columns}
+      rows={data}
+      getRowId={(asset) => asset.ticker}
+      stickyFirstColumn
+      loading={loading}
+      loadingRows={4}
+      caption="Radar de oportunidades"
+      empty={{
+        title: 'Nenhum ativo no radar',
+        description: 'Adicione tickers ao seu radar ou veja a aba Explorar.',
+      }}
+    />
   )
 }
-

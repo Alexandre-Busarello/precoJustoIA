@@ -1,106 +1,103 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
-import { StrategyAnalysis } from '@/lib/strategies'
+import { InfoHint } from '@/components/ui/info-hint'
+import type { StrategyAnalysis } from '@/lib/strategies'
+import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+export interface RadarStrategies {
+  graham?: StrategyAnalysis | null
+  barsi?: StrategyAnalysis | null
+  dividendYield?: StrategyAnalysis | null
+  lowPE?: StrategyAnalysis | null
+  magicFormula?: StrategyAnalysis | null
+  fcd?: StrategyAnalysis | null
+  gordon?: StrategyAnalysis | null
+  fundamentalist?: StrategyAnalysis | null
+}
+
 interface RadarStrategyBadgesProps {
-  strategies: {
-    graham?: StrategyAnalysis | null
-    barsi?: StrategyAnalysis | null
-    dividendYield?: StrategyAnalysis | null
-    lowPE?: StrategyAnalysis | null
-    magicFormula?: StrategyAnalysis | null
-    fcd?: StrategyAnalysis | null
-    gordon?: StrategyAnalysis | null
-    fundamentalist?: StrategyAnalysis | null
-  }
+  strategies: RadarStrategies
+  /** Ticker da linha, para o nome acessível da ajuda. */
+  ticker: string
   className?: string
-  compact?: boolean
 }
 
-const strategyLabels: Record<string, string> = {
-  graham: 'Graham',
-  barsi: 'Bazin',
-  dividendYield: 'DY',
-  lowPE: 'Low P/E',
-  magicFormula: 'MF',
-  fcd: 'FCD',
-  gordon: 'Gordon',
-  fundamentalist: 'Fund',
-}
+/** Ordem e nomes das estratégias do radar (o método Barsi é o `barsi`; o Bazin chega na onda 2). */
+export const RADAR_STRATEGY_LABELS: Array<{ key: keyof RadarStrategies; label: string }> = [
+  { key: 'graham', label: 'Graham' },
+  { key: 'barsi', label: 'Barsi' },
+  { key: 'dividendYield', label: 'Dividend yield' },
+  { key: 'lowPE', label: 'P/L baixo' },
+  { key: 'magicFormula', label: 'Fórmula mágica' },
+  { key: 'fcd', label: 'FCD' },
+  { key: 'gordon', label: 'Gordon' },
+  { key: 'fundamentalist', label: 'Fundamentalista' },
+]
 
-export function RadarStrategyBadges({
-  strategies,
-  className,
-  compact = false,
-}: RadarStrategyBadgesProps) {
-  const strategyList = [
-    { key: 'graham', analysis: strategies.graham },
-    { key: 'barsi', analysis: strategies.barsi },
-    { key: 'dividendYield', analysis: strategies.dividendYield },
-    { key: 'lowPE', analysis: strategies.lowPE },
-    { key: 'magicFormula', analysis: strategies.magicFormula },
-    { key: 'fcd', analysis: strategies.fcd },
-    { key: 'gordon', analysis: strategies.gordon },
-    { key: 'fundamentalist', analysis: strategies.fundamentalist },
-  ].filter(item => item.analysis !== null && item.analysis !== undefined)
+/**
+ * Estratégias do ativo: contagem "6/8" + um ponto de 6 px por estratégia (cheio = aprovado, vazio = não aprovado)
+ * e uma ajuda por toque com os nomes. Sem pílulas coloridas.
+ */
+export function RadarStrategyBadges({ strategies, ticker, className }: RadarStrategyBadgesProps) {
+  const list = RADAR_STRATEGY_LABELS.map((item) => ({ ...item, analysis: strategies[item.key] })).filter(
+    (item): item is typeof item & { analysis: StrategyAnalysis } => item.analysis !== null && item.analysis !== undefined
+  )
 
-  if (strategyList.length === 0) {
-    return (
-      <span className={cn('text-xs text-muted-foreground', className)}>
-        Nenhuma estratégia
-      </span>
-    )
+  if (list.length === 0) {
+    return <span className={cn('text-sm text-muted-foreground', className)}>—</span>
   }
 
-  if (compact) {
-    // Modo compacto: apenas contagem e cores
-    const approvedCount = strategyList.filter(item => item.analysis?.isEligible).length
-    const totalCount = strategyList.length
+  const approved = list.filter((item) => item.analysis.isEligible).length
 
-    return (
-      <div className={cn('flex items-center gap-1', className)}>
-        <span className="text-xs text-muted-foreground">
-          {approvedCount}/{totalCount}
-        </span>
-        <div className="flex gap-0.5">
-          {strategyList.map((item) => (
-            <div
-              key={item.key}
-              className={cn(
-                'w-2 h-2 rounded-full',
-                item.analysis?.isEligible
-                  ? 'bg-green-500'
-                  : 'bg-red-500'
-              )}
-              title={`${strategyLabels[item.key]}: ${item.analysis?.isEligible ? 'Aprovado' : 'Reprovado'}`}
-            />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  // Modo completo: badges com nomes
   return (
-    <div className={cn('flex flex-wrap gap-1.5', className)}>
-      {strategyList.map((item) => (
-        <Badge
-          key={item.key}
-          variant={item.analysis?.isEligible ? 'default' : 'destructive'}
-          className={cn(
-            'text-xs px-2 py-1',
-            item.analysis?.isEligible
-              ? 'bg-green-500 hover:bg-green-600 text-white'
-              : 'bg-red-500 hover:bg-red-600 text-white'
-          )}
-          title={`${strategyLabels[item.key]}: Score ${item.analysis?.score?.toFixed(0) || 0} - ${item.analysis?.isEligible ? 'Aprovado' : 'Reprovado'}`}
-        >
-          {strategyLabels[item.key]}
-        </Badge>
-      ))}
+    <div className={cn('flex items-center gap-2', className)}>
+      <span className="text-sm font-medium tabular-nums text-foreground">
+        {approved}/{list.length}
+        <span className="sr-only"> estratégias aprovadas</span>
+      </span>
+      <span className="flex items-center gap-1">
+        {list.map((item) => {
+          const ok = item.analysis.isEligible
+          return (
+            <span
+              key={item.key}
+              role="img"
+              aria-label={`${item.label}: ${ok ? 'aprovado' : 'não aprovado'}`}
+              className={cn('size-1.5 shrink-0 rounded-full border', ok ? 'border-brand bg-brand' : 'border-muted-foreground')}
+            />
+          )
+        })}
+      </span>
+      <InfoHint
+        label={`Estratégias de ${ticker}`}
+        side="bottom"
+        content={
+          <div className="space-y-2">
+            <p className="font-medium text-foreground">Estratégias de {ticker}</p>
+            <ul className="space-y-1">
+              {list.map((item) => (
+                <li key={item.key} className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'size-1.5 rounded-full border',
+                        item.analysis.isEligible ? 'border-brand bg-brand' : 'border-muted-foreground'
+                      )}
+                    />
+                    {item.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {item.analysis.isEligible ? 'Aprovado' : 'Não aprovado'}
+                    {typeof item.analysis.score === 'number' && ` · ${formatNumber(item.analysis.score, { digits: 0 })}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+      />
     </div>
   )
 }
-

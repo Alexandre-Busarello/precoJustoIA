@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { SectionHeader } from '@/components/ui/section-header'
+import { InfoHint } from '@/components/ui/info-hint'
 import {
   Dialog,
   DialogContent,
@@ -15,27 +17,31 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { 
-  Info, 
-  AlertTriangle,
-  Zap,
-  Circle,
-  RefreshCw,
-  History,
-  Loader2
-} from 'lucide-react'
+import { Info, AlertTriangle, RefreshCw, History, Loader2 } from 'lucide-react'
 import { usePremiumStatus } from '@/hooks/use-premium-status'
 import { useAdminStatus } from '@/hooks/use-admin-status'
 import { useToast } from '@/hooks/use-toast'
 import { useCompanyAnalysis } from '@/hooks/use-company-data'
+import { formatBRL, formatDate, formatNumber, formatPct } from '@/lib/format'
+import { getTechnicalTrafficLightStatus, priceRangePosition } from '@/lib/radar-service'
+import { softenAiText } from '@/app/acao/[ticker]/analise-tecnica/ai-text'
 import SupportResistanceChart from './support-resistance-chart'
-import { getTechnicalTrafficLightStatus } from '@/lib/radar-service'
+import { TechnicalAnalysisDisclaimer } from './technical-analysis-page-limited'
 
 interface TechnicalAnalysisPageProps {
   ticker: string
-  companyName: string
-  sector: string | null
-  currentPrice: number
+  /**
+   * Score fundamentalista usado no status técnico (só fica favorável com score ≥ 50).
+   * Quando omitido, vem da análise da empresa (ações e BDRs). ETFs informam o score PJ-ETF.
+   */
+  fundamentalScore?: number | null
+}
+
+interface PriceLevel {
+  price: number
+  strength: number
+  type: string
+  touches: number
 }
 
 interface TechnicalAnalysisData {
@@ -64,9 +70,9 @@ interface TechnicalAnalysisData {
   senkouSpanA: number | null
   senkouSpanB: number | null
   chikouSpan: number | null
-  supportLevels: Array<{ price: number; strength: number; type: string; touches: number }>
-  resistanceLevels: Array<{ price: number; strength: number; type: string; touches: number }>
-  psychologicalLevels: Array<{ price: number; strength: number; type: string; touches: number }>
+  supportLevels: PriceLevel[]
+  resistanceLevels: PriceLevel[]
+  psychologicalLevels: PriceLevel[]
   aiMinPrice: number | null
   aiMaxPrice: number | null
   aiFairEntryPrice: number | null
@@ -118,30 +124,160 @@ interface UsageResponse {
   monthlyUsage?: number
 }
 
-export default function TechnicalAnalysisPage({
-  ticker,
-  companyName,
-  sector,
-  currentPrice
-}: TechnicalAnalysisPageProps) {
+type ChartLevel = { price: number; strength: number; type: 'support' | 'resistance' | 'psychological'; touches: number }
+
+/** Linha rótulo → valor de uma lista de definições. */
+function ValueRow({ label, value }: { label: React.ReactNode; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-2">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium tabular-nums text-foreground">{value}</dd>
+    </div>
+  )
+}
+
+function IndicatorBlock({
+  title,
+  hint,
+  value,
+  badge,
+  children,
+}: {
+  title: string
+  hint?: string
+  value?: string
+  badge?: React.ReactNode
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span>{title}</span>
+        {hint && <InfoHint content={hint} label={`Sobre ${title}`} />}
+      </div>
+      {value !== undefined && (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span data-num className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+            {value}
+          </span>
+          {badge}
+        </div>
+      )}
+      {children && <dl className="mt-2 divide-y divide-border">{children}</dl>}
+    </div>
+  )
+}
+
+/** Barra da faixa estimada: faixa mínima–máxima, entrada técnica (traço) e preço atual (ponto). */
+function EstimatedRangeBar({ min, max, entry, price }: { min: number; max: number; entry: number | null; price: number }) {
+  const low = Math.min(min, price)
+  const high = Math.max(max, price)
+  const pad = (high - low) * 0.08 || high * 0.02
+  const domainMin = low - pad
+  const domainMax = high + pad
+  const at = (value: number) => `${((value - domainMin) / (domainMax - domainMin)) * 100}%`
+  const position = priceRangePosition(min, max, price)
+  const positionText =
+    position?.position === 'below'
+      ? 'Preço atual abaixo da faixa estimada'
+      : position?.position === 'above'
+      ? 'Preço atual acima da faixa estimada'
+      : 'Preço atual dentro da faixa estimada'
+
+  return (
+    <figure className="space-y-2">
+      <div
+        role="img"
+        aria-label={`${positionText}: ${formatBRL(price)}, faixa de ${formatBRL(min)} a ${formatBRL(max)}`}
+        className="relative h-6"
+      >
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-muted" />
+        <div
+          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-brand-subtle ring-1 ring-brand/40"
+          style={{ left: at(min), width: `calc(${at(max)} - ${at(min)})` }}
+        />
+        {entry !== null && entry >= domainMin && entry <= domainMax && (
+          <div className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground" style={{ left: at(entry) }} />
+        )}
+        <div
+          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-foreground"
+          style={{ left: at(price) }}
+        />
+      </div>
+      <figcaption className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="size-2.5 rounded-full bg-foreground" />
+          {positionText}: <span className="tabular-nums text-foreground">{formatBRL(price)}</span>
+        </span>
+        {entry !== null && (
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden="true" className="h-3 w-0.5 rounded-full bg-muted-foreground" />
+            Entrada técnica
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-1.5 w-4 rounded-full bg-brand-subtle ring-1 ring-brand/40" />
+          Faixa estimada
+        </span>
+      </figcaption>
+    </figure>
+  )
+}
+
+function LevelList({ title, levels, empty }: { title: string; levels: PriceLevel[]; empty: string }) {
+  return (
+    <div className="min-w-0">
+      <h3 className="text-sm font-medium text-foreground">{title}</h3>
+      {levels.length > 0 ? (
+        <dl className="mt-1 divide-y divide-border">
+          {levels.map((level, idx) => (
+            <div key={`${level.price}-${idx}`} className="flex items-baseline justify-between gap-3 py-2">
+              <dt className="text-sm font-medium tabular-nums text-foreground">{formatBRL(level.price)}</dt>
+              <dd className="text-xs text-muted-foreground">
+                força {level.strength}/5
+                {level.touches > 0 && ` · ${level.touches} ${level.touches === 1 ? 'toque' : 'toques'}`}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">{empty}</p>
+      )}
+    </div>
+  )
+}
+
+function rsiBadge(rsi: number) {
+  if (rsi >= 70) return <Badge variant="warning">Sobrecompra</Badge>
+  if (rsi <= 30) return <Badge variant="warning">Sobrevenda</Badge>
+  return <Badge variant="neutral">Neutro</Badge>
+}
+
+/** Busca o score geral da empresa (ações e BDRs) e renderiza a análise. */
+function WithCompanyScore({ ticker }: { ticker: string }) {
+  const { data: companyAnalysisData } = useCompanyAnalysis(ticker)
+  return <TechnicalAnalysisContent ticker={ticker} overallScore={companyAnalysisData?.overallScore?.score ?? null} />
+}
+
+export default function TechnicalAnalysisPage({ ticker, fundamentalScore }: TechnicalAnalysisPageProps) {
+  if (fundamentalScore !== undefined) return <TechnicalAnalysisContent ticker={ticker} overallScore={fundamentalScore} />
+  return <WithCompanyScore ticker={ticker} />
+}
+
+function TechnicalAnalysisContent({ ticker, overallScore }: { ticker: string; overallScore: number | null }) {
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const { isPremium } = usePremiumStatus()
+  const { isPremium, isLoading: premiumLoading } = usePremiumStatus()
   const { isAdmin } = useAdminStatus()
   const canUpdate = isPremium || isAdmin
 
-  // Query para obter overallScore (necessário para o TrafficLight)
-  const { data: companyAnalysisData } = useCompanyAnalysis(ticker)
-  const overallScore = companyAnalysisData?.overallScore?.score ?? null
-
-  // Query para análise atual ou selecionada
-  const analysisQueryKey = selectedAnalysisId 
+  const analysisQueryKey = selectedAnalysisId
     ? ['technical-analysis', ticker, selectedAnalysisId]
     : ['technical-analysis', ticker]
-  
+
   const { data, isLoading, error } = useQuery<ApiResponse>({
     queryKey: analysisQueryKey,
     queryFn: async () => {
@@ -157,7 +293,6 @@ export default function TechnicalAnalysisPage({
     }
   })
 
-  // Query para histórico com paginação
   const { data: historyData, isLoading: historyLoading } = useQuery<HistoryResponse>({
     queryKey: ['technical-analysis-history', ticker, historyPage],
     queryFn: async (): Promise<HistoryResponse> => {
@@ -171,7 +306,6 @@ export default function TechnicalAnalysisPage({
     placeholderData: (previousData) => previousData
   })
 
-  // Resetar página quando modal abrir
   const handleHistoryOpenChange = (open: boolean) => {
     setHistoryOpen(open)
     if (open) {
@@ -179,7 +313,7 @@ export default function TechnicalAnalysisPage({
     }
   }
 
-  // Query para uso (apenas usuários gratuitos)
+  // Uso mensal: só para quem não é Premium (depois de saber o plano)
   const { data: usageData } = useQuery<UsageResponse>({
     queryKey: ['technical-analysis-usage', ticker],
     queryFn: async () => {
@@ -189,10 +323,9 @@ export default function TechnicalAnalysisPage({
       }
       return response.json()
     },
-    enabled: !isPremium
+    enabled: !premiumLoading && !isPremium
   })
 
-  // Mutation para atualizar análise
   const updateMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch(`/api/technical-analysis/${ticker}`, {
@@ -204,19 +337,19 @@ export default function TechnicalAnalysisPage({
       }
       return response.json()
     },
-    onSuccess: (data) => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['technical-analysis', ticker] })
       queryClient.invalidateQueries({ queryKey: ['technical-analysis-history', ticker] })
-      setSelectedAnalysisId(null) // Voltar para análise atual
+      setSelectedAnalysisId(null)
       toast({
-        title: data.recalculated ? 'Análise atualizada com sucesso!' : 'Análise já existe para hoje',
-        description: data.message || 'A análise técnica foi atualizada.'
+        title: result.recalculated ? 'Análise atualizada' : 'A análise de hoje já existe',
+        description: result.message || 'A análise técnica foi atualizada.'
       })
     },
-    onError: (error: Error) => {
+    onError: (mutationError: Error) => {
       toast({
-        title: 'Erro ao atualizar análise',
-        description: error.message,
+        title: 'Não foi possível atualizar a análise',
+        description: mutationError.message,
         variant: 'destructive'
       })
     }
@@ -234,9 +367,18 @@ export default function TechnicalAnalysisPage({
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-8 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-        <div className="h-96 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+      <div className="space-y-6" aria-busy="true" aria-label="Carregando análise técnica">
+        <div className="flex justify-end gap-2">
+          <Skeleton className="h-9 w-28" />
+          <Skeleton className="h-9 w-36" />
+        </div>
+        <Skeleton className="h-56 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+        </div>
       </div>
     )
   }
@@ -244,9 +386,16 @@ export default function TechnicalAnalysisPage({
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>
-          Erro ao carregar análise técnica. Tente novamente mais tarde.
+        <AlertTriangle className="size-4" strokeWidth={1.75} />
+        <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          Não foi possível carregar a análise técnica.
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['technical-analysis', ticker] })}
+          >
+            Tentar novamente
+          </Button>
         </AlertDescription>
       </Alert>
     )
@@ -255,533 +404,338 @@ export default function TechnicalAnalysisPage({
   if (!data?.analysis) {
     return (
       <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          Dados históricos insuficientes para análise técnica.
-        </AlertDescription>
+        <Info className="size-4" strokeWidth={1.75} />
+        <AlertDescription>Dados históricos insuficientes para a análise técnica.</AlertDescription>
       </Alert>
     )
   }
 
   const analysis = data.analysis
-
-  // Usar função centralizada para calcular status do semáforo
-  // A função aceita TechnicalAnalysisData com campos opcionais para calculatedAt/expiresAt
-  const trafficLightResult = getTechnicalTrafficLightStatus(
-    analysis as any, // Converter para compatibilidade com tipos
-    analysis.currentPrice,
-    overallScore // Passar overallScore obtido do hook useCompanyAnalysis
-  )
-
-  const trafficLight = trafficLightResult ? {
-    color: trafficLightResult.status,
-    label: trafficLightResult.label,
-    icon: trafficLightResult.status === 'green' ? Circle : AlertTriangle,
-    description: trafficLightResult.description
-  } : null
+  const status = getTechnicalTrafficLightStatus(analysis, analysis.currentPrice, overallScore)
+  const hasRange = analysis.aiMinPrice !== null && analysis.aiMaxPrice !== null && analysis.aiMaxPrice > analysis.aiMinPrice
+  const hasFibonacci = analysis.fib236 !== null
+  const hasIchimoku = analysis.tenkanSen !== null
 
   return (
-    <div className="space-y-6">
-      {/* Header com controles */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex-1">
-          {selectedAnalysisId && (
-            <Alert className="mb-4">
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Visualizando análise histórica. 
-                <Button 
-                  variant="link" 
-                  className="p-0 h-auto ml-2"
-                  onClick={handleLoadCurrent}
-                >
-                  Carregar análise atual
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-          {!isPremium && usageData && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Você já visualizou {usageData.currentUsage} de {usageData.limit} análises técnicas este mês.
-                {usageData.remaining > 0 ? ` Restam ${usageData.remaining} análises.` : ' Faça upgrade para acesso ilimitado.'}
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Botão de Histórico */}
-          <Dialog open={historyOpen} onOpenChange={handleHistoryOpenChange}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <History className="w-4 h-4 mr-2" />
-                Histórico
+    <div className="space-y-8">
+      {/* Controles */}
+      <div className="space-y-3">
+        {selectedAnalysisId && (
+          <Alert>
+            <Info className="size-4" strokeWidth={1.75} />
+            <AlertDescription className="flex flex-wrap items-center gap-x-2">
+              Você está vendo uma análise anterior.
+              <Button variant="link" className="h-auto p-0" onClick={handleLoadCurrent}>
+                Ver a análise atual
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>Histórico de Análises Técnicas</DialogTitle>
-                <DialogDescription>
-                  Selecione uma análise anterior para visualizar
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                {historyLoading ? (
-                  <div className="flex items-center justify-center py-8 flex-1">
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                  </div>
-                ) : historyData && historyData.history && historyData.history.length > 0 ? (
-                  <>
-                    <div className="space-y-2 flex-1 overflow-y-auto min-h-0 pr-2">
-                      {historyData.history.map((item) => (
-                        <Card 
-                          key={item.id} 
-                          className="cursor-pointer hover:bg-muted transition-colors"
-                          onClick={() => handleHistorySelect(item.id)}
-                        >
-                          <CardContent className="p-3 sm:p-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm sm:text-base truncate">
-                                  {new Date(item.calculatedAt).toLocaleDateString('pt-BR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </p>
-                                <p className="text-xs sm:text-sm text-muted-foreground">
-                                  Válida até: {new Date(item.expiresAt).toLocaleDateString('pt-BR')}
-                                </p>
-                              </div>
-                              {selectedAnalysisId === item.id && (
-                                <Badge variant="default" className="self-start sm:self-center">Atual</Badge>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+            </AlertDescription>
+          </Alert>
+        )}
+        {!isPremium && usageData && (
+          <Alert>
+            <Info className="size-4" strokeWidth={1.75} />
+            <AlertDescription>
+              Você viu {usageData.currentUsage} de {usageData.limit} análises técnicas este mês.
+              {usageData.remaining > 0
+                ? ` ${usageData.remaining === 1 ? 'Resta 1 análise' : `Restam ${usageData.remaining} análises`}.`
+                : ' Com o Premium, o acesso é ilimitado.'}
+            </AlertDescription>
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Calculada em {formatDate(analysis.calculatedAt, { style: 'datetime' })} · válida até{' '}
+            {formatDate(analysis.expiresAt, { style: 'datetime' })}
+          </p>
+          <div className="flex items-center gap-2">
+            <Dialog open={historyOpen} onOpenChange={handleHistoryOpenChange}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <History className="size-4 text-muted-foreground" strokeWidth={1.75} />
+                  Histórico
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col sm:w-full">
+                <DialogHeader>
+                  <DialogTitle>Histórico de análises técnicas</DialogTitle>
+                  <DialogDescription>Selecione uma análise anterior para visualizar.</DialogDescription>
+                </DialogHeader>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  {historyLoading ? (
+                    <div className="flex flex-1 items-center justify-center py-8">
+                      <Loader2 className="size-5 animate-spin text-muted-foreground" strokeWidth={1.75} />
                     </div>
-                    {/* Controles de Paginação */}
-                    {historyData?.pagination && historyData.pagination.totalPages > 1 && (
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 mt-4 border-t">
-                        <div className="text-sm text-muted-foreground">
-                          Mostrando {((historyData.pagination.page - 1) * historyData.pagination.pageSize) + 1} - {Math.min(historyData.pagination.page * historyData.pagination.pageSize, historyData.pagination.total)} de {historyData.pagination.total}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
-                            disabled={historyData.pagination.page === 1 || historyLoading}
-                          >
-                            Anterior
-                          </Button>
-                          <div className="flex items-center gap-1">
-                            {Array.from({ length: Math.min(5, historyData.pagination.totalPages) }, (_, i) => {
-                              let pageNum: number
-                              if (historyData.pagination.totalPages <= 5) {
-                                pageNum = i + 1
-                              } else if (historyData.pagination.page <= 3) {
-                                pageNum = i + 1
-                              } else if (historyData.pagination.page >= historyData.pagination.totalPages - 2) {
-                                pageNum = historyData.pagination.totalPages - 4 + i
-                              } else {
-                                pageNum = historyData.pagination.page - 2 + i
-                              }
-                              
-                              return (
-                                <Button
-                                  key={pageNum}
-                                  variant={historyData.pagination.page === pageNum ? "default" : "outline"}
-                                  size="sm"
-                                  className="w-8 h-8 p-0"
-                                  onClick={() => setHistoryPage(pageNum)}
-                                  disabled={historyLoading}
-                                >
-                                  {pageNum}
-                                </Button>
-                              )
-                            })}
+                  ) : historyData && historyData.history && historyData.history.length > 0 ? (
+                    <>
+                      <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+                        {historyData.history.map((item) => (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              onClick={() => handleHistorySelect(item.id)}
+                              className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium tabular-nums text-foreground">
+                                  {formatDate(item.calculatedAt, { style: 'datetime' })}
+                                </span>
+                                <span className="block text-xs text-muted-foreground">
+                                  Válida até {formatDate(item.expiresAt)}
+                                </span>
+                              </span>
+                              {selectedAnalysisId === item.id && <Badge variant="brand">Em exibição</Badge>}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      {historyData.pagination && historyData.pagination.totalPages > 1 && (
+                        <div className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border pt-4 sm:flex-row">
+                          <p className="text-sm tabular-nums text-muted-foreground">
+                            {(historyData.pagination.page - 1) * historyData.pagination.pageSize + 1}–
+                            {Math.min(historyData.pagination.page * historyData.pagination.pageSize, historyData.pagination.total)} de{' '}
+                            {historyData.pagination.total}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                              disabled={historyData.pagination.page === 1 || historyLoading}
+                            >
+                              Anterior
+                            </Button>
+                            <span className="text-sm tabular-nums text-muted-foreground">
+                              {historyData.pagination.page} / {historyData.pagination.totalPages}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setHistoryPage((p) => Math.min(historyData.pagination.totalPages, p + 1))}
+                              disabled={historyData.pagination.page === historyData.pagination.totalPages || historyLoading}
+                            >
+                              Próxima
+                            </Button>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setHistoryPage(p => Math.min(historyData.pagination.totalPages, p + 1))}
-                            disabled={historyData.pagination.page === historyData.pagination.totalPages || historyLoading}
-                          >
-                            Próxima
-                          </Button>
                         </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground flex-1 flex items-center justify-center">
-                    Nenhuma análise histórica encontrada
-                  </div>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
+                      )}
+                    </>
+                  ) : (
+                    <p className="flex flex-1 items-center justify-center py-8 text-sm text-muted-foreground">
+                      Nenhuma análise anterior encontrada.
+                    </p>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
 
-          {/* Botão de Atualizar (apenas Premium/Admin) */}
-          {canUpdate && (
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => updateMutation.mutate()}
-              disabled={updateMutation.isPending}
-            >
-              {updateMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Atualizando...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Atualizar Análise
-                </>
-              )}
-            </Button>
-          )}
+            {canUpdate && (
+              <Button variant="outline" size="sm" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" strokeWidth={1.75} />
+                ) : (
+                  <RefreshCw className="size-4 text-muted-foreground" strokeWidth={1.75} />
+                )}
+                {updateMutation.isPending ? 'Atualizando…' : 'Atualizar análise'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-      {/* Indicador de Semáforo */}
-      {trafficLight && (
-        <Card className={`border-2 ${
-          trafficLight.color === 'green' ? 'border-green-500 bg-green-50 dark:bg-green-950' :
-          trafficLight.color === 'yellow' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
-          'border-red-500 bg-red-50 dark:bg-red-950'
-        }`}>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center space-x-4">
-                  <div className={`w-4 h-4 rounded-full animate-pulse ${
-                    trafficLight.color === 'green' ? 'bg-green-500' :
-                    trafficLight.color === 'yellow' ? 'bg-yellow-500' :
-                    'bg-red-500'
-                  }`} />
-                  <div>
-                    <p className="font-semibold text-lg">
-                      Preço Atual: R$ {analysis.currentPrice.toFixed(2)}
-                    </p>
-                    <p className={`text-sm font-medium ${
-                      trafficLight.color === 'green' ? 'text-green-700 dark:text-green-300' :
-                      trafficLight.color === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
-                      'text-red-700 dark:text-red-300'
-                    }`}>
-                      {trafficLight.label}
-                    </p>
-                  </div>
-                </div>
-                {analysis.aiFairEntryPrice && (
-                  <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Preço Justo de Entrada</p>
-                    <p className="font-semibold text-lg">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
-                  </div>
-                )}
-              </div>
-              <div className={`text-sm pt-2 border-t ${
-                trafficLight.color === 'green' ? 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' :
-                trafficLight.color === 'yellow' ? 'border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300' :
-                'border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-              }`}>
-                {trafficLight.description}
-              </div>
-              {analysis.aiMinPrice && analysis.aiMaxPrice && (
-                <div className="text-xs text-muted-foreground pt-2">
-                  Faixa prevista: R$ {analysis.aiMinPrice.toFixed(2)} - R$ {analysis.aiMaxPrice.toFixed(2)}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
-      {/* Disclaimer */}
-      <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
-        <Info className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-900 dark:text-blue-100">
-          <strong>Importante:</strong> A análise técnica é um auxílio complementar para identificar 
-          as melhores regiões de preço para entrada em um ativo para <strong>longo prazo</strong>. 
-          <strong> Não é recomendada para day trade.</strong> Sempre combine com análise fundamentalista.
-        </AlertDescription>
-      </Alert>
 
-      {/* Análise da IA */}
-      {analysis.aiFairEntryPrice && (
-        <Card className="border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-950 dark:to-indigo-950">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Zap className="w-5 h-5 text-purple-600" />
-              <span>Previsão de Preços com IA (30 dias)</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                <p className="text-sm text-muted-foreground">Preço Mínimo Previsto</p>
-                <p className="text-2xl font-bold text-red-600">
-                  R$ {analysis.aiMinPrice?.toFixed(2) || 'N/A'}
+      {/* Faixa estimada pela IA */}
+      {analysis.aiFairEntryPrice !== null && (
+        <section aria-labelledby="faixa-estimada" className="space-y-4">
+          <SectionHeader
+            id="faixa-estimada"
+            title={
+              <>
+                Faixa estimada (30 dias)
+                <span className="font-normal text-muted-foreground"> · gerada por IA · não é recomendação</span>
+              </>
+            }
+            actions={<Badge variant={status.status === 'red' ? 'warning' : 'neutral'}>{status.label}</Badge>}
+          />
+          <div className="space-y-5 rounded-lg border border-border bg-card p-4 sm:p-5">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Mínima estimada</p>
+                <p data-num className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                  {formatBRL(analysis.aiMinPrice)}
                 </p>
               </div>
-              <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                <p className="text-sm text-muted-foreground">Preço Máximo Previsto</p>
-                <p className="text-2xl font-bold text-green-600">
-                  R$ {analysis.aiMaxPrice?.toFixed(2) || 'N/A'}
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Máxima estimada</p>
+                <p data-num className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                  {formatBRL(analysis.aiMaxPrice)}
                 </p>
               </div>
-              <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-lg border-2 border-purple-300 dark:border-purple-700">
-                <p className="text-sm text-muted-foreground">Preço Justo de Entrada</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  R$ {analysis.aiFairEntryPrice?.toFixed(2) || 'N/A'}
+              <div className="col-span-2 min-w-0 sm:col-span-1">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span>Entrada técnica estimada</span>
+                  <InfoHint
+                    label="Sobre a entrada técnica"
+                    content="Preço que o modelo considera uma região técnica de entrada, a partir de suportes, médias e da faixa estimada. É uma estimativa, não uma recomendação."
+                  />
+                </div>
+                <p data-num className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                  {formatBRL(analysis.aiFairEntryPrice)}
                 </p>
-                {analysis.aiConfidence && (
-                  <Badge variant="outline" className="mt-2">
-                    Confiança: {analysis.aiConfidence}%
-                  </Badge>
+                {analysis.aiConfidence !== null && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Confiança do modelo: {formatPct(analysis.aiConfidence / 100, { digits: 0 })}
+                  </p>
                 )}
               </div>
             </div>
+
+            {hasRange && (
+              <EstimatedRangeBar
+                min={analysis.aiMinPrice as number}
+                max={analysis.aiMaxPrice as number}
+                entry={analysis.aiFairEntryPrice}
+                price={analysis.currentPrice}
+              />
+            )}
+
+            <p className="text-sm text-muted-foreground">{status.description}</p>
+
             {analysis.aiAnalysis && (
-              <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                <p className="text-sm font-semibold mb-2">Análise da IA:</p>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {analysis.aiAnalysis}
+              <div className="border-t border-border pt-4">
+                <p className="text-sm font-medium text-foreground">Leitura do modelo</p>
+                <p className="mt-2 max-w-[68ch] whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                  {softenAiText(analysis.aiAnalysis)}
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
 
-      {/* Tabs com Indicadores */}
-      <Tabs defaultValue="indicators" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+      {/* Indicadores */}
+      <Tabs defaultValue="indicators" className="w-full gap-4">
+        <TabsList variant="underline" aria-label="Seções da análise técnica">
           <TabsTrigger value="indicators">Indicadores</TabsTrigger>
-          <TabsTrigger value="support-resistance">Suporte/Resistência</TabsTrigger>
+          <TabsTrigger value="support-resistance">Suporte/resistência</TabsTrigger>
           <TabsTrigger value="fibonacci">Fibonacci</TabsTrigger>
           <TabsTrigger value="ichimoku">Ichimoku</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="indicators" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Indicadores Técnicos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {analysis.rsi !== null && (
-                  <div className="p-4 border rounded-lg">
-                    <p className="text-sm text-muted-foreground">RSI</p>
-                    <p className="text-2xl font-bold">{analysis.rsi.toFixed(2)}</p>
-                    <Badge variant={analysis.rsi >= 70 ? 'destructive' : analysis.rsi <= 30 ? 'default' : 'secondary'}>
-                      {analysis.rsi >= 70 ? 'Sobrecompra' : analysis.rsi <= 30 ? 'Sobrevenda' : 'Neutro'}
-                    </Badge>
-                  </div>
-                )}
-                {analysis.macd !== null && (
-                  <div className="p-4 border rounded-lg">
-                    <p className="text-sm text-muted-foreground">MACD</p>
-                    <p className="text-2xl font-bold">{analysis.macd.toFixed(4)}</p>
-                    {analysis.macdHistogram !== null && (
-                      <Badge variant={analysis.macdHistogram > 0 ? 'default' : 'secondary'}>
-                        {analysis.macdHistogram > 0 ? 'Alta' : 'Baixa'}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-                {analysis.bbUpper !== null && (
-                  <div className="p-4 border rounded-lg">
-                    <p className="text-sm text-muted-foreground">Bollinger Bands</p>
-                    <div className="space-y-1 text-sm">
-                      <p>Superior: R$ {analysis.bbUpper.toFixed(2)}</p>
-                      <p>Média: R$ {analysis.bbMiddle?.toFixed(2)}</p>
-                      <p>Inferior: R$ {analysis.bbLower?.toFixed(2)}</p>
-                    </div>
-                  </div>
-                )}
-                {analysis.sma20 !== null && (
-                  <div className="p-4 border rounded-lg">
-                    <p className="text-sm text-muted-foreground">Médias Móveis</p>
-                    <div className="space-y-1 text-sm">
-                      <p>SMA 20: R$ {analysis.sma20.toFixed(2)}</p>
-                      <p>SMA 50: R$ {analysis.sma50?.toFixed(2)}</p>
-                      <p>SMA 200: R$ {analysis.sma200?.toFixed(2)}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="indicators">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {analysis.rsi !== null && (
+              <IndicatorBlock
+                title="IFR (RSI 14)"
+                hint="Índice de força relativa de 0 a 100. Acima de 70 indica sobrecompra; abaixo de 30, sobrevenda."
+                value={formatNumber(analysis.rsi, { digits: 1 })}
+                badge={rsiBadge(analysis.rsi)}
+              />
+            )}
+            {analysis.macd !== null && (
+              <IndicatorBlock
+                title="MACD"
+                hint="Diferença entre as médias exponenciais de 12 e 26 períodos. O histograma compara o MACD com a linha de sinal."
+                value={formatNumber(analysis.macd, { digits: 4 })}
+                badge={
+                  analysis.macdHistogram !== null ? (
+                    <Badge variant="neutral">Histograma {analysis.macdHistogram > 0 ? 'positivo' : 'negativo'}</Badge>
+                  ) : undefined
+                }
+              >
+                <ValueRow label="Linha de sinal" value={formatNumber(analysis.macdSignal, { digits: 4 })} />
+                <ValueRow label="Histograma" value={formatNumber(analysis.macdHistogram, { digits: 4 })} />
+              </IndicatorBlock>
+            )}
+            {analysis.stochasticK !== null && (
+              <IndicatorBlock
+                title="Estocástico"
+                hint="Posição do fechamento na faixa de preços recente, de 0 a 100. Acima de 80, sobrecompra; abaixo de 20, sobrevenda."
+                value={formatNumber(analysis.stochasticK, { digits: 1 })}
+              >
+                <ValueRow label="%D" value={formatNumber(analysis.stochasticD, { digits: 1 })} />
+              </IndicatorBlock>
+            )}
+            {analysis.bbUpper !== null && (
+              <IndicatorBlock title="Bandas de Bollinger" hint="Média de 20 períodos com bandas de 2 desvios-padrão.">
+                <ValueRow label="Superior" value={formatBRL(analysis.bbUpper)} />
+                <ValueRow label="Média" value={formatBRL(analysis.bbMiddle)} />
+                <ValueRow label="Inferior" value={formatBRL(analysis.bbLower)} />
+              </IndicatorBlock>
+            )}
+            {(analysis.sma20 !== null || analysis.sma50 !== null || analysis.sma200 !== null) && (
+              <IndicatorBlock title="Médias móveis" hint="SMA: média simples. MME: média exponencial.">
+                <ValueRow label="SMA 20" value={formatBRL(analysis.sma20)} />
+                <ValueRow label="SMA 50" value={formatBRL(analysis.sma50)} />
+                <ValueRow label="SMA 200" value={formatBRL(analysis.sma200)} />
+                <ValueRow label="MME 12" value={formatBRL(analysis.ema12)} />
+                <ValueRow label="MME 26" value={formatBRL(analysis.ema26)} />
+              </IndicatorBlock>
+            )}
+          </div>
         </TabsContent>
 
-        <TabsContent value="support-resistance" className="space-y-4">
-          {/* Gráfico de Suporte e Resistência */}
+        <TabsContent value="support-resistance" className="space-y-6">
           {data.historicalData && data.historicalData.length > 0 ? (
             <SupportResistanceChart
               historicalData={data.historicalData}
-              supportLevels={analysis.supportLevels as Array<{ price: number; strength: number; type: 'support' | 'resistance' | 'psychological'; touches: number }>}
-              resistanceLevels={analysis.resistanceLevels as Array<{ price: number; strength: number; type: 'support' | 'resistance' | 'psychological'; touches: number }>}
-              fibonacciLevels={analysis.fib236 ? {
-                fib236: analysis.fib236,
-                fib382: analysis.fib382,
-                fib500: analysis.fib500,
-                fib618: analysis.fib618,
-                fib786: analysis.fib786
-              } : null}
-              ichimokuLevels={analysis.tenkanSen ? {
-                tenkanSen: analysis.tenkanSen,
-                kijunSen: analysis.kijunSen,
-                senkouSpanA: analysis.senkouSpanA,
-                senkouSpanB: analysis.senkouSpanB,
-                chikouSpan: analysis.chikouSpan
-              } : null}
+              supportLevels={analysis.supportLevels as ChartLevel[]}
+              resistanceLevels={analysis.resistanceLevels as ChartLevel[]}
               currentPrice={analysis.currentPrice}
-              ticker={ticker}
             />
           ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-muted-foreground text-center">
-                  Dados históricos não disponíveis para exibir gráfico
-                </p>
-              </CardContent>
-            </Card>
+            <p className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
+              Sem histórico de preços para exibir o gráfico.
+            </p>
           )}
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Detalhes dos Níveis</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="font-semibold mb-3 text-green-600">Níveis de Suporte</h3>
-                  <div className="space-y-2">
-                    {analysis.supportLevels.length > 0 ? (
-                      analysis.supportLevels.map((level, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-950 rounded">
-                          <span className="font-medium">R$ {level.price.toFixed(2)}</span>
-                          <Badge variant="outline">Força: {level.strength}/5</Badge>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-muted-foreground text-sm">Nenhum nível de suporte detectado</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-3 text-red-600">Níveis de Resistência</h3>
-                  <div className="space-y-2">
-                    {analysis.resistanceLevels.length > 0 ? (
-                      analysis.resistanceLevels.map((level, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-950 rounded">
-                          <span className="font-medium">R$ {level.price.toFixed(2)}</span>
-                          <Badge variant="outline">Força: {level.strength}/5</Badge>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-muted-foreground text-sm">Nenhum nível de resistência detectado</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid gap-6 rounded-lg border border-border bg-card p-4 sm:p-5 md:grid-cols-2">
+            <LevelList title="Suportes" levels={analysis.supportLevels} empty="Nenhum suporte detectado." />
+            <LevelList title="Resistências" levels={analysis.resistanceLevels} empty="Nenhuma resistência detectada." />
+          </div>
         </TabsContent>
 
-        <TabsContent value="fibonacci" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Níveis de Fibonacci</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {analysis.fib236 ? (
-                <div className="space-y-2">
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>23.6%</span>
-                    <span className="font-medium">R$ {analysis.fib236.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>38.2%</span>
-                    <span className="font-medium">R$ {analysis.fib382?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>50%</span>
-                    <span className="font-medium">R$ {analysis.fib500?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>61.8%</span>
-                    <span className="font-medium">R$ {analysis.fib618?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>78.6%</span>
-                    <span className="font-medium">R$ {analysis.fib786?.toFixed(2)}</span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-muted-foreground">Dados de Fibonacci não disponíveis</p>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="fibonacci">
+          <div className="rounded-lg border border-border bg-card p-4 sm:p-5">
+            <SectionHeader
+              as="h3"
+              title="Retrações de Fibonacci"
+              description="Níveis entre a mínima e a máxima do período analisado."
+            />
+            {hasFibonacci ? (
+              <dl className="mt-3 max-w-md divide-y divide-border">
+                <ValueRow label={formatPct(0.236)} value={formatBRL(analysis.fib236)} />
+                <ValueRow label={formatPct(0.382)} value={formatBRL(analysis.fib382)} />
+                <ValueRow label={formatPct(0.5)} value={formatBRL(analysis.fib500)} />
+                <ValueRow label={formatPct(0.618)} value={formatBRL(analysis.fib618)} />
+                <ValueRow label={formatPct(0.786)} value={formatBRL(analysis.fib786)} />
+              </dl>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">Níveis de Fibonacci indisponíveis.</p>
+            )}
+          </div>
         </TabsContent>
 
-        <TabsContent value="ichimoku" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Ichimoku Cloud</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {analysis.tenkanSen !== null ? (
-                <div className="space-y-2">
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>Tenkan-sen</span>
-                    <span className="font-medium">R$ {analysis.tenkanSen.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>Kijun-sen</span>
-                    <span className="font-medium">R$ {analysis.kijunSen?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>Senkou Span A</span>
-                    <span className="font-medium">R$ {analysis.senkouSpanA?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>Senkou Span B</span>
-                    <span className="font-medium">R$ {analysis.senkouSpanB?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 border rounded">
-                    <span>Chikou Span</span>
-                    <span className="font-medium">R$ {analysis.chikouSpan?.toFixed(2)}</span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-muted-foreground">Dados de Ichimoku não disponíveis</p>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="ichimoku">
+          <div className="rounded-lg border border-border bg-card p-4 sm:p-5">
+            <SectionHeader
+              as="h3"
+              title="Ichimoku"
+              description="Tenkan-sen e Kijun-sen são médias de máximas e mínimas; os Senkou Span formam a nuvem."
+            />
+            {hasIchimoku ? (
+              <dl className="mt-3 max-w-md divide-y divide-border">
+                <ValueRow label="Tenkan-sen" value={formatBRL(analysis.tenkanSen)} />
+                <ValueRow label="Kijun-sen" value={formatBRL(analysis.kijunSen)} />
+                <ValueRow label="Senkou Span A" value={formatBRL(analysis.senkouSpanA)} />
+                <ValueRow label="Senkou Span B" value={formatBRL(analysis.senkouSpanB)} />
+                <ValueRow label="Chikou Span" value={formatBRL(analysis.chikouSpan)} />
+              </dl>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">Dados de Ichimoku indisponíveis.</p>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 
-      {/* Metadata */}
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-xs text-muted-foreground">
-            Análise calculada em: {new Date(analysis.calculatedAt).toLocaleString('pt-BR')}
-            {data.cached && ' (em cache)'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Válida até: {new Date(analysis.expiresAt).toLocaleString('pt-BR')}
-          </p>
-        </CardContent>
-      </Card>
+      <TechnicalAnalysisDisclaimer />
     </div>
   )
 }
-

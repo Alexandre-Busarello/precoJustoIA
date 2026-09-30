@@ -1,18 +1,8 @@
 'use client'
 
 import { useMemo } from 'react'
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  Legend
-} from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { formatBRL } from '@/lib/format'
 
 interface SupportResistanceLevel {
   price: number
@@ -28,316 +18,127 @@ interface HistoricalPrice {
   low: number
 }
 
-interface FibonacciLevels {
-  fib236: number | null
-  fib382: number | null
-  fib500: number | null
-  fib618: number | null
-  fib786: number | null
-}
-
-interface IchimokuLevels {
-  tenkanSen: number | null
-  kijunSen: number | null
-  senkouSpanA: number | null
-  senkouSpanB: number | null
-  chikouSpan: number | null
-}
-
 interface SupportResistanceChartProps {
   historicalData: HistoricalPrice[]
   supportLevels: SupportResistanceLevel[]
   resistanceLevels: SupportResistanceLevel[]
-  fibonacciLevels?: FibonacciLevels | null
-  ichimokuLevels?: IchimokuLevels | null
   currentPrice: number
-  ticker: string
 }
 
+/** Estilo comum dos gráficos: grade só horizontal, eixos xs em muted, tooltip em superfície de popover. */
+const AXIS_TICK = { fontSize: 12, fill: 'var(--muted-foreground)' } as const
+const TOOLTIP_PROPS = {
+  contentStyle: {
+    background: 'var(--popover)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    color: 'var(--popover-foreground)',
+    fontSize: 12,
+  },
+  labelStyle: { color: 'var(--muted-foreground)', marginBottom: 4 },
+  itemStyle: { color: 'var(--popover-foreground)', padding: 0 },
+  cursor: { stroke: 'var(--border)' },
+  separator: ': ',
+} as const
+
+const SUPPORT_DASH = '6 4'
+const RESISTANCE_DASH = '2 3'
+
+const monthFormat = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+
+function strongest(levels: SupportResistanceLevel[]): SupportResistanceLevel | null {
+  return [...levels].sort((a, b) => b.strength - a.strength)[0] ?? null
+}
+
+function LegendItem({ label, dash, color }: { label: string; dash?: string; color: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <svg width="18" height="4" aria-hidden="true">
+        <line x1="0" y1="2" x2="18" y2="2" stroke={color} strokeWidth="2" strokeDasharray={dash} />
+      </svg>
+      {label}
+    </span>
+  )
+}
+
+/** Preço mensal com o suporte e a resistência mais fortes (linhas tracejadas neutras). */
 export default function SupportResistanceChart({
   historicalData,
   supportLevels,
   resistanceLevels,
-  fibonacciLevels,
-  ichimokuLevels,
   currentPrice,
-  ticker
 }: SupportResistanceChartProps) {
-  // Preparar dados do gráfico (garantir apenas um ponto por mês)
+  // Um ponto por mês (o mais recente de cada mês)
   const chartData = useMemo(() => {
-    // Agrupar novamente por mês para garantir que não há duplicatas
-    const monthlyMap = new Map<string, { date: Date; close: number; high: number; low: number }>()
-    
+    const monthly = new Map<string, { time: number; close: number; high: number; low: number }>()
     for (const d of historicalData) {
       const date = new Date(d.date)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      
-      // Se não existe ou se esta data é mais recente, substituir
-      const existing = monthlyMap.get(monthKey)
-      if (!existing || date.getTime() > existing.date.getTime()) {
-        monthlyMap.set(monthKey, {
-          date,
-          close: Number(d.close),
-          high: Number(d.high),
-          low: Number(d.low)
-        })
+      const key = `${date.getUTCFullYear()}-${date.getUTCMonth()}`
+      const existing = monthly.get(key)
+      if (!existing || date.getTime() > existing.time) {
+        monthly.set(key, { time: date.getTime(), close: Number(d.close), high: Number(d.high), low: Number(d.low) })
       }
     }
-    
-    // Converter para array, ordenar por data e formatar
-    return Array.from(monthlyMap.values())
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .map(item => ({
-        date: item.date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-        dateObj: item.date,
-        close: item.close,
-        high: item.high,
-        low: item.low
-      }))
+    return Array.from(monthly.values())
+      .sort((a, b) => a.time - b.time)
+      .map((item) => ({ ...item, label: monthFormat.format(new Date(item.time)) }))
   }, [historicalData])
 
-  // Preparar linhas de referência para suporte e resistência (apenas o mais forte)
-  const supportLines = useMemo(() => {
-    const strongest = supportLevels
-      .sort((a, b) => b.strength - a.strength)[0]
-    return strongest ? [{
-      price: strongest.price,
-      strength: strongest.strength,
-      color: '#10b981' // Verde
-    }] : []
-  }, [supportLevels])
+  const support = useMemo(() => strongest(supportLevels), [supportLevels])
+  const resistance = useMemo(() => strongest(resistanceLevels), [resistanceLevels])
 
-  const resistanceLines = useMemo(() => {
-    const strongest = resistanceLevels
-      .sort((a, b) => b.strength - a.strength)[0]
-    return strongest ? [{
-      price: strongest.price,
-      strength: strongest.strength,
-      color: '#ef4444' // Vermelho
-    }] : []
-  }, [resistanceLevels])
-
-  // Preparar níveis de Fibonacci (apenas o mais forte de cada tipo)
-  const fibonacciLines = useMemo(() => {
-    if (!fibonacciLevels) return []
-    const levels: Array<{ price: number; label: string; type: 'support' | 'resistance' }> = []
-    
-    // Encontrar o nível de Fibonacci mais próximo abaixo do preço atual (suporte mais forte)
-    const supportFibs = [
-      { price: fibonacciLevels.fib786, label: 'Fib 78.6%' },
-      { price: fibonacciLevels.fib618, label: 'Fib 61.8%' },
-      { price: fibonacciLevels.fib500, label: 'Fib 50%' },
-      { price: fibonacciLevels.fib382, label: 'Fib 38.2%' },
-      { price: fibonacciLevels.fib236, label: 'Fib 23.6%' }
-    ].filter(f => f.price && f.price < currentPrice)
-    
-    if (supportFibs.length > 0) {
-      // Pegar o mais próximo do preço atual (mais forte como suporte)
-      const strongestSupport = supportFibs.reduce((prev, curr) => 
-        Math.abs(curr.price! - currentPrice) < Math.abs(prev.price! - currentPrice) ? curr : prev
-      )
-      levels.push({ price: strongestSupport.price!, label: strongestSupport.label, type: 'support' })
-    }
-    
-    // Encontrar o nível de Fibonacci mais próximo acima do preço atual (resistência mais forte)
-    const resistanceFibs = [
-      { price: fibonacciLevels.fib236, label: 'Fib 23.6%' },
-      { price: fibonacciLevels.fib382, label: 'Fib 38.2%' },
-      { price: fibonacciLevels.fib500, label: 'Fib 50%' },
-      { price: fibonacciLevels.fib618, label: 'Fib 61.8%' },
-      { price: fibonacciLevels.fib786, label: 'Fib 78.6%' }
-    ].filter(f => f.price && f.price > currentPrice)
-    
-    if (resistanceFibs.length > 0) {
-      // Pegar o mais próximo do preço atual (mais forte como resistência)
-      const strongestResistance = resistanceFibs.reduce((prev, curr) => 
-        Math.abs(curr.price! - currentPrice) < Math.abs(prev.price! - currentPrice) ? curr : prev
-      )
-      levels.push({ price: strongestResistance.price!, label: strongestResistance.label, type: 'resistance' })
-    }
-    
-    return levels
-  }, [fibonacciLevels, currentPrice])
-
-  // Preparar níveis de Ichimoku (apenas o mais forte de cada tipo)
-  const ichimokuLines = useMemo(() => {
-    if (!ichimokuLevels) return []
-    const levels: Array<{ price: number; label: string; type: 'support' | 'resistance' }> = []
-    
-    // Coletar todos os níveis de Ichimoku
-    const ichiLevels: Array<{ price: number; label: string; type: 'support' | 'resistance' }> = []
-    
-    // Kijun-sen é uma linha de suporte/resistência importante
-    if (ichimokuLevels.kijunSen) {
-      const type = ichimokuLevels.kijunSen < currentPrice ? 'support' : 'resistance'
-      ichiLevels.push({ price: ichimokuLevels.kijunSen, label: 'Kijun-sen', type })
-    }
-    
-    // Tenkan-sen também é importante
-    if (ichimokuLevels.tenkanSen) {
-      const type = ichimokuLevels.tenkanSen < currentPrice ? 'support' : 'resistance'
-      ichiLevels.push({ price: ichimokuLevels.tenkanSen, label: 'Tenkan-sen', type })
-    }
-    
-    // Senkou Span A e B formam a nuvem (cloud)
-    if (ichimokuLevels.senkouSpanA && ichimokuLevels.senkouSpanB) {
-      const cloudTop = Math.max(ichimokuLevels.senkouSpanA, ichimokuLevels.senkouSpanB)
-      const cloudBottom = Math.min(ichimokuLevels.senkouSpanA, ichimokuLevels.senkouSpanB)
-      
-      if (cloudTop > currentPrice) {
-        ichiLevels.push({ price: cloudTop, label: 'Cloud Top', type: 'resistance' })
-      }
-      if (cloudBottom < currentPrice) {
-        ichiLevels.push({ price: cloudBottom, label: 'Cloud Bottom', type: 'support' })
-      }
-    }
-    
-    // Pegar apenas o suporte e resistência mais próximos do preço atual
-    const supports = ichiLevels.filter(l => l.type === 'support')
-    const resistances = ichiLevels.filter(l => l.type === 'resistance')
-    
-    if (supports.length > 0) {
-      const strongestSupport = supports.reduce((prev, curr) => 
-        Math.abs(curr.price - currentPrice) < Math.abs(prev.price - currentPrice) ? curr : prev
-      )
-      levels.push(strongestSupport)
-    }
-    
-    if (resistances.length > 0) {
-      const strongestResistance = resistances.reduce((prev, curr) => 
-        Math.abs(curr.price - currentPrice) < Math.abs(prev.price - currentPrice) ? curr : prev
-      )
-      levels.push(strongestResistance)
-    }
-    
-    return levels
-  }, [ichimokuLevels, currentPrice])
-
-  // Calcular min/max incluindo todos os níveis
-  const allLevels = [
-    ...supportLines.map(s => s.price),
-    ...resistanceLines.map(r => r.price),
-    ...fibonacciLines.map(f => f.price),
-    ...ichimokuLines.map(i => i.price),
-    currentPrice
-  ]
-  const minPrice = Math.min(...chartData.map(d => d.low), ...allLevels) * 0.95
-  const maxPrice = Math.max(...chartData.map(d => d.high), ...allLevels) * 1.05
+  const levels = [support?.price, resistance?.price, currentPrice].filter((v): v is number => typeof v === 'number')
+  const minPrice = Math.min(...chartData.map((d) => d.low), ...levels) * 0.95
+  const maxPrice = Math.max(...chartData.map((d) => d.high), ...levels) * 1.05
+  const tickDigits = maxPrice < 20 ? 2 : 0
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Gráfico de Preços com Suporte e Resistência</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="date" 
-              tick={{ fontSize: 12 }}
-              angle={-45}
-              textAnchor="end"
-              height={80}
-            />
-            <YAxis 
+    <figure className="rounded-lg border border-border bg-card p-4 sm:p-5">
+      <figcaption className="mb-3 text-sm font-medium text-foreground">Preço mensal com suporte e resistência</figcaption>
+      <div className="h-72 sm:h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={28} />
+            <YAxis
               domain={[minPrice, maxPrice]}
-              tick={{ fontSize: 12 }}
-              tickFormatter={(value) => `R$ ${value.toFixed(2)}`}
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              width={64}
+              tickFormatter={(value: number) => formatBRL(value, { digits: tickDigits })}
             />
             <Tooltip
-              formatter={(value) => {
-                const n =
-                  typeof value === 'number' ? value : Number(value ?? 0)
-                return [`R$ ${n.toFixed(2)}`, 'Preço']
-              }}
-              labelFormatter={(label) => `Data: ${label}`}
+              {...TOOLTIP_PROPS}
+              formatter={(value) => [formatBRL(typeof value === 'number' ? value : Number(value)), 'Fechamento']}
             />
-            <Legend />
-            
-            {/* Linha de preço de fechamento */}
-            <Line
-              type="monotone"
-              dataKey="close"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dot={false}
-              name="Preço de Fechamento"
-            />
-            
-            {/* Linha de Suporte Automático (mais forte) */}
-            {supportLines.length > 0 && (
-              <ReferenceLine
-                key={`support-0`}
-                y={supportLines[0].price}
-                stroke={supportLines[0].color}
-                strokeWidth={3}
-                strokeDasharray="5 5"
-                label={{ 
-                  value: `Suporte: R$ ${supportLines[0].price.toFixed(2)}`, 
-                  position: 'right',
-                  fill: supportLines[0].color
-                }}
-              />
+            <Line type="monotone" dataKey="close" stroke="var(--chart-1)" strokeWidth={2} dot={false} name="Fechamento" />
+            {support && (
+              <ReferenceLine y={support.price} stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray={SUPPORT_DASH} />
             )}
-            
-            {/* Linha de Resistência Automática (mais forte) */}
-            {resistanceLines.length > 0 && (
-              <ReferenceLine
-                key={`resistance-0`}
-                y={resistanceLines[0].price}
-                stroke={resistanceLines[0].color}
-                strokeWidth={3}
-                strokeDasharray="5 5"
-                label={{ 
-                  value: `Resistência: R$ ${resistanceLines[0].price.toFixed(2)}`, 
-                  position: 'right',
-                  fill: resistanceLines[0].color
-                }}
-              />
+            {resistance && (
+              <ReferenceLine y={resistance.price} stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray={RESISTANCE_DASH} />
             )}
           </LineChart>
         </ResponsiveContainer>
-        
-        {/* Legenda Simplificada */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          {supportLines.length > 0 && (
-            <div>
-              <h4 className="font-semibold mb-2 text-green-600">Suporte Automático</h4>
-              <div className="flex items-center space-x-2">
-                <div 
-                  className="w-4 h-0.5" 
-                  style={{ backgroundColor: supportLines[0].color }}
-                />
-                <span>R$ {supportLines[0].price.toFixed(2)} - Força: {supportLines[0].strength}/5</span>
-              </div>
-            </div>
-          )}
-          {resistanceLines.length > 0 && (
-            <div>
-              <h4 className="font-semibold mb-2 text-red-600">Resistência Automática</h4>
-              <div className="flex items-center space-x-2">
-                <div 
-                  className="w-4 h-0.5" 
-                  style={{ backgroundColor: resistanceLines[0].color }}
-                />
-                <span>R$ {resistanceLines[0].price.toFixed(2)} - Força: {resistanceLines[0].strength}/5</span>
-              </div>
-            </div>
-          )}
-        </div>
-        
-        {/* Nota sobre Fibonacci e Ichimoku */}
-        <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-          <p className="font-semibold mb-1">ℹ️ Níveis Adicionais</p>
-          <p className="text-xs">
-            Os níveis de Fibonacci e Ichimoku estão disponíveis nas seções dedicadas acima. 
-            Eles foram removidos do gráfico para melhorar a legibilidade, mas continuam sendo 
-            considerados na análise técnica completa.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
+        <LegendItem label="Fechamento mensal" color="var(--chart-1)" />
+        {support && (
+          <LegendItem
+            label={`Suporte mais forte: ${formatBRL(support.price)} (força ${support.strength}/5)`}
+            color="var(--muted-foreground)"
+            dash={SUPPORT_DASH}
+          />
+        )}
+        {resistance && (
+          <LegendItem
+            label={`Resistência mais forte: ${formatBRL(resistance.price)} (força ${resistance.strength}/5)`}
+            color="var(--muted-foreground)"
+            dash={RESISTANCE_DASH}
+          />
+        )}
+      </div>
+    </figure>
   )
 }
-

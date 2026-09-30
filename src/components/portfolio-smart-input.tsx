@@ -1,148 +1,84 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useId, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChevronDown, ChevronUp, Upload, FileText, Bot } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { PortfolioTransactionAI } from '@/components/portfolio-transaction-ai';
 import { PortfolioTransactionForm } from '@/components/portfolio-transaction-form';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 interface PortfolioSmartInputProps {
   portfolioId: string;
   currentCashBalance?: number;
   onTransactionsApplied?: () => void;
-  defaultCollapsed?: boolean; // Control initial collapsed state
+  /** Começa recolhido (visão geral) ou aberto (transações). */
+  defaultCollapsed?: boolean;
 }
 
+/** Bloco "Registrar transações": texto livre interpretado por IA ou formulário manual. */
 export function PortfolioSmartInput({
   portfolioId,
   currentCashBalance = 0,
   onTransactionsApplied,
-  defaultCollapsed = false, // Default to open (expanded)
+  defaultCollapsed = false,
 }: PortfolioSmartInputProps) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
-  const [showManualForm, setShowManualForm] = useState(false);
   const [activeTab, setActiveTab] = useState('ai');
+  const [formKey, setFormKey] = useState(0);
+  const contentId = useId();
 
   return (
-    <Card className="border-2 border-primary/20 shadow-lg">
-      <CardHeader 
-        className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors"
-        onClick={() => setIsCollapsed(!isCollapsed)}
+    <section className="rounded-lg border border-border bg-card">
+      <button
+        type="button"
+        aria-expanded={!isCollapsed}
+        aria-controls={contentId}
+        onClick={() => setIsCollapsed((value) => !value)}
+        className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-4 py-3 text-left hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none sm:px-5"
       >
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Atualizar Custódia / Importar Transações
-          </CardTitle>
-          <div className="flex-shrink-0">
-            {isCollapsed ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronUp className="h-4 w-4" />
-            )}
-          </div>
-        </div>
-      </CardHeader>
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-foreground">Registrar transações</span>
+          <span className="block text-xs text-muted-foreground">
+            Cole o extrato da B3 ou preencha o formulário
+          </span>
+        </span>
+        <ChevronDown
+          className={cn('size-4 shrink-0 text-muted-foreground transition-transform', !isCollapsed && 'rotate-180')}
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+      </button>
 
       {!isCollapsed && (
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="ai" className="flex items-center gap-2">
-                <Bot className="h-4 w-4" />
-                <span className="hidden sm:inline">Texto Inteligente</span>
-                <span className="sm:hidden">IA</span>
-              </TabsTrigger>
-              <TabsTrigger value="pdf" className="flex items-center gap-2" disabled>
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Upload PDF</span>
-                <span className="sm:hidden">PDF</span>
-              </TabsTrigger>
-              <TabsTrigger value="manual" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Manual
-              </TabsTrigger>
+        <div id={contentId} className="border-t border-border px-4 pt-3 pb-4 sm:px-5 sm:pb-5">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList variant="underline">
+              <TabsTrigger value="ai">Colar texto</TabsTrigger>
+              <TabsTrigger value="manual">Formulário</TabsTrigger>
             </TabsList>
 
             <TabsContent value="ai" className="mt-4">
               <PortfolioTransactionAI
                 portfolioId={portfolioId}
                 currentCashBalance={currentCashBalance}
-                onTransactionsGenerated={(transactions) => {
-                  if (onTransactionsApplied) {
-                    onTransactionsApplied();
-                  }
-                }}
+                onTransactionsGenerated={() => onTransactionsApplied?.()}
               />
             </TabsContent>
 
-            <TabsContent value="pdf" className="mt-4">
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                  <Upload className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-                  <h3 className="font-semibold mb-2">Upload de Nota de Corretagem</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Esta funcionalidade estará disponível em breve
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Por enquanto, use a aba &quot;Texto Inteligente&quot; para cadastrar suas transações
-                  </p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
             <TabsContent value="manual" className="mt-4">
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Prefere cadastrar manualmente? Use o formulário abaixo.
-                </p>
-                <Button
-                  onClick={() => setShowManualForm(true)}
-                  className="w-full"
-                  variant="outline"
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Abrir Formulário Manual
-                </Button>
-              </div>
+              <PortfolioTransactionForm
+                key={formKey}
+                portfolioId={portfolioId}
+                onSuccess={() => {
+                  // Recria o formulário limpo para a próxima transação.
+                  setFormKey((value) => value + 1);
+                  onTransactionsApplied?.();
+                }}
+              />
             </TabsContent>
           </Tabs>
-        </CardContent>
+        </div>
       )}
-
-      {/* Manual Form Dialog */}
-      <Dialog open={showManualForm} onOpenChange={setShowManualForm}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle>Registrar Transação Manual</DialogTitle>
-            <DialogDescription>
-              Adicione uma transação manualmente à sua carteira
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-1">
-            <PortfolioTransactionForm
-              portfolioId={portfolioId}
-              onSuccess={() => {
-                setShowManualForm(false);
-                if (onTransactionsApplied) {
-                  onTransactionsApplied();
-                }
-              }}
-              onCancel={() => setShowManualForm(false)}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
-    </Card>
+    </section>
   );
 }
-

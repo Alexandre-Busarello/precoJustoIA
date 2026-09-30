@@ -16,7 +16,8 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useTracking } from '@/hooks/use-tracking';
 import { EventType } from '@/lib/tracking-types';
-import { DollarSign, AlertTriangle, Plus } from 'lucide-react';
+import { formatBRL } from '@/lib/format';
+import { PortfolioMoneyInput, PortfolioQuantityInput, roundTo } from '@/components/portfolio-money-input';
 import { invalidatePortfolioAnalyticsCache } from '@/components/portfolio-analytics';
 import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
 import { dispatchPortfolioChangeEvent } from '@/hooks/use-cache-invalidation';
@@ -47,12 +48,19 @@ interface PortfolioTransactionFormProps {
 }
 
 const TRANSACTION_TYPES = [
-  { value: 'CASH_CREDIT', label: 'Aporte em Dinheiro', requiresAsset: false },
-  { value: 'CASH_DEBIT', label: 'Saque de Dinheiro', requiresAsset: false },
-  { value: 'BUY', label: 'Compra de Ativo', requiresAsset: true },
-  { value: 'SELL_WITHDRAWAL', label: 'Venda de Ativo', requiresAsset: true },
-  { value: 'DIVIDEND', label: 'Dividendo Recebido', requiresAsset: true },
+  { value: 'CASH_CREDIT', label: 'Aporte em dinheiro', requiresAsset: false, help: 'O valor fica em caixa, disponível para compras.' },
+  { value: 'CASH_DEBIT', label: 'Saque de dinheiro', requiresAsset: false, help: 'Retira o valor do caixa da carteira.' },
+  { value: 'BUY', label: 'Compra de ativo', requiresAsset: true, help: 'Informe preço e quantidade; o total é calculado.' },
+  { value: 'SELL_WITHDRAWAL', label: 'Venda de ativo', requiresAsset: true, help: 'O valor da venda volta para o caixa.' },
+  { value: 'DIVIDEND', label: 'Dividendo recebido', requiresAsset: true, help: 'O valor é creditado no caixa da carteira.' },
 ];
+
+/** Converte o valor inicial (string numérica com ponto) em número. */
+function toNumber(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 export function PortfolioTransactionForm({
   portfolioId,
@@ -75,13 +83,20 @@ export function PortfolioTransactionForm({
   const [type, setType] = useState(initialData?.type || 'CASH_CREDIT');
   const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
   const [ticker, setTicker] = useState(initialData?.ticker || '');
-  const [amount, setAmount] = useState(initialData?.amount || '');
-  const [price, setPrice] = useState(initialData?.price || '');
-  const [quantity, setQuantity] = useState(initialData?.quantity || '');
+  const [amount, setAmount] = useState<number | undefined>(toNumber(initialData?.amount));
+  const [price, setPrice] = useState<number | undefined>(toNumber(initialData?.price));
+  const [quantity, setQuantity] = useState<number | undefined>(toNumber(initialData?.quantity));
   const [notes, setNotes] = useState(initialData?.notes || '');
 
   const selectedType = TRANSACTION_TYPES.find(t => t.value === type);
   const requiresAsset = selectedType?.requiresAsset || false;
+  const usesPriceAndQuantity = requiresAsset && type !== 'DIVIDEND';
+  // Compra/venda: o total é sempre preço × quantidade.
+  const effectiveAmount = usesPriceAndQuantity
+    ? price !== undefined && quantity !== undefined
+      ? roundTo(price * quantity)
+      : undefined
+    : amount;
 
   // Mutation for creating transaction
   const createTransactionMutation = useMutation({
@@ -112,8 +127,8 @@ export function PortfolioTransactionForm({
     },
     onSuccess: (responseData, variables) => {
       toast({
-        title: 'Sucesso!',
-        description: responseData.message || 'Transação registrada com sucesso'
+        title: 'Transação registrada',
+        description: responseData.message || 'A transação foi salva na carteira.'
       });
 
       // Track evento de atualização de carteira (transação adicionada)
@@ -186,8 +201,8 @@ export function PortfolioTransactionForm({
     },
     onSuccess: (responseData, variables) => {
       toast({
-        title: 'Sucesso!',
-        description: responseData.message || 'Aporte e compra criados com sucesso'
+        title: 'Aporte e compra registrados',
+        description: responseData.message || 'As duas transações foram salvas na carteira.'
       });
 
       // Invalidar cache de dashboard também
@@ -230,27 +245,6 @@ export function PortfolioTransactionForm({
     }
   });
 
-  // Auto-calculate amount when price or quantity changes
-  const handlePriceChange = (value: string) => {
-    setPrice(value);
-    if (quantity && value) {
-      const calc = parseFloat(quantity) * parseFloat(value);
-      if (!isNaN(calc) && calc > 0) {
-        setAmount(calc.toFixed(2));
-      }
-    }
-  };
-
-  const handleQuantityChange = (value: string) => {
-    setQuantity(value);
-    if (price && value) {
-      const calc = parseFloat(value) * parseFloat(price);
-      if (!isNaN(calc) && calc > 0) {
-        setAmount(calc.toFixed(2));
-      }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -264,7 +258,7 @@ export function PortfolioTransactionForm({
       return;
     }
 
-    if (!amount || parseFloat(amount) <= 0) {
+    if (!effectiveAmount || effectiveAmount <= 0) {
       toast({
         title: 'Erro',
         description: 'Valor da transação deve ser maior que zero',
@@ -273,7 +267,7 @@ export function PortfolioTransactionForm({
       return;
     }
 
-    if (requiresAsset && type !== 'DIVIDEND') {
+    if (usesPriceAndQuantity) {
       if (!price || !quantity) {
         toast({
           title: 'Erro',
@@ -287,16 +281,16 @@ export function PortfolioTransactionForm({
     const transactionData: any = {
       type,
       date,
-      amount: parseFloat(amount),
+      amount: effectiveAmount,
       notes: notes || undefined,
     };
 
     if (requiresAsset) {
       transactionData.ticker = ticker.toUpperCase();
       
-      if (type !== 'DIVIDEND') {
-        transactionData.price = parseFloat(price);
-        transactionData.quantity = parseFloat(quantity);
+      if (usesPriceAndQuantity) {
+        transactionData.price = price;
+        transactionData.quantity = quantity;
       }
     }
 
@@ -319,204 +313,131 @@ export function PortfolioTransactionForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Transaction Type */}
-      <div>
-        <Label htmlFor="type">Tipo de Transação *</Label>
-        <Select value={type} onValueChange={setType}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TRANSACTION_TYPES.map(t => (
-              <SelectItem key={t.value} value={t.value}>
-                {t.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="tx-type">Tipo de transação</Label>
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger id="tx-type" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TRANSACTION_TYPES.map(t => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedType && <p className="text-xs text-muted-foreground">{selectedType.help}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="tx-date">Data</Label>
+          <Input id="tx-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </div>
       </div>
 
-      {/* Date */}
-      <div>
-        <Label htmlFor="date">Data *</Label>
-        <Input
-          id="date"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          required
-        />
-      </div>
-
-      {/* Ticker (conditional) */}
       {requiresAsset && (
-        <div>
-          <Label htmlFor="ticker">Ticker do Ativo *</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="tx-ticker">Ticker</Label>
           <Input
-            id="ticker"
+            id="tx-ticker"
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            placeholder="Ex: PETR4"
+            placeholder="Ex.: PETR4"
+            autoCapitalize="characters"
+            autoComplete="off"
+            enterKeyHint="next"
             required
           />
         </div>
       )}
 
-      {/* Amount */}
-      <div>
-        <Label htmlFor="amount">
-          Valor (R$) * {requiresAsset && type !== 'DIVIDEND' && '(calculado automaticamente)'}
-        </Label>
-        <div className="relative">
-          <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            id="amount"
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="pl-9"
-            placeholder="0.00"
-            required
-            readOnly={requiresAsset && type !== 'DIVIDEND'}
-            disabled={requiresAsset && type !== 'DIVIDEND'}
-          />
-        </div>
-      </div>
-
-      {/* Price and Quantity (for asset transactions, except dividends) */}
-      {requiresAsset && type !== 'DIVIDEND' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="price">Preço Unitário (R$) *</Label>
-            <Input
-              id="price"
-              type="number"
-              step="0.0001"
-              min="0.0001"
-              value={price}
-              onChange={(e) => handlePriceChange(e.target.value)}
-              placeholder="0.00"
-              required
-            />
+      {usesPriceAndQuantity ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="tx-price">Preço unitário</Label>
+            <PortfolioMoneyInput id="tx-price" value={price} onValueChange={setPrice} enterKeyHint="next" required />
           </div>
-          <div>
-            <Label htmlFor="quantity">Quantidade *</Label>
-            <Input
-              id="quantity"
-              type="number"
-              step="0.000001"
-              min="0.000001"
+          <div className="space-y-1.5">
+            <Label htmlFor="tx-quantity">Quantidade</Label>
+            <PortfolioQuantityInput
+              id="tx-quantity"
               value={quantity}
-              onChange={(e) => handleQuantityChange(e.target.value)}
+              onValueChange={setQuantity}
               placeholder="0"
+              enterKeyHint="go"
               required
             />
           </div>
+          <p className="text-sm text-muted-foreground sm:col-span-2">
+            Total: <span className="font-medium tabular-nums text-foreground">{formatBRL(effectiveAmount ?? 0)}</span>
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label htmlFor="tx-amount">Valor</Label>
+          <PortfolioMoneyInput id="tx-amount" value={amount} onValueChange={setAmount} enterKeyHint="go" required />
         </div>
       )}
 
-      {/* Notes */}
-      <div>
-        <Label htmlFor="notes">Observações</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="tx-notes">
+          Observações <span className="font-normal text-muted-foreground">(opcional)</span>
+        </Label>
         <Textarea
-          id="notes"
+          id="tx-notes"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Adicione detalhes sobre esta transação..."
-          rows={3}
+          placeholder="Detalhes sobre esta transação"
+          rows={2}
         />
       </div>
 
-      {/* Help Text */}
-      <div className="text-xs text-muted-foreground bg-muted p-3 rounded-lg">
-        <p className="font-medium mb-1">💡 Dica:</p>
-        {type === 'CASH_CREDIT' && (
-          <p>Registre aportes de dinheiro na carteira. Este valor ficará disponível para compra de ativos.</p>
-        )}
-        {type === 'CASH_DEBIT' && (
-          <p>Registre saques de dinheiro da carteira.</p>
-        )}
-        {type === 'BUY' && (
-          <p>Registre compras de ativos. Preencha preço e quantidade, ou apenas valor total.</p>
-        )}
-        {type === 'SELL_WITHDRAWAL' && (
-          <p>Registre vendas de ativos com retirada do valor da carteira.</p>
-        )}
-        {type === 'DIVIDEND' && (
-          <p>Registre dividendos recebidos. O valor será adicionado ao caixa da carteira.</p>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row gap-2 justify-end pt-2">
+      <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
         {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel} disabled={loading} className="w-full sm:w-auto">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading} className="w-full sm:w-auto">
-          {loading ? 'Registrando...' : 'Registrar Transação'}
+        <Button type="submit" disabled={loading}>
+          {loading ? 'Registrando' : 'Registrar transação'}
         </Button>
       </div>
 
-      {/* Insufficient Cash Dialog */}
       <AlertDialog open={showCashConfirmDialog} onOpenChange={setShowCashConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
-              Saldo Insuficiente em Caixa
-            </AlertDialogTitle>
+            <AlertDialogTitle>Saldo insuficiente em caixa</AlertDialogTitle>
             <AlertDialogDescription>
-              <div className="space-y-4 mt-4">
-                <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 p-4 rounded-lg">
-                  <p className="text-sm text-foreground mb-2">
-                    Você não possui saldo suficiente em caixa para esta compra.
-                  </p>
-                  {insufficientCashData && (
-                    <div className="space-y-1 text-sm">
-                      <p><strong>Caixa atual:</strong> R$ {insufficientCashData.currentCashBalance.toFixed(2)}</p>
-                      <p><strong>Valor da compra:</strong> R$ {insufficientCashData.transactionAmount.toFixed(2)}</p>
-                      <p className="text-yellow-700 dark:text-yellow-300 font-medium">
-                        <strong>Faltam:</strong> R$ {insufficientCashData.insufficientAmount.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-4 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <Plus className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm">
-                      <p className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                        Deseja adicionar o aporte automaticamente?
-                      </p>
-                      <p className="text-blue-800 dark:text-blue-200">
-                        Criaremos duas transações:
-                      </p>
-                      <ol className="list-decimal list-inside mt-2 space-y-1 text-blue-800 dark:text-blue-200">
-                        <li>Crédito de Caixa: R$ {insufficientCashData?.insufficientAmount.toFixed(2)}</li>
-                        <li>Compra do Ativo: R$ {insufficientCashData?.transactionAmount.toFixed(2)}</li>
-                      </ol>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              O caixa da carteira não cobre esta compra. Podemos registrar um aporte com a diferença antes da compra.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {insufficientCashData && (
+            <dl className="divide-y divide-border rounded-lg border border-border text-sm">
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-muted-foreground">Caixa atual</dt>
+                <dd className="tabular-nums text-foreground">{formatBRL(insufficientCashData.currentCashBalance)}</dd>
+              </div>
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-muted-foreground">Valor da compra</dt>
+                <dd className="tabular-nums text-foreground">{formatBRL(insufficientCashData.transactionAmount)}</dd>
+              </div>
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="font-medium text-foreground">Aporte necessário</dt>
+                <dd className="font-medium tabular-nums text-foreground">
+                  {formatBRL(insufficientCashData.insufficientAmount)}
+                </dd>
+              </div>
+            </dl>
+          )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={loading}>
-              Cancelar
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmWithCashCredit}
               disabled={createTransactionWithCashCreditMutation.isPending}
-              className="bg-green-600 hover:bg-green-700"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              {createTransactionWithCashCreditMutation.isPending ? 'Criando...' : 'Sim, Adicionar Aporte'}
+              {createTransactionWithCashCreditMutation.isPending ? 'Registrando' : 'Registrar aporte e compra'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -524,4 +445,3 @@ export function PortfolioTransactionForm({
     </form>
   );
 }
-

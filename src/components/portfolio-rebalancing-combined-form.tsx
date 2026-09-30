@@ -10,13 +10,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowDownCircle, ArrowUpCircle, Scale, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { formatBRL } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { PortfolioMoneyInput, PortfolioQuantityInput, roundTo } from '@/components/portfolio-money-input';
 
 interface CombinedRebalancingSuggestion {
   date: string;
@@ -68,14 +68,62 @@ interface PortfolioRebalancingCombinedFormProps {
   onSuccess?: () => void;
 }
 
-// Formatting function (local to avoid importing Node.js modules)
-const formatCurrencyLocal = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return 'N/A';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-};
+interface RebalanceRowProps {
+  tx: EditableTransaction;
+  index: number;
+  isSell: boolean;
+  onToggle: () => void;
+  onChange: (field: 'quantity' | 'price', value: number) => void;
+}
+
+/** Uma operação editável do ajuste (quantidade, preço e seleção). */
+function RebalanceRow({ tx, index, isSell, onToggle, onChange }: RebalanceRowProps) {
+  const prefix = isSell ? 'sell' : 'buy';
+  return (
+    <li className={cn('space-y-3 p-4', !tx.selected && 'opacity-60')}>
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id={`${prefix}-select-${index}`}
+          checked={tx.selected}
+          onCheckedChange={onToggle}
+          className="mt-0.5"
+          aria-label={`${isSell ? 'Incluir venda de' : 'Incluir compra de'} ${tx.ticker}`}
+        />
+        <div className="min-w-0 flex-1">
+          <label htmlFor={`${prefix}-select-${index}`} className="text-sm text-foreground">
+            {isSell ? 'vender' : 'comprar'} <span className="font-medium">{tx.ticker}</span>
+          </label>
+          {tx.reason && <p className="text-xs text-muted-foreground break-words">{tx.reason}</p>}
+        </div>
+        <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">{formatBRL(tx.amount)}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 pl-7">
+        <div className="space-y-1">
+          <Label htmlFor={`${prefix}-qty-${index}`} className="text-xs">
+            Quantidade
+          </Label>
+          <PortfolioQuantityInput
+            id={`${prefix}-qty-${index}`}
+            value={tx.quantity}
+            onValueChange={(value) => onChange('quantity', value ?? 0)}
+            disabled={!tx.selected}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`${prefix}-price-${index}`} className="text-xs">
+            Preço
+          </Label>
+          <PortfolioMoneyInput
+            id={`${prefix}-price-${index}`}
+            value={tx.price}
+            onValueChange={(value) => onChange('price', value ?? 0)}
+            disabled={!tx.selected}
+          />
+        </div>
+      </div>
+    </li>
+  );
+}
 
 export function PortfolioRebalancingCombinedForm({
   portfolioId,
@@ -157,9 +205,7 @@ export function PortfolioRebalancingCombinedForm({
       updated[index] = {
         ...updated[index],
         [field]: value,
-        amount: field === 'quantity' 
-          ? value * updated[index].price 
-          : updated[index].quantity * value,
+        amount: roundTo(field === 'quantity' ? value * updated[index].price : updated[index].quantity * value),
       };
       setSellTransactions(updated);
     } else {
@@ -167,9 +213,7 @@ export function PortfolioRebalancingCombinedForm({
       updated[index] = {
         ...updated[index],
         [field]: value,
-        amount: field === 'quantity' 
-          ? value * updated[index].price 
-          : updated[index].quantity * value,
+        amount: roundTo(field === 'quantity' ? value * updated[index].price : updated[index].quantity * value),
       };
       setBuyTransactions(updated);
     }
@@ -177,15 +221,10 @@ export function PortfolioRebalancingCombinedForm({
 
   // Toggle transaction selection
   const toggleTransaction = (index: number, isSell: boolean) => {
-    if (isSell) {
-      const updated = [...sellTransactions];
-      updated[index].selected = !updated[index].selected;
-      setSellTransactions(updated);
-    } else {
-      const updated = [...buyTransactions];
-      updated[index].selected = !updated[index].selected;
-      setBuyTransactions(updated);
-    }
+    const toggle = (list: EditableTransaction[]) =>
+      list.map((tx, i) => (i === index ? { ...tx, selected: !tx.selected } : tx));
+    if (isSell) setSellTransactions(toggle);
+    else setBuyTransactions(toggle);
   };
 
   // Calculate totals for selected transactions
@@ -249,8 +288,8 @@ export function PortfolioRebalancingCombinedForm({
     },
     onSuccess: (data) => {
       toast({
-        title: 'Rebalanceamento executado',
-        description: data.message || 'Todas as transações de rebalanceamento foram executadas com sucesso',
+        title: 'Ajuste registrado',
+        description: data.message || 'As operações do ajuste foram registradas na carteira.',
       });
 
       // Invalidate queries
@@ -276,7 +315,7 @@ export function PortfolioRebalancingCombinedForm({
       console.error('Erro ao executar rebalanceamento:', error);
       toast({
         title: 'Erro',
-        description: error.message || 'Não foi possível executar o rebalanceamento',
+        description: error.message || 'Não foi possível registrar o ajuste',
         variant: 'destructive',
       });
       setIsExecuting(false);
@@ -296,7 +335,7 @@ export function PortfolioRebalancingCombinedForm({
     if (hasNegativeCash) {
       toast({
         title: 'Erro',
-        description: 'Não é possível executar operações que resultem em caixa negativo',
+        description: 'O ajuste deixaria o caixa negativo. Reduza as compras selecionadas.',
         variant: 'destructive',
       });
       return;
@@ -305,301 +344,103 @@ export function PortfolioRebalancingCombinedForm({
     executeRebalancingMutation.mutate();
   };
 
+  const operationCount = selectedSells.length + selectedBuys.length;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Scale className="h-5 w-5 text-orange-600" />
-            Confirmar Rebalanceamento Combinado
-          </DialogTitle>
+          <DialogTitle>Ajuste para sua alocação-alvo</DialogTitle>
           <DialogDescription>
-            <p className="mt-2">
-              Revise e ajuste quantidade e preço médio de cada operação. Selecione quais operações deseja executar.
-            </p>
+            Revise quantidade e preço de cada operação e escolha quais registrar.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-1">
-          <div className="space-y-4">
-            {/* Summary */}
-            <Card>
-              <CardContent className="py-4">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  {selectedSells.length > 0 && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total de Vendas Selecionadas</p>
-                      <p className="text-lg font-semibold text-red-600">
-                        {formatCurrencyLocal(totalSold)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {selectedSells.length} operação(ões)
-                      </p>
-                    </div>
-                  )}
-                  {selectedBuys.length > 0 && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total de Compras Selecionadas</p>
-                      <p className="text-lg font-semibold text-green-600">
-                        {formatCurrencyLocal(totalBought)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {selectedBuys.length} operação(ões)
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-muted-foreground">Caixa Antes</p>
-                    <p className="text-lg font-semibold">
-                      {formatCurrencyLocal(suggestion.cashBalanceBefore)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Caixa Depois</p>
-                    <p className={`text-lg font-semibold ${hasNegativeCash ? 'text-red-600 dark:text-red-400' : ''}`}>
-                      {formatCurrencyLocal(finalCashBalance)}
-                      {hasNegativeCash && (
-                        <span className="ml-2 text-xs">⚠️</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        <div className="flex-1 space-y-4 overflow-y-auto px-1">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-border p-4 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-xs text-muted-foreground">Vendas selecionadas</dt>
+              <dd className="font-medium tabular-nums text-foreground">{formatBRL(totalSold)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Compras selecionadas</dt>
+              <dd className="font-medium tabular-nums text-foreground">{formatBRL(totalBought)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Caixa antes</dt>
+              <dd className="font-medium tabular-nums text-foreground">{formatBRL(suggestion.cashBalanceBefore)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Caixa depois</dt>
+              <dd className={cn('font-medium tabular-nums', hasNegativeCash ? 'text-negative' : 'text-foreground')}>
+                {formatBRL(finalCashBalance)}
+              </dd>
+            </div>
+          </dl>
 
-            {/* Sell Transactions */}
-            {sellTransactions.length > 0 && (
-              <Card className="border-red-200 dark:border-red-900">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <ArrowDownCircle className="h-5 w-5 text-red-600" />
-                    <h3 className="font-semibold">
-                      Vendas ({selectedSells.length} de {sellTransactions.length} selecionadas)
-                    </h3>
-                  </div>
-                  <div className="space-y-4">
-                    {sellTransactions.map((sell, index) => (
-                      <div
-                        key={index}
-                        className={`p-4 rounded-lg border ${
-                          sell.selected
-                            ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900'
-                            : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800 opacity-60'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="pt-1">
-                            <Checkbox
-                              checked={sell.selected}
-                              onCheckedChange={() => toggleTransaction(index, true)}
-                            />
-                          </div>
-                          <div className="flex-1 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <Badge variant="outline" className="text-sm">
-                                {sell.ticker}
-                              </Badge>
-                              {sell.reason && (
-                                <p className="text-xs text-muted-foreground">{sell.reason}</p>
-                              )}
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <Label htmlFor={`sell-qty-${index}`} className="text-xs">
-                                  Quantidade
-                                </Label>
-                                <Input
-                                  id={`sell-qty-${index}`}
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={sell.quantity}
-                                  onChange={(e) => {
-                                    const value = parseInt(e.target.value) || 0;
-                                    updateTransaction(index, 'quantity', value, true);
-                                  }}
-                                  disabled={!sell.selected}
-                                  className="h-9"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor={`sell-price-${index}`} className="text-xs">
-                                  Preço Médio
-                                </Label>
-                                <Input
-                                  id={`sell-price-${index}`}
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={sell.price.toFixed(2)}
-                                  onChange={(e) => {
-                                    const value = parseFloat(e.target.value) || 0;
-                                    updateTransaction(index, 'price', value, true);
-                                  }}
-                                  disabled={!sell.selected}
-                                  className="h-9"
-                                />
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between pt-2 border-t">
-                              <span className="text-sm font-medium">Valor Total</span>
-                              <span className={`text-lg font-semibold ${sell.selected ? 'text-red-600' : 'text-muted-foreground'}`}>
-                                {formatCurrencyLocal(sell.amount)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+          {sellTransactions.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">
+                Vendas ({selectedSells.length} de {sellTransactions.length})
+              </h3>
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {sellTransactions.map((sell, index) => (
+                  <RebalanceRow
+                    key={`sell-${sell.ticker}-${index}`}
+                    tx={sell}
+                    index={index}
+                    isSell
+                    onToggle={() => toggleTransaction(index, true)}
+                    onChange={(field, value) => updateTransaction(index, field, value, true)}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
 
-            {/* Buy Transactions */}
-            {buyTransactions.length > 0 && (
-              <Card className="border-green-200 dark:border-green-900">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <ArrowUpCircle className="h-5 w-5 text-green-600" />
-                    <h3 className="font-semibold">
-                      Compras ({selectedBuys.length} de {buyTransactions.length} selecionadas)
-                    </h3>
-                  </div>
-                  <div className="space-y-4">
-                    {buyTransactions.map((buy, index) => (
-                      <div
-                        key={index}
-                        className={`p-4 rounded-lg border ${
-                          buy.selected
-                            ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900'
-                            : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800 opacity-60'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="pt-1">
-                            <Checkbox
-                              checked={buy.selected}
-                              onCheckedChange={() => toggleTransaction(index, false)}
-                            />
-                          </div>
-                          <div className="flex-1 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <Badge variant="outline" className="text-sm">
-                                {buy.ticker}
-                              </Badge>
-                              {buy.reason && (
-                                <p className="text-xs text-muted-foreground">{buy.reason}</p>
-                              )}
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <Label htmlFor={`buy-qty-${index}`} className="text-xs">
-                                  Quantidade
-                                </Label>
-                                <Input
-                                  id={`buy-qty-${index}`}
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={buy.quantity}
-                                  onChange={(e) => {
-                                    const value = parseInt(e.target.value) || 0;
-                                    updateTransaction(index, 'quantity', value, false);
-                                  }}
-                                  disabled={!buy.selected}
-                                  className="h-9"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor={`buy-price-${index}`} className="text-xs">
-                                  Preço Médio
-                                </Label>
-                                <Input
-                                  id={`buy-price-${index}`}
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={buy.price.toFixed(2)}
-                                  onChange={(e) => {
-                                    const value = parseFloat(e.target.value) || 0;
-                                    updateTransaction(index, 'price', value, false);
-                                  }}
-                                  disabled={!buy.selected}
-                                  className="h-9"
-                                />
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between pt-2 border-t">
-                              <span className="text-sm font-medium">Valor Total</span>
-                              <span className={`text-lg font-semibold ${buy.selected ? 'text-green-600' : 'text-muted-foreground'}`}>
-                                {formatCurrencyLocal(buy.amount)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+          {buyTransactions.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">
+                Compras ({selectedBuys.length} de {buyTransactions.length})
+              </h3>
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {buyTransactions.map((buy, index) => (
+                  <RebalanceRow
+                    key={`buy-${buy.ticker}-${index}`}
+                    tx={buy}
+                    index={index}
+                    isSell={false}
+                    onToggle={() => toggleTransaction(index, false)}
+                    onChange={(field, value) => updateTransaction(index, field, value, false)}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
 
-            {/* Warning if no transactions selected */}
-            {selectedSells.length === 0 && selectedBuys.length === 0 && (
-              <Card className="border-yellow-200 dark:border-yellow-900 bg-yellow-50 dark:bg-yellow-950/20">
-                <CardContent className="py-4">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    ⚠️ Selecione pelo menos uma transação para executar o rebalanceamento.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+          {operationCount === 0 && (
+            <p className="text-sm text-muted-foreground">Selecione pelo menos uma operação para registrar.</p>
+          )}
 
-            {/* Warning if cash would be negative */}
-            {hasNegativeCash && (selectedSells.length > 0 || selectedBuys.length > 0) && (
-              <Card className="border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20">
-                <CardContent className="py-4">
-                  <p className="text-sm text-red-800 dark:text-red-200 font-medium">
-                    ❌ Atenção: Esta operação resultaria em caixa negativo ({formatCurrencyLocal(finalCashBalance)}).
-                  </p>
-                  <p className="text-xs text-red-700 dark:text-red-300 mt-2">
-                    Ajuste as quantidades ou preços das compras, ou selecione menos operações de compra para evitar saldo negativo.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          {hasNegativeCash && operationCount > 0 && (
+            <p role="alert" className="text-sm text-negative">
+              O caixa ficaria negativo ({formatBRL(finalCashBalance)}). Reduza as compras ou selecione menos operações.
+            </p>
+          )}
         </div>
 
-        {/* Actions */}
-        <div className="flex-shrink-0 flex items-center justify-end gap-3 pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isExecuting}
-          >
+        <div className="flex flex-shrink-0 flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isExecuting}>
             Cancelar
           </Button>
-          <Button
-            onClick={handleExecute}
-            disabled={isExecuting || (selectedSells.length === 0 && selectedBuys.length === 0) || hasNegativeCash}
-            className="bg-orange-600 hover:bg-orange-700"
-          >
+          <Button onClick={handleExecute} disabled={isExecuting || operationCount === 0 || hasNegativeCash}>
             {isExecuting ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Executando...
+                <Loader2 className="animate-spin" strokeWidth={1.75} aria-hidden="true" />
+                Registrando
               </>
             ) : (
-              <>
-                <Scale className="h-4 w-4 mr-2" />
-                Executar Rebalanceamento ({selectedSells.length + selectedBuys.length} transações)
-              </>
+              `Registrar ${operationCount} ${operationCount === 1 ? 'operação' : 'operações'}`
             )}
           </Button>
         </div>

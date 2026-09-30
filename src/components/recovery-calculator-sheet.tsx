@@ -4,6 +4,7 @@ import { useState } from "react"
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Calculator } from "lucide-react"
 import { RecoveryCalculator } from "@/components/recovery-calculator"
 import { calculateRecovery } from "@/lib/recovery-calculator-utils"
+import { formatBRL, formatDeltaPct, formatNumber } from "@/lib/format"
 
 interface Holding {
   ticker: string
@@ -26,15 +28,19 @@ interface RecoveryCalculatorSheetProps {
   onOpenChange: (open: boolean) => void
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
+function ScenarioRow({ label, qty, investment }: { label: string; qty: number; investment: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-border py-3 last:border-0">
+      <dt className="text-sm text-foreground">{label}</dt>
+      <dd className="text-right text-sm tabular-nums">
+        <span className="font-medium text-foreground">{formatNumber(qty, { digits: 0 })} ações</span>
+        <span className="block text-xs text-muted-foreground">{formatBRL(investment)}</span>
+      </dd>
+    </div>
+  )
 }
 
+/** Simulação de aporte para reduzir o preço médio de um ativo abaixo do preço pago. */
 export function RecoveryCalculatorSheet({
   holding,
   open,
@@ -44,6 +50,7 @@ export function RecoveryCalculatorSheet({
 
   if (!holding) return null
 
+  // Queda atual em pontos percentuais (a calculadora recebe % e não fração).
   const currentDrop = holding.averagePrice > 0
     ? ((holding.averagePrice - holding.currentPrice) / holding.averagePrice) * 100
     : 0
@@ -58,7 +65,7 @@ export function RecoveryCalculatorSheet({
       })
     : null
 
-  const lucro5Result = currentDrop > 0
+  const profit5Result = currentDrop > 0
     ? calculateRecovery({
         currentQty: holding.quantity,
         avgPrice: holding.averagePrice,
@@ -69,62 +76,50 @@ export function RecoveryCalculatorSheet({
     : null
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setShowFullCalculator(false)
-    }
+    if (!next) setShowFullCalculator(false)
     onOpenChange(next)
   }
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-md overflow-y-auto"
-      >
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Calculator className="w-5 h-5" />
-            Recuperação - {holding.ticker}
-          </SheetTitle>
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader className="pr-14">
+          <SheetTitle>Simulação de aporte · {holding.ticker}</SheetTitle>
+          <SheetDescription>
+            Preço médio {formatBRL(holding.averagePrice)} · preço atual {formatBRL(holding.currentPrice)} (
+            {formatDeltaPct(holding.averagePrice > 0 ? holding.currentPrice / holding.averagePrice - 1 : null)})
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-4">
+        <div className="space-y-4 px-4 pb-4">
           {!showFullCalculator ? (
             <>
               <p className="text-sm text-muted-foreground">
-                Sugestões de aporte para este ativo em queda:
+                Quantidade estimada para que o novo preço médio permita cada cenário, considerando o preço atual.
+                É uma simulação, não é recomendação.
               </p>
 
-              {breakEvenResult?.success && (
-                <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
-                  <p className="font-semibold text-sm text-emerald-800 dark:text-emerald-200 mb-1">
-                    Para empatar
-                  </p>
-                  <p className="text-sm">
-                    Compre <strong>{breakEvenResult.qtyToBuy}</strong> ações (
-                    {formatCurrency(breakEvenResult.investmentRequired)})
-                  </p>
-                </div>
+              {(breakEvenResult?.success || profit5Result?.success) && (
+                <dl className="rounded-lg border border-border bg-card px-4">
+                  {breakEvenResult?.success && (
+                    <ScenarioRow
+                      label="Voltar ao preço pago"
+                      qty={breakEvenResult.qtyToBuy}
+                      investment={breakEvenResult.investmentRequired}
+                    />
+                  )}
+                  {profit5Result?.success && (
+                    <ScenarioRow
+                      label="Resultado de +5%"
+                      qty={profit5Result.qtyToBuy}
+                      investment={profit5Result.investmentRequired}
+                    />
+                  )}
+                </dl>
               )}
 
-              {lucro5Result?.success && (
-                <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
-                  <p className="font-semibold text-sm text-blue-800 dark:text-blue-200 mb-1">
-                    Para lucrar 5%
-                  </p>
-                  <p className="text-sm">
-                    Compre <strong>{lucro5Result.qtyToBuy}</strong> ações (
-                    {formatCurrency(lucro5Result.investmentRequired)})
-                  </p>
-                </div>
-              )}
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowFullCalculator(true)}
-              >
-                <Calculator className="w-4 h-4 mr-2" />
+              <Button variant="outline" className="w-full" onClick={() => setShowFullCalculator(true)}>
+                <Calculator strokeWidth={1.75} aria-hidden="true" />
                 Abrir calculadora completa
               </Button>
             </>

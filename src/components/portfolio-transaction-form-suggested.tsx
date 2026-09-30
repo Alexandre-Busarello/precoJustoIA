@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { PortfolioTransactionForm } from '@/components/portfolio-transaction-form';
 import {
   Dialog,
@@ -29,11 +28,22 @@ interface PortfolioTransactionFormSuggestedProps {
   onSuccess?: () => void;
 }
 
-/**
- * Component that wraps PortfolioTransactionForm with pre-filled data from a suggestion
- * Note: This is a wrapper that will need to be enhanced to actually pre-fill the form
- * For now, it shows the form and the user can manually enter the suggested values
- */
+function dialogTitle(type: string): string {
+  if (type === 'BUY_REBALANCE' || type === 'BUY') return 'Registrar compra da sugestão';
+  if (type === 'SELL_REBALANCE') return 'Registrar venda da sugestão';
+  if (type === 'MONTHLY_CONTRIBUTION' || type === 'CASH_CREDIT') return 'Registrar aporte sugerido';
+  if (type === 'DIVIDEND') return 'Registrar dividendo';
+  return 'Registrar transação sugerida';
+}
+
+function formType(type: string): string {
+  if (type === 'BUY_REBALANCE') return 'BUY';
+  if (type === 'SELL_REBALANCE') return 'SELL_WITHDRAWAL';
+  if (type === 'MONTHLY_CONTRIBUTION') return 'CASH_CREDIT';
+  return type;
+}
+
+/** Formulário de transação já preenchido com os valores de uma sugestão (editáveis antes de salvar). */
 export function PortfolioTransactionFormSuggested({
   portfolioId,
   suggestion,
@@ -43,37 +53,24 @@ export function PortfolioTransactionFormSuggested({
 }: PortfolioTransactionFormSuggestedProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>
-            {suggestion.type === 'BUY_REBALANCE' || suggestion.type === 'BUY'
-              ? 'Confirmar Compra Sugerida'
-              : suggestion.type === 'SELL_REBALANCE'
-              ? 'Confirmar Venda Sugerida'
-              : suggestion.type === 'MONTHLY_CONTRIBUTION' || suggestion.type === 'CASH_CREDIT'
-              ? 'Confirmar Aporte Sugerido'
-              : 'Confirmar Transação Sugerida'}
-          </DialogTitle>
+          <DialogTitle>{dialogTitle(suggestion.type)}</DialogTitle>
           <DialogDescription>
-            {suggestion.reason && (
-              <div className="mt-2 p-3 bg-muted rounded-md">
-                <p className="text-sm font-medium">Motivo da sugestão:</p>
-                <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
-              </div>
-            )}
-            <p className="mt-2">
-              Revise os valores abaixo e confirme a transação. Você pode editar qualquer campo antes de confirmar.
-            </p>
+            Revise os valores e registre a transação. Todos os campos podem ser editados.
           </DialogDescription>
         </DialogHeader>
+        {suggestion.reason && (
+          <div className="rounded-md border border-border bg-surface p-3 text-sm">
+            <p className="font-medium text-foreground">Motivo da sugestão</p>
+            <p className="mt-0.5 text-muted-foreground">{suggestion.reason}</p>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto px-1">
           <PortfolioTransactionForm
             portfolioId={portfolioId}
             initialData={{
-              type: suggestion.type === 'BUY_REBALANCE' ? 'BUY' : 
-                    suggestion.type === 'SELL_REBALANCE' ? 'SELL_WITHDRAWAL' :
-                    suggestion.type === 'MONTHLY_CONTRIBUTION' ? 'CASH_CREDIT' :
-                    suggestion.type,
+              type: formType(suggestion.type),
               date: new Date(suggestion.date).toISOString().split('T')[0],
               ticker: suggestion.ticker || '',
               amount: suggestion.amount.toString(),
@@ -83,9 +80,7 @@ export function PortfolioTransactionFormSuggested({
             }}
             onSuccess={() => {
               onOpenChange(false);
-              if (onSuccess) {
-                onSuccess();
-              }
+              onSuccess?.();
             }}
             onCancel={() => onOpenChange(false)}
           />
@@ -94,4 +89,3 @@ export function PortfolioTransactionFormSuggested({
     </Dialog>
   );
 }
-

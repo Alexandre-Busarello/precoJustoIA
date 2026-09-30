@@ -20,7 +20,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useTracking } from '@/hooks/use-tracking';
 import { EventType } from '@/lib/tracking-types';
-import { Plus, Trash2, TrendingUp, Bot, FileText } from 'lucide-react';
+import { formatPct } from '@/lib/format';
+import { Plus, Trash2 } from 'lucide-react';
+import { PortfolioMoneyInput, PortfolioPercentInput } from '@/components/portfolio-money-input';
 import { PortfolioAIAssistant } from '@/components/portfolio-ai-assistant';
 import { PortfolioBulkAssetInput } from '@/components/portfolio-bulk-asset-input';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
@@ -61,18 +63,21 @@ export function PortfolioConfigForm({
   const [name, setName] = useState(initialData?.name || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [startDate, setStartDate] = useState(initialData?.startDate || new Date().toISOString().split('T')[0]);
-  const [monthlyContribution, setMonthlyContribution] = useState(initialData?.monthlyContribution || 1000);
+  const [monthlyContribution, setMonthlyContribution] = useState<number | undefined>(
+    initialData?.monthlyContribution ?? 1000
+  );
   const [rebalanceFrequency, setRebalanceFrequency] = useState(initialData?.rebalanceFrequency || 'monthly');
   const [assets, setAssets] = useState<Asset[]>(initialData?.assets || []);
   const [newTicker, setNewTicker] = useState('');
-  const [newAllocation, setNewAllocation] = useState('');
+  /** Alocação em % (15 = 15%). */
+  const [newAllocation, setNewAllocation] = useState<number | undefined>(undefined);
 
   const totalAllocation = assets.reduce((sum, asset) => sum + asset.targetAllocation, 0);
   // In create mode, only require name (assets and allocation are optional, can be added later)
   // In edit mode, only validate basic fields (assets are managed separately)
   const isValid = mode === 'create' 
     ? (name && name.trim().length > 0)
-    : (name && monthlyContribution > 0);
+    : (name && (monthlyContribution ?? 0) > 0);
 
   const handleAddAsset = async () => {
     if (!newTicker) {
@@ -127,10 +132,10 @@ export function PortfolioConfigForm({
     // Se não foi informada, calcular distribuição igual entre todos os ativos (incluindo o novo)
     let allocation: number;
     
-    if (newAllocation && newAllocation.trim() !== '') {
-      const parsedAlloc = parseFloat(newAllocation) / 100;
-      
-      if (isNaN(parsedAlloc) || parsedAlloc <= 0 || parsedAlloc > 1) {
+    if (newAllocation !== undefined) {
+      const parsedAlloc = newAllocation / 100;
+
+      if (parsedAlloc <= 0 || parsedAlloc > 1) {
         toast({
           title: 'Erro',
           description: 'Alocação deve estar entre 0% e 100%',
@@ -154,18 +159,18 @@ export function PortfolioConfigForm({
       
       setAssets([...updatedAssets, { ticker: tickerUpper, targetAllocation: allocation }]);
       setNewTicker('');
-      setNewAllocation('');
+      setNewAllocation(undefined);
       
       toast({
         title: 'Ativo adicionado',
-        description: `Alocação distribuída igualmente: ${(allocation * 100).toFixed(1)}% para cada ativo`,
+        description: `Alocação distribuída igualmente: ${formatPct(allocation)} para cada ativo`,
       });
       return;
     }
 
     setAssets([...assets, { ticker: tickerUpper, targetAllocation: allocation }]);
     setNewTicker('');
-    setNewAllocation('');
+    setNewAllocation(undefined);
   };
 
   const handleRemoveAsset = (ticker: string) => {
@@ -175,15 +180,15 @@ export function PortfolioConfigForm({
   const handleAssetsFromAI = (generatedAssets: Asset[]) => {
     setAssets(generatedAssets);
     toast({
-      title: 'Ativos aplicados!',
-      description: `${generatedAssets.length} ativos foram configurados pela IA`,
+      title: 'Ativos aplicados',
+      description: `${generatedAssets.length} ativos sugeridos pela IA foram adicionados`,
     });
   };
 
   const handleAssetsFromBulk = (bulkAssets: Asset[]) => {
     setAssets(bulkAssets);
     toast({
-      title: 'Ativos aplicados!',
+      title: 'Ativos aplicados',
       description: `${bulkAssets.length} ativos foram adicionados`,
     });
   };
@@ -213,8 +218,8 @@ export function PortfolioConfigForm({
     },
     onSuccess: (data) => {
       toast({
-        title: 'Sucesso!',
-        description: 'Carteira criada com sucesso'
+        title: 'Carteira criada',
+        description: 'Agora registre suas transações para acompanhar o desempenho.'
       });
 
       // Track evento de criação de carteira
@@ -276,8 +281,8 @@ export function PortfolioConfigForm({
     },
     onSuccess: () => {
       toast({
-        title: 'Sucesso!',
-        description: 'Carteira atualizada com sucesso'
+        title: 'Carteira atualizada',
+        description: 'As alterações foram salvas.'
       });
 
       // Track evento de atualização de carteira
@@ -348,7 +353,7 @@ export function PortfolioConfigForm({
         name,
         description,
         startDate,
-        monthlyContribution,
+        monthlyContribution: monthlyContribution ?? 0,
         rebalanceFrequency,
         assets: normalizedAssets
       });
@@ -367,7 +372,7 @@ export function PortfolioConfigForm({
         portfolioId: initialData.id,
         name,
         description,
-        monthlyContribution,
+        monthlyContribution: monthlyContribution ?? 0,
         rebalanceFrequency
       });
     }
@@ -375,39 +380,50 @@ export function PortfolioConfigForm({
 
   const loading = createPortfolioMutation.isPending || updatePortfolioMutation.isPending;
 
+  const allocationStatus =
+    assets.length === 0
+      ? null
+      : totalAllocation === 0
+        ? 'Sem alocação informada: será distribuída igualmente entre os ativos ao criar a carteira.'
+        : totalAllocation < 0.995 || totalAllocation > 1.005
+          ? `Alocação total de ${formatPct(totalAllocation)}. Será ajustada proporcionalmente para 100% ao criar a carteira.`
+          : null;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Basic Info */}
       <Card>
         <CardHeader>
-          <CardTitle>Informações Básicas</CardTitle>
+          <CardTitle className="text-base">Dados da carteira</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="name">Nome da Carteira *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="name">Nome</Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Carteira Dividendos"
+              placeholder="Ex.: Carteira de dividendos"
+              enterKeyHint="next"
               required
             />
           </div>
 
-          <div>
-            <Label htmlFor="description">Descrição</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="description">
+              Descrição <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descreva sua estratégia..."
-              rows={3}
+              placeholder="Descreva sua estratégia"
+              rows={2}
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="startDate" className="text-sm font-medium">Data de Início *</Label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="startDate">Data de início</Label>
               <Input
                 id="startDate"
                 type="date"
@@ -415,183 +431,144 @@ export function PortfolioConfigForm({
                 onChange={(e) => setStartDate(e.target.value)}
                 disabled={mode === 'edit'}
                 required
-                className="mt-1"
               />
             </div>
 
-            <div>
-              <Label htmlFor="monthlyContribution" className="text-sm font-medium">Aporte Mensal (R$) *</Label>
-              <Input
+            <div className="space-y-1.5">
+              <Label htmlFor="monthlyContribution">Aporte mensal</Label>
+              <PortfolioMoneyInput
                 id="monthlyContribution"
-                type="number"
-                step="0.01"
-                min="0"
                 value={monthlyContribution}
-                onChange={(e) => setMonthlyContribution(parseFloat(e.target.value))}
-                placeholder="1000"
+                onValueChange={setMonthlyContribution}
+                enterKeyHint="go"
                 required
-                className="mt-1"
               />
             </div>
-          </div>
 
-          <div>
-            <Label htmlFor="rebalanceFrequency">Frequência de Rebalanceamento *</Label>
-            <Select value={rebalanceFrequency} onValueChange={setRebalanceFrequency}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">Mensal</SelectItem>
-                <SelectItem value="quarterly">Trimestral</SelectItem>
-                <SelectItem value="yearly">Anual</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              <Label htmlFor="rebalanceFrequency">Rebalanceamento</Label>
+              <Select value={rebalanceFrequency} onValueChange={setRebalanceFrequency}>
+                <SelectTrigger id="rebalanceFrequency" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                  <SelectItem value="quarterly">Trimestral</SelectItem>
+                  <SelectItem value="yearly">Anual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Assets */}
       {mode === 'create' && (
         <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Ativos da Carteira</CardTitle>
-                <Badge variant={totalAllocation === 0 || totalAllocation === 1 ? 'default' : 'outline'}>
-                  {totalAllocation === 0 ? 'Sem alocação' : `${(totalAllocation * 100).toFixed(1)}% alocado`}
-                </Badge>
-              </div>
-            </CardHeader>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-base">Ativos e alocação-alvo</CardTitle>
+              <Badge variant="neutral" className="tabular-nums">
+                {totalAllocation === 0 ? 'Sem alocação' : `${formatPct(totalAllocation)} alocado`}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">Opcional: você também pode adicionar os ativos depois.</p>
+          </CardHeader>
           <CardContent className="space-y-6">
-            {/* Asset Input Methods */}
-            <Tabs defaultValue="manual" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="manual" className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Manual
-                </TabsTrigger>
-                <TabsTrigger value="bulk" className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Lista
-                </TabsTrigger>
-                <TabsTrigger value="ai" className="flex items-center gap-2">
-                  <Bot className="h-4 w-4" />
-                  IA
-                </TabsTrigger>
+            <Tabs defaultValue="manual">
+              <TabsList variant="underline">
+                <TabsTrigger value="manual">Um por vez</TabsTrigger>
+                <TabsTrigger value="bulk">Colar lista</TabsTrigger>
+                <TabsTrigger value="ai">Com IA</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="manual" className="space-y-4 mt-6">
-                {/* Manual Add Asset Form */}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
-                    placeholder="Ticker (ex: PETR4)"
-                    value={newTicker}
-                    onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-                    className="flex-1"
-                  />
-                  <div className="flex gap-2">
+              <TabsContent value="manual" className="mt-4 space-y-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_6.5rem_auto] items-end gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="new-asset-ticker">Ticker</Label>
                     <Input
-                      type="number"
-                      placeholder="% (opcional)"
-                      value={newAllocation}
-                      onChange={(e) => setNewAllocation(e.target.value)}
-                      className="w-24 sm:w-32"
-                      step="0.1"
-                      min="0"
-                      max="100"
+                      id="new-asset-ticker"
+                      placeholder="Ex.: PETR4"
+                      value={newTicker}
+                      onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      enterKeyHint="next"
                     />
-                    <Button type="button" onClick={handleAddAsset} variant="outline" className="flex-shrink-0">
-                      <Plus className="h-4 w-4" />
-                      <span className="ml-1 sm:hidden">Adicionar</span>
-                    </Button>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Alocação</Label>
+                    <PortfolioPercentInput
+                      value={newAllocation}
+                      onChange={setNewAllocation}
+                      ariaLabel="Alocação do ativo em %"
+                      placeholder="Auto"
+                      suffix="%"
+                    />
+                  </div>
+                  <Button type="button" onClick={handleAddAsset} variant="outline" aria-label="Adicionar ativo">
+                    <Plus strokeWidth={1.75} aria-hidden="true" />
+                    <span className="hidden sm:inline">Adicionar</span>
+                  </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  💡 Se não informar a alocação, será distribuída igualmente entre todos os ativos
+                  Sem alocação informada, o peso é distribuído igualmente entre todos os ativos.
                 </p>
               </TabsContent>
 
-              <TabsContent value="bulk" className="mt-6">
+              <TabsContent value="bulk" className="mt-4">
                 <PortfolioBulkAssetInput onAssetsGenerated={handleAssetsFromBulk} />
               </TabsContent>
 
-              <TabsContent value="ai" className="mt-6">
-                <PortfolioAIAssistant 
-                  onAssetsGenerated={handleAssetsFromAI}
-                  disabled={!isPremium}
-                />
+              <TabsContent value="ai" className="mt-4">
+                <PortfolioAIAssistant onAssetsGenerated={handleAssetsFromAI} locked={!isPremium} />
               </TabsContent>
             </Tabs>
 
-            {/* Assets List */}
             {assets.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <TrendingUp className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>Nenhum ativo adicionado ainda</p>
-                <p className="text-sm mt-1">Você pode adicionar ativos agora ou depois na aba de configurações</p>
-              </div>
+              <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                Nenhum ativo adicionado ainda.
+              </p>
             ) : (
               <div className="space-y-2">
-                <h4 className="font-medium text-sm text-muted-foreground mb-3">
-                  Ativos Configurados ({assets.length})
-                </h4>
-                {assets.map(asset => (
-                  <div
-                    key={asset.ticker}
-                    className="flex items-center justify-between p-3 border rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="font-medium">{asset.ticker}</span>
-                      <Badge variant="outline">
-                        {(asset.targetAllocation * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveAsset(asset.ticker)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {assets.length > 0 && (
-              <div className="space-y-1">
-                {totalAllocation === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    ℹ️ Nenhuma alocação informada. Será distribuída igualmente entre todos os ativos ao criar a carteira.
-                  </p>
-                ) : totalAllocation < 0.995 || totalAllocation > 1.005 ? (
-                  <p className="text-sm text-muted-foreground">
-                    ℹ️ Alocação total: {(totalAllocation * 100).toFixed(1)}%. Será normalizada para 100% ao criar a carteira.
-                  </p>
-                ) : totalAllocation !== 1 ? (
-                  <p className="text-sm text-muted-foreground">
-                    ℹ️ Alocação será ajustada automaticamente para 100% pela plataforma
-                  </p>
-                ) : null}
+                <h4 className="text-sm font-medium text-muted-foreground">Ativos ({assets.length})</h4>
+                <ul className="divide-y divide-border rounded-lg border border-border">
+                  {assets.map(asset => (
+                    <li key={asset.ticker} className="flex items-center justify-between gap-3 py-1 pr-1 pl-3">
+                      <span className="font-medium text-foreground">{asset.ticker}</span>
+                      <span className="flex items-center gap-1">
+                        <span className="text-sm tabular-nums text-muted-foreground">
+                          {formatPct(asset.targetAllocation)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Remover ${asset.ticker}`}
+                          onClick={() => handleRemoveAsset(asset.ticker)}
+                        >
+                          <Trash2 className="text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                        </Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {allocationStatus && <p className="text-xs text-muted-foreground">{allocationStatus}</p>}
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel} disabled={loading} className="w-full sm:w-auto">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={!isValid || loading} className="w-full sm:w-auto">
-          {loading ? 'Salvando...' : mode === 'create' ? 'Criar Carteira' : 'Salvar Alterações'}
+        <Button type="submit" disabled={!isValid || loading}>
+          {loading ? 'Salvando' : mode === 'create' ? 'Criar carteira' : 'Salvar alterações'}
         </Button>
       </div>
     </form>
   );
 }
-

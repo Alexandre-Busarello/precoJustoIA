@@ -1,369 +1,150 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Percent,
-  ArrowUpRight,
-  ArrowDownRight,
-  Activity,
-  Clock,
-  Calendar
-} from 'lucide-react';
-import { format, differenceInMonths, addMonths } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { addMonths, differenceInMonths } from 'date-fns';
+import { Stat } from '@/components/ui/stat';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { formatBRL, formatDate, formatDeltaPct, formatNumber, formatPct } from '@/lib/format';
 
 interface PortfolioMetrics {
   currentValue: number;
   cashBalance: number;
   totalInvested: number;
   totalWithdrawn: number;
-  netInvested?: number; // Capital líquido investido (totalInvested - totalWithdrawn)
+  /** Capital líquido investido (totalInvested − totalWithdrawn). */
+  netInvested?: number;
   totalDividends: number;
+  /** Fração (0,271 = 27,1%). */
   totalReturn: number;
-  annualizedReturn?: number;
-  volatility?: number;
-  sharpeRatio?: number;
-  maxDrawdown?: number;
+  annualizedReturn?: number | null;
+  volatility?: number | null;
+  sharpeRatio?: number | null;
+  /** Fração positiva (0,12 = queda de 12%). */
+  maxDrawdown?: number | null;
 }
 
 interface PortfolioMetricsCardProps {
-  metrics: PortfolioMetrics;
+  /** Ausente enquanto carrega (skeleton) ou se a API falhar (aviso com "Tentar de novo"). */
+  metrics?: PortfolioMetrics | null;
   loading?: boolean;
-  startDate?: Date; // Portfolio start date for calculating availability
+  /** A requisição de métricas falhou. */
+  error?: boolean;
+  onRetry?: () => void;
+  /** Data de início da carteira, para saber quando cada métrica fica disponível. */
+  startDate?: Date | string;
 }
 
-export function PortfolioMetricsCard({ metrics, loading, startDate }: PortfolioMetricsCardProps) {
-  if (loading) {
+function toTone(value: number | null | undefined): 'default' | 'positive' | 'negative' {
+  if (typeof value !== 'number' || Math.round(Math.abs(value) * 1000) === 0) return 'default';
+  return value > 0 ? 'positive' : 'negative';
+}
+
+/** Resumo da carteira em Stats: patrimônio, retorno e métricas de risco. */
+export function PortfolioMetricsCard({ metrics, loading, error, onRetry, startDate }: PortfolioMetricsCardProps) {
+  if (!loading && !metrics && error) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        </CardContent>
-      </Card>
+      <div
+        role="status"
+        className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+      >
+        <div className="min-w-0 text-sm">
+          <p className="font-medium text-foreground">Não foi possível carregar o resumo da carteira</p>
+          <p className="mt-0.5 text-muted-foreground">Patrimônio, retorno e risco aparecem aqui quando o cálculo responder.</p>
+        </div>
+        {onRetry && (
+          <Button variant="outline" className="shrink-0" onClick={onRetry}>
+            Tentar de novo
+          </Button>
+        )}
+      </div>
     );
   }
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
+  if (loading || !metrics) {
+    return (
+      <div className="grid grid-cols-2 gap-4 rounded-lg border border-border bg-card p-4 sm:p-5 lg:grid-cols-4" aria-busy="true">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} className="h-14" />
+        ))}
+      </div>
+    );
+  }
+
+  const start = startDate ? new Date(startDate) : null;
+  /** Texto para métricas que precisam de N meses de histórico, ou null se já deveriam existir. */
+  const pendingCaption = (requiredMonths: number): string | null => {
+    if (!start || Number.isNaN(start.getTime())) return null;
+    if (differenceInMonths(new Date(), start) >= requiredMonths) return null;
+    return `Disponível em ${formatDate(addMonths(start, requiredMonths))}`;
   };
 
-  const formatPercent = (value: number) => {
-    return `${(value * 100).toFixed(2)}%`;
-  };
+  const netInvested = metrics.netInvested ?? metrics.totalInvested - metrics.totalWithdrawn;
+  const hasValue = (value: number | null | undefined): value is number =>
+    typeof value === 'number' && Number.isFinite(value);
 
-  const isPositive = (value: number) => value >= 0;
-
-  // Calculate when metrics will be available
-  const getMetricAvailability = (requiredMonths: number) => {
-    if (!startDate) return null;
-    
-    const monthsPassed = differenceInMonths(new Date(), startDate);
-    const monthsRemaining = Math.max(0, requiredMonths - monthsPassed);
-    
-    if (monthsRemaining === 0) return { available: true, monthsRemaining: 0, availableDate: null };
-    
-    const availableDate = addMonths(startDate, requiredMonths);
-    
-    return {
-      available: false,
-      monthsRemaining,
-      availableDate
-    };
-  };
-
-  const volatilityAvailability = getMetricAvailability(2);
-  const annualizedReturnAvailability = getMetricAvailability(12);
-  const maxDrawdownAvailability = getMetricAvailability(2);
+  const annualizedPending = pendingCaption(12);
+  const riskPending = pendingCaption(2);
 
   return (
-    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      {/* Current Value */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">
-            Valor Atual
-          </CardTitle>
-          <DollarSign className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">
-            {formatCurrency(metrics.currentValue)}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Caixa: {formatCurrency(metrics.cashBalance)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Alocado: {formatCurrency(metrics.currentValue - metrics.cashBalance)}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Total Return */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">
-            Retorno Total
-          </CardTitle>
-          {isPositive(metrics.totalReturn) ? (
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          ) : (
-            <TrendingDown className="h-4 w-4 text-red-600" />
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className={`text-2xl font-bold ${
-            isPositive(metrics.totalReturn) ? 'text-green-600' : 'text-red-600'
-          }`}>
-            {formatPercent(metrics.totalReturn)}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Investido líquido: {formatCurrency(metrics.netInvested || (metrics.totalInvested - metrics.totalWithdrawn))}
-          </p>
-          {metrics.totalWithdrawn > 0 && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              (Aportes: {formatCurrency(metrics.totalInvested)} - Saques: {formatCurrency(metrics.totalWithdrawn)})
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Annualized Return */}
-      {metrics.annualizedReturn !== null && metrics.annualizedReturn !== undefined ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Retorno Anualizado
-            </CardTitle>
-            {isPositive(metrics.annualizedReturn) ? (
-              <ArrowUpRight className="h-4 w-4 text-green-600" />
-            ) : (
-              <ArrowDownRight className="h-4 w-4 text-red-600" />
-            )}
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${
-              isPositive(metrics.annualizedReturn) ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {formatPercent(metrics.annualizedReturn)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Por ano (CAGR)
-            </p>
-          </CardContent>
-        </Card>
-      ) : annualizedReturnAvailability && !annualizedReturnAvailability.available ? (
-        <Card className="border-dashed border-2">
-          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-              <span>Retorno Anualizado</span>
-              <Badge variant="outline" className="text-xs flex-shrink-0 whitespace-nowrap">
-                <Clock className="h-3 w-3 mr-1" />
-                Em {annualizedReturnAvailability.monthsRemaining} meses
-              </Badge>
-            </CardTitle>
-            <ArrowUpRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-muted-foreground">
-              Aguardando dados
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Disponível em {format(annualizedReturnAvailability.availableDate!, 'MMM/yyyy', { locale: ptBR })}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Requer 12 meses de histórico
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* Dividends */}
-      {metrics.totalDividends > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Dividendos Recebidos
-            </CardTitle>
-            <Percent className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(metrics.totalDividends)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Renda passiva
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Volatility */}
-      {metrics.volatility !== null && metrics.volatility !== undefined ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Volatilidade
-            </CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatPercent(metrics.volatility)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Risco anualizado
-            </p>
-          </CardContent>
-        </Card>
-      ) : volatilityAvailability && !volatilityAvailability.available ? (
-        <Card className="border-dashed border-2">
-          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-              <span>Volatilidade</span>
-              <Badge variant="outline" className="text-xs flex-shrink-0 whitespace-nowrap">
-                <Clock className="h-3 w-3 mr-1" />
-                Em {volatilityAvailability.monthsRemaining} {volatilityAvailability.monthsRemaining === 1 ? 'mês' : 'meses'}
-              </Badge>
-            </CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-muted-foreground">
-              Aguardando dados
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Disponível em {format(volatilityAvailability.availableDate!, 'MMM/yyyy', { locale: ptBR })}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Requer 2 meses de histórico
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* Sharpe Ratio */}
-      {metrics.sharpeRatio !== null && metrics.sharpeRatio !== undefined ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Índice Sharpe
-            </CardTitle>
-            <Badge variant={metrics.sharpeRatio > 1 ? 'default' : 'secondary'}>
-              {metrics.sharpeRatio > 1 ? 'Bom' : 'Regular'}
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.sharpeRatio.toFixed(2)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Retorno ajustado ao risco
-            </p>
-          </CardContent>
-        </Card>
-      ) : annualizedReturnAvailability && !annualizedReturnAvailability.available ? (
-        <Card className="border-dashed border-2">
-          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-              <span>Índice Sharpe</span>
-              <Badge variant="outline" className="text-xs flex-shrink-0 whitespace-nowrap">
-                <Clock className="h-3 w-3 mr-1" />
-                Em {annualizedReturnAvailability.monthsRemaining} meses
-              </Badge>
-            </CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-muted-foreground">
-              Aguardando dados
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Disponível em {format(annualizedReturnAvailability.availableDate!, 'MMM/yyyy', { locale: ptBR })}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Requer 12 meses de histórico
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* Max Drawdown */}
-      {metrics.maxDrawdown !== null && metrics.maxDrawdown !== undefined ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Maior Queda
-            </CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatPercent(metrics.maxDrawdown)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Máximo drawdown
-            </p>
-          </CardContent>
-        </Card>
-      ) : maxDrawdownAvailability && !maxDrawdownAvailability.available ? (
-        <Card className="border-dashed border-2">
-          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-              <span>Maior Queda</span>
-              <Badge variant="outline" className="text-xs flex-shrink-0 whitespace-nowrap">
-                <Clock className="h-3 w-3 mr-1" />
-                Em {maxDrawdownAvailability.monthsRemaining} {maxDrawdownAvailability.monthsRemaining === 1 ? 'mês' : 'meses'}
-              </Badge>
-            </CardTitle>
-            <TrendingDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-muted-foreground">
-              Aguardando dados
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Disponível em {format(maxDrawdownAvailability.availableDate!, 'MMM/yyyy', { locale: ptBR })}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Requer 2 meses de histórico
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* Withdrawals */}
-      {metrics.totalWithdrawn > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Sacado
-            </CardTitle>
-            <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(metrics.totalWithdrawn)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Saques realizados
-            </p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+    <section aria-label="Resumo da carteira" className="rounded-lg border border-border bg-card p-4 sm:p-5">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
+        <Stat
+          label="Patrimônio"
+          value={formatBRL(metrics.currentValue)}
+          caption={`Caixa ${formatBRL(metrics.cashBalance)}`}
+        />
+        <Stat
+          label="Retorno total"
+          value={formatDeltaPct(metrics.totalReturn)}
+          tone={toTone(metrics.totalReturn)}
+          caption={`Investido ${formatBRL(netInvested, { digits: 0 })}`}
+          hint={
+            metrics.totalWithdrawn > 0
+              ? `Investido líquido: aportes de ${formatBRL(metrics.totalInvested)} menos saques de ${formatBRL(metrics.totalWithdrawn)}.`
+              : `Investido líquido: ${formatBRL(netInvested)}.`
+          }
+        />
+        {hasValue(metrics.annualizedReturn) ? (
+          <Stat
+            label="Retorno anualizado"
+            value={formatDeltaPct(metrics.annualizedReturn)}
+            tone={toTone(metrics.annualizedReturn)}
+            caption="Por ano (CAGR)"
+          />
+        ) : annualizedPending ? (
+          <Stat label="Retorno anualizado" value="—" caption={annualizedPending} hint="Requer 12 meses de histórico." />
+        ) : null}
+        {metrics.totalDividends > 0 && (
+          <Stat label="Dividendos recebidos" value={formatBRL(metrics.totalDividends)} caption="Proventos creditados" />
+        )}
+        {hasValue(metrics.volatility) ? (
+          <Stat label="Volatilidade" value={formatPct(metrics.volatility)} caption="Risco anualizado" />
+        ) : riskPending ? (
+          <Stat label="Volatilidade" value="—" caption={riskPending} hint="Requer 2 meses de histórico." />
+        ) : null}
+        {hasValue(metrics.sharpeRatio) ? (
+          <Stat
+            label="Índice Sharpe"
+            value={formatNumber(metrics.sharpeRatio, { digits: 2 })}
+            caption="Ajustado ao risco"
+          />
+        ) : annualizedPending ? (
+          <Stat label="Índice Sharpe" value="—" caption={annualizedPending} hint="Requer 12 meses de histórico." />
+        ) : null}
+        {hasValue(metrics.maxDrawdown) ? (
+          <Stat
+            label="Maior queda"
+            value={formatDeltaPct(-Math.abs(metrics.maxDrawdown))}
+            tone={toTone(-Math.abs(metrics.maxDrawdown))}
+            caption="Desde o pico anterior"
+          />
+        ) : riskPending ? (
+          <Stat label="Maior queda" value="—" caption={riskPending} hint="Requer 2 meses de histórico." />
+        ) : null}
+        {metrics.totalWithdrawn > 0 && (
+          <Stat label="Total sacado" value={formatBRL(metrics.totalWithdrawn)} caption="Saques realizados" />
+        )}
+      </div>
+    </section>
   );
 }
-

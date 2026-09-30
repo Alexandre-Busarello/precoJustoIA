@@ -3,16 +3,9 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Plus, 
-  FileText, 
-  CheckCircle, 
-  AlertCircle,
-  Info
-} from 'lucide-react';
+import { formatPct } from '@/lib/format';
 
 interface Asset {
   ticker: string;
@@ -85,8 +78,8 @@ export function PortfolioBulkAssetInput({ onAssetsGenerated }: PortfolioBulkAsse
       setShowPreview(true);
 
       toast({
-        title: 'Tickers processados!',
-        description: `${assets.length} ativos com ${(equalAllocation * 100).toFixed(1)}% cada`,
+        title: 'Tickers lidos',
+        description: `${assets.length} ativos com ${formatPct(equalAllocation)} cada`,
       });
 
     } catch (error) {
@@ -129,7 +122,7 @@ export function PortfolioBulkAssetInput({ onAssetsGenerated }: PortfolioBulkAsse
     if (invalidTickers.length > 0) {
       toast({
         title: 'Tickers inválidos encontrados',
-        description: `Os seguintes tickers não foram encontrados no Yahoo Finance: ${invalidTickers.join(', ')}`,
+        description: `Tickers não encontrados: ${invalidTickers.join(', ')}`,
         variant: 'destructive',
       });
 
@@ -160,7 +153,7 @@ export function PortfolioBulkAssetInput({ onAssetsGenerated }: PortfolioBulkAsse
     setParsedAssets([]);
     
     toast({
-      title: 'Ativos aplicados!',
+      title: 'Ativos aplicados',
       description: 'Os ativos foram adicionados à sua carteira',
     });
   };
@@ -168,142 +161,69 @@ export function PortfolioBulkAssetInput({ onAssetsGenerated }: PortfolioBulkAsse
   const totalAllocation = parsedAssets.reduce((sum, asset) => sum + asset.targetAllocation, 0);
 
   return (
-    <Card className="border-dashed border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-green-950/20 dark:to-emerald-950/20">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300">
-          <FileText className="h-5 w-5" />
-          Adicionar Múltiplos Ativos
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Digite os tickers separados por vírgula para adicionar vários ativos de uma vez
-        </p>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        {!showPreview ? (
-          <>
-            {/* Bulk Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Tickers (separados por vírgula)
-              </label>
-              <Textarea
-                value={tickersInput}
-                onChange={(e) => setTickersInput(e.target.value)}
-                placeholder="PETR4, VALE3, ITUB4, BBDC4, ABEV3, HGLG11, XPML11"
-                rows={3}
-                className="resize-none font-mono"
-              />
-              <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="text-xs text-blue-700 dark:text-blue-300">
-                  <p className="font-medium">Dicas:</p>
-                  <ul className="mt-1 space-y-0.5">
-                    <li>• Separe os tickers por vírgula</li>
-                    <li>• A alocação será distribuída igualmente entre todos</li>
-                    <li>• Você poderá ajustar as % individualmente depois</li>
-                    <li>• Tickers duplicados serão removidos automaticamente</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+    <div className="space-y-4">
+      {!showPreview ? (
+        <>
+          <div className="space-y-1.5">
+            <Label htmlFor="bulk-tickers">Tickers separados por vírgula</Label>
+            <Textarea
+              id="bulk-tickers"
+              value={tickersInput}
+              onChange={(e) => setTickersInput(e.target.value)}
+              placeholder="PETR4, VALE3, ITUB4, BBDC4, HGLG11"
+              rows={3}
+              autoCapitalize="characters"
+              className="resize-none font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              O peso é dividido igualmente e pode ser ajustado depois. Tickers repetidos são ignorados.
+            </p>
+          </div>
 
-            {/* Parse Button */}
-            <Button 
-              onClick={parseTickersInput}
-              disabled={!tickersInput.trim()}
-              className="w-full"
-              size="lg"
+          <Button type="button" onClick={parseTickersInput} disabled={!tickersInput.trim()} variant="outline">
+            Ler tickers
+          </Button>
+        </>
+      ) : (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border">
+            <ul className="max-h-60 divide-y divide-border overflow-y-auto">
+              {parsedAssets.map((asset) => (
+                <li key={asset.ticker} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span className="font-mono font-medium text-foreground">{asset.ticker}</span>
+                  <span className="tabular-nums text-muted-foreground">{formatPct(asset.targetAllocation)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center justify-between border-t border-border px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Total ({parsedAssets.length} ativos)</span>
+              <span className="font-medium tabular-nums text-foreground">{formatPct(totalAllocation)}</span>
+            </div>
+          </div>
+
+          {Math.abs(totalAllocation - 1) > 0.01 && (
+            <p className="text-xs text-muted-foreground">
+              As porcentagens serão ajustadas proporcionalmente para somar 100%.
+            </p>
+          )}
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowPreview(false);
+                setParsedAssets([]);
+              }}
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Processar Tickers
+              Editar lista
             </Button>
-          </>
-        ) : (
-          <>
-            {/* Preview Results */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <h4 className="font-semibold">Ativos Processados</h4>
-              </div>
-
-              <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border max-h-60 overflow-y-auto">
-                <div className="space-y-2">
-                  {parsedAssets.map((asset, index) => (
-                    <div key={index} className="flex items-center justify-between py-1">
-                      <span className="font-mono font-medium">{asset.ticker}</span>
-                      <Badge variant="outline">
-                        {(asset.targetAllocation * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="border-t mt-3 pt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      Total ({parsedAssets.length} ativos):
-                    </span>
-                    <Badge 
-                      variant={Math.abs(totalAllocation - 1) < 0.01 ? 'default' : 'destructive'}
-                    >
-                      {(totalAllocation * 100).toFixed(1)}%
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              {Math.abs(totalAllocation - 1) > 0.01 && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <p className="font-medium text-amber-900 dark:text-amber-100">
-                      Alocação será normalizada
-                    </p>
-                    <p className="text-amber-700 dark:text-amber-300">
-                      As porcentagens serão ajustadas automaticamente para somar 100%
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                <div className="flex items-start gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <p className="font-medium text-green-900 dark:text-green-100">
-                      Próximos passos
-                    </p>
-                    <p className="text-green-700 dark:text-green-300">
-                      Após aplicar, você poderá ajustar as alocações individuais na aba &quot;Configuração&quot;
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button 
-                  onClick={handleApplyAssets}
-                  className="flex-1"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Aplicar Ativos
-                </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => {
-                    setShowPreview(false);
-                    setParsedAssets([]);
-                  }}
-                >
-                  Editar Lista
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+            <Button type="button" onClick={handleApplyAssets}>
+              Aplicar ativos
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

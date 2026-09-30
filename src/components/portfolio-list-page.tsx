@@ -1,29 +1,24 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent } from '@/components/ui/card';
+import { MoreHorizontal, Plus, Receipt, Settings, LineChart, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/page-header';
 import { useToast } from '@/hooks/use-toast';
-import {
-  Briefcase,
-  Plus,
-  Crown,
-  TrendingUp,
-  Receipt,
-  Settings,
-  LineChart,
-  Trash2,
-  MoreVertical,
-} from 'lucide-react';
+import { toast as sonnerToast } from 'sonner';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
-import { PortfolioTutorialBanner } from '@/components/portfolio-tutorial-banner';
+import { formatBRL, formatDeltaPct } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { PortfolioTutorialLink } from '@/components/portfolio-tutorial-banner';
 import { PortfolioEmptyState } from '@/components/portfolio-empty-state';
 import { ConvertBacktestModal } from '@/components/convert-backtest-modal';
-import { PortfolioCardSuggestionsButton } from '@/components/portfolio-card-suggestions-button';
 import { DeletePortfolioDialog } from '@/components/delete-portfolio-dialog';
+import { REBALANCE_FREQUENCY_LABELS, returnToneClass } from '@/components/portfolio-page-shell';
 import {
   Dialog,
   DialogContent,
@@ -59,7 +54,6 @@ interface Portfolio {
   } | null;
 }
 
-// Fetch function for portfolios
 const fetchPortfolios = async (): Promise<Portfolio[]> => {
   try {
     const response = await fetch('/api/portfolio');
@@ -67,23 +61,73 @@ const fetchPortfolios = async (): Promise<Portfolio[]> => {
       throw new Error('Erro ao carregar carteiras');
     }
     const data = await response.json();
-    
-    if (!data || typeof data !== 'object') {
-      console.warn('API retornou dados inválidos:', data);
-      return [];
-    }
-    
-    const portfolios = data.portfolios;
-    if (!Array.isArray(portfolios)) {
-      console.warn('API retornou portfolios que não é um array:', portfolios);
-      return [];
-    }
-    return portfolios;
+    return Array.isArray(data?.portfolios) ? data.portfolios : [];
   } catch (error) {
-    console.error('Erro ao buscar portfolios:', error);
+    console.error('Erro ao buscar carteiras:', error);
     return [];
   }
 };
+
+type DeleteTarget = { id: string; name: string } | null;
+
+interface PortfolioActionsMenuProps {
+  portfolio: Portfolio;
+  onDelete: (target: DeleteTarget) => void;
+}
+
+/** Menu "Mais ações" da carteira (transações, análise, configurações, excluir). */
+function PortfolioActionsMenu({ portfolio, onDelete }: PortfolioActionsMenuProps) {
+  const router = useRouter();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Mais ações para ${portfolio.name}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <MoreHorizontal strokeWidth={1.75} aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+        <DropdownMenuItem onClick={() => router.push(`/carteira/${portfolio.id}/transacoes`)}>
+          <Receipt className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+          Transações
+        </DropdownMenuItem>
+        {portfolio.trackingStarted && (
+          <DropdownMenuItem onClick={() => router.push(`/carteira/${portfolio.id}/analise`)}>
+            <LineChart className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+            Análise
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => router.push(`/carteira/${portfolio.id}/config`)}>
+          <Settings className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+          Configurações
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={() => onDelete({ id: portfolio.id, name: portfolio.name })}
+        >
+          <Trash2 className="size-4" strokeWidth={1.75} aria-hidden="true" />
+          Excluir
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true">
+      <span className="sr-only">Carregando carteiras</span>
+      {Array.from({ length: 2 }, (_, index) => (
+        <Skeleton key={index} className="h-24 w-full md:h-10" />
+      ))}
+    </div>
+  );
+}
 
 export function PortfolioListPage() {
   const router = useRouter();
@@ -107,336 +151,238 @@ export function PortfolioListPage() {
 
   const portfolios = Array.isArray(portfoliosData) ? portfoliosData : [];
   const [showConvertBacktestModal, setShowConvertBacktestModal] = useState(false);
-  const [deleteDialogState, setDeleteDialogState] = useState<{
-    open: boolean;
-    portfolioId: string;
-    portfolioName: string;
-  }>({
-    open: false,
-    portfolioId: '',
-    portfolioName: '',
-  });
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const hasRefetchedRef = useRef(false);
 
   useEffect(() => {
-    if (portfoliosError) {
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar suas carteiras',
-        variant: 'destructive',
-      });
-    }
-  }, [portfoliosError, toast]);
+    // toast do sonner direto: o de useToast muda a cada render e repetiria o aviso.
+    if (portfoliosError) sonnerToast.error('Erro', { description: 'Não foi possível carregar suas carteiras' });
+  }, [portfoliosError]);
 
+  // A primeira leitura logo após criar uma carteira pode vir vazia: refaz uma vez.
   useEffect(() => {
     if (!loading && portfolios.length === 0 && !portfoliosError && !hasRefetchedRef.current) {
-      console.log('🔄 [PORTFOLIO LIST] Portfolios vazio após carregamento inicial, forçando refetch...');
       hasRefetchedRef.current = true;
       refetch();
     }
   }, [loading, portfolios.length, portfoliosError, refetch]);
 
-  const handleCreatePortfolio = async () => {
+  const handleCreatePortfolio = () => {
     if (!isPremium && portfolios.length >= 1) {
       toast({
-        title: 'Upgrade Necessário',
-        description: 'Usuários gratuitos estão limitados a 1 carteira. Faça upgrade para Premium.',
-        variant: 'destructive',
+        title: 'Limite do plano gratuito',
+        description: 'O plano gratuito permite 1 carteira. Veja os planos para criar outras.',
       });
       router.push('/planos');
       return;
     }
-
     router.push('/carteira/nova');
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
-  };
+  const openPortfolio = (portfolio: Portfolio) => router.push(`/carteira/${portfolio.id}`);
 
-  const formatPercentage = (value: number) => {
-    return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
-  };
-
-  // Loading state
-  if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+  const columns: DataTableColumn<Portfolio>[] = [
+    {
+      key: 'name',
+      header: 'Nome',
+      sortable: true,
+      className: 'max-w-72',
+      cell: (p) => (
+        <div className="min-w-0 py-1">
+          <p className="truncate font-medium text-foreground">{p.name}</p>
+          {p.description && <p className="truncate text-xs text-muted-foreground">{p.description}</p>}
         </div>
-      </div>
-    );
-  }
+      ),
+    },
+    {
+      key: 'currentValue',
+      header: 'Patrimônio',
+      align: 'right',
+      sortable: true,
+      sortValue: (p) => p.metrics?.currentValue ?? null,
+      cell: (p) => <span className="font-medium">{formatBRL(p.metrics?.currentValue)}</span>,
+    },
+    {
+      key: 'totalReturn',
+      header: 'Retorno',
+      align: 'right',
+      sortable: true,
+      sortValue: (p) => p.metrics?.totalReturn ?? null,
+      cell: (p) => (
+        <span className={cn('font-medium', returnToneClass(p.metrics?.totalReturn))}>
+          {formatDeltaPct(p.metrics?.totalReturn)}
+        </span>
+      ),
+    },
+    {
+      key: 'cashBalance',
+      header: 'Caixa',
+      align: 'right',
+      sortable: true,
+      sortValue: (p) => p.metrics?.cashBalance ?? null,
+      cell: (p) => formatBRL(p.metrics?.cashBalance),
+    },
+    { key: 'assetCount', header: 'Nº ativos', align: 'right', sortable: true },
+    {
+      key: 'rebalanceFrequency',
+      header: 'Rebalanceamento',
+      cell: (p) => REBALANCE_FREQUENCY_LABELS[p.rebalanceFrequency] ?? p.rebalanceFrequency,
+    },
+    {
+      key: 'actions',
+      header: <span className="sr-only">Ações</span>,
+      align: 'right',
+      cell: (p) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              openPortfolio(p);
+            }}
+          >
+            Abrir
+          </Button>
+          <PortfolioActionsMenu portfolio={p} onDelete={setDeleteTarget} />
+        </div>
+      ),
+    },
+  ];
 
-  // Empty state
-  if (!loading && portfolios.length === 0) {
-    return (
-      <>
-        <PortfolioTutorialBanner />
-        <PortfolioEmptyState
-          onCreateClick={handleCreatePortfolio}
-          onConvertBacktestClick={() => setShowConvertBacktestModal(true)}
-          isPremium={isPremium!}
-        />
-        <Dialog open={showConvertBacktestModal} onOpenChange={setShowConvertBacktestModal}>
-          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-            <DialogHeader className="flex-shrink-0">
-              <DialogTitle>Criar Carteira a partir de Backtest</DialogTitle>
-              <DialogDescription>
-                Converta um backtest existente em uma carteira para acompanhamento real
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex-1 overflow-y-auto px-1">
-              <ConvertBacktestModal
-                onSuccess={(portfolioId) => {
-                  setShowConvertBacktestModal(false);
-                  queryClient.invalidateQueries({ queryKey: ['portfolios'] });
-                  router.push(`/carteira/${portfolioId}`);
-                }}
-                onCancel={() => setShowConvertBacktestModal(false)}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      </>
-    );
-  }
+  const convertDialog = (
+    <Dialog open={showConvertBacktestModal} onOpenChange={setShowConvertBacktestModal}>
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>Criar carteira a partir de um backtest</DialogTitle>
+          <DialogDescription>
+            Converta um backtest salvo em uma carteira para acompanhamento real.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto px-1">
+          <ConvertBacktestModal
+            onSuccess={(portfolioId) => {
+              setShowConvertBacktestModal(false);
+              queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+              router.push(`/carteira/${portfolioId}`);
+            }}
+            onCancel={() => setShowConvertBacktestModal(false)}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  const hasPortfolios = !loading && portfolios.length > 0;
 
   return (
-    <>
-      <PortfolioTutorialBanner />
-      
-      <div className="container mx-auto px-4 py-6 sm:py-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-                <Briefcase className="h-6 w-6 sm:h-8 sm:w-8 flex-shrink-0" />
-                <span>Minhas Carteiras</span>
-              </h1>
-              <p className="text-muted-foreground mt-1 text-sm sm:text-base">
-                Gerencie seus investimentos com acompanhamento completo
-              </p>
-            </div>
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-8">
+      <PageHeader
+        title="Minhas carteiras"
+        description="Patrimônio, retorno e alocação de cada carteira."
+        actions={
+          hasPortfolios ? (
+            <>
+              <PortfolioTutorialLink />
+              <Button onClick={handleCreatePortfolio}>
+                <Plus strokeWidth={1.75} aria-hidden="true" />
+                Nova carteira
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
-            <Button onClick={handleCreatePortfolio} className="w-full sm:w-auto flex-shrink-0">
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Carteira
-            </Button>
-          </div>
-
-          {/* Premium CTA */}
-          {!isPremium && portfolios.length >= 1 && (
-            <Card className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 border-amber-200 dark:border-amber-800">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Crown className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-                    <div>
-                      <h3 className="font-semibold text-amber-900 dark:text-amber-100">
-                        Desbloqueie Carteiras Ilimitadas
-                      </h3>
-                      <p className="text-sm text-amber-700 dark:text-amber-300">
-                        Faça upgrade para Premium e crie quantas carteiras quiser
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={() => router.push('/planos')}
-                    className="bg-amber-600 hover:bg-amber-700"
-                  >
-                    Fazer Upgrade
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Grid de Carteiras */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {portfolios.map((portfolio) => (
-              <Card
-                key={portfolio.id}
-                className="hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={() => router.push(`/carteira/${portfolio.id}`)}
-              >
-                <CardContent className="p-4 sm:p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-lg truncate mb-1">
-                        {portfolio.name}
-                      </h3>
+      <div className="mt-6">
+        {loading ? (
+          <ListSkeleton />
+        ) : !hasPortfolios ? (
+          <PortfolioEmptyState
+            onCreateClick={handleCreatePortfolio}
+            onConvertBacktestClick={() => setShowConvertBacktestModal(true)}
+            isPremium={!!isPremium}
+          />
+        ) : (
+          <>
+            {/* Mobile: um card por carteira */}
+            <ul className="space-y-3 md:hidden">
+              {portfolios.map((portfolio) => (
+                <li key={portfolio.id} className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h2 className="truncate font-medium text-foreground">{portfolio.name}</h2>
                       {portfolio.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {portfolio.description}
-                        </p>
+                        <p className="line-clamp-2 text-xs text-muted-foreground">{portfolio.description}</p>
                       )}
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="flex-shrink-0"
-                          onClick={(e) => e.stopPropagation()}
-                          title="Mais ações"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenuItem
-                          onClick={() => router.push(`/carteira/${portfolio.id}/transacoes`)}
-                        >
-                          <Receipt className="h-4 w-4 mr-2" />
-                          Transações
-                        </DropdownMenuItem>
-                        {portfolio.trackingStarted && (
-                          <DropdownMenuItem
-                            onClick={() => router.push(`/carteira/${portfolio.id}/analise`)}
-                          >
-                            <LineChart className="h-4 w-4 mr-2" />
-                            Análise
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          onClick={() => router.push(`/carteira/${portfolio.id}/config`)}
-                        >
-                          <Settings className="h-4 w-4 mr-2" />
-                          Configurações
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() =>
-                            setDeleteDialogState({
-                              open: true,
-                              portfolioId: portfolio.id,
-                              portfolioName: portfolio.name,
-                            })
-                          }
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <PortfolioActionsMenu portfolio={portfolio} onDelete={setDeleteTarget} />
                   </div>
-
-                  {/* Métricas */}
-                  {portfolio.metrics && (
-                    <div className="space-y-2 mb-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Patrimônio</span>
-                        <span className="font-semibold">
-                          {formatCurrency(portfolio.metrics.currentValue)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Retorno</span>
-                        <Badge
-                          variant={portfolio.metrics.totalReturn >= 0 ? 'default' : 'destructive'}
-                        >
-                          {formatPercentage(portfolio.metrics.totalReturn)}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Caixa</span>
-                        <span className="text-sm font-medium">
-                          {formatCurrency(portfolio.metrics.cashBalance)}
-                        </span>
-                      </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">Patrimônio</dt>
+                      <dd className="truncate font-medium tabular-nums text-foreground">
+                        {formatBRL(portfolio.metrics?.currentValue)}
+                      </dd>
                     </div>
-                  )}
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">Retorno</dt>
+                      <dd className={cn('font-medium tabular-nums', returnToneClass(portfolio.metrics?.totalReturn))}>
+                        {formatDeltaPct(portfolio.metrics?.totalReturn)}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">Caixa</dt>
+                      <dd className="truncate tabular-nums text-foreground">{formatBRL(portfolio.metrics?.cashBalance)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">Ativos · rebalanceamento</dt>
+                      <dd className="truncate text-foreground">
+                        {portfolio.assetCount} ·{' '}
+                        {REBALANCE_FREQUENCY_LABELS[portfolio.rebalanceFrequency] ?? portfolio.rebalanceFrequency}
+                      </dd>
+                    </div>
+                  </dl>
+                  <Button asChild className="mt-4 w-full">
+                    <Link href={`/carteira/${portfolio.id}`}>Abrir</Link>
+                  </Button>
+                </li>
+              ))}
+            </ul>
 
-                  {/* Badges */}
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <Badge variant="outline" className="text-xs">
-                      {portfolio.assetCount} {portfolio.assetCount === 1 ? 'ativo' : 'ativos'}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {portfolio.rebalanceFrequency === 'monthly'
-                        ? 'Mensal'
-                        : portfolio.rebalanceFrequency === 'quarterly'
-                        ? 'Trimestral'
-                        : 'Anual'}
-                    </Badge>
-                  </div>
+            {/* Desktop: tabela em largura total */}
+            <DataTable
+              className="hidden md:block"
+              caption="Minhas carteiras"
+              columns={columns}
+              rows={portfolios}
+              getRowId={(p) => p.id}
+              onRowClick={openPortfolio}
+            />
 
-                  {/* Ações Rápidas */}
-                  <div className="flex flex-wrap gap-2 pt-4 border-t">
-                    {portfolio.trackingStarted && (
-                      <PortfolioCardSuggestionsButton
-                        portfolioId={portfolio.id}
-                        trackingStarted={portfolio.trackingStarted}
-                        cashBalance={portfolio.metrics?.cashBalance}
-                      />
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/carteira/${portfolio.id}`);
-                      }}
-                    >
-                      <TrendingUp className="h-3 w-3 mr-1" />
-                      Ver Carteira
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
+            {!isPremium && portfolios.length >= 1 && (
+              <p className="mt-6 text-sm text-muted-foreground">
+                No plano gratuito você pode ter 1 carteira.{' '}
+                <Link href="/planos" className="text-brand underline-offset-4 hover:underline">
+                  Ver planos
+                </Link>
+              </p>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Convert Backtest Modal */}
-      <Dialog open={showConvertBacktestModal} onOpenChange={setShowConvertBacktestModal}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle>Criar Carteira a partir de Backtest</DialogTitle>
-            <DialogDescription>
-              Converta um backtest existente em uma carteira para acompanhamento real
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-1">
-            <ConvertBacktestModal
-              onSuccess={(portfolioId) => {
-                setShowConvertBacktestModal(false);
-                queryClient.invalidateQueries({ queryKey: ['portfolios'] });
-                router.push(`/carteira/${portfolioId}`);
-              }}
-              onCancel={() => setShowConvertBacktestModal(false)}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      {convertDialog}
 
-      {/* Delete Portfolio Dialog */}
       <DeletePortfolioDialog
-        open={deleteDialogState.open}
+        open={deleteTarget !== null}
         onOpenChange={(open) => {
-          setDeleteDialogState({
-            open,
-            portfolioId: deleteDialogState.portfolioId,
-            portfolioName: deleteDialogState.portfolioName,
-          });
           if (!open) {
-            // Invalidate queries when dialog closes (after deletion)
+            setDeleteTarget(null);
             queryClient.invalidateQueries({ queryKey: ['portfolios'] });
           }
         }}
-        portfolioId={deleteDialogState.portfolioId}
-        portfolioName={deleteDialogState.portfolioName}
+        portfolioId={deleteTarget?.id ?? ''}
+        portfolioName={deleteTarget?.name ?? ''}
       />
-    </>
+    </div>
   );
 }
-

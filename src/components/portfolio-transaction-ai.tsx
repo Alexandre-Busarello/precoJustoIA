@@ -4,22 +4,11 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Bot, 
-  Sparkles, 
-  Loader2, 
-  CheckCircle, 
-  AlertCircle,
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
-  Plus,
-  Minus,
-  FileText
-} from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { formatBRL, formatDate, formatNumber } from '@/lib/format';
 import { portfolioCache } from '@/lib/portfolio-cache';
 import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
 
@@ -64,8 +53,6 @@ export function PortfolioTransactionAI({
     'Aporte de R$ 5.000 hoje',
     'Venda de 50 VALE3 por R$ 65,00 cada',
     'Dividendo de ITUB4: R$ 0,25 por ação (tenho 200 ações)',
-    'Saque de R$ 2.000 para emergência',
-    'Compra de 50 BOVA11 a R$ 120,00 cada',
   ];
 
   // Mutation for generating transactions with AI
@@ -102,7 +89,7 @@ export function PortfolioTransactionAI({
         });
       } else if (data.transactions.length > 0) {
         toast({
-          title: 'Transações processadas!',
+          title: 'Transações identificadas',
           description: `${data.transactions.length} transação(ões) identificada(s)`,
         });
       }
@@ -186,7 +173,7 @@ export function PortfolioTransactionAI({
       setResult(null);
       
       toast({
-        title: 'Transações aplicadas!',
+        title: 'Transações salvas',
         description: data.message || `${data.createdTransactions} transação(ões) criada(s) com sucesso`,
       });
 
@@ -227,23 +214,6 @@ export function PortfolioTransactionAI({
   // Combined loading state from both mutations
   const loading = generateTransactionsMutation.isPending || applyTransactionsMutation.isPending;
 
-  const getTransactionIcon = (type: string) => {
-    switch (type) {
-      case 'BUY':
-        return <TrendingUp className="h-4 w-4 text-green-600" />;
-      case 'SELL_WITHDRAWAL':
-        return <TrendingDown className="h-4 w-4 text-red-600" />;
-      case 'CASH_CREDIT':
-        return <Plus className="h-4 w-4 text-blue-600" />;
-      case 'CASH_DEBIT':
-        return <Minus className="h-4 w-4 text-orange-600" />;
-      case 'DIVIDEND':
-        return <DollarSign className="h-4 w-4 text-purple-600" />;
-      default:
-        return <FileText className="h-4 w-4 text-gray-600" />;
-    }
-  };
-
   const getTransactionLabel = (type: string) => {
     switch (type) {
       case 'BUY':
@@ -261,226 +231,151 @@ export function PortfolioTransactionAI({
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
   return (
-    <Card className="border-dashed border-2 border-primary/20 bg-gradient-to-br from-green-50/50 to-blue-50/50 dark:from-green-950/20 dark:to-blue-950/20">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-primary">
-          <Bot className="h-5 w-5" />
-          Assistente IA para Transações
-          <Sparkles className="h-4 w-4" />
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Digite ou cole suas transações em linguagem natural. A IA irá processar e extrair todas as informações necessárias.
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Cole o extrato da B3 ou descreva as operações em texto livre. A IA identifica as transações e você revisa
+        antes de salvar.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="transaction-ai-input">Transações</Label>
+        <Textarea
+          id="transaction-ai-input"
+          placeholder={
+            'Ex.: Compra de 100 PETR4 a R$ 32,50 cada\nAporte de R$ 5.000 hoje\nDividendo de ITUB4: R$ 0,25 por ação (tenho 200 ações)\n\nEm compras, informe a quantidade e o preço por ação.'
+          }
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={disabled || loading}
+          className="min-h-[140px] resize-y"
+        />
+        <p className="text-xs text-muted-foreground">
+          Saldo atual em caixa: <span className="tabular-nums">{formatBRL(currentCashBalance)}</span>
         </p>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-4">
-        {/* Input Area */}
-        <div className="space-y-2">
-          <Textarea
-            placeholder="Digite suas transações aqui...
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">Exemplos</p>
+        <div className="flex flex-wrap gap-2">
+          {exampleInputs.map((example) => (
+            <Button
+              key={example}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-auto min-h-10 max-w-full whitespace-normal py-2 text-left text-xs md:min-h-8"
+              onClick={() => setInput(example)}
+              disabled={disabled || loading}
+            >
+              {example}
+            </Button>
+          ))}
+        </div>
+      </div>
 
-Exemplos:
-• Compra de 100 PETR4 a R$ 32,50 cada
-• Aporte de R$ 5.000 hoje
-• Venda de 50 VALE3 por R$ 65,00 cada
-• Dividendo de ITUB4: R$ 0,25 por ação (tenho 200 ações)
+      <Button
+        onClick={handleGenerate}
+        disabled={disabled || generateTransactionsMutation.isPending || !input.trim()}
+        className="w-full sm:w-auto"
+      >
+        {generateTransactionsMutation.isPending ? (
+          <>
+            <Loader2 className="animate-spin" strokeWidth={1.75} aria-hidden="true" />
+            Processando transações
+          </>
+        ) : (
+          'Identificar transações'
+        )}
+      </Button>
 
-IMPORTANTE: Para compras, sempre informe quantidade E preço por ação"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={disabled || loading}
-            className="min-h-[120px] resize-none"
-          />
-          
-          {currentCashBalance !== undefined && (
-            <div className="text-xs text-muted-foreground">
-              Saldo atual em caixa: {formatCurrency(currentCashBalance)}
+      {showResults && result && (
+        <div className="space-y-4 border-t border-border pt-4">
+          {result.errors.length > 0 && (
+            <div role="alert" className="rounded-lg border border-border bg-surface p-3 text-sm">
+              <p className="flex items-center gap-2 font-medium text-negative">
+                <AlertCircle className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                Não foi possível interpretar
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-muted-foreground">
+                {result.errors.map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.warnings.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface p-3 text-sm">
+              <p className="flex items-center gap-2 font-medium text-warning">
+                <AlertCircle className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                Avisos
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-muted-foreground">
+                {result.warnings.map((warning, index) => (
+                  <li key={index}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.transactions.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-foreground">
+                Transações identificadas ({result.transactions.length})
+              </h4>
+
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {result.transactions.map((transaction, index) => (
+                  <li key={index} className="flex items-start justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="neutral">{getTransactionLabel(transaction.type)}</Badge>
+                        {transaction.ticker && (
+                          <span className="text-sm font-medium text-foreground">{transaction.ticker}</span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                        {transaction.quantity ? `${formatNumber(transaction.quantity)} ações · ` : ''}
+                        {transaction.price ? `${formatBRL(transaction.price)} cada · ` : ''}
+                        Total {formatBRL(transaction.amount)}
+                      </p>
+                      {transaction.notes && (
+                        <p className="mt-1 text-xs text-muted-foreground break-words">{transaction.notes}</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatDate(`${transaction.date}T12:00:00`)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setShowResults(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleApplyTransactions} disabled={applyTransactionsMutation.isPending}>
+                  {applyTransactionsMutation.isPending ? (
+                    <>
+                      <Loader2 className="animate-spin" strokeWidth={1.75} aria-hidden="true" />
+                      Salvando
+                    </>
+                  ) : (
+                    `Salvar ${result.transactions.length} ${result.transactions.length === 1 ? 'transação' : 'transações'}`
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </div>
+      )}
 
-        {/* Example Buttons */}
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Exemplos rápidos:</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {exampleInputs.map((example, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                className="text-xs h-auto py-2 px-3 text-left justify-start"
-                onClick={() => setInput(example)}
-                disabled={disabled || loading}
-              >
-                {example}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Generate Button */}
-        <Button 
-          onClick={handleGenerate}
-          disabled={disabled || generateTransactionsMutation.isPending || !input.trim()}
-          className="w-full"
-          size="lg"
-        >
-          {generateTransactionsMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Processando transações...
-            </>
-          ) : (
-            <>
-              <Bot className="h-4 w-4 mr-2" />
-              Processar Transações
-            </>
-          )}
-        </Button>
-
-        {/* Results */}
-        {showResults && result && (
-          <div className="space-y-4 border-t pt-4">
-            {/* Errors */}
-            {result.errors.length > 0 && (
-              <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="font-medium text-red-800 dark:text-red-200">Erros encontrados:</p>
-                      <ul className="list-disc list-inside space-y-1 text-red-700 dark:text-red-300">
-                        {result.errors.map((error, index) => (
-                          <li key={index} className="text-sm">{error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Warnings */}
-            {result.warnings.length > 0 && (
-              <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="font-medium text-yellow-800 dark:text-yellow-200">Avisos:</p>
-                      <ul className="list-disc list-inside space-y-1 text-yellow-700 dark:text-yellow-300">
-                        {result.warnings.map((warning, index) => (
-                          <li key={index} className="text-sm">{warning}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Transactions */}
-            {result.transactions.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Transações Identificadas ({result.transactions.length})
-                  </h4>
-                </div>
-
-                <div className="space-y-2">
-                  {result.transactions.map((transaction, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        {getTransactionIcon(transaction.type)}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">
-                              {getTransactionLabel(transaction.type)}
-                            </Badge>
-                            {transaction.ticker && (
-                              <Badge variant="secondary">
-                                {transaction.ticker}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-sm text-muted-foreground mt-1">
-                            {transaction.quantity && (
-                              <span>{transaction.quantity} ações • </span>
-                            )}
-                            {transaction.price && (
-                              <span>Preço: {formatCurrency(transaction.price)} • </span>
-                            )}
-                            <span>Total: {formatCurrency(transaction.amount)}</span>
-                          </div>
-                          {transaction.notes && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {transaction.notes}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(transaction.date + 'T00:00:00').toLocaleDateString('pt-BR')}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <Button 
-                    onClick={handleApplyTransactions}
-                    disabled={applyTransactionsMutation.isPending}
-                    className="flex-1"
-                  >
-                    {applyTransactionsMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Aplicando...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Aplicar Transações
-                      </>
-                    )}
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={() => setShowResults(false)}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Premium Notice */}
-        {disabled && (
-          <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-2">
-                <Sparkles className="h-4 w-4 text-amber-600 mt-0.5" />
-                <div className="text-amber-800 dark:text-amber-200">
-                  O Assistente IA para Transações é um recurso exclusivo Premium. 
-                  Faça upgrade para usar linguagem natural no cadastro de transações.
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </CardContent>
-    </Card>
+      {disabled && (
+        <p className="text-sm text-muted-foreground">
+          O preenchimento por texto está disponível no Premium. Você pode registrar pelo formulário.
+        </p>
+      )}
+    </div>
   );
 }

@@ -1,216 +1,123 @@
 import { Metadata } from 'next';
+import Link from 'next/link';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import { Plus } from 'lucide-react';
+
+import { authOptions } from '@/lib/auth';
 import { getCurrentUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
+import type { TriggerConfig } from '@/lib/custom-trigger-service';
 import CustomMonitorsList from '@/components/custom-monitors-list';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import Link from 'next/link';
-import { Bell, ArrowLeft, Plus, Settings, Crown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { MonitorLimitBanner } from '@/components/monitor-limit-banner';
+import { PageHeader } from '@/components/page-header';
+import { AlertsTabs } from '@/components/alerts-tabs';
+import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
-  title: 'Monitoramentos Customizados | Preço Justo AI',
-  description: 'Gerencie seus monitoramentos customizados de ações com gatilhos personalizados',
+  title: 'Monitoramentos',
+  description: 'Gerencie seus monitoramentos de ações com preço-alvo e limites de indicadores',
 };
+
+interface MonitorRow {
+  id: string;
+  companyId: number;
+  isActive: boolean | null;
+  createdAt: Date;
+  lastTriggeredAt: Date | null;
+  triggerConfig: unknown;
+  company: { id: number; ticker: string; name: string; logoUrl: string | null } | null;
+}
 
 export default async function CustomMonitorsPage() {
   const session = await getServerSession(authOptions);
-
   if (!session) {
-    redirect('/login');
+    redirect('/login?callbackUrl=/dashboard/monitoramentos-customizados');
   }
 
   const user = await getCurrentUser();
-
   if (!user) {
-    redirect('/login');
+    redirect('/login?callbackUrl=/dashboard/monitoramentos-customizados');
   }
 
-  // Buscar monitoramentos customizados do usuário
-  const monitorsRaw = await safeQueryWithParams(
+  const monitorsRaw = (await safeQueryWithParams(
     'user_asset_monitor',
     () =>
       prisma.userAssetMonitor.findMany({
         where: { userId: user.id },
         include: {
           company: {
-            select: {
-              id: true,
-              ticker: true,
-              name: true,
-              logoUrl: true,
-            },
+            select: { id: true, ticker: true, name: true, logoUrl: true },
           },
         },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        orderBy: { createdAt: 'desc' },
       }),
     { userId: user.id }
-  );
+  )) as MonitorRow[];
 
-  // Transformar dados para o formato esperado pelo componente
-  const monitors = (monitorsRaw as any[]).map((m: any) => {
-    // Garantir que company existe antes de acessar propriedades
-    if (!m.company) {
-      console.error('Monitor sem company:', m.id);
-      return null;
-    }
-    
-    return {
+  const monitors = monitorsRaw
+    .filter((m): m is MonitorRow & { company: NonNullable<MonitorRow['company']> } => m.company !== null)
+    .map((m) => ({
       id: m.id,
       companyId: m.companyId,
       ticker: m.company.ticker,
       companyName: m.company.name,
       companyLogoUrl: m.company.logoUrl,
-      triggerConfig: (m.triggerConfig || {}) as any,
+      triggerConfig: (m.triggerConfig || {}) as TriggerConfig,
       isActive: m.isActive ?? true,
       createdAt: m.createdAt,
       lastTriggeredAt: m.lastTriggeredAt,
-    };
-  }).filter((m): m is NonNullable<typeof m> => m !== null);
+    }));
 
-  // Calcular limites
-  const activeMonitorsCount = monitors.filter(m => m.isActive).length;
-  const maxMonitors = user.isPremium ? null : 1; // null = ilimitado
-  const isLimitReached = !user.isPremium && activeMonitorsCount >= 1;
-
-  // Debug: log temporário para verificar dados
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Monitoramentos] Total encontrado:', monitors.length);
-    console.log('[Monitoramentos] Dados:', monitors);
-  }
+  const activeCount = monitors.filter((m) => m.isActive).length;
+  const pausedCount = monitors.length - activeCount;
+  const maxMonitors = user.isPremium ? null : 1; // null = sem limite
+  const isLimitReached = maxMonitors !== null && activeCount >= maxMonitors;
+  const summary =
+    monitors.length === 0
+      ? 'Preço-alvo e limites de indicadores para os ativos que você acompanha.'
+      : `${monitors.length} ${monitors.length === 1 ? 'monitoramento' : 'monitoramentos'}${
+          pausedCount > 0 ? ` · ${pausedCount} ${pausedCount === 1 ? 'pausado' : 'pausados'}` : ''
+        }`;
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Button variant="ghost" asChild>
-            <Link href="/dashboard">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Voltar ao Dashboard
-            </Link>
-          </Button>
-          <Button variant="ghost" asChild>
-            <Link href="/dashboard/subscriptions">
-              <Bell className="w-4 h-4 mr-2" />
-              Minhas Inscrições
-            </Link>
-          </Button>
-        </div>
+    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
+      <PageHeader
+        title="Monitoramentos"
+        description={summary}
+        actions={
+          isLimitReached ? (
+            <Button disabled title="Limite do plano gratuito atingido">
+              <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+              Criar monitoramento
+            </Button>
+          ) : (
+            <Button asChild>
+              <Link href="/dashboard/monitoramentos-customizados/criar">
+                <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                Criar monitoramento
+              </Link>
+            </Button>
+          )
+        }
+      />
+      <AlertsTabs />
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center space-x-3 mb-2">
-              <Settings className="w-8 h-8 text-primary" />
-              <h1 className="text-3xl font-bold">Monitoramentos Customizados</h1>
-              {user.isPremium ? (
-                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gradient-to-r from-yellow-400 to-yellow-500 text-white flex items-center gap-1">
-                  <Crown className="w-3 h-3" />
-                  Premium
-                </span>
-              ) : (
-                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                  Gratuito
-                </span>
-              )}
-            </div>
-            <p className="text-muted-foreground">
-              Configure gatilhos personalizados para receber alertas quando ações atendem seus critérios específicos.
-            </p>
-          </div>
-          <Button 
-            asChild 
-            size="lg"
-            disabled={isLimitReached}
-            title={isLimitReached ? 'Limite de monitores atingido. Faça upgrade para Premium.' : undefined}
-          >
-            <Link href="/dashboard/monitoramentos-customizados/criar">
-              <Plus className="w-4 h-4 mr-2" />
-              Criar Monitoramento
-            </Link>
-          </Button>
-        </div>
-      </div>
+      {maxMonitors !== null && <MonitorLimitBanner current={activeCount} max={maxMonitors} showUpgrade={isLimitReached} />}
 
-      {/* Banner de Limite */}
-      {!user.isPremium && (
-        <MonitorLimitBanner
-          current={activeMonitorsCount}
-          max={maxMonitors}
-          showUpgrade={isLimitReached}
-        />
-      )}
-
-      {/* Stats Card */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Total de Monitoramentos</p>
-              <p className="text-3xl font-bold">{monitors.length}</p>
-              {!user.isPremium && maxMonitors !== null && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {activeMonitorsCount}/{maxMonitors} ativo{activeMonitorsCount !== 1 ? 's' : ''} utilizados
-                </p>
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {monitors.filter((m) => m.isActive).length} ativo(s)
-              {user.isPremium && (
-                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
-                  Ilimitado
-                </span>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lista de monitoramentos */}
       <CustomMonitorsList monitors={monitors} />
 
-      {/* Info Card */}
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Como Funciona?</CardTitle>
-          <CardDescription>
-            Entenda o sistema de monitoramentos customizados
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <div>
-            <h4 className="font-semibold mb-1">🎯 Gatilhos Personalizados</h4>
-            <p className="text-muted-foreground">
-              Configure critérios específicos como P/L mínimo, P/VP máximo, Score mínimo ou alertas de preço.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-1">🔔 Alertas Inteligentes</h4>
-            <p className="text-muted-foreground">
-              Você receberá um relatório gerado por IA quando seus critérios forem atendidos, explicando o que aconteceu.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-1">📊 Monitoramento Contínuo</h4>
-            <p className="text-muted-foreground">
-              Nosso sistema verifica seus gatilhos regularmente e dispara alertas automaticamente.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-1">✅ Gestão Fácil</h4>
-            <p className="text-muted-foreground">
-              Ative, desative ou edite seus monitoramentos a qualquer momento.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <section aria-labelledby="monitors-how" className="space-y-2 text-sm">
+        <h2 id="monitors-how" className="text-lg font-semibold tracking-tight text-foreground">
+          Como funciona
+        </h2>
+        <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+          <li>Os critérios são verificados periodicamente com os dados mais recentes do ativo.</li>
+          <li>Quando qualquer um dos critérios é atingido, você recebe um aviso com um resumo gerado por IA.</li>
+          <li>Você pode pausar, editar ou remover um monitoramento a qualquer momento.</li>
+        </ul>
+      </section>
     </div>
   );
 }
-

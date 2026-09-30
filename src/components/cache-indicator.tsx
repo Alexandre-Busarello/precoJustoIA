@@ -1,14 +1,14 @@
 /**
- * Componente discreto para indicar que dados estão sendo exibidos do cache
- * e permitir limpar o cache se necessário
+ * Indicador discreto de dados vindos do cache, com ação para atualizar.
  */
 
 'use client';
 
-import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Clock, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
+import { formatDate } from '@/lib/format';
 import { invalidateTickerCache } from '@/hooks/use-company-data';
 
 interface CacheIndicatorProps {
@@ -16,83 +16,48 @@ interface CacheIndicatorProps {
   dataUpdatedAt?: number;
   staleTime?: number;
   className?: string;
-  ticker?: string; // Se fornecido, invalida todos os caches do ticker
+  /** Se informado, invalida todos os caches do ticker. */
+  ticker?: string;
 }
 
-/**
- * Formata tempo relativo (ex: "há 2 horas")
- */
-function formatRelativeTime(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `há ${days} ${days === 1 ? 'dia' : 'dias'}`;
-  if (hours > 0) return `há ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
-  if (minutes > 0) return `há ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
-  return 'agora';
-}
-
-/**
- * Verifica se os dados estão stale (fora do staleTime)
- */
-function isStale(dataUpdatedAt: number, staleTime: number): boolean {
-  const age = Date.now() - dataUpdatedAt;
-  return age > staleTime;
-}
-
-export function CacheIndicator({ 
-  queryKey, 
-  dataUpdatedAt, 
+/** Só aparece quando os dados passaram do `staleTime` ou têm mais de 1 minuto. */
+export function CacheIndicator({
+  queryKey,
+  dataUpdatedAt,
   staleTime = 5 * 60 * 1000,
-  className = '',
-  ticker
+  className,
+  ticker,
 }: CacheIndicatorProps) {
   const queryClient = useQueryClient();
-  const [showClearOption, setShowClearOption] = useState(false);
-  
+
   if (!dataUpdatedAt) return null;
 
   const age = Date.now() - dataUpdatedAt;
-  const isStaleData = isStale(dataUpdatedAt, staleTime);
-  
-  // Só mostrar se os dados estão stale ou têm mais de 1 minuto
-  if (!isStaleData && age < 60 * 1000) return null;
-
-  const relativeTime = formatRelativeTime(age);
+  if (age <= staleTime && age < 60 * 1000) return null;
 
   const handleRefresh = () => {
     if (ticker) {
-      // Se ticker fornecido, invalidar todos os caches do ticker
       invalidateTickerCache(queryClient, ticker);
     } else {
-      // Caso contrário, invalidar apenas a query específica
       queryClient.invalidateQueries({ queryKey });
       queryClient.refetchQueries({ queryKey });
     }
   };
 
   return (
-    <div 
-      className={`inline-flex items-center gap-1.5 text-xs text-muted-foreground opacity-50 hover:opacity-100 transition-opacity group ${className}`}
-      onMouseEnter={() => setShowClearOption(true)}
-      onMouseLeave={() => setShowClearOption(false)}
-    >
-      <Clock className="w-3 h-3" />
-      <span className="hidden sm:inline">Cache {relativeTime}</span>
-      {showClearOption && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-5 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={handleRefresh}
-          title={ticker ? "Atualizar todos os dados do ativo" : "Atualizar dados"}
-        >
-          <RefreshCw className="w-3 h-3" />
-        </Button>
+    <button
+      type="button"
+      onClick={handleRefresh}
+      title={ticker ? 'Atualizar todos os dados do ativo' : 'Atualizar dados'}
+      className={cn(
+        'inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 sm:min-h-9 sm:min-w-0 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none',
+        className
       )}
-    </div>
+    >
+      <RefreshCw className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+      <span className="hidden sm:inline">Atualizado {formatDate(dataUpdatedAt, { style: 'relative' })}</span>
+      <span className="sr-only sm:hidden">Atualizar dados</span>
+    </button>
   );
 }
 
@@ -102,16 +67,13 @@ export function CacheIndicator({
 export function useCacheInfo(queryKey: unknown[], staleTime?: number) {
   const queryClient = useQueryClient();
   const query = queryClient.getQueryState(queryKey);
-  
+
   const dataUpdatedAt = query?.dataUpdatedAt;
-  const isStale = dataUpdatedAt && staleTime 
-    ? (Date.now() - dataUpdatedAt) > staleTime 
-    : false;
-  
+  const isStale = dataUpdatedAt && staleTime ? Date.now() - dataUpdatedAt > staleTime : false;
+
   return {
     dataUpdatedAt,
     isStale,
     isFetching: query?.fetchStatus === 'fetching',
   };
 }
-

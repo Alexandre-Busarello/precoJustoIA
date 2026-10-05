@@ -96,6 +96,8 @@ interface RankBuilderRequest {
     | "fiiDividendYield"
     | "fiiRanking";
   params: ModelParams;
+  /** Abertura automática da página: calcula sem salvar no histórico. */
+  preview?: boolean;
 }
 
 /** `minLiquidity` válido: número finito ≥ 0, `null` (incluir ilíquidos) ou `undefined` (limite padrão). */
@@ -204,6 +206,8 @@ export async function POST(request: NextRequest) {
   try {
     const body: RankBuilderRequest = await request.json();
     const { model, params } = body;
+    // preview: abertura automática da página de rankings; não entra no histórico do usuário.
+    const preview = body.preview === true;
 
     // Validação básica
     if (!model || !params) {
@@ -563,8 +567,8 @@ export async function POST(request: NextRequest) {
     // Gerar racional para o modelo usado (usar executionParams que pode ter sido modificado)
     const rational = generateRational(model, executionParams);
 
-    // Salvar no histórico se o usuário estiver logado (COM transação pois é INSERT)
-    if (session?.user?.id) {
+    // Salvar no histórico se o usuário estiver logado e pediu o ranking (COM transação pois é INSERT)
+    if (session?.user?.id && !preview) {
       try {
         // Usar o serviço centralizado para obter o usuário válido
         const currentUser = await getCurrentUser();

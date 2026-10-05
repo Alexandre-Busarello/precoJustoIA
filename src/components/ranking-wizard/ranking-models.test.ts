@@ -8,7 +8,6 @@ import {
   defaultModelForUniverse,
   getRankingModel,
   modelsForUniverse,
-  previewCredentials,
   rankingModelLabel,
   universeForModel,
 } from '../../lib/ranking-models'
@@ -219,18 +218,6 @@ test('URL: padrão, links antigos e ranking salvo', () => {
   assert.equal(parseRankingUrl(params({ model: 'fiiRanking' })).universe, 'fii')
   assert.equal(parseRankingUrl(params({ model: 'inexistente' })).modelKey, 'graham')
   assert.equal(parseRankingUrl(params({ id: 'abc' })).rankingId, 'abc')
-})
-
-test('prévia: sem cookies só quando o plano não muda o resultado', () => {
-  const graham = getRankingModel('graham')!
-  const etf = defaultModelForUniverse('etf')
-  const fcd = getRankingModel('fcd')!
-  assert.equal(previewCredentials(graham, false), 'omit')
-  assert.equal(previewCredentials(graham, true), 'omit')
-  // ETFs: gratuito recebe 10 de qualquer jeito; Premium precisa da sessão para a lista completa.
-  assert.equal(previewCredentials(etf, false), 'omit')
-  assert.equal(previewCredentials(etf, true), 'same-origin')
-  assert.equal(previewCredentials(fcd, true), 'same-origin')
 })
 
 test('URL: seleção de modelo e classe de ativo vai para a URL e volta igual', () => {

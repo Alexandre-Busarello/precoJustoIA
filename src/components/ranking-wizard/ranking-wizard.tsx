@@ -65,6 +65,7 @@ export function RankingWizard({ isLoggedIn, sessionLoading = false }: RankingWiz
       <TabsContent value="ranking" forceMount className={`data-[state=inactive]:hidden ${TAB_TRANSITION}`}>
         <QuickRanker
           isLoggedIn={isLoggedIn}
+          sessionLoading={sessionLoading}
           initialUniverse={initial.universe}
           initialModelKey={initial.modelKey}
           rankingId={rankingId}

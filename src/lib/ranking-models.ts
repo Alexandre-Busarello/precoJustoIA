@@ -527,17 +527,6 @@ export function canAutoRunRankingModel(model: RankingModel, isPremium: boolean):
   return canUseRankingModel(model, isPremium) && !model.isAi
 }
 
-/**
- * Credenciais da prévia automática (abertura da página). Sem sessão a API não grava o ranking no histórico,
- * então modelos gratuitos vão sem cookies, exceto quando o plano muda o resultado e o usuário é Premium
- * (senão ele receberia a lista cortada do plano gratuito). Modelos premium sempre exigem sessão.
- */
-export function previewCredentials(model: RankingModel, isPremium: boolean): 'omit' | 'same-origin' {
-  if (model.plan !== 'free') return 'same-origin'
-  if (model.planLimitedResults && isPremium) return 'same-origin'
-  return 'omit'
-}
-
 /** Rótulo de um modelo salvo no histórico, inclusive os que saíram do registro. */
 export function rankingModelLabel(key: string): string {
   const legacy: Record<string, string> = {

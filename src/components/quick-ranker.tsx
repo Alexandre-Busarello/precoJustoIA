@@ -46,7 +46,6 @@ import {
   isModelInUniverse,
   isRankingUniverse,
   modelsForUniverse,
-  previewCredentials,
   rankingModelLabel,
   supportsLowLiquidityToggle,
   universeForModel,
@@ -58,6 +57,8 @@ import {
 
 interface QuickRankerProps {
   isLoggedIn: boolean
+  /** Sessão ainda carregando: a abertura espera para saber se mostra o ranking salvo do dia. */
+  sessionLoading?: boolean
   /** Universo inicial (ex.: `/ranking?assetType=etf`). */
   initialUniverse: RankingUniverse
   /** Modelo inicial (ex.: `/ranking?model=graham`). */
@@ -85,6 +86,23 @@ interface SavedInfo {
 
 const GENERIC_ERROR = "Não foi possível gerar o ranking. Tente novamente."
 
+/** Data local (America/Sao_Paulo) no formato AAAA-MM-DD, para comparar "hoje". */
+function brazilDateKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(date)
+}
+
+/** Id do último ranking salvo do modelo e classe de ativo, se foi gerado hoje; `null` caso contrário. */
+async function findTodaysRanking(modelKey: string, universe: RankingUniverse): Promise<string | null> {
+  const response = await fetch(`/api/ranking-history?model=${encodeURIComponent(modelKey)}&limit=1`, { credentials: "same-origin" })
+  if (!response.ok) return null
+  const data: { history?: { id: string; createdAt: string; assetTypeFilter?: string }[] } = await response.json()
+  const latest = data.history?.[0]
+  if (!latest) return null
+  const sameUniverse = (latest.assetTypeFilter ?? "b3") === universe
+  const today = brazilDateKey(new Date()) === brazilDateKey(new Date(latest.createdAt))
+  return sameUniverse && today ? latest.id : null
+}
+
 function resultNoun(model: RankingModel | undefined, universe: RankingUniverse, count: number): string {
   if (model?.assetType === "fii") return count === 1 ? "FII" : "FIIs"
   if (model?.assetType === "etf") return count === 1 ? "ETF" : "ETFs"
@@ -103,6 +121,7 @@ async function readError(response: Response): Promise<string> {
 
 export function QuickRanker({
   isLoggedIn,
+  sessionLoading = false,
   initialUniverse,
   initialModelKey,
   rankingId,
@@ -143,21 +162,15 @@ export function QuickRanker({
       setSaved(null)
       // A prévia automática da abertura da página vai sem cookies quando dá (não entra no histórico do usuário).
       // Modelos premium, e os gratuitos cujo resultado muda com o plano (ETFs) para quem é Premium, levam a sessão.
-      const credentials: RequestCredentials = preview ? previewCredentials(target, hasPremium) : "same-origin"
-      // Sem cookies a requisição pode ser barrada antes da API (ex.: proteção de deployment da Vercel nas previews,
-      // que responde 401 em HTML). Nesse caso repete uma vez com a sessão, como faria o "Tentar novamente".
-      const post = async (url: string, body: unknown) => {
-        const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-        if (credentials === "omit") {
-          try {
-            const response = await fetch(url, { ...init, credentials })
-            if (response.ok) return response
-          } catch {
-            // segue para a nova tentativa com a sessão
-          }
-        }
-        return fetch(url, { ...init, credentials: "same-origin" })
-      }
+      // A prévia da abertura da página vai com a sessão (o plano pode mudar o resultado), mas com `preview`
+      // para o servidor não salvar no histórico: só entra no histórico o ranking que o usuário pede.
+      const post = (url: string, body: Record<string, unknown>) =>
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(preview ? { ...body, preview: true } : body),
+        })
       try {
         let next: RankingOutcome
         if (target.assetType === "etf") {
@@ -187,7 +200,7 @@ export function QuickRanker({
         if (seq === requestSeq.current) setLoading(false)
       }
     },
-    [hasPremium, onRankingGenerated, trackEngagement, trackEvent]
+    [onRankingGenerated, trackEngagement, trackEvent]
   )
 
   const loadSaved = useCallback(async (id: string) => {
@@ -241,18 +254,26 @@ export function QuickRanker({
 
   // Abertura da página: gera o ranking padrão sem nenhum clique.
   useEffect(() => {
-    if (initialRunDone.current || rankingId) return
+    if (initialRunDone.current || rankingId || sessionLoading) return
     const initial = getRankingModel(initialModelKey)
     if (!initial) return
     // Premium ou resultado que depende do plano: espera saber o plano antes de pedir.
     if ((initial.plan !== "free" || initial.planLimitedResults) && premiumLoading) return
     initialRunDone.current = true
     if (canAutoRunRankingModel(initial, hasPremium)) {
-      run(initial, initialUniverse, initial.defaults(initialUniverse), { preview: true })
+      const preview = () => run(initial, initialUniverse, initial.defaults(initialUniverse), { preview: true })
+      if (!isLoggedIn) {
+        preview()
+        return
+      }
+      // Já gerou este ranking hoje? Mostra o último (com "Gerar com dados atuais") em vez de calcular de novo.
+      findTodaysRanking(initial.key, initialUniverse)
+        .then((id) => (id ? loadSaved(id) : preview()))
+        .catch(preview)
     } else if (initial.isAi && canUseRankingModel(initial, hasPremium)) {
       setParamsOpen(true)
     }
-  }, [hasPremium, initialModelKey, initialUniverse, premiumLoading, rankingId, run])
+  }, [hasPremium, initialModelKey, initialUniverse, isLoggedIn, loadSaved, premiumLoading, rankingId, run, sessionLoading])
 
   const applySelection = (nextModel: RankingModel, nextUniverse: RankingUniverse) => {
     setSaved(null)
